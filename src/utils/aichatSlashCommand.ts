@@ -87,7 +87,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
-    '| /neko s <検索語 ...> | 半角スペース区切りの検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます |',
+    '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
@@ -336,6 +336,7 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
+  logSearchShares?: (keyword: string, outcome: AichatSearchOutcome) => Promise<void>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
   hourlyTokenUsage?: () => Promise<HourlyTokenUsageRow[]>;
   checkApiToken?: (token: string) => Promise<boolean>;
@@ -452,7 +453,12 @@ export async function interpretAichatSlashCommand(
   if (subcommand === 's') {
     // partsでは引用符内の空白が失われるため、サブコマンドより後ろの原文を解析する。
     const argumentText = trimmed.replace(/^\/neko\s+s(?:\s+|$)/i, '');
-    const keywords = parseNekoSearchArguments(argumentText);
+    const parsedArguments = parseNekoSearchArguments(argumentText);
+    // 日本語入力時に変換されることがあるem dashも同じオプションとして受け付ける。
+    const loggingEnabled = parsedArguments.some((arg) => arg === '--enable-logging' || arg === '\u2014enable-logging');
+    const keywords = parsedArguments
+      .filter((arg) => arg !== '--enable-logging' && arg !== '\u2014enable-logging')
+      .slice(0, 20);
     if (keywords.length === 0) {
       return { handled: true, response: formatAichatMultiSearchResults([]) };
     }
@@ -471,6 +477,15 @@ export async function interpretAichatSlashCommand(
         return { handled: true, response: `❌ /neko s の「${keyword}」検索でエラーが発生しました: ${outcome.message}` };
       }
       summaries.push({ keyword, hitCount: outcome.value.hitCount });
+      if (loggingEnabled && deps.logSearchShares) {
+        const logged = await raceWithTimeout(deps.logSearchShares(keyword, outcome.value), AICHAT_SEARCH_TIMEOUT_MS);
+        if (logged.status === 'timeout') {
+          return { handled: true, response: `❌ /neko s の「${keyword}」履歴記録がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+        }
+        if (logged.status === 'error') {
+          return { handled: true, response: `❌ /neko s の「${keyword}」履歴記録でエラーが発生しました: ${logged.message}` };
+        }
+      }
       for (const result of outcome.value.results) modalResults.set(result.id, result);
     }
     const results = Array.from(modalResults.values()).slice(0, 30);

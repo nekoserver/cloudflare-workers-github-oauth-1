@@ -32,4 +32,37 @@ describe('/neko s', () => {
     expect(result).toEqual({ handled: true, response: '❌ 検索語を指定してください: /neko s <検索語 ...>' });
     expect(searchShares).not.toHaveBeenCalled();
   });
+
+  it('--enable-logging付きでは各検索語の結果を履歴へ記録する', async () => {
+    const searchShares = vi.fn(async (keyword: string) => ({
+      hitCount: 1,
+      results: [{ id: keyword, question: `${keyword}のログ` }],
+    }));
+    const logSearchShares = vi.fn(async () => undefined);
+
+    await interpretAichatSlashCommand('/neko s --enable-logging 猫 "東京 駅"', new Date(), {
+      ...deps, searchShares, logSearchShares,
+    });
+
+    expect(searchShares.mock.calls.map(([keyword]) => keyword)).toEqual(['猫', '東京 駅']);
+    expect(logSearchShares.mock.calls.map(([keyword]) => keyword)).toEqual(['猫', '東京 駅']);
+    expect(logSearchShares.mock.calls[0][1]).toEqual({
+      hitCount: 1,
+      results: [{ id: '猫', question: '猫のログ' }],
+    });
+  });
+
+  it('検索語は20個を上限とし、em dashのloggingオプションも検索語に含めない', async () => {
+    const searchShares = vi.fn(async () => ({ hitCount: 0, results: [] }));
+    const logSearchShares = vi.fn(async () => undefined);
+    const keywords = Array.from({ length: 22 }, (_, index) => `語${index + 1}`);
+
+    await interpretAichatSlashCommand(`/neko s \u2014enable-logging ${keywords.join(' ')}`, new Date(), {
+      ...deps, searchShares, logSearchShares,
+    });
+
+    expect(searchShares).toHaveBeenCalledTimes(20);
+    expect(logSearchShares).toHaveBeenCalledTimes(20);
+    expect(searchShares.mock.calls.at(-1)?.[0]).toBe('語20');
+  });
 });
