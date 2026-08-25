@@ -186,6 +186,8 @@ h1{font-size:22px;margin:0 0 4px}
 #end-city-picker-flag-th{cursor:pointer;text-align:center}
 #end-city-picker-flag-th:hover{color:#38bdf8}
 .end-city-picker-flag-td{text-align:center}
+.end-city-picker-airport-td{text-align:center}
+.end-city-picker-airport-td.end-city-picker-airport-connected{background:#bbf7d0;color:#0f172a}
 .end-city-picker-row.end-city-picker-current{background:#bbf7d0;color:#0f172a}
 .end-city-picker-row.end-city-picker-current td{color:#0f172a}
 #swap-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13px}
@@ -503,7 +505,7 @@ ${getMitokoroModalCss()}
       </div>
     </div>
     <table class="end-city-picker-table">
-      <thead><tr><th id="end-city-picker-flag-th" title="国旗をタップすると到達国を制限できます">🏁</th><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
+      <thead><tr><th id="end-city-picker-flag-th" title="国旗をタップすると到達国を制限できます">🏁</th><th>都市名</th><th>出発地からの距離(km)</th><th title="出発地が空港選択中の場合、その空港との発着航路の有無を示します">✈︎</th></tr></thead>
       <tbody id="end-city-picker-table-body"></tbody>
     </table>
   </div>
@@ -3268,8 +3270,19 @@ function buildTransportPickerPoints(suffix) {
   return HERITAGE_POINTS.filter(function(h) {
     return typeof h.n === 'string' && h.n.length > suffix.length && h.n.slice(h.n.length - suffix.length) === suffix;
   }).map(function(h) {
-    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '' };
+    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '', airportCode: h.airportCode || null, airportRoutes: h.airportRoutes || [] };
   });
+}
+
+// 空港Aと空港Bの間に直行の発着航路(AIRLINE_NETWORK由来、buildAirportNetworkRoutes()で
+// 空港ごとに埋め込み済みのairportRoutes)が存在するかを判定する純粋関数。routesは
+// otherCode側の空港自身のairportRoutes配列(hubCode/destinationCodeのどちらかが必ず
+// その空港自身のコードになっている)なので、渡された配列の中にotherCodeが
+// hubCode/destinationCodeいずれかとして現れれば、その空港とotherCodeの空港が
+// 直接結ばれていることになる。
+function airportsConnected(routes, otherCode) {
+  if (!otherCode || !routes || !routes.length) return false;
+  return routes.some(function(r) { return r.hubCode === otherCode || r.destinationCode === otherCode; });
 }
 
 // HERITAGE_POINTSのうち絵文字が🏰(城)であるものを、都市選択モーダルの行として
@@ -3478,9 +3491,15 @@ function renderEndCityPickerTable() {
   }).map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }) : [];
   var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles);
   var pool = cityPool.concat(extraPool);
+  // 出発地選択モーダルで空港を選んでいる(start.airportCode有り)場合に限り、かつ
+  // この到着地選択モーダルの「空港」チェックがONの間だけ、表内の空港候補すべてに
+  // ついて出発地の空港との発着航路の有無(airportsConnected)を調べ、✈︎列を薄緑色で
+  // 塗りつぶす対象を決める。どちらかの条件を満たさない場合は判定自体を行わない。
+  var startAirportCode = (start && start.airportCode) ? start.airportCode : null;
+  var checkAirportConnectivity = !!startAirportCode && includeAirports;
   var rows = pool.map(function(p) {
     var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, p.lat, p.lon) : null;
-    return { name: p.name, label: p.label, km: km, flag: p.flag || '' };
+    return { name: p.name, label: p.label, km: km, flag: p.flag || '', airportCode: p.airportCode || null, airportRoutes: p.airportRoutes || [] };
   });
   rows.sort(function(a, b) {
     if (a.km === null && b.km === null) return 0;
@@ -3491,8 +3510,15 @@ function renderEndCityPickerTable() {
   body.innerHTML = rows.map(function(r) {
     var isCurrent = r.name === currentEnd;
     var kmText = (r.km === null) ? '-' : r.km.toFixed(1) + ' km';
+    var airportTd = '';
+    if (r.airportCode) {
+      var connected = checkAirportConnectivity && airportsConnected(r.airportRoutes, startAirportCode);
+      airportTd = '<td class="end-city-picker-airport-td' + (connected ? ' end-city-picker-airport-connected' : '') + '">' + CLIENT_AIRPORT_ICON + '</td>';
+    } else {
+      airportTd = '<td class="end-city-picker-airport-td"></td>';
+    }
     return '<tr class="end-city-picker-row' + (isCurrent ? ' end-city-picker-current' : '') + '" data-city-name="' + esc(r.name) + '">'
-      + '<td class="end-city-picker-flag-td">' + esc(r.flag) + '</td><td>' + esc(r.label) + '</td><td>' + kmText + '</td></tr>';
+      + '<td class="end-city-picker-flag-td">' + esc(r.flag) + '</td><td>' + esc(r.label) + '</td><td>' + kmText + '</td>' + airportTd + '</tr>';
   }).join('');
 }
 
