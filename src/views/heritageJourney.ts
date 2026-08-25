@@ -301,6 +301,9 @@ h1{font-size:22px;margin:0 0 4px}
 .end-city-picker-cand-toolbar{margin-left:auto;margin-bottom:0;font-size:11px}
 .end-city-picker-cand-label{color:#94a3b8;white-space:nowrap}
 .end-city-picker-cand-toolbar-row2{flex-basis:100%;margin-left:0}
+.end-city-picker-search{min-width:150px;flex:1;background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:11px;font-family:inherit}
+.end-city-picker-search:focus{border-color:#38bdf8;outline:2px solid rgba(56,189,248,.2)}
+.end-city-picker-search::placeholder{color:#64748b}
 .dist-country-filter-label{color:#94a3b8;white-space:nowrap}
 .dist-country-filter-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
 .dist-country-filter-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #334155;cursor:pointer;color:#e2e8f0;font-size:13px}
@@ -508,6 +511,7 @@ ${getMitokoroModalCss()}
         <button id="select-all-btn-modal" type="button">すべて選択</button>
         <button id="select-none-btn-modal" type="button">すべて解除</button>
         <button id="select-near-btn-modal" type="button">近接のみ選択(20km以内)</button>
+        <input type="search" id="end-city-picker-search" class="end-city-picker-search" placeholder="到着先を検索..." aria-label="到着先を検索" autocomplete="off">
       </div>
     </div>
     <table class="end-city-picker-table">
@@ -3607,6 +3611,8 @@ function renderEndCityPickerTable() {
   var stationsCb = document.getElementById('end-city-picker-stations-cb');
   var airportsCb = document.getElementById('end-city-picker-airports-cb');
   var castlesCb = document.getElementById('end-city-picker-castles-cb');
+  var searchInput = document.getElementById('end-city-picker-search');
+  var searchQuery = searchInput ? searchInput.value.trim().toLocaleLowerCase() : '';
   var includeCities = citiesCb ? citiesCb.checked : true;
   var includeStations = stationsCb ? stationsCb.checked : false;
   var includeAirports = airportsCb ? airportsCb.checked : false;
@@ -3625,6 +3631,11 @@ function renderEndCityPickerTable() {
   var rows = pool.map(function(p) {
     var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, p.lat, p.lon) : null;
     return { name: p.name, label: p.label, km: km, flag: p.flag || '', airportCode: p.airportCode || null, airportRoutes: p.airportRoutes || [] };
+  }).filter(function(r) {
+    if (!searchQuery) return true;
+    return [r.label, r.name, r.airportCode || ''].some(function(value) {
+      return String(value).toLocaleLowerCase().indexOf(searchQuery) !== -1;
+    });
   });
   rows.sort(function(a, b) {
     if (a.km === null && b.km === null) return 0;
@@ -3683,6 +3694,7 @@ function closeEndCityPickerModal() {
   var stationsCb = document.getElementById('end-city-picker-stations-cb');
   var airportsCb = document.getElementById('end-city-picker-airports-cb');
   var castlesCb = document.getElementById('end-city-picker-castles-cb');
+  var searchInput = document.getElementById('end-city-picker-search');
   if (!pickerBtn || !overlay || !closeBtn || !body) return;
   pickerBtn.addEventListener('click', openEndCityPickerModal);
   closeBtn.addEventListener('click', closeEndCityPickerModal);
@@ -3705,6 +3717,7 @@ function closeEndCityPickerModal() {
   [citiesCb, stationsCb, airportsCb, castlesCb].forEach(function(cb) {
     if (cb) cb.addEventListener('change', renderEndCityPickerTable);
   });
+  if (searchInput) searchInput.addEventListener('input', renderEndCityPickerTable);
   // 🏁列見出しをタップすると、既存の「到達国を制限する」国一覧モーダルをそのまま開く。
   // 集計(国別都市数の降順)は候補都市の全体(CITIES全件)を対象にする既存の
   // computeDestCountryCounts()をそのまま再利用する(この到着地選択モーダルで
