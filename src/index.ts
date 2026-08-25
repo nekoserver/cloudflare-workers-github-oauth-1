@@ -4350,6 +4350,11 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub).all<HourlyTokenUsageRow>();
       return rows.results ?? [];
     },
+    checkApiToken: async (token) => {
+      if (!c.env.DB) throw new Error('DB未設定です');
+      const result = await checkApiKeyAuth(c.env.DB as unknown as ApiKeyDb, token, new Date());
+      return result.valid;
+    },
     sha256ViaWasm: async (input) => {
       if (c.env.DB) {
         const row = await c.env.DB.prepare(
