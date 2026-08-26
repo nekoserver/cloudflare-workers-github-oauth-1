@@ -85,6 +85,21 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('AMS発着はネットワークに登録済みの全空港を網羅する', () => {
+    const registeredCodes = new Set<string>();
+    for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) {
+      registeredCodes.add(airline.hubCode);
+      for (const destination of airline.destinations) registeredCodes.add(destination.code);
+    }
+
+    const ams = AIRLINE_NETWORK.flatMap((country) => country.airlines)
+      .find((airline) => airline.hubCode === 'AMS');
+    expect(ams).toBeDefined();
+    const amsCodes = new Set(ams!.destinations.map((destination) => destination.code));
+    registeredCodes.delete('AMS');
+    expect(amsCodes).toEqual(registeredCodes);
+  });
+
   it('検索ボックスと国別フィルタが両方JSに実装されている', () => {
     expect(html).toContain("document.getElementById('search-box')");
     expect(html).toContain('matchesCountry');
