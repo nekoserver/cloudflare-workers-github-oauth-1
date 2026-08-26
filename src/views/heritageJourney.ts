@@ -3399,7 +3399,18 @@ function buildTransportPickerPoints(suffix) {
   return HERITAGE_POINTS.filter(function(h) {
     return typeof h.n === 'string' && h.n.length > suffix.length && h.n.slice(h.n.length - suffix.length) === suffix;
   }).map(function(h) {
-    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '', airportCode: h.airportCode || null, airportRoutes: h.airportRoutes || [] };
+    return {
+      name: 'TP::' + h.n,
+      label: h.n,
+      lat: h.lat,
+      lon: h.lon,
+      // 空港行は種類アイコンだけでなく所属国も一目で分かるよう「✈︎国旗」にする。
+      // country は到着地モーダルの🏁見出しから開く国旗フィルタにも利用する。
+      flag: (h.e || '') + (suffix === '空港' ? (h.f || '') : ''),
+      country: h.c || '',
+      airportCode: h.airportCode || null,
+      airportRoutes: h.airportRoutes || []
+    };
   });
 }
 
@@ -3604,9 +3615,9 @@ function renderEndCityPickerTable() {
   var currentEnd = endSel ? endSel.value : null;
   // 出発地選択モーダル(#start-city-picker-modal-overlay)と同じ「都市名のみ/駅/空港/城」
   // チェックボックスで候補プールを組み立てる(buildCityPickerPool()を共有)。
-  // 「到達国を制限する」フィルタ(destCountryFilter)は都市(CITIES)にのみ適用する
-  // (駅/空港/城の仮想エントリはbuildTransportPickerPoints/buildCastlePickerPointsが
-  // 国情報を持たないため、対象外のまま常に表示する)。
+  // 「到達国を制限する」フィルタ(destCountryFilter)は都市に加え、所属国を持つ
+  // 空港候補にも適用する。これにより空港行頭の「✈︎国旗」と🏁見出しから開く
+  // 国旗フィルタが同じ国情報に反応する。
   var citiesCb = document.getElementById('end-city-picker-cities-cb');
   var stationsCb = document.getElementById('end-city-picker-stations-cb');
   var airportsCb = document.getElementById('end-city-picker-airports-cb');
@@ -3620,7 +3631,9 @@ function renderEndCityPickerTable() {
   var cityPool = includeCities ? CITIES.filter(function(c) {
     return destCountryFilter === DEST_COUNTRY_FILTER_ALL || c.country === destCountryFilter;
   }).map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }) : [];
-  var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles);
+  var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles).filter(function(p) {
+    return destCountryFilter === DEST_COUNTRY_FILTER_ALL || !p.airportCode || p.country === destCountryFilter;
+  });
   var pool = cityPool.concat(extraPool);
   // 出発地選択モーダルで空港を選んでいる(start.airportCode有り)場合に限り、かつ
   // この到着地選択モーダルの「空港」チェックがONの間だけ、表内の空港候補すべてに
