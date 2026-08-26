@@ -31,6 +31,8 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "VNS", name: "ラール・バハードゥル・シャーストリー国際空港", city: "🇮🇳 インド・バラナシ", lat: 25.45, lon: 82.86 },
   { code: "LUA", name: "テンジン・ヒラリー空港（ルカラ空港）", city: "🇳🇵 ネパール・ルカラ", lat: 27.6869, lon: 86.7297 },
   { code: "KTM", name: "トリブバン国際空港", city: "🇳🇵 ネパール・カトマンズ", lat: 27.6966, lon: 85.3591 },
+  { code: "BWA", name: "ガウタム・ブッダ国際空港", city: "🇳🇵 ネパール・シッダールタナガル", lat: 27.5057, lon: 83.4163 },
+  { code: "PKR", name: "ポカラ国際空港", city: "🇳🇵 ネパール・ポカラ", lat: 28.1846, lon: 83.9821 },
   { code: "RHP", name: "マンタリ空港（ラメチャップ空港）", city: "🇳🇵 ネパール・ラメチャップ", lat: 27.394, lon: 86.0614 },
   { code: "DXB", name: "ドバイ国際空港", city: "🇦🇪 UAE・ドバイ", lat: 25.25, lon: 55.36 },
   { code: "DOH", name: "ハマド国際空港", city: "🇶🇦 カタール・ドーハ", lat: 25.27, lon: 51.61 },

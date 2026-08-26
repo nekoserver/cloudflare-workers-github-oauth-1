@@ -237,7 +237,9 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   ]},
   // ネパール―インド間の定期直行便は、公開されている各社の就航地と空港時刻表を
   // 2026-08-26に照合した。KTMから就航する既知のインド4空港（DEL、BOM、BLR、
-  // VNS）と、同一路線を運航する各社を収録。コードシェアは運航会社側だけを数え、
+  // VNS）と、同一路線を運航する各社を収録。BWA・PKR発のインド定期直行便は
+  // 確認できなかったため、就航計画やチャーター便を定期便としては収録していない。
+  // コードシェアは運航会社側だけを数え、
   // 便数は通常期の公開スケジュールを週換算した旅程比較用の目安としている。
   // ルカラ便は天候とトレッキングシーズンにより運航地・便数が大きく変わる。
   // KTM（カトマンズ）とRHP（ラメチャップ／マンタリ）の双方を発着地として収録し、
@@ -266,7 +268,17 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 }
     ]},
     { name: 'Buddha Air', iata: 'U4', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
-      { code: 'VNS', name: 'ラール・バハードゥル・シャーストリー国際空港（バラナシ）', flightsPerWeek: 2 }
+      { code: 'VNS', name: 'ラール・バハードゥル・シャーストリー国際空港（バラナシ）', flightsPerWeek: 2 },
+      { code: 'BWA', name: 'ガウタム・ブッダ国際空港（シッダールタナガル）', flightsPerWeek: 35 },
+      { code: 'PKR', name: 'ポカラ国際空港', flightsPerWeek: 70 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'BWA', hubName: 'ガウタム・ブッダ国際空港（シッダールタナガル）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 35 },
+      { code: 'PKR', name: 'ポカラ国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'PKR', hubName: 'ポカラ国際空港', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 70 },
+      { code: 'BWA', name: 'ガウタム・ブッダ国際空港（シッダールタナガル）', flightsPerWeek: 7 }
     ]},
     { name: 'Tara Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
       { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
