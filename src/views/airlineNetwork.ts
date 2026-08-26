@@ -10,6 +10,12 @@ function getAirportFlag(code: string): string {
   return airport ? airport.city.split(' ')[0] : '🏳️';
 }
 
+function getAirportCountry(code: string): string {
+  const airport = AIRPORT_LIST.find((item) => item.code === code);
+  if (!airport) return '';
+  return airport.city.substring(airport.city.indexOf(' ') + 1).split('・')[0];
+}
+
 function escapeHtmlAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -85,7 +91,8 @@ function buildRows(): string {
     const destFlag = getAirportFlag(destination.code);
     const searchKey = [country, airline.name, airline.hubName, destination.name, destination.code].join(' ').toLowerCase();
     const hubKey = `${country}::${airline.hubCode}`;
-    html += `<tr data-country="${country}" data-search="${searchKey}" data-airline="${escapeHtmlAttribute(airline.name)}" data-airline-iata="${escapeHtmlAttribute(airline.iata)}" data-hub-code="${airline.hubCode}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-flights="${destination.flightsPerWeek}" data-hub-key="${hubKey}">`;
+    const routeType = getAirportCountry(airline.hubCode) === getAirportCountry(destination.code) ? 'domestic' : 'international';
+    html += `<tr data-country="${country}" data-search="${searchKey}" data-airline="${escapeHtmlAttribute(airline.name)}" data-airline-iata="${escapeHtmlAttribute(airline.iata)}" data-hub-code="${airline.hubCode}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-route-type="${routeType}" data-flights="${destination.flightsPerWeek}" data-hub-key="${hubKey}">`;
     html += `<td class="col-country">${flag} ${country}</td>`;
     html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
     html += `<td class="col-hub"><span class="airport-name">${airline.hubName}</span><span class="code">${airline.hubCode}</span></td>`;
@@ -209,9 +216,13 @@ h1 { font-size: 1.15rem; margin-bottom: 3px; }
 .airport-name-toggle button.active { background: var(--btn-active-bg); color: var(--btn-active-text); }
 
 .network-canvas-panel { margin-bottom: 10px; padding: 10px 12px 12px; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-.network-canvas-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 8px; }
+.network-canvas-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .network-canvas-heading h2 { font-size: 0.86rem; }
-.network-canvas-heading p { color: var(--text-muted); font-size: 0.68rem; text-align: right; }
+.network-route-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.network-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.network-toggle button { border: 0; border-right: 1px solid var(--border); background: var(--btn-bg); color: var(--text); cursor: pointer; font: inherit; font-size: 0.7rem; padding: 5px 8px; }
+.network-toggle button:last-child { border-right: 0; }
+.network-toggle button.active { background: var(--btn-active-bg); color: var(--btn-active-text); }
 .network-canvas-wrap { width: 100%; min-width: 560px; }
 #route-network-canvas { display: block; width: 100%; height: 276px; border-radius: 8px; background: light-dark(#f7faff, #0d141d); }
 .network-canvas-scroll { overflow-x: auto; }
@@ -302,7 +313,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
   .country-btn { width: auto; }
   .right-main { overflow-y: visible; }
   .network-canvas-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .network-canvas-heading p { text-align: left; }
+  .network-route-controls { justify-content: flex-start; }
   .table-wrap { overflow-x: auto; }
 }
 </style>
@@ -336,7 +347,18 @@ tr:nth-child(even) td { background: var(--row-alt); }
     <section class="network-canvas-panel" aria-labelledby="network-canvas-title">
       <div class="network-canvas-heading">
         <h2 id="network-canvas-title">乗り入れ便航空会社 → 空港コード経路</h2>
-        <p>現在の絞り込み結果から上位6路線を表示（線の太さは週あたり便数）</p>
+        <div class="network-route-controls">
+          <div class="network-toggle" role="group" aria-label="路線種別">
+            <button type="button" class="route-type-btn active" data-route-type="both" aria-pressed="true">両方(デフォルト値)</button>
+            <button type="button" class="route-type-btn" data-route-type="international" aria-pressed="false">国際線</button>
+            <button type="button" class="route-type-btn" data-route-type="domestic" aria-pressed="false">国内線</button>
+          </div>
+          <div class="network-toggle" role="group" aria-label="表示路線数">
+            <button type="button" class="route-limit-btn active" data-route-limit="6" aria-pressed="true">6(デフォルト値)</button>
+            <button type="button" class="route-limit-btn" data-route-limit="10" aria-pressed="false">10</button>
+            <button type="button" class="route-limit-btn" data-route-limit="all" aria-pressed="false">すべて</button>
+          </div>
+        </div>
       </div>
       <div class="network-canvas-scroll">
         <div class="network-canvas-wrap">
@@ -427,6 +449,10 @@ var airportNameNormalBtn = document.getElementById('airport-name-normal-btn');
 var airportNameCompactBtn = document.getElementById('airport-name-compact-btn');
 var routeTable = document.getElementById('route-table');
 var routeNetworkCanvas = document.getElementById('route-network-canvas');
+var routeTypeBtns = Array.prototype.slice.call(document.querySelectorAll('.route-type-btn'));
+var routeLimitBtns = Array.prototype.slice.call(document.querySelectorAll('.route-limit-btn'));
+var networkRouteType = 'both';
+var networkRouteLimit = 6;
 var destFilterBtn = document.getElementById('dest-filter-btn');
 var destFilterCompactBtn = document.getElementById('dest-filter-btn-compact');
 var destFilterModal = document.getElementById('dest-filter-modal');
@@ -593,9 +619,12 @@ function drawRouteNetwork() {
   if (!routeNetworkCanvas || typeof window.CanvasRenderingContext2D === 'undefined') return;
   var ctx = routeNetworkCanvas.getContext('2d');
   if (!ctx) return;
-  var visibleRows = allRows.filter(function (row) { return row.style.display !== 'none'; }).slice(0, 6);
+  var visibleRows = allRows.filter(function (row) {
+    return row.style.display !== 'none' && (networkRouteType === 'both' || row.getAttribute('data-route-type') === networkRouteType);
+  });
+  if (networkRouteLimit !== 'all') visibleRows = visibleRows.slice(0, networkRouteLimit);
   var cssWidth = Math.max(560, routeNetworkCanvas.parentElement.clientWidth || 900);
-  var cssHeight = 276;
+  var cssHeight = Math.max(276, 31 + visibleRows.length * 40);
   var ratio = window.devicePixelRatio || 1;
   routeNetworkCanvas.width = Math.round(cssWidth * ratio);
   routeNetworkCanvas.height = Math.round(cssHeight * ratio);
@@ -646,6 +675,31 @@ function drawRouteNetwork() {
     ctx.fillText(flights + '便/週', (originX + destinationX) / 2, y + 10);
   });
 }
+
+routeTypeBtns.forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    networkRouteType = btn.getAttribute('data-route-type');
+    routeTypeBtns.forEach(function (item) {
+      var active = item === btn;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
+    });
+    drawRouteNetwork();
+  });
+});
+
+routeLimitBtns.forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var value = btn.getAttribute('data-route-limit');
+    networkRouteLimit = value === 'all' ? 'all' : Number(value);
+    routeLimitBtns.forEach(function (item) {
+      var active = item === btn;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
+    });
+    drawRouteNetwork();
+  });
+});
 
 countryBtns.forEach(function (btn) {
   btn.addEventListener('click', function () {

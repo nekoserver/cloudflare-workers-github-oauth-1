@@ -87,13 +87,38 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(document.getElementById('network-canvas-title')!.textContent).toContain('乗り入れ便航空会社 → 空港コード経路');
   });
 
-  it('canvas路線図は絞り込み後の上位6路線を航空会社→発着空港の順で描画する', () => {
-    expect(html).toContain("visibleRows = allRows.filter(function (row) { return row.style.display !== 'none'; }).slice(0, 6)");
+  it('canvas路線図は路線種別と表示数を選び、航空会社→発着空港の順で描画する', () => {
+    const document = new JSDOM(html, { runScripts: 'dangerously' }).window.document;
+    const routeTypeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.route-type-btn'));
+    const routeLimitButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.route-limit-btn'));
+
+    expect(routeTypeButtons.map((button) => button.textContent)).toEqual(['両方(デフォルト値)', '国際線', '国内線']);
+    expect(routeLimitButtons.map((button) => button.textContent)).toEqual(['6(デフォルト値)', '10', 'すべて']);
+    expect(routeTypeButtons[0].classList.contains('active')).toBe(true);
+    expect(routeLimitButtons[0].classList.contains('active')).toBe(true);
+    expect(html).not.toContain('現在の絞り込み結果から上位6路線を表示');
+    expect(html).toContain("row.getAttribute('data-route-type') === networkRouteType");
+    expect(html).toContain("if (networkRouteLimit !== 'all') visibleRows = visibleRows.slice(0, networkRouteLimit)");
     expect(html).toContain("row.getAttribute('data-airline')");
     expect(html).toContain("row.getAttribute('data-hub-code')");
     expect(html).toContain("row.getAttribute('data-dest-code')");
     expect(html).toContain('drawRouteNetwork();');
     expect(html).toContain("window.addEventListener('resize', drawRouteNetwork);");
+
+    routeTypeButtons[1].click();
+    expect(routeTypeButtons[1].classList.contains('active')).toBe(true);
+    expect(routeTypeButtons[1].getAttribute('aria-pressed')).toBe('true');
+    routeLimitButtons[2].click();
+    expect(routeLimitButtons[2].classList.contains('active')).toBe(true);
+    expect(routeLimitButtons[2].getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('各路線を発着空港の国に基づいて国内線・国際線に分類する', () => {
+    const document = new JSDOM(html).window.document;
+    expect(document.querySelector('tr[data-hub-code="HND"][data-dest-code="KIX"]')?.getAttribute('data-route-type')).toBe('domestic');
+    expect(document.querySelector('tr[data-hub-code="AMS"][data-dest-code="HND"]')?.getAttribute('data-route-type')).toBe('international');
+    expect(document.querySelectorAll('tr[data-route-type="domestic"]').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('tr[data-route-type="international"]').length).toBeGreaterThan(0);
   });
 
   it('ルカラ空港とネパール2空港の双方向の発着便を表示する', () => {
