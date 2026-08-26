@@ -217,6 +217,19 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .compact-airports .compact-only { display: inline; }
 .compact-dest-heading { line-height: 1.25; white-space: nowrap; }
 .compact-dest-heading .th-filter-btn { display: block; margin: 0 auto 2px; }
+.country-column-flash th:first-child,
+.country-column-flash td.col-country {
+  animation: country-column-outline 0.4s ease-in-out 3;
+}
+.country-column-flash th:first-child,
+.country-column-flash tbody tr:not([style*="display: none"]):first-child td.col-country { border-top-color: #f2d96b; }
+.country-column-flash th:first-child,
+.country-column-flash td.col-country { border-left-color: #f2d96b; border-right-color: #f2d96b; }
+.country-column-flash tbody tr:not([style*="display: none"]):last-child td.col-country { border-bottom-color: #f2d96b; }
+@keyframes country-column-outline {
+  0%, 100% { border-color: var(--border); box-shadow: none; }
+  50% { border-color: #f2d96b; box-shadow: inset 0 0 0 1px #fff3a3; }
+}
 .col-freq { font-weight: 700; color: var(--accent); }
 .col-dest-flag { width: 44px; text-align: center; font-size: 1.05rem; }
 .unit { font-weight: 400; color: var(--text-muted); font-size: 0.68rem; margin-left: 3px; }
@@ -307,7 +320,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
       </div>
     </div>
     <div class="table-wrap">
-      <table>
+      <table id="route-table">
         <thead>
           <tr>
             <th>国<button type="button" id="country-filter-btn" class="th-filter-btn" title="表示する経由国・拠点空港を選択">&#x25BE;</button></th>
@@ -377,6 +390,7 @@ var DEST_FLAG_COOKIE_NAME = 'airline_network_dest_flags';
 var ALL_DEST_FLAGS = ${destFlagsJson};
 var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';
 var ALL_COUNTRY_HUB_KEYS = ${countryHubKeysJson};
+var DISPLAY_MODE_COOKIE_NAME = 'airline_network_display_mode';
 
 var currentCountry = '__all__';
 var countryBtns = document.querySelectorAll('.country-btn');
@@ -386,6 +400,7 @@ var hitCountEl = document.getElementById('hit-count');
 var noHitEl = document.getElementById('no-hit');
 var airportNameNormalBtn = document.getElementById('airport-name-normal-btn');
 var airportNameCompactBtn = document.getElementById('airport-name-compact-btn');
+var routeTable = document.getElementById('route-table');
 var destFilterBtn = document.getElementById('dest-filter-btn');
 var destFilterCompactBtn = document.getElementById('dest-filter-btn-compact');
 var destFilterModal = document.getElementById('dest-filter-modal');
@@ -416,6 +431,13 @@ function setAirportNameDisplay(compact) {
   airportNameNormalBtn.setAttribute('aria-pressed', String(!compact));
   airportNameCompactBtn.classList.toggle('active', compact);
   airportNameCompactBtn.setAttribute('aria-pressed', String(compact));
+  setCookieValue(DISPLAY_MODE_COOKIE_NAME, compact ? 'compact' : 'normal');
+}
+
+function flashCountryColumn() {
+  routeTable.classList.remove('country-column-flash');
+  void routeTable.offsetWidth;
+  routeTable.classList.add('country-column-flash');
 }
 
 function getCookieValue(name) {
@@ -541,6 +563,7 @@ countryBtns.forEach(function (btn) {
     btn.classList.add('active');
     currentCountry = btn.getAttribute('data-country');
     applyFilter();
+    if (currentCountry === '__all__') flashCountryColumn();
   });
 });
 
@@ -641,7 +664,9 @@ countryFilterApply.addEventListener('click', function () {
 searchBox.addEventListener('input', applyFilter);
 airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });
 airportNameCompactBtn.addEventListener('click', function () { setAirportNameDisplay(true); });
+setAirportNameDisplay(getCookieValue(DISPLAY_MODE_COOKIE_NAME) === 'compact');
 applyFilter();
+flashCountryColumn();
 </script>
 </body>
 </html>`;
