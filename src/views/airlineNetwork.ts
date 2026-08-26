@@ -212,6 +212,11 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .iata, .code { display: inline-block; margin-left: 6px; font-size: 0.68rem; color: var(--code-text); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
 .compact-airports .airport-name { display: none; }
 .compact-airports .col-hub .code, .compact-airports .col-dest .code { margin-left: 0; }
+.compact-only { display: none; }
+.compact-airports .normal-only { display: none; }
+.compact-airports .compact-only { display: inline; }
+.compact-dest-heading { line-height: 1.25; white-space: nowrap; }
+.compact-dest-heading .th-filter-btn { display: block; margin: 0 auto 2px; }
 .col-freq { font-weight: 700; color: var(--accent); }
 .col-dest-flag { width: 44px; text-align: center; font-size: 1.05rem; }
 .unit { font-weight: 400; color: var(--text-muted); font-size: 0.68rem; margin-left: 3px; }
@@ -307,9 +312,9 @@ tr:nth-child(even) td { background: var(--row-alt); }
           <tr>
             <th>国<button type="button" id="country-filter-btn" class="th-filter-btn" title="表示する経由国・拠点空港を選択">&#x25BE;</button></th>
             <th>航空会社</th>
-            <th>拠点空港</th>
+            <th><span class="normal-only">拠点空港</span><span class="compact-only">発空港</span></th>
+            <th class="col-dest"><span class="normal-only">乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></span><span class="compact-only compact-dest-heading">(<button type="button" id="dest-filter-btn-compact" class="th-filter-btn" title="表示する着空港を選択">&#x25EF;/&#x25B3;</button>)<br>着空港</span></th>
             <th class="col-dest-flag"><button type="button" id="dest-flag-filter-btn" class="th-filter-btn" title="乗り入れ空港を国旗で絞り込む" aria-label="乗り入れ空港を国旗で絞り込む">🏁</button></th>
-            <th>乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></th>
             <th>便数(週)</th>
           </tr>
         </thead>
@@ -382,6 +387,7 @@ var noHitEl = document.getElementById('no-hit');
 var airportNameNormalBtn = document.getElementById('airport-name-normal-btn');
 var airportNameCompactBtn = document.getElementById('airport-name-compact-btn');
 var destFilterBtn = document.getElementById('dest-filter-btn');
+var destFilterCompactBtn = document.getElementById('dest-filter-btn-compact');
 var destFilterModal = document.getElementById('dest-filter-modal');
 var destFilterBackdrop = document.getElementById('dest-filter-backdrop');
 var destFilterClose = document.getElementById('dest-filter-close');
@@ -460,8 +466,10 @@ function getNextZ() {
 function updateDestFilterBtnLabel() {
   if (selectedDestCodes.length === ALL_DEST_CODES.length) {
     destFilterBtn.textContent = '▾';
+    destFilterCompactBtn.textContent = '◯/△';
   } else {
     destFilterBtn.textContent = '▾(' + selectedDestCodes.length + '/' + ALL_DEST_CODES.length + ')';
+    destFilterCompactBtn.textContent = selectedDestCodes.length + '/' + ALL_DEST_CODES.length;
   }
 }
 
@@ -552,6 +560,7 @@ function closeDestFilterModal() {
 }
 
 destFilterBtn.addEventListener('click', openDestFilterModal);
+destFilterCompactBtn.addEventListener('click', openDestFilterModal);
 destFilterClose.addEventListener('click', closeDestFilterModal);
 destFilterCancel.addEventListener('click', closeDestFilterModal);
 destFilterBackdrop.addEventListener('click', closeDestFilterModal);
