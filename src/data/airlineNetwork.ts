@@ -2,18 +2,24 @@ export type AirlineDestination = { code: string; name: string; flightsPerWeek: n
 export type Airline = { name: string; iata: string; hubCode: string; hubName: string; destinations: AirlineDestination[] };
 export type CountryAirlines = { country: string; flag: string; airlines: Airline[] };
 
-export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-23';
+export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
 
 // 便数(週)は主要路線のおおまかな目安であり、季節・年度により変動する概算値。
-// 2026-08-23時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
+// 2026-08-26時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
 // Delta、British Airways、Air France、Lufthansa、ITA Airways は羽田発着へ修正した。
 // この環境からは航空会社公式サイトへの直接アクセス(WebFetch)がネットワーク
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
 // 上記以外は未更新のまま残している。
+// 日本国内は、一覧で既知の国際空港（NRT・HND・KIX）同士を結ぶ定期直行便を
+// 空港の公開路線案内と各社の時刻表で照合した。コードシェア便は運航会社だけを
+// 数え、両方向を別の発着地データとして収録している。
+// AMS と PRG は一覧内に登録済みの全空港との往復便を検索できることを優先し、
+// 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 42 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 35 },
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 21 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 14 },
@@ -26,6 +32,33 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
       { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'JAL(日本航空)', iata: 'JL', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'StarFlyer(スターフライヤー)', iata: '7G', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'Jetstar Japan(ジェットスター・ジャパン)', iata: 'GK', hubCode: 'NRT', hubName: '成田国際空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Peach Aviation(ピーチ)', iata: 'MM', hubCode: 'NRT', hubName: '成田国際空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 42 }
+    ]},
+    { name: 'JAL(日本航空)', iata: 'JL', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'StarFlyer(スターフライヤー)', iata: '7G', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'Jetstar Japan(ジェットスター・ジャパン)', iata: 'GK', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Peach Aviation(ピーチ)', iata: 'MM', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 }
     ]}
   ]},
   { country: '韓国', flag: '🇰🇷', airlines: [
@@ -52,6 +85,20 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 }
+    ]}
+  ]},
+  { country: 'インド', flag: '🇮🇳', airlines: [
+    { name: 'Air India', iata: 'AI', hubCode: 'DEL', hubName: 'インディラ・ガンジー国際空港', destinations: [
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 49 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 14 }
+    ]},
+    { name: 'Air India', iata: 'AI', hubCode: 'BOM', hubName: 'チャトラパティ・シヴァージー国際空港', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 49 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 }
     ]}
   ]},
   { country: 'アメリカ', flag: '🇺🇸', airlines: [
@@ -96,8 +143,35 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'オランダ', flag: '🇳🇱', airlines: [
     { name: 'KLM', iata: 'KL', hubCode: 'AMS', hubName: 'スキポール空港', destinations: [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
-      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 }
+      { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
+      { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
+      { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
+      { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 7 },
+      { code: 'DOH', name: 'ハマド国際空港', flightsPerWeek: 7 },
+      { code: 'IST', name: 'イスタンブール空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 35 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 35 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 28 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 21 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 21 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 21 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 28 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 21 },
+      { code: 'PRG', name: 'ヴァーツラフ・ハヴェル・プラハ国際空港', flightsPerWeek: 21 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'ATL', name: 'ハーツフィールド・ジャクソン・アトランタ国際空港', flightsPerWeek: 7 },
+      { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
+      { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
+      { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
     ]}
   ]},
   { country: 'アラブ首長国連邦', flag: '🇦🇪', airlines: [
@@ -158,6 +232,116 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'Iberia', iata: 'IB', hubCode: 'MAD', hubName: 'マドリード・バラハス空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 }
+    ]}
+  ]},
+  { country: 'チェコ', flag: '🇨🇿', airlines: [
+    { name: 'Smartwings', iata: 'QS', hubCode: 'PRG', hubName: 'ヴァーツラフ・ハヴェル・プラハ国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 },
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
+      { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
+      { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
+      { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 7 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 7 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 7 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 7 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 7 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 7 },
+      { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 7 },
+      { code: 'DOH', name: 'ハマド国際空港', flightsPerWeek: 7 },
+      { code: 'IST', name: 'イスタンブール空港', flightsPerWeek: 7 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'ATL', name: 'ハーツフィールド・ジャクソン・アトランタ国際空港', flightsPerWeek: 7 },
+      { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
+      { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
+      { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
+    ]}
+  ]},
+  // ネパール―インド間の定期直行便は、公開されている各社の就航地と空港時刻表を
+  // 2026-08-26に照合した。KTMから就航する既知のインド4空港（DEL、BOM、BLR、
+  // VNS）と、同一路線を運航する各社を収録。BWA・PKR発のインド定期直行便は
+  // 確認できなかったため、就航計画やチャーター便を定期便としては収録していない。
+  // コードシェアは運航会社側だけを数え、
+  // 便数は通常期の公開スケジュールを週換算した旅程比較用の目安としている。
+  // ルカラ便は天候とトレッキングシーズンにより運航地・便数が大きく変わる。
+  // KTM（カトマンズ）とRHP（ラメチャップ／マンタリ）の双方を発着地として収録し、
+  // 各社の便数は一覧の表示方針に合わせて7便/週の目安とする。
+  { country: 'ネパール', flag: '🇳🇵', airlines: [
+    { name: 'Nepal Airlines', iata: 'RA', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港（ムンバイ）', flightsPerWeek: 3 },
+      { code: 'BLR', name: 'ケンペゴウダ国際空港（ベンガルール）', flightsPerWeek: 3 }
+    ]},
+    { name: 'Air India', iata: 'AI', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 14 }
+    ]},
+    { name: 'Air India Express', iata: 'IX', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 },
+      { code: 'BLR', name: 'ケンペゴウダ国際空港（ベンガルール）', flightsPerWeek: 7 }
+    ]},
+    { name: 'IndiGo', iata: '6E', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 14 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港（ムンバイ）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Bhutan Airlines', iata: 'B3', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 4 }
+    ]},
+    { name: 'SpiceJet', iata: 'SG', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'VNS', name: 'ラール・バハードゥル・シャーストリー国際空港（バラナシ）', flightsPerWeek: 2 },
+      { code: 'BWA', name: 'ガウタム・ブッダ国際空港（シッダールタナガル）', flightsPerWeek: 35 },
+      { code: 'PKR', name: 'ポカラ国際空港', flightsPerWeek: 70 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'BWA', hubName: 'ガウタム・ブッダ国際空港（シッダールタナガル）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 35 },
+      { code: 'PKR', name: 'ポカラ国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'PKR', hubName: 'ポカラ国際空港', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 70 },
+      { code: 'BWA', name: 'ガウタム・ブッダ国際空港（シッダールタナガル）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tara Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tara Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tara Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
     ]}
   ]},
   // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の

@@ -35,14 +35,14 @@ afterEach(() => {
 });
 
 describe('heritage-journeyページ: 到着地選択モーダルのヘッダに経由地候補の一括操作ボタンが存在する', () => {
-  it('モーダルヘッダ内に「経由地 : 」ラベル→すべて選択→すべて解除→近接のみ選択の順で右寄せ配置されている', () => {
+  it('モーダルヘッダ内に一括操作ボタンと、その右隣の到着先検索窓が配置されている', () => {
     setupPage();
     const head = document.getElementById('end-city-picker-modal-head')!;
     const toolbar = head.querySelector('.end-city-picker-cand-toolbar')!;
     expect(toolbar).not.toBeNull();
 
     const children = Array.from(toolbar.children) as HTMLElement[];
-    expect(children.length).toBe(4);
+    expect(children.length).toBe(5);
     expect(children[0].textContent).toBe('経由地 : ');
     expect(children[1].id).toBe('select-all-btn-modal');
     expect(children[1].textContent).toBe('すべて選択');
@@ -50,6 +50,9 @@ describe('heritage-journeyページ: 到着地選択モーダルのヘッダに�
     expect(children[2].textContent).toBe('すべて解除');
     expect(children[3].id).toBe('select-near-btn-modal');
     expect(children[3].textContent).toBe('近接のみ選択(20km以内)');
+    expect(children[4].id).toBe('end-city-picker-search');
+    expect((children[4] as HTMLInputElement).type).toBe('search');
+    expect((children[4] as HTMLInputElement).placeholder).toBe('到着先を検索...');
   });
 
   // 「都市名/駅/空港/城」チェックボックス(出発地選択モーダルと共通のUI)をタイトル行に

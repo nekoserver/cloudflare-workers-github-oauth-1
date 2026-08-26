@@ -32,12 +32,12 @@ function setupPage() {
   return { fillTextCalls };
 }
 
-describe('heritage-journeyページ: ルート順序表示板の横幅が20%広がっている', () => {
+describe('heritage-journeyページ: ルート順序表示板が画面の残り幅いっぱいに広がる', () => {
   afterEach(() => { document.body.innerHTML = ''; });
 
-  it('CSSで#tour-route-side-panelの横幅が240px(200pxの1.2倍)に設定されている', () => {
+  it('CSSでモーダル右側の残り幅を使い、240pxを最小幅にしている', () => {
     const html = getHeritageJourneyPage();
-    expect(html).toMatch(/\.tour-route-side-panel\{[^}]*width:240px/);
+    expect(html).toMatch(/\.tour-route-side-panel\{[^}]*width:calc\(100vw - 608px\)[^}]*max-width:none[^}]*flex:1 1 auto[^}]*min-width:240px/);
   });
 });
 

@@ -213,7 +213,7 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .airport-network-btn{background:#1e3a5f;border:1px solid #38bdf8;color:#bae6fd;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px}
 .airport-network-btn.has-data{background:#bbf7d0;border-color:#86efac;color:#14532d;font-weight:700}
-.airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
+.airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left;white-space:nowrap}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .route-apply-row{display:flex;justify-content:center;margin-top:12px}
@@ -278,9 +278,15 @@ h1{font-size:22px;margin:0 0 4px}
 #registered-routes-modal-head{cursor:grab;user-select:none;touch-action:none}
 #registered-routes-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
-.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
+#airport-network-modal-box{position:fixed;max-width:672px;width:calc(100% - 32px)}
+.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:calc(100vw - 608px);max-width:none;max-height:90vh;overflow:auto;margin-left:16px;flex:1 1 auto;min-width:240px}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
-.tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-row{display:flex;align-items:center;border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tour-route-flight-controls{display:flex;align-items:center;gap:8px;margin-left:auto;padding-left:12px;white-space:nowrap;font-weight:700}
+.tour-route-flight-control{display:inline-flex;align-items:center;gap:3px;cursor:pointer}
+.tour-route-flight-control input{margin:0;cursor:pointer}
+.tour-route-flight-control.arrival{color:#b91c1c}.tour-route-flight-control.departure{color:#1d4ed8}
 .tour-route-side-num{display:inline-block;min-width:1.4em;color:#94a3b8;font-variant-numeric:tabular-nums}
 .tour-route-side-check{margin:0 4px;vertical-align:middle;cursor:pointer}
 .tour-route-side-row:hover{background:#1e293b}
@@ -295,6 +301,9 @@ h1{font-size:22px;margin:0 0 4px}
 .end-city-picker-cand-toolbar{margin-left:auto;margin-bottom:0;font-size:11px}
 .end-city-picker-cand-label{color:#94a3b8;white-space:nowrap}
 .end-city-picker-cand-toolbar-row2{flex-basis:100%;margin-left:0}
+.end-city-picker-search{min-width:150px;flex:1;background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:11px;font-family:inherit}
+.end-city-picker-search:focus{border-color:#38bdf8;outline:2px solid rgba(56,189,248,.2)}
+.end-city-picker-search::placeholder{color:#64748b}
 .dist-country-filter-label{color:#94a3b8;white-space:nowrap}
 .dist-country-filter-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
 .dist-country-filter-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #334155;cursor:pointer;color:#e2e8f0;font-size:13px}
@@ -502,6 +511,7 @@ ${getMitokoroModalCss()}
         <button id="select-all-btn-modal" type="button">すべて選択</button>
         <button id="select-none-btn-modal" type="button">すべて解除</button>
         <button id="select-near-btn-modal" type="button">近接のみ選択(20km以内)</button>
+        <input type="search" id="end-city-picker-search" class="end-city-picker-search" placeholder="到着先を検索..." aria-label="到着先を検索" autocomplete="off">
       </div>
     </div>
     <table class="end-city-picker-table">
@@ -999,6 +1009,9 @@ var state = { selected: {} };
 // 巡回テスト(#tour-mini-canvas/#tour-globe-canvas)の巡回対象からのみ
 // 一時的に外す(テスト時に特定の地点だけスキップしたい場合の補助)。
 var routeLineExcluded = {};
+// 空港行の「到着」「出発」は互いに独立して選択でき、再描画後も状態を保つ。
+// キーは同名表記ゆれの影響を受けないIATA空港コードを使う。
+var airportFlightLineSelection = {};
 
 // 現在ON状態(routeLineExcludedで除外されていない)の世界遺産のみを、巡回順(tourPoints順)に
 // heritage_masterの4桁IDで並べた配列。出発地・到着地(idを持たない都市)は含まれない。
@@ -1126,7 +1139,10 @@ function updateTourScopeHeaderLabel() {
 
 // 出発地・到着地の組み合わせが heritage_journey_registered_routes テーブルに
 // 未登録の場合のみ「ルート登録」ボタン(#register-route-btn)を有効化する。
-// 登録済みなら非アクティブ、書き込み成功後はボタン自体をDOMから削除する。
+// 登録済みなら非アクティブにする。書き込み成功後もボタンはDOMに残し、現在の
+// 組み合わせだけを登録済み状態にする。ボタンを削除すると、その後に別の都市を
+// 選んでもupdateRegisterRouteButton()が更新対象を見つけられず、同じページでは
+// 2件目以降のルートを登録できなくなるためである。
 //
 // 【非同期レースガード】出発地/到着地は短時間に何度も変わりうる
 // (入替ボタン・分布チップ・出発地/到着地選択モーダルの連続クリック等)。
@@ -1405,7 +1421,8 @@ function clearRegisterRouteError() {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data && data.ok) {
-          btn.remove();
+          btn.disabled = true;
+          btn.title = 'この出発地・到着地の組み合わせは既に登録済みです';
           updateStartCityRegisteredIndicator();
         } else {
           btn.disabled = false;
@@ -1458,7 +1475,20 @@ function showAirportNetworkModal(point) {
   document.getElementById('airport-network-table-body').innerHTML = routes.length ? routes.map(function(r) {
     return '<tr><td>' + esc(r.direction) + '</td><td>' + esc(r.flag + ' ' + r.country) + '</td><td>' + esc(r.airline) + '<span class="airport-network-code">' + esc(r.iata) + '</span></td><td>' + esc(r.hubName) + '<span class="airport-network-code">' + esc(r.hubCode) + '</span></td><td>' + esc(r.destinationName) + '<span class="airport-network-code">' + esc(r.destinationCode) + '</span></td><td>' + esc(r.flightsPerWeek) + '便/週</td></tr>';
   }).join('') : '<tr><td colspan="6" class="empty-note">airline-networkに登録された発着便はありません。</td></tr>';
-  document.getElementById('airport-network-modal-overlay').style.display = 'flex';
+  resetAirportNetworkModalPosition();
+  var airportOverlay = document.getElementById('airport-network-modal-overlay');
+  airportOverlay.style.display = 'flex';
+  activateFloatingPanel(airportOverlay);
+}
+
+// 登録済みルートモーダルと同じく、左上の巡回ルートスコープ
+// (#tour-mini-panel、既定top:12px/left:12px/幅280px)の右端に左端を接し、上端も揃える。
+// 再オープン時もこの基準位置へ戻す。
+function resetAirportNetworkModalPosition() {
+  var box = document.getElementById('airport-network-modal-box');
+  if (!box) return;
+  box.style.left = '292px';
+  box.style.top = '12px';
 }
 document.getElementById('airport-network-modal-close').addEventListener('click', function() { document.getElementById('airport-network-modal-overlay').style.display = 'none'; });
 document.getElementById('airport-network-modal-overlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
@@ -1697,12 +1727,18 @@ function renderRouteSidePanel(ordered) {
     var flag = p.flag || '';
     var dim = filterActive && country !== routeCountryFilter;
     var airportHasData = !!p.airportCode && !!(p.airportRoutes && p.airportRoutes.length);
+    var flightSelection = p.airportCode && airportFlightLineSelection[p.airportCode] || {};
+    var flightControls = airportHasData
+      ? '<span class="tour-route-flight-controls">'
+        + '<label class="tour-route-flight-control arrival"><input type="checkbox" data-airport-flight-direction="arrival" data-airport-flight-code="' + esc(p.airportCode) + '"' + (flightSelection.arrival ? ' checked' : '') + '>到着</label>'
+        + '<label class="tour-route-flight-control departure"><input type="checkbox" data-airport-flight-direction="departure" data-airport-flight-code="' + esc(p.airportCode) + '"' + (flightSelection.departure ? ' checked' : '') + '>出発</label>'
+        + '</span>' : '';
     return '<div class="tour-route-side-row' + (off ? ' off' : '') + (dim ? ' route-line-item-dimmed' : '') + (airportHasData ? ' airport-has-data' : '') + '" data-side-name="' + esc(p.name) + '" data-side-country="' + esc(country) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '"' + (p.airportCode ? ' data-side-airport-code="' + esc(p.airportCode) + '"' : '') + ' title="タップで地球儀上に名称を表示">'
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
       + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + (dim ? ' disabled aria-disabled="true"' : '') + ' title="OFFで巡回テストから一時的に除外">'
-      + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
+      + '<span class="tour-route-side-name"> ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
       + esc(p.icon || '📍') + ' ' + esc(p.name)
-      + (p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '') + '</div>';
+      + (p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '') + '</span>' + flightControls + '</div>';
   }).join('');
 }
 
@@ -2010,12 +2046,34 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var miniHead = document.getElementById('tour-mini-head');
   var miniCanvas = document.getElementById('tour-mini-canvas');
   var lodgingModal = document.getElementById('lodging-recommend-modal');
+  var airportNetworkModal = document.getElementById('airport-network-modal-overlay');
   var lodgingList = document.getElementById('lodging-recommend-list');
   var lodgingStatus = document.getElementById('lodging-recommend-status');
   var lodgingNextBtn = document.getElementById('lodging-next-day-btn');
   var tourAirportSummary = document.getElementById('tour-airport-summary');
   var tourAirportSummaryBody = document.getElementById('tour-airport-summary-body');
   var castleToggleBtn = document.getElementById('toggle-castles-btn');
+  // 巡回ルートスコープと宿泊推奨地はドラッグ後などに重なることがある。
+  // DOM順や固定のz-indexだけに任せると、下側になったパネルのボタンやcanvasへ
+  // ポインターが届かなくなるため、最後に操作・フォーカスされた側を前面へ出す。
+  // pointerdownはボタンのclickより先に発火するので、前面化したその操作を
+  // キャンセルせず、そのまま各コントロールへ届けられる。
+  var floatingPanelZ = 10001;
+  function activateFloatingPanel(panel) {
+    if (!panel) return;
+    // 登録済み巡回ルートを選ぶ間は、呼び出し元のスコープとそこから開く
+    // 宿泊推奨地・空港の各パネルを背面に固定する。全画面overlayの外から
+    // focusinが発生した場合にも、巡回ルートモーダルを追い越させない。
+    var registeredRoutesOverlay = document.getElementById('registered-routes-modal-overlay');
+    if (registeredRoutesOverlay && registeredRoutesOverlay.classList.contains('open')) return;
+    floatingPanelZ += 1;
+    panel.style.zIndex = String(floatingPanelZ);
+  }
+  [miniPanel, lodgingModal, airportNetworkModal].forEach(function(panel) {
+    if (!panel) return;
+    panel.addEventListener('pointerdown', function() { activateFloatingPanel(panel); });
+    panel.addEventListener('focusin', function() { activateFloatingPanel(panel); });
+  });
   // 城の地球儀オーバーレイ表示は、経由地候補の「城ON/OFF」トグル(#toggle-castles-btn、
   // toggleTransportCandidates('toggle-castles-btn','castle')で駅/空港と同じ選択トグルとして
   // 動作する)と単一のボタン・単一の状態(aria-pressed)を共有する。以前はcastlesVisibleという
@@ -2441,6 +2499,34 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var routePoints = isScope && lodgingRoutePoints.length > 0 ? lodgingRoutePoints : tourPoints;
     var projectedRoute = routePoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
 
+    // ルート順序パネルの空港行で選択された発着便を重ねる。到着便は
+    // 他空港→選択空港を赤、出発便は選択空港→他空港を青で表す。
+    // airline-networkに座標は無いため、同じページへ埋め込んだ空港マスタを
+    // IATAコードで引いて両端の地球儀座標を解決する。
+    tourPoints.forEach(function(airport) {
+      if (!airport.airportCode) return;
+      var selection = airportFlightLineSelection[airport.airportCode] || {};
+      if (!selection.arrival && !selection.departure) return;
+      var airportSource = HERITAGE_POINTS.find(function(p) { return p.airportCode === airport.airportCode; });
+      ((airportSource && airportSource.airportRoutes) || []).forEach(function(route) {
+        var isArrival = route.direction === '到着';
+        if ((isArrival && !selection.arrival) || (!isArrival && !selection.departure)) return;
+        var otherCode = isArrival ? route.hubCode : route.destinationCode;
+        var other = HERITAGE_POINTS.find(function(p) { return p.airportCode === otherCode; });
+        if (!other) return;
+        var from = isArrival ? other : airport;
+        var to = isArrival ? airport : other;
+        var fp = project(from.lat, from.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        var tp = project(to.lat, to.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        ctx.strokeStyle = isArrival ? '#ef4444' : '#2563eb';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(fp.x, fp.y);
+        ctx.lineTo(tp.x, tp.y);
+        ctx.stroke();
+      });
+    });
+
     // 経由地を結ぶルート線
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -2688,7 +2774,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   });
 
   document.getElementById('tour-route-side-list').addEventListener('click', function(e) {
-    if (e.target.closest('[data-side-check-name]')) return; // チェックボックス操作はトグル専用のchangeリスナーに任せる
+    if (e.target.closest('[data-side-check-name], [data-airport-flight-direction]')) return; // チェックボックス操作はchangeリスナーに任せる
     var row = e.target.closest('[data-side-name]');
     if (!row) return;
     var lat = Number(row.getAttribute('data-side-lat'));
@@ -2700,6 +2786,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   });
 
   document.getElementById('tour-route-side-list').addEventListener('change', function(e) {
+    var flightCheck = e.target.closest('[data-airport-flight-direction]');
+    if (flightCheck) {
+      var code = flightCheck.getAttribute('data-airport-flight-code');
+      var direction = flightCheck.getAttribute('data-airport-flight-direction');
+      if (!airportFlightLineSelection[code]) airportFlightLineSelection[code] = {};
+      airportFlightLineSelection[code][direction] = flightCheck.checked;
+      renderAll();
+      return;
+    }
     var check = e.target.closest('[data-side-check-name]');
     if (!check) return;
     toggleRouteLineExcluded(check.getAttribute('data-side-check-name'));
@@ -2958,8 +3053,24 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
 // heritage_journey_registered_routes 全件を取得し、出発地・到着地それぞれの
 // 出現回数を集計して降順表示、あわせてID/出発地/到着地/直線距離のテーブルを表示する。
 function getNextZ() {
+  // Inline style だけを調べると、stylesheet 側に z-index を持つ
+  // #tour-mini-panel / .lodging-recommend-modal / .tour-modal-overlay を
+  // 見落とす。その場合、後から開いたモーダルへ 200 程度しか割り当てられず、
+  // CSS の 9998〜10001 のレイヤーより背面に入ってしまう。
+  // 静的レイヤーは明示的に登録し、動的に前面化された要素は inline style から
+  // 拾う。全DOMの getComputedStyle() はモーダルを開くたびにレイアウト計算を
+  // 誘発するため行わない。
+  var staticZDefaults = {
+    heritageAddModal: 9999,
+    tourModalOverlay: 9999,
+    tourMiniPanel: 9998,
+    lodgingRecommendModal: 10001
+  };
   var els = document.querySelectorAll('[style*="z-index"]');
   var max = 100;
+  Object.keys(staticZDefaults).forEach(function(key) {
+    if (staticZDefaults[key] > max) max = staticZDefaults[key];
+  });
   for (var i = 0; i < els.length; i++) {
     var z = parseInt(els[i].style.zIndex, 10);
     if (!isNaN(z) && z > max) max = z;
@@ -3134,7 +3245,7 @@ function switchTourScopeToRegisteredRoute(startLabel, endLabel) {
 function openRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   if (!overlay) return;
-  overlay.style.zIndex = String(getNextZ());
+  activateRegisteredRoutesModalLayer(overlay);
   overlay.classList.add('open');
   resetRegisteredRoutesModalPosition();
   var dropdown = document.getElementById('registered-routes-end-dropdown');
@@ -3163,6 +3274,23 @@ function openRegisteredRoutesModal() {
     });
 }
 
+// 登録済みルートモーダルの領域を操作したときは、巡回ルートスコープと
+// 宿泊推奨地よりもこのモーダルを前面へ戻す。両フローティングパネルは
+// 操作時に動的にz-indexを上げるため、固定値ではなく同じカウンターも進める。
+function activateRegisteredRoutesModalLayer(overlay) {
+  if (!overlay) return;
+  var nextZ = Math.max(getNextZ(), floatingPanelZ + 1);
+  floatingPanelZ = nextZ;
+  overlay.style.zIndex = String(nextZ);
+  // 呼び出し元の巡回ルートスコープと、その配下から開かれる関連モーダルを
+  // 一つ下のレイヤーへまとめる。登録済みルートモーダルを閉じ、各パネルが
+  // 改めて操作・フォーカスされるまではこのレイヤーを維持する。
+  ['tour-mini-panel', 'lodging-recommend-modal', 'airport-network-modal-overlay'].forEach(function(id) {
+    var panel = document.getElementById(id);
+    if (panel) panel.style.zIndex = String(nextZ - 1);
+  });
+}
+
 function closeRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   if (overlay) overlay.classList.remove('open');
@@ -3179,6 +3307,7 @@ function closeRegisteredRoutesModal() {
   if (!viewBtn || !overlay || !closeBtn || !body || !endThBtn || !endDropdown || !countryFilter) return;
   viewBtn.addEventListener('click', openRegisteredRoutesModal);
   closeBtn.addEventListener('click', closeRegisteredRoutesModal);
+  overlay.addEventListener('pointerdown', function() { activateRegisteredRoutesModalLayer(overlay); });
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
   endThBtn.addEventListener('click', function() {
     endDropdown.hidden = !endDropdown.hidden;
@@ -3270,7 +3399,18 @@ function buildTransportPickerPoints(suffix) {
   return HERITAGE_POINTS.filter(function(h) {
     return typeof h.n === 'string' && h.n.length > suffix.length && h.n.slice(h.n.length - suffix.length) === suffix;
   }).map(function(h) {
-    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '', airportCode: h.airportCode || null, airportRoutes: h.airportRoutes || [] };
+    return {
+      name: 'TP::' + h.n,
+      label: h.n,
+      lat: h.lat,
+      lon: h.lon,
+      // 空港行は種類アイコンだけでなく所属国も一目で分かるよう「✈︎国旗」にする。
+      // country は到着地モーダルの🏁見出しから開く国旗フィルタにも利用する。
+      flag: (h.e || '') + (suffix === '空港' ? (h.f || '') : ''),
+      country: h.c || '',
+      airportCode: h.airportCode || null,
+      airportRoutes: h.airportRoutes || []
+    };
   });
 }
 
@@ -3475,13 +3615,15 @@ function renderEndCityPickerTable() {
   var currentEnd = endSel ? endSel.value : null;
   // 出発地選択モーダル(#start-city-picker-modal-overlay)と同じ「都市名のみ/駅/空港/城」
   // チェックボックスで候補プールを組み立てる(buildCityPickerPool()を共有)。
-  // 「到達国を制限する」フィルタ(destCountryFilter)は都市(CITIES)にのみ適用する
-  // (駅/空港/城の仮想エントリはbuildTransportPickerPoints/buildCastlePickerPointsが
-  // 国情報を持たないため、対象外のまま常に表示する)。
+  // 「到達国を制限する」フィルタ(destCountryFilter)は都市に加え、所属国を持つ
+  // 空港候補にも適用する。これにより空港行頭の「✈︎国旗」と🏁見出しから開く
+  // 国旗フィルタが同じ国情報に反応する。
   var citiesCb = document.getElementById('end-city-picker-cities-cb');
   var stationsCb = document.getElementById('end-city-picker-stations-cb');
   var airportsCb = document.getElementById('end-city-picker-airports-cb');
   var castlesCb = document.getElementById('end-city-picker-castles-cb');
+  var searchInput = document.getElementById('end-city-picker-search');
+  var searchQuery = searchInput ? searchInput.value.trim().toLocaleLowerCase() : '';
   var includeCities = citiesCb ? citiesCb.checked : true;
   var includeStations = stationsCb ? stationsCb.checked : false;
   var includeAirports = airportsCb ? airportsCb.checked : false;
@@ -3489,7 +3631,9 @@ function renderEndCityPickerTable() {
   var cityPool = includeCities ? CITIES.filter(function(c) {
     return destCountryFilter === DEST_COUNTRY_FILTER_ALL || c.country === destCountryFilter;
   }).map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }) : [];
-  var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles);
+  var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles).filter(function(p) {
+    return destCountryFilter === DEST_COUNTRY_FILTER_ALL || !p.airportCode || p.country === destCountryFilter;
+  });
   var pool = cityPool.concat(extraPool);
   // 出発地選択モーダルで空港を選んでいる(start.airportCode有り)場合に限り、かつ
   // この到着地選択モーダルの「空港」チェックがONの間だけ、表内の空港候補すべてに
@@ -3500,6 +3644,11 @@ function renderEndCityPickerTable() {
   var rows = pool.map(function(p) {
     var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, p.lat, p.lon) : null;
     return { name: p.name, label: p.label, km: km, flag: p.flag || '', airportCode: p.airportCode || null, airportRoutes: p.airportRoutes || [] };
+  }).filter(function(r) {
+    if (!searchQuery) return true;
+    return [r.label, r.name, r.airportCode || ''].some(function(value) {
+      return String(value).toLocaleLowerCase().indexOf(searchQuery) !== -1;
+    });
   });
   rows.sort(function(a, b) {
     if (a.km === null && b.km === null) return 0;
@@ -3558,6 +3707,7 @@ function closeEndCityPickerModal() {
   var stationsCb = document.getElementById('end-city-picker-stations-cb');
   var airportsCb = document.getElementById('end-city-picker-airports-cb');
   var castlesCb = document.getElementById('end-city-picker-castles-cb');
+  var searchInput = document.getElementById('end-city-picker-search');
   if (!pickerBtn || !overlay || !closeBtn || !body) return;
   pickerBtn.addEventListener('click', openEndCityPickerModal);
   closeBtn.addEventListener('click', closeEndCityPickerModal);
@@ -3580,6 +3730,7 @@ function closeEndCityPickerModal() {
   [citiesCb, stationsCb, airportsCb, castlesCb].forEach(function(cb) {
     if (cb) cb.addEventListener('change', renderEndCityPickerTable);
   });
+  if (searchInput) searchInput.addEventListener('input', renderEndCityPickerTable);
   // 🏁列見出しをタップすると、既存の「到達国を制限する」国一覧モーダルをそのまま開く。
   // 集計(国別都市数の降順)は候補都市の全体(CITIES全件)を対象にする既存の
   // computeDestCountryCounts()をそのまま再利用する(この到着地選択モーダルで

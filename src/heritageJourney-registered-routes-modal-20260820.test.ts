@@ -179,6 +179,41 @@ describe('heritage-journeyページ: 到着地ドロップダウンと国旗フ�
 });
 
 describe('heritage-journeyページ: 登録済みルートから巡回スコープを選択', () => {
+  it('巡回ルートモーダルを最上位にし、スコープ・宿泊推奨地・空港を再アクティブ化まで下位に保つ', () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    const overlay = document.getElementById('registered-routes-modal-overlay') as HTMLElement;
+    const miniPanel = document.getElementById('tour-mini-panel') as HTMLElement;
+    const lodgingModal = document.getElementById('lodging-recommend-modal') as HTMLElement;
+    const airportModal = document.getElementById('airport-network-modal-overlay') as HTMLElement;
+
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(miniPanel.style.zIndex));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(lodgingModal.style.zIndex));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(airportModal.style.zIndex));
+
+    miniPanel.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    lodgingModal.dispatchEvent(new Event('focusin', { bubbles: true }));
+    airportModal.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(miniPanel.style.zIndex));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(lodgingModal.style.zIndex));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(airportModal.style.zIndex));
+
+    document.getElementById('registered-routes-modal-close')!.click();
+    miniPanel.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(Number(miniPanel.style.zIndex)).toBeGreaterThan(Number(overlay.style.zIndex));
+  });
+
+  it('CSSでz-indexを持つ未表示モーダルも計算に含め、巡回ルートモーダルを確実に最上位へ出す', () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+
+    document.getElementById('view-registered-routes-btn')!.click();
+    const overlay = document.getElementById('registered-routes-modal-overlay') as HTMLElement;
+
+    // stylesheet上で最も高い固定レイヤーは.lodging-recommend-modalの10001。
+    // テストDOMは<style>を含めないため、数値を境界として直接検証する。
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(10001);
+  }, 15000);
+
   it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;

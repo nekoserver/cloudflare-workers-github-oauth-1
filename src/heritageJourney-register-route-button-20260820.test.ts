@@ -6,7 +6,7 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 // 「ルート登録」ボタン(#register-route-btn)。出発地・到着地の組み合わせが
 // D1の heritage_journey_registered_routes テーブルに未登録の場合のみ有効化され、
 // 押すと /api/heritage-journey/register-route へPOSTしてルートを登録、
-// 成功したらボタン自体をDOMから削除する。出発地・到着地を変更するたびに
+// 成功したら現在の組み合わせについてボタンを無効化する。出発地・到着地を変更するたびに
 // /api/heritage-journey/route-exists で再チェックする。
 //
 // 故障シナリオ:
@@ -14,9 +14,10 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 //   (2) 初期表示時に存在チェックのfetchが行われず、ボタンの有効/無効が
 //       サーバーの実データと無関係に固定されてしまう
 //   (3) 出発地/到着地を変更しても再チェックが行われず、古い有効/無効状態が残る
-//   (4) ボタン押下時にstart/end/座標を正しく送らない、またはPOST成功時にも
-//       ボタンが残ったままになる
+//   (4) ボタン押下時にstart/end/座標を正しく送らない、またはPOST成功後に
+//       現在の組み合わせを登録済みとして無効化しない
 //   (5) POST失敗時にもボタンが消えてしまい、ユーザーが再試行できなくなる
+//   (6) POST成功時にボタンをDOMから削除し、都市変更後の2件目を登録できなくなる
 
 function setupPage(fetchImpl: (input: unknown, init?: unknown) => Promise<{ json: () => Promise<unknown> }>) {
   const html = getHeritageJourneyPage();
@@ -85,8 +86,8 @@ describe('heritage-journeyページ: 出発地・到着地の変更で再チェ�
   });
 });
 
-describe('heritage-journeyページ: ボタン押下時の登録POSTと削除', () => {
-  it('クリックするとstart/end/座標を含めてregister-routeへPOSTし、成功時(ok:true)にボタンが削除される', async () => {
+describe('heritage-journeyページ: ボタン押下時の登録POSTと状態更新', () => {
+  it('クリックするとstart/end/座標を含めてregister-routeへPOSTし、成功時(ok:true)に登録済み状態になる', async () => {
     const { fetchMock } = setupPage((input: unknown) => {
       const url = String(input);
       if (url.indexOf('/api/heritage-journey/route-exists') === 0) {
@@ -114,7 +115,54 @@ describe('heritage-journeyページ: ボタン押下時の登録POSTと削除', 
     expect(typeof payload.startLat).toBe('number');
     expect(typeof payload.endLat).toBe('number');
 
-    expect(document.getElementById('register-route-btn')).toBeNull();
+    const btnAfter = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btnAfter).not.toBeNull();
+    expect(btnAfter.disabled).toBe(true);
+    expect(btnAfter.title).toContain('既に登録済み');
+  });
+
+  it('1件登録後もボタンを残し、ローマ→リムリックへ変更すると2件目を登録できる', async () => {
+    let registerCount = 0;
+    const { fetchMock } = setupPage((input: unknown) => {
+      const url = String(input);
+      if (url.indexOf('/api/heritage-journey/route-exists') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ exists: false }) });
+      }
+      if (url === '/api/heritage-journey/register-route') {
+        registerCount++;
+        return Promise.resolve({ json: () => Promise.resolve({ ok: true, id: registerCount, straightKm: 1000 }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({ starts: [] }) });
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    (document.getElementById('register-route-btn') as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const start = document.getElementById('start-city') as unknown as HTMLSelectElement;
+    const end = document.getElementById('end-city') as unknown as HTMLSelectElement;
+    start.value = 'Rome';
+    start.dispatchEvent(new Event('change'));
+    end.value = 'Limerick';
+    end.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.disabled).toBe(false);
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const postCalls = fetchMock.mock.calls.filter((c) => String(c[0]) === '/api/heritage-journey/register-route');
+    expect(postCalls).toHaveLength(2);
+    expect(JSON.parse((postCalls[1][1] as { body: string }).body)).toMatchObject({
+      start: 'ローマ',
+      end: 'リムリック',
+    });
   });
 
   it('POSTが失敗(ok:false)した場合、ボタンは削除されず再度クリック可能になる', async () => {

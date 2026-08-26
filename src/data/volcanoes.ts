@@ -9,6 +9,10 @@ export interface VolcanoSite {
 }
 
 export const VOLCANOES: VolcanoSite[] = [
+  // ネパール国内に Smithsonian GVP の完新世火山は登録されていないため、
+  // 周辺広域で最も近い同データベース収録火山を「近郊」として明記する。
+  {id:'kunlun_volcanic_group',n:'崑崙火山群（阿什庫勒）',c:'中国（チベット高原・ネパール北西広域）',elev:5808,lastErupt:'1951年（噴火報告には不確実性あり）',lat:35.52,lon:80.20},
+  {id:'tengchong',n:'騰衝火山群',c:'中国（雲南省・ネパール東方広域）',elev:2865,lastErupt:'約5750年前（完新世）',lat:25.23,lon:98.50},
   {id:'kilauea',n:'キラウエア',c:'アメリカ合衆国（ハワイ）',elev:1247,lastErupt:'2024年（現在も活動中）',lat:19.42,lon:-155.29},
   {id:'mauna_loa',n:'マウナ・ロア',c:'アメリカ合衆国（ハワイ）',elev:4169,lastErupt:'2022年',lat:19.48,lon:-155.61},
   {id:'hualalai',n:'フアラライ山',c:'アメリカ合衆国（ハワイ島）',elev:2521,lastErupt:'1801年（次の噴火が懸念）',lat:19.69,lon:-155.87},

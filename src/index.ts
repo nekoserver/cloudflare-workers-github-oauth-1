@@ -4277,9 +4277,35 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/qwen/qwen3.8-27b',
 ]);
 
+async function logNekoMultiSearchResults(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+  outcome: { hitCount: number; results: Array<{ id: string }> }
+): Promise<void> {
+  if (outcome.results.length === 0) return;
+  const now = new Date().toISOString();
+  // 検索キーワード履歴モーダルが参照するaichat_search_logへ、検索結果ごとに
+  // キーワード、対象共有ID、全体のヒット件数を同じ検索時刻で保存する。
+  await db.batch(outcome.results.map((result) => db.prepare(
+    `INSERT INTO aichat_search_log
+       (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count, result_count)
+     VALUES (?, ?, ?, ?, ?, 1, ?)
+     ON CONFLICT(user_id, keyword, share_id) DO UPDATE SET
+       last_searched_at = excluded.last_searched_at,
+       select_count = aichat_search_log.select_count + 1,
+       result_count = excluded.result_count`
+  ).bind(userId, keyword.slice(0, 200), result.id.slice(0, 100), now, now, outcome.hitCount)));
+}
+
+type AichatRequestBody = {
+  message?: string; model?: string; systemPromptMode?: string;
+  source?: string; image?: string; preferMoondream?: boolean;
+};
+
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
-  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string; image?: string; preferMoondream?: boolean };
+  let body: AichatRequestBody;
   try {
     body = await c.req.json();
   } catch {
@@ -4313,6 +4339,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const { results } = await searchAiChatShares(db, user.sub, keyword);
       return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question })) };
     },
+    logSearchShares: c.env.DB ? (keyword, outcome) => logNekoMultiSearchResults(c.env.DB!, user.sub, keyword, outcome) : undefined,
     vectorizedAnswers: async () => {
       if (!c.env.DB) return { count: 0, totalCount: 0, results: [] };
       const countRow = await c.env.DB.prepare(
@@ -4350,6 +4377,11 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub).all<HourlyTokenUsageRow>();
       return rows.results ?? [];
     },
+    checkApiToken: async (token) => {
+      if (!c.env.DB) throw new Error('DB未設定です');
+      const result = await checkApiKeyAuth(c.env.DB as unknown as ApiKeyDb, token, new Date());
+      return result.valid;
+    },
     sha256ViaWasm: async (input) => {
       if (c.env.DB) {
         const row = await c.env.DB.prepare(
@@ -4359,11 +4391,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           throw new Error('sha256モジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
         }
       }
-      // dynamic importにする理由: sha256WasmServer.tsは.wasmファイルを
-      // 静的importしており、Vite/vitest環境では.wasmインポートが
-      // WebAssembly.Moduleではなくアセットパス文字列になる。静的import
-      // にすると `import app from './index'` を使う全テストがテスト収集時に
-      // 壊れるため、実行時にのみ読み込む
+      // WASMは実行時のみ読み込み、index.tsを読むテストでの静的importを避ける。
       const { sha256HexViaWasm } = await import('./utils/sha256WasmServer');
       return sha256HexViaWasm(input);
     },
