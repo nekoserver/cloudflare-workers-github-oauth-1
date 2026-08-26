@@ -100,6 +100,22 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(amsCodes).toEqual(registeredCodes);
   });
 
+  it('PRG発着はネットワークに登録済みの全空港との往復便を網羅する', () => {
+    const registeredCodes = new Set<string>();
+    for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) {
+      registeredCodes.add(airline.hubCode);
+      for (const destination of airline.destinations) registeredCodes.add(destination.code);
+    }
+
+    const prg = AIRLINE_NETWORK.flatMap((country) => country.airlines)
+      .find((airline) => airline.hubCode === 'PRG');
+    expect(prg).toBeDefined();
+    const prgCodes = new Set(prg!.destinations.map((destination) => destination.code));
+    registeredCodes.delete('PRG');
+    expect(prgCodes).toEqual(registeredCodes);
+    expect(prg!.destinations.every((destination) => destination.flightsPerWeek === 7)).toBe(true);
+  });
+
   it('検索ボックスと国別フィルタが両方JSに実装されている', () => {
     expect(html).toContain("document.getElementById('search-box')");
     expect(html).toContain('matchesCountry');
