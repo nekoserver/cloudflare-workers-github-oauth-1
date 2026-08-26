@@ -2,7 +2,27 @@ import { AIRLINE_NETWORK, AIRLINE_NETWORK_CHECKED_AT } from '../data/airlineNetw
 import { AIRPORT_LIST } from '../data/airports';
 
 type DestAirportEntry = { code: string; name: string; flag: string };
+type DestFlagEntry = { flag: string; country: string };
 type CountryHubEntry = { key: string; country: string; flag: string; hubCode: string; hubName: string };
+
+function getAirportFlag(code: string): string {
+  const airport = AIRPORT_LIST.find((item) => item.code === code);
+  return airport ? airport.city.split(' ')[0] : '🏳️';
+}
+
+function collectDestFlags(destinations: DestAirportEntry[]): DestFlagEntry[] {
+  const seen: Record<string, boolean> = {};
+  const flags: DestFlagEntry[] = [];
+  for (const destination of destinations) {
+    if (seen[destination.flag]) continue;
+    seen[destination.flag] = true;
+    const airport = AIRPORT_LIST.find((item) => item.code === destination.code);
+    const country = airport ? airport.city.substring(airport.city.indexOf(' ') + 1).split('・')[0] : '不明';
+    flags.push({ flag: destination.flag, country });
+  }
+  flags.sort((a, b) => a.country.localeCompare(b.country, 'ja'));
+  return flags;
+}
 
 function collectCountryHubs(): CountryHubEntry[] {
   const seen: Record<string, boolean> = {};
@@ -46,22 +66,35 @@ function buildCountryButtons(): string {
 
 function buildRows(): string {
   let html = '';
+  const routes: Array<{ country: string; flag: string; airline: typeof AIRLINE_NETWORK[number]['airlines'][number]; destination: typeof AIRLINE_NETWORK[number]['airlines'][number]['destinations'][number]; order: number }> = [];
+  let order = 0;
   for (const c of AIRLINE_NETWORK) {
     for (const airline of c.airlines) {
       for (const dest of airline.destinations) {
-        const searchKey = [c.country, airline.name, airline.hubName, dest.name, dest.code].join(' ').toLowerCase();
-        const hubKey = `${c.country}::${airline.hubCode}`;
-        html += `<tr data-country="${c.country}" data-search="${searchKey}" data-dest-code="${dest.code}" data-hub-key="${hubKey}">`;
-        html += `<td class="col-country">${c.flag} ${c.country}</td>`;
-        html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
-        html += `<td class="col-hub">${airline.hubName}<span class="code">${airline.hubCode}</span></td>`;
-        html += `<td class="col-dest">${dest.name}<span class="code">${dest.code}</span></td>`;
-        html += `<td class="col-freq">${dest.flightsPerWeek}<span class="unit">便/週</span></td>`;
-        html += `</tr>`;
+        routes.push({ country: c.country, flag: c.flag, airline, destination: dest, order: order++ });
       }
     }
   }
+  routes.sort((a, b) => b.destination.flightsPerWeek - a.destination.flightsPerWeek || a.order - b.order);
+  for (const route of routes) {
+    const { country, flag, airline, destination } = route;
+    const destFlag = getAirportFlag(destination.code);
+    const searchKey = [country, airline.name, airline.hubName, destination.name, destination.code].join(' ').toLowerCase();
+    const hubKey = `${country}::${airline.hubCode}`;
+    html += `<tr data-country="${country}" data-search="${searchKey}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-hub-key="${hubKey}">`;
+    html += `<td class="col-country">${flag} ${country}</td>`;
+    html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
+    html += `<td class="col-hub">${airline.hubName}<span class="code">${airline.hubCode}</span></td>`;
+    html += `<td class="col-dest-flag">${destFlag}</td>`;
+    html += `<td class="col-dest">${destination.name}<span class="code">${destination.code}</span></td>`;
+    html += `<td class="col-freq">${destination.flightsPerWeek}<span class="unit">便/週</span></td>`;
+    html += `</tr>`;
+  }
   return html;
+}
+
+function buildDestFlagCheckRows(flags: DestFlagEntry[]): string {
+  return flags.map((item) => `<label class="check-row"><input type="checkbox" class="dest-flag-check" value="${item.flag}" checked><span class="check-flag">${item.flag}</span><span class="check-name">${item.country}</span></label>`).join('');
 }
 
 function buildDestCheckRows(destinations: DestAirportEntry[]): string {
@@ -95,6 +128,9 @@ export function getAirlineNetworkPage(): string {
   const destAirports = collectDestAirports();
   const destCheckRows = buildDestCheckRows(destAirports);
   const destCodesJson = JSON.stringify(destAirports.map((d) => d.code));
+  const destFlags = collectDestFlags(destAirports);
+  const destFlagCheckRows = buildDestFlagCheckRows(destFlags);
+  const destFlagsJson = JSON.stringify(destFlags.map((item) => item.flag));
   const countryHubs = collectCountryHubs();
   const countryHubCheckRows = buildCountryHubCheckRows(countryHubs);
   const countryHubKeysJson = JSON.stringify(countryHubs.map((ch) => ch.key));
@@ -171,6 +207,7 @@ td { padding: 6px 9px; border: 1px solid var(--border); vertical-align: middle; 
 tr:nth-child(even) td { background: var(--row-alt); }
 .iata, .code { display: inline-block; margin-left: 6px; font-size: 0.68rem; color: var(--code-text); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
 .col-freq { font-weight: 700; color: var(--accent); }
+.col-dest-flag { width: 44px; text-align: center; font-size: 1.05rem; }
 .unit { font-weight: 400; color: var(--text-muted); font-size: 0.68rem; margin-left: 3px; }
 .no-hit { text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.8rem; }
 
@@ -261,6 +298,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
             <th>国<button type="button" id="country-filter-btn" class="th-filter-btn" title="表示する経由国・拠点空港を選択">&#x25BE;</button></th>
             <th>航空会社</th>
             <th>拠点空港</th>
+            <th class="col-dest-flag"><button type="button" id="dest-flag-filter-btn" class="th-filter-btn" title="乗り入れ空港を国旗で絞り込む" aria-label="乗り入れ空港を国旗で絞り込む">🏁</button></th>
             <th>乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></th>
             <th>便数(週)</th>
           </tr>
@@ -289,6 +327,19 @@ tr:nth-child(even) td { background: var(--row-alt); }
   </div>
 </div>
 
+<div class="modal-backdrop" id="dest-flag-filter-backdrop"></div>
+<div class="modal-box" id="dest-flag-filter-modal">
+  <div class="modal-header">
+    <span>🏁 乗り入れ国を選択</span>
+    <button type="button" id="dest-flag-filter-close" class="modal-close">&times;</button>
+  </div>
+  <div class="modal-body" id="dest-flag-filter-list">${destFlagCheckRows}</div>
+  <div class="modal-footer">
+    <button type="button" id="dest-flag-filter-cancel" class="modal-btn">キャンセル</button>
+    <button type="button" id="dest-flag-filter-apply" class="modal-btn modal-btn-primary">適用</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="country-filter-backdrop"></div>
 <div class="modal-box" id="country-filter-modal">
   <div class="modal-header">
@@ -307,6 +358,8 @@ tr:nth-child(even) td { background: var(--row-alt); }
 <script>
 var DEST_COOKIE_NAME = 'airline_network_dest_airports';
 var ALL_DEST_CODES = ${destCodesJson};
+var DEST_FLAG_COOKIE_NAME = 'airline_network_dest_flags';
+var ALL_DEST_FLAGS = ${destFlagsJson};
 var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';
 var ALL_COUNTRY_HUB_KEYS = ${countryHubKeysJson};
 
@@ -323,6 +376,13 @@ var destFilterClose = document.getElementById('dest-filter-close');
 var destFilterCancel = document.getElementById('dest-filter-cancel');
 var destFilterApply = document.getElementById('dest-filter-apply');
 var destCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.dest-check'));
+var destFlagFilterBtn = document.getElementById('dest-flag-filter-btn');
+var destFlagFilterModal = document.getElementById('dest-flag-filter-modal');
+var destFlagFilterBackdrop = document.getElementById('dest-flag-filter-backdrop');
+var destFlagFilterClose = document.getElementById('dest-flag-filter-close');
+var destFlagFilterCancel = document.getElementById('dest-flag-filter-cancel');
+var destFlagFilterApply = document.getElementById('dest-flag-filter-apply');
+var destFlagCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.dest-flag-check'));
 var countryFilterBtn = document.getElementById('country-filter-btn');
 var countryFilterModal = document.getElementById('country-filter-modal');
 var countryFilterBackdrop = document.getElementById('country-filter-backdrop');
@@ -358,8 +418,15 @@ function loadSelectedCountryHubs() {
   return saved.split(',').filter(function (key) { return ALL_COUNTRY_HUB_KEYS.indexOf(key) !== -1; });
 }
 
+function loadSelectedDestFlags() {
+  var saved = getCookieValue(DEST_FLAG_COOKIE_NAME);
+  if (saved === null || saved === '') return ALL_DEST_FLAGS.slice();
+  return saved.split(',').filter(function (flag) { return ALL_DEST_FLAGS.indexOf(flag) !== -1; });
+}
+
 var selectedDestCodes = loadSelectedDestCodes();
 var selectedCountryHubs = loadSelectedCountryHubs();
+var selectedDestFlags = loadSelectedDestFlags();
 
 function getNextZ() {
   var max = 100;
@@ -384,6 +451,12 @@ function updateCountryFilterBtnLabel() {
   } else {
     countryFilterBtn.textContent = '▾(' + selectedCountryHubs.length + '/' + ALL_COUNTRY_HUB_KEYS.length + ')';
   }
+}
+
+function updateDestFlagFilterBtnLabel() {
+  destFlagFilterBtn.textContent = selectedDestFlags.length === ALL_DEST_FLAGS.length
+    ? '🏁'
+    : '🏁(' + selectedDestFlags.length + '/' + ALL_DEST_FLAGS.length + ')';
 }
 
 function updateCountryPanelVisibility() {
@@ -416,8 +489,9 @@ function applyFilter() {
     var matchesCountry = (currentCountry === '__all__') || (row.getAttribute('data-country') === currentCountry);
     var matchesSearch = !q || row.getAttribute('data-search').indexOf(q) !== -1;
     var matchesDest = selectedDestCodes.indexOf(row.getAttribute('data-dest-code')) !== -1;
+    var matchesDestFlag = selectedDestFlags.indexOf(row.getAttribute('data-dest-flag')) !== -1;
     var matchesCountryHub = selectedCountryHubs.indexOf(row.getAttribute('data-hub-key')) !== -1;
-    var show = matchesCountry && matchesSearch && matchesDest && matchesCountryHub;
+    var show = matchesCountry && matchesSearch && matchesDest && matchesDestFlag && matchesCountryHub;
     row.style.display = show ? '' : 'none';
     if (show) visibleCount++;
   });
@@ -425,6 +499,7 @@ function applyFilter() {
   noHitEl.style.display = visibleCount === 0 ? '' : 'none';
   updateDestFilterBtnLabel();
   updateCountryFilterBtnLabel();
+  updateDestFlagFilterBtnLabel();
 }
 
 countryBtns.forEach(function (btn) {
@@ -440,6 +515,7 @@ updateCountryPanelVisibility();
 
 function openDestFilterModal() {
   closeCountryFilterModal();
+  closeDestFlagFilterModal();
   destCheckboxes.forEach(function (cb) {
     cb.checked = selectedDestCodes.indexOf(cb.value) !== -1;
   });
@@ -467,8 +543,38 @@ destFilterApply.addEventListener('click', function () {
   applyFilter();
 });
 
+function openDestFlagFilterModal() {
+  closeDestFilterModal();
+  closeCountryFilterModal();
+  destFlagCheckboxes.forEach(function (cb) {
+    cb.checked = selectedDestFlags.indexOf(cb.value) !== -1;
+  });
+  var z = getNextZ();
+  destFlagFilterBackdrop.style.zIndex = String(z);
+  destFlagFilterModal.style.zIndex = String(z + 1);
+  destFlagFilterBackdrop.classList.add('open');
+  destFlagFilterModal.classList.add('open');
+}
+
+function closeDestFlagFilterModal() {
+  destFlagFilterBackdrop.classList.remove('open');
+  destFlagFilterModal.classList.remove('open');
+}
+
+destFlagFilterBtn.addEventListener('click', openDestFlagFilterModal);
+destFlagFilterClose.addEventListener('click', closeDestFlagFilterModal);
+destFlagFilterCancel.addEventListener('click', closeDestFlagFilterModal);
+destFlagFilterBackdrop.addEventListener('click', closeDestFlagFilterModal);
+destFlagFilterApply.addEventListener('click', function () {
+  selectedDestFlags = destFlagCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+  setCookieValue(DEST_FLAG_COOKIE_NAME, selectedDestFlags.join(','));
+  closeDestFlagFilterModal();
+  applyFilter();
+});
+
 function openCountryFilterModal() {
   closeDestFilterModal();
+  closeDestFlagFilterModal();
   countryHubCheckboxes.forEach(function (cb) {
     cb.checked = selectedCountryHubs.indexOf(cb.value) !== -1;
   });
