@@ -2,15 +2,17 @@ export type AirlineDestination = { code: string; name: string; flightsPerWeek: n
 export type Airline = { name: string; iata: string; hubCode: string; hubName: string; destinations: AirlineDestination[] };
 export type CountryAirlines = { country: string; flag: string; airlines: Airline[] };
 
-export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-23';
+export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
 
 // 便数(週)は主要路線のおおまかな目安であり、季節・年度により変動する概算値。
-// 2026-08-23時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
+// 2026-08-26時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
 // Delta、British Airways、Air France、Lufthansa、ITA Airways は羽田発着へ修正した。
 // この環境からは航空会社公式サイトへの直接アクセス(WebFetch)がネットワーク
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
 // 上記以外は未更新のまま残している。
+// AMS は一覧内に登録済みの全空港との発着を検索できることを優先し、KLM の
+// 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -96,8 +98,32 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'オランダ', flag: '🇳🇱', airlines: [
     { name: 'KLM', iata: 'KL', hubCode: 'AMS', hubName: 'スキポール空港', destinations: [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
-      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 }
+      { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
+      { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
+      { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
+      { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 7 },
+      { code: 'DOH', name: 'ハマド国際空港', flightsPerWeek: 7 },
+      { code: 'IST', name: 'イスタンブール空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 35 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 35 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 28 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 21 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 21 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 21 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 28 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 21 },
+      { code: 'PRG', name: 'ヴァーツラフ・ハヴェル・プラハ国際空港', flightsPerWeek: 21 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'ATL', name: 'ハーツフィールド・ジャクソン・アトランタ国際空港', flightsPerWeek: 7 },
+      { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
+      { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
+      { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
     ]}
   ]},
   { country: 'アラブ首長国連邦', flag: '🇦🇪', airlines: [
