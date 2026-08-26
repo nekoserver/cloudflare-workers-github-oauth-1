@@ -85,8 +85,8 @@ function buildRows(): string {
     html += `<td class="col-country">${flag} ${country}</td>`;
     html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
     html += `<td class="col-hub"><span class="airport-name">${airline.hubName}</span><span class="code">${airline.hubCode}</span></td>`;
-    html += `<td class="col-dest-flag">${destFlag}</td>`;
     html += `<td class="col-dest"><span class="airport-name">${destination.name}</span><span class="code">${destination.code}</span></td>`;
+    html += `<td class="col-dest-flag">${destFlag}</td>`;
     html += `<td class="col-freq">${destination.flightsPerWeek}<span class="unit">便/週</span></td>`;
     html += `</tr>`;
   }
@@ -313,8 +313,8 @@ tr:nth-child(even) td { background: var(--row-alt); }
             <th>国<button type="button" id="country-filter-btn" class="th-filter-btn" title="表示する経由国・拠点空港を選択">&#x25BE;</button></th>
             <th>航空会社</th>
             <th><span class="normal-only">拠点空港</span><span class="compact-only">発空港</span></th>
-            <th class="col-dest"><span class="normal-only">乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></span><span class="compact-only compact-dest-heading">(<button type="button" id="dest-filter-btn-compact" class="th-filter-btn" title="表示する着空港を選択">&#x25EF;/&#x25B3;</button>)<br>着空港</span></th>
-            <th class="col-dest-flag"><button type="button" id="dest-flag-filter-btn" class="th-filter-btn" title="乗り入れ空港を国旗で絞り込む" aria-label="乗り入れ空港を国旗で絞り込む">🏁</button></th>
+            <th class="col-dest"><span class="normal-only">乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></span><span class="compact-only compact-dest-heading"><button type="button" id="dest-filter-btn-compact" class="th-filter-btn" title="表示する着空港を選択">&#x25EF;/&#x25B3;</button><br>着空港</span></th>
+            <th class="col-dest-flag"><span class="normal-only"><button type="button" id="dest-flag-filter-btn" class="th-filter-btn" title="乗り入れ空港を国旗で絞り込む" aria-label="乗り入れ空港を国旗で絞り込む">🏁</button></span><span class="compact-only compact-dest-heading"><button type="button" id="dest-flag-filter-btn-compact" class="th-filter-btn" title="乗り入れ空港を国旗で絞り込む" aria-label="乗り入れ空港を国旗で絞り込む">&#x25EF;/&#x25B3;</button><br>🏁</span></th>
             <th>便数(週)</th>
           </tr>
         </thead>
@@ -395,6 +395,7 @@ var destFilterCancel = document.getElementById('dest-filter-cancel');
 var destFilterApply = document.getElementById('dest-filter-apply');
 var destCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.dest-check'));
 var destFlagFilterBtn = document.getElementById('dest-flag-filter-btn');
+var destFlagFilterCompactBtn = document.getElementById('dest-flag-filter-btn-compact');
 var destFlagFilterModal = document.getElementById('dest-flag-filter-modal');
 var destFlagFilterBackdrop = document.getElementById('dest-flag-filter-backdrop');
 var destFlagFilterClose = document.getElementById('dest-flag-filter-close');
@@ -482,9 +483,13 @@ function updateCountryFilterBtnLabel() {
 }
 
 function updateDestFlagFilterBtnLabel() {
-  destFlagFilterBtn.textContent = selectedDestFlags.length === ALL_DEST_FLAGS.length
-    ? '🏁'
-    : '🏁(' + selectedDestFlags.length + '/' + ALL_DEST_FLAGS.length + ')';
+  if (selectedDestFlags.length === ALL_DEST_FLAGS.length) {
+    destFlagFilterBtn.textContent = '🏁';
+    destFlagFilterCompactBtn.textContent = '◯/△';
+  } else {
+    destFlagFilterBtn.textContent = '🏁(' + selectedDestFlags.length + '/' + ALL_DEST_FLAGS.length + ')';
+    destFlagFilterCompactBtn.textContent = selectedDestFlags.length + '/' + ALL_DEST_FLAGS.length;
+  }
 }
 
 function updateCountryPanelVisibility() {
@@ -591,6 +596,7 @@ function closeDestFlagFilterModal() {
 }
 
 destFlagFilterBtn.addEventListener('click', openDestFlagFilterModal);
+destFlagFilterCompactBtn.addEventListener('click', openDestFlagFilterModal);
 destFlagFilterClose.addEventListener('click', closeDestFlagFilterModal);
 destFlagFilterCancel.addEventListener('click', closeDestFlagFilterModal);
 destFlagFilterBackdrop.addEventListener('click', closeDestFlagFilterModal);

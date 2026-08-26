@@ -145,7 +145,7 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain("airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });");
   });
 
-  it('簡易表示では発空港の右に(○/△)と改行した着空港の見出しを表示する', () => {
+  it('簡易表示では発空港の右に○/△と改行した着空港の見出しを表示する', () => {
     const dom = new JSDOM(html, { runScripts: 'dangerously' });
     const { document } = dom.window;
     const compactButton = document.getElementById('airport-name-compact-btn')!;
@@ -157,10 +157,23 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     const destinationHeader = headers[originHeaderIndex + 1];
     expect(originHeaderIndex).toBeGreaterThan(-1);
     expect(destinationHeader.classList.contains('col-dest')).toBe(true);
-    expect(destinationHeader.innerHTML).toContain('(<button');
+    expect(destinationHeader.innerHTML).not.toContain('(<button');
     expect(destinationHeader.textContent).toContain('◯/△');
     expect(destinationHeader.querySelector('br')).not.toBeNull();
     expect(destinationHeader.textContent).toContain('着空港');
+  });
+
+  it('簡易表示では着空港の右に○/△と改行した🏁の国旗カラムを表示する', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    (document.getElementById('airport-name-compact-btn') as HTMLButtonElement).click();
+
+    const compactFlagHeader = document.querySelector('th.col-dest-flag .compact-only')!;
+    expect(compactFlagHeader.textContent).toContain('◯/△');
+    expect(compactFlagHeader.querySelector('br')).not.toBeNull();
+    expect(compactFlagHeader.textContent).toContain('🏁');
+    expect(compactFlagHeader.textContent!.indexOf('◯/△')).toBeLessThan(compactFlagHeader.textContent!.indexOf('🏁'));
+    expect(compactFlagHeader.querySelector('#dest-flag-filter-btn-compact')).not.toBeNull();
   });
 
   it('簡易ボタンで空港名を非表示にし、通常ボタンで元に戻す', () => {
@@ -198,8 +211,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(destinationHeader!.querySelector('#dest-filter-btn.th-filter-btn')).not.toBeNull();
   });
 
-  it('乗り入れ空港の国旗を専用カラムに表示し、thの🏁ボタンから国旗で絞り込める', () => {
-    expect(html).toContain('<th class="col-dest-flag"><button type="button" id="dest-flag-filter-btn"');
+  it('乗り入れ空港の国旗を着空港の右の専用カラムに表示し、thの🏁ボタンから国旗で絞り込める', () => {
+    expect(html).toContain('<th class="col-dest-flag"><span class="normal-only"><button type="button" id="dest-flag-filter-btn"');
+    const document = new JSDOM(html).window.document;
 
     for (const code of uniqueDestCodes()) {
       const apt = AIRPORT_LIST.find((a) => a.code === code);
@@ -208,9 +222,13 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
       expect(html).toContain(`data-dest-code="${code}"`);
       expect(html).toContain(`data-dest-flag="${flag}"`);
       expect(html).toContain(`<td class="col-dest-flag">${flag}</td>`);
+      const row = document.querySelector(`tr[data-dest-code="${code}"]`)!;
+      expect(row.querySelector('.col-dest')!.nextElementSibling!.classList.contains('col-dest-flag')).toBe(true);
+      expect(row.querySelector('.col-dest-flag')!.textContent).toBe(flag);
     }
 
     expect(html).toContain("destFlagFilterBtn.addEventListener('click', openDestFlagFilterModal);");
+    expect(html).toContain("destFlagFilterCompactBtn.addEventListener('click', openDestFlagFilterModal);");
     expect(html).toContain("selectedDestFlags.indexOf(row.getAttribute('data-dest-flag')) !== -1");
   });
 
