@@ -192,6 +192,32 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(normalButton.getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('通常・簡易モードをCookieに保存し、ページ読み込み時に復元する', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.com/airline-network' });
+    const { document } = dom.window;
+
+    (document.getElementById('airport-name-compact-btn') as HTMLButtonElement).click();
+    expect(document.cookie).toContain('airline_network_display_mode=compact');
+    expect(html).toContain("setAirportNameDisplay(getCookieValue(DISPLAY_MODE_COOKIE_NAME) === 'compact');");
+
+    (document.getElementById('airport-name-normal-btn') as HTMLButtonElement).click();
+    expect(document.cookie).toContain('airline_network_display_mode=normal');
+  });
+
+  it('初期表示と垂直タブの「すべて」選択時に国カラムの枠を3回点滅する', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    const table = document.getElementById('route-table')!;
+
+    expect(table.classList.contains('country-column-flash')).toBe(true);
+    expect(html).toContain('animation: country-column-outline 0.4s ease-in-out 3;');
+    expect(html).toContain("if (currentCountry === '__all__') flashCountryColumn();");
+
+    document.querySelector<HTMLButtonElement>('.country-btn:not([data-country="__all__"])')!.click();
+    document.querySelector<HTMLButtonElement>('.country-btn[data-country="__all__"]')!.click();
+    expect(table.classList.contains('country-column-flash')).toBe(true);
+  });
+
   it('該当0件の場合の空表示メッセージ要素が存在する', () => {
     expect(html).toContain('id="no-hit"');
     expect(html).toContain('該当する路線が見つかりません');
