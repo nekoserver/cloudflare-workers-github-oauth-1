@@ -77,6 +77,21 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('便数は季節で変動する目安です');
   });
 
+  it('ルカラ空港の出発・到着便としてネパール3社と2空港を表示する', () => {
+    const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール');
+    expect(nepal?.airlines.map((airline) => airline.name)).toEqual(['Tara Air', 'Summit Air', 'Sita Air']);
+    for (const airline of nepal!.airlines) {
+      expect(airline.hubCode).toBe('LUA');
+      expect(airline.destinations.map((destination) => destination.code)).toEqual(['KTM', 'RHP']);
+    }
+    expect(html).toContain('テンジン・ヒラリー空港（ルカラ空港）');
+    expect(html).toContain('トリブバン国際空港（カトマンズ）');
+    expect(html).toContain('マンタリ空港（ラメチャップ空港）');
+    expect(AIRPORT_LIST.find((airport) => airport.code === 'LUA')?.city).toBe('🇳🇵 ネパール・ルカラ');
+    expect(AIRPORT_LIST.find((airport) => airport.code === 'KTM')).toBeDefined();
+    expect(AIRPORT_LIST.find((airport) => airport.code === 'RHP')).toBeDefined();
+  });
+
   it('羽田へ移管済みの主要5社を成田発着として表示しない', () => {
     for (const iata of ['DL', 'BA', 'AF', 'LH', 'AZ']) {
       const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines).find((item) => item.iata === iata);
@@ -86,9 +101,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
-  it('AMS発着はネットワークに登録済みの全空港を網羅する', () => {
+  it('AMS発着はネパール国内線を除く登録済みの全空港を網羅する', () => {
     const registeredCodes = new Set<string>();
-    for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) {
+    for (const country of AIRLINE_NETWORK) if (country.country !== 'ネパール') for (const airline of country.airlines) {
       registeredCodes.add(airline.hubCode);
       for (const destination of airline.destinations) registeredCodes.add(destination.code);
     }
@@ -101,9 +116,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(amsCodes).toEqual(registeredCodes);
   });
 
-  it('PRG発着はネットワークに登録済みの全空港との往復便を網羅する', () => {
+  it('PRG発着はネパール国内線を除く登録済みの全空港との往復便を網羅する', () => {
     const registeredCodes = new Set<string>();
-    for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) {
+    for (const country of AIRLINE_NETWORK) if (country.country !== 'ネパール') for (const airline of country.airlines) {
       registeredCodes.add(airline.hubCode);
       for (const destination of airline.destinations) registeredCodes.add(destination.code);
     }

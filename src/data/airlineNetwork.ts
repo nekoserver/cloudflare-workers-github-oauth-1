@@ -217,6 +217,23 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
     ]}
   ]},
+  // ルカラ便は天候とトレッキングシーズンにより運航地・便数が大きく変わる。
+  // KTM（カトマンズ）とRHP（ラメチャップ／マンタリ）の双方を発着地として収録し、
+  // 各社の便数は一覧の表示方針に合わせて7便/週の目安とする。
+  { country: 'ネパール', flag: '🇳🇵', airlines: [
+    { name: 'Tara Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
+      { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
+      { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]}
+  ]},
   // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の
   // 発着データが丸ごと欠けていた。便数はこのマスタの他路線と同じく、毎日運航を
   // 7便/週として丸めた旅程検討用の目安（コードシェア便の重複は含めない）。
