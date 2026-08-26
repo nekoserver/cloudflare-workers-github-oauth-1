@@ -77,6 +77,25 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('便数は季節で変動する目安です');
   });
 
+  it('航空会社から空港コード同士の経路へつながるHTML canvas図を表示する', () => {
+    const document = new JSDOM(html).window.document;
+    const canvas = document.getElementById('route-network-canvas');
+
+    expect(canvas).toBeInstanceOf(document.defaultView!.HTMLCanvasElement);
+    expect(canvas!.getAttribute('role')).toBe('img');
+    expect(canvas!.getAttribute('aria-label')).toContain('出発空港コード、到着空港コード');
+    expect(document.getElementById('network-canvas-title')!.textContent).toContain('乗り入れ便航空会社 → 空港コード経路');
+  });
+
+  it('canvas路線図は絞り込み後の上位6路線を航空会社→発着空港の順で描画する', () => {
+    expect(html).toContain("visibleRows = allRows.filter(function (row) { return row.style.display !== 'none'; }).slice(0, 6)");
+    expect(html).toContain("row.getAttribute('data-airline')");
+    expect(html).toContain("row.getAttribute('data-hub-code')");
+    expect(html).toContain("row.getAttribute('data-dest-code')");
+    expect(html).toContain('drawRouteNetwork();');
+    expect(html).toContain("window.addEventListener('resize', drawRouteNetwork);");
+  });
+
   it('ルカラ空港とネパール2空港の双方向の発着便を表示する', () => {
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール');
     expect(nepal).toBeDefined();
