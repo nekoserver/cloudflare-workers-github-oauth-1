@@ -145,6 +145,24 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain("airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });");
   });
 
+  it('簡易表示では発空港の右に(○/△)と改行した着空港の見出しを表示する', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    const compactButton = document.getElementById('airport-name-compact-btn')!;
+
+    compactButton.click();
+
+    const headers = Array.from(document.querySelectorAll('thead th'));
+    const originHeaderIndex = headers.findIndex((header) => header.textContent!.includes('発空港'));
+    const destinationHeader = headers[originHeaderIndex + 1];
+    expect(originHeaderIndex).toBeGreaterThan(-1);
+    expect(destinationHeader.classList.contains('col-dest')).toBe(true);
+    expect(destinationHeader.innerHTML).toContain('(<button');
+    expect(destinationHeader.textContent).toContain('◯/△');
+    expect(destinationHeader.querySelector('br')).not.toBeNull();
+    expect(destinationHeader.textContent).toContain('着空港');
+  });
+
   it('簡易ボタンで空港名を非表示にし、通常ボタンで元に戻す', () => {
     const dom = new JSDOM(html, { runScripts: 'dangerously' });
     const { document } = dom.window;
@@ -173,10 +191,11 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
   });
 
   it('「乗り入れ空港」th内にフィルタボタンが配置されている', () => {
-    const thMatch = html.match(/<th>乗り入れ空港[\s\S]*?<\/th>/);
-    expect(thMatch).toBeTruthy();
-    expect(thMatch![0]).toContain('id="dest-filter-btn"');
-    expect(thMatch![0]).toContain('class="th-filter-btn"');
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const destinationHeader = dom.window.document.querySelector('th.col-dest');
+    expect(destinationHeader).not.toBeNull();
+    expect(destinationHeader!.textContent).toContain('乗り入れ空港');
+    expect(destinationHeader!.querySelector('#dest-filter-btn.th-filter-btn')).not.toBeNull();
   });
 
   it('乗り入れ空港の国旗を専用カラムに表示し、thの🏁ボタンから国旗で絞り込める', () => {
