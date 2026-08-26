@@ -11,11 +11,15 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
 // 上記以外は未更新のまま残している。
+// 日本国内は、一覧で既知の国際空港（NRT・HND・KIX）同士を結ぶ定期直行便を
+// 空港の公開路線案内と各社の時刻表で照合した。コードシェア便は運航会社だけを
+// 数え、両方向を別の発着地データとして収録している。
 // AMS と PRG は一覧内に登録済みの全空港との往復便を検索できることを優先し、
 // 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 42 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 35 },
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 21 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 14 },
@@ -28,6 +32,33 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
       { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'JAL(日本航空)', iata: 'JL', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'StarFlyer(スターフライヤー)', iata: '7G', hubCode: 'HND', hubName: '羽田空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'Jetstar Japan(ジェットスター・ジャパン)', iata: 'GK', hubCode: 'NRT', hubName: '成田国際空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Peach Aviation(ピーチ)', iata: 'MM', hubCode: 'NRT', hubName: '成田国際空港', destinations: [
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 42 }
+    ]},
+    { name: 'JAL(日本航空)', iata: 'JL', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'StarFlyer(スターフライヤー)', iata: '7G', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'Jetstar Japan(ジェットスター・ジャパン)', iata: 'GK', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Peach Aviation(ピーチ)', iata: 'MM', hubCode: 'KIX', hubName: '関西国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 }
     ]}
   ]},
   { country: '韓国', flag: '🇰🇷', airlines: [
@@ -113,6 +144,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'KLM', iata: 'KL', hubCode: 'AMS', hubName: 'スキポール空港', destinations: [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
       { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
@@ -206,6 +238,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'Smartwings', iata: 'QS', hubCode: 'PRG', hubName: 'ヴァーツラフ・ハヴェル・プラハ国際空港', destinations: [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
       { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },

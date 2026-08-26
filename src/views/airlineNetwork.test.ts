@@ -169,6 +169,28 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('日本の既知の国際空港間を運航する全社の往復便を表示する', () => {
+    const japan = AIRLINE_NETWORK.find((country) => country.country === '日本')!;
+    const expectedRoutes = [
+      { origin: 'HND', destination: 'KIX', iatas: ['NH', 'JL', '7G'] },
+      { origin: 'KIX', destination: 'HND', iatas: ['NH', 'JL', '7G'] },
+      { origin: 'NRT', destination: 'KIX', iatas: ['GK', 'MM'] },
+      { origin: 'KIX', destination: 'NRT', iatas: ['GK', 'MM'] }
+    ];
+
+    for (const route of expectedRoutes) {
+      const operators = japan.airlines
+        .filter((airline) => airline.hubCode === route.origin &&
+          airline.destinations.some((destination) => destination.code === route.destination))
+        .map((airline) => airline.iata);
+      expect(operators).toEqual(route.iatas);
+    }
+    for (const code of ['NRT', 'HND', 'KIX']) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇯🇵 日本・');
+      expect(japan.airlines.some((airline) => airline.hubCode === code)).toBe(true);
+    }
+  });
+
   it('羽田へ移管済みの主要5社を成田発着として表示しない', () => {
     for (const iata of ['DL', 'BA', 'AF', 'LH', 'AZ']) {
       const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines).find((item) => item.iata === iata);
