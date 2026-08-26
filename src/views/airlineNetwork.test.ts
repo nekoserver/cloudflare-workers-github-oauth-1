@@ -124,6 +124,30 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(thMatch![0]).toContain('class="th-filter-btn"');
   });
 
+  it('乗り入れ空港の国旗を専用カラムに表示し、thの🏁ボタンから国旗で絞り込める', () => {
+    expect(html).toContain('<th class="col-dest-flag"><button type="button" id="dest-flag-filter-btn"');
+
+    for (const code of uniqueDestCodes()) {
+      const apt = AIRPORT_LIST.find((a) => a.code === code);
+      expect(apt).toBeDefined();
+      const flag = apt!.city.split(' ')[0];
+      expect(html).toContain(`data-dest-code="${code}"`);
+      expect(html).toContain(`data-dest-flag="${flag}"`);
+      expect(html).toContain(`<td class="col-dest-flag">${flag}</td>`);
+    }
+
+    expect(html).toContain("destFlagFilterBtn.addEventListener('click', openDestFlagFilterModal);");
+    expect(html).toContain("selectedDestFlags.indexOf(row.getAttribute('data-dest-flag')) !== -1");
+  });
+
+  it('全路線を便数の多い順に描画する', () => {
+    const tbody = html.match(/<tbody id="route-tbody">([\s\S]*?)<\/tbody>/);
+    expect(tbody).toBeTruthy();
+    const frequencies = Array.from(tbody![1].matchAll(/<td class="col-freq">(\d+)/g), (match) => Number(match[1]));
+    expect(frequencies.length).toBeGreaterThan(0);
+    expect(frequencies).toEqual([...frequencies].sort((a, b) => b - a));
+  });
+
   it('モーダルに全乗り入れ空港のチェックボックス(国旗/空港名/コード)がデフォルトONで並ぶ', () => {
     const modalMatch = html.match(/<div class="modal-body" id="dest-filter-list">[\s\S]*?<\/div>/);
     expect(modalMatch).toBeTruthy();
