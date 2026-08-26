@@ -159,6 +159,41 @@ app.get('/sha256-wasm', authMiddleware, async (c) => {
 
 `/wasm-modules`ページでWASMモジュールの起動時読み込みON/OFFをD1に保存できるようにしたが、Cloudflare Workersには「今すぐ再起動する」という明示的な操作が無い。設定は次にWorker isolateが新規に立ち上がったタイミング(次回のコールドスタート)から反映される。この制約はUIに明記しておくこと(ユーザーが「設定を保存したのに反映されない」と混乱するのを防ぐため)。
 
+## 10. vitest(Node)環境では`wasm-bindgen --target web`出力を実際に実行できない(既存の全モジュールで共通の制約)
+
+`sha256WasmServer.ts`/`factorWasmServer.ts`/`digWasmServer.ts`/`lsWasmServer.ts`のように、
+`public/wasm/<name>.js`から`initSync`を呼び`.wasm`を静的importするサーバー側実装を、
+`app.request(...)`経由の統合テスト(vitest、Node実行)で実際に最後まで実行しようとすると、
+以下のエラーで必ず失敗する(新規に作った`ls-wasm`だけの問題ではなく、既存の
+`sha256`/`factor`/`dig`でも同じエラーになることを`/neko factor`で実機確認済み):
+
+```
+Cannot find module './factor_bg.js' imported from .../public/wasm/factor_bg.wasm
+```
+
+原因: `wasm-bindgen --target web`が出力する`.wasm`バイナリは、自身の関数呼び出し規約の一部
+(externref操作等)を`./<name>_bg.js`という名前空間からのimportとして宣言している。ブラウザの
+`WebAssembly.instantiate`はこの名前空間を単なる文字列キーとして扱い、`<name>.js`側の
+`initSync()`が`__wbg_get_imports()`で自前に組み立てたオブジェクトを渡すだけなので、
+実際に`<name>_bg.js`というファイルが存在するかどうかは無関係(ブラウザでは正しく動く)。
+しかしVite/vitestのNode実行環境で`.wasm`を静的importすると、Vite側のwasm処理が
+バイナリの宣言済みimportをNodeの実モジュール解決にかけてしまい、実在しない
+`<name>_bg.js`を本当に`import`しようとしてエラーになる。
+
+**結論・対処**: この制約により、**このリポジトリのvitestテストではRust/WASM機能の
+「実際の計算結果」をNode経由で検証できない**。既存のsha256/factor/digも同様の理由で、
+統合テスト側は次の2点だけを検証し、実行結果の正しさの検証はRust側の`cargo test`
+(`wasm/<name>-wasm/src/lib.rs`内の`#[cfg(test)] mod tests`、JsValueに依存しない
+`_impl`関数を経由してネイティブでもテスト可能にする)に完全に委ねる設計にしている:
+  1. `index.ts`が対象モジュールをdynamic importで正しく配線しているか(ソース文字列検索)
+  2. `/wasm-modules`ページでの無効化設定が尊重され、無効時はWASMを一切実行せずに
+     エラーメッセージを返すか
+
+新しいWASMモジュールを追加するときも、TSの統合テストで「実際にWASMを実行して結果を
+検証する」テストを書こうとして原因不明のエラーに時間を溶かさないよう、最初から
+上記2点(配線・無効化)のみをTS側でテストし、計算ロジック自体はRustの`cargo test`で
+テストすること。
+
 ## 関連ドキュメント
 
 - [`wasm/README.md`](wasm/README.md) — WASMモジュールのビルド手順、サーバー側での再利用方法

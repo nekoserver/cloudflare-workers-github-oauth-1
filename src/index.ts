@@ -4425,6 +4425,21 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const { digLookupViaWasm } = await import('./utils/digWasmServer');
       return digLookupViaWasm(name, qtype);
     },
+    lsViaWasm: async (long, all) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('ls').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('lsモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+      // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+      // 既存テストが壊れるため)
+      const { lsFormatViaWasm } = await import('./utils/lsWasmServer');
+      return lsFormatViaWasm(long, all);
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
