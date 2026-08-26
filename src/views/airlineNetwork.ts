@@ -10,6 +10,10 @@ function getAirportFlag(code: string): string {
   return airport ? airport.city.split(' ')[0] : '🏳️';
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function collectDestFlags(destinations: DestAirportEntry[]): DestFlagEntry[] {
   const seen: Record<string, boolean> = {};
   const flags: DestFlagEntry[] = [];
@@ -81,7 +85,7 @@ function buildRows(): string {
     const destFlag = getAirportFlag(destination.code);
     const searchKey = [country, airline.name, airline.hubName, destination.name, destination.code].join(' ').toLowerCase();
     const hubKey = `${country}::${airline.hubCode}`;
-    html += `<tr data-country="${country}" data-search="${searchKey}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-hub-key="${hubKey}">`;
+    html += `<tr data-country="${country}" data-search="${searchKey}" data-airline="${escapeHtmlAttribute(airline.name)}" data-airline-iata="${escapeHtmlAttribute(airline.iata)}" data-hub-code="${airline.hubCode}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-flights="${destination.flightsPerWeek}" data-hub-key="${hubKey}">`;
     html += `<td class="col-country">${flag} ${country}</td>`;
     html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
     html += `<td class="col-hub"><span class="airport-name">${airline.hubName}</span><span class="code">${airline.hubCode}</span></td>`;
@@ -204,6 +208,14 @@ h1 { font-size: 1.15rem; margin-bottom: 3px; }
 .airport-name-toggle button:last-child { border-right: 0; }
 .airport-name-toggle button.active { background: var(--btn-active-bg); color: var(--btn-active-text); }
 
+.network-canvas-panel { margin-bottom: 10px; padding: 10px 12px 12px; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.network-canvas-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 8px; }
+.network-canvas-heading h2 { font-size: 0.86rem; }
+.network-canvas-heading p { color: var(--text-muted); font-size: 0.68rem; text-align: right; }
+.network-canvas-wrap { width: 100%; min-width: 560px; }
+#route-network-canvas { display: block; width: 100%; height: 276px; border-radius: 8px; background: light-dark(#f7faff, #0d141d); }
+.network-canvas-scroll { overflow-x: auto; }
+
 .table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
 table { border-collapse: collapse; font-size: 0.78rem; background: var(--surface); width: 100%; }
 th { padding: 7px 9px; text-align: left; border: 1px solid var(--border); white-space: nowrap; font-weight: 600; background: var(--header-bg); color: var(--header-text); }
@@ -289,6 +301,8 @@ tr:nth-child(even) td { background: var(--row-alt); }
   .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; overflow-y: visible; }
   .country-btn { width: auto; }
   .right-main { overflow-y: visible; }
+  .network-canvas-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .network-canvas-heading p { text-align: left; }
   .table-wrap { overflow-x: auto; }
 }
 </style>
@@ -319,6 +333,17 @@ tr:nth-child(even) td { background: var(--row-alt); }
         <button type="button" id="airport-name-compact-btn" aria-pressed="false">簡易</button>
       </div>
     </div>
+    <section class="network-canvas-panel" aria-labelledby="network-canvas-title">
+      <div class="network-canvas-heading">
+        <h2 id="network-canvas-title">乗り入れ便航空会社 → 空港コード経路</h2>
+        <p>現在の絞り込み結果から上位6路線を表示（線の太さは週あたり便数）</p>
+      </div>
+      <div class="network-canvas-scroll">
+        <div class="network-canvas-wrap">
+          <canvas id="route-network-canvas" height="276" role="img" aria-label="航空会社から出発空港コード、到着空港コードへつながる路線図"></canvas>
+        </div>
+      </div>
+    </section>
     <div class="table-wrap">
       <table id="route-table">
         <thead>
@@ -401,6 +426,7 @@ var noHitEl = document.getElementById('no-hit');
 var airportNameNormalBtn = document.getElementById('airport-name-normal-btn');
 var airportNameCompactBtn = document.getElementById('airport-name-compact-btn');
 var routeTable = document.getElementById('route-table');
+var routeNetworkCanvas = document.getElementById('route-network-canvas');
 var destFilterBtn = document.getElementById('dest-filter-btn');
 var destFilterCompactBtn = document.getElementById('dest-filter-btn-compact');
 var destFilterModal = document.getElementById('dest-filter-modal');
@@ -555,6 +581,70 @@ function applyFilter() {
   updateDestFilterBtnLabel();
   updateCountryFilterBtnLabel();
   updateDestFlagFilterBtnLabel();
+  drawRouteNetwork();
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, radius);
+}
+
+function drawRouteNetwork() {
+  if (!routeNetworkCanvas || typeof window.CanvasRenderingContext2D === 'undefined') return;
+  var ctx = routeNetworkCanvas.getContext('2d');
+  if (!ctx) return;
+  var visibleRows = allRows.filter(function (row) { return row.style.display !== 'none'; }).slice(0, 6);
+  var cssWidth = Math.max(560, routeNetworkCanvas.parentElement.clientWidth || 900);
+  var cssHeight = 276;
+  var ratio = window.devicePixelRatio || 1;
+  routeNetworkCanvas.width = Math.round(cssWidth * ratio);
+  routeNetworkCanvas.height = Math.round(cssHeight * ratio);
+  routeNetworkCanvas.style.width = cssWidth + 'px';
+  routeNetworkCanvas.style.height = cssHeight + 'px';
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var colors = dark
+    ? { text: '#e6edf3', muted: '#8b949e', airline: '#172d46', airport: '#14261f', line: '#58a6ff', border: '#3b82c4' }
+    : { text: '#1f2937', muted: '#64748b', airline: '#e8f2ff', airport: '#e9f8f0', line: '#2a6fd8', border: '#7fb0e8' };
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  if (!visibleRows.length) {
+    ctx.fillStyle = colors.muted; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('表示できる経路がありません', cssWidth / 2, cssHeight / 2);
+    return;
+  }
+  ctx.font = '600 11px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = colors.muted;
+  ctx.fillText('乗り入れ便航空会社', 105, 17);
+  ctx.fillText('経路情報', cssWidth * 0.65, 17);
+  var airlineWidth = Math.min(180, Math.max(140, cssWidth * 0.22));
+  var originX = Math.max(250, cssWidth * 0.43);
+  var destinationX = Math.max(originX + 155, cssWidth * 0.82);
+  visibleRows.forEach(function (row, index) {
+    var y = 31 + index * 40;
+    var airline = row.getAttribute('data-airline');
+    var iata = row.getAttribute('data-airline-iata');
+    var hub = row.getAttribute('data-hub-code');
+    var dest = row.getAttribute('data-dest-code');
+    var flights = Number(row.getAttribute('data-flights')) || 1;
+    ctx.strokeStyle = colors.line; ctx.lineWidth = Math.min(5, 1 + flights / 18); ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.moveTo(14 + airlineWidth, y + 15); ctx.lineTo(originX - 34, y + 15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(originX + 34, y + 15); ctx.lineTo(destinationX - 38, y + 15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(destinationX - 38, y + 15); ctx.lineTo(destinationX - 46, y + 10); ctx.lineTo(destinationX - 46, y + 20); ctx.closePath(); ctx.fillStyle = colors.line; ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colors.airline; ctx.strokeStyle = colors.border; ctx.lineWidth = 1;
+    roundedRect(ctx, 14, y, airlineWidth, 30, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = colors.text; ctx.font = '600 11px system-ui'; ctx.textAlign = 'left';
+    var label = airline.length > 19 ? airline.slice(0, 18) + '…' : airline;
+    ctx.fillText(label, 23, y + 19);
+    ctx.fillStyle = colors.muted; ctx.textAlign = 'right'; ctx.fillText(iata, 14 + airlineWidth - 9, y + 19);
+    [originX, destinationX].forEach(function (x) {
+      ctx.fillStyle = colors.airport; ctx.strokeStyle = colors.border;
+      roundedRect(ctx, x - 34, y, 68, 30, 15); ctx.fill(); ctx.stroke();
+    });
+    ctx.fillStyle = colors.text; ctx.font = '700 13px ui-monospace, monospace'; ctx.textAlign = 'center';
+    ctx.fillText(hub, originX, y + 20); ctx.fillText(dest, destinationX, y + 20);
+    ctx.fillStyle = colors.muted; ctx.font = '10px system-ui';
+    ctx.fillText(flights + '便/週', (originX + destinationX) / 2, y + 10);
+  });
 }
 
 countryBtns.forEach(function (btn) {
@@ -662,6 +752,7 @@ countryFilterApply.addEventListener('click', function () {
 });
 
 searchBox.addEventListener('input', applyFilter);
+window.addEventListener('resize', drawRouteNetwork);
 airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });
 airportNameCompactBtn.addEventListener('click', function () { setAirportNameDisplay(true); });
 setAirportNameDisplay(getCookieValue(DISPLAY_MODE_COOKIE_NAME) === 'compact');
