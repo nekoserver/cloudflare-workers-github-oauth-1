@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { getAirlineNetworkPage } from './airlineNetwork';
 import { AIRLINE_NETWORK, AIRLINE_NETWORK_CHECKED_AT } from '../data/airlineNetwork';
 import { AIRPORT_LIST } from '../data/airports';
@@ -120,6 +121,44 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain("document.getElementById('search-box')");
     expect(html).toContain('matchesCountry');
     expect(html).toContain('matchesSearch');
+  });
+
+  it('件数表示の右側に通常・簡易の空港名表示トグルがある', () => {
+    const hitCountIndex = html.indexOf('id="hit-count"');
+    const normalButtonIndex = html.indexOf('id="airport-name-normal-btn"');
+    const compactButtonIndex = html.indexOf('id="airport-name-compact-btn"');
+    const tableIndex = html.indexOf('<div class="table-wrap">');
+    expect(hitCountIndex).toBeGreaterThan(-1);
+    expect(normalButtonIndex).toBeGreaterThan(hitCountIndex);
+    expect(compactButtonIndex).toBeGreaterThan(normalButtonIndex);
+    expect(tableIndex).toBeGreaterThan(compactButtonIndex);
+    expect(html).toContain('>通常</button>');
+    expect(html).toContain('>簡易</button>');
+  });
+
+  it('簡易表示では表内の拠点・乗り入れ空港名を隠し、空港コードだけを表示する', () => {
+    expect(html).toContain('<span class="airport-name">');
+    expect(html).toContain('.compact-airports .airport-name { display: none; }');
+    expect(html).toContain('function setAirportNameDisplay(compact)');
+    expect(html).toContain("document.body.classList.toggle('compact-airports', compact);");
+    expect(html).toContain("airportNameCompactBtn.addEventListener('click', function () { setAirportNameDisplay(true); });");
+    expect(html).toContain("airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });");
+  });
+
+  it('簡易ボタンで空港名を非表示にし、通常ボタンで元に戻す', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    const compactButton = document.getElementById('airport-name-compact-btn')!;
+    const normalButton = document.getElementById('airport-name-normal-btn')!;
+
+    compactButton.click();
+    expect(document.body.classList.contains('compact-airports')).toBe(true);
+    expect(compactButton.getAttribute('aria-pressed')).toBe('true');
+    expect(normalButton.getAttribute('aria-pressed')).toBe('false');
+
+    normalButton.click();
+    expect(document.body.classList.contains('compact-airports')).toBe(false);
+    expect(normalButton.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('該当0件の場合の空表示メッセージ要素が存在する', () => {

@@ -84,9 +84,9 @@ function buildRows(): string {
     html += `<tr data-country="${country}" data-search="${searchKey}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-hub-key="${hubKey}">`;
     html += `<td class="col-country">${flag} ${country}</td>`;
     html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
-    html += `<td class="col-hub">${airline.hubName}<span class="code">${airline.hubCode}</span></td>`;
+    html += `<td class="col-hub"><span class="airport-name">${airline.hubName}</span><span class="code">${airline.hubCode}</span></td>`;
     html += `<td class="col-dest-flag">${destFlag}</td>`;
-    html += `<td class="col-dest">${destination.name}<span class="code">${destination.code}</span></td>`;
+    html += `<td class="col-dest"><span class="airport-name">${destination.name}</span><span class="code">${destination.code}</span></td>`;
     html += `<td class="col-freq">${destination.flightsPerWeek}<span class="unit">便/週</span></td>`;
     html += `</tr>`;
   }
@@ -199,6 +199,10 @@ h1 { font-size: 1.15rem; margin-bottom: 3px; }
   background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
 }
 .search-row .hit-count { font-size: 0.72rem; color: var(--text-muted); }
+.airport-name-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.airport-name-toggle button { border: 0; border-right: 1px solid var(--border); background: var(--btn-bg); color: var(--text); cursor: pointer; font: inherit; font-size: 0.72rem; padding: 5px 8px; }
+.airport-name-toggle button:last-child { border-right: 0; }
+.airport-name-toggle button.active { background: var(--btn-active-bg); color: var(--btn-active-text); }
 
 .table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
 table { border-collapse: collapse; font-size: 0.78rem; background: var(--surface); width: 100%; }
@@ -206,6 +210,8 @@ th { padding: 7px 9px; text-align: left; border: 1px solid var(--border); white-
 td { padding: 6px 9px; border: 1px solid var(--border); vertical-align: middle; color: var(--text); }
 tr:nth-child(even) td { background: var(--row-alt); }
 .iata, .code { display: inline-block; margin-left: 6px; font-size: 0.68rem; color: var(--code-text); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+.compact-airports .airport-name { display: none; }
+.compact-airports .col-hub .code, .compact-airports .col-dest .code { margin-left: 0; }
 .col-freq { font-weight: 700; color: var(--accent); }
 .col-dest-flag { width: 44px; text-align: center; font-size: 1.05rem; }
 .unit { font-weight: 400; color: var(--text-muted); font-size: 0.68rem; margin-left: 3px; }
@@ -290,6 +296,10 @@ tr:nth-child(even) td { background: var(--row-alt); }
     <div class="search-row">
       <input type="text" id="search-box" placeholder="航空会社名・空港名・IATAコードで検索">
       <span class="hit-count" id="hit-count"></span>
+      <div class="airport-name-toggle" role="group" aria-label="空港名の表示形式">
+        <button type="button" id="airport-name-normal-btn" class="active" aria-pressed="true">通常</button>
+        <button type="button" id="airport-name-compact-btn" aria-pressed="false">簡易</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
@@ -369,6 +379,8 @@ var allRows = Array.prototype.slice.call(document.querySelectorAll('#route-tbody
 var searchBox = document.getElementById('search-box');
 var hitCountEl = document.getElementById('hit-count');
 var noHitEl = document.getElementById('no-hit');
+var airportNameNormalBtn = document.getElementById('airport-name-normal-btn');
+var airportNameCompactBtn = document.getElementById('airport-name-compact-btn');
 var destFilterBtn = document.getElementById('dest-filter-btn');
 var destFilterModal = document.getElementById('dest-filter-modal');
 var destFilterBackdrop = document.getElementById('dest-filter-backdrop');
@@ -390,6 +402,14 @@ var countryFilterClose = document.getElementById('country-filter-close');
 var countryFilterCancel = document.getElementById('country-filter-cancel');
 var countryFilterApply = document.getElementById('country-filter-apply');
 var countryHubCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.country-hub-check'));
+
+function setAirportNameDisplay(compact) {
+  document.body.classList.toggle('compact-airports', compact);
+  airportNameNormalBtn.classList.toggle('active', !compact);
+  airportNameNormalBtn.setAttribute('aria-pressed', String(!compact));
+  airportNameCompactBtn.classList.toggle('active', compact);
+  airportNameCompactBtn.setAttribute('aria-pressed', String(compact));
+}
 
 function getCookieValue(name) {
   var parts = document.cookie.split(';');
@@ -604,6 +624,8 @@ countryFilterApply.addEventListener('click', function () {
 });
 
 searchBox.addEventListener('input', applyFilter);
+airportNameNormalBtn.addEventListener('click', function () { setAirportNameDisplay(false); });
+airportNameCompactBtn.addEventListener('click', function () { setAirportNameDisplay(true); });
 applyFilter();
 </script>
 </body>
