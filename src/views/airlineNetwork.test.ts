@@ -81,7 +81,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール');
     expect(nepal).toBeDefined();
     for (const hubCode of ['KTM', 'RHP']) {
-      const outbound = nepal!.airlines.filter((airline) => airline.hubCode === hubCode);
+      const outbound = nepal!.airlines.filter((airline) =>
+        airline.hubCode === hubCode && airline.destinations.some((destination) => destination.code === 'LUA')
+      );
       expect(outbound.map((airline) => airline.name)).toEqual(['Tara Air', 'Summit Air', 'Sita Air']);
       expect(outbound.every((airline) => airline.destinations.some((destination) => destination.code === 'LUA'))).toBe(true);
     }
@@ -96,6 +98,24 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(AIRPORT_LIST.find((airport) => airport.code === 'LUA')?.city).toBe('🇳🇵 ネパール・ルカラ');
     expect(AIRPORT_LIST.find((airport) => airport.code === 'KTM')).toBeDefined();
     expect(AIRPORT_LIST.find((airport) => airport.code === 'RHP')).toBeDefined();
+  });
+
+  it('カトマンズ発インド便の全就航空港と運航会社を表示する', () => {
+    const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール')!;
+    const indiaRoutes = nepal.airlines.filter((airline) =>
+      airline.hubCode === 'KTM' && airline.destinations.some((destination) =>
+        ['DEL', 'BOM', 'BLR', 'VNS'].includes(destination.code)
+      )
+    );
+
+    expect(new Set(indiaRoutes.flatMap((airline) => airline.destinations.map((destination) => destination.code))))
+      .toEqual(new Set(['DEL', 'BOM', 'BLR', 'VNS']));
+    expect(indiaRoutes.map((airline) => airline.iata)).toEqual(['RA', 'AI', 'IX', '6E', 'B3', 'SG', 'U4']);
+    for (const code of ['DEL', 'BOM', 'BLR', 'VNS']) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇮🇳 インド・');
+    }
+    expect(html).toContain('ケンペゴウダ国際空港（ベンガルール）');
+    expect(html).toContain('ラール・バハードゥル・シャーストリー国際空港（バラナシ）');
   });
 
   it('インドのデリーとムンバイをAir Indiaの双方向ネットワークとして表示する', () => {
