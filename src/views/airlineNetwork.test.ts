@@ -98,6 +98,20 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(AIRPORT_LIST.find((airport) => airport.code === 'RHP')).toBeDefined();
   });
 
+  it('インドのデリーとムンバイをAir Indiaの双方向ネットワークとして表示する', () => {
+    const india = AIRLINE_NETWORK.find((country) => country.country === 'インド');
+    expect(india?.flag).toBe('🇮🇳');
+    expect(india?.airlines.map((airline) => airline.hubCode)).toEqual(['DEL', 'BOM']);
+    expect(india?.airlines.every((airline) => airline.name === 'Air India' && airline.iata === 'AI')).toBe(true);
+    expect(india?.airlines.find((airline) => airline.hubCode === 'DEL')?.destinations)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'BOM' })]));
+    expect(india?.airlines.find((airline) => airline.hubCode === 'BOM')?.destinations)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'DEL' })]));
+    for (const code of ['DEL', 'BOM']) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇮🇳 インド・');
+    }
+  });
+
   it('羽田へ移管済みの主要5社を成田発着として表示しない', () => {
     for (const iata of ['DL', 'BA', 'AF', 'LH', 'AZ']) {
       const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines).find((item) => item.iata === iata);

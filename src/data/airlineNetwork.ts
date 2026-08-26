@@ -56,6 +56,20 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 }
     ]}
   ]},
+  { country: 'インド', flag: '🇮🇳', airlines: [
+    { name: 'Air India', iata: 'AI', hubCode: 'DEL', hubName: 'インディラ・ガンジー国際空港', destinations: [
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 49 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 14 }
+    ]},
+    { name: 'Air India', iata: 'AI', hubCode: 'BOM', hubName: 'チャトラパティ・シヴァージー国際空港', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 49 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 }
+    ]}
+  ]},
   { country: 'アメリカ', flag: '🇺🇸', airlines: [
     { name: 'American Airlines', iata: 'AA', hubCode: 'DFW', hubName: 'ダラス・フォートワース国際空港', destinations: [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
@@ -103,6 +117,8 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
       { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
       { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
@@ -194,6 +210,8 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
       { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
       { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
