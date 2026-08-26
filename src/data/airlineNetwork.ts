@@ -232,6 +232,24 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'Sita Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
       { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
       { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tara Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tara Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Summit Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Sita Air', iata: '—', hubCode: 'RHP', hubName: 'マンタリ空港（ラメチャップ空港）', destinations: [
+      { code: 'LUA', name: 'テンジン・ヒラリー空港（ルカラ空港）', flightsPerWeek: 7 }
     ]}
   ]},
   // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の

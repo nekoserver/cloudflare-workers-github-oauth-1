@@ -77,13 +77,19 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('便数は季節で変動する目安です');
   });
 
-  it('ルカラ空港の出発・到着便としてネパール3社と2空港を表示する', () => {
+  it('ルカラ空港とネパール2空港の双方向の発着便を表示する', () => {
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール');
-    expect(nepal?.airlines.map((airline) => airline.name)).toEqual(['Tara Air', 'Summit Air', 'Sita Air']);
-    for (const airline of nepal!.airlines) {
-      expect(airline.hubCode).toBe('LUA');
-      expect(airline.destinations.map((destination) => destination.code)).toEqual(['KTM', 'RHP']);
+    expect(nepal).toBeDefined();
+    for (const hubCode of ['KTM', 'RHP']) {
+      const outbound = nepal!.airlines.filter((airline) => airline.hubCode === hubCode);
+      expect(outbound.map((airline) => airline.name)).toEqual(['Tara Air', 'Summit Air', 'Sita Air']);
+      expect(outbound.every((airline) => airline.destinations.some((destination) => destination.code === 'LUA'))).toBe(true);
     }
+    const lukla = nepal!.airlines.filter((airline) => airline.hubCode === 'LUA');
+    expect(lukla.map((airline) => airline.name)).toEqual(['Tara Air', 'Summit Air', 'Sita Air']);
+    expect(lukla.every((airline) => ['KTM', 'RHP'].every((code) =>
+      airline.destinations.some((destination) => destination.code === code)
+    ))).toBe(true);
     expect(html).toContain('テンジン・ヒラリー空港（ルカラ空港）');
     expect(html).toContain('トリブバン国際空港（カトマンズ）');
     expect(html).toContain('マンタリ空港（ラメチャップ空港）');
