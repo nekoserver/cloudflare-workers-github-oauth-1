@@ -92,6 +92,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
+    '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -217,6 +218,18 @@ export function formatFactorWasmResult(result: string): string {
   return ['## factor (WASM)', '```', result, '```'].join('\n');
 }
 
+/**
+ * `/neko ls [-l] [-a]` の結果を表示する。resultはGNU coreutilsのlsコマンドの
+ * 出力書式(短形式は1行1名前、-l指定時は長形式)で渡される。0件(全件が-aなしで
+ * 除外された場合等)ならその旨を明示する(空のコードブロックだけを出さない)。
+ */
+export function formatLsWasmResult(result: string): string {
+  if (!result) {
+    return ['## ls (WASM)', '(表示できる項目がありません)'].join('\n');
+  }
+  return ['## ls (WASM)', '```', result, '```'].join('\n');
+}
+
 export type HourlyTokenUsageRow = {
   hour: string;
   model: string;
@@ -289,6 +302,7 @@ export type AichatSlashCommandDeps = {
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
+  lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
 };
 
@@ -493,6 +507,24 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'ls') {
+    const args = parts.slice(2);
+    const long = args.includes('-l') || args.includes('-la') || args.includes('-al');
+    const all = args.includes('-a') || args.includes('-la') || args.includes('-al');
+    if (!deps.lsViaWasm) {
+      return { handled: true, response: '❌ /neko ls は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const result = await deps.lsViaWasm(long, all);
+      return { handled: true, response: formatLsWasmResult(result) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko ls の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'tokens') {
     if (!deps.hourlyTokenUsage) {
       return { handled: true, response: formatHourlyTokenUsage([]) };
@@ -516,6 +548,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
   };
 }

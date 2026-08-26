@@ -1401,7 +1401,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 6800);
+    const fn = src.slice(idx, idx + 7800);
     expect(fn).toContain('body.model');
   });
 
@@ -1411,7 +1411,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 6400);
+    const fn = src.slice(idx, idx + 7400);
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -2079,7 +2079,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 10600);
+    const fn = src.slice(idx, idx + 11600);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2089,7 +2089,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 10400);
+    const fn = src.slice(idx, idx + 11400);
     expect(fn).toContain('shareId');
   });
 
@@ -2099,7 +2099,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 10000);
+    const fn = src.slice(idx, idx + 11000);
     expect(fn).toContain('userHash');
   });
 

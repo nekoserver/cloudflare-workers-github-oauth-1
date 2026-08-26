@@ -77,6 +77,12 @@ export function sha256HexViaWasm(input: string): string {
   ソケットが使えないため、実際のDNS問い合わせ自体はCloudflare DNS over
   HTTPS(`https://cloudflare-dns.com/dns-query`)へのfetchで行う
   (`src/utils/digWasmServer.ts`)
+- `ls-wasm`: GNU coreutilsの`ls`コマンドの出力書式(短形式/`-l`長形式/`-a`全件表示)
+  だけをRustで再実装したもの(実ファイルを読むわけではない)。Workersには
+  ファイルシステムの一覧取得API相当が無いため、一覧対象はJS側(`src/utils/lsWasmServer.ts`)
+  が`WASM_MODULE_REGISTRY`自体を仮想ディレクトリとして渡す
+  (`"name\ttype\tsize\tmtime"`形式のTSVをls-wasmへ渡し、整形済みテキストを受け取る)。
+  `/neko ls [-l] [-a]`。ブラウザページは無くサーバー(Worker)実行のみ
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)

@@ -12,6 +12,13 @@ export type WasmModuleInfo = {
   sourceDir: string;
   sourceFile: string;
   approxSize: string;
+  // ls-wasm(/neko ls)がこのレジストリ自体を仮想ディレクトリとして一覧表示するために
+  // 追加した実データ由来のフィールド。sizeBytesはpublic/wasm/配下の対応する
+  // *_bg.wasmファイルの実バイト数(approxSizeの元になった数値そのもの)、
+  // builtAtはそのファイルの最終コミット日(git log -1 --format=%ad --date=short)。
+  // どちらも推測値ではなく実際のファイル/git履歴から確認した値を入れること。
+  sizeBytes: number;
+  builtAt: string;
 };
 
 export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
@@ -24,6 +31,8 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sourceDir: 'wasm/sha256-wasm',
     sourceFile: 'wasm/sha256-wasm/src/lib.rs',
     approxSize: '約25KB',
+    sizeBytes: 25600,
+    builtAt: '2026-08-20',
   },
   {
     id: 'factor',
@@ -34,6 +43,8 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sourceDir: 'wasm/factor-wasm',
     sourceFile: 'wasm/factor-wasm/src/lib.rs',
     approxSize: '約21KB',
+    sizeBytes: 21248,
+    builtAt: '2026-08-20',
   },
   {
     id: 'dig',
@@ -44,6 +55,20 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sourceDir: 'wasm/dig-wasm',
     sourceFile: 'wasm/dig-wasm/src/lib.rs',
     approxSize: '約55KB',
+    sizeBytes: 55686,
+    builtAt: '2026-08-20',
+  },
+  {
+    id: 'ls',
+    name: 'ls (WASM module一覧, Rust)',
+    description:
+      'GNU coreutilsのlsコマンドの出力書式(短形式/-l長形式/-a全件表示)だけをRustで再実装し、実データはJS側から渡す。Workersには実ファイルシステムが無いため、一覧の対象はこのWASM_MODULE_REGISTRY自体(仮想ディレクトリ)にしている。AIチャットの/neko lsサブコマンドのサーバー実行で使用する',
+    wasmPath: 'public/wasm/ls_bg.wasm',
+    sourceDir: 'wasm/ls-wasm',
+    sourceFile: 'wasm/ls-wasm/src/lib.rs',
+    approxSize: '約35KB',
+    sizeBytes: 35040,
+    builtAt: '2026-08-26',
   },
 ];
 

@@ -8,6 +8,7 @@ import {
   formatFactorWasmResult,
   formatDigHelp,
   formatDigResult,
+  formatLsWasmResult,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -361,5 +362,60 @@ describe('formatDigResult', () => {
   it('digの結果をコードブロック付きMarkdownで表示する', () => {
     const result = formatDigResult(';; ANSWER SECTION:\nexample.com. 300 IN A 93.184.216.34');
     expect(result).toBe('## dig (WASM)\n```\n;; ANSWER SECTION:\nexample.com. 300 IN A 93.184.216.34\n```');
+  });
+});
+
+describe('/neko ls', () => {
+  const now = new Date('2026-08-26T10:00:00Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+
+  it('/neko ls (オプション無し) はlong=false, all=falseでlsViaWasmを呼ぶ', async () => {
+    const lsViaWasm = vi.fn().mockResolvedValue('dig_bg.wasm\nfactor_bg.wasm');
+    const result = await interpretAichatSlashCommand('/neko ls', now, { ...unusedDeps, lsViaWasm });
+    expect(lsViaWasm).toHaveBeenCalledWith(false, false);
+    expect(result).toEqual({ handled: true, response: '## ls (WASM)\n```\ndig_bg.wasm\nfactor_bg.wasm\n```' });
+  });
+
+  it('/neko ls -l はlong=trueでlsViaWasmを呼ぶ', async () => {
+    const lsViaWasm = vi.fn().mockResolvedValue('-rw-r--r-- 1 neko neko 100 2026-08-20 a.wasm');
+    await interpretAichatSlashCommand('/neko ls -l', now, { ...unusedDeps, lsViaWasm });
+    expect(lsViaWasm).toHaveBeenCalledWith(true, false);
+  });
+
+  it('/neko ls -a はall=trueでlsViaWasmを呼ぶ', async () => {
+    const lsViaWasm = vi.fn().mockResolvedValue('mock');
+    await interpretAichatSlashCommand('/neko ls -a', now, { ...unusedDeps, lsViaWasm });
+    expect(lsViaWasm).toHaveBeenCalledWith(false, true);
+  });
+
+  it('/neko ls -la / -al はlong=true, all=trueの両方でlsViaWasmを呼ぶ', async () => {
+    const lsViaWasm = vi.fn().mockResolvedValue('mock');
+    await interpretAichatSlashCommand('/neko ls -la', now, { ...unusedDeps, lsViaWasm });
+    expect(lsViaWasm).toHaveBeenLastCalledWith(true, true);
+    await interpretAichatSlashCommand('/neko ls -al', now, { ...unusedDeps, lsViaWasm });
+    expect(lsViaWasm).toHaveBeenLastCalledWith(true, true);
+  });
+
+  it('/neko ls は lsViaWasm 未設定時にエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko ls', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko ls は現在利用できません(WASM未設定)' });
+  });
+
+  it('/neko ls で lsViaWasm が例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const lsViaWasm = vi.fn().mockRejectedValue(new Error('wasm init failed'));
+    const result = await interpretAichatSlashCommand('/neko ls', now, { ...unusedDeps, lsViaWasm });
+    expect(result).toEqual({ handled: true, response: '❌ /neko ls の実行中にエラーが発生しました: wasm init failed' });
+  });
+});
+
+describe('formatLsWasmResult', () => {
+  it('lsの結果をコードブロック付きMarkdownで表示する', () => {
+    const result = formatLsWasmResult('a.wasm\nb.wasm');
+    expect(result).toBe('## ls (WASM)\n```\na.wasm\nb.wasm\n```');
+  });
+
+  it('結果が空文字列の場合はコードブロックではなく「表示できる項目がありません」を表示する', () => {
+    const result = formatLsWasmResult('');
+    expect(result).toBe('## ls (WASM)\n(表示できる項目がありません)');
   });
 });
