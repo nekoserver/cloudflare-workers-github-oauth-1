@@ -29,6 +29,12 @@ function uniqueCountryHubKeys(): string[] {
 describe('/airline-network ページ: 各国航空会社ネットワーク一覧', () => {
   const html = getAirlineNetworkPage();
 
+  it('デスクトップでは国選択パネルの上端を画面内に固定し、モバイルでは通常配置に戻す', () => {
+    expect(html).toMatch(/\.left-panel\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*max-height:\s*100vh;/s);
+    expect(html).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.left-panel\s*\{[^}]*position:\s*static;[^}]*max-height:\s*none;/);
+    expect(html).not.toMatch(/\.main-layout\s*\{[^}]*overflow:\s*hidden;/);
+  });
+
   it('script タグ内の JS に構文エラーがない', () => {
     const scriptRe = /<script>([\s\S]*?)<\/script>/g;
     let m: RegExpExecArray | null;

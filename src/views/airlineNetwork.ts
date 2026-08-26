@@ -184,10 +184,11 @@ h1 { font-size: 1.15rem; margin-bottom: 3px; }
 .freshness-note { margin-top: 6px; color: var(--text-muted); font-size: 0.7rem; }
 .freshness-note time { color: var(--text); font-weight: 600; }
 
-.main-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.main-layout { display: flex; flex: 1; min-height: 0; align-items: flex-start; }
 
 .left-panel {
   width: 190px; flex-shrink: 0; overflow-y: auto;
+  position: sticky; top: 0; max-height: 100vh;
   border-right: 1px solid var(--border);
   padding: 10px 8px;
   background: var(--surface);
@@ -309,7 +310,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
 
 @media (max-width: 640px) {
   .main-layout { flex-direction: column; overflow: visible; }
-  .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; overflow-y: visible; }
+  .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; overflow-y: visible; position: static; max-height: none; }
   .country-btn { width: auto; }
   .right-main { overflow-y: visible; }
   .network-canvas-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
