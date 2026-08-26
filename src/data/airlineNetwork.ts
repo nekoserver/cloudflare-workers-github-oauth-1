@@ -235,10 +235,39 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
     ]}
   ]},
+  // ネパール―インド間の定期直行便は、公開されている各社の就航地と空港時刻表を
+  // 2026-08-26に照合した。KTMから就航する既知のインド4空港（DEL、BOM、BLR、
+  // VNS）と、同一路線を運航する各社を収録。コードシェアは運航会社側だけを数え、
+  // 便数は通常期の公開スケジュールを週換算した旅程比較用の目安としている。
   // ルカラ便は天候とトレッキングシーズンにより運航地・便数が大きく変わる。
   // KTM（カトマンズ）とRHP（ラメチャップ／マンタリ）の双方を発着地として収録し、
   // 各社の便数は一覧の表示方針に合わせて7便/週の目安とする。
   { country: 'ネパール', flag: '🇳🇵', airlines: [
+    { name: 'Nepal Airlines', iata: 'RA', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港（ムンバイ）', flightsPerWeek: 3 },
+      { code: 'BLR', name: 'ケンペゴウダ国際空港（ベンガルール）', flightsPerWeek: 3 }
+    ]},
+    { name: 'Air India', iata: 'AI', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 14 }
+    ]},
+    { name: 'Air India Express', iata: 'IX', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 },
+      { code: 'BLR', name: 'ケンペゴウダ国際空港（ベンガルール）', flightsPerWeek: 7 }
+    ]},
+    { name: 'IndiGo', iata: '6E', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 14 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港（ムンバイ）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Bhutan Airlines', iata: 'B3', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 4 }
+    ]},
+    { name: 'SpiceJet', iata: 'SG', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港（ニューデリー）', flightsPerWeek: 7 }
+    ]},
+    { name: 'Buddha Air', iata: 'U4', hubCode: 'KTM', hubName: 'トリブバン国際空港（カトマンズ）', destinations: [
+      { code: 'VNS', name: 'ラール・バハードゥル・シャーストリー国際空港（バラナシ）', flightsPerWeek: 2 }
+    ]},
     { name: 'Tara Air', iata: '—', hubCode: 'LUA', hubName: 'テンジン・ヒラリー空港（ルカラ空港）', destinations: [
       { code: 'KTM', name: 'トリブバン国際空港（カトマンズ）', flightsPerWeek: 7 },
       { code: 'RHP', name: 'マンタリ空港（ラメチャップ空港）', flightsPerWeek: 7 }
