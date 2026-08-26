@@ -11,7 +11,7 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
 // 上記以外は未更新のまま残している。
-// AMS は一覧内に登録済みの全空港との発着を検索できることを優先し、KLM の
+// AMS と PRG は一覧内に登録済みの全空港との往復便を検索できることを優先し、
 // 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
@@ -188,10 +188,33 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   ]},
   { country: 'チェコ', flag: '🇨🇿', airlines: [
     { name: 'Smartwings', iata: 'QS', hubCode: 'PRG', hubName: 'ヴァーツラフ・ハヴェル・プラハ国際空港', destinations: [
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
+      { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 7 },
+      { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
+      { code: 'CAN', name: '広州白雲国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
       { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
       { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 },
-      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 7 }
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 7 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 7 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 7 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 7 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 7 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 7 },
+      { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 7 },
+      { code: 'DOH', name: 'ハマド国際空港', flightsPerWeek: 7 },
+      { code: 'IST', name: 'イスタンブール空港', flightsPerWeek: 7 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'ATL', name: 'ハーツフィールド・ジャクソン・アトランタ国際空港', flightsPerWeek: 7 },
+      { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
+      { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
+      { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
     ]}
   ]},
   // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の
