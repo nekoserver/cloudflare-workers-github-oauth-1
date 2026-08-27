@@ -9985,9 +9985,33 @@ app.get('/api/file-deps', authMiddleware, async (c) => {
       nodeSet.add(e.source_file);
       nodeSet.add(e.target_file);
     }
+    const historyByNode: Record<string, number> = {};
+    let historyAvailabilityError: string | null = null;
+    try {
+      const historyRows = await c.env.DB.prepare(`
+        SELECT m.file_path, COUNT(DISTINCT m.commit_hash) AS history_count
+        FROM ts_commit_function_map m
+        JOIN ts_commit_log cl
+          ON cl.repo_id = m.repo_id AND cl.commit_hash = m.commit_hash
+        WHERE m.repo_id = 1
+        GROUP BY m.file_path
+      `).all<{ file_path: string; history_count: number }>();
+      for (const row of historyRows.results ?? []) {
+        if (nodeSet.has(row.file_path) && Number(row.history_count) > 0) {
+          historyByNode[row.file_path] = Number(row.history_count);
+        }
+      }
+    } catch (error) {
+      historyAvailabilityError = '履歴の有無を取得できませんでした';
+      logger.warn('Failed to load file history availability', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return jsonUtf8({
       nodes: [...nodeSet],
       edges: edges.map((e) => ({ source: e.source_file, target: e.target_file })),
+      historyByNode,
+      historyAvailabilityError,
     });
   } catch (error) {
     logger.warn('Failed to load ts_file_dependencies', {

@@ -23,7 +23,11 @@ async function makeAuthHeader() {
   return `Bearer ${token}`;
 }
 
-function createMockDb(depRows: Record<string, unknown>[] = []) {
+function createMockDb(
+  depRows: Record<string, unknown>[] = [],
+  historyRows: Record<string, unknown>[] = [],
+  rejectHistory = false,
+) {
   return {
     prepare: vi.fn().mockImplementation((sql: string) => ({
       bind: vi.fn().mockReturnValue({
@@ -31,13 +35,22 @@ function createMockDb(depRows: Record<string, unknown>[] = []) {
           if (sql.includes('user_sessions')) return Promise.resolve({ revoked_at: null });
           return Promise.resolve(null);
         }),
-        all: vi.fn().mockResolvedValue({ results: depRows }),
+        all: vi.fn().mockResolvedValue({
+          results: sql.includes('ts_commit_function_map') ? historyRows : depRows,
+        }),
       }),
       first: vi.fn().mockImplementation(() => {
         if (sql.includes('user_sessions')) return Promise.resolve({ revoked_at: null });
         return Promise.resolve(null);
       }),
-      all: vi.fn().mockResolvedValue({ results: depRows }),
+      all: vi.fn().mockImplementation(() => {
+        if (rejectHistory && sql.includes('ts_commit_function_map')) {
+          return Promise.reject(new Error('history table unavailable'));
+        }
+        return Promise.resolve({
+          results: sql.includes('ts_commit_function_map') ? historyRows : depRows,
+        });
+      }),
     })),
   };
 }
@@ -73,6 +86,50 @@ describe('GET /api/file-deps', () => {
     expect(body.nodes.sort()).toEqual(['src/index.ts', 'src/utils/jwt.ts', 'src/views/aichat.ts']);
     expect(body.edges).toHaveLength(3);
   });
+
+  it('変更履歴を表示できるノードを履歴件数付きで返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const depRows = [
+      { source_file: 'src/index.ts', target_file: 'src/utils/jwt.ts' },
+      { source_file: 'src/index.ts', target_file: 'src/views/aichat.ts' },
+    ];
+    const historyRows = [
+      { file_path: 'src/index.ts', history_count: 12 },
+      { file_path: 'src/views/aichat.ts', history_count: 3 },
+    ];
+    const res = await app.request(
+      '/api/file-deps',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb(depRows, historyRows) }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      historyByNode: Record<string, number>;
+    };
+    expect(body.historyByNode).toEqual({
+      'src/index.ts': 12,
+      'src/views/aichat.ts': 3,
+    });
+  });
+
+  it('履歴判定に失敗しても依存グラフを返し、画面表示用のエラーを通知する', async () => {
+    const authHeader = await makeAuthHeader();
+    const depRows = [{ source_file: 'src/index.ts', target_file: 'src/utils/jwt.ts' }];
+    const res = await app.request(
+      '/api/file-deps',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb(depRows, [], true) }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      nodes: string[];
+      historyByNode: Record<string, number>;
+      historyAvailabilityError: string | null;
+    };
+    expect(body.nodes).toEqual(['src/index.ts', 'src/utils/jwt.ts']);
+    expect(body.historyByNode).toEqual({});
+    expect(body.historyAvailabilityError).toBe('履歴の有無を取得できませんでした');
+  });
 });
 
 describe('GET /file-deps', () => {
@@ -98,5 +155,13 @@ describe('GET /file-deps', () => {
       expect(() => new Function(m![1])).not.toThrow();
     }
     expect(count).toBeGreaterThan(0);
+  });
+
+  it('履歴の有無をノードと凡例で判別でき、履歴なしノードは取得しない', () => {
+    const html = getFileDepsPage('tester');
+    expect(html).toContain('historyByNode');
+    expect(html).toContain('履歴あり');
+    expect(html).toContain('履歴なし');
+    expect(html).toContain('if (selectedId && historyByNode[selectedId]) loadFileHistory(selectedId)');
   });
 });

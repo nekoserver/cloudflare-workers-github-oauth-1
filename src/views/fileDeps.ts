@@ -77,6 +77,9 @@ export function getFileDepsPage(username: string): string {
     .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
     .legend-item { display: flex; align-items: center; gap: 4px; }
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .legend-separator { width: 1px; height: 14px; background: var(--border-color); margin: 0 2px; }
+    .legend-ring { width: 12px; height: 12px; border: 2px solid var(--accent-color); border-radius: 50%; display: inline-block; }
+    .legend-muted { width: 8px; height: 8px; background: var(--text-muted); opacity: 0.45; border-radius: 50%; display: inline-block; }
     .canvas-wrap { width: 100%; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
     .status-msg { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
     .history-panel { margin-top: 18px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); }
@@ -146,7 +149,7 @@ export function getFileDepsPage(username: string): string {
     <div class="status-msg" id="statusMsg">読み込み中…</div>
     <section class="history-panel" aria-live="polite">
       <h2 id="historyTitle">📜 ファイルの変更履歴</h2>
-      <div class="history-help">グラフのノードを選択すると、そのファイルに含まれる関数の変更コミットを新しい順に表示します。</div>
+      <div class="history-help">外周リングのあるノードを選択すると、そのファイルに含まれる関数の変更コミットを新しい順に表示します。</div>
       <div class="history-list" id="historyList"><div class="status-msg">ファイルを選択してください。</div></div>
     </section>
   </div>
@@ -203,6 +206,7 @@ export function getFileDepsPage(username: string): string {
 
     var allNodes = [];
     var allEdges = [];
+    var historyByNode = {};
     var posById = {};
     var selectedId = null;
 
@@ -278,14 +282,17 @@ export function getFileDepsPage(username: string): string {
         var p = posById[id];
         if (!p) return;
         var isSelected = id === selectedId;
+        var hasHistory = Boolean(historyByNode[id]);
         var color = GROUP_COLORS[groupOf(id)] || GROUP_COLORS.other;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, isSelected ? 8 : 5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, isSelected ? 9 : (hasHistory ? 7 : 4), 0, Math.PI * 2);
         ctx.fillStyle = color;
+        ctx.globalAlpha = hasHistory ? 1 : 0.38;
         ctx.fill();
-        if (isSelected) {
-          ctx.strokeStyle = '#0969da';
-          ctx.lineWidth = 2;
+        ctx.globalAlpha = 1;
+        if (hasHistory) {
+          ctx.strokeStyle = isSelected ? '#0969da' : getComputedStyle(document.body).getPropertyValue('--accent-color').trim();
+          ctx.lineWidth = isSelected ? 3 : 2;
           ctx.stroke();
         }
       });
@@ -334,8 +341,9 @@ export function getFileDepsPage(username: string): string {
         tooltip.style.display = 'block';
         tooltip.style.left = (e.clientX + 12) + 'px';
         tooltip.style.top = (e.clientY + 12) + 'px';
-        tooltip.textContent = id;
-        canvas.style.cursor = 'pointer';
+        var historyCount = Number(historyByNode[id] || 0);
+        tooltip.textContent = id + (historyCount ? ' · 履歴 ' + historyCount + '件' : ' · 履歴なし');
+        canvas.style.cursor = historyCount ? 'pointer' : 'not-allowed';
       } else {
         tooltip.style.display = 'none';
         canvas.style.cursor = 'default';
@@ -349,7 +357,11 @@ export function getFileDepsPage(username: string): string {
       var id = nodeAtPoint(x, y);
       selectedId = (id && id === selectedId) ? null : id;
       draw(currentFilteredNodeIds(), currentFilteredEdges(new Set(currentFilteredNodeIds())));
-      if (selectedId) loadFileHistory(selectedId);
+      if (selectedId && historyByNode[selectedId]) loadFileHistory(selectedId);
+      else if (selectedId) {
+        historyTitle.textContent = '📜 ' + selectedId;
+        historyList.innerHTML = '<div class="status-msg">このファイルには表示できる変更履歴がありません。</div>';
+      }
       else {
         historyTitle.textContent = '📜 ファイルの変更履歴';
         historyList.innerHTML = '<div class="status-msg">ファイルを選択してください。</div>';
@@ -392,6 +404,9 @@ export function getFileDepsPage(username: string): string {
       Object.keys(GROUP_COLORS).forEach(function(g) {
         html += '<span class="legend-item"><span class="legend-dot" style="background:' + GROUP_COLORS[g] + ';"></span>' + escHtml(g) + '</span>';
       });
+      html += '<span class="legend-separator" aria-hidden="true"></span>';
+      html += '<span class="legend-item"><span class="legend-ring"></span>履歴あり（選択可）</span>';
+      html += '<span class="legend-item"><span class="legend-muted"></span>履歴なし</span>';
       legendEl.innerHTML = html;
     }
 
@@ -401,6 +416,10 @@ export function getFileDepsPage(username: string): string {
         .then(function(data) {
           allNodes = data.nodes || [];
           allEdges = data.edges || [];
+          historyByNode = data.historyByNode || {};
+          if (data.historyAvailabilityError) {
+            historyList.innerHTML = '<div class="status-msg">' + escHtml(data.historyAvailabilityError) + '。ノードの履歴表示状態は利用できません。</div>';
+          }
           if (allNodes.length === 0) {
             statusMsg.textContent = 'データがありません。scripts/index-file-deps.mjs を実行してD1に登録してください。';
             return;
