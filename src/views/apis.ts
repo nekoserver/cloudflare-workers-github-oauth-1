@@ -735,6 +735,8 @@ const APIS = [
       res:{items:[{seq_no:1,name_fr:'Comté',reading:'コンテ',ingredient:'牛乳',producer:'フランス東部',method:'非加熱圧搾',hardness:'ハード',notes:'ナッツのような風味',pairing:'白ワイン'}]} },
     { method:'GET', path:'/api/file-deps', desc:'TypeScriptファイル間の依存関係グラフ(ts_file_dependencies)',
       res:{nodes:['src/index.ts','src/views/aichat.ts'],edges:[{source:'src/index.ts',target:'src/views/aichat.ts'}]} },
+    { method:'GET', path:'/api/file-history', desc:'TypeScriptファイルのコミット変更履歴', query:[{n:'file_path',req:true,s:'src/index.ts'},{n:'repo_id',s:'1'}],
+      res:{ok:true,repo_id:1,file_path:'src/index.ts',history:[{commit_hash:'abc1234',commit_at:'2026-08-26T00:00:00Z',subject:'変更内容',lines_added:10,lines_deleted:2,functions_touched:2,function_names:['fetchHandler','renderPage']}],total:1} },
     { method:'POST', path:'/api/tsubuyaki', desc:'つぶやきをSlackへ通知投稿', body:[{n:'text',req:true,s:'今日は良い天気です'}],
       res:{ok:true} },
   ]},
