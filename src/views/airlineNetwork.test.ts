@@ -127,6 +127,16 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(document.querySelectorAll('tr[data-route-type="international"]').length).toBeGreaterThan(0);
   });
 
+  it('空港コード経路の各発着空港コードの左に国旗を描画する', () => {
+    const document = new JSDOM(html).window.document;
+    const route = document.querySelector('tr[data-hub-code="HND"][data-dest-code="KIX"]');
+
+    expect(route?.getAttribute('data-hub-flag')).toBe('🇯🇵');
+    expect(route?.getAttribute('data-dest-flag')).toBe('🇯🇵');
+    expect(html).toContain("ctx.fillText(hubFlag + ' ' + hub, originX, y + 20)");
+    expect(html).toContain("ctx.fillText(destFlag + ' ' + dest, destinationX, y + 20)");
+  });
+
   it('ルカラ空港とネパール2空港の双方向の発着便を表示する', () => {
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール');
     expect(nepal).toBeDefined();

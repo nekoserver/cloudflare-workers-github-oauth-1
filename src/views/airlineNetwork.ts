@@ -88,11 +88,12 @@ function buildRows(): string {
   routes.sort((a, b) => b.destination.flightsPerWeek - a.destination.flightsPerWeek || a.order - b.order);
   for (const route of routes) {
     const { country, flag, airline, destination } = route;
+    const hubFlag = getAirportFlag(airline.hubCode);
     const destFlag = getAirportFlag(destination.code);
     const searchKey = [country, airline.name, airline.hubName, destination.name, destination.code].join(' ').toLowerCase();
     const hubKey = `${country}::${airline.hubCode}`;
     const routeType = getAirportCountry(airline.hubCode) === getAirportCountry(destination.code) ? 'domestic' : 'international';
-    html += `<tr data-country="${country}" data-search="${searchKey}" data-airline="${escapeHtmlAttribute(airline.name)}" data-airline-iata="${escapeHtmlAttribute(airline.iata)}" data-hub-code="${airline.hubCode}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-route-type="${routeType}" data-flights="${destination.flightsPerWeek}" data-hub-key="${hubKey}">`;
+    html += `<tr data-country="${country}" data-search="${searchKey}" data-airline="${escapeHtmlAttribute(airline.name)}" data-airline-iata="${escapeHtmlAttribute(airline.iata)}" data-hub-code="${airline.hubCode}" data-hub-flag="${hubFlag}" data-dest-code="${destination.code}" data-dest-flag="${destFlag}" data-route-type="${routeType}" data-flights="${destination.flightsPerWeek}" data-hub-key="${hubKey}">`;
     html += `<td class="col-country">${flag} ${country}</td>`;
     html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
     html += `<td class="col-hub"><span class="airport-name">${airline.hubName}</span><span class="code">${airline.hubCode}</span></td>`;
@@ -653,7 +654,9 @@ function drawRouteNetwork() {
     var airline = row.getAttribute('data-airline');
     var iata = row.getAttribute('data-airline-iata');
     var hub = row.getAttribute('data-hub-code');
+    var hubFlag = row.getAttribute('data-hub-flag');
     var dest = row.getAttribute('data-dest-code');
+    var destFlag = row.getAttribute('data-dest-flag');
     var flights = Number(row.getAttribute('data-flights')) || 1;
     ctx.strokeStyle = colors.line; ctx.lineWidth = Math.min(5, 1 + flights / 18); ctx.globalAlpha = 0.7;
     ctx.beginPath(); ctx.moveTo(14 + airlineWidth, y + 15); ctx.lineTo(originX - 34, y + 15); ctx.stroke();
@@ -670,8 +673,8 @@ function drawRouteNetwork() {
       ctx.fillStyle = colors.airport; ctx.strokeStyle = colors.border;
       roundedRect(ctx, x - 34, y, 68, 30, 15); ctx.fill(); ctx.stroke();
     });
-    ctx.fillStyle = colors.text; ctx.font = '700 13px ui-monospace, monospace'; ctx.textAlign = 'center';
-    ctx.fillText(hub, originX, y + 20); ctx.fillText(dest, destinationX, y + 20);
+    ctx.fillStyle = colors.text; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(hubFlag + ' ' + hub, originX, y + 20); ctx.fillText(destFlag + ' ' + dest, destinationX, y + 20);
     ctx.fillStyle = colors.muted; ctx.font = '10px system-ui';
     ctx.fillText(flights + '便/週', (originX + destinationX) / 2, y + 10);
   });
