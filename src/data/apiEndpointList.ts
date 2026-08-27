@@ -206,5 +206,6 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'その他', method: 'GET', path: '/api/protected', desc: '認証テストエンドポイント' },
   { group: 'その他', method: 'GET', path: '/api/cheese-fr', desc: 'フランスチーズ一覧(名称・読み仮名の部分一致検索可)' },
   { group: 'その他', method: 'GET', path: '/api/file-deps', desc: 'TypeScriptファイル間の依存関係グラフ(ts_file_dependencies)' },
+  { group: 'その他', method: 'GET', path: '/api/file-history', desc: 'TypeScriptファイルのコミット変更履歴' },
   { group: 'その他', method: 'POST', path: '/api/tsubuyaki', desc: 'つぶやきをSlackへ通知投稿' },
 ];

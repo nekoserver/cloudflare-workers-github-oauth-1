@@ -79,6 +79,15 @@ export function getFileDepsPage(username: string): string {
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     .canvas-wrap { width: 100%; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
     .status-msg { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+    .history-panel { margin-top: 18px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); }
+    .history-panel h2 { color: var(--text-primary); font-size: 17px; margin-bottom: 4px; }
+    .history-help { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; }
+    .history-list { display: grid; gap: 8px; }
+    .history-item { border-left: 3px solid #667eea; padding: 8px 10px; background: var(--bg-secondary); border-radius: 4px; }
+    .history-subject { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+    .history-meta { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
+    .history-stats { color: var(--text-secondary); font-size: 12px; margin-top: 5px; }
+    .added { color: #22c55e; } .deleted { color: #ef4444; }
     #depsTooltip {
       position: fixed;
       display: none;
@@ -135,6 +144,11 @@ export function getFileDepsPage(username: string): string {
       <canvas id="depsCanvas" width="1040" height="700"></canvas>
     </div>
     <div class="status-msg" id="statusMsg">読み込み中…</div>
+    <section class="history-panel" aria-live="polite">
+      <h2 id="historyTitle">📜 ファイルの変更履歴</h2>
+      <div class="history-help">グラフのノードを選択すると、そのファイルに含まれる関数の変更コミットを新しい順に表示します。</div>
+      <div class="history-list" id="historyList"><div class="status-msg">ファイルを選択してください。</div></div>
+    </section>
   </div>
   <div id="depsTooltip"></div>
 
@@ -166,6 +180,8 @@ export function getFileDepsPage(username: string): string {
     var searchInput = document.getElementById('searchInput');
     var tooltip = document.getElementById('depsTooltip');
     var legendEl = document.getElementById('legend');
+    var historyTitle = document.getElementById('historyTitle');
+    var historyList = document.getElementById('historyList');
 
     var GROUP_COLORS = {
       views: '#3b82f6',
@@ -333,7 +349,40 @@ export function getFileDepsPage(username: string): string {
       var id = nodeAtPoint(x, y);
       selectedId = (id && id === selectedId) ? null : id;
       draw(currentFilteredNodeIds(), currentFilteredEdges(new Set(currentFilteredNodeIds())));
+      if (selectedId) loadFileHistory(selectedId);
+      else {
+        historyTitle.textContent = '📜 ファイルの変更履歴';
+        historyList.innerHTML = '<div class="status-msg">ファイルを選択してください。</div>';
+      }
     });
+
+    function loadFileHistory(filePath) {
+      historyTitle.textContent = '📜 ' + filePath;
+      historyList.innerHTML = '<div class="status-msg">履歴を読み込み中…</div>';
+      fetch('/api/file-history?repo_id=1&file_path=' + encodeURIComponent(filePath), { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(result) {
+          if (!result.ok) throw new Error(result.data.error || '履歴の取得に失敗しました');
+          var rows = result.data.history || [];
+          if (rows.length === 0) {
+            historyList.innerHTML = '<div class="status-msg">保存済みの変更履歴はありません。関数を持たないファイルや、インデックス実行前の変更は表示されません。</div>';
+            return;
+          }
+          historyList.innerHTML = rows.map(function(row) {
+            var date = row.commit_at ? new Date(row.commit_at).toLocaleString('ja-JP') : '日時不明';
+            var names = (row.function_names || []).join(', ');
+            return '<article class="history-item">' +
+              '<div class="history-subject">' + escHtml(row.subject || '(件名なし)') + '</div>' +
+              '<div class="history-meta"><code>' + escHtml(String(row.commit_hash || '').slice(0, 7)) + '</code> · ' + escHtml(date) +
+              (row.branch_name ? ' · ' + escHtml(row.branch_name) : '') + '</div>' +
+              '<div class="history-stats"><span class="added">+' + Number(row.lines_added || 0) + '</span> / <span class="deleted">-' + Number(row.lines_deleted || 0) + '</span>' +
+              ' · ' + Number(row.functions_touched || 0) + '関数' + (names ? '（' + escHtml(names) + '）' : '') + '</div></article>';
+          }).join('');
+        })
+        .catch(function(err) {
+          historyList.innerHTML = '<div class="status-msg">読み込みに失敗しました: ' + escHtml(err && err.message ? err.message : String(err)) + '</div>';
+        });
+    }
 
     dirFilter.addEventListener('change', function() { selectedId = null; renderGraph(); });
     searchInput.addEventListener('input', function() { selectedId = null; renderGraph(); });

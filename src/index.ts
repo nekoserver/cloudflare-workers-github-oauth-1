@@ -9983,6 +9983,53 @@ app.get('/api/file-deps', authMiddleware, async (c) => {
 });
 
 /**
+ * ファイル変更履歴 API
+ * GET /api/file-history?file_path=src/example.ts&repo_id=1
+ * 関数インデクサーが保存したコミット×関数情報をファイル単位に集約して返す。
+ */
+app.get('/api/file-history', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ ok: false, error: 'DB not available' }, 500);
+
+  const filePath = c.req.query('file_path')?.trim();
+  const repoIdText = c.req.query('repo_id')?.trim() || '1';
+  const repoId = Number.parseInt(repoIdText, 10);
+  if (!filePath) return jsonUtf8({ ok: false, error: 'file_path は必須です' }, 400);
+  if (!/^\d+$/.test(repoIdText) || !Number.isSafeInteger(repoId) || repoId < 1) {
+    return jsonUtf8({ ok: false, error: 'repo_id は正の整数でなければなりません' }, 400);
+  }
+
+  try {
+    const rows = await c.env.DB.prepare(`
+      SELECT cl.commit_hash, cl.commit_at, cl.subject, cl.author_email, cl.branch_name,
+             SUM(m.lines_added) AS lines_added,
+             SUM(m.lines_deleted) AS lines_deleted,
+             COUNT(DISTINCT m.function_name) AS functions_touched,
+             GROUP_CONCAT(DISTINCT m.function_name) AS function_names
+      FROM ts_commit_function_map m
+      JOIN ts_commit_log cl
+        ON cl.repo_id = m.repo_id AND cl.commit_hash = m.commit_hash
+      WHERE m.repo_id = ? AND m.file_path = ?
+      GROUP BY cl.commit_hash, cl.commit_at, cl.subject, cl.author_email, cl.branch_name
+      ORDER BY cl.commit_at DESC
+      LIMIT 200
+    `).bind(repoId, filePath).all<{
+      commit_hash: string; commit_at: string; subject: string;
+      author_email: string | null; branch_name: string | null;
+      lines_added: number; lines_deleted: number; functions_touched: number;
+      function_names: string | null;
+    }>();
+    const history = (rows.results ?? []).map((row) => ({
+      ...row,
+      function_names: row.function_names ? row.function_names.split(',') : [],
+    }));
+    return jsonUtf8({ ok: true, repo_id: repoId, file_path: filePath, history, total: history.length });
+  } catch (error) {
+    logger.warn('file-history error', { error: error instanceof Error ? error.message : String(error) });
+    return jsonUtf8({ ok: false, error: 'ファイル履歴の取得に失敗しました' }, 500);
+  }
+});
+
+/**
  * フランスチーズ一覧(cheese_fr)を返す。qがあれば名称・読み仮名の部分一致で絞り込む。
  */
 app.get('/api/cheese-fr', authMiddleware, async (c) => {
