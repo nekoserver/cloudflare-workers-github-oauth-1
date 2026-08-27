@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   formatJstDateTime,
+  formatEpochTime,
   formatJstMonthCalendar,
   formatCommitAgentLogEntry,
   formatAichatSlashCommandHelp,
@@ -24,6 +25,12 @@ describe('formatJstDateTime', () => {
 
   it('秒までゼロ埋めで2桁表示する', () => {
     expect(formatJstDateTime(new Date('2026-01-01T00:00:05Z'))).toBe('2026-01-01 09:00:05');
+  });
+});
+
+describe('formatEpochTime', () => {
+  it('Unixエポックからの経過秒数を返す', () => {
+    expect(formatEpochTime(new Date('2026-07-05T01:02:03.999Z'))).toBe('1783213323');
   });
 });
 
@@ -112,6 +119,7 @@ describe('formatAichatSlashCommandHelp', () => {
   it('全サブコマンドを含むヘルプを返す', () => {
     const result = formatAichatSlashCommandHelp();
     expect(result).toContain('/neko hms');
+    expect(result).toContain('/neko epoch');
     expect(result).toContain('/neko cal');
     expect(result).toContain('/neko clog');
     expect(result).toContain('/neko limit');
@@ -155,6 +163,11 @@ describe('interpretAichatSlashCommand', () => {
   it('/neko hms は現在時刻(JST)をそのまま返す（プレフィックスなし）', async () => {
     const result = await interpretAichatSlashCommand('/neko hms', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: '2026-07-05 10:02:03' });
+  });
+
+  it('/neko epoch は現在のエポックタイムを秒単位で返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko epoch', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '1783213323' });
   });
 
   it('大文字小文字を区別しない', async () => {
