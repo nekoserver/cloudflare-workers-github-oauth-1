@@ -201,6 +201,23 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('data-hub-code="DOH"');
   });
 
+  it('アラブ首長国連邦の全定期国際旅客空港コードと代表発着便を収録する', () => {
+    const uae = AIRLINE_NETWORK.find((country) => country.country === 'アラブ首長国連邦');
+    const airportCodes = ['AUH', 'AAN', 'DXB', 'DWC', 'FJR', 'RKT', 'SHJ'];
+
+    expect(uae).toBeDefined();
+    expect(new Set(uae!.airlines.map((airline) => airline.hubCode))).toEqual(new Set(airportCodes));
+    for (const code of airportCodes) {
+      expect(uae!.airlines.some((airline) =>
+        airline.hubCode === code && airline.destinations.some((destination) => destination.flightsPerWeek > 0)
+      )).toBe(true);
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city)
+        .toContain('🇦🇪 アラブ首長国連邦・');
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+    expect(html).toContain('data-country="アラブ首長国連邦"');
+  });
+
   it('ネパールの3国際空港を収録し、BWA・PKRの国内接続を双方向に表示する', () => {
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール')!;
     for (const code of ['KTM', 'BWA', 'PKR']) {
