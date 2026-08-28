@@ -181,6 +181,26 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('ラール・バハードゥル・シャーストリー国際空港（バラナシ）');
   });
 
+  it('カタールの全定期国際旅客空港コードと代表発着便を収録する', () => {
+    const qatar = AIRLINE_NETWORK.find((country) => country.country === 'カタール');
+    expect(qatar).toBeDefined();
+    expect(new Set(qatar!.airlines.map((airline) => airline.hubCode))).toEqual(new Set(['DOH']));
+
+    const dohaRoutes = qatar!.airlines.flatMap((airline) => airline.destinations);
+    expect(dohaRoutes.length).toBeGreaterThanOrEqual(20);
+    expect(new Set(dohaRoutes.map((destination) => destination.code))).toEqual(new Set([
+      'LHR', 'CDG', 'FRA', 'AMS', 'FCO', 'MAD', 'IST', 'NRT', 'HND', 'KIX',
+      'ICN', 'BKK', 'SIN', 'DEL', 'BOM', 'JFK', 'SYD', 'MEL', 'DXB', 'JED'
+    ]));
+    expect(dohaRoutes.every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+    expect(AIRPORT_LIST.find((airport) => airport.code === 'DOH')).toMatchObject({
+      name: 'ハマド国際空港',
+      city: '🇶🇦 カタール・ドーハ'
+    });
+    expect(html).toContain('data-country="カタール"');
+    expect(html).toContain('data-hub-code="DOH"');
+  });
+
   it('ネパールの3国際空港を収録し、BWA・PKRの国内接続を双方向に表示する', () => {
     const nepal = AIRLINE_NETWORK.find((country) => country.country === 'ネパール')!;
     for (const code of ['KTM', 'BWA', 'PKR']) {
