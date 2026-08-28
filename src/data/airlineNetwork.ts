@@ -41,6 +41,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
 // スイスは、定期国際旅客便（季節運航・定期チャーターを含む）がある7空港を収録し、
 // 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
+// カタールは、定期国際旅客便がある国内唯一の空港であるハマド国際空港を収録し、
+// 同空港を発着する代表的な直行便を地域別に掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -343,9 +345,26 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   ]},
   { country: 'カタール', flag: '🇶🇦', airlines: [
     { name: 'Qatar Airways', iata: 'QR', hubCode: 'DOH', hubName: 'ハマド国際空港', destinations: [
-      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 },
-      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 }
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 42 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 21 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 14 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 14 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 14 },
+      { code: 'IST', name: 'イスタンブール空港', flightsPerWeek: 14 },
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
+      { code: 'KIX', name: '関西国際空港', flightsPerWeek: 7 },
+      { code: 'ICN', name: '仁川国際空港（ソウル）', flightsPerWeek: 14 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 28 },
+      { code: 'SIN', name: 'チャンギ空港（シンガポール）', flightsPerWeek: 21 },
+      { code: 'DEL', name: 'インディラ・ガンジー国際空港', flightsPerWeek: 21 },
+      { code: 'BOM', name: 'チャトラパティ・シヴァージー国際空港', flightsPerWeek: 21 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 14 },
+      { code: 'MEL', name: 'メルボルン空港', flightsPerWeek: 14 },
+      { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 21 },
+      { code: 'JED', name: 'キング・アブドゥルアズィーズ国際空港', flightsPerWeek: 21 }
     ]}
   ]},
   { country: 'シンガポール', flag: '🇸🇬', airlines: [
