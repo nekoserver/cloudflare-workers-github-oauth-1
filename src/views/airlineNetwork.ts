@@ -68,8 +68,8 @@ function collectDestAirports(): DestAirportEntry[] {
 
 function buildCountryButtons(): string {
   let html = `<button type="button" class="country-btn active" data-country="__all__">🌐 すべて</button>`;
-  for (const c of AIRLINE_NETWORK) {
-    html += `<button type="button" class="country-btn" data-country="${c.country}">${c.flag} ${c.country}</button>`;
+  for (const [index, c] of AIRLINE_NETWORK.entries()) {
+    html += `<button type="button" class="country-btn" data-country="${c.country}" data-country-order="${index}">${c.flag} ${c.country}</button>`;
   }
   return html;
 }
@@ -124,8 +124,8 @@ function buildDestCheckRows(destinations: DestAirportEntry[]): string {
 
 function buildCountryHubCheckRows(countryHubs: CountryHubEntry[]): string {
   let html = '';
-  for (const ch of countryHubs) {
-    html += `<label class="check-row">`;
+  for (const [index, ch] of countryHubs.entries()) {
+    html += `<label class="check-row" data-country="${ch.country}" data-hub-order="${index}">`;
     html += `<input type="checkbox" class="country-hub-check" value="${ch.key}" checked>`;
     html += `<span class="check-flag">${ch.flag}</span>`;
     html += `<span class="check-name">${ch.country}<span class="hub-sub">${ch.hubName}<span class="code">${ch.hubCode}</span></span></span>`;
@@ -438,6 +438,7 @@ var ALL_DEST_CODES = ${destCodesJson};
 var DEST_FLAG_COOKIE_NAME = 'airline_network_dest_flags';
 var ALL_DEST_FLAGS = ${destFlagsJson};
 var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';
+var COUNTRY_HUB_STORAGE_NAME = 'airline_network_country_hubs_v2';
 var ALL_COUNTRY_HUB_KEYS = ${countryHubKeysJson};
 var DISPLAY_MODE_COOKIE_NAME = 'airline_network_display_mode';
 
@@ -516,6 +517,14 @@ function loadSelectedDestCodes() {
 }
 
 function loadSelectedCountryHubs() {
+  var stored = null;
+  try { stored = window.localStorage.getItem(COUNTRY_HUB_STORAGE_NAME); } catch (e) { /* Cookie fallback. */ }
+  if (stored !== null) {
+    try {
+      var parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) return parsed.filter(function (key) { return ALL_COUNTRY_HUB_KEYS.indexOf(key) !== -1; });
+    } catch (e) { /* Ignore malformed storage and use the legacy cookie. */ }
+  }
   var saved = getCookieValue(COUNTRY_HUB_COOKIE_NAME);
   if (saved === null || saved === '') return ALL_COUNTRY_HUB_KEYS.slice();
   return saved.split(',').filter(function (key) { return ALL_COUNTRY_HUB_KEYS.indexOf(key) !== -1; });
@@ -530,6 +539,11 @@ function loadSelectedDestFlags() {
 var selectedDestCodes = loadSelectedDestCodes();
 var selectedCountryHubs = loadSelectedCountryHubs();
 var selectedDestFlags = loadSelectedDestFlags();
+
+function saveSelectedCountryHubs() {
+  try { window.localStorage.setItem(COUNTRY_HUB_STORAGE_NAME, JSON.stringify(selectedCountryHubs)); } catch (e) { /* Cookie remains as fallback. */ }
+  setCookieValue(COUNTRY_HUB_COOKIE_NAME, selectedCountryHubs.join(','));
+}
 
 function getNextZ() {
   var max = 100;
@@ -569,16 +583,29 @@ function updateDestFlagFilterBtnLabel() {
 }
 
 function updateCountryPanelVisibility() {
-  var visibleCountries = {};
+  var enabledCounts = {};
   selectedCountryHubs.forEach(function (key) {
     var country = key.split('::')[0];
-    visibleCountries[country] = true;
+    enabledCounts[country] = (enabledCounts[country] || 0) + 1;
   });
   countryBtns.forEach(function (btn) {
     var country = btn.getAttribute('data-country');
     if (country === '__all__') return;
-    btn.style.display = visibleCountries[country] ? '' : 'none';
+    btn.style.display = enabledCounts[country] ? '' : 'none';
   });
+  var countryPanel = document.getElementById('country-panel');
+  Array.prototype.slice.call(countryBtns).filter(function (btn) {
+    return btn.getAttribute('data-country') !== '__all__';
+  }).sort(function (a, b) {
+    return (enabledCounts[b.getAttribute('data-country')] || 0) - (enabledCounts[a.getAttribute('data-country')] || 0)
+      || Number(a.getAttribute('data-country-order')) - Number(b.getAttribute('data-country-order'));
+  }).forEach(function (btn) { countryPanel.appendChild(btn); });
+
+  var countryFilterList = document.getElementById('country-filter-list');
+  Array.prototype.slice.call(countryFilterList.querySelectorAll('.check-row')).sort(function (a, b) {
+    return (enabledCounts[b.getAttribute('data-country')] || 0) - (enabledCounts[a.getAttribute('data-country')] || 0)
+      || Number(a.getAttribute('data-hub-order')) - Number(b.getAttribute('data-hub-order'));
+  }).forEach(function (row) { countryFilterList.appendChild(row); });
   var activeBtn = null;
   countryBtns.forEach(function (btn) {
     if (btn.getAttribute('data-country') === currentCountry) activeBtn = btn;
@@ -812,7 +839,7 @@ countryFilterBackdrop.addEventListener('click', closeCountryFilterModal);
 
 countryFilterApply.addEventListener('click', function () {
   selectedCountryHubs = countryHubCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
-  setCookieValue(COUNTRY_HUB_COOKIE_NAME, selectedCountryHubs.join(','));
+  saveSelectedCountryHubs();
   closeCountryFilterModal();
   updateCountryPanelVisibility();
   applyFilter();
