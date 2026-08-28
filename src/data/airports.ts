@@ -7,6 +7,14 @@ export interface Airport {
 }
 
 export const AIRPORT_LIST: Airport[] = [
+  // airline-network で扱うアラブ首長国連邦の定期国際旅客便発着空港（季節運航を含む）。
+  { code: "AUH", name: "ザイード国際空港", city: "🇦🇪 アラブ首長国連邦・アブダビ", lat: 24.4330, lon: 54.6511 },
+  { code: "AAN", name: "アル・アイン国際空港", city: "🇦🇪 アラブ首長国連邦・アル・アイン", lat: 24.2617, lon: 55.6092 },
+  { code: "DWC", name: "アル・マクトゥーム国際空港", city: "🇦🇪 アラブ首長国連邦・ドバイ", lat: 24.8964, lon: 55.1614 },
+  { code: "FJR", name: "フジャイラ国際空港", city: "🇦🇪 アラブ首長国連邦・フジャイラ", lat: 25.1122, lon: 56.3239 },
+  { code: "RKT", name: "ラス・アル・ハイマ国際空港", city: "🇦🇪 アラブ首長国連邦・ラス・アル・ハイマ", lat: 25.6135, lon: 55.9388 },
+  { code: "SHJ", name: "シャルジャ国際空港", city: "🇦🇪 アラブ首長国連邦・シャルジャ", lat: 25.3286, lon: 55.5172 },
+  { code: "DME", name: "ドモジェドヴォ空港", city: "🇷🇺 ロシア・モスクワ", lat: 55.4088, lon: 37.9063 },
   // airline-network で扱うスイスの定期国際旅客便発着空港（季節運航・定期チャーターを含む）。
   { code: "ACH", name: "ザンクト・ガレン＝アルテンライン空港", city: "🇨🇭 スイス・アルテンライン", lat: 47.4850, lon: 9.5608 },
   { code: "SIR", name: "シオン空港", city: "🇨🇭 スイス・シオン", lat: 46.2196, lon: 7.3268 },
@@ -149,7 +157,7 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "BWA", name: "ガウタム・ブッダ国際空港", city: "🇳🇵 ネパール・シッダールタナガル", lat: 27.5057, lon: 83.4163 },
   { code: "PKR", name: "ポカラ国際空港", city: "🇳🇵 ネパール・ポカラ", lat: 28.1846, lon: 83.9821 },
   { code: "RHP", name: "マンタリ空港（ラメチャップ空港）", city: "🇳🇵 ネパール・ラメチャップ", lat: 27.394, lon: 86.0614 },
-  { code: "DXB", name: "ドバイ国際空港", city: "🇦🇪 UAE・ドバイ", lat: 25.25, lon: 55.36 },
+  { code: "DXB", name: "ドバイ国際空港", city: "🇦🇪 アラブ首長国連邦・ドバイ", lat: 25.25, lon: 55.36 },
   { code: "DOH", name: "ハマド国際空港", city: "🇶🇦 カタール・ドーハ", lat: 25.27, lon: 51.61 },
   { code: "IST", name: "イスタンブール空港", city: "🇹🇷 トルコ・イスタンブール", lat: 41.27, lon: 28.75 },
   { code: "JED", name: "キング・アブドゥルアズィーズ国際空港", city: "🇸🇦 サウジアラビア・ジェッダ", lat: 21.68, lon: 39.16 },

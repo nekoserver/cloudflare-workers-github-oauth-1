@@ -45,6 +45,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 // カタールは、定期国際旅客便がある国内唯一の空港であるハマド国際空港を収録し、
 // 同空港を発着する代表的な直行便を地域別に掲載している。
+// アラブ首長国連邦は、定期国際旅客便（季節運航を含む）がある7空港を収録し、
+// 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -337,12 +339,34 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'British Airways', iata: 'BA', hubCode: 'RTM', hubName: 'ロッテルダム・ザ・ハーグ空港', destinations: [{ code: 'LCY', name: 'ロンドン・シティ空港', flightsPerWeek: 14 }] }
   ]},
   { country: 'アラブ首長国連邦', flag: '🇦🇪', airlines: [
+    { name: 'Etihad Airways', iata: 'EY', hubCode: 'AUH', hubName: 'ザイード国際空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 28 },
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 7 },
+      { code: 'SIN', name: 'チャンギ空港（シンガポール）', flightsPerWeek: 7 },
+      { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 14 }
+    ]},
     { name: 'Emirates', iata: 'EK', hubCode: 'DXB', hubName: 'ドバイ国際空港', destinations: [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 },
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 },
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 14 }
+    ]},
+    { name: 'Nile Air', iata: 'NP', hubCode: 'AAN', hubName: 'アル・アイン国際空港', destinations: [
+      { code: 'CAI', name: 'カイロ国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Ural Airlines', iata: 'U6', hubCode: 'DWC', hubName: 'アル・マクトゥーム国際空港', destinations: [
+      { code: 'DME', name: 'ドモジェドヴォ空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'EgyptAir', iata: 'MS', hubCode: 'FJR', hubName: 'フジャイラ国際空港', destinations: [
+      { code: 'CAI', name: 'カイロ国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Air Arabia', iata: 'G9', hubCode: 'RKT', hubName: 'ラス・アル・ハイマ国際空港', destinations: [
+      { code: 'CAI', name: 'カイロ国際空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Air Arabia', iata: 'G9', hubCode: 'SHJ', hubName: 'シャルジャ国際空港', destinations: [
+      { code: 'CAI', name: 'カイロ国際空港', flightsPerWeek: 28 }
     ]}
   ]},
   { country: 'カタール', flag: '🇶🇦', airlines: [
