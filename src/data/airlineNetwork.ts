@@ -19,6 +19,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // スペインは、定期国際旅客便がある29空港を収録し、各空港から利用できる
 // 代表的な国際線を最低1路線ずつ掲載している。同じ航空会社が複数空港を
 // 発着する場合は、空港ごとに別のネットワーク行として扱う。
+// イタリアも同じ基準で、定期便（季節運航を含む）で国外へ移動できる37空港を
+// 収録した。便数は通常期または運航期間中の代表的な週間便数の目安。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -229,7 +231,43 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
       { code: 'HND', name: '羽田空港', flightsPerWeek: 3 }
-    ]}
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'AHO', hubName: 'アルゲーロ・フェルティリア空港', destinations: [{ code: 'CRL', name: 'ブリュッセル・サウスシャルロワ空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'AOI', hubName: 'アンコーナ・ファルコナーラ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BDS', hubName: 'ブリンディジ空港', destinations: [{ code: 'CRL', name: 'ブリュッセル・サウスシャルロワ空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BGY', hubName: 'ミラノ・ベルガモ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BLQ', hubName: 'ボローニャ・グリエルモ・マルコーニ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BRI', hubName: 'バーリ・カロル・ヴォイティワ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'SkyAlps', iata: 'BQ', hubCode: 'BZO', hubName: 'ボルツァーノ空港', destinations: [{ code: 'BER', name: 'ベルリン・ブランデンブルク空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CAG', hubName: 'カリアリ・エルマス空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CIA', hubName: 'ローマ・チャンピーノ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CIY', hubName: 'コーミゾ空港', destinations: [{ code: 'CRL', name: 'ブリュッセル・サウスシャルロワ空港', flightsPerWeek: 2 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'CTA', hubName: 'カターニア・フォンターナロッサ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CUF', hubName: 'クーネオ・レバルディジ空港', destinations: [{ code: 'RAK', name: 'マラケシュ・メナラ空港', flightsPerWeek: 2 }] },
+    { name: 'Vueling', iata: 'VY', hubCode: 'FLR', hubName: 'フィレンツェ・ペレトラ空港', destinations: [{ code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'FRL', hubName: 'フォルリ空港', destinations: [{ code: 'TIA', name: 'ティラナ国際空港', flightsPerWeek: 2 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'GOA', hubName: 'ジェノヴァ・クリストーフォロ・コロンボ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'ITA Airways', iata: 'AZ', hubCode: 'LIN', hubName: 'ミラノ・リナーテ空港', destinations: [{ code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LMP', hubName: 'ランペドゥーザ空港', destinations: [{ code: 'BSL', name: 'ユーロエアポート・バーゼル＝ミュールーズ空港', flightsPerWeek: 1 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'MXP', hubName: 'ミラノ・マルペンサ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 35 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'NAP', hubName: 'ナポリ・カポディキーノ国際空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 21 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'OLB', hubName: 'オルビア・コスタ・スメラルダ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PEG', hubName: 'ペルージャ・サン・フランチェスコ・ダッシジ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PMF', hubName: 'パルマ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PMO', hubName: 'パレルモ・ファルコーネ・ボルセリーノ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'DAT', iata: 'DX', hubCode: 'PNL', hubName: 'パンテッレリーア空港', destinations: [{ code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 1 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PSA', hubName: 'ピサ・ガリレオ・ガリレイ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PSR', hubName: 'アブルッツォ空港', destinations: [{ code: 'CRL', name: 'ブリュッセル・サウスシャルロワ空港', flightsPerWeek: 4 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'QSR', hubName: 'サレルノ・コスタ・ダマルフィ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'REG', hubName: 'レッジョ・カラブリア空港', destinations: [{ code: 'TIA', name: 'ティラナ国際空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'RMI', hubName: 'リミニ・フェデリコ・フェリーニ空港', destinations: [{ code: 'BUD', name: 'リスト・フェレンツ国際空港', flightsPerWeek: 2 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'SUF', hubName: 'ラメーツィア・テルメ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TPS', hubName: 'トラーパニ・ビルジ空港', destinations: [{ code: 'CRL', name: 'ブリュッセル・サウスシャルロワ空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TRN', hubName: 'トリノ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TRS', hubName: 'トリエステ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TSF', hubName: 'トレヴィーゾ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 14 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'VCE', hubName: 'ヴェネツィア・テッセラ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'VRN', hubName: 'ヴェローナ・ヴィラフランカ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] }
   ]},
   { country: 'スペイン', flag: '🇪🇸', airlines: [
     { name: 'Iberia', iata: 'IB', hubCode: 'MAD', hubName: 'マドリード・バラハス空港', destinations: [
