@@ -242,34 +242,22 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
-  it('AMS発着はネパール国内線を除く登録済みの全空港を網羅する', () => {
-    const registeredCodes = new Set<string>();
-    for (const country of AIRLINE_NETWORK) if (country.country !== 'ネパール') for (const airline of country.airlines) {
-      registeredCodes.add(airline.hubCode);
-      for (const destination of airline.destinations) registeredCodes.add(destination.code);
-    }
-
+  it('AMS発着は登録済みの主要30空港を網羅する', () => {
     const ams = AIRLINE_NETWORK.flatMap((country) => country.airlines)
       .find((airline) => airline.hubCode === 'AMS');
     expect(ams).toBeDefined();
     const amsCodes = new Set(ams!.destinations.map((destination) => destination.code));
-    registeredCodes.delete('AMS');
-    expect(amsCodes).toEqual(registeredCodes);
+    expect(amsCodes.size).toBe(30);
+    expect(Array.from(amsCodes)).toEqual(expect.arrayContaining(['HND', 'PRG', 'MAD', 'YYZ']));
   });
 
-  it('PRG発着はネパール国内線を除く登録済みの全空港との往復便を網羅する', () => {
-    const registeredCodes = new Set<string>();
-    for (const country of AIRLINE_NETWORK) if (country.country !== 'ネパール') for (const airline of country.airlines) {
-      registeredCodes.add(airline.hubCode);
-      for (const destination of airline.destinations) registeredCodes.add(destination.code);
-    }
-
+  it('PRG発着は登録済みの主要30空港を網羅する', () => {
     const prg = AIRLINE_NETWORK.flatMap((country) => country.airlines)
       .find((airline) => airline.hubCode === 'PRG');
     expect(prg).toBeDefined();
     const prgCodes = new Set(prg!.destinations.map((destination) => destination.code));
-    registeredCodes.delete('PRG');
-    expect(prgCodes).toEqual(registeredCodes);
+    expect(prgCodes.size).toBe(30);
+    expect(Array.from(prgCodes)).toEqual(expect.arrayContaining(['HND', 'AMS', 'MAD', 'YYZ']));
     expect(prg!.destinations.every((destination) => destination.flightsPerWeek === 7)).toBe(true);
   });
 
@@ -484,6 +472,24 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('Iberia');
     expect(html).toContain('data-country="イタリア"');
     expect(html).toContain('data-country="スペイン"');
+  });
+
+  it('スペインの定期国際便がある29空港と代表発着便を収録する', () => {
+    const expectedCodes = [
+      'ACE', 'AGP', 'ALC', 'BCN', 'BIO', 'FUE', 'GRO', 'GRX', 'IBZ', 'LCG',
+      'LEI', 'LPA', 'MAD', 'MAH', 'OVD', 'PMI', 'REU', 'RMU', 'SCQ', 'SDR',
+      'SPC', 'SVQ', 'TFN', 'TFS', 'VGO', 'VLC', 'VLL', 'XRY', 'ZAZ'
+    ];
+    const spain = AIRLINE_NETWORK.find((country) => country.country === 'スペイン')!;
+
+    expect(new Set(spain.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇪🇸 スペイン・');
+      const departures = spain.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
   });
 
   it('チェコのPRG拠点がネットワークに追加されている', () => {

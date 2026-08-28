@@ -2,7 +2,7 @@ export type AirlineDestination = { code: string; name: string; flightsPerWeek: n
 export type Airline = { name: string; iata: string; hubCode: string; hubName: string; destinations: AirlineDestination[] };
 export type CountryAirlines = { country: string; flag: string; airlines: Airline[] };
 
-export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
+export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 
 // 便数(週)は主要路線のおおまかな目安であり、季節・年度により変動する概算値。
 // 2026-08-26時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
@@ -16,6 +16,9 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-26';
 // 数え、両方向を別の発着地データとして収録している。
 // AMS と PRG は一覧内に登録済みの全空港との往復便を検索できることを優先し、
 // 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
+// スペインは、定期国際旅客便がある29空港を収録し、各空港から利用できる
+// 代表的な国際線を最低1路線ずつ掲載している。同じ航空会社が複数空港を
+// 発着する場合は、空港ごとに別のネットワーク行として扱う。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -231,7 +234,92 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'スペイン', flag: '🇪🇸', airlines: [
     { name: 'Iberia', iata: 'IB', hubCode: 'MAD', hubName: 'マドリード・バラハス空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
-      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 }
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'BCN', hubName: 'バルセロナ＝エル・プラット空港', destinations: [
+      { code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 35 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'ALC', hubName: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', destinations: [
+      { code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 21 }
+    ]},
+    { name: 'easyJet', iata: 'U2', hubCode: 'AGP', hubName: 'マラガ＝コスタ・デル・ソル空港', destinations: [
+      { code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'Air Europa', iata: 'UX', hubCode: 'PMI', hubName: 'パルマ・デ・マヨルカ空港', destinations: [
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 }
+    ]},
+    { name: 'Binter Canarias', iata: 'NT', hubCode: 'LPA', hubName: 'グラン・カナリア空港', destinations: [
+      { code: 'RAK', name: 'マラケシュ・メナラ空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Binter Canarias', iata: 'NT', hubCode: 'TFN', hubName: 'テネリフェ・ノルテ空港', destinations: [
+      { code: 'FNC', name: 'マデイラ空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TFS', hubName: 'テネリフェ・スール空港', destinations: [
+      { code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'ACE', hubName: 'セサル・マンリケ・ランサローテ空港', destinations: [
+      { code: 'DUB', name: 'ダブリン空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Condor', iata: 'DE', hubCode: 'FUE', hubName: 'フエルテベントゥラ空港', destinations: [
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'IBZ', hubName: 'イビサ空港', destinations: [
+      { code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'easyJet', iata: 'U2', hubCode: 'MAH', hubName: 'メノルカ空港', destinations: [
+      { code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'VLC', hubName: 'バレンシア空港', destinations: [
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'BIO', hubName: 'ビルバオ空港', destinations: [
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'SVQ', hubName: 'セビリア空港', destinations: [
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'SCQ', hubName: 'サンティアゴ・ロサリア・デ・カストロ空港', destinations: [
+      { code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'OVD', hubName: 'アストゥリアス空港', destinations: [
+      { code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 4 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'SDR', hubName: 'セベ・バレステロス＝サンタンデール空港', destinations: [
+      { code: 'BGY', name: 'ミラノ・ベルガモ空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'GRO', hubName: 'ジローナ＝コスタ・ブラバ空港', destinations: [
+      { code: 'CRL', name: 'ブリュッセル・サウスシャルルロワ空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'REU', hubName: 'レウス空港', destinations: [
+      { code: 'DUB', name: 'ダブリン空港', flightsPerWeek: 4 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'GRX', hubName: 'グラナダ空港', destinations: [
+      { code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LEI', hubName: 'アルメリア空港', destinations: [
+      { code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'XRY', hubName: 'ヘレス空港', destinations: [
+      { code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Volotea', iata: 'V7', hubCode: 'RMU', hubName: 'レヒオン・デ・ムルシア国際空港', destinations: [
+      { code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Vueling', iata: 'VY', hubCode: 'LCG', hubName: 'ア・コルーニャ空港', destinations: [
+      { code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'VGO', hubName: 'ビーゴ空港', destinations: [
+      { code: 'BGY', name: 'ミラノ・ベルガモ空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Binter Canarias', iata: 'NT', hubCode: 'SPC', hubName: 'ラ・パルマ空港', destinations: [
+      { code: 'FNC', name: 'マデイラ空港', flightsPerWeek: 1 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'ZAZ', hubName: 'サラゴサ空港', destinations: [
+      { code: 'BGY', name: 'ミラノ・ベルガモ空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'VLL', hubName: 'バリャドリッド空港', destinations: [
+      { code: 'CRL', name: 'ブリュッセル・サウスシャルルロワ空港', flightsPerWeek: 2 }
     ]}
   ]},
   { country: 'チェコ', flag: '🇨🇿', airlines: [
