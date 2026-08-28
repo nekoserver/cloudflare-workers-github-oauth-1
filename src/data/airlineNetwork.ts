@@ -27,6 +27,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // ドイツは、定期国際旅客便（季節運航を含む）がある27空港を収録し、各空港の
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
+// フランスは、本土・コルシカ島で定期国際旅客便（季節運航を含む）がある31空港を
+// 収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -170,7 +172,37 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
-    ]}
+    ]},
+    { name: 'easyJet', iata: 'U2', hubCode: 'AJA', hubName: 'アジャクシオ・ナポレオン・ボナパルト空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 2 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'BIA', hubName: 'バスティア・ポレッタ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 2 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BIQ', hubName: 'ビアリッツ・ペイ・バスク空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'BOD', hubName: 'ボルドー・メリニャック空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 14 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'BES', hubName: 'ブレスト・ブルターニュ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BVA', hubName: 'パリ・ボーヴェ・ティレ空港', destinations: [{ code: 'FCO', name: 'ローマ・フィウミチーノ空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BZR', hubName: 'ベジエ・キャプ・ダグド空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CCF', hubName: 'カルカソンヌ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'CFE', hubName: 'クレルモン＝フェラン・オーヴェルニュ空港', destinations: [{ code: 'OPO', name: 'フランシスコ・サ・カルネイロ空港', flightsPerWeek: 2 }] },
+    { name: 'Air Corsica', iata: 'XK', hubCode: 'CLY', hubName: 'カルヴィ・サント・カトリーヌ空港', destinations: [{ code: 'GVA', name: 'ジュネーブ空港', flightsPerWeek: 2 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'DLE', hubName: 'ドール・ジュラ空港', destinations: [{ code: 'OPO', name: 'フランシスコ・サ・カルネイロ空港', flightsPerWeek: 2 }] },
+    { name: 'Air Algérie', iata: 'AH', hubCode: 'ETZ', hubName: 'メス・ナンシー・ロレーヌ空港', destinations: [{ code: 'ALG', name: 'ウアリ・ブーメディアン空港', flightsPerWeek: 3 }] },
+    { name: 'Air Corsica', iata: 'XK', hubCode: 'FSC', hubName: 'フィガリ・シュド・コルス空港', destinations: [{ code: 'GVA', name: 'ジュネーブ空港', flightsPerWeek: 3 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'GNB', hubName: 'グルノーブル・アルプ・イゼール空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LDE', hubName: 'タルブ・ルルド・ピレネー空港', destinations: [{ code: 'FCO', name: 'ローマ・フィウミチーノ空港', flightsPerWeek: 2 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LIL', hubName: 'リール空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LRH', hubName: 'ラ・ロシェル・イル・ド・レ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LYS', hubName: 'リヨン・サン＝テグジュペリ空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 21 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'MPL', hubName: 'モンペリエ・メディテラネ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'MRS', hubName: 'マルセイユ・プロヴァンス空港', destinations: [{ code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 14 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'NCE', hubName: 'ニース・コート・ダジュール空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 28 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'NTE', hubName: 'ナント・アトランティック空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 14 }] },
+    { name: 'Transavia France', iata: 'TO', hubCode: 'ORY', hubName: 'パリ・オルリー空港', destinations: [{ code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PGF', hubName: 'ペルピニャン・リヴサルト空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PIS', hubName: 'ポワティエ・ビアール空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'RNS', hubName: 'レンヌ・サン・ジャック空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 4 }] },
+    { name: 'Volotea', iata: 'V7', hubCode: 'SXB', hubName: 'ストラスブール空港', destinations: [{ code: 'FCO', name: 'ローマ・フィウミチーノ空港', flightsPerWeek: 4 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'TLN', hubName: 'トゥーロン・イエール空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 3 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'TLS', hubName: 'トゥールーズ・ブラニャック空港', destinations: [{ code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'TUF', hubName: 'トゥール・ヴァル・ド・ロワール空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] }
   ]},
   { country: 'ドイツ', flag: '🇩🇪', airlines: [
     { name: 'Lufthansa', iata: 'LH', hubCode: 'FRA', hubName: 'フランクフルト空港', destinations: [
