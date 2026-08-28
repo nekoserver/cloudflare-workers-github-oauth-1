@@ -23,6 +23,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 収録した。便数は通常期または運航期間中の代表的な週間便数の目安。
 // イギリスは、定期国際旅客便（季節運航を含む）がある30空港を収録し、各空港の
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
+// デンマークは、定期国際旅客便（季節運航を含む）がある6空港を収録し、各空港の
+// IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -536,6 +538,21 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 14 },
       { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 14 },
       { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'KLM', iata: 'KL', hubCode: 'BLL', hubName: 'ビルン空港', destinations: [
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'KLM', iata: 'KL', hubCode: 'AAL', hubName: 'オールボー空港', destinations: [
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'AAR', hubName: 'オーフス空港', destinations: [
+      { code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 4 }
+    ]},
+    { name: 'Loganair', iata: 'LM', hubCode: 'EBJ', hubName: 'エスビャウ空港', destinations: [
+      { code: 'ABZ', name: 'アバディーン国際空港', flightsPerWeek: 6 }
+    ]},
+    { name: 'Danish Air Transport', iata: 'DX', hubCode: 'RNN', hubName: 'ボーンホルム空港', destinations: [
+      { code: 'BER', name: 'ベルリン・ブランデンブルク空港', flightsPerWeek: 2 }
     ]}
   ]}
 ];
