@@ -7,6 +7,10 @@ export interface Airport {
 }
 
 export const AIRPORT_LIST: Airport[] = [
+  // airline-network で扱うオーストリアの定期国際旅客便発着空港（季節運航を含む）。
+  { code: "GRZ", name: "グラーツ空港", city: "🇦🇹 オーストリア・グラーツ", lat: 46.9911, lon: 15.4396 },
+  { code: "KLU", name: "クラーゲンフルト空港", city: "🇦🇹 オーストリア・クラーゲンフルト", lat: 46.6425, lon: 14.3377 },
+  { code: "LNZ", name: "リンツ空港", city: "🇦🇹 オーストリア・リンツ", lat: 48.2332, lon: 14.1875 },
   // airline-network で扱うチェコの定期国際旅客便発着空港（季節運航を含む）。
   { code: "BRQ", name: "ブルノ・トゥジャニ空港", city: "🇨🇿 チェコ・ブルノ", lat: 49.1513, lon: 16.6944 },
   { code: "JCL", name: "チェスケー・ブジェヨヴィツェ空港", city: "🇨🇿 チェコ・チェスケー・ブジェヨヴィツェ", lat: 48.9482, lon: 14.4283 },

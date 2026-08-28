@@ -33,6 +33,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 // オランダは、定期国際旅客便（季節運航を含む）がある本土5空港を収録し、各空港から
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
+// オーストリアは、定期国際旅客便（季節運航を含む）がある6空港を収録し、各空港から
+// 利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -600,7 +602,12 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 21 },
       { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 },
       { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 14 }
-    ]}
+    ]},
+    { name: 'Eurowings', iata: 'EW', hubCode: 'GRZ', hubName: 'グラーツ空港', destinations: [{ code: 'BER', name: 'ベルリン・ブランデンブルク空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'KLU', hubName: 'クラーゲンフルト空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LNZ', hubName: 'リンツ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 3 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'INN', hubName: 'インスブルック空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'SZG', hubName: 'ザルツブルク空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 5 }] }
   ]},
   { country: 'デンマーク', flag: '🇩🇰', airlines: [
     { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'CPH', hubName: 'コペンハーゲン空港', destinations: [
