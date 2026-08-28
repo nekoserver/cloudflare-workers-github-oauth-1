@@ -21,6 +21,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 発着する場合は、空港ごとに別のネットワーク行として扱う。
 // イタリアも同じ基準で、定期便（季節運航を含む）で国外へ移動できる37空港を
 // 収録した。便数は通常期または運航期間中の代表的な週間便数の目安。
+// イギリスは、定期国際旅客便（季節運航を含む）がある30空港を収録し、各空港の
+// IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -128,7 +130,36 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
       { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 14 }
-    ]}
+    ]},
+    { name: 'KLM', iata: 'KL', hubCode: 'ABZ', hubName: 'アバディーン国際空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'BHD', hubName: 'ジョージ・ベスト・ベルファスト・シティ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 14 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'BFS', hubName: 'ベルファスト国際空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'BHX', hubName: 'バーミンガム空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BOH', hubName: 'ボーンマス空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'BRS', hubName: 'ブリストル空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'CWL', hubName: 'カーディフ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }] },
+    { name: 'Loganair', iata: 'LM', hubCode: 'DND', hubName: 'ダンディー空港', destinations: [{ code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 2 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'EDI', hubName: 'エディンバラ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 35 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'EMA', hubName: 'イースト・ミッドランズ空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'EXT', hubName: 'エクセター空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 3 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'GLA', hubName: 'グラスゴー空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 35 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'HUY', hubName: 'ハンバーサイド空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'INV', hubName: 'インヴァネス空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'LBA', hubName: 'リーズ・ブラッドフォード空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'LCY', hubName: 'ロンドン・シティ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 35 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LGW', hubName: 'ロンドン・ガトウィック空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 35 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LPL', hubName: 'リバプール・ジョン・レノン空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'LTN', hubName: 'ロンドン・ルートン空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'MAN', hubName: 'マンチェスター空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 42 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'MME', hubName: 'ティーズサイド国際空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 2 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'NCL', hubName: 'ニューカッスル国際空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 35 }] },
+    { name: 'Edelweiss Air', iata: 'WK', hubCode: 'NQY', hubName: 'コーンウォール空港ニューキー', destinations: [{ code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 2 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'NWI', hubName: 'ノリッジ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PIK', hubName: 'グラスゴー・プレストウィック空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 4 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'SEN', hubName: 'ロンドン・サウスエンド空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 6 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'SOU', hubName: 'サウサンプトン空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'STN', hubName: 'ロンドン・スタンステッド空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LDY', hubName: 'シティ・オブ・デリー空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 2 }] }
   ]},
   { country: 'フランス', flag: '🇫🇷', airlines: [
     { name: 'Air France', iata: 'AF', hubCode: 'CDG', hubName: 'シャルル・ド・ゴール空港', destinations: [
