@@ -170,6 +170,19 @@ describe('interpretAichatSlashCommand', () => {
     expect(result).toEqual({ handled: true, response: '1783213323' });
   });
 
+  it('/neko ip はCloudflareから渡された接続元IPアドレスを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko ip', now, {
+      ...unusedDeps,
+      clientIp: '2001:db8::1',
+    });
+    expect(result).toEqual({ handled: true, response: '接続元IPアドレス: 2001:db8::1' });
+  });
+
+  it('/neko ip で接続元IPアドレスを取得できない場合はエラーを明示する', async () => {
+    const result = await interpretAichatSlashCommand('/neko ip', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ 接続元IPアドレスを取得できませんでした' });
+  });
+
   it('大文字小文字を区別しない', async () => {
     const result = await interpretAichatSlashCommand('/NEKO HMS', now, unusedDeps);
     expect(result.handled).toBe(true);
@@ -215,6 +228,7 @@ describe('interpretAichatSlashCommand', () => {
     expect(result.handled).toBe(true);
     expect((result as { response: string }).response).toContain('unknown');
     expect((result as { response: string }).response).toContain('/neko hms');
+    expect((result as { response: string }).response).toContain('/neko ip');
     expect((result as { response: string }).response).toContain('/neko cal');
     expect((result as { response: string }).response).toContain('/neko clog');
   });

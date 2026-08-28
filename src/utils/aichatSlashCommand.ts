@@ -87,6 +87,7 @@ export function formatAichatSlashCommandHelp(): string {
     '|---|---|',
     '| /neko hms | 現在時刻(JST)を表示します |',
     '| /neko epoch | 現在のエポックタイム(秒)を表示します |',
+    '| /neko ip | 接続元のIPアドレスを表示します |',
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
@@ -354,6 +355,7 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
 
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
+  clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   logSearchShares?: (keyword: string, outcome: AichatSearchOutcome) => Promise<void>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
@@ -422,6 +424,15 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'epoch') {
     return { handled: true, response: formatEpochTime(now) };
+  }
+
+  if (subcommand === 'ip') {
+    return {
+      handled: true,
+      response: deps.clientIp
+        ? `接続元IPアドレス: ${deps.clientIp}`
+        : '❌ 接続元IPアドレスを取得できませんでした',
+    };
   }
 
   if (subcommand === 'cal') {
@@ -677,6 +688,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
   };
 }
