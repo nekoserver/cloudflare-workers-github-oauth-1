@@ -29,6 +29,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // フランスは、本土・コルシカ島で定期国際旅客便（季節運航を含む）がある31空港を
 // 収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
+// チェコは、定期国際旅客便（季節運航・定期チャーターを含む）がある6空港を収録し、
+// 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -485,7 +487,12 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
       { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
       { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
-    ]}
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'BRQ', hubName: 'ブルノ・トゥジャニ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'Smartwings', iata: 'QS', hubCode: 'JCL', hubName: 'チェスケー・ブジェヨヴィツェ空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 2 }] },
+    { name: 'Smartwings', iata: 'QS', hubCode: 'KLV', hubName: 'カルロヴィ・ヴァリ空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 2 }] },
+    { name: 'LOT Polish Airlines', iata: 'LO', hubCode: 'OSR', hubName: 'レオシュ・ヤナーチェク・オストラヴァ空港', destinations: [{ code: 'WAW', name: 'ワルシャワ・ショパン空港', flightsPerWeek: 5 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PED', hubName: 'パルドゥビツェ空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 2 }] }
   ]},
   // ネパール―インド間の定期直行便は、公開されている各社の就航地と空港時刻表を
   // 2026-08-26に照合した。KTMから就航する既知のインド4空港（DEL、BOM、BLR、
