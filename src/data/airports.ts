@@ -7,6 +7,12 @@ export interface Airport {
 }
 
 export const AIRPORT_LIST: Airport[] = [
+  // airline-network で扱うチェコの定期国際旅客便発着空港（季節運航を含む）。
+  { code: "BRQ", name: "ブルノ・トゥジャニ空港", city: "🇨🇿 チェコ・ブルノ", lat: 49.1513, lon: 16.6944 },
+  { code: "JCL", name: "チェスケー・ブジェヨヴィツェ空港", city: "🇨🇿 チェコ・チェスケー・ブジェヨヴィツェ", lat: 48.9482, lon: 14.4283 },
+  { code: "KLV", name: "カルロヴィ・ヴァリ空港", city: "🇨🇿 チェコ・カルロヴィ・ヴァリ", lat: 50.2030, lon: 12.9150 },
+  { code: "OSR", name: "レオシュ・ヤナーチェク・オストラヴァ空港", city: "🇨🇿 チェコ・オストラヴァ", lat: 49.6963, lon: 18.1111 },
+  { code: "PED", name: "パルドゥビツェ空港", city: "🇨🇿 チェコ・パルドゥビツェ", lat: 50.0134, lon: 15.7386 },
   { code: "OPO", name: "フランシスコ・サ・カルネイロ空港", city: "🇵🇹 ポルトガル・ポルト", lat: 41.2481, lon: -8.6814 },
   { code: "ALG", name: "ウアリ・ブーメディアン空港", city: "🇩🇿 アルジェリア・アルジェ", lat: 36.6910, lon: 3.2154 },
   // airline-network で扱うフランス本土・コルシカ島の定期国際旅客便発着空港。
@@ -225,7 +231,6 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "STR", name: "シュトゥットガルト空港", city: "🇩🇪 ドイツ・シュトゥットガルト", lat: 48.6899, lon: 9.222 },
   { code: "GVA", name: "ジュネーブ空港", city: "🇨🇭 スイス・ジュネーブ", lat: 46.2381, lon: 6.1089 },
   { code: "SXB", name: "ストラスブール空港", city: "🇫🇷 フランス・ストラスブール", lat: 48.5383, lon: 7.6282 },
-  { code: "LKCS", name: "チェスケー・ブジェヨヴィツェ空港", city: "🇨🇿 チェコ・チェスケー・ブジェヨヴィツェ", lat: 48.9482, lon: 14.4283 },
   { code: "TRS", name: "トリエステ空港", city: "🇮🇹 イタリア・トリエステ", lat: 45.8275, lon: 13.4722 },
   { code: "TRN", name: "トリノ空港", city: "🇮🇹 イタリア・トリノ", lat: 45.2008, lon: 7.6497 },
   { code: "EPTO", name: "トルン空港", city: "🇵🇱 ポーランド・トルン", lat: 53.0292, lon: 18.5459 },
@@ -236,7 +241,6 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "PMI", name: "パルマ空港", city: "🇪🇸 スペイン・マヨルカ島", lat: 39.5517, lon: 2.7388 },
   { code: "BZG", name: "ビドゴシュチュ・イグナツィ・ヤン・パデレフスキ空港", city: "🇵🇱 ポーランド・ビドゴシュチュ", lat: 53.0968, lon: 17.9777 },
   { code: "FLR", name: "フィレンツェ空港", city: "🇮🇹 イタリア・フィレンツェ", lat: 43.81, lon: 11.2051 },
-  { code: "BRQ", name: "ブルノ・トゥライステ空港", city: "🇨🇿 チェコ・ブルノ", lat: 49.1513, lon: 16.6944 },
   { code: "BRE", name: "ブレーメン空港", city: "🇩🇪 ドイツ・ブレーメン", lat: 53.0475, lon: 8.7867 },
   { code: "PRG", name: "ヴァーツラフ・ハヴェル・プラハ国際空港", city: "🇨🇿 チェコ・プラハ", lat: 50.1008, lon: 14.26 },
   { code: "LKLN", name: "プルゼニ空港", city: "🇨🇿 チェコ・プルゼニ", lat: 49.6752, lon: 13.2746 },
