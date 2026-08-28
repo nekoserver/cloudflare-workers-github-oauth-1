@@ -546,6 +546,25 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('ドイツの定期国際便がある27空港と代表発着便を収録する', () => {
+    const expectedCodes = [
+      'BER', 'BRE', 'CGN', 'DTM', 'DRS', 'DUS', 'ERF', 'FRA', 'FKB',
+      'HAM', 'HAJ', 'HHN', 'LEJ', 'LBC', 'MUC', 'FMM', 'FMO', 'NRN',
+      'NUE', 'PAD', 'RLG', 'SCN', 'STR', 'FDH', 'KSF', 'GWT', 'HDF'
+    ];
+    const germany = AIRLINE_NETWORK.find((country) => country.country === 'ドイツ')!;
+
+    expect(new Set(germany.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇩🇪 ドイツ・');
+      const departures = germany.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
   it('チェコのPRG拠点がネットワークに追加されている', () => {
     const czechia = AIRLINE_NETWORK.find((c) => c.country === 'チェコ');
     expect(czechia).toBeDefined();

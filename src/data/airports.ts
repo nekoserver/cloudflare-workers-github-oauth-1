@@ -7,6 +7,23 @@ export interface Airport {
 }
 
 export const AIRPORT_LIST: Airport[] = [
+  // airline-network で扱うドイツの定期国際旅客便発着空港。
+  { code: "DTM", name: "ドルトムント空港", city: "🇩🇪 ドイツ・ドルトムント", lat: 51.5183, lon: 7.6122 },
+  { code: "DRS", name: "ドレスデン空港", city: "🇩🇪 ドイツ・ドレスデン", lat: 51.1328, lon: 13.7672 },
+  { code: "FKB", name: "カールスルーエ・バーデン＝バーデン空港", city: "🇩🇪 ドイツ・カールスルーエ", lat: 48.7794, lon: 8.0805 },
+  { code: "HAJ", name: "ハノーファー空港", city: "🇩🇪 ドイツ・ハノーファー", lat: 52.4611, lon: 9.6851 },
+  { code: "HHN", name: "フランクフルト・ハーン空港", city: "🇩🇪 ドイツ・ハーン", lat: 49.9487, lon: 7.2639 },
+  { code: "LBC", name: "リューベック空港", city: "🇩🇪 ドイツ・リューベック", lat: 53.8054, lon: 10.7192 },
+  { code: "FMM", name: "メミンゲン空港", city: "🇩🇪 ドイツ・メミンゲン", lat: 47.9888, lon: 10.2395 },
+  { code: "FMO", name: "ミュンスター・オスナブリュック空港", city: "🇩🇪 ドイツ・ミュンスター", lat: 52.1346, lon: 7.6848 },
+  { code: "NRN", name: "ヴェーツェ空港", city: "🇩🇪 ドイツ・ヴェーツェ", lat: 51.6024, lon: 6.1422 },
+  { code: "PAD", name: "パーダーボルン・リップシュタット空港", city: "🇩🇪 ドイツ・パーダーボルン", lat: 51.6141, lon: 8.6163 },
+  { code: "RLG", name: "ロストック・ラーゲ空港", city: "🇩🇪 ドイツ・ロストック", lat: 53.9182, lon: 12.2783 },
+  { code: "SCN", name: "ザールブリュッケン空港", city: "🇩🇪 ドイツ・ザールブリュッケン", lat: 49.2146, lon: 7.1095 },
+  { code: "GWT", name: "ズュルト空港", city: "🇩🇪 ドイツ・ズュルト", lat: 54.9132, lon: 8.3405 },
+  { code: "HDF", name: "ヘリングスドルフ空港", city: "🇩🇪 ドイツ・ヘリングスドルフ", lat: 53.8787, lon: 14.1523 },
+  { code: "AYT", name: "アンタルヤ空港", city: "🇹🇷 トルコ・アンタルヤ", lat: 36.8987, lon: 30.8005 },
+  { code: "LUX", name: "ルクセンブルク空港", city: "🇱🇺 ルクセンブルク", lat: 49.6233, lon: 6.2044 },
   // airline-network で扱うイタリアの定期国際旅客便発着空港。
   { code: "AHO", name: "アルゲーロ・フェルティリア空港", city: "🇮🇹 イタリア・アルゲーロ", lat: 40.6321, lon: 8.2908 },
   { code: "AOI", name: "アンコーナ・ファルコナーラ空港", city: "🇮🇹 イタリア・アンコーナ", lat: 43.6163, lon: 13.3623 },

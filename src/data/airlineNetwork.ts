@@ -25,6 +25,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // デンマークは、定期国際旅客便（季節運航を含む）がある6空港を収録し、各空港の
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
+// ドイツは、定期国際旅客便（季節運航を含む）がある27空港を収録し、各空港の
+// IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -176,7 +178,33 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 }
-    ]}
+    ]},
+    { name: 'easyJet', iata: 'U2', hubCode: 'BER', hubName: 'ベルリン・ブランデンブルク空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 21 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'BRE', hubName: 'ブレーメン空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'Eurowings', iata: 'EW', hubCode: 'CGN', hubName: 'ケルン・ボン空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 21 }] },
+    { name: 'Wizz Air', iata: 'W6', hubCode: 'DTM', hubName: 'ドルトムント空港', destinations: [{ code: 'BUD', name: 'リスト・フェレンツ国際空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'DRS', hubName: 'ドレスデン空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'DUS', hubName: 'デュッセルドルフ空港', destinations: [{ code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'ERF', hubName: 'エアフルト・ヴァイマル空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 4 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'FKB', hubName: 'カールスルーエ・バーデン＝バーデン空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'HAM', hubName: 'ハンブルク空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'HAJ', hubName: 'ハノーファー空港', destinations: [{ code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'HHN', hubName: 'フランクフルト・ハーン空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'LEJ', hubName: 'ライプツィヒ・ハレ空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'LBC', hubName: 'リューベック空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 3 }] },
+    { name: 'Lufthansa', iata: 'LH', hubCode: 'MUC', hubName: 'ミュンヘン国際空港', destinations: [{ code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'FMM', hubName: 'メミンゲン空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'FMO', hubName: 'ミュンスター・オスナブリュック空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'NRN', hubName: 'ヴェーツェ空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 7 }] },
+    { name: 'KLM', iata: 'KL', hubCode: 'NUE', hubName: 'ニュルンベルク空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'PAD', hubName: 'パーダーボルン・リップシュタット空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 7 }] },
+    { name: 'Corendon Airlines', iata: 'XC', hubCode: 'RLG', hubName: 'ロストック・ラーゲ空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 2 }] },
+    { name: 'Eurowings', iata: 'EW', hubCode: 'SCN', hubName: 'ザールブリュッケン空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 7 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'STR', hubName: 'シュトゥットガルト空港', destinations: [{ code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 }] },
+    { name: 'Wizz Air', iata: 'W6', hubCode: 'FDH', hubName: 'フリードリヒスハーフェン空港', destinations: [{ code: 'TIA', name: 'ティラナ国際空港', flightsPerWeek: 3 }] },
+    { name: 'Sundair', iata: 'SR', hubCode: 'KSF', hubName: 'カッセル空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 2 }] },
+    { name: 'SWISS', iata: 'LX', hubCode: 'GWT', hubName: 'ズュルト空港', destinations: [{ code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 2 }] },
+    { name: 'Luxair', iata: 'LG', hubCode: 'HDF', hubName: 'ヘリングスドルフ空港', destinations: [{ code: 'LUX', name: 'ルクセンブルク空港', flightsPerWeek: 1 }] }
   ]},
   { country: 'オランダ', flag: '🇳🇱', airlines: [
     { name: 'KLM', iata: 'KL', hubCode: 'AMS', hubName: 'スキポール空港', destinations: [
