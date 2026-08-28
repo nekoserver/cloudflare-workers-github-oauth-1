@@ -512,6 +512,25 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('イギリスの定期国際便がある30空港と代表発着便を収録する', () => {
+    const expectedCodes = [
+      'ABZ', 'BHD', 'BFS', 'BHX', 'BOH', 'BRS', 'CWL', 'DND', 'EDI', 'EMA',
+      'EXT', 'GLA', 'HUY', 'INV', 'LBA', 'LCY', 'LGW', 'LHR', 'LPL', 'LTN',
+      'MAN', 'MME', 'NCL', 'NQY', 'NWI', 'PIK', 'SEN', 'SOU', 'STN', 'LDY'
+    ];
+    const uk = AIRLINE_NETWORK.find((country) => country.country === 'イギリス')!;
+
+    expect(new Set(uk.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇬🇧 イギリス・');
+      const departures = uk.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
   it('チェコのPRG拠点がネットワークに追加されている', () => {
     const czechia = AIRLINE_NETWORK.find((c) => c.country === 'チェコ');
     expect(czechia).toBeDefined();
