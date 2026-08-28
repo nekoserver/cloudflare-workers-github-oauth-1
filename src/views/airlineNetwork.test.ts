@@ -133,8 +133,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
 
     expect(route?.getAttribute('data-hub-flag')).toBe('🇯🇵');
     expect(route?.getAttribute('data-dest-flag')).toBe('🇯🇵');
-    expect(html).toContain("ctx.fillText(hubFlag + ' ' + hub, originX, y + 20)");
-    expect(html).toContain("ctx.fillText(destFlag + ' ' + dest, destinationX, y + 20)");
+    expect(html).toContain('drawCenteredAirportCode(ctx, hubFlag, hub, originX, y + 20)');
+    expect(html).toContain('drawCenteredAirportCode(ctx, destFlag, dest, destinationX, y + 20)');
+    expect(html).toContain("ctx.fillText(label, centerX - labelWidth / 2, y)");
   });
 
   it('ルカラ空港とネパール2空港の双方向の発着便を表示する', () => {
