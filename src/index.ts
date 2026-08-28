@@ -4326,6 +4326,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
+    // Cloudflareがエッジで設定するヘッダーだけを使用し、クライアントが任意に
+    // 追加できるX-Forwarded-Forを接続元IPとして誤表示しない。
+    clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
       if (!c.env.DB) return null;
       const row = await c.env.DB.prepare(
