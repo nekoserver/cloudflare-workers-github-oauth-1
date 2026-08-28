@@ -617,6 +617,13 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.roundRect(x, y, width, height, radius);
 }
 
+function drawCenteredAirportCode(ctx, flag, code, centerX, y) {
+  var label = flag + ' ' + code;
+  var labelWidth = ctx.measureText(label).width;
+  ctx.textAlign = 'left';
+  ctx.fillText(label, centerX - labelWidth / 2, y);
+}
+
 function drawRouteNetwork() {
   if (!routeNetworkCanvas || typeof window.CanvasRenderingContext2D === 'undefined') return;
   var ctx = routeNetworkCanvas.getContext('2d');
@@ -673,9 +680,11 @@ function drawRouteNetwork() {
       ctx.fillStyle = colors.airport; ctx.strokeStyle = colors.border;
       roundedRect(ctx, x - 34, y, 68, 30, 15); ctx.fill(); ctx.stroke();
     });
-    ctx.fillStyle = colors.text; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(hubFlag + ' ' + hub, originX, y + 20); ctx.fillText(destFlag + ' ' + dest, destinationX, y + 20);
+    ctx.fillStyle = colors.text; ctx.font = '13px system-ui';
+    drawCenteredAirportCode(ctx, hubFlag, hub, originX, y + 20);
+    drawCenteredAirportCode(ctx, destFlag, dest, destinationX, y + 20);
     ctx.fillStyle = colors.muted; ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
     ctx.fillText(flights + '便/週', (originX + destinationX) / 2, y + 10);
   });
 }
