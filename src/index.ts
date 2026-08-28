@@ -104,7 +104,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
@@ -4335,6 +4335,13 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         'SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1'
       ).first<CommitAgentLogRow>();
       return row ?? null;
+    },
+    fetchUserSessionLogins: async () => {
+      if (!c.env.DB) throw new Error('DB未設定です');
+      const rows = await c.env.DB.prepare(
+        'SELECT user_id, last_login_at, current_login_at FROM user_sessions ORDER BY current_login_at DESC;'
+      ).all<UserSessionLoginRow>();
+      return rows.results ?? [];
     },
     searchShares: async (keyword) => {
       if (!c.env.DB) return { hitCount: 0, results: [] };

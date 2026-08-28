@@ -90,6 +90,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko ip | 接続元のIPアドレスを表示します |',
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
+    '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
@@ -153,6 +154,26 @@ export type CommitAgentLogRow = {
   detected_agent_name: string | null;
   created_at: string;
 };
+
+export type UserSessionLoginRow = {
+  user_id: string;
+  last_login_at: string | null;
+  current_login_at: string;
+};
+
+/** `/neko sessions` の取得結果をMarkdownテーブルで表示する。 */
+export function formatUserSessionLogins(rows: UserSessionLoginRow[]): string {
+  if (rows.length === 0) {
+    return '## ユーザーセッション\n記録はありません。';
+  }
+  const escapeCell = (value: string | null) => (value ?? '—').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  return [
+    '## ユーザーセッション',
+    '| user_id | last_login_at | current_login_at |',
+    '|---|---|---|',
+    ...rows.map((row) => `| ${escapeCell(row.user_id)} | ${escapeCell(row.last_login_at)} | ${escapeCell(row.current_login_at)} |`),
+  ].join('\n');
+}
 
 /**
  * commit_agent_log の最新行をMarkdownのコードブロックで表示する。
@@ -355,6 +376,7 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
 
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
+  fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   logSearchShares?: (keyword: string, outcome: AichatSearchOutcome) => Promise<void>;
@@ -442,6 +464,20 @@ export async function interpretAichatSlashCommand(
   if (subcommand === 'clog') {
     const row = await deps.fetchLatestCommitAgentLog();
     return { handled: true, response: formatCommitAgentLogEntry(row) };
+  }
+
+  if (subcommand === 'sessions') {
+    if (!deps.fetchUserSessionLogins) {
+      return { handled: true, response: '❌ /neko sessions は現在利用できません(DB未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.fetchUserSessionLogins(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return { handled: true, response: `❌ /neko sessions がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko sessions でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatUserSessionLogins(outcome.value) };
   }
 
   if (subcommand === 'limit') {
@@ -688,6 +724,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
   };
 }
