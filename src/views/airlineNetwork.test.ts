@@ -211,6 +211,23 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('トルコの定期国際旅客便がある28空港と代表発着便を収録する', () => {
+    const expectedCodes = ['IST', 'SAW', 'AYT', 'ESB', 'ADB', 'DLM', 'BJV', 'GZP', 'COV',
+      'TZX', 'GZT', 'ASR', 'DIY', 'EDO', 'AOE', 'EZS', 'ERZ', 'KYA', 'MLX', 'NAV',
+      'SZF', 'VAN', 'DNZ', 'RZV', 'OGU', 'MQM', 'KSY', 'KZR'];
+    const turkey = AIRLINE_NETWORK.find((country) => country.country === 'トルコ')!;
+
+    expect(new Set(turkey.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇹🇷 トルコ・');
+      const departures = turkey.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.flatMap((airline) => airline.destinations)
+        .every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
   it('日本の既知の国際空港間を運航する全社の往復便を表示する', () => {
     const japan = AIRLINE_NETWORK.find((country) => country.country === '日本')!;
     const expectedRoutes = [

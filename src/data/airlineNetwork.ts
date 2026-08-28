@@ -37,6 +37,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
 // アメリカは、50州・ワシントンD.C.・プエルトリコで定期国際旅客便（季節運航を含む）
 // がある51空港を収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載する。
+// トルコは、定期国際旅客便（季節運航を含む）がある28空港を収録し、各空港から
+// 利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -373,7 +375,34 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 }
-    ]}
+    ]},
+    { name: 'Pegasus Airlines', iata: 'PC', hubCode: 'SAW', hubName: 'サビハ・ギョクチェン国際空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 14 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'AYT', hubName: 'アンタルヤ空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 }] },
+    { name: 'Turkish Airlines', iata: 'TK', hubCode: 'ESB', hubName: 'エセンボーア国際空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 14 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'ADB', hubName: 'イズミル・アドナン・メンデレス空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'DLM', hubName: 'ダラマン空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 14 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'BJV', hubName: 'ミラス・ボドルム空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 7 }] },
+    { name: 'Norwegian', iata: 'DY', hubCode: 'GZP', hubName: 'ガズィパシャ・アランヤ空港', destinations: [{ code: 'OSL', name: 'オスロ空港', flightsPerWeek: 3 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'COV', hubName: 'チュクロヴァ国際空港', destinations: [{ code: 'BER', name: 'ベルリン・ブランデンブルク空港', flightsPerWeek: 4 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'TZX', hubName: 'トラブゾン空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 4 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'GZT', hubName: 'ガズィアンテプ・オーゼリ空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 4 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'ASR', hubName: 'カイセリ空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 7 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'DIY', hubName: 'ディヤルバクル空港', destinations: [{ code: 'HAJ', name: 'ハノーファー空港', flightsPerWeek: 3 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'EDO', hubName: 'バルケスィル・コジャ・セイット空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 3 }] },
+    { name: 'TUI fly Belgium', iata: 'TB', hubCode: 'AOE', hubName: 'ハサン・ポラトカン空港', destinations: [{ code: 'BRU', name: 'ブリュッセル空港', flightsPerWeek: 4 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'EZS', hubName: 'エラズー空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 3 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'ERZ', hubName: 'エルズルム空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 3 }] },
+    { name: 'Pegasus Airlines', iata: 'PC', hubCode: 'KYA', hubName: 'コンヤ空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 3 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'MLX', hubName: 'マラティヤ・エルハチ空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 3 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'NAV', hubName: 'ネヴシェヒル・カッパドキア空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 2 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'SZF', hubName: 'サムスン・チャルシャンバ空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 4 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'VAN', hubName: 'ヴァン・フェリト・メレン空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 2 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'DNZ', hubName: 'デニズリ・チャルダク空港', destinations: [{ code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 3 }] },
+    { name: 'SalamAir', iata: 'OV', hubCode: 'RZV', hubName: 'リゼ・アルトヴィン空港', destinations: [{ code: 'MCT', name: 'マスカット国際空港', flightsPerWeek: 2 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'OGU', hubName: 'オルドゥ・ギレスン空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 3 }] },
+    { name: 'AJet', iata: 'VF', hubCode: 'MQM', hubName: 'マルディン空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 2 }] },
+    { name: 'SunExpress', iata: 'XQ', hubCode: 'KSY', hubName: 'カルス・ハラカニ空港', destinations: [{ code: 'DUS', name: 'デュッセルドルフ空港', flightsPerWeek: 2 }] },
+    { name: 'TUI fly Belgium', iata: 'TB', hubCode: 'KZR', hubName: 'ザフェル空港', destinations: [{ code: 'BRU', name: 'ブリュッセル空港', flightsPerWeek: 2 }] }
   ]},
   { country: 'イタリア', flag: '🇮🇹', airlines: [
     { name: 'ITA Airways', iata: 'AZ', hubCode: 'FCO', hubName: 'フィウミチーノ空港', destinations: [
