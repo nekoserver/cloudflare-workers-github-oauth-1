@@ -39,6 +39,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // がある51空港を収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載する。
 // トルコは、定期国際旅客便（季節運航を含む）がある28空港を収録し、各空港から
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
+// スイスは、定期国際旅客便（季節運航・定期チャーターを含む）がある7空港を収録し、
+// 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -666,7 +668,13 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 },
       { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 21 },
       { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 14 }
-    ]}
+    ]},
+    { name: 'easyJet', iata: 'U2', hubCode: 'GVA', hubName: 'ジュネーブ国際空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 35 }] },
+    { name: 'easyJet', iata: 'U2', hubCode: 'BSL', hubName: 'バーゼル・ミュルーズ・フライブルク欧州空港', destinations: [{ code: 'LGW', name: 'ロンドン・ガトウィック空港', flightsPerWeek: 21 }] },
+    { name: 'Helvetic Airways', iata: '2L', hubCode: 'BRN', hubName: 'ベルン空港', destinations: [{ code: 'PMI', name: 'パルマ・デ・マヨルカ空港', flightsPerWeek: 2 }] },
+    { name: "People's", iata: 'PE', hubCode: 'ACH', hubName: 'ザンクト・ガレン＝アルテンライン空港', destinations: [{ code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 10 }] },
+    { name: 'Silver Air', iata: '—', hubCode: 'LUG', hubName: 'ルガーノ空港', destinations: [{ code: 'EBA', name: 'マリーナ・ディ・カンポ空港', flightsPerWeek: 2 }] },
+    { name: 'Helvetic Airways', iata: '2L', hubCode: 'SIR', hubName: 'シオン空港', destinations: [{ code: 'LCY', name: 'ロンドン・シティ空港', flightsPerWeek: 2 }] }
   ]},
   { country: 'オーストリア', flag: '🇦🇹', airlines: [
     { name: 'Austrian Airlines', iata: 'OS', hubCode: 'VIE', hubName: 'ウィーン国際空港', destinations: [

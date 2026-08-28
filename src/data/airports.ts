@@ -7,6 +7,10 @@ export interface Airport {
 }
 
 export const AIRPORT_LIST: Airport[] = [
+  // airline-network で扱うスイスの定期国際旅客便発着空港（季節運航・定期チャーターを含む）。
+  { code: "ACH", name: "ザンクト・ガレン＝アルテンライン空港", city: "🇨🇭 スイス・アルテンライン", lat: 47.4850, lon: 9.5608 },
+  { code: "SIR", name: "シオン空港", city: "🇨🇭 スイス・シオン", lat: 46.2196, lon: 7.3268 },
+  { code: "EBA", name: "マリーナ・ディ・カンポ空港", city: "🇮🇹 イタリア・エルバ島", lat: 42.7603, lon: 10.2394 },
   // airline-network で扱うトルコの定期国際旅客便発着空港（季節運航を含む）。
   { code: "SAW", name: "サビハ・ギョクチェン国際空港", city: "🇹🇷 トルコ・イスタンブール", lat: 40.8986, lon: 29.3092 },
   { code: "ESB", name: "エセンボーア国際空港", city: "🇹🇷 トルコ・アンカラ", lat: 40.1281, lon: 32.9951 },
