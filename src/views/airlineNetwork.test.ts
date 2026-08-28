@@ -585,17 +585,45 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain("countryFilterApply.addEventListener('click'");
   });
 
-  it('国別モーダルの選択状態もCookieへ保存・復元される', () => {
+  it('国別モーダルの選択状態をlocalStorageへ保存し、旧Cookieからも復元できる', () => {
     expect(html).toContain("var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';");
-    expect(html).toContain('setCookieValue(COUNTRY_HUB_COOKIE_NAME, selectedCountryHubs.join(\',\'));');
+    expect(html).toContain("var COUNTRY_HUB_STORAGE_NAME = 'airline_network_country_hubs_v2';");
+    expect(html).toContain('window.localStorage.setItem(COUNTRY_HUB_STORAGE_NAME, JSON.stringify(selectedCountryHubs))');
+    expect(html).toContain('window.localStorage.getItem(COUNTRY_HUB_STORAGE_NAME)');
     expect(html).toContain('function loadSelectedCountryHubs()');
     expect(html).toContain('var selectedCountryHubs = loadSelectedCountryHubs();');
     expect(html).toContain('getCookieValue(COUNTRY_HUB_COOKIE_NAME)');
   });
 
+  it('localStorageから拠点空港のON/OFFをリロード後に復元する', () => {
+    const selectedKeys = uniqueCountryHubKeys().slice(0, 3);
+    const dom = new JSDOM(html, {
+      runScripts: 'dangerously',
+      url: 'https://example.com/airline-network',
+      beforeParse(window) {
+        const values: Record<string, string> = {
+          airline_network_country_hubs_v2: JSON.stringify(selectedKeys),
+        };
+        Object.defineProperty(window, 'localStorage', { value: {
+          getItem: (key: string) => values[key] ?? null,
+          setItem: (key: string, value: string) => { values[key] = value; },
+        }});
+      },
+    });
+    dom.window.document.getElementById('country-filter-btn')!.click();
+    const checkedKeys = Array.from(dom.window.document.querySelectorAll<HTMLInputElement>('.country-hub-check:checked')).map((cb) => cb.value);
+    expect(checkedKeys).toEqual(selectedKeys);
+  });
+
+  it('国別モーダルと左パネルを有効な拠点空港数の多い国順に並べる', () => {
+    expect(html).toContain('enabledCounts[country] = (enabledCounts[country] || 0) + 1;');
+    expect(html).toContain('countryPanel.appendChild(btn)');
+    expect(html).toContain('countryFilterList.appendChild(row)');
+  });
+
   it('チェックを外した国の左サイドパネルボタンが非表示になる(updateCountryPanelVisibility)', () => {
     expect(html).toContain('function updateCountryPanelVisibility()');
-    expect(html).toContain("btn.style.display = visibleCountries[country] ? '' : 'none';");
+    expect(html).toContain("btn.style.display = enabledCounts[country] ? '' : 'none';");
     expect(html).toContain('updateCountryPanelVisibility();');
     // apply時にも呼ばれること
     const applyIdx = html.indexOf("countryFilterApply.addEventListener('click'");
