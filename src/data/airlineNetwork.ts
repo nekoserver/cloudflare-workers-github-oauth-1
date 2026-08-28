@@ -25,6 +25,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // デンマークは、定期国際旅客便（季節運航を含む）がある6空港を収録し、各空港の
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
+// スウェーデンは、定期国際旅客便（季節運航を含む）がある12空港を収録し、各空港の
+// IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // ドイツは、定期国際旅客便（季節運航を含む）がある27空港を収録し、各空港の
 // IATAコードと代表的な国際線を最低1路線ずつ掲載している。
 // フランスは、本土・コルシカ島で定期国際旅客便（季節運航を含む）がある31空港を
@@ -736,5 +738,25 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'Danish Air Transport', iata: 'DX', hubCode: 'RNN', hubName: 'ボーンホルム空港', destinations: [
       { code: 'BER', name: 'ベルリン・ブランデンブルク空港', flightsPerWeek: 2 }
     ]}
+  ]},
+  { country: 'スウェーデン', flag: '🇸🇪', airlines: [
+    { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'ARN', hubName: 'ストックホルム・アーランダ空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 28 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 35 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 14 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 },
+      { code: 'HEL', name: 'ヘルシンキ・ヴァンター国際空港', flightsPerWeek: 28 }
+    ]},
+    { name: 'KLM', iata: 'KL', hubCode: 'GOT', hubName: 'ヨーテボリ・ランドヴェッテル空港', destinations: [{ code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 }] },
+    { name: 'Wizz Air', iata: 'W6', hubCode: 'MMX', hubName: 'マルメ空港', destinations: [{ code: 'GDN', name: 'グダニスク・レフ・ワレサ空港', flightsPerWeek: 5 }] },
+    { name: 'Wizz Air', iata: 'W6', hubCode: 'NYO', hubName: 'ストックホルム・スカブスタ空港', destinations: [{ code: 'GDN', name: 'グダニスク・レフ・ワレサ空港', flightsPerWeek: 7 }] },
+    { name: 'Ryanair', iata: 'FR', hubCode: 'VST', hubName: 'ストックホルム・ヴェステロース空港', destinations: [{ code: 'ALC', name: 'アリカンテ＝エルチェ・ミゲル・エルナンデス空港', flightsPerWeek: 2 }] },
+    { name: 'Transavia France', iata: 'TO', hubCode: 'LLA', hubName: 'ルレオ空港', destinations: [{ code: 'ORY', name: 'パリ・オルリー空港', flightsPerWeek: 1 }] },
+    { name: 'Finnair', iata: 'AY', hubCode: 'UME', hubName: 'ウメオ空港', destinations: [{ code: 'HEL', name: 'ヘルシンキ・ヴァンター国際空港', flightsPerWeek: 12 }] },
+    { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'OSD', hubName: 'オーレ・エステルスンド空港', destinations: [{ code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 2 }] },
+    { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'KRN', hubName: 'キルナ空港', destinations: [{ code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 2 }] },
+    { name: 'Wizz Air', iata: 'W6', hubCode: 'VXO', hubName: 'ベクショー・スモーランド空港', destinations: [{ code: 'GDN', name: 'グダニスク・レフ・ワレサ空港', flightsPerWeek: 3 }] },
+    { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'SCR', hubName: 'スカンジナビアン・マウンテンズ空港', destinations: [{ code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 2 }] },
+    { name: 'Finnair', iata: 'AY', hubCode: 'VBY', hubName: 'ヴィスビュー空港', destinations: [{ code: 'HEL', name: 'ヘルシンキ・ヴァンター国際空港', flightsPerWeek: 2 }] }
   ]}
 ];

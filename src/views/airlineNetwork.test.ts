@@ -632,6 +632,21 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('スウェーデンの定期国際便がある12空港と代表発着便を収録する', () => {
+    const expectedCodes = ['ARN', 'GOT', 'MMX', 'NYO', 'VST', 'LLA', 'UME', 'OSD', 'KRN', 'VXO', 'SCR', 'VBY'];
+    const sweden = AIRLINE_NETWORK.find((country) => country.country === 'スウェーデン')!;
+
+    expect(new Set(sweden.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇸🇪 スウェーデン・');
+      const departures = sweden.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
   it('ドイツの定期国際便がある27空港と代表発着便を収録する', () => {
     const expectedCodes = [
       'BER', 'BRE', 'CGN', 'DTM', 'DRS', 'DUS', 'ERF', 'FRA', 'FKB',
