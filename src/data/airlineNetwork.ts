@@ -11,9 +11,9 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
 // 上記以外は未更新のまま残している。
-// 日本国内は、一覧で既知の国際空港（NRT・HND・KIX）同士を結ぶ定期直行便を
-// 空港の公開路線案内と各社の時刻表で照合した。コードシェア便は運航会社だけを
-// 数え、両方向を別の発着地データとして収録している。
+// 日本は、定期国際旅客便（季節運航を含む）がある34空港を収録し、既存の
+// NRT・HND・KIXの発着便は維持したまま、未掲載だった空港に代表的な国際線を
+// 最低1路線ずつ追加している。便数は運航期間中の代表的な週間便数の目安。
 // AMS と PRG は一覧内に登録済みの全空港との往復便を検索できることを優先し、
 // 乗り入れ先に全コードを収録している。便数は旅程比較用の概算値。
 // スペインは、定期国際旅客便がある29空港を収録し、各空港から利用できる
@@ -51,6 +51,99 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
+    { name: 'Tigerair Taiwan(タイガーエア台湾)', iata: 'IT', hubCode: 'AKJ', hubName: '旭川空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 5 }
+    ]},
+    { name: 'Korean Air(大韓航空)', iata: 'KE', hubCode: 'CTS', hubName: '新千歳空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 14 }
+    ]},
+    { name: 'Tigerair Taiwan(タイガーエア台湾)', iata: 'IT', hubCode: 'HKD', hubName: '函館空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 5 }
+    ]},
+    { name: 'Korean Air(大韓航空)', iata: 'KE', hubCode: 'AOJ', hubName: '青森空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 3 }
+    ]},
+    { name: 'Tigerair Taiwan(タイガーエア台湾)', iata: 'IT', hubCode: 'AXT', hubName: '秋田空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Tigerair Taiwan(タイガーエア台湾)', iata: 'IT', hubCode: 'HNA', hubName: 'いわて花巻空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'EVA Air(エバー航空)', iata: 'BR', hubCode: 'SDJ', hubName: '仙台空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Spring Airlines(春秋航空)', iata: '9C', hubCode: 'IBR', hubName: '茨城空港', destinations: [
+      { code: 'PVG', name: '上海浦東国際空港', flightsPerWeek: 3 }
+    ]},
+    { name: 'Korean Air(大韓航空)', iata: 'KE', hubCode: 'KIJ', hubName: '新潟空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 3 }
+    ]},
+    { name: 'China Airlines(チャイナエアライン)', iata: 'CI', hubCode: 'TOY', hubName: '富山きときと空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'EVA Air(エバー航空)', iata: 'BR', hubCode: 'KMQ', hubName: '小松空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Jeju Air(チェジュ航空)', iata: '7C', hubCode: 'FSZ', hubName: '富士山静岡空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'NGO', hubName: '中部国際空港', destinations: [
+      { code: 'HKG', name: '香港国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Air Seoul(エアソウル)', iata: 'RS', hubCode: 'YGJ', hubName: '米子鬼太郎空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 5 }
+    ]},
+    { name: 'Korean Air(大韓航空)', iata: 'KE', hubCode: 'OKJ', hubName: '岡山桃太郎空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'China Airlines(チャイナエアライン)', iata: 'CI', hubCode: 'HIJ', hubName: '広島空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Eastar Jet(イースター航空)', iata: 'ZE', hubCode: 'TKS', hubName: '徳島阿波おどり空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 3 }
+    ]},
+    { name: 'Jin Air(ジンエアー)', iata: 'LJ', hubCode: 'TAK', hubName: '高松空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'Jeju Air(チェジュ航空)', iata: '7C', hubCode: 'MYJ', hubName: '松山空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'Tigerair Taiwan(タイガーエア台湾)', iata: 'IT', hubCode: 'KCZ', hubName: '高知龍馬空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 2 }
+    ]},
+    { name: 'Jin Air(ジンエアー)', iata: 'LJ', hubCode: 'FUK', hubName: '福岡空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 28 }
+    ]},
+    { name: 'Jin Air(ジンエアー)', iata: 'LJ', hubCode: 'KKJ', hubName: '北九州空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: "T'way Air(ティーウェイ航空)", iata: 'TW', hubCode: 'HSG', hubName: '九州佐賀国際空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 4 }
+    ]},
+    { name: 'Korean Air(大韓航空)', iata: 'KE', hubCode: 'NGS', hubName: '長崎空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 4 }
+    ]},
+    { name: 'China Airlines(チャイナエアライン)', iata: 'CI', hubCode: 'KMJ', hubName: '阿蘇くまもと空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 7 }
+    ]},
+    { name: 'Jeju Air(チェジュ航空)', iata: '7C', hubCode: 'OIT', hubName: '大分空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'Asiana Airlines(アシアナ航空)', iata: 'OZ', hubCode: 'KMI', hubName: '宮崎ブーゲンビリア空港', destinations: [
+      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
+    ]},
+    { name: 'China Airlines(チャイナエアライン)', iata: 'CI', hubCode: 'KOJ', hubName: '鹿児島空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 5 }
+    ]},
+    { name: 'EVA Air(エバー航空)', iata: 'BR', hubCode: 'OKA', hubName: '那覇空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 14 }
+    ]},
+    { name: 'Hong Kong Express(香港エクスプレス)', iata: 'UO', hubCode: 'SHI', hubName: 'みやこ下地島空港', destinations: [
+      { code: 'HKG', name: '香港国際空港', flightsPerWeek: 4 }
+    ]},
+    { name: 'China Airlines(チャイナエアライン)', iata: 'CI', hubCode: 'ISG', hubName: '南ぬ島石垣空港', destinations: [
+      { code: 'TPE', name: '台湾桃園国際空港', flightsPerWeek: 2 }
+    ]},
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
       { code: 'KIX', name: '関西国際空港', flightsPerWeek: 42 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 35 },

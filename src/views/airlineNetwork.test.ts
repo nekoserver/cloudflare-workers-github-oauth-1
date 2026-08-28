@@ -27,6 +27,25 @@ function uniqueCountryHubKeys(): string[] {
 }
 
 describe('/airline-network ページ: 各国航空会社ネットワーク一覧', () => {
+  it('日本の全定期国際旅客空港コードと未掲載だった代表発着便を収録する', () => {
+    const japan = AIRLINE_NETWORK.find((country) => country.country === '日本');
+    const airportCodes = [
+      'AKJ', 'CTS', 'HKD', 'AOJ', 'AXT', 'HNA', 'SDJ', 'IBR', 'NRT', 'HND',
+      'KIJ', 'TOY', 'KMQ', 'FSZ', 'NGO', 'KIX', 'YGJ', 'OKJ', 'HIJ', 'TKS',
+      'TAK', 'MYJ', 'KCZ', 'FUK', 'KKJ', 'HSG', 'NGS', 'KMJ', 'OIT', 'KMI',
+      'KOJ', 'OKA', 'SHI', 'ISG'
+    ];
+
+    expect(japan).toBeDefined();
+    expect(new Set(japan!.airlines.map((airline) => airline.hubCode))).toEqual(new Set(airportCodes));
+    for (const code of airportCodes) {
+      expect(japan!.airlines.some((airline) =>
+        airline.hubCode === code && airline.destinations.some((destination) => destination.flightsPerWeek > 0)
+      )).toBe(true);
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇯🇵 日本・');
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
   const html = getAirlineNetworkPage();
 
   it('デスクトップでは国選択パネルの上端を画面内に固定し、モバイルでは通常配置に戻す', () => {
