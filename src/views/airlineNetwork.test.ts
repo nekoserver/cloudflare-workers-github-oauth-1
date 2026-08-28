@@ -565,6 +565,26 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     }
   });
 
+  it('フランス本土・コルシカ島の定期国際便がある31空港と代表発着便を収録する', () => {
+    const expectedCodes = [
+      'AJA', 'BIA', 'BIQ', 'BOD', 'BES', 'BVA', 'BZR', 'CCF', 'CDG',
+      'CFE', 'CLY', 'DLE', 'ETZ', 'FSC', 'GNB', 'LDE', 'LIL', 'LRH',
+      'LYS', 'MPL', 'MRS', 'NCE', 'NTE', 'ORY', 'PGF', 'PIS', 'RNS',
+      'SXB', 'TLN', 'TLS', 'TUF'
+    ];
+    const france = AIRLINE_NETWORK.find((country) => country.country === 'フランス')!;
+
+    expect(new Set(france.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇫🇷 フランス・');
+      const departures = france.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
   it('チェコのPRG拠点がネットワークに追加されている', () => {
     const czechia = AIRLINE_NETWORK.find((c) => c.country === 'チェコ');
     expect(czechia).toBeDefined();
