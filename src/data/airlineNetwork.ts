@@ -35,6 +35,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
 // オーストリアは、定期国際旅客便（季節運航を含む）がある6空港を収録し、各空港から
 // 利用できる代表的な国際線を最低1路線ずつ掲載している。
+// アメリカは、50州・ワシントンD.C.・プエルトリコで定期国際旅客便（季節運航を含む）
+// がある51空港を収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載する。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -121,20 +123,64 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     ]}
   ]},
   { country: 'アメリカ', flag: '🇺🇸', airlines: [
-    { name: 'American Airlines', iata: 'AA', hubCode: 'DFW', hubName: 'ダラス・フォートワース国際空港', destinations: [
-      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 }
-    ]},
-    { name: 'Delta Air Lines', iata: 'DL', hubCode: 'ATL', hubName: 'ハーツフィールド・ジャクソン・アトランタ国際空港', destinations: [
-      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
-      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
-      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
-    ]},
-    { name: 'United Airlines', iata: 'UA', hubCode: 'ORD', hubName: 'オヘア国際空港', destinations: [
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 },
-      { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 },
-      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 }
-    ]}
+    ...(
+      [
+        ['ANC','テッド・スティーブンス・アンカレッジ国際空港','Condor','DE','FRA','フランクフルト空港',3],
+        ['ATL','ハーツフィールド・ジャクソン・アトランタ国際空港','Delta Air Lines','DL','CDG','シャルル・ド・ゴール空港',7],
+        ['AUS','オースティン・バーグストロム国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7],
+        ['BDL','ブラッドレー国際空港','Aer Lingus','EI','DUB','ダブリン空港',7],
+        ['BNA','ナッシュビル国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7],
+        ['BOS','ローガン国際空港','Delta Air Lines','DL','CDG','シャルル・ド・ゴール空港',7],
+        ['BWI','ボルチモア・ワシントン国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7],
+        ['CHS','チャールストン国際空港','Air Canada','AC','YYZ','トロント・ピアソン国際空港',7],
+        ['CLE','クリーブランド・ホプキンス国際空港','Aer Lingus','EI','DUB','ダブリン空港',4],
+        ['CLT','シャーロット・ダグラス国際空港','American Airlines','AA','LHR','ロンドン・ヒースロー空港',14],
+        ['CVG','シンシナティ・ノーザンケンタッキー国際空港','Delta Air Lines','DL','CDG','シャルル・ド・ゴール空港',7],
+        ['DEN','デンバー国際空港','United Airlines','UA','NRT','成田国際空港',7],
+        ['DFW','ダラス・フォートワース国際空港','American Airlines','AA','NRT','成田国際空港',7],
+        ['DTW','デトロイト・メトロポリタン空港','Delta Air Lines','DL','HND','羽田空港',7],
+        ['EWR','ニューアーク・リバティー国際空港','United Airlines','UA','NRT','成田国際空港',7],
+        ['FLL','フォートローダーデール・ハリウッド国際空港','JetBlue','B6','CUN','カンクン国際空港',14],
+        ['HNL','ダニエル・K・イノウエ国際空港','Hawaiian Airlines','HA','HND','羽田空港',7],
+        ['IAD','ワシントン・ダレス国際空港','United Airlines','UA','NRT','成田国際空港',7],
+        ['IAH','ジョージ・ブッシュ・インターコンチネンタル空港','United Airlines','UA','NRT','成田国際空港',7],
+        ['IND','インディアナポリス国際空港','Air Canada','AC','YYZ','トロント・ピアソン国際空港',14],
+        ['JFK','ジョン・F・ケネディ国際空港','Japan Airlines','JL','HND','羽田空港',14],
+        ['LAS','ハリー・リード国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7],
+        ['LAX','ロサンゼルス国際空港','ANA(全日本空輸)','NH','HND','羽田空港',14],
+        ['MCI','カンザスシティ国際空港','Air Canada','AC','YYZ','トロント・ピアソン国際空港',14],
+        ['MCO','オーランド国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',14],
+        ['MDW','シカゴ・ミッドウェー国際空港','Southwest Airlines','WN','CUN','カンクン国際空港',7],
+        ['MEM','メンフィス国際空港','Southwest Airlines','WN','CUN','カンクン国際空港',2],
+        ['MIA','マイアミ国際空港','American Airlines','AA','LHR','ロンドン・ヒースロー空港',14],
+        ['MSP','ミネアポリス・セントポール国際空港','Delta Air Lines','DL','CDG','シャルル・ド・ゴール空港',7],
+        ['MSY','ルイ・アームストロング・ニューオーリンズ国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',5],
+        ['OAK','サンフランシスコ・ベイ・オークランド国際空港','Volaris','Y4','GDL','グアダラハラ国際空港',7],
+        ['OGG','カフルイ空港','Air Canada','AC','YVR','バンクーバー国際空港',7],
+        ['ONT','オンタリオ国際空港','China Airlines','CI','TPE','台湾桃園国際空港',7],
+        ['ORD','シカゴ・オヘア国際空港','United Airlines','UA','HND','羽田空港',7],
+        ['PBI','パームビーチ国際空港','Air Canada','AC','YYZ','トロント・ピアソン国際空港',14],
+        ['PDX','ポートランド国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',5],
+        ['PHL','フィラデルフィア国際空港','American Airlines','AA','LHR','ロンドン・ヒースロー空港',14],
+        ['PHX','フェニックス・スカイハーバー国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7],
+        ['PIT','ピッツバーグ国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',6],
+        ['RDU','ローリー・ダーラム国際空港','American Airlines','AA','LHR','ロンドン・ヒースロー空港',7],
+        ['RSW','サウスウエスト・フロリダ国際空港','Air Canada','AC','YYZ','トロント・ピアソン国際空港',14],
+        ['SAN','サンディエゴ国際空港','Japan Airlines','JL','NRT','成田国際空港',7],
+        ['SAT','サンアントニオ国際空港','Viva Aerobus','VB','MEX','メキシコシティ国際空港',7],
+        ['SEA','シアトル・タコマ国際空港','Delta Air Lines','DL','HND','羽田空港',7],
+        ['SFO','サンフランシスコ国際空港','United Airlines','UA','HND','羽田空港',14],
+        ['SJC','ノーマン・Y・ミネタ・サンノゼ国際空港','Volaris','Y4','GDL','グアダラハラ国際空港',7],
+        ['SJU','ルイス・ムニョス・マリン国際空港','Iberia','IB','MAD','マドリード・バラハス空港',7],
+        ['SLC','ソルトレイクシティ国際空港','Delta Air Lines','DL','CDG','シャルル・ド・ゴール空港',7],
+        ['SMF','サクラメント国際空港','Air Canada','AC','YVR','バンクーバー国際空港',14],
+        ['SWF','ニューヨーク・スチュワート国際空港','PLAY','OG','KEF','ケプラヴィーク国際空港',4],
+        ['TPA','タンパ国際空港','British Airways','BA','LHR','ロンドン・ヒースロー空港',7]
+      ] as const
+    ).map(([hubCode, hubName, name, iata, code, destinationName, flightsPerWeek]) => ({
+      name, iata, hubCode, hubName,
+      destinations: [{ code, name: destinationName, flightsPerWeek }]
+    }))
   ]},
   { country: 'イギリス', flag: '🇬🇧', airlines: [
     { name: 'British Airways', iata: 'BA', hubCode: 'LHR', hubName: 'ロンドン・ヒースロー空港', destinations: [

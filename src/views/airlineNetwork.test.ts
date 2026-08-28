@@ -235,7 +235,8 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
 
   it('羽田へ移管済みの主要5社を成田発着として表示しない', () => {
     for (const iata of ['DL', 'BA', 'AF', 'LH', 'AZ']) {
-      const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines).find((item) => item.iata === iata);
+      const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines)
+        .find((item) => item.iata === iata && item.destinations.some((destination) => destination.code === 'HND'));
       expect(airline).toBeDefined();
       expect(airline!.destinations.find((destination) => destination.code === 'HND')).toBeDefined();
       expect(airline!.destinations.find((destination) => destination.code === 'NRT')).toBeUndefined();
@@ -590,6 +591,28 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     for (const code of expectedCodes) {
       expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇩🇪 ドイツ・');
       const departures = germany.airlines.filter((airline) => airline.hubCode === code);
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
+      expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
+      expect(html).toContain(`data-hub-code="${code}"`);
+    }
+  });
+
+  it('アメリカの定期国際便がある51空港と代表発着便を収録する', () => {
+    const expectedCodes = [
+      'ANC', 'ATL', 'AUS', 'BDL', 'BNA', 'BOS', 'BWI', 'CHS', 'CLE',
+      'CLT', 'CVG', 'DEN', 'DFW', 'DTW', 'EWR', 'FLL', 'HNL', 'IAD',
+      'IAH', 'IND', 'JFK', 'LAS', 'LAX', 'MCI', 'MCO', 'MDW', 'MEM',
+      'MIA', 'MSP', 'MSY', 'OAK', 'OGG', 'ONT', 'ORD', 'PBI', 'PDX',
+      'PHL', 'PHX', 'PIT', 'RDU', 'RSW', 'SAN', 'SAT', 'SEA', 'SFO',
+      'SJC', 'SJU', 'SLC', 'SMF', 'SWF', 'TPA'
+    ];
+    const usa = AIRLINE_NETWORK.find((country) => country.country === 'アメリカ')!;
+
+    expect(new Set(usa.airlines.map((airline) => airline.hubCode))).toEqual(new Set(expectedCodes));
+    for (const code of expectedCodes) {
+      expect(AIRPORT_LIST.find((airport) => airport.code === code)?.city).toContain('🇺🇸 アメリカ・');
+      const departures = usa.airlines.filter((airline) => airline.hubCode === code);
       expect(departures.length).toBeGreaterThan(0);
       expect(departures.every((airline) => airline.destinations.length > 0)).toBe(true);
       expect(departures.flatMap((airline) => airline.destinations).every((destination) => destination.flightsPerWeek > 0)).toBe(true);
