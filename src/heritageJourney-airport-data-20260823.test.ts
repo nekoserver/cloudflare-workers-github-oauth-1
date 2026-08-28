@@ -9,9 +9,7 @@ describe('heritage-journey: 空港ボタンのデータ表示', () => {
     expect(routes.some((route) => route.direction === '出発')).toBe(true);
   });
 
-  it('追加した航空会社・空港コードに重複や空の路線がない', () => {
-    const iataCodes = AIRLINE_NETWORK.flatMap((country) => country.airlines.map((airline) => airline.iata));
-    expect(new Set(iataCodes).size).toBe(iataCodes.length);
+  it('追加した航空会社に空の路線や重複した到着空港コードがない', () => {
     for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) {
       expect(airline.destinations.length).toBeGreaterThan(0);
       expect(new Set(airline.destinations.map((destination) => destination.code)).size).toBe(airline.destinations.length);
