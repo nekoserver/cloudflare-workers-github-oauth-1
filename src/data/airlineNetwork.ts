@@ -31,6 +31,8 @@ export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-28';
 // 収録し、各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
 // チェコは、定期国際旅客便（季節運航・定期チャーターを含む）がある6空港を収録し、
 // 各空港から利用できる代表的な国際線を最低1路線ずつ掲載している。
+// オランダは、定期国際旅客便（季節運航を含む）がある本土5空港を収録し、各空港から
+// 利用できる代表的な国際線を最低1路線ずつ掲載している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -272,7 +274,11 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'DFW', name: 'ダラス・フォートワース国際空港', flightsPerWeek: 7 },
       { code: 'ORD', name: 'オヘア国際空港', flightsPerWeek: 7 },
       { code: 'YYZ', name: 'トロント・ピアソン国際空港', flightsPerWeek: 7 }
-    ]}
+    ]},
+    { name: 'Ryanair', iata: 'FR', hubCode: 'EIN', hubName: 'アイントホーフェン空港', destinations: [{ code: 'STN', name: 'ロンドン・スタンステッド空港', flightsPerWeek: 14 }] },
+    { name: 'Corendon Dutch Airlines', iata: 'CD', hubCode: 'GRQ', hubName: 'フローニンゲン・エールデ空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 2 }] },
+    { name: 'Corendon Dutch Airlines', iata: 'CD', hubCode: 'MST', hubName: 'マーストリヒト・アーヘン空港', destinations: [{ code: 'AYT', name: 'アンタルヤ空港', flightsPerWeek: 2 }] },
+    { name: 'British Airways', iata: 'BA', hubCode: 'RTM', hubName: 'ロッテルダム・ザ・ハーグ空港', destinations: [{ code: 'LCY', name: 'ロンドン・シティ空港', flightsPerWeek: 14 }] }
   ]},
   { country: 'アラブ首長国連邦', flag: '🇦🇪', airlines: [
     { name: 'Emirates', iata: 'EK', hubCode: 'DXB', hubName: 'ドバイ国際空港', destinations: [
