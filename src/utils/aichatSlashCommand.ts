@@ -22,30 +22,44 @@ export function formatEpochTime(now: Date): string {
   return String(Math.floor(now.getTime() / 1000));
 }
 
-/** 2以上の安全な整数が素数か、平方根までの試し割りで判定する。 */
-export function isPrimeInteger(value: number): boolean {
-  if (!Number.isSafeInteger(value) || value < 2) return false;
-  if (value === 2) return true;
-  if (value % 2 === 0) return false;
-  for (let divisor = 3; divisor * divisor <= value; divisor += 2) {
-    if (value % divisor === 0) return false;
-  }
-  return true;
+function ymdOf(d: Date): string {
+  return (
+    String(d.getUTCFullYear()).padStart(4, '0') +
+    String(d.getUTCMonth() + 1).padStart(2, '0') +
+    String(d.getUTCDate()).padStart(2, '0')
+  );
 }
 
-/** JSTの今日以降で、YYYYMMDDを整数として読んだ値が初めて素数になる日を返す。 */
-export function findFirstPrimeYmd(now: Date): string {
+/**
+ * JSTの今日から`days`日後まで(両端含む、古い順)のYYYYMMDD候補を列挙する。
+ * `/neko fymd`・`/neko factor -a`の素数判定は、JS側の独自実装(旧isPrimeInteger)
+ * ではなく、factor-wasm(Rust実装)の`is_prime`へ一本化した
+ * (2つの素数判定実装が食い違うリスクを避けるため)。この関数自体は
+ * 日付候補の列挙だけを担い、素数判定は呼び出し側がWASM経由で行う。
+ */
+export function buildYmdCandidates(now: Date, days: number): string[] {
   const { year, month, day } = getJstDateParts(now);
-  const candidate = new Date(Date.UTC(year, month - 1, day));
-
-  while (true) {
-    const ymd =
-      String(candidate.getUTCFullYear()).padStart(4, '0') +
-      String(candidate.getUTCMonth() + 1).padStart(2, '0') +
-      String(candidate.getUTCDate()).padStart(2, '0');
-    if (isPrimeInteger(Number(ymd))) return ymd;
-    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  const start = new Date(Date.UTC(year, month - 1, day));
+  const result: string[] = [];
+  for (let i = 0; i <= days; i++) {
+    const c = new Date(start);
+    c.setUTCDate(c.getUTCDate() + i);
+    result.push(ymdOf(c));
   }
+  return result;
+}
+
+/** `/neko factor -a <日数>`の結果を、日付昇順のMarkdownテーブルで表示する。 */
+export function formatPrimeYmdSearchResult(days: number, primeYmds: string[]): string {
+  if (primeYmds.length === 0) {
+    return `## 素数日検索(今日から${days}日以内)\n該当する素数日はありませんでした`;
+  }
+  return [
+    `## 素数日検索(今日から${days}日以内)`,
+    '| YYYYMMDD |',
+    '|---|',
+    ...primeYmds.map((ymd) => `| ${ymd} |`),
+  ].join('\n');
 }
 
 /**
@@ -128,6 +142,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
+    '| /neko factor -a <日数> | 今日から指定日数後までのYYYYMMDD日付のうち、WASM(Rust実装)で素数と判定された日を一覧表示します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
@@ -413,6 +428,7 @@ export type AichatSlashCommandDeps = {
   checkApiToken?: (token: string) => Promise<boolean>;
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
+  isPrimeViaWasm?: (n: number) => Promise<boolean>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
@@ -526,7 +542,23 @@ export async function interpretAichatSlashCommand(
   }
 
   if (subcommand === 'fymd') {
-    return { handled: true, response: findFirstPrimeYmd(now) };
+    if (!deps.isPrimeViaWasm) {
+      return { handled: true, response: '❌ /neko fymd は現在利用できません(WASM未設定)' };
+    }
+    const FYMD_SEARCH_CAP_DAYS = 3650;
+    try {
+      for (const ymd of buildYmdCandidates(now, FYMD_SEARCH_CAP_DAYS)) {
+        if (await deps.isPrimeViaWasm(Number(ymd))) {
+          return { handled: true, response: ymd };
+        }
+      }
+      return { handled: true, response: `❌ 今日から${FYMD_SEARCH_CAP_DAYS}日以内に素数日が見つかりませんでした` };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko fymd の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
 
   if (subcommand === 'clog') {
@@ -676,6 +708,33 @@ export async function interpretAichatSlashCommand(
   }
 
   if (subcommand === 'factor') {
+    if ((parts[2] ?? '').trim() === '-a') {
+      const MAX_SEARCH_DAYS = 3650;
+      const rawDays = (parts[3] ?? '').trim();
+      const days = Number(rawDays);
+      if (!rawDays || !Number.isFinite(days) || !Number.isInteger(days) || days < 1 || days > MAX_SEARCH_DAYS) {
+        return {
+          handled: true,
+          response: `❌ 日数は1以上${MAX_SEARCH_DAYS}以下の整数で指定してください: /neko factor -a <日数>`,
+        };
+      }
+      if (!deps.isPrimeViaWasm) {
+        return { handled: true, response: '❌ /neko factor -a は現在利用できません(WASM未設定)' };
+      }
+      try {
+        const primeYmds: string[] = [];
+        for (const ymd of buildYmdCandidates(now, days)) {
+          if (await deps.isPrimeViaWasm(Number(ymd))) primeYmds.push(ymd);
+        }
+        return { handled: true, response: formatPrimeYmdSearchResult(days, primeYmds) };
+      } catch (err) {
+        return {
+          handled: true,
+          response: `❌ /neko factor -a の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
+
     const raw = (parts[2] ?? '').trim();
     const MAX_SAFE = 9007199254740992; // 2^53
     if (!raw) {
