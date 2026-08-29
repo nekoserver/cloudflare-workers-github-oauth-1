@@ -1,4 +1,4 @@
-import { initSync, factor } from '../../public/wasm/factor.js';
+import { initSync, factor, is_prime } from '../../public/wasm/factor.js';
 import factorWasmModule from '../../public/wasm/factor_bg.wasm';
 
 let initialized = false;
@@ -19,4 +19,17 @@ export function factorViaWasm(n: number): string {
     initialized = true;
   }
   return factor(n);
+}
+
+/**
+ * `/neko fymd`・`/neko factor -a`用の素数判定。JS側で別の試し割り実装
+ * (旧isPrimeInteger)を持つと2つの実装が食い違うリスクがあるため、
+ * factor()と同じRust実装(is_prime、対応範囲は0以上2^53以下)へ一本化する。
+ */
+export function isPrimeViaWasm(n: number): boolean {
+  if (!initialized) {
+    initSync(factorWasmModule);
+    initialized = true;
+  }
+  return is_prime(n);
 }
