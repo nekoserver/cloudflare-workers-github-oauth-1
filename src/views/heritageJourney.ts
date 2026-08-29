@@ -380,6 +380,12 @@ h1{font-size:22px;margin:0 0 4px}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
 .visit-chip:hover{border-color:#38bdf8;color:#fff}
 .visit-chip.off{background:#374151;border-color:#374151;color:#9ca3af;text-decoration:line-through}
+.itinerary-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.itinerary-toolbar button,.itinerary-file-label{background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer}
+.itinerary-toolbar button:hover,.itinerary-file-label:hover{border-color:#38bdf8}.itinerary-file-label input{display:none}
+.itinerary-status{font-size:11px;color:#94a3b8;flex:1;min-width:180px}.itinerary-table-wrap{overflow:auto;border:1px solid #334155;border-radius:8px}
+.itinerary-table{width:100%;border-collapse:collapse;font-size:12px;min-width:650px}.itinerary-table th,.itinerary-table td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}.itinerary-table th{background:#1e293b;color:#93c5fd;white-space:nowrap}.itinerary-table tbody tr:last-child td{border-bottom:0}.itinerary-day{background:#172033;color:#5eead4;font-weight:700}.itinerary-time{font-variant-numeric:tabular-nums;white-space:nowrap}.itinerary-suggestions{margin-top:10px;padding:10px 12px;border:1px solid #14532d;background:#0c2d1a;border-radius:8px;color:#bbf7d0;font-size:12px;line-height:1.7}.itinerary-suggestions:empty{display:none}
+@media print{body{background:#fff;color:#111}.wrap>*{display:none!important}.wrap .itinerary-card{display:block!important;background:#fff;border:0;color:#111}.itinerary-card .itinerary-toolbar,.itinerary-card .section-title+.muted,.itinerary-suggestions{display:none!important}.itinerary-table th{background:#eee;color:#111}.itinerary-table th,.itinerary-table td{border-color:#aaa}}
 #tour-tap-mitokoro-gemma-btn,#tour-tap-mitokoro-llama-btn{cursor:pointer;margin-left:4px;pointer-events:auto;touch-action:manipulation}
 ${getMitokoroModalCss()}
 </style>
@@ -457,6 +463,20 @@ ${getMitokoroModalCss()}
       <input type="search" id="heritage-add-search" class="heritage-add-search" placeholder="🔍 追加したい経由地(世界遺産・空港・駅)を検索..." autocomplete="off">
     </div>
     <div id="day-plan"></div>
+  </div>
+
+  <div class="card itinerary-card">
+    <div class="section-title">🗓️ 写真付き旅程表</div>
+    <div class="muted" style="margin-bottom:10px">現在のルートから時刻入りの表を作成します。画像の計画書はAIで読み取り、テキスト／CSVは端末内で読み込んで、登録済みスポットとの照合や日程の改善案を表示できます。</div>
+    <div class="itinerary-toolbar">
+      <button id="itinerary-generate-btn" type="button">現在のプランから作成</button>
+      <label class="itinerary-file-label">計画書を読み込む<input id="itinerary-file" type="file" accept="image/png,image/jpeg,image/webp,.txt,.csv,text/plain,text/csv"></label>
+      <button id="itinerary-print-btn" type="button">印刷 / PDF</button>
+      <button id="itinerary-csv-btn" type="button">CSV保存</button>
+      <span class="itinerary-status" id="itinerary-status" aria-live="polite">「現在のプランから作成」で更新できます</span>
+    </div>
+    <div class="itinerary-table-wrap"><table class="itinerary-table"><thead><tr><th>日</th><th>時刻</th><th>種別</th><th>場所・予定</th><th>メモ / 提案</th></tr></thead><tbody id="itinerary-table-body"></tbody></table></div>
+    <div class="itinerary-suggestions" id="itinerary-suggestions"></div>
   </div>
 </div>
 
@@ -1003,7 +1023,7 @@ function bucketByNights(distribution) {
 
 var esc = function(s) { return String(s||'').replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
 
-var state = { selected: {} };
+var state = { selected: {}, lastDays: [], itineraryRows: [] };
 // ルート順序セクションの各ボタン(#route-line)をトグルした際の一時的な除外状態。
 // state.selectedとは別管理: 距離・時間ロスや宿泊プランの計算には影響させず、
 // 巡回テスト(#tour-mini-canvas/#tour-globe-canvas)の巡回対象からのみ
@@ -1893,6 +1913,7 @@ function recompute() {
   renderRouteSidePanel(ordered);
   var clusters = detectHubClusters(ordered, hubRadiusKm);
   var days = planOvernights(se.start, se.end, ordered, clusters, CITY_POINTS, maxDailyKm);
+  state.lastDays = days;
   renderDayPlan(ordered, days, availableNights);
   var currentNights = days.reduce(function(s, d) { return s + d.nights; }, 0);
   renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm);
@@ -3886,12 +3907,96 @@ heritageAddResultsBody.addEventListener('click', function(e) {
   renderHeritageAddResults(heritageAddSearchInput.value);
 });
 
+// ===== 印刷できる旅程表・既存計画書の読み込み =====
+function buildCurrentItineraryRows() {
+  var rows = [];
+  var days = state.lastDays || [];
+  days.forEach(function(day, dayIndex) {
+    var dayNo = dayIndex + 1;
+    rows.push({ day: dayNo + '日目', time: '08:30', type: '移動', place: dayIndex === 0 ? currentStartEnd().start.name + 'を出発' : '宿泊地を出発', note: '予定に合わせて出発時刻を調整' });
+    (day.visits || []).forEach(function(name, visitIndex) {
+      var hour = Math.min(17, 10 + visitIndex * 2);
+      rows.push({ day: dayNo + '日目', time: (hour < 10 ? '0' : '') + hour + ':00', type: '観光', place: name, note: '見学時間の目安 ' + (Number(document.getElementById('opt-visit').value) || 1.5) + '時間' });
+    });
+    rows.push({ day: dayNo + '日目', time: day.nights ? '18:00' : '17:00', type: day.nights ? '宿泊' : '到着', place: day.city, note: Math.round(day.km) + 'km移動' + (day.isHub ? '・連泊拠点におすすめ' : '') });
+  });
+  return rows;
+}
+
+function renderItineraryTable(rows, sourceLabel) {
+  state.itineraryRows = rows;
+  var body = document.getElementById('itinerary-table-body');
+  body.innerHTML = rows.length ? rows.map(function(row, index) {
+    var previous = index > 0 ? rows[index - 1].day : '';
+    return '<tr><td class="itinerary-day">' + (row.day === previous ? '' : esc(row.day)) + '</td><td class="itinerary-time">' + esc(row.time) + '</td><td>' + esc(row.type) + '</td><td>' + esc(row.place) + '</td><td>' + esc(row.note) + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="empty-note">読み取れる予定がありません。</td></tr>';
+  document.getElementById('itinerary-status').textContent = sourceLabel || '';
+}
+
+function parseItineraryText(text) {
+  var rows = [];
+  String(text || '').split(String.fromCharCode(10)).forEach(function(raw, index) {
+    var line = raw.trim();
+    if (!line || line.indexOf('---') === 0) return;
+    var delimiter = line.indexOf(String.fromCharCode(9)) !== -1 ? String.fromCharCode(9) : (line.indexOf('|') !== -1 ? '|' : ',');
+    var cols = line.split(delimiter).map(function(value) { return value.trim(); }).filter(function(value, colIndex, all) { return !(delimiter === '|' && value === '' && (colIndex === 0 || colIndex === all.length - 1)); });
+    if (cols.length < 3) return;
+    if (index === 0 && (cols.join('').indexOf('時刻') !== -1 || cols.join('').toLowerCase().indexOf('time') !== -1)) return;
+    rows.push({ day: cols[0] || '', time: cols[1] || '', type: cols[2] || '予定', place: cols[3] || cols[2] || '', note: cols.slice(4).join(' / ') });
+  });
+  return rows;
+}
+
+function suggestForImportedPlan(rows) {
+  var text = rows.map(function(row) { return row.place; }).join(' ');
+  var matched = HERITAGE_POINTS.filter(function(point) { return text.indexOf(point.n) !== -1; });
+  var lateCount = rows.filter(function(row) { return String(row.time) >= '20:00'; }).length;
+  var suggestions = [];
+  if (matched.length) suggestions.push('✅ 登録済みスポット ' + matched.length + '件と照合できました: ' + matched.slice(0, 5).map(function(p) { return p.n; }).join('、'));
+  else suggestions.push('💡 地名を正式名称で記載すると、世界遺産・空港・駅データとの照合精度が上がります。');
+  if (lateCount) suggestions.push('🌙 20時以降の予定が ' + lateCount + '件あります。移動遅延と休憩時間を確認してください。');
+  if (rows.length >= 9) suggestions.push('🕒 予定が多めです。昼食・移動の予備時間を30〜60分ずつ確保する案がおすすめです。');
+  suggestions.push('📍 読み取り結果は編集用CSVとして保存でき、印刷から画像例のような1枚のPDFにもできます。');
+  document.getElementById('itinerary-suggestions').innerHTML = suggestions.map(function(s) { return '<div>' + esc(s) + '</div>'; }).join('');
+}
+
+document.getElementById('itinerary-generate-btn').addEventListener('click', function() {
+  renderItineraryTable(buildCurrentItineraryRows(), '現在のルートから作成しました');
+  document.getElementById('itinerary-suggestions').innerHTML = '<div>💡 実際の予約時刻、開館時間、食事・休憩時間を追記してからPDF保存するのがおすすめです。</div>';
+});
+document.getElementById('itinerary-print-btn').addEventListener('click', function() { window.print(); });
+document.getElementById('itinerary-csv-btn').addEventListener('click', function() {
+  var lines = [['日','時刻','種別','場所・予定','メモ / 提案']].concat(state.itineraryRows.map(function(r) { return [r.day,r.time,r.type,r.place,r.note]; }));
+  var csv = lines.map(function(line) { return line.map(function(value) { return '"' + String(value || '').split('"').join('""') + '"'; }).join(','); }).join(String.fromCharCode(13,10));
+  var link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([String.fromCharCode(0xfeff) + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'heritage-journey-plan.csv'; link.click(); URL.revokeObjectURL(link.href);
+});
+document.getElementById('itinerary-file').addEventListener('change', function(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  document.getElementById('itinerary-status').textContent = '計画書を読み込み中…';
+  reader.onload = function() {
+    if (file.type.indexOf('image/') === 0) {
+      document.getElementById('itinerary-status').textContent = 'AIが画像から予定を読み取り中…';
+      fetch('/api/moondream-analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: reader.result, prompt: 'この旅行計画書を読み取ってください。各予定を必ず「日<TAB>時刻<TAB>種別<TAB>場所・予定<TAB>メモ」のTSV形式で1行ずつ出力し、説明文やMarkdownは付けないでください。' }) })
+        .then(function(response) { return response.json().then(function(data) { if (!response.ok) throw new Error(data.error || '画像を解析できませんでした'); return data; }); })
+        .then(function(data) { var rows = parseItineraryText(data.analysis); renderItineraryTable(rows, 'AIの画像読み取り結果（内容をご確認ください）'); suggestForImportedPlan(rows); })
+        .catch(function(error) { document.getElementById('itinerary-status').textContent = '読み取り失敗: ' + error.message; });
+    } else {
+      var rows = parseItineraryText(reader.result); renderItineraryTable(rows, file.name + ' を読み込みました'); suggestForImportedPlan(rows);
+    }
+  };
+  if (file.type.indexOf('image/') === 0) reader.readAsDataURL(file); else reader.readAsText(file);
+  event.target.value = '';
+});
+
 populateCitySelects();
 updateStartCityPickerBtnLabel();
 loadDestCountryFilterFromCookie();
 updateDistCountryFilterBtnLabel();
 renderCandidates();
 recompute();
+renderItineraryTable(buildCurrentItineraryRows(), '初期プランから作成しました');
 renderNightsDistribution();
 refreshRouteRegistrationUi();
 </script>
