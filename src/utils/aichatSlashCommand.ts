@@ -22,6 +22,32 @@ export function formatEpochTime(now: Date): string {
   return String(Math.floor(now.getTime() / 1000));
 }
 
+/** 2以上の安全な整数が素数か、平方根までの試し割りで判定する。 */
+export function isPrimeInteger(value: number): boolean {
+  if (!Number.isSafeInteger(value) || value < 2) return false;
+  if (value === 2) return true;
+  if (value % 2 === 0) return false;
+  for (let divisor = 3; divisor * divisor <= value; divisor += 2) {
+    if (value % divisor === 0) return false;
+  }
+  return true;
+}
+
+/** JSTの今日以降で、YYYYMMDDを整数として読んだ値が初めて素数になる日を返す。 */
+export function findFirstPrimeYmd(now: Date): string {
+  const { year, month, day } = getJstDateParts(now);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+
+  while (true) {
+    const ymd =
+      String(candidate.getUTCFullYear()).padStart(4, '0') +
+      String(candidate.getUTCMonth() + 1).padStart(2, '0') +
+      String(candidate.getUTCDate()).padStart(2, '0');
+    if (isPrimeInteger(Number(ymd))) return ymd;
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+}
+
 /**
  * JST(UTC+9)の当月カレンダーをMarkdownテーブルで組み立てる。今日のマスは太字にする。
  * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
@@ -89,6 +115,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko epoch | 現在のエポックタイム(秒)を表示します |',
     '| /neko ip | 接続元のIPアドレスを表示します |',
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
+    '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
@@ -461,6 +488,10 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatJstMonthCalendar(now) };
   }
 
+  if (subcommand === 'fymd') {
+    return { handled: true, response: findFirstPrimeYmd(now) };
+  }
+
   if (subcommand === 'clog') {
     const row = await deps.fetchLatestCommitAgentLog();
     return { handled: true, response: formatCommitAgentLogEntry(row) };
@@ -724,6 +755,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
   };
 }
