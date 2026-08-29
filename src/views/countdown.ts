@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
 
 /**
  * /countdownページ: カレンダーの日付タップから予定日時(ラベル・目標日時)を登録し、
@@ -168,22 +169,7 @@ export function getCountdownPage(username: string): string {
     }
     .empty-hint { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
 
-    #countdownWidget {
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-      padding: 14px 18px;
-      min-width: 200px;
-      z-index: 500;
-      display: none;
-    }
-    #countdownWidget.visible { display: block; }
-    .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-    .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    ${getCountdownWidgetCSS()}
   </style>
 </head>
 <body>
@@ -244,10 +230,7 @@ export function getCountdownPage(username: string): string {
     </div>
   </div>
 
-  <div id="countdownWidget">
-    <div class="widget-label" id="widgetLabel"></div>
-    <div class="widget-clock" id="widgetClock">--:--:--</div>
-  </div>
+  ${getCountdownWidgetHTML()}
 
   <script type="module">
     ${getThemeToggleScript()}
@@ -417,47 +400,7 @@ export function getCountdownPage(username: string): string {
     loadEvents();
 
     // ===== 画面右下の常時カウントダウンウィジェット =====
-    var widget = document.getElementById('countdownWidget');
-    var widgetLabel = document.getElementById('widgetLabel');
-    var widgetClock = document.getElementById('widgetClock');
-    var nextEvent = null; // { id, label, targetAt }
-
-    function formatRemaining(ms) {
-      var totalSeconds = Math.max(0, Math.floor(ms / 1000));
-      var days = Math.floor(totalSeconds / 86400);
-      var hours = Math.floor((totalSeconds % 86400) / 3600);
-      var minutes = Math.floor((totalSeconds % 3600) / 60);
-      var seconds = totalSeconds % 60;
-      var clock = pad2(hours) + ':' + pad2(minutes) + ':' + pad2(seconds);
-      return days > 0 ? (days + '日 ' + clock) : clock;
-    }
-
-    function tickWidget() {
-      if (!nextEvent) {
-        widget.classList.remove('visible');
-        return;
-      }
-      var remaining = new Date(nextEvent.targetAt).getTime() - Date.now();
-      if (remaining <= 0) {
-        widget.classList.remove('visible');
-        fetchNextEvent();
-        return;
-      }
-      widget.classList.add('visible');
-      widgetLabel.textContent = nextEvent.label;
-      widgetClock.textContent = formatRemaining(remaining);
-    }
-
-    function fetchNextEvent() {
-      fetch('/api/countdown/next').then(function(res) { return res.json(); }).then(function(data) {
-        nextEvent = data.event || null;
-        tickWidget();
-      }).catch(function() {});
-    }
-
-    fetchNextEvent();
-    setInterval(tickWidget, 1000);
-    setInterval(fetchNextEvent, 30000);
+    ${getCountdownWidgetScript()}
   </script>
 </body>
 </html>`;

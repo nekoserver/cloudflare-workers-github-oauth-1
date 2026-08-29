@@ -130,6 +130,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
+    '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -415,7 +416,39 @@ export type AichatSlashCommandDeps = {
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
+  countdownList?: () => Promise<CountdownListItem[]>;
 };
+
+export type CountdownListItem = {
+  label: string;
+  targetAt: string;
+};
+
+/**
+ * `/neko tlist` の結果を、日時昇順のMarkdownテーブルで表示する。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
+ * 0件の場合は「登録されている予定はありません」を返す。
+ */
+export function formatCountdownListResult(events: CountdownListItem[]): string {
+  if (events.length === 0) {
+    return ['## 次の予定一覧', '登録されている予定はありません(/countdownページから登録できます)'].join('\n');
+  }
+  const rows = events.map((ev) => {
+    const at = new Date(ev.targetAt);
+    const y = at.getFullYear();
+    const mo = String(at.getMonth() + 1).padStart(2, '0');
+    const d = String(at.getDate()).padStart(2, '0');
+    const h = String(at.getHours()).padStart(2, '0');
+    const mi = String(at.getMinutes()).padStart(2, '0');
+    return `| ${y}/${mo}/${d} ${h}:${mi} | ${ev.label} |`;
+  });
+  return [
+    '## 次の予定一覧',
+    '| 日時 | 予定 |',
+    '|---|---|',
+    ...rows,
+  ].join('\n');
+}
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
 
@@ -466,6 +499,10 @@ export async function interpretAichatSlashCommand(
 
   const parts = trimmed.split(/\s+/).filter((p) => p.length > 0);
   const subcommand = (parts[1] ?? '').toLowerCase();
+
+  if (!subcommand) {
+    return { handled: true, response: formatAichatSlashCommandHelp() };
+  }
 
   if (subcommand === 'hms') {
     return { handled: true, response: formatJstDateTime(now) };
@@ -695,6 +732,21 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'tlist') {
+    if (!deps.countdownList) {
+      return { handled: true, response: '❌ /neko tlist は現在利用できません(DB未設定)' };
+    }
+    try {
+      const events = await deps.countdownList();
+      return { handled: true, response: formatCountdownListResult(events) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko tlist の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'ls') {
     const args = parts.slice(2);
     const long = args.includes('-l') || args.includes('-la') || args.includes('-al');
@@ -755,6 +807,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko tlist, /neko help\n詳細は /neko help を実行してください`,
   };
 }

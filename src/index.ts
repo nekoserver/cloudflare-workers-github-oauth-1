@@ -4464,6 +4464,13 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const { lsFormatViaWasm } = await import('./utils/lsWasmServer');
       return lsFormatViaWasm(long, all);
     },
+    countdownList: async () => {
+      if (!c.env.DB) return [];
+      const rows = await c.env.DB.prepare(
+        'SELECT label, target_at FROM countdown_events WHERE user_id = ? AND target_at > ? ORDER BY target_at ASC'
+      ).bind(user.sub, new Date().toISOString()).all<{ label: string; target_at: string }>();
+      return (rows.results ?? []).map((r) => ({ label: r.label, targetAt: r.target_at }));
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
