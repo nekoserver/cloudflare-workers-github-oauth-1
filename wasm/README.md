@@ -87,3 +87,31 @@ export function sha256HexViaWasm(input: string): string {
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
 にもエントリを追加すること。
+
+## gh-wasm移植プロトタイプ
+
+`gh-wasm/`には、Go製GitHub CLIをWorkers向けに移植できるか検証する最小の
+Rust実装がある。完全な`gh`はGit、端末、OSキーチェーン、対話UIに依存するため
+ブラウザ/Workers向けWASMへそのまま移植せず、次の境界で段階的に実装する。
+
+| 担当 | 処理 |
+|---|---|
+| Rust/WASM | `owner/repo`の検証、GitHub API応答の整形、コマンド固有ロジック |
+| Worker/JavaScript | OAuthトークン管理、`fetch`によるGitHub API通信、HTTPエラー処理 |
+
+最初の対象は読み取り専用の`gh repo view <owner/repo>`である。`gh-wasm`は
+リポジトリ名の検証とAPI応答をMarkdownテーブルへ整形する関数を実装済みだが、
+公開WASM成果物とアプリへの配線はまだ行っていない。成果物を生成できる環境で
+以下を実行した後、既存モジュールと同様にdynamic importで配線する。
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.127
+cargo build --release --target wasm32-unknown-unknown --manifest-path wasm/gh-wasm/Cargo.toml
+wasm-bindgen --target web --out-dir public/wasm --out-name gh \
+  wasm/gh-wasm/target/wasm32-unknown-unknown/release/gh_wasm.wasm
+```
+
+書き込み系コマンドは、CSRF対策、権限の明示、確認UI、監査ログを先に設計してから
+追加する。任意の`gh api`をそのまま公開すると、意図しない書き込みAPIも呼べるため
+許可リスト方式にする。
