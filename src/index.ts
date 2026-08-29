@@ -62,6 +62,8 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getFactorWasmPage } from './views/factorWasm';
+import { getCountdownPage } from './views/countdown';
+import { findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -263,6 +265,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
   { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
+  { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1618,6 +1621,14 @@ CREATE INDEX IF NOT EXISTS idx_heritage_master_country ON heritage_master(countr
   deleted_flag INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_waypoint_sets_dedup ON heritage_journey_waypoint_sets(start_city_name, end_city_name, waypoint_heritage_ids);`,
+  '0115': `CREATE TABLE IF NOT EXISTS countdown_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  target_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_countdown_events_user_target ON countdown_events(user_id, target_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1852,6 +1863,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_journey_registered_routes: { id: 'pk', start_city: 'uk', end_city: 'uk' },
   heritage_master: { id: 'pk', moved_to: 'fk' },
   heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
+  countdown_events: { id: 'pk', user_id: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1968,6 +1980,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_journey_registered_routes: 'system',
   heritage_master: 'system',
   heritage_journey_waypoint_sets: 'system',
+  countdown_events: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2074,6 +2087,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
   commit_search_hit_details: { search_history_id: 'commit_search_history' },
   commit_search_keyword_labels: { user_id: 'user_sessions' },
+  countdown_events: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -9357,6 +9371,91 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
   } catch (err) {
     console.error('[heritage-journey/latest-waypoint-set] DB query failed', err);
     return c.json({ waypointSet: null, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// =====================================================
+// /countdown: カレンダーから登録した予定日時のカウントダウン
+// =====================================================
+
+app.get('/countdown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getCountdownPage(user.sub));
+});
+
+app.get('/api/countdown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT id, label, target_at FROM countdown_events WHERE user_id = ? ORDER BY target_at ASC'
+    ).bind(user.sub).all<{ id: number; label: string; target_at: string }>();
+    return jsonUtf8({ events: rows.results ?? [] });
+  } catch (err) {
+    logger.error('countdown list failed', { error: err instanceof Error ? err.message : 'Unknown error' });
+    return jsonUtf8({ error: '予定の取得に失敗しました' }, 500);
+  }
+});
+
+// ログイン中の画面カウントダウン表示のために、現在時刻より未来の予定のうち
+// 最も近いものだけを1件返す。findNextCountdownEvent()（純粋関数）で選定する。
+app.get('/api/countdown/next', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT id, label, target_at FROM countdown_events WHERE user_id = ?'
+    ).bind(user.sub).all<{ id: number; label: string; target_at: string }>();
+    const next = findNextCountdownEvent(rows.results ?? [], new Date().toISOString());
+    return jsonUtf8({
+      event: next ? { id: next.id, label: next.label, targetAt: next.target_at } : null,
+    });
+  } catch (err) {
+    logger.error('countdown next lookup failed', { error: err instanceof Error ? err.message : 'Unknown error' });
+    return jsonUtf8({ event: null, error: '次の予定の取得に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/countdown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  let body: { label?: unknown; targetAt?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエストボディが不正です' }, 400);
+  }
+  if (!isValidCountdownLabel(body.label)) {
+    return jsonUtf8({ error: 'ラベルは1〜100文字で指定してください' }, 400);
+  }
+  if (!isValidCountdownTargetAt(body.targetAt)) {
+    return jsonUtf8({ error: '日時が不正です' }, 400);
+  }
+  const label = (body.label as string).trim();
+  const targetAt = new Date(body.targetAt as string).toISOString();
+  try {
+    const result = await c.env.DB.prepare(
+      'INSERT INTO countdown_events (user_id, label, target_at) VALUES (?, ?, ?)'
+    ).bind(user.sub, label, targetAt).run();
+    return jsonUtf8({ ok: true, id: result.meta.last_row_id, label, targetAt });
+  } catch (err) {
+    logger.error('countdown insert failed', { error: err instanceof Error ? err.message : 'Unknown error' });
+    return jsonUtf8({ error: '予定の登録に失敗しました' }, 500);
+  }
+});
+
+app.delete('/api/countdown/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  try {
+    await c.env.DB.prepare(
+      'DELETE FROM countdown_events WHERE id = ? AND user_id = ?'
+    ).bind(id, user.sub).run();
+    return jsonUtf8({ ok: true });
+  } catch (err) {
+    logger.error('countdown delete failed', { error: err instanceof Error ? err.message : 'Unknown error' });
+    return jsonUtf8({ error: '予定の削除に失敗しました' }, 500);
   }
 });
 
