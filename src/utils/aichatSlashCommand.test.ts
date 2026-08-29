@@ -10,6 +10,7 @@ import {
   formatDigHelp,
   formatDigResult,
   formatLsWasmResult,
+  formatCountdownListResult,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -233,10 +234,9 @@ describe('interpretAichatSlashCommand', () => {
     expect((result as { response: string }).response).toContain('/neko clog');
   });
 
-  it('サブコマンド無指定もエラーメッセージを返す', async () => {
+  it('サブコマンド無指定は/neko helpと同じヘルプを返す', async () => {
     const result = await interpretAichatSlashCommand('/neko', now, unusedDeps);
-    expect(result.handled).toBe(true);
-    expect((result as { response: string }).response).toContain('(なし)');
+    expect(result).toEqual({ handled: true, response: formatAichatSlashCommandHelp() });
   });
 
   it('/neko 256 <文字列> は sha256ViaWasm の結果を表示する', async () => {
@@ -444,5 +444,50 @@ describe('formatLsWasmResult', () => {
   it('結果が空文字列の場合はコードブロックではなく「表示できる項目がありません」を表示する', () => {
     const result = formatLsWasmResult('');
     expect(result).toBe('## ls (WASM)\n(表示できる項目がありません)');
+  });
+});
+
+describe('/neko tlist', () => {
+  const now = new Date('2026-08-29T10:00:00Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+
+  it('countdownListの結果をformatCountdownListResultで表示する', async () => {
+    const events = [{ label: '会議', targetAt: '2026-09-01T10:00:00.000Z' }];
+    const countdownList = vi.fn().mockResolvedValue(events);
+    const result = await interpretAichatSlashCommand('/neko tlist', now, { ...unusedDeps, countdownList });
+    expect(countdownList).toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: formatCountdownListResult(events) });
+  });
+
+  it('countdownList未設定時はエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko tlist', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko tlist は現在利用できません(DB未設定)' });
+  });
+
+  it('countdownListが例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const countdownList = vi.fn().mockRejectedValue(new Error('db error'));
+    const result = await interpretAichatSlashCommand('/neko tlist', now, { ...unusedDeps, countdownList });
+    expect(result).toEqual({ handled: true, response: '❌ /neko tlist の実行中にエラーが発生しました: db error' });
+  });
+});
+
+describe('formatCountdownListResult', () => {
+  it('日時昇順のMarkdownテーブルで表示する', () => {
+    const events = [
+      { label: '会議', targetAt: '2026-09-01T10:05:00.000Z' },
+      { label: '締め切り', targetAt: '2026-09-03T00:00:00.000Z' },
+    ];
+    const result = formatCountdownListResult(events);
+    expect(result).toContain('| 日時 | 予定 |');
+    const meetingLine = result.split('\n').find((l) => l.includes('会議'));
+    const deadlineLine = result.split('\n').find((l) => l.includes('締め切り'));
+    expect(meetingLine).toBeTruthy();
+    expect(deadlineLine).toBeTruthy();
+    expect(result.indexOf(meetingLine as string)).toBeLessThan(result.indexOf(deadlineLine as string));
+  });
+
+  it('0件の場合は登録案内を表示する', () => {
+    const result = formatCountdownListResult([]);
+    expect(result).toBe('## 次の予定一覧\n登録されている予定はありません(/countdownページから登録できます)');
   });
 });

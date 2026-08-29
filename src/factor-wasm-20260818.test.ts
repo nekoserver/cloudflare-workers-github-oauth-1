@@ -88,7 +88,7 @@ describe('POST /api/aichat: /neko factor サーバー配線', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5200);
+    const fn = src.slice(idx, idx + 6000);
     expect(fn).toContain('factorViaWasm:');
     expect(fn).toContain("await import('./utils/factorWasmServer')");
   });
