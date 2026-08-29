@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="リポジトリページの機能と GitHub CLI コマンドの対応実例">
+<title>Repository page → gh command map</title>
+<style>
+:root{color-scheme:dark;--bg:#070b14;--side:#0b1120;--panel:#101827;--border:#24324a;--text:#edf4ff;--muted:#96a5bd;--blue:#7c9cff;--green:#52d6a2;--amber:#ffc96b;--purple:#bd9cff;--code:#080d17}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:25px}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 Inter,system-ui,sans-serif}body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 85% 0,rgba(124,156,255,.14),transparent 32%),radial-gradient(circle at 55% 100%,rgba(82,214,162,.06),transparent 35%)}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.mobile{display:none}.side{position:fixed;inset:0 auto 0 0;width:330px;padding:26px 18px;overflow:auto;background:rgba(11,17,32,.95);border-right:1px solid var(--border);backdrop-filter:blur(18px);z-index:20}.brand{padding:0 10px 20px;border-bottom:1px solid var(--border)}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.brand h1{margin:7px 0 3px;font-size:20px;line-height:1.3}.brand p{margin:0;color:var(--muted);font-size:12px}.search{width:100%;margin:17px 0 5px;padding:10px 12px;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:10px;outline:0}.search:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(124,156,255,.12)}.layer-title{display:flex;align-items:center;gap:9px;margin:18px 8px 7px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:50%;background:var(--blue);box-shadow:0 0 13px currentColor}.layer:nth-child(3) .dot{background:var(--amber)}.layer:nth-child(4) .dot{background:var(--purple)}.nav{display:block;padding:7px 10px 7px 27px;border-left:2px solid transparent;border-radius:0 8px 8px 0;color:var(--muted);text-decoration:none;font-size:12.5px;transition:.16s}.nav:hover,.nav.active{color:var(--text);background:rgba(124,156,255,.09);border-color:var(--blue)}.nav.hidden{display:none}main{position:relative;margin-left:330px;padding:58px clamp(24px,5vw,78px) 100px;max-width:1480px}.hero{padding:clamp(28px,5vw,58px);border:1px solid var(--border);border-radius:26px;background:linear-gradient(145deg,rgba(21,31,49,.94),rgba(10,16,29,.94));box-shadow:0 22px 55px rgba(0,0,0,.32)}.hero h2{max-width:820px;margin:13px 0 15px;font-size:clamp(36px,5vw,66px);line-height:1.04;letter-spacing:-.045em}.hero h2 span{color:var(--blue)}.hero p{max-width:760px;color:var(--muted);font-size:17px}.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.chip{padding:7px 11px;border:1px solid var(--border);border-radius:999px;background:rgba(7,11,20,.5);font-size:12px}.legend{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:25px 0 60px}.legend article{padding:21px;border:1px solid var(--border);border-radius:16px;background:var(--panel)}.legend b{color:var(--blue);font:800 12px monospace}.legend article:nth-child(2) b{color:var(--amber)}.legend article:nth-child(3) b{color:var(--purple)}.legend h3{margin:10px 0 5px;font-size:16px}.legend p{margin:0;color:var(--muted);font-size:13px}.section-head{margin:60px 0 20px}.kicker{color:var(--blue);font:800 12px monospace}.group:nth-of-type(3) .kicker{color:var(--amber)}.group:nth-of-type(4) .kicker{color:var(--purple)}.section-head h2{margin:8px 0 4px;font-size:clamp(26px,3vw,37px);letter-spacing:-.025em}.section-head p{margin:0;color:var(--muted)}.card{margin:0 0 18px;padding:25px;border:1px solid var(--border);border-radius:18px;background:rgba(16,24,39,.92);box-shadow:0 12px 30px rgba(0,0,0,.16);scroll-margin-top:24px}.card:target{border-color:var(--blue);box-shadow:0 0 0 4px rgba(124,156,255,.12),0 22px 55px rgba(0,0,0,.32)}.card-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.card h3{margin:0;font-size:20px}.badge{flex:none;padding:4px 9px;border:1px solid rgba(82,214,162,.25);border-radius:999px;color:var(--green);background:rgba(82,214,162,.1);font-size:11px;font-weight:800}.badge.api{color:var(--amber);border-color:rgba(255,201,107,.25);background:rgba(255,201,107,.09)}.badge.local{color:var(--purple);border-color:rgba(189,156,255,.25);background:rgba(189,156,255,.09)}.lead{margin:8px 0 18px;color:var(--muted)}.label{margin:17px 0 7px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.codebox{position:relative}pre{margin:0;padding:17px 55px 17px 17px;overflow:auto;border:1px solid #1d2a40;border-radius:12px;color:#dce7fb;background:var(--code);font-size:13px;line-height:1.65}.copy{position:absolute;top:9px;right:9px;padding:5px 8px;cursor:pointer;color:var(--muted);background:#121c2d;border:1px solid var(--border);border-radius:7px;font-size:11px}.copy:hover{color:var(--text);border-color:var(--blue)}.note{margin-top:13px;padding:11px 13px;border-left:3px solid var(--blue);background:rgba(124,156,255,.06);color:var(--muted);font-size:13px}.note strong{color:var(--text)}footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--border);color:var(--muted);font-size:12px}@media(max-width:900px){.mobile{display:flex;position:sticky;top:0;z-index:30;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(11,17,32,.95);border-bottom:1px solid var(--border);backdrop-filter:blur(16px)}.mobile button{padding:7px 10px;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:8px}.side{transform:translateX(-105%);transition:.2s;box-shadow:0 22px 55px #000}.side.open{transform:none}main{margin:0;padding:28px 18px 70px}.legend{grid-template-columns:1fr}}@media(max-width:520px){.side{width:min(330px,88vw)}.hero{border-radius:18px}.card{padding:19px}.card-top{display:block}.badge{display:inline-block;margin-top:9px}}
+</style>
+</head>
+<body>
+<header class="mobile"><strong>gh command map</strong><button id="menu" aria-expanded="false">☰ メニュー</button></header>
+<aside class="side" id="side"><div class="brand"><div class="eyebrow">Repository guide</div><h1>ページ機能 → gh 実例</h1><p>項目をタップして実行例へ移動</p></div><input id="search" class="search" type="search" placeholder="メニューを絞り込み…" aria-label="メニューを絞り込み"><nav aria-label="機能別コマンド例">
+<div class="layer"><div class="layer-title"><i class="dot"></i>1 · gh でほぼ同じ</div><a class="nav" href="#repo-list">リポジトリ一覧・名前取得</a><a class="nav" href="#repo-create">新規リポジトリ作成</a><a class="nav" href="#latest-commit">最新コミット</a><a class="nav" href="#commit-log">コミット履歴</a><a class="nav" href="#issues-pr">Issue＋PR件数</a><a class="nav" href="#app-permissions">GitHub App権限</a><a class="nav" href="#webhooks">Webhook確認</a></div>
+<div class="layer"><div class="layer-title"><i class="dot"></i>2 · gh api で再現</div><a class="nav" href="#monthly">月別・日別コミット</a><a class="nav" href="#total">総コミット数</a><a class="nav" href="#installations">Appインストール状況</a><a class="nav" href="#external">外部サービス連携判定</a></div>
+<div class="layer"><div class="layer-title"><i class="dot"></i>3 · アプリ独自</div><a class="nav" href="#commit-search">横断コミット検索</a><a class="nav" href="#history">検索履歴</a><a class="nav" href="#groups">色・グループ</a><a class="nav" href="#zanzibar">Zanzibar表示</a><a class="nav" href="#keywords">キーワード分類</a><a class="nav" href="#cloudflare">Cloudflare通知</a></div></nav></aside>
+<main>
+<section class="hero"><div class="eyebrow">Interactive correspondence</div><h2>Repository page,<br><span>translated to gh.</span></h2><p>このリポジトリの「リポジトリ」ページで行える操作を、ターミナルから実現するとどうなるか。左メニューから機能を選ぶと、そのまま使えるコマンド例と差分へジャンプします。</p><div class="chips"><span class="chip">OWNER/REPO を置換</span><span class="chip">認証済み gh を想定</span><span class="chip">JST の期間例</span><span class="chip">コピー対応</span></div></section>
+<section class="legend"><article><b>LAYER 01</b><h3>専用サブコマンド中心</h3><p>gh repo、gh issue、gh prで素直に置換。</p></article><article><b>LAYER 02</b><h3>REST APIを直接呼ぶ</h3><p>gh api、--paginate、--jqを組み合わせる。</p></article><article><b>LAYER 03</b><h3>アプリ内データ</h3><p>D1のキャッシュや分類で、完全対応はしない。</p></article></section>
+
+<section class="group"><header class="section-head"><div class="kicker">LAYER 01 / NATIVE GH</div><h2>gh でほぼ同じことができる</h2><p>専用サブコマンド、または短いAPI呼び出しで置き換えられます。</p></header>
+<article class="card" id="repo-list"><div class="card-top"><h3>リポジトリ一覧・名前取得</h3><span class="badge">gh repo list</span></div><p class="lead">名前、説明、言語、Star、Fork、更新日時、公開状態を一覧化します。</p><div class="label">見やすい一覧</div><x-code>gh repo list --limit 1000 \
+  --json name,nameWithOwner,url,description,primaryLanguage,stargazerCount,forkCount,updatedAt,isPrivate \
+  --jq '.[] | [.updatedAt, .nameWithOwner, .isPrivate] | @tsv'</x-code><div class="label">アプリと同じ所属条件</div><x-code>gh api -X GET /user/repos \
+  -f sort=updated -f visibility=all \
+  -f affiliation='owner,collaborator,organization_member' \
+  -f per_page=100 --paginate --jq '.[].full_name'</x-code><div class="note"><strong>使い分け:</strong> 手軽さなら gh repo list、RESTパラメーターまで合わせるなら gh api。</div></article>
+<article class="card" id="repo-create"><div class="card-top"><h3>新規リポジトリ作成</h3><span class="badge">gh repo create</span></div><p class="lead">Public／Privateを選び、ページと同じくREADME付きで初期化します。</p><div class="label">Public</div><x-code>gh repo create my-new-repo --public --add-readme</x-code><div class="label">Private + 説明</div><x-code>gh repo create my-new-repo --private --add-readme \
+  --description 'リポジトリの説明'</x-code><div class="note"><strong>ポイント:</strong> ページは auto_init: true なので、同じ初期状態にするには --add-readme を付けます。</div></article>
+<article class="card" id="latest-commit"><div class="card-top"><h3>最新コミット</h3><span class="badge api">gh api</span></div><p class="lead">デフォルトブランチの最新SHAとGitHub上のURLを1件だけ取得します。</p><x-code>gh api -X GET repos/OWNER/REPO/commits -f per_page=1 \
+  --jq '.[0] | {sha, url: .html_url}'</x-code></article>
+<article class="card" id="commit-log"><div class="card-top"><h3>コミット履歴の参照</h3><span class="badge api">gh api</span></div><p class="lead">直近20件を、作者・日時・メッセージ・マージ判定付きで整形します。</p><x-code>gh api -X GET repos/OWNER/REPO/commits \
+  -f per_page=20 -f page=1 \
+  --jq '.[] | {sha, message: .commit.message,
+    author: (.author.login // .commit.author.name),
+    date: .commit.author.date,
+    isMerge: ((.parents | length) >= 2), url: .html_url}'</x-code><div class="label">マージだけ</div><x-code>gh api repos/OWNER/REPO/commits --paginate \
+  --jq '.[] | select((.parents | length) &gt;= 2)'</x-code><div class="note">gh repo commitsという一般的な専用コマンドはないため、リモート履歴にはgh apiを使います。clone済みならgit logも選択肢です。</div></article>
+<article class="card" id="issues-pr"><div class="card-top"><h3>Issue＋PR件数</h3><span class="badge api">repository API</span></div><p class="lead">ページと同じ合算値はリポジトリ情報のopen_issues_countです。</p><x-code>gh api repos/OWNER/REPO --jq '.open_issues_count'</x-code><div class="label">内容を別々に見る</div><x-code>gh issue list --repo OWNER/REPO --state open --limit 100
+gh pr list    --repo OWNER/REPO --state open --limit 100</x-code></article>
+<article class="card" id="app-permissions"><div class="card-top"><h3>GitHub App権限</h3><span class="badge api">gh api</span></div><p class="lead">インストールされたAppの対象範囲と権限を確認します。</p><x-code>gh api /user/installations --paginate \
+  --jq '.installations[] | {id, app_slug, repository_selection, permissions}'</x-code><div class="note">OAuthスコープの概況はgh auth status、レスポンスヘッダーまで見るならgh api -i /user。</div></article>
+<article class="card" id="webhooks"><div class="card-top"><h3>Webhook確認</h3><span class="badge api">gh api</span></div><p class="lead">Webhookを列挙し、アプリと同じようにSlack送信先も判定できます。</p><x-code>gh api repos/OWNER/REPO/hooks --paginate \
+  --jq '.[] | {id, active, url: .config.url}'</x-code><div class="label">Slackだけ</div><x-code>gh api repos/OWNER/REPO/hooks --paginate \
+  --jq '.[] | select(.config.url | contains("hooks.slack.com"))'</x-code></article>
+</section>
+
+<section class="group"><header class="section-head"><div class="kicker">LAYER 02 / API COMPOSITION</div><h2>gh api なら再現できる</h2><p>ページネーション、期間指定、集計まで含む機能です。</p></header>
+<article class="card" id="monthly"><div class="card-top"><h3>月別・日別コミット</h3><span class="badge api">since / until</span></div><p class="lead">JSTの月初から翌月月初までを取得します。日別ならuntilを翌日にします。</p><x-code>gh api -X GET repos/OWNER/REPO/commits \
+  -f since='2026-08-01T00:00:00+09:00' \
+  -f until='2026-09-01T00:00:00+09:00' \
+  -f per_page=100 --paginate \
+  --jq '.[] | [.commit.author.date, .sha, .commit.message] | @tsv'</x-code><div class="note"><strong>時差:</strong> ページはJST境界で再判定します。UTCの日付部分を切るだけでは深夜帯が一致しません。</div></article>
+<article class="card" id="total"><div class="card-top"><h3>総コミット数</h3><span class="badge api">Link header</span></div><p class="lead">1ページ1件で要求し、Linkヘッダーのrel="last"にあるページ番号から推定します。</p><x-code>gh api -i -X GET repos/OWNER/REPO/commits -f per_page=1</x-code><div class="note">Link内のpage=N; rel="last"のNが推定総数です。ヘッダーがなければ0または1件です。</div></article>
+<article class="card" id="installations"><div class="card-top"><h3>Appインストール状況</h3><span class="badge api">installation API</span></div><p class="lead">selectedのインストールについて、選択リポジトリを取得します。</p><x-code>gh api /user/installations/INSTALLATION_ID/repositories --paginate \
+  --jq '.repositories[].full_name'</x-code><div class="note">トークン種別とApp権限によりアクセスできない場合があります。</div></article>
+<article class="card" id="external"><div class="card-top"><h3>外部サービス連携判定</h3><span class="badge api">app_slug + hooks</span></div><p class="lead">Cloudflare／VercelはAppのslug、SlackはWebhook URLから判定します。</p><x-code>gh api /user/installations --paginate \
+  --jq '.installations[] |
+    select(.app_slug == "cloudflare-pages" or
+           .app_slug == "cloudflare-workers-and-pages" or
+           .app_slug == "vercel") |
+    {app_slug, repository_selection, permissions}'</x-code><div class="note">ページと同じバッジにはrepository_selectionのall／selectedも解釈します。</div></article>
+</section>
+
+<section class="group"><header class="section-head"><div class="kicker">LAYER 03 / APP DATA</div><h2>このアプリ独自の機能</h2><p>GitHub外のD1データや表示モデルを使うため、完全一致するghコマンドはありません。</p></header>
+<article class="card" id="commit-search"><div class="card-top"><h3>全リポジトリ横断コミット検索</h3><span class="badge local">近似: gh search</span></div><p class="lead">アプリはD1キャッシュを部分一致検索します。GitHub側を探す近似例です。</p><x-code>gh search commits '検索語' --repo OWNER/REPO</x-code><div class="label">API取得後にローカル検索</div><x-code>gh api repos/OWNER/REPO/commits --paginate \
+  --jq '.[] | [.sha, .author.login, .commit.author.name, .commit.message] | @tsv' \
+  | rg -i '検索語'</x-code><div class="note"><strong>非等価:</strong> gh searchはGitHubの検索インデックス、ページはワークスペースのD1キャッシュが対象です。</div></article>
+<article class="card" id="history"><div class="card-top"><h3>検索履歴</h3><span class="badge local">D1 only</span></div><p class="lead">検索語、ヒット数、対象リポジトリ、ヒットコミットをD1へ保存します。</p><x-code># 完全対応する gh コマンドはありません
+# 近似: 結果を自前で保存
+gh search commits '検索語' --json sha,repository,message \
+  &gt; commit-search-$(date +%Y%m%d-%H%M%S).json</x-code></article>
+<article class="card" id="groups"><div class="card-top"><h3>リポジトリの色・グループ</h3><span class="badge local">D1 only</span></div><p class="lead">色、タグ、アプリ内グループはGitHub属性ではありません。Topicsで近似できます。</p><x-code>gh repo edit OWNER/REPO --add-topic team-platform
+gh search repos --topic team-platform --owner OWNER</x-code><div class="note">Topicsとアプリのグループは別データなので、ページの色やグループは更新されません。</div></article>
+<article class="card" id="zanzibar"><div class="card-top"><h3>Zanzibarタプル／ツリー</h3><span class="badge local">app model</span></div><p class="lead">権限やOAuthスコープを関係モデルへ変換したアプリ固有表示です。</p><x-code># 元データの一部だけを確認
+gh api /user/installations --paginate \
+  --jq '.installations[] | {app_slug, repository_selection, permissions}'</x-code></article>
+<article class="card" id="keywords"><div class="card-top"><h3>キーワード分類・共起キーワード</h3><span class="badge local">D1 + classifier</span></div><p class="lead">検索語の分類と共起語フィルターはアプリ内分析です。</p><x-code># 素材となるコミットメッセージの取得までが gh の役割
+gh api repos/OWNER/REPO/commits --paginate \
+  --jq '.[].commit.message'</x-code></article>
+<article class="card" id="cloudflare"><div class="card-top"><h3>Cloudflareセットアップ通知</h3><span class="badge local">Cloudflare side</span></div><p class="lead">新規作成後にD1へ未設定通知を保存し、ダッシュボードへ誘導する独自フローです。</p><x-code># GitHub CLIに対応コマンドはありません
+# Cloudflare CLIによる別操作
+npx wrangler pages project create</x-code><div class="note">wranglerはghではなくCloudflareのCLIです。通知の消化や連携判定とも別操作です。</div></article>
+</section>
+<footer>OWNER/REPO、INSTALLATION_IDなどのプレースホルダーを実値に置き換えて実行してください。</footer>
+</main>
+<script>
+customElements.define('x-code',class extends HTMLElement{connectedCallback(){const text=this.textContent.trim();this.textContent='';const box=document.createElement('div');box.className='codebox';const pre=document.createElement('pre');const code=document.createElement('code');code.textContent=text;pre.append(code);const btn=document.createElement('button');btn.className='copy';btn.textContent='Copy';btn.setAttribute('aria-label','コマンドをコピー');btn.onclick=async()=>{await navigator.clipboard.writeText(text);btn.textContent='Copied';setTimeout(()=>btn.textContent='Copy',1200)};box.append(pre,btn);this.append(box)}});
+const side=document.querySelector('#side'),menu=document.querySelector('#menu'),links=[...document.querySelectorAll('.nav')],cards=[...document.querySelectorAll('.card')];menu.onclick=()=>{const open=side.classList.toggle('open');menu.setAttribute('aria-expanded',open)};links.forEach(a=>a.onclick=()=>{if(innerWidth<=900){side.classList.remove('open');menu.setAttribute('aria-expanded','false')}});document.querySelector('#search').oninput=e=>{const q=e.target.value.trim().toLowerCase();links.forEach(a=>a.classList.toggle('hidden',!a.textContent.toLowerCase().includes(q)))};const observer=new IntersectionObserver(entries=>entries.filter(e=>e.isIntersecting).forEach(e=>links.forEach(a=>a.classList.toggle('active',a.hash==='#'+e.target.id))),{rootMargin:'-20% 0px -68% 0px'});cards.forEach(c=>observer.observe(c));
+</script>
+</body></html>
