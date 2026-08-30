@@ -12,6 +12,23 @@
  * 認証はページ側のCookie/JWTに乗るため、このモジュール自体は認証情報を持たない。
  */
 
+/** 画面内にウィジェットを収めるため、指定位置(left/top基準)をビューポート内にクランプする純粋関数。 */
+export function clampCountdownWidgetPosition(
+  left: number,
+  top: number,
+  widgetWidth: number,
+  widgetHeight: number,
+  viewportWidth: number,
+  viewportHeight: number
+): { left: number; top: number } {
+  const maxLeft = Math.max(0, viewportWidth - widgetWidth);
+  const maxTop = Math.max(0, viewportHeight - widgetHeight);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+  };
+}
+
 /** <style>内に展開する、ウィジェット本体のCSS。 */
 export function getCountdownWidgetCSS(): string {
   return `
@@ -27,8 +44,12 @@ export function getCountdownWidgetCSS(): string {
       min-width: 200px;
       z-index: 500;
       display: none;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
     }
     #countdownWidget.visible { display: block; }
+    #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
   `;
@@ -58,6 +79,84 @@ export function getCountdownWidgetScript(): string {
       var widgetClock = document.getElementById('widgetClock');
       if (!widget || !widgetLabel || !widgetClock) return;
       var nextEvent = null; // { id, label, targetAt }
+      var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
+
+      function clampPosition(left, top, widgetWidth, widgetHeight, viewportWidth, viewportHeight) {
+        var maxLeft = Math.max(0, viewportWidth - widgetWidth);
+        var maxTop = Math.max(0, viewportHeight - widgetHeight);
+        return {
+          left: Math.min(Math.max(0, left), maxLeft),
+          top: Math.min(Math.max(0, top), maxTop),
+        };
+      }
+
+      function applyPosition(left, top) {
+        widget.style.left = left + 'px';
+        widget.style.top = top + 'px';
+        widget.style.right = 'auto';
+        widget.style.bottom = 'auto';
+      }
+
+      function restorePosition() {
+        var saved = null;
+        try {
+          var raw = window.localStorage.getItem(POSITION_STORAGE_KEY);
+          saved = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          saved = null;
+        }
+        if (!saved || typeof saved.left !== 'number' || typeof saved.top !== 'number') return;
+        var rect = widget.getBoundingClientRect();
+        var clamped = clampPosition(saved.left, saved.top, rect.width, rect.height, window.innerWidth, window.innerHeight);
+        applyPosition(clamped.left, clamped.top);
+      }
+
+      function savePosition(left, top) {
+        try {
+          window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify({ left: left, top: top }));
+        } catch (e) {}
+      }
+
+      var dragState = null; // { pointerId, offsetX, offsetY }
+
+      function onPointerDown(ev) {
+        var rect = widget.getBoundingClientRect();
+        dragState = {
+          pointerId: ev.pointerId,
+          offsetX: ev.clientX - rect.left,
+          offsetY: ev.clientY - rect.top,
+        };
+        widget.classList.add('dragging');
+        widget.setPointerCapture(ev.pointerId);
+      }
+
+      function onPointerMove(ev) {
+        if (!dragState || ev.pointerId !== dragState.pointerId) return;
+        var rect = widget.getBoundingClientRect();
+        var clamped = clampPosition(
+          ev.clientX - dragState.offsetX,
+          ev.clientY - dragState.offsetY,
+          rect.width,
+          rect.height,
+          window.innerWidth,
+          window.innerHeight
+        );
+        applyPosition(clamped.left, clamped.top);
+      }
+
+      function onPointerUp(ev) {
+        if (!dragState || ev.pointerId !== dragState.pointerId) return;
+        var rect = widget.getBoundingClientRect();
+        savePosition(rect.left, rect.top);
+        widget.classList.remove('dragging');
+        dragState = null;
+      }
+
+      widget.addEventListener('pointerdown', onPointerDown);
+      widget.addEventListener('pointermove', onPointerMove);
+      widget.addEventListener('pointerup', onPointerUp);
+      widget.addEventListener('pointercancel', onPointerUp);
+      restorePosition();
 
       function pad2(n) { return String(n).padStart(2, '0'); }
 
