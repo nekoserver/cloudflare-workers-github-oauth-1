@@ -59,6 +59,15 @@ describe('getCountdownQuickAddModalScript', () => {
     const script = getCountdownQuickAddModalScript();
     expect(script).toContain('window.openCountdownQuickAddModal = function() {};');
   });
+
+  it('ドラッグハンドルへのpointerイベント配線と、開くたびに動的算出するz-indexロジックを含む', () => {
+    const script = getCountdownQuickAddModalScript();
+    expect(script).toContain("dragHandle.addEventListener('pointerdown'");
+    expect(script).toContain("dragHandle.addEventListener('pointermove'");
+    expect(script).toContain("dragHandle.addEventListener('pointerup'");
+    expect(script).toContain('function getNextZIndex()');
+    expect(script).toContain("overlay.style.zIndex = String(getNextZIndex())");
+  });
 });
 
 describe('window.openCountdownQuickAddModal: 実DOMでの登録フロー(単発)', () => {
@@ -239,5 +248,84 @@ describe('window.openCountdownQuickAddModal: 一括登録(複数行)', () => {
 
     (window as any).openCountdownQuickAddModal();
     expect(window.document.querySelectorAll('.qa-row-entry').length).toBe(1);
+  });
+});
+
+function firePointerEvent(
+  window: ReturnType<typeof setupDom>,
+  target: Element,
+  type: string,
+  props: { pointerId: number; clientX: number; clientY: number }
+) {
+  const ev = new window.Event(type, { bubbles: true, cancelable: true });
+  Object.assign(ev, props);
+  target.dispatchEvent(ev);
+}
+
+describe('window.openCountdownQuickAddModal: 画面中央表示・最前面z-index・ドラッグ移動', () => {
+  let window: ReturnType<typeof setupDom>;
+
+  beforeEach(() => {
+    window = setupDom();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('開くたびにパネルの position/left/top がリセットされる(前回ドラッグしても中央から始まる)', () => {
+    (window as any).openCountdownQuickAddModal();
+    const panel = window.document.getElementById('countdownQuickAddPanel') as HTMLElement;
+    panel.style.position = 'fixed';
+    panel.style.left = '999px';
+    panel.style.top = '888px';
+    window.document.getElementById('countdownQaCancelBtn')!.dispatchEvent(new window.Event('click'));
+
+    (window as any).openCountdownQuickAddModal();
+    expect(panel.style.position).toBe('');
+    expect(panel.style.left).toBe('');
+    expect(panel.style.top).toBe('');
+  });
+
+  it('他に開いている[data-overlay]要素より高いz-indexを動的に割り振る(常に最前面)', () => {
+    const otherOverlay = window.document.createElement('div');
+    otherOverlay.setAttribute('data-overlay', '');
+    otherOverlay.style.zIndex = '5000';
+    window.document.body.appendChild(otherOverlay);
+
+    (window as any).openCountdownQuickAddModal();
+    const overlay = window.document.getElementById('countdownQuickAddOverlay') as HTMLElement;
+    expect(parseInt(overlay.style.zIndex, 10)).toBeGreaterThan(5000);
+  });
+
+  it('タイトルのドラッグハンドルをpointerdown→pointermoveすると、パネルがfixed配置に切り替わり追従する', () => {
+    (window as any).openCountdownQuickAddModal();
+    const panel = window.document.getElementById('countdownQuickAddPanel') as HTMLElement;
+    const handle = window.document.getElementById('countdownQaDragHandle') as HTMLElement;
+
+    firePointerEvent(window, handle, 'pointerdown', { pointerId: 1, clientX: 200, clientY: 150 });
+    expect(panel.style.position).toBe('fixed');
+    expect(panel.className).toContain('dragging');
+
+    firePointerEvent(window, handle, 'pointermove', { pointerId: 1, clientX: 260, clientY: 190 });
+    // jsdomのgetBoundingClientRectは常に0を返すため、offsetは開始clientXそのもの
+    expect(panel.style.left).toBe('60px');
+    expect(panel.style.top).toBe('40px');
+
+    firePointerEvent(window, handle, 'pointerup', { pointerId: 1, clientX: 260, clientY: 190 });
+    expect(panel.className).not.toContain('dragging');
+  });
+
+  it('別のpointerIdのpointermoveは無視する(同時マルチタッチでの誤動作を防ぐ)', () => {
+    (window as any).openCountdownQuickAddModal();
+    const panel = window.document.getElementById('countdownQuickAddPanel') as HTMLElement;
+    const handle = window.document.getElementById('countdownQaDragHandle') as HTMLElement;
+
+    firePointerEvent(window, handle, 'pointerdown', { pointerId: 1, clientX: 200, clientY: 150 });
+    // pointerdown自体がpanelの初期位置(0px, jsdomのgetBoundingClientRectは常に0)をセットする
+    expect(panel.style.left).toBe('0px');
+    firePointerEvent(window, handle, 'pointermove', { pointerId: 2, clientX: 999, clientY: 999 });
+    // 異なるpointerIdのpointermoveは無視されるため、位置はpointerdown直後のまま変化しない
+    expect(panel.style.left).toBe('0px');
   });
 });

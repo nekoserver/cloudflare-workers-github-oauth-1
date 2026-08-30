@@ -15,6 +15,11 @@
  * 全行を検証してから POST /api/countdown へ {events:[...]}} 形式で一括送信する
  * (サーバー側は2件以上ならまとめて同じgroup_idを割り振り、後で画面右下の
  * ウィジェットがタイマー完了トーストに「index/total」形式で表示できるようにする)。
+ *
+ * 画面中央に表示する最前面のモーダルで、タイトル部分(#countdownQaDragHandle)を
+ * ドラッグして自由に移動できる(CLAUDE.mdルール26に従い、z-indexは開くたびに
+ * 自前のgetNextZIndex()で動的に算出する。ホストページの他のgetNextZ()実装には
+ * 依存しない)。開き直すと前回の移動位置は破棄され、常に画面中央から始まる。
  */
 
 /** <style>内に展開する、クイック登録モーダルのCSS。 */
@@ -40,7 +45,17 @@ export function getCountdownQuickAddModalCSS(): string {
       max-height: 80vh;
       overflow-y: auto;
     }
-    #countdownQuickAddPanel .qa-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; }
+    #countdownQuickAddPanel.dragging { opacity: 0.9; }
+    #countdownQuickAddPanel .qa-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+    #countdownQuickAddPanel.dragging .qa-title { cursor: grabbing; }
     #countdownQaRows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
     .qa-row-entry { display: flex; gap: 6px; align-items: center; }
     .qa-row-entry input {
@@ -107,7 +122,7 @@ export function getCountdownQuickAddModalHTML(): string {
   return `
   <div id="countdownQuickAddOverlay">
     <div id="countdownQuickAddPanel">
-      <div class="qa-title">予定を登録</div>
+      <div class="qa-title" id="countdownQaDragHandle" title="ドラッグで移動できます">予定を登録</div>
       <div id="countdownQaRows"></div>
       <button type="button" class="qa-add-row-btn" id="countdownQaAddRowBtn">+ もう1件追加</button>
       <div class="qa-error" id="countdownQaError"></div>
@@ -131,16 +146,78 @@ export function getCountdownQuickAddModalScript(): string {
   return `
     (function() {
       var overlay = document.getElementById('countdownQuickAddOverlay');
+      var panel = document.getElementById('countdownQuickAddPanel');
+      var dragHandle = document.getElementById('countdownQaDragHandle');
       var rowsContainer = document.getElementById('countdownQaRows');
       var addRowBtn = document.getElementById('countdownQaAddRowBtn');
       var errorEl = document.getElementById('countdownQaError');
       var saveBtn = document.getElementById('countdownQaSaveBtn');
       var cancelBtn = document.getElementById('countdownQaCancelBtn');
-      if (!overlay || !rowsContainer || !addRowBtn || !errorEl || !saveBtn || !cancelBtn) {
+      if (!overlay || !panel || !dragHandle || !rowsContainer || !addRowBtn || !errorEl || !saveBtn || !cancelBtn) {
         window.openCountdownQuickAddModal = function() {};
         return;
       }
       var pendingOnSaved = null;
+
+      // このモーダルは任意のページに埋め込まれる部品(CLAUDE.mdルール26: 新しい
+      // モーダルは常にgetNextZ()で動的にz-indexを算出する)。ホストページが
+      // 独自のgetNextZ()を持つとは限らないため、自前で最前面のz-indexを算出する。
+      function getNextZIndex() {
+        var max = 2000;
+        document.querySelectorAll('[data-overlay]').forEach(function(el) {
+          if (el === overlay) return;
+          var z = parseInt(el.style.zIndex, 10) || 0;
+          if (z > max) max = z;
+        });
+        return max + 100;
+      }
+
+      // 画面内にパネルを収めるため、指定位置(left/top)をビューポート内にクランプする。
+      function clampPanelPosition(left, top, panelWidth, panelHeight) {
+        var maxLeft = Math.max(0, window.innerWidth - panelWidth);
+        var maxTop = Math.max(0, window.innerHeight - panelHeight);
+        return {
+          left: Math.min(Math.max(0, left), maxLeft),
+          top: Math.min(Math.max(0, top), maxTop),
+        };
+      }
+
+      var dragState = null; // { pointerId, offsetX, offsetY }
+
+      function onDragPointerDown(ev) {
+        var rect = panel.getBoundingClientRect();
+        dragState = {
+          pointerId: ev.pointerId,
+          offsetX: ev.clientX - rect.left,
+          offsetY: ev.clientY - rect.top,
+        };
+        // flexによる中央寄せから、位置追従できる固定配置に切り替える
+        panel.style.position = 'fixed';
+        panel.style.left = rect.left + 'px';
+        panel.style.top = rect.top + 'px';
+        panel.style.margin = '0';
+        panel.classList.add('dragging');
+        if (dragHandle.setPointerCapture) dragHandle.setPointerCapture(ev.pointerId);
+      }
+
+      function onDragPointerMove(ev) {
+        if (!dragState || ev.pointerId !== dragState.pointerId) return;
+        var rect = panel.getBoundingClientRect();
+        var clamped = clampPanelPosition(ev.clientX - dragState.offsetX, ev.clientY - dragState.offsetY, rect.width, rect.height);
+        panel.style.left = clamped.left + 'px';
+        panel.style.top = clamped.top + 'px';
+      }
+
+      function onDragPointerUp(ev) {
+        if (!dragState || ev.pointerId !== dragState.pointerId) return;
+        panel.classList.remove('dragging');
+        dragState = null;
+      }
+
+      dragHandle.addEventListener('pointerdown', onDragPointerDown);
+      dragHandle.addEventListener('pointermove', onDragPointerMove);
+      dragHandle.addEventListener('pointerup', onDragPointerUp);
+      dragHandle.addEventListener('pointercancel', onDragPointerUp);
 
       function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -219,6 +296,13 @@ export function getCountdownQuickAddModalScript(): string {
         resetRows();
         errorEl.style.display = 'none';
         saveBtn.disabled = false;
+        // 開き直すたびに、前回ドラッグした位置ではなく画面中央から始める
+        panel.style.position = '';
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.margin = '';
+        overlay.style.zIndex = String(getNextZIndex());
+        overlay.setAttribute('data-overlay', '');
         overlay.classList.add('open');
       };
 
