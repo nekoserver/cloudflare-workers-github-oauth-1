@@ -4,6 +4,7 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
+import { getCountdownQuickAddModalCSS, getCountdownQuickAddModalHTML, getCountdownQuickAddModalScript } from '../utils/countdownQuickAdd';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 
@@ -52,6 +53,7 @@ export function getAiChatPage(user: {
     ${getThemeCSS()}
     ${getThemeToggleCSS()}
     ${getCountdownWidgetCSS()}
+    ${getCountdownQuickAddModalCSS()}
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -681,6 +683,19 @@ export function getAiChatPage(user: {
     .neko-results-link-row { margin-top: 8px; }
     .neko-results-link { font-size: 12px; color: var(--accent-color, #667eea); text-decoration: none; }
     .neko-results-link:hover { text-decoration: underline; }
+    .tlist-register-btn {
+      margin-left: 10px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .tlist-register-btn:hover { background: #5568d3; }
     .chat-bubble.error {
       align-self: flex-start; background: rgba(207,34,46,0.08); border: 1px solid rgba(207,34,46,0.3); color: #cf222e;
     }
@@ -779,6 +794,7 @@ export function getAiChatPage(user: {
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       ${getCountdownWidgetHTML()}
+      ${getCountdownQuickAddModalHTML()}
       <div class="user-menu-container">
         <div class="user-icon" id="userIcon">${initials}</div>
         <div class="dropdown-menu" id="dropdownMenu">
@@ -1297,6 +1313,7 @@ export function getAiChatPage(user: {
   <script>
     ${getThemeToggleScript()}
     ${getCountdownWidgetScript()}
+    ${getCountdownQuickAddModalScript()}
 
     // ===== ドロップダウン =====
     var userIcon = document.getElementById('userIcon');
@@ -6387,11 +6404,34 @@ export function getAiChatPage(user: {
       }
     }
 
+    // 対象: /neko tlist の出力バブルのみ。次の予定が1件も無い場合に「次の予定一覧」
+    // 見出しの行末へ「登録」ボタンを追加し、押すとカウントダウンページと同じ
+    // 登録機能一式(openCountdownQuickAddModal、src/utils/countdownQuickAdd.ts)を
+    // 呼び出してその場で予定登録できるようにする。
+    function addTlistRegisterButton(el, text) {
+      var body = String(text);
+      if (body.indexOf('## 次の予定一覧') !== 0) return;
+      if (body.indexOf('登録されている予定はありません') === -1) return;
+      var heading = el.querySelector('h2');
+      if (!heading || typeof window.openCountdownQuickAddModal !== 'function') return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tlist-register-btn';
+      btn.textContent = '登録';
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.openCountdownQuickAddModal();
+      });
+      heading.appendChild(btn);
+    }
+
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
       if (isLocalCommand) highlightNekoCalToday(el, text);
+      if (isLocalCommand) addTlistRegisterButton(el, text);
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
