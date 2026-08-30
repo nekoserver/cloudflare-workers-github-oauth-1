@@ -23,46 +23,66 @@ async function makeAuthHeader(sub = 'test-user') {
   return `Bearer ${token}`;
 }
 
-type Row = { id: number; user_id: string; label: string; target_at: string };
+type Row = { id: number; user_id: string; label: string; target_at: string; group_id?: string | null };
+type StoredRow = Required<Row>;
 
 function createMockDb(initialRows: Row[] = []) {
-  const rows: Row[] = [...initialRows];
+  const rows: StoredRow[] = initialRows.map((r) => ({ group_id: null, ...r }));
   let nextId = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : 1;
+
+  function makeStatement(sql: string, params: unknown[]) {
+    return {
+      first: async () => {
+        if (sql.includes('user_sessions')) return { revoked_at: null };
+        return null;
+      },
+      all: async () => {
+        if (sql.includes('SELECT id, label, target_at, group_id FROM countdown_events')) {
+          const userId = params[0] as string;
+          const matched = rows
+            .filter((r) => r.user_id === userId)
+            .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at, group_id: r.group_id }));
+          return { results: matched };
+        }
+        if (sql.includes('SELECT id, label, target_at FROM countdown_events')) {
+          const userId = params[0] as string;
+          const matched = rows
+            .filter((r) => r.user_id === userId)
+            .sort((a, b) => a.target_at.localeCompare(b.target_at))
+            .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at }));
+          return { results: matched };
+        }
+        return { results: [] };
+      },
+      run: async () => {
+        if (sql.includes('INSERT INTO countdown_events')) {
+          const [userId, label, targetAt, groupId] = params as [string, string, string, string | null];
+          const id = nextId++;
+          rows.push({ id, user_id: userId, label, target_at: targetAt, group_id: groupId ?? null });
+          return { meta: { last_row_id: id } };
+        }
+        if (sql.includes('DELETE FROM countdown_events')) {
+          const [id, userId] = params as [string, string];
+          const idx = rows.findIndex((r) => String(r.id) === String(id) && r.user_id === userId);
+          if (idx !== -1) rows.splice(idx, 1);
+          return { success: true };
+        }
+        return { success: true };
+      },
+    };
+  }
+
   const db = {
     prepare: (sql: string) => ({
-      bind: (...params: unknown[]) => ({
-        first: async () => {
-          if (sql.includes('user_sessions')) return { revoked_at: null };
-          return null;
-        },
-        all: async () => {
-          if (sql.includes('SELECT id, label, target_at FROM countdown_events')) {
-            const userId = params[0] as string;
-            const matched = rows
-              .filter((r) => r.user_id === userId)
-              .sort((a, b) => a.target_at.localeCompare(b.target_at))
-              .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at }));
-            return { results: matched };
-          }
-          return { results: [] };
-        },
-        run: async () => {
-          if (sql.includes('INSERT INTO countdown_events')) {
-            const [userId, label, targetAt] = params as [string, string, string];
-            const id = nextId++;
-            rows.push({ id, user_id: userId, label, target_at: targetAt });
-            return { meta: { last_row_id: id } };
-          }
-          if (sql.includes('DELETE FROM countdown_events')) {
-            const [id, userId] = params as [string, string];
-            const idx = rows.findIndex((r) => String(r.id) === String(id) && r.user_id === userId);
-            if (idx !== -1) rows.splice(idx, 1);
-            return { success: true };
-          }
-          return { success: true };
-        },
-      }),
+      bind: (...params: unknown[]) => makeStatement(sql, params),
     }),
+    batch: async (statements: { run: () => Promise<unknown> }[]) => {
+      const results = [];
+      for (const stmt of statements) {
+        results.push(await stmt.run());
+      }
+      return results;
+    },
   };
   return { db, rows };
 }
@@ -154,6 +174,93 @@ describe('GET /api/countdown/next', () => {
     const res = await app.request('/api/countdown/next', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
     const body = (await res.json()) as { event: null };
     expect(body.event).toBeNull();
+  });
+
+  it('単発登録(group_idなし)の場合はgroupIndex/groupTotalがnullになる', async () => {
+    const { db } = createMockDb([
+      { id: 1, user_id: 'test-user', label: '単発予定', target_at: '2099-01-01T00:00:00.000Z', group_id: null },
+    ]);
+    const authHeader = await makeAuthHeader('test-user');
+    const res = await app.request('/api/countdown/next', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const body = (await res.json()) as { event: { groupIndex: number | null; groupTotal: number | null } };
+    expect(body.event.groupIndex).toBeNull();
+    expect(body.event.groupTotal).toBeNull();
+  });
+
+  it('一括登録(同じgroup_id)の場合、最も近い予定のgroupIndex/groupTotalを返す', async () => {
+    const { db } = createMockDb([
+      { id: 1, user_id: 'test-user', label: '1件目', target_at: '2098-01-01T00:00:00.000Z', group_id: 'g1' },
+      { id: 2, user_id: 'test-user', label: '2件目', target_at: '2099-01-01T00:00:00.000Z', group_id: 'g1' },
+    ]);
+    const authHeader = await makeAuthHeader('test-user');
+    const res = await app.request('/api/countdown/next', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const body = (await res.json()) as { event: { label: string; groupIndex: number | null; groupTotal: number | null } };
+    expect(body.event.label).toBe('1件目');
+    expect(body.event.groupIndex).toBe(1);
+    expect(body.event.groupTotal).toBe(2);
+  });
+});
+
+describe('POST /api/countdown: 一括登録(events配列)', () => {
+  it('2件以上のeventsを一括登録すると同じgroupIdが割り振られる', async () => {
+    const { db, rows } = createMockDb();
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/api/countdown',
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: [
+            { label: '会議A', targetAt: '2026-09-01T09:00:00.000Z' },
+            { label: '会議B', targetAt: '2026-09-01T10:00:00.000Z' },
+          ],
+        }),
+      },
+      { JWT_SECRET, DB: db }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; events: { id: number; label: string }[]; groupId: string };
+    expect(body.ok).toBe(true);
+    expect(body.events.map((e) => e.label)).toEqual(['会議A', '会議B']);
+    expect(body.groupId).toBeTruthy();
+    expect(rows.every((r) => r.group_id === body.groupId)).toBe(true);
+  });
+
+  it('events配列に1件だけ含まれる場合はgroup_idを割り振らない(単発登録と同じ扱い)', async () => {
+    const { db, rows } = createMockDb();
+    const authHeader = await makeAuthHeader();
+    await app.request(
+      '/api/countdown',
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: [{ label: '単発', targetAt: '2026-09-01T09:00:00.000Z' }] }),
+      },
+      { JWT_SECRET, DB: db }
+    );
+    expect(rows[0].group_id).toBeNull();
+  });
+
+  it('一括登録のうち1件でも不正なら何も登録しない(部分登録を避ける)', async () => {
+    const { db, rows } = createMockDb();
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/api/countdown',
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: [
+            { label: '正常', targetAt: '2026-09-01T09:00:00.000Z' },
+            { label: '', targetAt: '2026-09-01T10:00:00.000Z' },
+          ],
+        }),
+      },
+      { JWT_SECRET, DB: db }
+    );
+    expect(res.status).toBe(400);
+    expect(rows.length).toBe(0);
   });
 });
 

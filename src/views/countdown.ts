@@ -119,7 +119,7 @@ export function getCountdownPage(username: string): string {
 
     .picker-panel { display: none; margin-top: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 10px; }
     .picker-panel.open { display: block; }
-    .picker-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .picker-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
     .picker-row input {
       flex: 1;
       min-width: 140px;
@@ -130,6 +130,28 @@ export function getCountdownPage(username: string): string {
       color: var(--text-primary);
       font-size: 14px;
     }
+    .picker-row-remove-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .picker-row-remove-btn:hover { color: #ef4444; }
+    .picker-add-row-btn {
+      background: none;
+      border: 1px dashed var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .picker-add-row-btn:hover { color: var(--accent-color, #667eea); border-color: var(--accent-color, #667eea); }
     .picker-date-label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .save-btn {
       background: #667eea;
@@ -213,10 +235,8 @@ export function getCountdownPage(username: string): string {
 
       <div class="picker-panel" id="pickerPanel">
         <div class="picker-date-label" id="pickerDateLabel"></div>
-        <div class="picker-row">
-          <input type="time" id="pickerTime" value="09:00">
-          <input type="text" id="pickerLabel" placeholder="予定の名前(例: 会議)" maxlength="100">
-        </div>
+        <div id="pickerRows"></div>
+        <button type="button" class="picker-add-row-btn" id="pickerAddRowBtn">+ この日にもう1件追加</button>
         <button type="button" class="save-btn" id="pickerSaveBtn">この日時で登録する</button>
         <div class="picker-error" id="pickerError"></div>
       </div>
@@ -253,8 +273,8 @@ export function getCountdownPage(username: string): string {
     var calGrid = document.getElementById('calGrid');
     var pickerPanel = document.getElementById('pickerPanel');
     var pickerDateLabel = document.getElementById('pickerDateLabel');
-    var pickerTime = document.getElementById('pickerTime');
-    var pickerLabel = document.getElementById('pickerLabel');
+    var pickerRows = document.getElementById('pickerRows');
+    var pickerAddRowBtn = document.getElementById('pickerAddRowBtn');
     var pickerSaveBtn = document.getElementById('pickerSaveBtn');
     var pickerError = document.getElementById('pickerError');
     var eventList = document.getElementById('eventList');
@@ -305,11 +325,57 @@ export function getCountdownPage(username: string): string {
       });
     }
 
+    // ===== 予定入力行(同じ日に複数件を一括登録できるよう、時刻+ラベルの行を動的に増やせる) =====
+    function updatePickerRemoveButtonsVisibility() {
+      var rows = pickerRows.querySelectorAll('.picker-row');
+      rows.forEach(function(row) {
+        var removeBtn = row.querySelector('.picker-row-remove-btn');
+        if (removeBtn) removeBtn.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+      });
+    }
+
+    function addPickerRow() {
+      var row = document.createElement('div');
+      row.className = 'picker-row';
+
+      var timeInput = document.createElement('input');
+      timeInput.type = 'time';
+      timeInput.className = 'picker-row-time';
+      timeInput.value = '09:00';
+
+      var labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.className = 'picker-row-label';
+      labelInput.placeholder = '予定の名前(例: 会議)';
+      labelInput.maxLength = 100;
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'picker-row-remove-btn';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', function() {
+        if (pickerRows.querySelectorAll('.picker-row').length > 1) {
+          row.remove();
+          updatePickerRemoveButtonsVisibility();
+        }
+      });
+
+      row.appendChild(timeInput);
+      row.appendChild(labelInput);
+      row.appendChild(removeBtn);
+      pickerRows.appendChild(row);
+      updatePickerRemoveButtonsVisibility();
+      return row;
+    }
+
+    pickerAddRowBtn.addEventListener('click', function() { addPickerRow(); });
+
     function openPicker(dateStr) {
       selectedDateStr = dateStr;
       var parts = dateStr.split('-');
       pickerDateLabel.textContent = parts[0] + '年' + Number(parts[1]) + '月' + Number(parts[2]) + '日の予定を登録';
-      pickerLabel.value = '';
+      pickerRows.innerHTML = '';
+      addPickerRow();
       pickerError.style.display = 'none';
       pickerPanel.classList.add('open');
     }
@@ -325,27 +391,41 @@ export function getCountdownPage(username: string): string {
       renderCalendar();
     });
 
+    // 選択中の日付に対する全行を検証し、events配列を組み立てる。1行でも不正なら
+    // nullを返し、どの行が問題かをpickerErrorに表示する(部分登録を避けるため)。
+    function collectPickerEvents() {
+      var rowEls = pickerRows.querySelectorAll('.picker-row');
+      var items = [];
+      for (var i = 0; i < rowEls.length; i++) {
+        var rowNumber = i + 1;
+        var label = rowEls[i].querySelector('.picker-row-label').value.trim();
+        var time = rowEls[i].querySelector('.picker-row-time').value || '09:00';
+        if (!label) {
+          pickerError.textContent = (rowEls.length > 1 ? (rowNumber + '件目: ') : '') + '予定の名前を入力してください';
+          pickerError.style.display = 'block';
+          return null;
+        }
+        var targetAt = new Date(selectedDateStr + 'T' + time + ':00');
+        if (isNaN(targetAt.getTime())) {
+          pickerError.textContent = (rowEls.length > 1 ? (rowNumber + '件目: ') : '') + '日時が不正です';
+          pickerError.style.display = 'block';
+          return null;
+        }
+        items.push({ label: label, targetAt: targetAt.toISOString() });
+      }
+      return items;
+    }
+
     pickerSaveBtn.addEventListener('click', function() {
       if (!selectedDateStr) return;
-      var label = pickerLabel.value.trim();
-      var time = pickerTime.value || '09:00';
       pickerError.style.display = 'none';
-      if (!label) {
-        pickerError.textContent = '予定の名前を入力してください';
-        pickerError.style.display = 'block';
-        return;
-      }
-      var targetAt = new Date(selectedDateStr + 'T' + time + ':00');
-      if (isNaN(targetAt.getTime())) {
-        pickerError.textContent = '日時が不正です';
-        pickerError.style.display = 'block';
-        return;
-      }
+      var events = collectPickerEvents();
+      if (!events) return;
       pickerSaveBtn.disabled = true;
       fetch('/api/countdown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label, targetAt: targetAt.toISOString() }),
+        body: JSON.stringify({ events: events }),
       }).then(function(res) { return res.json(); }).then(function(data) {
         pickerSaveBtn.disabled = false;
         if (data.error) {

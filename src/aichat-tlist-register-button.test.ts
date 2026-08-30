@@ -105,8 +105,8 @@ describe('AIチャット(DOM実動作): /neko tlist 応答バブルの「登録�
     const btn = document.querySelector('.tlist-register-btn') as HTMLButtonElement;
     btn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
 
-    (document.getElementById('countdownQaLabel') as HTMLInputElement).value = '打ち合わせ';
-    (document.getElementById('countdownQaDate') as HTMLInputElement).value = '2026-09-05';
+    (document.querySelector('.qa-row-label') as HTMLInputElement).value = '打ち合わせ';
+    (document.querySelector('.qa-row-date') as HTMLInputElement).value = '2026-09-05';
     document.getElementById('countdownQaSaveBtn')!.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -115,6 +115,6 @@ describe('AIチャット(DOM実動作): /neko tlist 応答バブルの「登録�
     );
     expect(countdownCall).toBeTruthy();
     const body = JSON.parse((countdownCall![1] as RequestInit).body as string);
-    expect(body.label).toBe('打ち合わせ');
+    expect(body.events[0].label).toBe('打ち合わせ');
   });
 });
