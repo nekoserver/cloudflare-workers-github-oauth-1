@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   clampCountdownWidgetPosition,
   getCountdownWidgetCSS,
@@ -38,6 +39,10 @@ describe('getCountdownWidgetHTML', () => {
     expect(html).toContain('id="widgetLabel"');
     expect(html).toContain('id="widgetClock"');
   });
+
+  it('トースト表示用の要素(id=countdownToast)を含む', () => {
+    expect(getCountdownWidgetHTML()).toContain('id="countdownToast"');
+  });
 });
 
 describe('getCountdownWidgetScript', () => {
@@ -63,5 +68,87 @@ describe('getCountdownWidgetScript', () => {
     expect(script).toContain('countdownWidgetPosition');
     expect(script).toContain('window.localStorage.setItem(POSITION_STORAGE_KEY');
     expect(script).toContain('window.localStorage.getItem(POSITION_STORAGE_KEY');
+  });
+
+  it('タイマー完了時のフック呼び出しポイント(onTimerCompleted)が未実装であることを示すコメントを含む', () => {
+    const script = getCountdownWidgetScript();
+    expect(script).toContain('function onTimerCompleted(completedEvent)');
+    expect(script).toContain('フック機構');
+  });
+});
+
+describe('タイマー完了時のトースト表示(実DOM実行)', () => {
+  const openDoms: JSDOM[] = [];
+
+  afterEach(() => {
+    // setInterval(tickWidget, 1000)/setInterval(fetchNextEvent, 30000)がプロセスを
+    // 生かし続けvitestがハングするため、各テスト後にjsdomウィンドウを明示的に閉じる
+    while (openDoms.length) openDoms.pop()!.window.close();
+  });
+
+  function setupDom() {
+    const dom = new JSDOM(`<!DOCTYPE html><body>${getCountdownWidgetHTML()}</body>`, { runScripts: 'dangerously' });
+    openDoms.push(dom);
+    return dom.window;
+  }
+
+  async function flushMicrotasks() {
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  it('残り時間が0以下になった瞬間、単発予定はトーストに「#id ok」を表示する', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const pastTargetAt = new Date(Date.now() - 1000).toISOString();
+    // 実際のAPIは期限切れイベントを二度と返さない(target_at > now でフィルタするため)。
+    // モックも1回目だけ返し、以降はnullにしないと無限フェッチループになる。
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ event: { id: 7, label: '会議', targetAt: pastTargetAt, groupIndex: null, groupTotal: null } }),
+      })
+      .mockResolvedValue({ json: () => Promise.resolve({ event: null }) });
+    (window as any).fetch = fetchMock;
+    // setInterval(tickWidget)/setInterval(fetchNextEvent)は本テストでは不要
+    // (初回のfetchNextEvent()呼び出しだけで検証できる)。放置するとプロセスが
+    // 生き続けvitestがハングするため無効化する。
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+
+    const toast = window.document.getElementById('countdownToast')!;
+    expect(toast.className).toContain('visible');
+    expect(toast.textContent).toBe('#7 ok');
+  });
+
+  it('一括登録グループの予定は「index/total ok」形式でトーストを表示する', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const pastTargetAt = new Date(Date.now() - 1000).toISOString();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        json: () => Promise.resolve({ event: { id: 8, label: '会議B', targetAt: pastTargetAt, groupIndex: 2, groupTotal: 3 } }),
+      })
+      .mockResolvedValue({ json: () => Promise.resolve({ event: null }) });
+    (window as any).fetch = fetchMock;
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+
+    const toast = window.document.getElementById('countdownToast')!;
+    expect(toast.textContent).toBe('2/3 ok');
+  });
+
+  it('残り時間が0にならない限りトーストは表示されない', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ event: { id: 9, label: '未来の予定', targetAt: '2099-01-01T00:00:00.000Z', groupIndex: null, groupTotal: null } }),
+    });
+    (window as any).fetch = fetchMock;
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+
+    const toast = window.document.getElementById('countdownToast')!;
+    expect(toast.className).not.toContain('visible');
   });
 });

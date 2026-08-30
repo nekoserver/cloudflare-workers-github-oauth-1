@@ -9,6 +9,13 @@ export type CountdownEventRow = {
   target_at: string;
 };
 
+export type CountdownGroupRow = {
+  id: number;
+  group_id: string | null;
+};
+
+export type CountdownGroupPosition = { index: number; total: number };
+
 const MAX_LABEL_LENGTH = 100;
 
 /** ISO 8601形式などパース可能な日時文字列かどうかを判定する。 */
@@ -57,4 +64,21 @@ export function formatCountdownRemaining(msRemaining: number): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   const clock = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
   return days > 0 ? `${days}日 ${clock}` : clock;
+}
+
+/**
+ * 一括登録(同じgroup_idを持つイベント群)の中で、指定イベントが何番目/何件中かを返す。
+ * group_idがnull、またはそのgroup内に自分しかいない(=単発登録)場合はnullを返す
+ * (単発登録では「◯/△」表示が不要なため)。同グループ内の順序はidの昇順(登録順)とする。
+ */
+export function computeCountdownGroupPosition(
+  rows: CountdownGroupRow[],
+  targetId: number
+): CountdownGroupPosition | null {
+  const target = rows.find((r) => r.id === targetId);
+  if (!target || !target.group_id) return null;
+  const groupRows = rows.filter((r) => r.group_id === target.group_id).sort((a, b) => a.id - b.id);
+  if (groupRows.length <= 1) return null;
+  const index = groupRows.findIndex((r) => r.id === targetId) + 1;
+  return { index, total: groupRows.length };
 }

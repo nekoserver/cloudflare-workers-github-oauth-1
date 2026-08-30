@@ -52,6 +52,24 @@ export function getCountdownWidgetCSS(): string {
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    #countdownToast {
+      position: fixed;
+      right: 20px;
+      bottom: 96px;
+      background: #d6f4fb;
+      color: #0c5c73;
+      border: 1px solid #a8e6f5;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      z-index: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    #countdownToast.visible { opacity: 1; }
   `;
 }
 
@@ -62,6 +80,7 @@ export function getCountdownWidgetHTML(): string {
     <div class="widget-label" id="widgetLabel"></div>
     <div class="widget-clock" id="widgetClock">--:--:--</div>
   </div>
+  <div id="countdownToast"></div>
   `;
 }
 
@@ -77,9 +96,11 @@ export function getCountdownWidgetScript(): string {
       var widget = document.getElementById('countdownWidget');
       var widgetLabel = document.getElementById('widgetLabel');
       var widgetClock = document.getElementById('widgetClock');
+      var toastEl = document.getElementById('countdownToast');
       if (!widget || !widgetLabel || !widgetClock) return;
-      var nextEvent = null; // { id, label, targetAt }
+      var nextEvent = null; // { id, label, targetAt, groupIndex, groupTotal }
       var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
+      var toastHideTimer = null;
 
       function clampPosition(left, top, widgetWidth, widgetHeight, viewportWidth, viewportHeight) {
         var maxLeft = Math.max(0, viewportWidth - widgetWidth);
@@ -170,6 +191,29 @@ export function getCountdownWidgetScript(): string {
         return days > 0 ? (days + '日 ' + clock) : clock;
       }
 
+      // タイマー完了時のトースト表示(薄水色)。timerid(◯/△形式は一括登録グループ内での
+      // 順番、単発登録は#idのまま)+「ok」を表示する。5秒後に自動で消える。
+      function showCountdownToast(completedEvent) {
+        if (!toastEl) return;
+        var idLabel = completedEvent.groupTotal
+          ? (completedEvent.groupIndex + '/' + completedEvent.groupTotal)
+          : ('#' + completedEvent.id);
+        toastEl.textContent = idLabel + ' ok';
+        toastEl.classList.add('visible');
+        if (toastHideTimer) clearTimeout(toastHideTimer);
+        toastHideTimer = setTimeout(function() { toastEl.classList.remove('visible'); }, 5000);
+      }
+
+      // タイマー完了時の処理エントリポイント。将来的にここへ、完了したタイマーに
+      // 割り当てたカスタム処理(フック)を呼び出し、その結果を受け取る仕組みを
+      // 追加できるようにしておく。現時点ではフック機構は未実装のため、
+      // トースト表示のみ行いスキップする。
+      function onTimerCompleted(completedEvent) {
+        // TODO: フック機構(タイマー登録時に割り当てた処理を呼び出し、結果を
+        // 受け取る仕組み)は未実装。実装するまではトースト表示のみでスキップする。
+        showCountdownToast(completedEvent);
+      }
+
       function tickWidget() {
         if (!nextEvent) {
           widget.classList.remove('visible');
@@ -177,7 +221,10 @@ export function getCountdownWidgetScript(): string {
         }
         var remaining = new Date(nextEvent.targetAt).getTime() - Date.now();
         if (remaining <= 0) {
+          var completed = nextEvent;
+          nextEvent = null;
           widget.classList.remove('visible');
+          onTimerCompleted(completed);
           fetchNextEvent();
           return;
         }

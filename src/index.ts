@@ -63,7 +63,7 @@ import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getCountdownPage } from './views/countdown';
-import { findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
+import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -9421,16 +9421,28 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 
 // ログイン中の画面カウントダウン表示のために、現在時刻より未来の予定のうち
 // 最も近いものだけを1件返す。findNextCountdownEvent()（純粋関数）で選定する。
+// 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
+// computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
+// (単発登録ではnullのまま=フィールド自体を含めない)。
 app.get('/api/countdown/next', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
   try {
     const rows = await c.env.DB.prepare(
-      'SELECT id, label, target_at FROM countdown_events WHERE user_id = ?'
-    ).bind(user.sub).all<{ id: number; label: string; target_at: string }>();
-    const next = findNextCountdownEvent(rows.results ?? [], new Date().toISOString());
+      'SELECT id, label, target_at, group_id FROM countdown_events WHERE user_id = ?'
+    ).bind(user.sub).all<{ id: number; label: string; target_at: string; group_id: string | null }>();
+    const results = rows.results ?? [];
+    const next = findNextCountdownEvent(results, new Date().toISOString());
+    if (!next) return jsonUtf8({ event: null });
+    const groupPosition = computeCountdownGroupPosition(results, next.id);
     return jsonUtf8({
-      event: next ? { id: next.id, label: next.label, targetAt: next.target_at } : null,
+      event: {
+        id: next.id,
+        label: next.label,
+        targetAt: next.target_at,
+        groupIndex: groupPosition ? groupPosition.index : null,
+        groupTotal: groupPosition ? groupPosition.total : null,
+      },
     });
   } catch (err) {
     logger.error('countdown next lookup failed', { error: err instanceof Error ? err.message : 'Unknown error' });
@@ -9438,28 +9450,77 @@ app.get('/api/countdown/next', authMiddleware, async (c) => {
   }
 });
 
+type CountdownRegistrationItem = { label: string; targetAt: string };
+
+/**
+ * POST /api/countdownのボディを検証し、登録すべきイベント一覧を返す。
+ * 従来どおりの単発 {label, targetAt} と、一括登録用の {events: [{label, targetAt}, ...]}
+ * の両方を受け付ける(既存クライアント(/countdownページのカレンダーpicker)との後方互換のため)。
+ * 1件でも不正な項目があれば、その旨のエラーメッセージと共に空配列を返す
+ * (部分的な登録を避けるため、検証を全て通ってから呼び出し側でINSERTする)。
+ */
+export function parseCountdownRegistrationRequest(
+  body: unknown
+): { items: CountdownRegistrationItem[]; error: null } | { items: []; error: string } {
+  if (!body || typeof body !== 'object') {
+    return { items: [], error: 'リクエストボディが不正です' };
+  }
+  const rawItems: unknown[] = Array.isArray((body as { events?: unknown }).events)
+    ? ((body as { events: unknown[] }).events)
+    : [body];
+  if (rawItems.length === 0) {
+    return { items: [], error: '登録する予定がありません' };
+  }
+  const items: CountdownRegistrationItem[] = [];
+  for (const raw of rawItems) {
+    const item = raw as { label?: unknown; targetAt?: unknown };
+    if (!isValidCountdownLabel(item.label)) {
+      return { items: [], error: 'ラベルは1〜100文字で指定してください' };
+    }
+    if (!isValidCountdownTargetAt(item.targetAt)) {
+      return { items: [], error: '日時が不正です' };
+    }
+    items.push({
+      label: (item.label as string).trim(),
+      targetAt: new Date(item.targetAt as string).toISOString(),
+    });
+  }
+  return { items, error: null };
+}
+
 app.post('/api/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  let body: { label?: unknown; targetAt?: unknown };
+  let body: unknown;
   try {
     body = await c.req.json();
   } catch {
     return jsonUtf8({ error: 'リクエストボディが不正です' }, 400);
   }
-  if (!isValidCountdownLabel(body.label)) {
-    return jsonUtf8({ error: 'ラベルは1〜100文字で指定してください' }, 400);
+  const parsed = parseCountdownRegistrationRequest(body);
+  if (parsed.error) {
+    return jsonUtf8({ error: parsed.error }, 400);
   }
-  if (!isValidCountdownTargetAt(body.targetAt)) {
-    return jsonUtf8({ error: '日時が不正です' }, 400);
-  }
-  const label = (body.label as string).trim();
-  const targetAt = new Date(body.targetAt as string).toISOString();
+  // 2件以上の一括登録の場合のみ、同じgroup_idを割り振る(単発登録には付与しない)。
+  const groupId = parsed.items.length > 1 ? crypto.randomUUID() : null;
   try {
-    const result = await c.env.DB.prepare(
-      'INSERT INTO countdown_events (user_id, label, target_at) VALUES (?, ?, ?)'
-    ).bind(user.sub, label, targetAt).run();
-    return jsonUtf8({ ok: true, id: result.meta.last_row_id, label, targetAt });
+    const statements = parsed.items.map((item) =>
+      c.env.DB!.prepare(
+        'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, ?)'
+      ).bind(user.sub, item.label, item.targetAt, groupId)
+    );
+    const results = statements.length === 1
+      ? [await statements[0].run()]
+      : await c.env.DB.batch(statements);
+    const events = results.map((result, i) => ({
+      id: result.meta.last_row_id,
+      label: parsed.items[i].label,
+      targetAt: parsed.items[i].targetAt,
+    }));
+    if (parsed.items.length === 1) {
+      return jsonUtf8({ ok: true, id: events[0].id, label: events[0].label, targetAt: events[0].targetAt });
+    }
+    return jsonUtf8({ ok: true, events, groupId });
   } catch (err) {
     logger.error('countdown insert failed', { error: err instanceof Error ? err.message : 'Unknown error' });
     return jsonUtf8({ error: '予定の登録に失敗しました' }, 500);

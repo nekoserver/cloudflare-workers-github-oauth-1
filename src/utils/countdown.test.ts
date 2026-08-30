@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { findNextCountdownEvent, formatCountdownRemaining, isValidCountdownLabel, isValidCountdownTargetAt, type CountdownEventRow } from './countdown';
+import {
+  computeCountdownGroupPosition,
+  findNextCountdownEvent,
+  formatCountdownRemaining,
+  isValidCountdownLabel,
+  isValidCountdownTargetAt,
+  type CountdownEventRow,
+  type CountdownGroupRow,
+} from './countdown';
 
 describe('isValidCountdownTargetAt', () => {
   it('ISO 8601形式の日時文字列を有効とする', () => {
@@ -92,5 +100,47 @@ describe('formatCountdownRemaining', () => {
   it('各要素を2桁ゼロ埋めする', () => {
     const ms = (1 * 3600 + 2 * 60 + 3) * 1000;
     expect(formatCountdownRemaining(ms)).toBe('01:02:03');
+  });
+});
+
+describe('computeCountdownGroupPosition', () => {
+  it('同じgroup_idを持つ複数件の中で、idの昇順で何番目/何件中かを返す', () => {
+    const rows: CountdownGroupRow[] = [
+      { id: 10, group_id: 'g1' },
+      { id: 11, group_id: 'g1' },
+      { id: 12, group_id: 'g1' },
+    ];
+    expect(computeCountdownGroupPosition(rows, 10)).toEqual({ index: 1, total: 3 });
+    expect(computeCountdownGroupPosition(rows, 11)).toEqual({ index: 2, total: 3 });
+    expect(computeCountdownGroupPosition(rows, 12)).toEqual({ index: 3, total: 3 });
+  });
+
+  it('group_idがnullの単発登録はnullを返す', () => {
+    const rows: CountdownGroupRow[] = [{ id: 1, group_id: null }];
+    expect(computeCountdownGroupPosition(rows, 1)).toBeNull();
+  });
+
+  it('同じgroup_idが自分しかいない(他が削除済み等)場合もnullを返す', () => {
+    const rows: CountdownGroupRow[] = [
+      { id: 1, group_id: 'g1' },
+      { id: 2, group_id: 'g2' },
+    ];
+    expect(computeCountdownGroupPosition(rows, 1)).toBeNull();
+  });
+
+  it('他グループが混在していても対象グループのみで数える', () => {
+    const rows: CountdownGroupRow[] = [
+      { id: 1, group_id: 'gA' },
+      { id: 2, group_id: 'gB' },
+      { id: 3, group_id: 'gA' },
+      { id: 4, group_id: 'gB' },
+    ];
+    expect(computeCountdownGroupPosition(rows, 2)).toEqual({ index: 1, total: 2 });
+    expect(computeCountdownGroupPosition(rows, 4)).toEqual({ index: 2, total: 2 });
+  });
+
+  it('対象idがrowsに存在しない場合はnullを返す', () => {
+    const rows: CountdownGroupRow[] = [{ id: 1, group_id: 'g1' }];
+    expect(computeCountdownGroupPosition(rows, 999)).toBeNull();
   });
 });
