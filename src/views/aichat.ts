@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 
@@ -50,6 +51,7 @@ export function getAiChatPage(user: {
   <style>
     ${getThemeCSS()}
     ${getThemeToggleCSS()}
+    ${getCountdownWidgetCSS()}
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -776,6 +778,7 @@ export function getAiChatPage(user: {
       <button class="search-hist-btn" id="ztTreeBtn" title="Zanzibar形式分類ツリー">ZT</button>
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
+      ${getCountdownWidgetHTML()}
       <div class="user-menu-container">
         <div class="user-icon" id="userIcon">${initials}</div>
         <div class="dropdown-menu" id="dropdownMenu">
@@ -1293,6 +1296,7 @@ export function getAiChatPage(user: {
 
   <script>
     ${getThemeToggleScript()}
+    ${getCountdownWidgetScript()}
 
     // ===== ドロップダウン =====
     var userIcon = document.getElementById('userIcon');
