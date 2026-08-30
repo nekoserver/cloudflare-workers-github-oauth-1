@@ -107,6 +107,7 @@ export function getCountdownPage(username: string): string {
     .cal-day.empty { cursor: default; }
     .cal-day.empty:hover { background: none; }
     .cal-day.today { border: 1px solid var(--accent-color, #667eea); font-weight: 700; }
+    .cal-day.selected { background: var(--accent-color, #667eea); color: #fff; font-weight: 700; }
     .cal-day.has-event::after {
       content: '';
       position: absolute;
@@ -167,6 +168,28 @@ export function getCountdownPage(username: string): string {
     .save-btn:hover:not(:disabled) { background: #5568d3; }
     .picker-error { font-size: 12px; color: #ef4444; margin-top: 8px; display: none; }
 
+    .event-list-filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .event-list-filter-clear-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--accent-color, #667eea);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .event-list-filter-clear-btn:hover { background: var(--card-bg); }
     .event-list { margin-top: 8px; }
     .event-row {
       display: flex;
@@ -244,6 +267,10 @@ export function getCountdownPage(username: string): string {
 
     <div class="card">
       <div class="title" style="font-size:16px;">登録済みの予定</div>
+      <div class="event-list-filter-bar" id="eventListFilterBar" style="display:none;">
+        <span id="eventListFilterLabel"></span>
+        <button type="button" class="event-list-filter-clear-btn" id="eventListFilterClearBtn">すべて表示</button>
+      </div>
       <div class="event-list" id="eventList">
         <div class="empty-hint">読み込み中…</div>
       </div>
@@ -278,11 +305,15 @@ export function getCountdownPage(username: string): string {
     var pickerSaveBtn = document.getElementById('pickerSaveBtn');
     var pickerError = document.getElementById('pickerError');
     var eventList = document.getElementById('eventList');
+    var eventListFilterBar = document.getElementById('eventListFilterBar');
+    var eventListFilterLabel = document.getElementById('eventListFilterLabel');
+    var eventListFilterClearBtn = document.getElementById('eventListFilterClearBtn');
 
     var today = new Date();
     var viewYear = today.getFullYear();
     var viewMonth = today.getMonth(); // 0-11
-    var selectedDateStr = null; // 'YYYY-MM-DD'
+    var selectedDateStr = null; // 'YYYY-MM-DD'(登録picker用)
+    var filterDateStr = null; // 'YYYY-MM-DD'(登録済みの予定一覧の絞り込み用)
     var events = [];
 
     var DOW = ['日', '月', '火', '水', '木', '金', '土'];
@@ -290,6 +321,25 @@ export function getCountdownPage(username: string): string {
 
     function pad2(n) { return String(n).padStart(2, '0'); }
     function dateKey(y, m, d) { return y + '-' + pad2(m + 1) + '-' + pad2(d); }
+
+    // カレンダーで選択した日付(dateKey形式)でイベント一覧を絞り込む純粋関数。
+    // dateStrがnullなら絞り込まず全件を返す(「すべて表示」状態)。
+    function filterEventsByDate(list, dateStr) {
+      if (!dateStr) return list;
+      return list.filter(function(ev) {
+        var at = new Date(ev.target_at);
+        if (isNaN(at.getTime())) return false;
+        return dateKey(at.getFullYear(), at.getMonth(), at.getDate()) === dateStr;
+      });
+    }
+
+    function setFilterDate(dateStr) {
+      filterDateStr = dateStr;
+      renderCalendar();
+      renderEventList();
+    }
+
+    eventListFilterClearBtn.addEventListener('click', function() { setFilterDate(null); });
 
     function eventDatesInMonth() {
       var set = {};
@@ -314,13 +364,16 @@ export function getCountdownPage(username: string): string {
       for (var day = 1; day <= daysInMonth; day++) {
         var key = dateKey(viewYear, viewMonth, day);
         var isToday = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
-        var cls = 'cal-day' + (isToday ? ' today' : '') + (hasEvent[key] ? ' has-event' : '');
+        var isSelected = key === filterDateStr;
+        var cls = 'cal-day' + (isToday ? ' today' : '') + (hasEvent[key] ? ' has-event' : '') + (isSelected ? ' selected' : '');
         cells.push('<div class="' + cls + '" data-date="' + key + '">' + day + '</div>');
       }
       calGrid.innerHTML = cells.join('');
       calGrid.querySelectorAll('.cal-day[data-date]').forEach(function(el) {
         el.addEventListener('click', function() {
-          openPicker(el.getAttribute('data-date'));
+          var dateStr = el.getAttribute('data-date');
+          openPicker(dateStr);
+          setFilterDate(dateStr);
         });
       });
     }
@@ -444,12 +497,23 @@ export function getCountdownPage(username: string): string {
 
     // ===== 登録済み予定一覧 =====
     function renderEventList() {
-      if (!events.length) {
-        eventList.innerHTML = '<div class="empty-hint">まだ予定が登録されていません</div>';
+      if (filterDateStr) {
+        var parts = filterDateStr.split('-');
+        eventListFilterLabel.textContent = parts[0] + '年' + Number(parts[1]) + '月' + Number(parts[2]) + '日の予定のみ表示中';
+        eventListFilterBar.style.display = 'flex';
+      } else {
+        eventListFilterBar.style.display = 'none';
+      }
+
+      var filteredEvents = filterEventsByDate(events, filterDateStr);
+      if (!filteredEvents.length) {
+        eventList.innerHTML = '<div class="empty-hint">'
+          + (filterDateStr ? 'この日に登録されている予定はありません' : 'まだ予定が登録されていません')
+          + '</div>';
         return;
       }
       var now = Date.now();
-      eventList.innerHTML = events.map(function(ev) {
+      eventList.innerHTML = filteredEvents.map(function(ev) {
         var at = new Date(ev.target_at);
         var isPast = at.getTime() < now;
         var label = String(ev.label).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

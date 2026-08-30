@@ -82,3 +82,26 @@ export function computeCountdownGroupPosition(
   const index = groupRows.findIndex((r) => r.id === targetId) + 1;
   return { index, total: groupRows.length };
 }
+
+/** Dateオブジェクトのローカル日付を'YYYY-MM-DD'形式にする(/countdownページのカレンダーと同じ書式)。 */
+function toLocalDateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * カレンダーで選択された日付(dateStr、'YYYY-MM-DD'形式のローカル日付)で
+ * イベント一覧を絞り込む。dateStrがnullなら絞り込まず全件を返す
+ * (「すべて表示」状態)。target_atがパース不能な行は一致しないものとして除外する。
+ */
+export function filterCountdownEventsByDate<T extends { target_at: string }>(
+  events: T[],
+  dateStr: string | null
+): T[] {
+  if (!dateStr) return events;
+  return events.filter((ev) => {
+    const at = new Date(ev.target_at);
+    if (Number.isNaN(at.getTime())) return false;
+    return toLocalDateKey(at) === dateStr;
+  });
+}
