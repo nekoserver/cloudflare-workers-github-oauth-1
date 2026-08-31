@@ -23,6 +23,17 @@
   ブラウザのdevtoolsを介さずJS側の文字列として結果を取得できる。
 - 巨大バイナリの初回ダウンロードに数秒〜数十秒かかることをUI上に明記しないと、
   「読み込みが終わらない、壊れているのでは」とユーザーが誤解しやすい。
+- **重要**: `@ruby/wasm-wasi` の `dist/esm/browser.js` は
+  `import { ... } from "@bjorn3/browser_wasi_shim"` のようなbare specifier
+  (パッケージ名のみのimport)を内部に含む。import mapを使わないブラウザの
+  素のESM importでは解決できず、`Module name, '@bjorn3/browser_wasi_shim'
+  does not resolve to a valid URL.` エラーで読み込みに失敗する
+  (実機で発生・確認済み)。npmパッケージをCDN経由でブラウザに直接
+  importする場合、そのファイルが依存パッケージへのbare specifierを
+  含んでいないか事前に確認すること。jsDelivrはURL末尾に`+esm`を付けると
+  bare specifierを含む依存関係を解決・バンドルした単一ESMファイルを
+  返してくれるため、`/ruby-wasm`ではこれを使って回避した
+  (例: `https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm`)。
 
 ## 索引への追記
 

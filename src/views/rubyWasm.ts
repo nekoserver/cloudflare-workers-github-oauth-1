@@ -8,7 +8,12 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 // パッケージ(@ruby/3.4-wasm-wasi)をjsDelivr CDN経由でブラウザから直接
 // 読み込む。他のwasm/*-wasmクレートのように自前Rust実装+public/wasm配下の
 // 静的配信ではない、この機能固有の構成であることに注意。
-const RUBY_WASM_JS_URL = 'https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
+// dist/esm/browser.js は"@bjorn3/browser_wasi_shim"のようなbare specifier
+// (パッケージ名のみのimport)を含んでおり、import mapを使わないブラウザの
+// 素のESM importでは "does not resolve to a valid URL" エラーになる。
+// jsDelivrのURL末尾に"+esm"を付けると、bare specifierを含む依存関係を
+// すべて解決・バンドルした単一ESMファイルを返してくれるため、そちらを使う。
+const RUBY_WASM_JS_URL = 'https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm';
 const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
 
 export function getRubyWasmPage(username: string): string {

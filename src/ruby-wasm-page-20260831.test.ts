@@ -14,12 +14,21 @@ import { getRubyWasmPage } from './views/rubyWasm';
 //   (3) ユーザー名がエスケープされずXSSにつながる
 //   (4) script type="module" 以外で dynamic import を使ってしまい構文エラーになる
 //   (5) Rubyコードの例外がユーザーに伝わらず、結果欄が空のまま握りつぶされる
+//   (6) dist/esm/browser.jsをそのまま読み込むと、内部のbare specifier
+//       (例: "@bjorn3/browser_wasi_shim")がブラウザの素のESM importでは
+//       解決できず「does not resolve to a valid URL」で読み込みに失敗する
+//       (2026-08-31に実機で発生・確認。jsDelivrの"+esm"サフィックスで解決)
 
 describe('Ruby WASMページ', () => {
   it('script内で公式CRuby WASMモジュールを動的importしている', () => {
     const html = getRubyWasmPage('tester');
-    expect(html).toContain("import('https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js')");
+    expect(html).toContain("import('https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm')");
     expect(html).toContain('https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
+  });
+
+  it('bare specifierを含む依存関係を解決するため"+esm"サフィックス付きURLを使う', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toMatch(/import\('https:\/\/cdn\.jsdelivr\.net\/npm\/@ruby\/wasm-wasi@[^']+\+esm'\)/);
   });
 
   it('script タグは type="module" である(dynamic importのため)', () => {
