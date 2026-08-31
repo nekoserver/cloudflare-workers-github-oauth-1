@@ -47,6 +47,7 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -10628,6 +10629,48 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
+
+app.get('/kimi-code', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getKimiCodePage(user.sub));
+});
+
+/**
+ * kimi-k2.7-codeへのプロンプト送信 API。account ID/APIトークンは使わず、
+ * Worker既存のAIバインディング(env.AI)経由で呼び出す(認証情報の管理コスト
+ * ゼロ・クライアント側への漏洩リスクもゼロにするため)。
+ */
+app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
+  const prompt = (body?.prompt ?? '').trim().slice(0, 8000);
+  if (!prompt) return jsonUtf8({ error: 'prompt は必須です' }, 400);
+  const systemPrompt = (body?.systemPrompt ?? '').trim().slice(0, 2000);
+  const messages: { role: string; content: string }[] = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  try {
+    const result = await c.env.AI.run(
+      KIMI_CODE_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+    const code = typeof resultObj.response === 'string' ? resultObj.response : '';
+    if (!code) {
+      logger.warn('[kimi-code] 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
+    }
+    return jsonUtf8({ code, model: KIMI_CODE_MODEL });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + message }, 500);
+  }
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
