@@ -9927,12 +9927,14 @@ app.get('/factor-wasm', authMiddleware, async (c) => {
 app.get('/ruby-wasm', authMiddleware, async (c) => {
   const user = c.get('user');
   // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
-  // このページのみ公式CRuby WASMビルドをjsDelivr CDNから取得するため、
-  // script-src/connect-srcにcdn.jsdelivr.netを追加する
+  // このページはRubyバイナリ本体(ruby+stdlib.wasm)をjsDelivr CDNから、
+  // bare specifierを解決済みURLへ書き換えてくれるesm.sh経由でJSグルー
+  // コード(@ruby/wasm-wasi)を取得するため、script-src/connect-srcに
+  // 両ドメインを追加する
   // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getRubyWasmPage(user.sub));
 });

@@ -23,6 +23,27 @@
   ブラウザのdevtoolsを介さずJS側の文字列として結果を取得できる。
 - 巨大バイナリの初回ダウンロードに数秒〜数十秒かかることをUI上に明記しないと、
   「読み込みが終わらない、壊れているのでは」とユーザーが誤解しやすい。
+- **重要**: `@ruby/wasm-wasi` の `dist/esm/browser.js` は
+  `import { ... } from "@bjorn3/browser_wasi_shim"` のようなbare specifier
+  (パッケージ名のみのimport)を内部に含む。import mapを使わないブラウザの
+  素のESM importでは解決できず、`Module name, '@bjorn3/browser_wasi_shim'
+  does not resolve to a valid URL.` エラーで読み込みに失敗する
+  (実機で発生・確認済み)。npmパッケージをCDN経由でブラウザに直接
+  importする場合、そのファイルが依存パッケージへのbare specifierを
+  含んでいないか事前に確認すること。
+- **jsDelivrの`+esm`はパッケージ直下URL専用、任意のサブパスには効かない**:
+  `https://cdn.jsdelivr.net/npm/<pkg>@<version>+esm` は依存解決済みバンドルを
+  返すが、`https://cdn.jsdelivr.net/npm/<pkg>@<version>/dist/esm/foo.js+esm`
+  のように任意のサブパスへ付けても効かず、生ファイルがそのまま返ってくる
+  (実機で修正後も同じエラーが再現し判明)。エントリポイント以外の特定
+  ファイルをbare specifier解決込みで取得したい場合は使えない。
+- 代わりに**esm.sh**(`https://esm.sh/<pkg>@<version>/<subpath>`)を使うと、
+  任意のサブパスに対してもファイル内のbare specifierを解決済みURLへ自動的に
+  書き換えてくれるため、`/ruby-wasm`ではesm.sh経由でJSグルーコードを読み込む
+  方式に切り替えて解決した。CSPの`script-src`/`connect-src`に
+  `https://esm.sh` の追加も忘れないこと。バイナリ本体(`.wasm`)自体は
+  ESM importではなく単純な`fetch()`なのでbare specifier問題は無関係であり、
+  引き続きjsDelivrから取得している。
 
 ## 索引への追記
 
