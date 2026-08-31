@@ -79,26 +79,27 @@ export function getCountdownPage(username: string): string {
     .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
     .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
 
-    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cal-wrap { max-width: 320px; margin: 0 auto; }
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .cal-nav-btn {
       background: var(--bg-secondary);
       border: 1px solid var(--border-color);
       color: var(--text-primary);
       border-radius: 8px;
-      padding: 6px 12px;
+      padding: 4px 10px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 12px;
     }
-    .cal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .cal-dow { text-align: center; font-size: 12px; color: var(--text-muted); padding: 4px 0; }
+    .cal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-dow { text-align: center; font-size: 11px; color: var(--text-muted); padding: 2px 0; }
     .cal-day {
       aspect-ratio: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 8px;
-      font-size: 13px;
+      border-radius: 6px;
+      font-size: 11px;
       color: var(--text-secondary);
       cursor: pointer;
       position: relative;
@@ -248,13 +249,15 @@ export function getCountdownPage(username: string): string {
       <div class="title">カウントダウン</div>
       <div class="subtitle">カレンダーの日付をタップして予定日時を登録すると、ログイン中は画面右下に常に残り時間が表示されます。</div>
 
-      <div class="cal-header">
-        <button type="button" class="cal-nav-btn" id="calPrevBtn">← 前月</button>
-        <div class="cal-title" id="calTitle"></div>
-        <button type="button" class="cal-nav-btn" id="calNextBtn">次月 →</button>
+      <div class="cal-wrap">
+        <div class="cal-header">
+          <button type="button" class="cal-nav-btn" id="calPrevBtn">← 前月</button>
+          <div class="cal-title" id="calTitle"></div>
+          <button type="button" class="cal-nav-btn" id="calNextBtn">次月 →</button>
+        </div>
+        <div class="cal-grid" id="calDowRow"></div>
+        <div class="cal-grid" id="calGrid"></div>
       </div>
-      <div class="cal-grid" id="calDowRow"></div>
-      <div class="cal-grid" id="calGrid"></div>
 
       <div class="picker-panel" id="pickerPanel">
         <div class="picker-date-label" id="pickerDateLabel"></div>
