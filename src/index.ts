@@ -62,6 +62,7 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getCountdownPage } from './views/countdown';
 import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
@@ -9921,6 +9922,19 @@ app.get('/factor-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getFactorWasmPage(user.sub));
+});
+
+app.get('/ruby-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
+  // このページのみ公式CRuby WASMビルドをjsDelivr CDNから取得するため、
+  // script-src/connect-srcにcdn.jsdelivr.netを追加する
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getRubyWasmPage(user.sub));
 });
 
 app.get('/wasm-modules', authMiddleware, async (c) => {
