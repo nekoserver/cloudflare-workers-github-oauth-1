@@ -30,10 +30,20 @@
   does not resolve to a valid URL.` エラーで読み込みに失敗する
   (実機で発生・確認済み)。npmパッケージをCDN経由でブラウザに直接
   importする場合、そのファイルが依存パッケージへのbare specifierを
-  含んでいないか事前に確認すること。jsDelivrはURL末尾に`+esm`を付けると
-  bare specifierを含む依存関係を解決・バンドルした単一ESMファイルを
-  返してくれるため、`/ruby-wasm`ではこれを使って回避した
-  (例: `https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm`)。
+  含んでいないか事前に確認すること。
+- **jsDelivrの`+esm`はパッケージ直下URL専用、任意のサブパスには効かない**:
+  `https://cdn.jsdelivr.net/npm/<pkg>@<version>+esm` は依存解決済みバンドルを
+  返すが、`https://cdn.jsdelivr.net/npm/<pkg>@<version>/dist/esm/foo.js+esm`
+  のように任意のサブパスへ付けても効かず、生ファイルがそのまま返ってくる
+  (実機で修正後も同じエラーが再現し判明)。エントリポイント以外の特定
+  ファイルをbare specifier解決込みで取得したい場合は使えない。
+- 代わりに**esm.sh**(`https://esm.sh/<pkg>@<version>/<subpath>`)を使うと、
+  任意のサブパスに対してもファイル内のbare specifierを解決済みURLへ自動的に
+  書き換えてくれるため、`/ruby-wasm`ではesm.sh経由でJSグルーコードを読み込む
+  方式に切り替えて解決した。CSPの`script-src`/`connect-src`に
+  `https://esm.sh` の追加も忘れないこと。バイナリ本体(`.wasm`)自体は
+  ESM importではなく単純な`fetch()`なのでbare specifier問題は無関係であり、
+  引き続きjsDelivrから取得している。
 
 ## 索引への追記
 

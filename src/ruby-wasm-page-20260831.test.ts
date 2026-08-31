@@ -17,18 +17,21 @@ import { getRubyWasmPage } from './views/rubyWasm';
 //   (6) dist/esm/browser.jsをそのまま読み込むと、内部のbare specifier
 //       (例: "@bjorn3/browser_wasi_shim")がブラウザの素のESM importでは
 //       解決できず「does not resolve to a valid URL」で読み込みに失敗する
-//       (2026-08-31に実機で発生・確認。jsDelivrの"+esm"サフィックスで解決)
+//       (2026-08-31に実機で発生・確認)。jsDelivrの"+esm"サフィックスは
+//       任意のサブパスには効かず(実機で再発を確認)、esm.sh(bare specifier
+//       を解決済みURLへ自動的に書き換えるCDN)への切り替えで解決した
 
 describe('Ruby WASMページ', () => {
   it('script内で公式CRuby WASMモジュールを動的importしている', () => {
     const html = getRubyWasmPage('tester');
-    expect(html).toContain("import('https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm')");
+    expect(html).toContain("import('https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js')");
     expect(html).toContain('https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
   });
 
-  it('bare specifierを含む依存関係を解決するため"+esm"サフィックス付きURLを使う', () => {
+  it('bare specifierを解決できるesm.sh経由でJSグルーコードを読み込む(jsDelivr直接importは使わない)', () => {
     const html = getRubyWasmPage('tester');
-    expect(html).toMatch(/import\('https:\/\/cdn\.jsdelivr\.net\/npm\/@ruby\/wasm-wasi@[^']+\+esm'\)/);
+    expect(html).toMatch(/import\('https:\/\/esm\.sh\/@ruby\/wasm-wasi@[^']+'\)/);
+    expect(html).not.toContain("import('https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi");
   });
 
   it('script タグは type="module" である(dynamic importのため)', () => {

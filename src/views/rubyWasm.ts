@@ -11,9 +11,12 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 // dist/esm/browser.js は"@bjorn3/browser_wasi_shim"のようなbare specifier
 // (パッケージ名のみのimport)を含んでおり、import mapを使わないブラウザの
 // 素のESM importでは "does not resolve to a valid URL" エラーになる。
-// jsDelivrのURL末尾に"+esm"を付けると、bare specifierを含む依存関係を
-// すべて解決・バンドルした単一ESMファイルを返してくれるため、そちらを使う。
-const RUBY_WASM_JS_URL = 'https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js+esm';
+// jsDelivrの"+esm"サフィックスはパッケージ直下(例: pkg@version+esm)では
+// 依存解決済みバンドルを返すが、dist/esm/browser.jsのような任意の
+// サブパスに付けても効かず生ファイルがそのまま返ってくることを実機で確認した
+// (2026-08-31、修正後も同じエラーが再現)。そのためesm.sh
+// (bare specifierを解決済みURLへ自動的に書き換えてくれるCDN)に切り替える。
+const RUBY_WASM_JS_URL = 'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
 const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
 
 export function getRubyWasmPage(username: string): string {
