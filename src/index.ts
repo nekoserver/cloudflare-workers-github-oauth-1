@@ -10660,7 +10660,23 @@ app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
       { messages } as Parameters<typeof c.env.AI.run>[1]
     );
     const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
-    const code = typeof resultObj.response === 'string' ? resultObj.response : '';
+    // kimi-k2.7-codeのようなチャット補完形式のモデルは、単純なチャットモデルが
+    // 使う .response ではなく choices[0].message.content でテキストを返す
+    // ことがある(実際にこの形式のためgetOrComputeKeywordEmbedding等が使う
+    // .response前提の実装では常に「空の応答」502になってしまう不具合があった)。
+    // 両方の形式に対応する。
+    let code = typeof resultObj.response === 'string' ? resultObj.response : '';
+    if (!code) {
+      const choices = Array.isArray(resultObj.choices) ? resultObj.choices as unknown[] : [];
+      const first = choices[0];
+      if (first && typeof first === 'object') {
+        const message = (first as Record<string, unknown>).message;
+        if (message && typeof message === 'object') {
+          const content = (message as Record<string, unknown>).content;
+          if (typeof content === 'string') code = content;
+        }
+      }
+    }
     if (!code) {
       logger.warn('[kimi-code] 空の応答', { userId: user.sub });
       return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);

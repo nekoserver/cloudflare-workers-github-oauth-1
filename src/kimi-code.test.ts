@@ -120,6 +120,21 @@ describe('POST /api/kimi-code/generate', () => {
     expect(ai.run).not.toHaveBeenCalled();
   });
 
+  it('AIの応答が.responseではなく.choices[0].message.content形式(チャット補完形式)の場合もcodeとして取得する', async () => {
+    const ai = { run: vi.fn().mockResolvedValue({ choices: [{ message: { content: 'def add(a, b): return a + b' } }] }) };
+    const auth = await makeAuthHeader();
+
+    const res = await app.request('/api/kimi-code/generate', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'add two numbers' }),
+    }, makeEnv(ai));
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { code: string };
+    expect(data.code).toBe('def add(a, b): return a + b');
+  });
+
   it('AIバインディング未設定の場合は503を返す', async () => {
     const auth = await makeAuthHeader();
 
