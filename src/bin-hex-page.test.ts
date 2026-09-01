@@ -30,6 +30,13 @@ describe('getBinHexPage: HTML構造', () => {
     expect(html).toContain('id="btnClear"');
   });
 
+  it('文字(UTF-8)用のテキストエリアと変換ボタンが存在する', () => {
+    expect(html).toContain('id="utfText"');
+    expect(html).toContain('id="btnUtfToHex"');
+    expect(html).toContain('id="btnHexToUtf"');
+    expect(html).toContain('id="btnSwapUtf"');
+  });
+
   it('usernameのHTML特殊文字をエスケープする(XSS対策)', () => {
     const xssHtml = getBinHexPage('<script>alert(1)</script>');
     expect(xssHtml).not.toContain('<script>alert(1)</script>');
@@ -123,6 +130,71 @@ describe('getBinHexPage: binToHex/hexToBin のロジック', () => {
   it('空文字を渡すと例外を投げる', () => {
     const binToHex = loadFn('binToHex');
     expect(() => binToHex('   ')).toThrow();
+  });
+});
+
+describe('getBinHexPage: utfToHex/hexToUtf のロジック(文字⇔UTF-8バイト列の16進数)', () => {
+  const html = getBinHexPage('tester');
+
+  function loadFn(name: string, opts: { upperCase?: boolean; withPrefix?: boolean } = {}) {
+    const src = extractFunctionSource(html, name);
+    expect(src, name + ' が生成HTMLから見つからない').toBeTruthy();
+    const fn = new Function(
+      'upperCase', 'withPrefix', 'TextEncoder', 'TextDecoder',
+      `${src}\nreturn ${name};`
+    );
+    return fn(
+      { checked: opts.upperCase ?? true },
+      { checked: opts.withPrefix ?? false },
+      globalThis.TextEncoder,
+      globalThis.TextDecoder,
+    );
+  }
+
+  it('ASCII文字列をUTF-8バイト列の16進数に変換する', () => {
+    const utfToHex = loadFn('utfToHex');
+    expect(utfToHex('AB')).toBe('41 42');
+  });
+
+  it('日本語(マルチバイトUTF-8)を往復変換できる(hexToUtf(utfToHex(x)) === x)', () => {
+    const utfToHex = loadFn('utfToHex');
+    const hexToUtf = loadFn('hexToUtf');
+    const original = 'こんにちは、世界！🎉';
+    const hex = utfToHex(original);
+    expect(hexToUtf(hex)).toBe(original);
+  });
+
+  it('16進数をUTF-8の文字列にデコードする(区切りなし・プレフィックス付きも許容)', () => {
+    const hexToUtf = loadFn('hexToUtf');
+    expect(hexToUtf('4142')).toBe('AB');
+    expect(hexToUtf('0x41 0x42')).toBe('AB');
+  });
+
+  it('大文字小文字オプションがOFFの場合、小文字の16進数を返す', () => {
+    const utfToHex = loadFn('utfToHex', { upperCase: false });
+    expect(utfToHex('Z')).toBe('5a');
+  });
+
+  it('プレフィックス付与オプションがONの場合、バイトごとに0xを付ける', () => {
+    const utfToHex = loadFn('utfToHex', { withPrefix: true });
+    expect(utfToHex('AB')).toBe('0x41 0x42');
+  });
+
+  it('空文字を渡すと例外を投げる', () => {
+    const utfToHex = loadFn('utfToHex');
+    expect(() => utfToHex('')).toThrow();
+    const hexToUtf = loadFn('hexToUtf');
+    expect(() => hexToUtf('   ')).toThrow();
+  });
+
+  it('16進数の桁数が奇数の場合は例外を投げる(UTF-8の1バイトは2桁)', () => {
+    const hexToUtf = loadFn('hexToUtf');
+    expect(() => hexToUtf('414')).toThrow();
+  });
+
+  it('不正な16進数文字を渡すと例外を投げる', () => {
+    const hexToUtf = loadFn('hexToUtf');
+    expect(() => hexToUtf('ZZ')).toThrow();
   });
 });
 
