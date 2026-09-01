@@ -47,6 +47,7 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getBinHexPage } from './views/binHex';
 import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -10798,6 +10799,11 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/bin-hex', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getBinHexPage(user.sub));
 });
 
 export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
