@@ -81,7 +81,12 @@ describe('searchKimiGemmaReviews', () => {
     const { results } = await searchKimiGemmaReviews(wrapD1(db), 'user1', 'フィボナッチ');
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe('r1');
-    expect(results[0].answer).toBe('問題ありません');
+    // answerには質問への本来の回答(生成コードそのもの)を割り当てる。
+    // レビュー結果をanswerに割り当てると「回答=別モデルのレビュー文」に
+    // なってしまい、生成コードがどこにも表示されなくなる不具合の再発防止
+    expect(results[0].answer).toBe('function fib(n) {}');
+    expect(results[0].review_note.text).toBe('問題ありません');
+    expect(results[0].review_note.label).toContain('@cf/google/gemma-4-26b-a4b-it');
   });
 
   it('kimi_code(生成コード本文)のキーワードでもヒットする', async () => {
@@ -114,26 +119,36 @@ describe('searchKimiGemmaReviews', () => {
 });
 
 describe('getAichatShareDetail(target=kimi-gemma)', () => {
-  it('kimi_gemma_reviewsから1件をAichatShareDetail互換の形で返す', async () => {
-    const db = setupDb();
-    insertReview(db, { id: 'r1', kimiPrompt: '質問', kimiCode: 'c', gemmaResponse: '回答本文' });
-    const detail = await getAichatShareDetail(wrapD1(db) as never, 'user1', 'r1', 'kimi-gemma');
-    expect(detail).not.toBeNull();
-    expect(detail?.question).toBe('質問');
-    expect(detail?.model).toBe('@cf/google/gemma-4-26b-a4b-it');
-    // 生成コード(kimi_code)がgemma_responseだけを返す実装だと二度と参照できなく
-    // なっていた不具合の再発防止: answerには生成コード本文とレビュー結果の
-    // 両方が含まれていること
-    expect(detail?.answer).toContain('c');
-    expect(detail?.answer).toContain('回答本文');
-  });
-
-  it('kimi_code(生成コード本文)がgemma_responseと共にanswerに含まれる', async () => {
+  it('kimi_gemma_reviewsから1件をAichatShareDetail互換の形で返す(answer=生成コード, review_note=レビュー)', async () => {
     const db = setupDb();
     insertReview(db, { id: 'r1', kimiPrompt: '質問', kimiCode: 'function uniqueMarkerCode() { return 42; }', gemmaResponse: 'ユニークなレビューコメント' });
     const detail = await getAichatShareDetail(wrapD1(db) as never, 'user1', 'r1', 'kimi-gemma');
-    expect(detail?.answer).toContain('function uniqueMarkerCode() { return 42; }');
-    expect(detail?.answer).toContain('ユニークなレビューコメント');
+    expect(detail).not.toBeNull();
+    expect(detail?.question).toBe('質問');
+    // 質問(kimi_prompt)への本来の回答は生成コード(kimi_code)そのもの。
+    // gemma_responseはanswerに混ぜず、質問/回答とは別の関係(回答へのレビュー)
+    // であることが分かるようreview_noteという別フィールドに分離する
+    expect(detail?.answer).toBe('function uniqueMarkerCode() { return 42; }');
+    expect(detail?.review_note).not.toBeNull();
+    expect(detail?.review_note?.text).toBe('ユニークなレビューコメント');
+    expect(detail?.review_note?.label).toContain('@cf/google/gemma-4-26b-a4b-it');
+  });
+
+  it('target=llama-4(通常の質問/回答)ではreview_noteはnullになる', async () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE ai_chat_shares (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_hash TEXT NOT NULL DEFAULT 'h',
+        question TEXT NOT NULL, answer TEXT NOT NULL, model TEXT NOT NULL DEFAULT 'model-x',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), access_count INTEGER NOT NULL DEFAULT 0,
+        question_hash TEXT, deleted_at TEXT, image_data_url TEXT, image_id TEXT,
+        input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER
+      );
+      CREATE TABLE aichat_images (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content_hash TEXT NOT NULL, image_data_url TEXT NOT NULL, byte_length INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO ai_chat_shares (id, user_id, question, answer) VALUES ('s1', 'user1', 'q', 'a');
+    `);
+    const detail = await getAichatShareDetail(wrapD1(db) as never, 'user1', 's1', 'llama-4');
+    expect(detail?.review_note).toBeNull();
   });
 
   it('他ユーザーのidでは取得できない', async () => {

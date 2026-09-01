@@ -4814,11 +4814,19 @@ export async function searchKimiGemmaReviews(
   q: string,
 ): Promise<{ results: Array<{
   id: string; question: string; answer: string; model: string; created_at: string;
+  review_note: { label: string; text: string };
 }> }> {
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT id, kimi_prompt AS question, gemma_response AS answer, gemma_model AS model, created_at
+      // answerには質問(kimi_prompt)に対する本来の回答であるkimi_code(生成コード)を
+      // 割り当てる。gemma_response(生成コードへの外部レビュー)をanswerに
+      // 割り当てると、通常の質問/回答バブルの並びでは「回答=別モデルによる
+      // レビュー文」になってしまい、実際に生成されたコードそのものがどの画面
+      // にも表示されなくなる(=質問と回答の対応関係が崩れる)ため、レビューは
+      // review_noteとして別フィールドに分離する。
+      `SELECT id, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model, created_at,
+              gemma_model, gemma_response
        FROM kimi_gemma_reviews
        WHERE user_id = ?
          AND (
@@ -4829,8 +4837,12 @@ export async function searchKimiGemmaReviews(
        ORDER BY created_at DESC LIMIT 30`
     )
     .bind(userId, normalized, normalized, normalized)
-    .all<{ id: string; question: string; answer: string; model: string; created_at: string }>();
-  return { results: rows.results ?? [] };
+    .all<{ id: string; question: string; answer: string; model: string; created_at: string; gemma_model: string; gemma_response: string }>();
+  const results = (rows.results ?? []).map((r) => {
+    const { gemma_model, gemma_response, ...rest } = r;
+    return { ...rest, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
+  });
+  return { results };
 }
 
 export interface AichatShareDetail {
@@ -4838,6 +4850,14 @@ export interface AichatShareDetail {
   model: string; created_at: string; access_count: number; question_hash: string | null;
   input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
   image_data_url: string | null;
+  /**
+   * kimi-gemma専用: answer(kimi-k2.7-codeが生成したコードそのもの)に対して、
+   * 別モデル(gemma-4-26b-a4b-it)がレビューした結果。question→answerの
+   * 1問1答とは別の「回答への外部レビュー」という副次的な関係のため、
+   * answerへ文字列結合せず専用フィールドとして分離する(応答バブルとは
+   * 別の注釈カードとして描画することを想定)。target='kimi-gemma'以外はnull。
+   */
+  review_note: { label: string; text: string } | null;
 }
 
 /**
@@ -4862,26 +4882,25 @@ export async function getAichatShareDetail(
   target: string,
 ): Promise<AichatShareDetail | null> {
   if (target === 'kimi-gemma') {
-    // gemma_response(レビュー結果)だけをanswerに入れると、レビュー対象だった
-    // kimi_code(kimi-k2.7-codeが生成したコード本文)がこのAPI経由では
-    // 二度と参照できなくなる(保存はkimi_gemma_reviews.kimi_codeにされているが、
-    // どの画面からも読み出されないまま埋もれてしまっていた不具合)。
-    // 生成コードとレビュー結果を1つのMarkdown本文にまとめて返し、
-    // 応答バブルモーダルでコードブロック+レビューとして表示されるようにする。
+    // 質問(kimi_prompt)→回答(kimi_code)は通常のコード生成のQ&Aとして
+    // そのまま表示し、gemma_response(生成コードに対する外部レビュー)は
+    // 文字列結合でanswerに混ぜ込まず、review_noteという別フィールドで返す。
+    // 「回答自体」と「回答に対する別モデルの注釈」を画面側でも別要素として
+    // 描画できるようにするため(1問1答の型に無理に押し込めない)。
     const row = await db
       .prepare(
-        `SELECT id, id AS user_hash, kimi_prompt AS question,
-                ('生成されたコード:' || char(10) || char(10) || '\`\`\`' || char(10) || kimi_code || char(10) || '\`\`\`' || char(10) || char(10)
-                  || 'Gemma(' || gemma_model || ')のレビュー結果:' || char(10) || char(10) || gemma_response) AS answer,
-                gemma_model AS model,
+        `SELECT id, id AS user_hash, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model,
+                gemma_model, gemma_response,
                 created_at, 0 AS access_count, NULL AS question_hash,
                 NULL AS input_tokens, NULL AS output_tokens, NULL AS total_tokens, NULL AS image_data_url
          FROM kimi_gemma_reviews
          WHERE id = ? AND user_id = ?`
       )
       .bind(id, userId)
-      .first<AichatShareDetail>();
-    return row ?? null;
+      .first<AichatShareDetail & { gemma_model: string; gemma_response: string }>();
+    if (!row) return null;
+    const { gemma_model, gemma_response, ...detail } = row;
+    return { ...detail, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
   }
   if (target === 'moondream3.1') {
     const row = await db
@@ -4896,7 +4915,7 @@ export async function getAichatShareDetail(
       )
       .bind(id, userId)
       .first<AichatShareDetail>();
-    return row ?? null;
+    return row ? { ...row, review_note: null } : null;
   }
   const row = await db
     .prepare(
@@ -4909,7 +4928,7 @@ export async function getAichatShareDetail(
     )
     .bind(id, userId)
     .first<AichatShareDetail>();
-  return row ?? null;
+  return row ? { ...row, review_note: null } : null;
 }
 
 /** /api/aichat/image-branches が返す1件分の型。llama-4はquestion/answer、moondream3.1はanalysis_textのみ埋める */
@@ -5322,7 +5341,11 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   // (加えてEXISTS句でmoondream分析結果もヒット判定には含む)を検索する。
   const target = (c.req.query('target') ?? '').trim();
   const db = c.env.DB as unknown as D1Like;
-  const { results } = target === 'moondream3.1'
+  // 検索対象ごとに戻り値の付随フィールド(user_hash/image_data_url/review_note等)が
+  // 異なるため、enrichSearchResultsWithKeywordCounts等の共通後処理へ渡す前に
+  // idを持つ緩い共通型へ揃える(TSがunion配列をそのままジェネリック推論できないため)。
+  type AichatSearchResultItem = { id: string; [key: string]: unknown };
+  const { results }: { results: AichatSearchResultItem[] } = target === 'moondream3.1'
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
     : target === 'kimi-gemma'
     ? await searchKimiGemmaReviews(db, user.sub, q)
