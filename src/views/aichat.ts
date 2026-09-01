@@ -622,6 +622,17 @@ export function getAiChatPage(user: {
       align-self: flex-end;
       border-bottom-left-radius: 12px; border-bottom-right-radius: 3px;
     }
+    /* kimi-gemma専用: 回答バブル(生成コード)に対する外部レビューの注釈カード。
+       「回答そのもの」と混同されないよう、通常の吹き出しとは別要素・別配色で
+       表示する(質問→回答→回答へのレビュー、という2段構造を視覚的に示す)。 */
+    .review-note-card {
+      align-self: flex-end; max-width: 88%; margin-top: -6px;
+      background: var(--bg-secondary); border: 1px dashed var(--border-color); border-radius: 8px;
+      padding: 8px 12px; font-size: 12px;
+    }
+    .review-note-card .review-note-label {
+      font-weight: 700; font-size: 11px; color: var(--accent-color, #667eea); margin-bottom: 4px;
+    }
     .history-modal-foot {
       flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
       background: var(--card-bg); display: flex; align-items: center; justify-content: space-between;
@@ -939,6 +950,10 @@ export function getAiChatPage(user: {
       <div class="results-panel-col">
         <div class="results-col-label">回答</div>
         <div class="results-col-text preview-area" id="resultsPanelA"></div>
+      </div>
+      <div class="results-panel-col" id="resultsPanelReviewCol" style="display:none;">
+        <div class="results-col-label" id="resultsPanelReviewLabel"></div>
+        <div class="results-col-text preview-area" id="resultsPanelReview"></div>
       </div>
     </div>
     <div class="results-panel-footer">
@@ -2648,6 +2663,9 @@ export function getAiChatPage(user: {
     var resultsPanel = document.getElementById('resultsPanel');
     var resultsPanelQ = document.getElementById('resultsPanelQ');
     var resultsPanelA = document.getElementById('resultsPanelA');
+    var resultsPanelReviewCol = document.getElementById('resultsPanelReviewCol');
+    var resultsPanelReviewLabel = document.getElementById('resultsPanelReviewLabel');
+    var resultsPanelReview = document.getElementById('resultsPanelReview');
     var resultsPanelMeta = document.getElementById('resultsPanelMeta');
     var resultsPanelShareLink = document.getElementById('resultsPanelShareLink');
     var resultsPanelClose = document.getElementById('resultsPanelClose');
@@ -2847,6 +2865,23 @@ export function getAiChatPage(user: {
       historyModalChat.appendChild(el);
     }
 
+    // kimi-gemma専用: 回答(生成コード)バブルの下に、外部レビュー結果を
+    // 別要素の注釈カードとして追加する。r.review_noteが無ければ何もしない。
+    function appendReviewNoteCard(reviewNote) {
+      if (!reviewNote || !reviewNote.text) return;
+      var card = document.createElement('div');
+      card.className = 'review-note-card';
+      var label = document.createElement('div');
+      label.className = 'review-note-label';
+      label.textContent = '🔍 ' + reviewNote.label;
+      var body = document.createElement('div');
+      body.className = 'preview-area';
+      body.innerHTML = parseMd(truncateForHistoryPreview(reviewNote.text));
+      card.appendChild(label);
+      card.appendChild(body);
+      historyModalChat.appendChild(card);
+    }
+
     // ===== キーワードハイライト(画像添付会話プレビュー等と共通) =====
     ${getKeywordHighlightScript()}
 
@@ -2972,6 +3007,14 @@ export function getAiChatPage(user: {
       }
       resultsPanelQ.appendChild(document.createTextNode(r.question));
       resultsPanelA.innerHTML = parseMd(truncateForHistoryPreview(r.answer));
+      if (r.review_note && r.review_note.text) {
+        resultsPanelReviewLabel.textContent = '🔍 ' + r.review_note.label;
+        resultsPanelReview.innerHTML = parseMd(truncateForHistoryPreview(r.review_note.text));
+        resultsPanelReviewCol.style.display = '';
+      } else {
+        resultsPanelReviewCol.style.display = 'none';
+        resultsPanelReview.innerHTML = '';
+      }
       if (keyword) {
         applyKeywordHighlight(resultsPanelQ, keyword);
         applyKeywordHighlight(resultsPanelA, keyword);
@@ -3057,6 +3100,7 @@ export function getAiChatPage(user: {
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user', r.image_data_url);
       appendHistoryModalBubble(r.answer, 'assistant');
+      appendReviewNoteCard(r.review_note);
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       updateHighlightToggleBtn();
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
