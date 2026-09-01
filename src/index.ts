@@ -268,7 +268,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
   { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
   { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
-  { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる', syncPolicy: 'auto' },
+  { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる。gemma_input_tokens/gemma_output_tokens/gemma_total_tokens(0119)にレビュー呼び出し自体のトークン数を記録する', syncPolicy: 'auto' },
+  { name: 'kimi_code_generate_log', migration: '0118', description: '/kimi-codeページでkimi-k2.7-code(従量課金モデル)にコード生成を依頼した1リクエストごとのトークン数(input/output/total)ログ。POST /api/kimi-code/generateの呼び出しのたびに記録し、/api/kimi-code/token-usageで集計する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1643,6 +1644,19 @@ CREATE INDEX IF NOT EXISTS idx_countdown_events_user_target ON countdown_events(
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_kimi_gemma_reviews_user_created ON kimi_gemma_reviews(user_id, created_at);`,
+  '0118': `CREATE TABLE IF NOT EXISTS kimi_code_generate_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_code_generate_log_user_created ON kimi_code_generate_log(user_id, created_at);`,
+  '0119': `ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_input_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_output_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_total_tokens INTEGER;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1879,6 +1893,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
   countdown_events: { id: 'pk', user_id: 'idx' },
   kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
+  kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1997,6 +2012,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_journey_waypoint_sets: 'system',
   countdown_events: 'system',
   kimi_gemma_reviews: 'ai',
+  kimi_code_generate_log: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2105,6 +2121,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_keyword_labels: { user_id: 'user_sessions' },
   countdown_events: { user_id: 'user_sessions' },
   kimi_gemma_reviews: { user_id: 'user_sessions' },
+  kimi_code_generate_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -4843,6 +4860,47 @@ export async function searchKimiGemmaReviews(
     return { ...rest, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
   });
   return { results };
+}
+
+/**
+ * /kimi-codeページ用のトークン利用量集計。kimi-k2.7-code(従量課金モデル)は
+ * コード生成の時点(kimi_code_generate_log)で、gemma-4-26b-a4b-itはレビュー
+ * 呼び出しの時点(kimi_gemma_reviews.gemma_*_tokens)でそれぞれ記録している
+ * ため、2つのテーブルをUNION ALLしてperiod(月 or 日)・モデル別に合算する。
+ * トークン数が記録されていない行(NULL。呼び出し失敗時やこの機能追加前の
+ * 既存データ)は合算対象から除外する。
+ */
+export async function getKimiCodeTokenUsage(
+  db: D1Like,
+  userId: string,
+  since: string,
+  granularity: 'day' | 'month' = 'month',
+): Promise<{ rows: Array<{
+  period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number;
+}> }> {
+  const periodFormat = granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
+  const rows = await db
+    .prepare(
+      `SELECT period, model,
+              SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(total_tokens) AS total_tokens,
+              COUNT(*) AS request_count
+       FROM (
+         SELECT strftime('${periodFormat}', created_at) AS period, model,
+                input_tokens, output_tokens, total_tokens
+         FROM kimi_code_generate_log
+         WHERE user_id = ? AND created_at >= ? AND input_tokens IS NOT NULL
+         UNION ALL
+         SELECT strftime('${periodFormat}', created_at) AS period, gemma_model AS model,
+                gemma_input_tokens AS input_tokens, gemma_output_tokens AS output_tokens, gemma_total_tokens AS total_tokens
+         FROM kimi_gemma_reviews
+         WHERE user_id = ? AND created_at >= ? AND gemma_input_tokens IS NOT NULL
+       )
+       GROUP BY period, model
+       ORDER BY period ASC, model ASC`
+    )
+    .bind(userId, since, userId, since)
+    .all<{ period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number }>();
+  return { rows: rows.results ?? [] };
 }
 
 export interface AichatShareDetail {
@@ -10770,6 +10828,15 @@ export function buildGemmaCodeReviewPrompt(code: string): string {
   return '次のコードをレビューしてください。バグ・改善点・注意すべき点を日本語で簡潔に指摘してください。\n\n```\n' + code + '\n```';
 }
 
+/** Ai.run()の結果からusage(トークン数)を取り出す。resultObjが取れていない場合は全てnullを返す */
+export function extractAiRunUsage(result: unknown): { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null } {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  const usageObj = (typeof resultObj['usage'] === 'object' && resultObj['usage'] !== null)
+    ? resultObj['usage'] as Record<string, unknown>
+    : {};
+  return extractAiUsage(usageObj);
+}
+
 app.get('/kimi-code', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getKimiCodePage(user.sub));
@@ -10801,7 +10868,20 @@ app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
       logger.warn('[kimi-code] 空の応答', { userId: user.sub });
       return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
     }
-    return jsonUtf8({ code, model: KIMI_CODE_MODEL });
+    const usage = extractAiRunUsage(result);
+    // kimi-k2.7-codeは従量課金モデルのため、リクエストごとのトークン数を
+    // kimi_code_generate_logへ記録する(この後Gemmaレビューに進むかどうかに
+    // 関わらず、生成した時点で必ず1件残す。/api/kimi-code/token-usageで集計)。
+    if (c.env.DB) {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO kimi_code_generate_log (user_id, model, input_tokens, output_tokens, total_tokens)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, KIMI_CODE_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+        .run();
+    }
+    return jsonUtf8({ code, model: KIMI_CODE_MODEL, ...usage });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
@@ -10835,19 +10915,44 @@ app.post('/api/kimi-code/gemma-review', authMiddleware, async (c) => {
       logger.warn('[kimi-code] gemmaレビュー: 空の応答', { userId: user.sub });
       return jsonUtf8({ error: 'レビュー結果を取得できませんでした(空の応答)' }, 502);
     }
+    const usage = extractAiRunUsage(result);
     const id = crypto.randomUUID();
     await c.env.DB
       .prepare(
-        `INSERT INTO kimi_gemma_reviews (id, user_id, kimi_prompt, kimi_code, gemma_prompt, gemma_response, gemma_model)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO kimi_gemma_reviews (id, user_id, kimi_prompt, kimi_code, gemma_prompt, gemma_response, gemma_model, gemma_input_tokens, gemma_output_tokens, gemma_total_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(id, user.sub, kimiPrompt, code, gemmaPrompt, review, GEMMA_CODE_REVIEW_MODEL)
+      .bind(id, user.sub, kimiPrompt, code, gemmaPrompt, review, GEMMA_CODE_REVIEW_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
       .run();
-    return jsonUtf8({ id, review, model: GEMMA_CODE_REVIEW_MODEL });
+    return jsonUtf8({ id, review, model: GEMMA_CODE_REVIEW_MODEL, ...usage });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[kimi-code] gemmaレビュー呼び出し失敗', { userId: user.sub, error: message });
     return jsonUtf8({ error: 'Gemmaレビューでサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページ用。kimi-k2.7-code(コード生成)・gemma-4-26b-a4b-it(レビュー)
+ * それぞれのトークン利用量を月or日・モデル別に集計する。
+ */
+app.get('/api/kimi-code/token-usage', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const granularity = c.req.query('granularity') === 'day' ? 'day' : 'month';
+  let since: string;
+  if (granularity === 'day') {
+    const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '30', 10), 1), 90);
+    since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else {
+    const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
+    since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  }
+  try {
+    const { rows } = await getKimiCodeTokenUsage(c.env.DB as unknown as D1Like, user.sub, since, granularity);
+    return jsonUtf8({ rows, granularity });
+  } catch {
+    return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
   }
 });
 
