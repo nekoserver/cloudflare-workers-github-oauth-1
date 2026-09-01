@@ -819,7 +819,7 @@ export function getAiChatPage(user: {
     <div class="sidebar" id="sidebar">
       <div class="sidebar-head">
         <div class="sidebar-search-wrap">
-          <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索..." autocomplete="off">
+          <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索...(llama-4)" autocomplete="off">
           <button class="sidebar-search-clear" id="sidebarClear" tabindex="-1">✕</button>
         </div>
       </div>
@@ -2003,10 +2003,13 @@ export function getAiChatPage(user: {
     });
 
     var SIDEBAR_SEARCH_TARGET_CYCLE = ['llama-4', 'moondream3.1', 'kimi-gemma'];
+    // アイコン+ツールチップだけでは「kimi-gemma対象も選べる」ことに気づけず、
+    // llama-4のまま検索して0件になる問い合わせが実際にあったため、検索欄の
+    // placeholderに現在の検索対象名を常時表示する(ホバー不要で視認できるようにする)。
     var SIDEBAR_SEARCH_TARGET_LABEL = {
-      'llama-4': ['🖼️', '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替'],
-      'moondream3.1': ['🩻', '検索対象: moondream3.1(画像分析)。クリックでkimi-gemma(kimi-codeのGemmaレビュー)に切替'],
-      'kimi-gemma': ['🌙', '検索対象: kimi-gemma(kimi-codeのGemmaレビュー)。クリックでllama-4(質問・回答)に切替'],
+      'llama-4': ['🖼️', '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替', '履歴を検索...(llama-4)'],
+      'moondream3.1': ['🩻', '検索対象: moondream3.1(画像分析)。クリックでkimi-gemma(kimi-codeのGemmaレビュー)に切替', '履歴を検索...(moondream3.1)'],
+      'kimi-gemma': ['🌙', '検索対象: kimi-gemma(kimi-codeのGemmaレビュー)。クリックでllama-4(質問・回答)に切替', '履歴を検索...(kimi-gemma)'],
     };
     sidebarSearchTargetBtn.addEventListener('click', function() {
       var idx = SIDEBAR_SEARCH_TARGET_CYCLE.indexOf(sidebarSearchTarget);
@@ -2014,6 +2017,7 @@ export function getAiChatPage(user: {
       var label = SIDEBAR_SEARCH_TARGET_LABEL[sidebarSearchTarget];
       sidebarSearchTargetBtn.textContent = label[0];
       sidebarSearchTargetBtn.title = label[1];
+      sidebarSearch.placeholder = label[2];
       sidebarSearchTargetBtn.classList.toggle('active', sidebarSearchTarget !== 'llama-4');
       var q = sidebarSearch.value.trim();
       if (q && currentMode === 'search') doSearch(q);
