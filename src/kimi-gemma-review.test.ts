@@ -120,8 +120,20 @@ describe('getAichatShareDetail(target=kimi-gemma)', () => {
     const detail = await getAichatShareDetail(wrapD1(db) as never, 'user1', 'r1', 'kimi-gemma');
     expect(detail).not.toBeNull();
     expect(detail?.question).toBe('質問');
-    expect(detail?.answer).toBe('回答本文');
     expect(detail?.model).toBe('@cf/google/gemma-4-26b-a4b-it');
+    // 生成コード(kimi_code)がgemma_responseだけを返す実装だと二度と参照できなく
+    // なっていた不具合の再発防止: answerには生成コード本文とレビュー結果の
+    // 両方が含まれていること
+    expect(detail?.answer).toContain('c');
+    expect(detail?.answer).toContain('回答本文');
+  });
+
+  it('kimi_code(生成コード本文)がgemma_responseと共にanswerに含まれる', async () => {
+    const db = setupDb();
+    insertReview(db, { id: 'r1', kimiPrompt: '質問', kimiCode: 'function uniqueMarkerCode() { return 42; }', gemmaResponse: 'ユニークなレビューコメント' });
+    const detail = await getAichatShareDetail(wrapD1(db) as never, 'user1', 'r1', 'kimi-gemma');
+    expect(detail?.answer).toContain('function uniqueMarkerCode() { return 42; }');
+    expect(detail?.answer).toContain('ユニークなレビューコメント');
   });
 
   it('他ユーザーのidでは取得できない', async () => {
