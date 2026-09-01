@@ -827,7 +827,7 @@ export function getAiChatPage(user: {
         <div class="sidebar-status" id="sidebarStatus" style="flex:1;font-size:10px;color:var(--text-muted);"></div>
         <button class="canvas-search-btn" id="canvasSearchBtn" title="質問・回答・キーワードをキャンバス表示" style="display:none;">⁂</button>
         <button class="sidebar-log-btn" id="searchLogRecordBtn" title="検索ログをモーダルに書き出す" style="display:none;">📋</button>
-        <button class="sidebar-search-target-btn" id="sidebarSearchTargetBtn" title="検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替">🖼️</button>
+        <button class="sidebar-search-target-btn" id="sidebarSearchTargetBtn" title="検索対象: llama-4(質問・回答)。クリックで切替(moondream3.1→kimi-gemma→llama-4)">🖼️</button>
         <div class="sidebar-mode-toggle" id="sidebarModeToggle" style="display:none;">
           <button class="sidebar-mode-btn" id="sidebarModeNew">新着</button>
           <button class="sidebar-mode-btn" id="sidebarModeKw">キーワード</button>
@@ -2002,13 +2002,19 @@ export function getAiChatPage(user: {
       sidebarSearch.focus();
     });
 
+    var SIDEBAR_SEARCH_TARGET_CYCLE = ['llama-4', 'moondream3.1', 'kimi-gemma'];
+    var SIDEBAR_SEARCH_TARGET_LABEL = {
+      'llama-4': ['🖼️', '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替'],
+      'moondream3.1': ['🩻', '検索対象: moondream3.1(画像分析)。クリックでkimi-gemma(kimi-codeのGemmaレビュー)に切替'],
+      'kimi-gemma': ['🌙', '検索対象: kimi-gemma(kimi-codeのGemmaレビュー)。クリックでllama-4(質問・回答)に切替'],
+    };
     sidebarSearchTargetBtn.addEventListener('click', function() {
-      sidebarSearchTarget = sidebarSearchTarget === 'moondream3.1' ? 'llama-4' : 'moondream3.1';
-      var isMoondream = sidebarSearchTarget === 'moondream3.1';
-      sidebarSearchTargetBtn.classList.toggle('active', isMoondream);
-      sidebarSearchTargetBtn.title = isMoondream
-        ? '検索対象: moondream3.1(画像分析)。クリックでllama-4(質問・回答)に切替'
-        : '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替';
+      var idx = SIDEBAR_SEARCH_TARGET_CYCLE.indexOf(sidebarSearchTarget);
+      sidebarSearchTarget = SIDEBAR_SEARCH_TARGET_CYCLE[(idx + 1) % SIDEBAR_SEARCH_TARGET_CYCLE.length];
+      var label = SIDEBAR_SEARCH_TARGET_LABEL[sidebarSearchTarget];
+      sidebarSearchTargetBtn.textContent = label[0];
+      sidebarSearchTargetBtn.title = label[1];
+      sidebarSearchTargetBtn.classList.toggle('active', sidebarSearchTarget !== 'llama-4');
       var q = sidebarSearch.value.trim();
       if (q && currentMode === 'search') doSearch(q);
     });
