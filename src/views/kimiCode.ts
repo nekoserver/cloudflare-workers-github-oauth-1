@@ -108,6 +108,17 @@ textarea:focus { border-color: var(--accent); }
   <div class="error-msg" id="kimiErrorMsg"></div>
 </div>
 
+<div class="toolbar" id="kimiGemmaToolbar" style="display:none;">
+  <button class="btn sm" id="kimiGemmaBtn">🔎 Gemmaにレビューさせる</button>
+  <span id="kimiGemmaStatus" style="font-size:11px;color:var(--text-muted);"></span>
+</div>
+
+<div class="panel" id="kimiGemmaPanel" style="display:none;">
+  <div class="panel-label">gemma-4-26b-a4b-it のレビュー結果 <span style="font-weight:normal;color:var(--text-muted);">(保存済み。左サイドパネルの検索対象で「kimi-gemma」を選ぶと後で検索できます)</span></div>
+  <div id="kimiGemmaOutput"></div>
+  <div class="error-msg" id="kimiGemmaErrorMsg"></div>
+</div>
+
 <script>
 (function() {
   var systemPromptEl = document.getElementById('kimiSystemPrompt');
@@ -156,6 +167,10 @@ textarea:focus { border-color: var(--accent); }
           return;
         }
         outputEl.textContent = d.code;
+        gemmaToolbar.style.display = 'flex';
+        gemmaPanel.style.display = 'none';
+        clearGemmaError();
+        gemmaOutputEl.textContent = '';
       })
       .catch(function(err) {
         showError('通信エラー: ' + ((err && err.message) || '不明'));
@@ -163,6 +178,62 @@ textarea:focus { border-color: var(--accent); }
       .then(function() {
         generateBtn.disabled = false;
         statusEl.textContent = '';
+      });
+  });
+
+  var gemmaToolbar = document.getElementById('kimiGemmaToolbar');
+  var gemmaBtn = document.getElementById('kimiGemmaBtn');
+  var gemmaStatusEl = document.getElementById('kimiGemmaStatus');
+  var gemmaPanel = document.getElementById('kimiGemmaPanel');
+  var gemmaOutputEl = document.getElementById('kimiGemmaOutput');
+  var gemmaErrorEl = document.getElementById('kimiGemmaErrorMsg');
+
+  function showGemmaError(msg) {
+    gemmaErrorEl.textContent = msg;
+    gemmaErrorEl.classList.add('show');
+  }
+  function clearGemmaError() {
+    gemmaErrorEl.textContent = '';
+    gemmaErrorEl.classList.remove('show');
+  }
+
+  gemmaBtn.addEventListener('click', function() {
+    var code = outputEl.textContent || '';
+    if (!code.trim()) {
+      showGemmaError('先にコードを生成してください');
+      return;
+    }
+    clearGemmaError();
+    gemmaPanel.style.display = 'none';
+    gemmaBtn.disabled = true;
+    gemmaStatusEl.textContent = 'Gemmaに問い合わせ中...';
+    fetch('/api/kimi-code/gemma-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ kimiPrompt: promptEl.value.trim(), code: code })
+    })
+      .then(function(r) { return r.text().then(function(t) { return { status: r.status, text: t }; }); })
+      .then(function(res) {
+        var d = null;
+        try { d = JSON.parse(res.text); } catch (e) { d = null; }
+        if (d && d.error) {
+          showGemmaError('レビューに失敗しました: ' + d.error);
+          return;
+        }
+        if (!d || typeof d.review !== 'string') {
+          showGemmaError('レビューに失敗しました: HTTP ' + res.status + ' / ' + String(res.text).slice(0, 200));
+          return;
+        }
+        gemmaOutputEl.textContent = d.review;
+        gemmaPanel.style.display = 'block';
+      })
+      .catch(function(err) {
+        showGemmaError('通信エラー: ' + ((err && err.message) || '不明'));
+      })
+      .then(function() {
+        gemmaBtn.disabled = false;
+        gemmaStatusEl.textContent = '';
       });
   });
 

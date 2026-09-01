@@ -268,6 +268,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
   { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
   { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
+  { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1631,6 +1632,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_waypoint_sets_dedup ON he
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_countdown_events_user_target ON countdown_events(user_id, target_at);`,
+  '0117': `CREATE TABLE IF NOT EXISTS kimi_gemma_reviews (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kimi_prompt TEXT NOT NULL,
+  kimi_code TEXT NOT NULL,
+  gemma_prompt TEXT NOT NULL,
+  gemma_response TEXT NOT NULL,
+  gemma_model TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_gemma_reviews_user_created ON kimi_gemma_reviews(user_id, created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1866,6 +1878,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_master: { id: 'pk', moved_to: 'fk' },
   heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
   countdown_events: { id: 'pk', user_id: 'idx' },
+  kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1983,6 +1996,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_master: 'system',
   heritage_journey_waypoint_sets: 'system',
   countdown_events: 'system',
+  kimi_gemma_reviews: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2090,6 +2104,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_hit_details: { search_history_id: 'commit_search_history' },
   commit_search_keyword_labels: { user_id: 'user_sessions' },
   countdown_events: { user_id: 'user_sessions' },
+  kimi_gemma_reviews: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -4785,6 +4800,39 @@ export async function searchAichatMoondreamAnalyses(
   return { results: rows.results ?? [] };
 }
 
+/**
+ * /answer-graph・AIチャット左サイドパネルの検索対象ドロップダウンで
+ * 「kimi-gemma」を選んだ場合用。/kimi-codeページでkimi-k2.7-codeが生成した
+ * コードをgemma-4-26b-a4b-itにレビューさせた結果(kimi_gemma_reviews)を
+ * キーワード検索する。ai_chat_sharesの行を持たない独立したデータのため、
+ * questionにはkimi_prompt(生成指示)、answerにはgemma_response(レビュー結果)を
+ * 割り当てて返す。
+ */
+export async function searchKimiGemmaReviews(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; question: string; answer: string; model: string; created_at: string;
+}> }> {
+  const normalized = q.replace(/[・･]/g, '・');
+  const rows = await db
+    .prepare(
+      `SELECT id, kimi_prompt AS question, gemma_response AS answer, gemma_model AS model, created_at
+       FROM kimi_gemma_reviews
+       WHERE user_id = ?
+         AND (
+           INSTR(REPLACE(kimi_prompt, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(kimi_code, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(gemma_response, '･', '・'), ?) > 0
+         )
+       ORDER BY created_at DESC LIMIT 30`
+    )
+    .bind(userId, normalized, normalized, normalized)
+    .all<{ id: string; question: string; answer: string; model: string; created_at: string }>();
+  return { results: rows.results ?? [] };
+}
+
 export interface AichatShareDetail {
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
@@ -4813,6 +4861,19 @@ export async function getAichatShareDetail(
   id: string,
   target: string,
 ): Promise<AichatShareDetail | null> {
+  if (target === 'kimi-gemma') {
+    const row = await db
+      .prepare(
+        `SELECT id, id AS user_hash, kimi_prompt AS question, gemma_response AS answer, gemma_model AS model,
+                created_at, 0 AS access_count, NULL AS question_hash,
+                NULL AS input_tokens, NULL AS output_tokens, NULL AS total_tokens, NULL AS image_data_url
+         FROM kimi_gemma_reviews
+         WHERE id = ? AND user_id = ?`
+      )
+      .bind(id, userId)
+      .first<AichatShareDetail>();
+    return row ?? null;
+  }
   if (target === 'moondream3.1') {
     const row = await db
       .prepare(
@@ -5254,6 +5315,8 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   const db = c.env.DB as unknown as D1Like;
   const { results } = target === 'moondream3.1'
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
+    : target === 'kimi-gemma'
+    ? await searchKimiGemmaReviews(db, user.sub, q)
     : await searchAiChatShares(db, user.sub, q);
   const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(db, user.sub, results);
   const enriched = await enrichSearchResultsWithVectorizedFlag(db, user.sub, withKeywordCounts);
@@ -10648,6 +10711,32 @@ app.get('/base64', authMiddleware, async (c) => {
 });
 
 export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
+export const GEMMA_CODE_REVIEW_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/**
+ * kimi-k2.7-codeやgemma-4-26b-a4b-itのようなチャット補完形式のモデルは、
+ * 単純なチャットモデルが使う .response ではなく choices[0].message.content で
+ * テキストを返すことがある。両方の形式に対応して本文テキストを取り出す純粋関数。
+ */
+export function extractChatCompletionText(result: unknown): string {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  if (typeof resultObj.response === 'string' && resultObj.response) return resultObj.response;
+  const choices = Array.isArray(resultObj.choices) ? resultObj.choices as unknown[] : [];
+  const first = choices[0];
+  if (first && typeof first === 'object') {
+    const message = (first as Record<string, unknown>).message;
+    if (message && typeof message === 'object') {
+      const content = (message as Record<string, unknown>).content;
+      if (typeof content === 'string') return content;
+    }
+  }
+  return '';
+}
+
+/** /api/kimi-code/gemma-review用。gemma-4-26b-a4b-itにコードレビューを依頼するプロンプトを組み立てる純粋関数 */
+export function buildGemmaCodeReviewPrompt(code: string): string {
+  return '次のコードをレビューしてください。バグ・改善点・注意すべき点を日本語で簡潔に指摘してください。\n\n```\n' + code + '\n```';
+}
 
 app.get('/kimi-code', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -10675,24 +10764,7 @@ app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
       KIMI_CODE_MODEL as Parameters<typeof c.env.AI.run>[0],
       { messages } as Parameters<typeof c.env.AI.run>[1]
     );
-    const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
-    // kimi-k2.7-codeのようなチャット補完形式のモデルは、単純なチャットモデルが
-    // 使う .response ではなく choices[0].message.content でテキストを返す
-    // ことがある(実際にこの形式のためgetOrComputeKeywordEmbedding等が使う
-    // .response前提の実装では常に「空の応答」502になってしまう不具合があった)。
-    // 両方の形式に対応する。
-    let code = typeof resultObj.response === 'string' ? resultObj.response : '';
-    if (!code) {
-      const choices = Array.isArray(resultObj.choices) ? resultObj.choices as unknown[] : [];
-      const first = choices[0];
-      if (first && typeof first === 'object') {
-        const message = (first as Record<string, unknown>).message;
-        if (message && typeof message === 'object') {
-          const content = (message as Record<string, unknown>).content;
-          if (typeof content === 'string') code = content;
-        }
-      }
-    }
+    const code = extractChatCompletionText(result);
     if (!code) {
       logger.warn('[kimi-code] 空の応答', { userId: user.sub });
       return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
@@ -10702,6 +10774,48 @@ app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
     return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
+ * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
+ * パネルの検索(target=kimi-gemma)から後で読み出せる。
+ */
+app.post('/api/kimi-code/gemma-review', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ kimiPrompt?: string; code?: string }>().catch(() => null);
+  const kimiPrompt = (body?.kimiPrompt ?? '').trim().slice(0, 8000);
+  const code = (body?.code ?? '').trim().slice(0, 20000);
+  if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
+
+  const gemmaPrompt = buildGemmaCodeReviewPrompt(code);
+  try {
+    const result = await c.env.AI.run(
+      GEMMA_CODE_REVIEW_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages: [{ role: 'user', content: gemmaPrompt }] } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const raw = extractChatCompletionText(result);
+    const review = stripThinkTags(raw || '');
+    if (!review) {
+      logger.warn('[kimi-code] gemmaレビュー: 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: 'レビュー結果を取得できませんでした(空の応答)' }, 502);
+    }
+    const id = crypto.randomUUID();
+    await c.env.DB
+      .prepare(
+        `INSERT INTO kimi_gemma_reviews (id, user_id, kimi_prompt, kimi_code, gemma_prompt, gemma_response, gemma_model)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, user.sub, kimiPrompt, code, gemmaPrompt, review, GEMMA_CODE_REVIEW_MODEL)
+      .run();
+    return jsonUtf8({ id, review, model: GEMMA_CODE_REVIEW_MODEL });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] gemmaレビュー呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'Gemmaレビューでサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
