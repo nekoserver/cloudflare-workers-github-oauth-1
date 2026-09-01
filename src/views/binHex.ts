@@ -88,6 +88,8 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
 <div class="toolbar">
   <button class="btn primary" id="btnToHex">↓ 16進数に変換</button>
   <button class="btn primary" id="btnToBin">↑ 2進数に変換</button>
+  <button class="btn" id="btnBinToUtf">2進数→文字(UTF-8)</button>
+  <button class="btn" id="btnUtfToBin">文字(UTF-8)→2進数</button>
   <button class="btn" id="btnSwap">⇅ 入れ替え</button>
   <button class="btn" id="btnClear">クリア</button>
   <label class="opt"><input type="checkbox" id="upperCase" checked> 16進数は大文字</label>
@@ -205,6 +207,32 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
       throw new Error('不正なUTF-8バイト列です（文字として解釈できません）');
     }
   }
+
+  function binToUtf(str) {
+    return hexToUtf(binToHex(str));
+  }
+
+  function utfToBin(str) {
+    return hexToBin(utfToHex(str));
+  }
+
+  document.getElementById('btnBinToUtf').addEventListener('click', function() {
+    clearError();
+    try {
+      utfText.value = binToUtf(binText.value);
+    } catch (e) {
+      showError(e && e.message ? e.message : String(e));
+    }
+  });
+
+  document.getElementById('btnUtfToBin').addEventListener('click', function() {
+    clearError();
+    try {
+      binText.value = utfToBin(utfText.value);
+    } catch (e) {
+      showError(e && e.message ? e.message : String(e));
+    }
+  });
 
   document.getElementById('btnUtfToHex').addEventListener('click', function() {
     clearErrorUtf();

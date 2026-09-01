@@ -37,6 +37,11 @@ describe('getBinHexPage: HTML構造', () => {
     expect(html).toContain('id="btnSwapUtf"');
   });
 
+  it('2進数⇔文字(UTF-8)の直接変換ボタンが存在する(16進数を経由せず1クリックで変換できる)', () => {
+    expect(html).toContain('id="btnBinToUtf"');
+    expect(html).toContain('id="btnUtfToBin"');
+  });
+
   it('usernameのHTML特殊文字をエスケープする(XSS対策)', () => {
     const xssHtml = getBinHexPage('<script>alert(1)</script>');
     expect(xssHtml).not.toContain('<script>alert(1)</script>');
@@ -195,6 +200,59 @@ describe('getBinHexPage: utfToHex/hexToUtf のロジック(文字⇔UTF-8バイ�
   it('不正な16進数文字を渡すと例外を投げる', () => {
     const hexToUtf = loadFn('hexToUtf');
     expect(() => hexToUtf('ZZ')).toThrow();
+  });
+});
+
+describe('getBinHexPage: binToUtf/utfToBin のロジック(16進数を経由しない直接変換)', () => {
+  const html = getBinHexPage('tester');
+
+  function loadFn(name: string, opts: { upperCase?: boolean; withPrefix?: boolean } = {}) {
+    // binToUtf/utfToBinは内部でbinToHex/hexToBin/utfToHex/hexToUtfを呼ぶため、
+    // それらも合わせて渡す
+    const deps = ['splitTokens', 'stripPrefix', 'binToHex', 'hexToBin', 'utfToHex', 'hexToUtf', name]
+      .filter((n, i, arr) => arr.indexOf(n) === i)
+      .map((n) => extractFunctionSource(html, n));
+    deps.forEach((src, i) => expect(src, name + 'の依存関数が生成HTMLから見つからない').toBeTruthy());
+    const fn = new Function(
+      'upperCase', 'withPrefix', 'TextEncoder', 'TextDecoder',
+      `${deps.join('\n')}\nreturn ${name};`
+    );
+    return fn(
+      { checked: opts.upperCase ?? true },
+      { checked: opts.withPrefix ?? false },
+      globalThis.TextEncoder,
+      globalThis.TextDecoder,
+    );
+  }
+
+  it('2進数から直接UTF-8文字列に変換できる(16進数を経由する手動操作が不要)', () => {
+    const binToUtf = loadFn('binToUtf');
+    // 'A' = 0x41 = 0b01000001, 'B' = 0x42 = 0b01000010
+    expect(binToUtf('01000001 01000010')).toBe('AB');
+  });
+
+  it('日本語(マルチバイトUTF-8)も2進数から直接変換できる', () => {
+    const utfToHex = loadFn('utfToHex'); // eslint-disable-line
+    const binToUtf = loadFn('binToUtf');
+    const utfToBin = loadFn('utfToBin');
+    const original = 'こんにちは🎉';
+    const bin = utfToBin(original);
+    expect(binToUtf(bin)).toBe(original);
+  });
+
+  it('文字列から直接2進数に変換できる(先頭ゼロは付かない、既存のhexToBinと同じ挙動)', () => {
+    const utfToBin = loadFn('utfToBin');
+    expect(utfToBin('A')).toBe('1000001');
+  });
+
+  it('不正な2進数を渡すと例外を投げる', () => {
+    const binToUtf = loadFn('binToUtf');
+    expect(() => binToUtf('0102')).toThrow();
+  });
+
+  it('空文字を渡すと例外を投げる', () => {
+    const utfToBin = loadFn('utfToBin');
+    expect(() => utfToBin('')).toThrow();
   });
 });
 
