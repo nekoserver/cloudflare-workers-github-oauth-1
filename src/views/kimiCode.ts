@@ -77,6 +77,11 @@ textarea:focus { border-color: var(--accent); }
   font-size: 12.5px; min-height: 40px;
 }
 .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+.token-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.usage-table th, .usage-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.usage-table th:first-child, .usage-table td:first-child { text-align: left; }
+.usage-table th { color: var(--text-muted); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -105,6 +110,7 @@ textarea:focus { border-color: var(--accent); }
     <button class="btn sm copy-btn" id="kimiCopyBtn" style="float:right;">コピー</button>
   </div>
   <div id="kimiOutput"></div>
+  <div class="token-note" id="kimiTokenNote"></div>
   <div class="error-msg" id="kimiErrorMsg"></div>
 </div>
 
@@ -116,7 +122,18 @@ textarea:focus { border-color: var(--accent); }
 <div class="panel" id="kimiGemmaPanel" style="display:none;">
   <div class="panel-label">gemma-4-26b-a4b-it のレビュー結果 <span style="font-weight:normal;color:var(--text-muted);">(保存済み。左サイドパネルの検索対象で「kimi-gemma」を選ぶと後で検索できます)</span></div>
   <div id="kimiGemmaOutput"></div>
+  <div class="token-note" id="kimiGemmaTokenNote"></div>
   <div class="error-msg" id="kimiGemmaErrorMsg"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-label">
+    トークン利用量(直近6か月・モデル別合計)
+    <button class="btn sm" id="kimiUsageReloadBtn" style="float:right;">再読み込み</button>
+  </div>
+  <div id="kimiUsageBody">
+    <div class="token-note">読み込み中...</div>
+  </div>
 </div>
 
 <script>
@@ -126,8 +143,16 @@ textarea:focus { border-color: var(--accent); }
   var generateBtn = document.getElementById('kimiGenerateBtn');
   var statusEl = document.getElementById('kimiStatus');
   var outputEl = document.getElementById('kimiOutput');
+  var tokenNoteEl = document.getElementById('kimiTokenNote');
   var errorEl = document.getElementById('kimiErrorMsg');
   var copyBtn = document.getElementById('kimiCopyBtn');
+
+  function formatTokenNote(usage) {
+    if (usage.input_tokens == null && usage.output_tokens == null) return '';
+    return '📊 このリクエスト: in ' + (usage.input_tokens == null ? '-' : usage.input_tokens)
+      + ' / out ' + (usage.output_tokens == null ? '-' : usage.output_tokens)
+      + ' / 合計 ' + (usage.total_tokens == null ? '-' : usage.total_tokens) + ' トークン';
+  }
 
   function showError(msg) {
     errorEl.textContent = msg;
@@ -167,10 +192,13 @@ textarea:focus { border-color: var(--accent); }
           return;
         }
         outputEl.textContent = d.code;
+        tokenNoteEl.textContent = formatTokenNote(d);
         gemmaToolbar.style.display = 'flex';
         gemmaPanel.style.display = 'none';
         clearGemmaError();
         gemmaOutputEl.textContent = '';
+        gemmaTokenNoteEl.textContent = '';
+        loadUsage();
       })
       .catch(function(err) {
         showError('通信エラー: ' + ((err && err.message) || '不明'));
@@ -186,6 +214,7 @@ textarea:focus { border-color: var(--accent); }
   var gemmaStatusEl = document.getElementById('kimiGemmaStatus');
   var gemmaPanel = document.getElementById('kimiGemmaPanel');
   var gemmaOutputEl = document.getElementById('kimiGemmaOutput');
+  var gemmaTokenNoteEl = document.getElementById('kimiGemmaTokenNote');
   var gemmaErrorEl = document.getElementById('kimiGemmaErrorMsg');
 
   function showGemmaError(msg) {
@@ -226,7 +255,9 @@ textarea:focus { border-color: var(--accent); }
           return;
         }
         gemmaOutputEl.textContent = d.review;
+        gemmaTokenNoteEl.textContent = formatTokenNote(d);
         gemmaPanel.style.display = 'block';
+        loadUsage();
       })
       .catch(function(err) {
         showGemmaError('通信エラー: ' + ((err && err.message) || '不明'));
@@ -236,6 +267,46 @@ textarea:focus { border-color: var(--accent); }
         gemmaStatusEl.textContent = '';
       });
   });
+
+  var usageBodyEl = document.getElementById('kimiUsageBody');
+  var usageReloadBtn = document.getElementById('kimiUsageReloadBtn');
+
+  function shortModelName(model) {
+    return (model || '').split('/').pop();
+  }
+
+  function renderUsageTable(rows) {
+    if (!rows || rows.length === 0) {
+      usageBodyEl.innerHTML = '<div class="token-note">まだ利用実績がありません</div>';
+      return;
+    }
+    var totals = {};
+    rows.forEach(function(r) {
+      if (!totals[r.model]) totals[r.model] = { input: 0, output: 0, total: 0, count: 0 };
+      totals[r.model].input += r.input_tokens;
+      totals[r.model].output += r.output_tokens;
+      totals[r.model].total += r.total_tokens;
+      totals[r.model].count += r.request_count;
+    });
+    var html = '<table class="usage-table"><thead><tr><th>モデル</th><th>リクエスト数</th><th>in</th><th>out</th><th>合計</th></tr></thead><tbody>';
+    Object.keys(totals).sort().forEach(function(model) {
+      var t = totals[model];
+      html += '<tr><td>' + shortModelName(model) + '</td><td>' + t.count + '</td><td>' + t.input + '</td><td>' + t.output + '</td><td>' + t.total + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    usageBodyEl.innerHTML = html;
+  }
+
+  function loadUsage() {
+    usageBodyEl.innerHTML = '<div class="token-note">読み込み中...</div>';
+    fetch('/api/kimi-code/token-usage?months=6', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { renderUsageTable(d.rows || []); })
+      .catch(function() { usageBodyEl.innerHTML = '<div class="token-note">読み込みに失敗しました</div>'; });
+  }
+
+  usageReloadBtn.addEventListener('click', loadUsage);
+  loadUsage();
 
   copyBtn.addEventListener('click', function() {
     navigator.clipboard.writeText(outputEl.textContent || '').then(function() {
