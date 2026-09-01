@@ -74,7 +74,7 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
 </style>
 </head>
 <body>
-<h1>🔢 2進数/16進数変換</h1>
+<h1>🔢 2進数/16進数/文字(UTF-8)変換</h1>
 <p class="subtitle">空白・改行区切りで複数値もまとめて変換します <span class="user-badge">${safeUser}</span></p>
 
 <div class="panel">
@@ -103,13 +103,30 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
   <div class="error-msg" id="errorMsg"></div>
 </div>
 
+<div class="toolbar">
+  <button class="btn primary" id="btnUtfToHex">↓ 文字(UTF-8)変換</button>
+  <button class="btn primary" id="btnHexToUtf">↑ 文字(UTF-8)変換</button>
+  <button class="btn" id="btnSwapUtf">⇅ 入れ替え</button>
+</div>
+
+<div class="panel">
+  <div class="panel-label">
+    <span>文字列(UTF-8)</span>
+    <button class="btn sm copy-btn" id="copyUtf">コピー</button>
+  </div>
+  <textarea id="utfText" placeholder="ここに文字列を入力... (UTF-8のバイト列として16進数と相互変換します)"></textarea>
+  <div class="error-msg" id="errorMsgUtf"></div>
+</div>
+
 <script>
 (function() {
   var binText = document.getElementById('binText');
   var hexText = document.getElementById('hexText');
+  var utfText = document.getElementById('utfText');
   var upperCase = document.getElementById('upperCase');
   var withPrefix = document.getElementById('withPrefix');
   var errorMsg = document.getElementById('errorMsg');
+  var errorMsgUtf = document.getElementById('errorMsgUtf');
 
   function showError(msg) {
     errorMsg.textContent = msg;
@@ -118,6 +135,14 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
   function clearError() {
     errorMsg.textContent = '';
     errorMsg.classList.remove('show');
+  }
+  function showErrorUtf(msg) {
+    errorMsgUtf.textContent = msg;
+    errorMsgUtf.classList.add('show');
+  }
+  function clearErrorUtf() {
+    errorMsgUtf.textContent = '';
+    errorMsgUtf.classList.remove('show');
   }
 
   function splitTokens(str) {
@@ -153,6 +178,62 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
     return results.join(tokens.length > 1 ? '\\n' : '');
   }
 
+  function utfToHex(str) {
+    if (!str) throw new Error('文字列を入力してください');
+    var bytes = new TextEncoder().encode(str);
+    if (bytes.length === 0) throw new Error('文字列を入力してください');
+    var hexBytes = [];
+    for (var i = 0; i < bytes.length; i++) {
+      var h = bytes[i].toString(16);
+      if (h.length < 2) h = '0' + h;
+      if (upperCase.checked) h = h.toUpperCase();
+      hexBytes.push((withPrefix.checked ? '0x' : '') + h);
+    }
+    return hexBytes.join(' ');
+  }
+
+  function hexToUtf(str) {
+    var cleaned = str.replace(/0[xX]/g, '').replace(/[\\s,]+/g, '');
+    if (!cleaned) throw new Error('16進数を入力してください');
+    if (!/^[0-9a-fA-F]+$/.test(cleaned)) throw new Error('不正な16進数です（0-9,A-Fのみ使用できます）');
+    if (cleaned.length % 2 !== 0) throw new Error('16進数の桁数が奇数です（UTF-8の1バイトは2桁で表します）');
+    var bytes = new Uint8Array(cleaned.length / 2);
+    for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(cleaned.substr(i * 2, 2), 16);
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+      throw new Error('不正なUTF-8バイト列です（文字として解釈できません）');
+    }
+  }
+
+  document.getElementById('btnUtfToHex').addEventListener('click', function() {
+    clearErrorUtf();
+    try {
+      hexText.value = utfToHex(utfText.value);
+    } catch (e) {
+      showErrorUtf(e && e.message ? e.message : String(e));
+    }
+  });
+
+  document.getElementById('btnHexToUtf').addEventListener('click', function() {
+    clearErrorUtf();
+    try {
+      utfText.value = hexToUtf(hexText.value);
+    } catch (e) {
+      showErrorUtf(e && e.message ? e.message : String(e));
+    }
+  });
+
+  document.getElementById('btnSwapUtf').addEventListener('click', function() {
+    var tmp = hexText.value;
+    hexText.value = utfText.value;
+    utfText.value = tmp;
+  });
+
+  document.getElementById('copyUtf').addEventListener('click', function(e) {
+    copyText(utfText.value, e.currentTarget);
+  });
+
   document.getElementById('btnToHex').addEventListener('click', function() {
     clearError();
     try {
@@ -180,7 +261,9 @@ label.opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color
   document.getElementById('btnClear').addEventListener('click', function() {
     binText.value = '';
     hexText.value = '';
+    utfText.value = '';
     clearError();
+    clearErrorUtf();
   });
 
   function copyText(text, btn) {
