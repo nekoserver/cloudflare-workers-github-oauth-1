@@ -4862,9 +4862,18 @@ export async function getAichatShareDetail(
   target: string,
 ): Promise<AichatShareDetail | null> {
   if (target === 'kimi-gemma') {
+    // gemma_response(レビュー結果)だけをanswerに入れると、レビュー対象だった
+    // kimi_code(kimi-k2.7-codeが生成したコード本文)がこのAPI経由では
+    // 二度と参照できなくなる(保存はkimi_gemma_reviews.kimi_codeにされているが、
+    // どの画面からも読み出されないまま埋もれてしまっていた不具合)。
+    // 生成コードとレビュー結果を1つのMarkdown本文にまとめて返し、
+    // 応答バブルモーダルでコードブロック+レビューとして表示されるようにする。
     const row = await db
       .prepare(
-        `SELECT id, id AS user_hash, kimi_prompt AS question, gemma_response AS answer, gemma_model AS model,
+        `SELECT id, id AS user_hash, kimi_prompt AS question,
+                ('生成されたコード:' || char(10) || char(10) || '\`\`\`' || char(10) || kimi_code || char(10) || '\`\`\`' || char(10) || char(10)
+                  || 'Gemma(' || gemma_model || ')のレビュー結果:' || char(10) || char(10) || gemma_response) AS answer,
+                gemma_model AS model,
                 created_at, 0 AS access_count, NULL AS question_hash,
                 NULL AS input_tokens, NULL AS output_tokens, NULL AS total_tokens, NULL AS image_data_url
          FROM kimi_gemma_reviews
