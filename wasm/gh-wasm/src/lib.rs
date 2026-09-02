@@ -132,14 +132,15 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
     let open_count = prs.len() - draft_count;
 
     // 列揃えはMarkdownの区切り行記法(:---=左, ---:=右, :---:=中央)で指定する。
-    // No.は6桁ゼロ埋め・右寄せ、作成者は中央寄せにする(利用者からの要望)。
-    // 状態(open/draft)列はMarkdown単体では色付きバッジにできないため、
-    // ブラウザ側(aichat.tsのstyleGhPrListBubble)でこの列のテキストを
-    // GitHub準拠の色バッジへ置き換える。ここではプレーンテキストのまま出力する。
+    // No.・作成者・コンフリクトは中央寄せにする(利用者からの要望)。
+    // 状態(open/draft)・コンフリクト(あり/なし/確認中)列はMarkdown単体では
+    // 色付きバッジにできないため、ブラウザ側(aichat.tsのstyleGhPrListBubble)で
+    // この列のテキストをGitHub準拠の色バッジへ置き換える。ここではプレーン
+    // テキストのまま出力する。
     let mut lines = vec![
         format!("## Pulls 一覧(Draft : {draft_count}/Open : {open_count})"),
         "| No. | タイトル | 作成者 | 状態 | コンフリクト |".to_string(),
-        "|---:|---|:---:|---|---|".to_string(),
+        "|:---:|---|:---:|---|:---:|".to_string(),
     ];
     for pr in &prs {
         let author = if mask_author {
@@ -260,8 +261,8 @@ mod tests {
         assert!(output.contains("## Pulls 一覧(Draft : 1/Open : 1)"));
         assert!(output.contains("| No. | タイトル | 作成者 | 状態 | コンフリクト |"));
         assert!(!output.contains("URL"));
-        // 列揃え: No.は右寄せ(6桁ゼロ埋めのリンクラベル、URL自体は非パディング)、作成者は中央寄せ
-        assert!(output.contains("|---:|---|:---:|---|---|"));
+        // 列揃え: No.・作成者・コンフリクトは中央寄せ
+        assert!(output.contains("|:---:|---|:---:|---|:---:|"));
         assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open | 確認中 |"));
         assert!(output.contains("| [000043](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft | 確認中 |"));
     }

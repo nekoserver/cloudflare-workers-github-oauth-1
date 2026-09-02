@@ -19,7 +19,7 @@ const minimalUser = {
 //       誤って適用してしまう(他の機能のテーブル表示を壊す)
 //   (2) 状態列がopen/draft以外の値(closed等)のときに未対応でエラーになる、
 //       またはバッジに変換されない
-//   (3) No.列の右寄せ・作成者列の中央寄せ(parseMdの列揃え記法)が
+//   (3) No.・作成者・コンフリクト列の中央寄せ(parseMdの列揃え記法)が
 //       実際にth/tdのstyle属性へ反映されない
 function loadParseMd() {
   const script = getMarkdownParserScript();
@@ -38,7 +38,7 @@ function loadStyleGhPrListBubble() {
 const SAMPLE_MARKDOWN = [
   '## Pulls 一覧(Draft : 1/Open : 1)',
   '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
-  '|---:|---|:---:|---|---|',
+  '|:---:|---|:---:|---|:---:|',
   '| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open | あり |',
   '| [000043](https://github.com/o/r/pull/43) | WIP feature | *** | draft | なし |',
 ].join('\n');
@@ -85,7 +85,7 @@ describe('styleGhPrListBubble', () => {
     const md = [
       '## Pulls 一覧(Draft : 0/Open : 1)',
       '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
-      '|---:|---|:---:|---|---|',
+      '|:---:|---|:---:|---|:---:|',
       '| [000001](https://github.com/o/r/pull/1) | t | a | closed | 確認中 |',
     ].join('\n');
     const el = document.createElement('div');
@@ -102,7 +102,7 @@ describe('styleGhPrListBubble', () => {
     const md = [
       '## Pulls 一覧(Draft : 0/Open : 3)',
       '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
-      '|---:|---|:---:|---|---|',
+      '|:---:|---|:---:|---|:---:|',
       '| [000001](https://github.com/o/r/pull/1) | a | a | open | あり |',
       '| [000002](https://github.com/o/r/pull/2) | b | b | open | なし |',
       '| [000003](https://github.com/o/r/pull/3) | c | c | open | 確認中 |',
@@ -114,12 +114,18 @@ describe('styleGhPrListBubble', () => {
     const conflictBadge0 = rows[0].querySelectorAll('.gh-pr-state-badge')[1];
     const conflictBadge1 = rows[1].querySelectorAll('.gh-pr-state-badge')[1];
     const conflictBadge2 = rows[2].querySelectorAll('.gh-pr-state-badge')[1];
-    expect(conflictBadge0.classList.contains('gh-pr-state-closed')).toBe(true);
+    expect(conflictBadge0.classList.contains('gh-pr-conflict-yes')).toBe(true);
     expect(conflictBadge0.textContent).toBe('あり');
-    expect(conflictBadge1.classList.contains('gh-pr-state-open')).toBe(true);
+    expect(conflictBadge1.classList.contains('gh-pr-conflict-no')).toBe(true);
     expect(conflictBadge1.textContent).toBe('なし');
-    expect(conflictBadge2.classList.contains('gh-pr-state-draft')).toBe(true);
+    expect(conflictBadge2.classList.contains('gh-pr-conflict-unknown')).toBe(true);
     expect(conflictBadge2.textContent).toBe('確認中');
+  });
+
+  it('コンフリクト「あり」はピンク背景、「なし」は薄緑背景のCSSで定義されている', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toMatch(/\.gh-pr-state-badge\.gh-pr-conflict-yes\s*\{\s*background:\s*#ffd7e6/);
+    expect(html).toMatch(/\.gh-pr-state-badge\.gh-pr-conflict-no\s*\{\s*background:\s*#d4f5d4/);
   });
 
   it('見出しのDraft/Open件数をGitHub準拠の色バッジ(span)へ置き換える', () => {
@@ -137,16 +143,18 @@ describe('styleGhPrListBubble', () => {
     expect(heading!.textContent).toContain('Pulls 一覧(');
   });
 
-  it('No.列は右寄せ(th/tdにtext-align:right)、作成者列は中央寄せになる(parseMdの列揃え反映)', () => {
+  it('No.・作成者・コンフリクト列は中央寄せになる(parseMdの列揃え反映)', () => {
     const parseMd = loadParseMd();
     const html = parseMd(SAMPLE_MARKDOWN);
     const el = document.createElement('div');
     el.innerHTML = html;
     const headerCells = el.querySelectorAll('th');
-    expect(headerCells[0].getAttribute('style')).toContain('text-align:right');
+    expect(headerCells[0].getAttribute('style')).toContain('text-align:center');
     expect(headerCells[2].getAttribute('style')).toContain('text-align:center');
+    expect(headerCells[4].getAttribute('style')).toContain('text-align:center');
     const firstRowCells = el.querySelectorAll('tbody tr:first-child td');
-    expect(firstRowCells[0].getAttribute('style')).toContain('text-align:right');
+    expect(firstRowCells[0].getAttribute('style')).toContain('text-align:center');
     expect(firstRowCells[2].getAttribute('style')).toContain('text-align:center');
+    expect(firstRowCells[4].getAttribute('style')).toContain('text-align:center');
   });
 });
