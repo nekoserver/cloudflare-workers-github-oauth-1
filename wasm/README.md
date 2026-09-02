@@ -115,3 +115,54 @@ wasm-bindgen --target web --out-dir public/wasm --out-name gh \
 書き込み系コマンドは、CSRF対策、権限の明示、確認UI、監査ログを先に設計してから
 追加する。任意の`gh api`をそのまま公開すると、意図しない書き込みAPIも呼べるため
 許可リスト方式にする。
+
+## gh-attach-wasm(Go/js-wasm移植、`/gh-attach`ページで導入済み)
+
+`gh-attach-wasm/`は、上記gh-wasmとは別に、`gh issue create --attach`
+(cli/cli `internal/attachments`)が行うMarkdown組み立てロジックをGo製の
+まま(Rustへの書き直しなし)js/wasmターゲットへ移植したもの。RustのWASM
+モジュール群とは生成物の形式が異なる(wasm-bindgenの`initSync`ではなく、
+Go標準の`wasm_exec.js`グルーコード経由で`GOOS=js GOARCH=wasm`バイナリを実行する)。
+
+移植範囲は、実ファイルI/O(`os.Open`)とHTTP送信(`net/http`)を除いた
+「本文Markdown中の`![alt](filename)`参照を書き換え、未参照の添付は末尾に
+追記する」という純粋な文字列組み立て部分のみ(`markdown.go`)。実際の
+アップロード・Issue作成はCloudflare Workers側(`src/index.ts`の
+`/api/gh-attach/upload`・`/api/gh-attach/create-issue`)がユーザーの
+既存GitHub OAuthセッションのアクセストークンで行う。
+
+cli/cli本家の`references.go`(goldmarkベースの本格的なMarkdownパーサー、
+810行)は移植範囲に含めていない。ここでの参照検出は`![alt](filename)`と
+一致する正規表現による簡易実装であり、ネストした画像リンクや
+コードブロック内の見せかけの参照など、goldmark実装が正しく除外する
+エッジケースは扱わない(`markdown.go`冒頭のコメント参照)。
+
+### ビルド手順
+
+```bash
+cd wasm/gh-attach-wasm
+go test ./...                                    # ネイティブ環境でロジック部分を検証
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/gh-attach.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/gh-attach-wasm_exec.js
+```
+
+Rust版と異なり`wasm-bindgen`は使わない(Goの`js/wasm`ターゲットは標準ツール
+チェーンに同梱されており、追加のcrates.io/npmパッケージ取得が不要なため、
+このリポジトリのネットワークプロキシ制約(`wasm32-unknown-unknown`の
+std取得が拒否される問題、NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md
+参照)を受けない)。`public/wasm/gh-attach.wasm`と
+`public/wasm/gh-attach-wasm_exec.js`はビルド成果物なのでリポジトリに
+コミットする。
+
+### ブラウザ側の読み込み
+
+```js
+await import('/wasm/gh-attach-wasm_exec.js'); // globalThis.Go を定義
+const go = new Go();
+const result = await WebAssembly.instantiateStreaming(fetch('/wasm/gh-attach.wasm'), go.importObject);
+go.run(result.instance); // ここでglobalThis.ghAttachBuildMarkdownが登録される
+const markdown = ghAttachBuildMarkdown(JSON.stringify({ body, attachments }));
+```
+
+`go.run(...)`が返すPromiseはGoの`main()`が終了するまで解決しない
+(`main_js.go`は`select {}`でブロックし続ける設計のため、意図的に待たない)。

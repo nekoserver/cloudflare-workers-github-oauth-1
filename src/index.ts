@@ -48,6 +48,17 @@ import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getBinHexPage } from './views/binHex';
+import { getGhAttachPage } from './views/ghAttach';
+import {
+  validateAttachDataUrl,
+  decodeAttachDataUrlToBytes,
+  parseOwnerRepo,
+  isUploadableTokenPrefix,
+  canUploadWithPermission,
+  buildUserAttachmentUploadUrl,
+  parseUploadAssetResponse,
+  parseCreateIssueResponse,
+} from './utils/ghAttach';
 import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -10815,6 +10826,154 @@ app.get('/base64', authMiddleware, async (c) => {
 app.get('/bin-hex', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBinHexPage(user.sub));
+});
+
+app.get('/gh-attach', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getGhAttachPage(user.sub));
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、画像アップロードAPI。
+ * cli/cli internal/attachments/client.go の postAsset 相当の処理をWorker側で行う。
+ * 実ファイルI/O(os.Open)・net/httpはブラウザWASMでは使えないため、この部分だけは
+ * WASM化せずWorker(サーバー)側のTypeScriptで実装している。
+ */
+app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; filename?: string; dataUrl?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const filename = (body.filename ?? '').trim();
+  const dataUrl = (body.dataUrl ?? '').trim();
+  if (!owner || !repo || !filename || !dataUrl) {
+    return jsonUtf8({ error: 'owner, repo, filename, dataUrl は必須です' }, 400);
+  }
+
+  const validation = validateAttachDataUrl(dataUrl);
+  if (!validation.ok) {
+    return jsonUtf8({ error: validation.reason }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+  if (!isUploadableTokenPrefix(accessToken)) {
+    return jsonUtf8({ error: 'このトークンの種類はファイル添付に対応していません' }, 403);
+  }
+
+  const ghHeaders = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+
+  let repoInfo: { id?: number; permissions?: { push?: boolean } };
+  try {
+    const repoRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+      headers: ghHeaders,
+    });
+    if (!repoRes.ok) {
+      return jsonUtf8({ error: `リポジトリ情報の取得に失敗しました(${repoRes.status})` }, 502);
+    }
+    repoInfo = await repoRes.json();
+  } catch (err) {
+    logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'リポジトリ情報の取得に失敗しました' }, 502);
+  }
+
+  if (!repoInfo.id) {
+    return jsonUtf8({ error: 'リポジトリIDを取得できませんでした' }, 502);
+  }
+  if (!canUploadWithPermission(repoInfo.permissions?.push)) {
+    return jsonUtf8({ error: 'このリポジトリへの書き込み権限がありません' }, 403);
+  }
+
+  const bytes = decodeAttachDataUrlToBytes(validation.base64);
+  const uploadUrl = buildUserAttachmentUploadUrl({ name: filename, contentType: validation.mime, repositoryId: repoInfo.id });
+
+  try {
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { ...ghHeaders, 'Content-Type': 'application/octet-stream' },
+      body: bytes.slice().buffer,
+    });
+    if (!uploadRes.ok) {
+      logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status });
+      return jsonUtf8({ error: `アップロードに失敗しました(${uploadRes.status})` }, 502);
+    }
+    const parsed = parseUploadAssetResponse(await uploadRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url });
+  } catch (err) {
+    logger.warn('gh-attach: upload request failed', { owner, repo, filename, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'アップロード中にエラーが発生しました' }, 502);
+  }
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、Issue作成API。
+ * 本文Markdownの組み立て(参照書き換え・未参照分の追記)はブラウザ側のWASM
+ * (wasm/gh-attach-wasm)で完了済みのものを受け取り、そのままIssue作成に使う。
+ */
+app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; title?: string; body?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const title = (body.title ?? '').trim();
+  const issueBody = body.body ?? '';
+  if (!owner || !repo || !title) {
+    return jsonUtf8({ error: 'owner, repo, title は必須です' }, 400);
+  }
+  if (!parseOwnerRepo(`${owner}/${repo}`)) {
+    return jsonUtf8({ error: 'owner/repoの形式が不正です' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+
+  try {
+    const issueRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title, body: issueBody }),
+    });
+    if (!issueRes.ok) {
+      logger.warn('gh-attach: create issue failed', { owner, repo, user: user.sub, status: issueRes.status });
+      return jsonUtf8({ error: `Issue作成に失敗しました(${issueRes.status})` }, 502);
+    }
+    const parsed = parseCreateIssueResponse(await issueRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url, number: parsed.number });
+  } catch (err) {
+    logger.warn('gh-attach: create issue request failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'Issue作成中にエラーが発生しました' }, 502);
+  }
 });
 
 export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
