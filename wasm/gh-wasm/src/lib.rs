@@ -82,7 +82,6 @@ struct PullRequestUser {
 struct PullRequest {
     number: u64,
     title: String,
-    html_url: String,
     state: String,
     draft: bool,
     user: Option<PullRequestUser>,
@@ -94,49 +93,61 @@ struct PullRequest {
 /// Worker/JavaScript側が行い、この関数はレスポンスの検証・整形のみを担う
 /// (wasm/README.mdに記載のRust/WASMとWorker/JavaScriptの責務分担を踏襲)。
 /// CLAUDE.mdルール16(罫線・ツリー文字禁止)に従いMarkdownテーブルで表現する。
-fn format_pr_list_impl(repo_full_name: &str, json: &str) -> Result<String, String> {
-    validate_repo_impl(repo_full_name).map_err(|_| "owner/repo形式が不正です".to_string())?;
+///
+/// 「URL」列は廃止し、「No.」列にプルリク番号自体をPR本体へのMarkdownリンク
+/// (`[番号](https://github.com/owner/repo/pull/番号)`)として埋め込む。
+/// リンク先URLはGitHub APIが返すhtml_urlをそのまま使わず、検証済みの
+/// repo_full_nameと番号から組み立てる(APIレスポンスの信頼性に依存しない)。
+///
+/// mask_authorがtrueの場合、作成者列は実際のユーザー名の代わりに常に"***"を
+/// 表示する(設定ページの「スラッシュコマンドからのプルリク応答で作成者を
+/// 伏せる」トグルに対応、デフォルトON)。
+fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> Result<String, String> {
+    let repo_full_name = validate_repo_impl(repo_full_name).map_err(|_| "owner/repo形式が不正です".to_string())?;
     let prs: Vec<PullRequest> =
         serde_json::from_str(json).map_err(|e| format!("GitHub APIレスポンスの解析に失敗しました: {e}"))?;
 
     if prs.is_empty() {
         return Ok(format!(
             "## {} のプルリクエスト一覧\nオープン中のプルリクエストはありません",
-            escape_cell(repo_full_name)
+            escape_cell(&repo_full_name)
         ));
     }
 
     let mut lines = vec![
-        format!("## {} のプルリクエスト一覧", escape_cell(repo_full_name)),
-        "| # | タイトル | 作成者 | 状態 | URL |".to_string(),
-        "|---|---|---|---|---|".to_string(),
+        format!("## {} のプルリクエスト一覧", escape_cell(&repo_full_name)),
+        "| No. | タイトル | 作成者 | 状態 |".to_string(),
+        "|---|---|---|---|".to_string(),
     ];
     for pr in &prs {
-        let author = pr
-            .user
-            .as_ref()
-            .map(|u| u.login.as_str())
-            .unwrap_or("(不明)");
+        let author = if mask_author {
+            "***".to_string()
+        } else {
+            escape_cell(pr.user.as_ref().map(|u| u.login.as_str()).unwrap_or("(不明)"))
+        };
         let state = if pr.draft {
             "draft".to_string()
         } else {
             escape_cell(&pr.state)
         };
+        let no_link = format!(
+            "[{}](https://github.com/{}/pull/{})",
+            pr.number, repo_full_name, pr.number
+        );
         lines.push(format!(
-            "| {} | {} | {} | {} | {} |",
-            pr.number,
+            "| {} | {} | {} | {} |",
+            no_link,
             escape_cell(&pr.title),
-            escape_cell(author),
-            state,
-            escape_cell(&pr.html_url)
+            author,
+            state
         ));
     }
     Ok(lines.join("\n"))
 }
 
 #[wasm_bindgen]
-pub fn format_pr_list(repo_full_name: &str, json: &str) -> Result<String, JsValue> {
-    format_pr_list_impl(repo_full_name, json).map_err(|message| JsValue::from_str(&message))
+pub fn format_pr_list(repo_full_name: &str, json: &str, mask_author: bool) -> Result<String, JsValue> {
+    format_pr_list_impl(repo_full_name, json, mask_author).map_err(|message| JsValue::from_str(&message))
 }
 
 #[wasm_bindgen]
@@ -217,38 +228,48 @@ mod tests {
     }
 
     #[test]
-    fn pr一覧をmarkdownテーブルへ整形する() {
+    fn pr一覧をmarkdownテーブルへ整形する_作成者マスクなし() {
         let json = r#"[
             {"number":42,"title":"Fix bug","html_url":"https://github.com/o/r/pull/42","state":"open","draft":false,"user":{"login":"alice"}},
             {"number":43,"title":"WIP | feature","html_url":"https://github.com/o/r/pull/43","state":"open","draft":true,"user":{"login":"bob"}}
         ]"#;
-        let output = format_pr_list_impl("o/r", json).unwrap();
+        let output = format_pr_list_impl("o/r", json, false).unwrap();
         assert!(output.contains("## o/r のプルリクエスト一覧"));
-        assert!(output.contains("| 42 | Fix bug | alice | open |"));
-        assert!(output.contains("| 43 | WIP \\| feature | bob | draft |"));
+        assert!(output.contains("| No. | タイトル | 作成者 | 状態 |"));
+        assert!(!output.contains("URL"));
+        assert!(output.contains("| [42](https://github.com/o/r/pull/42) | Fix bug | alice | open |"));
+        assert!(output.contains("| [43](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft |"));
+    }
+
+    #[test]
+    fn pr一覧をmarkdownテーブルへ整形する_作成者マスクあり() {
+        let json = r#"[{"number":42,"title":"Fix bug","html_url":"https://github.com/o/r/pull/42","state":"open","draft":false,"user":{"login":"alice"}}]"#;
+        let output = format_pr_list_impl("o/r", json, true).unwrap();
+        assert!(output.contains("| [42](https://github.com/o/r/pull/42) | Fix bug | *** | open |"));
+        assert!(!output.contains("alice"));
     }
 
     #[test]
     fn pr0件は該当メッセージを返す() {
-        let output = format_pr_list_impl("o/r", "[]").unwrap();
+        let output = format_pr_list_impl("o/r", "[]", true).unwrap();
         assert!(output.contains("オープン中のプルリクエストはありません"));
     }
 
     #[test]
-    fn userが欠損している場合は不明として扱う() {
+    fn userが欠損している場合は不明として扱う_マスクなし() {
         let json = r#"[{"number":1,"title":"t","html_url":"https://github.com/o/r/pull/1","state":"open","draft":false,"user":null}]"#;
-        let output = format_pr_list_impl("o/r", json).unwrap();
-        assert!(output.contains("| 1 | t | (不明) | open |"));
+        let output = format_pr_list_impl("o/r", json, false).unwrap();
+        assert!(output.contains("| [1](https://github.com/o/r/pull/1) | t | (不明) | open |"));
     }
 
     #[test]
     fn 不正なjsonはエラーを返す() {
-        let error = format_pr_list_impl("o/r", "not json").unwrap_err();
+        let error = format_pr_list_impl("o/r", "not json", true).unwrap_err();
         assert!(error.contains("GitHub APIレスポンスの解析に失敗しました"));
     }
 
     #[test]
     fn owner_repo形式が不正なら弾く() {
-        assert!(format_pr_list_impl("invalid", "[]").is_err());
+        assert!(format_pr_list_impl("invalid", "[]", true).is_err());
     }
 }

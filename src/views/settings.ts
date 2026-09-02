@@ -620,6 +620,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">スラッシュコマンドからのプルリク応答で作成者を伏せる（/neko gh pr list）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="nekoPrHideAuthorLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="nekoPrHideAuthorCheckbox" onchange="onNekoPrHideAuthorChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">AIチャット画面の左サイドバーを余白タップでも閉じられるようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="aichatSidebarTapCloseLabel">ON</span>
@@ -1116,6 +1126,73 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'aichat_show_lang_mode=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // Cookieへ書き込む前に残り容量を見積もる。ブラウザのCookie上限は仕様上
+    // 明示されておらず実装依存だが、多くの主要ブラウザで「1オリジンあたり
+    // document.cookie全体でおよそ4000バイト前後」が実用上の下限として広く
+    // 知られているため、保守的にこれを基準値として使う。書き込み後の想定
+    // document.cookie長がこの基準値を超える場合はCookie書き込みをやめ、
+    // localStorageへフォールバックする(呼び出し元が本関数の戻り値で分岐する)。
+    var COOKIE_CAPACITY_BUDGET_BYTES = 4000;
+    function hasCookieCapacityFor(name, value) {
+      try {
+        var newEntryLength = (name + '=' + encodeURIComponent(value)).length;
+        var currentLength = document.cookie ? document.cookie.length : 0;
+        return (currentLength + newEntryLength) < COOKIE_CAPACITY_BUDGET_BYTES;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Cookieへ書き込めない(容量不足、またはプライベートブラウジング等で
+    // 例外が出る)場合はlocalStorageへフォールバックする。サーバー側からは
+    // localStorageを読めないため、この場合サーバーが生成する応答(/neko gh
+    // pr list等)には設定が反映されない制約が残るが、少なくとも設定自体は
+    // 失われずクライアント側には保持される。
+    function writeSettingCookieWithFallback(name, value, maxAgeSeconds) {
+      if (hasCookieCapacityFor(name, value)) {
+        try {
+          document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; Secure; SameSite=Lax; Max-Age=' + maxAgeSeconds;
+          return;
+        } catch (e) {
+          // Cookie書き込みが例外で失敗した場合もlocalStorageへフォールバックする
+        }
+      }
+      try {
+        window.localStorage.setItem(name, value);
+      } catch (e) {
+        // localStorageも使えない場合は静かに諦める(設定変更自体はUI上には反映済み)
+      }
+    }
+
+    function readSettingCookieOrLocalStorage(name, fallbackValue) {
+      var re = new RegExp('(^|;)\\\\s*' + name + '=([^;]*)');
+      var m = document.cookie.match(re);
+      if (m) return decodeURIComponent(m[2]);
+      try {
+        var stored = window.localStorage.getItem(name);
+        if (stored !== null) return stored;
+      } catch (e) {
+        // localStorageが使えない場合はfallbackValueを使う
+      }
+      return fallbackValue;
+    }
+
+    (function() {
+      var val = readSettingCookieOrLocalStorage('neko_pr_hide_author', 'on');
+      var cb = document.getElementById('nekoPrHideAuthorCheckbox');
+      var label = document.getElementById('nekoPrHideAuthorLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onNekoPrHideAuthorChange() {
+      var cb = document.getElementById('nekoPrHideAuthorCheckbox');
+      var label = document.getElementById('nekoPrHideAuthorLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      writeSettingCookieWithFallback('neko_pr_hide_author', enabled ? 'on' : 'off', 31536000);
     }
 
     (function() {

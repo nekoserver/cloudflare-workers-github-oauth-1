@@ -61,6 +61,7 @@ import {
   describeGithubApiError,
   stripHtmlTags,
 } from './utils/ghAttach';
+import { resolveHideAuthorFromCookie } from './utils/ghPrList';
 
 /**
  * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
@@ -134,7 +135,12 @@ async function fetchAndFormatGhPrList(
     throw new Error(describeGithubApiError('プルリクエスト一覧の取得', res.status, ghMessage));
   }
   const json = await res.text();
-  return formatPrListViaWasm(repoFullName, json);
+  // 設定ページの「スラッシュコマンドからのプルリク応答で作成者を伏せる」
+  // トグル(Cookie: neko_pr_hide_author)。Cookie未設定(初回訪問等)の場合は
+  // デフォルトON(伏せる)として扱う(設定ページ側の初期表示デフォルトと合わせる)。
+  const hideAuthorCookie = getCookieValue(c.req.header('Cookie'), 'neko_pr_hide_author');
+  const maskAuthor = resolveHideAuthorFromCookie(hideAuthorCookie);
+  return formatPrListViaWasm(repoFullName, json, maskAuthor);
 }
 import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
