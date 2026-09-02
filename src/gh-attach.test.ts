@@ -7,6 +7,7 @@ import {
   buildUserAttachmentUploadUrl,
   parseUploadAssetResponse,
   parseCreateIssueResponse,
+  parseGithubErrorMessage,
   MAX_ATTACH_BASE64_LENGTH,
 } from './utils/ghAttach';
 
@@ -128,5 +129,17 @@ describe('parseCreateIssueResponse', () => {
   it('必須フィールドが無い場合はerrorを返す(握りつぶさない)', () => {
     expect(parseCreateIssueResponse({})).toEqual({ error: expect.any(String) });
     expect(parseCreateIssueResponse({ html_url: 'https://x' })).toEqual({ error: expect.any(String) });
+  });
+});
+
+describe('parseGithubErrorMessage', () => {
+  it('GitHub APIのエラーレスポンスからmessageを取り出す', () => {
+    expect(parseGithubErrorMessage({ message: 'Bad credentials' })).toBe('Bad credentials');
+  });
+
+  it('messageが無い・JSONでない場合はnullを返す', () => {
+    expect(parseGithubErrorMessage({})).toBeNull();
+    expect(parseGithubErrorMessage(null)).toBeNull();
+    expect(parseGithubErrorMessage({ message: '' })).toBeNull();
   });
 });
