@@ -143,6 +143,34 @@ describe('parseGithubErrorMessage', () => {
     expect(parseGithubErrorMessage(null)).toBeNull();
     expect(parseGithubErrorMessage({ message: '' })).toBeNull();
   });
+
+  // 422 Validation Failedはトップレベルのmessageだけでは原因が分からないため、
+  // errors配列(オブジェクト形式・文字列形式のどちらも)を連結して返す
+  it('422のerrors配列(オブジェクト形式)をmessageに連結する', () => {
+    const msg = parseGithubErrorMessage({
+      message: 'Validation Failed',
+      errors: [{ field: 'name', code: 'missing_field' }],
+    });
+    expect(msg).toBe('Validation Failed (name: missing_field)');
+  });
+
+  it('errors配列の要素にmessageがあればそちらを優先する', () => {
+    const msg = parseGithubErrorMessage({
+      message: 'Validation Failed',
+      errors: [{ field: 'content_type', message: 'is not a supported image type' }],
+    });
+    expect(msg).toBe('Validation Failed (content_type: is not a supported image type)');
+  });
+
+  it('errors配列(文字列形式)にも対応する', () => {
+    const msg = parseGithubErrorMessage({ message: 'Validation Failed', errors: ['file too large'] });
+    expect(msg).toBe('Validation Failed (file too large)');
+  });
+
+  it('トップレベルmessageが無くerrorsのみの場合はerrorsだけを返す', () => {
+    const msg = parseGithubErrorMessage({ errors: ['file too large'] });
+    expect(msg).toBe('file too large');
+  });
 });
 
 describe('describeGithubApiError', () => {

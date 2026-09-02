@@ -103,11 +103,46 @@ export function parseUploadAssetResponse(json: unknown): UploadAssetResponse {
  * ステータスコード単体(例: "401")だけではユーザーも呼び出し元も原因を
  * 追えないため、GitHubが返す具体的な理由("Bad credentials"等)を
  * エラーメッセージに含めて返せるようにする(CLAUDE.mdルール8の「記録」義務)。
+ *
+ * 422(Validation Failed)ではトップレベルのmessageだけでは
+ * 「何が」不正だったか分からないため、cli/cliのapi.HandleHTTPErrorに倣い
+ * errors配列の各要素(field/code/messageのいずれか)も連結する。
  */
 export function parseGithubErrorMessage(json: unknown): string | null {
   if (typeof json !== 'object' || json === null) return null;
-  const message = (json as Record<string, unknown>)['message'];
-  return typeof message === 'string' && message !== '' ? message : null;
+  const obj = json as Record<string, unknown>;
+  const message = obj['message'];
+  const topMessage = typeof message === 'string' && message !== '' ? message : null;
+
+  const errorsField = obj['errors'];
+  const detailParts: string[] = [];
+  if (Array.isArray(errorsField)) {
+    for (const e of errorsField) {
+      if (typeof e === 'string') {
+        if (e) detailParts.push(e);
+        continue;
+      }
+      if (typeof e === 'object' && e !== null) {
+        const eo = e as Record<string, unknown>;
+        const detailMessage = typeof eo['message'] === 'string' ? eo['message'] : null;
+        const field = typeof eo['field'] === 'string' ? eo['field'] : null;
+        const code = typeof eo['code'] === 'string' ? eo['code'] : null;
+        if (detailMessage) {
+          detailParts.push(field ? `${field}: ${detailMessage}` : detailMessage);
+        } else if (field && code) {
+          detailParts.push(`${field}: ${code}`);
+        }
+      }
+    }
+  }
+
+  if (topMessage && detailParts.length > 0) {
+    return `${topMessage} (${detailParts.join('; ')})`;
+  }
+  if (detailParts.length > 0) {
+    return detailParts.join('; ');
+  }
+  return topMessage;
 }
 
 /**

@@ -67,8 +67,18 @@ import {
  * ステータスコードのみでエラーメッセージを組み立てる)。
  */
 async function extractGithubErrorMessage(res: Response): Promise<string | null> {
+  const clone = res.clone();
   try {
-    return parseGithubErrorMessage(await res.clone().json());
+    const parsed = parseGithubErrorMessage(await res.clone().json());
+    if (parsed) return parsed;
+  } catch {
+    // JSONでない場合はテキストとしてフォールバックする(下記)
+  }
+  try {
+    const text = (await clone.text()).trim();
+    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、原文が長すぎると
+    // ログ・エラーメッセージが読みにくくなるため200文字までに切り詰める
+    return text ? text.slice(0, 200) : null;
   } catch {
     return null;
   }
