@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 fn valid_component(value: &str) -> bool {
@@ -70,6 +71,72 @@ fn format_repo_view_impl(
         format!("| Archived | {} |", if archived { "yes" } else { "no" }),
     ]
     .join("\n"))
+}
+
+#[derive(Deserialize)]
+struct PullRequestUser {
+    login: String,
+}
+
+#[derive(Deserialize)]
+struct PullRequest {
+    number: u64,
+    title: String,
+    html_url: String,
+    state: String,
+    draft: bool,
+    user: Option<PullRequestUser>,
+}
+
+/// `/neko gh pr list <owner/repo>` 用。GitHub REST API
+/// `GET /repos/{owner}/{repo}/pulls` のJSONレスポンス(配列)をパースし、
+/// Markdownテーブルへ整形する。実際のfetch(OAuthトークン付与含む)は
+/// Worker/JavaScript側が行い、この関数はレスポンスの検証・整形のみを担う
+/// (wasm/README.mdに記載のRust/WASMとWorker/JavaScriptの責務分担を踏襲)。
+/// CLAUDE.mdルール16(罫線・ツリー文字禁止)に従いMarkdownテーブルで表現する。
+fn format_pr_list_impl(repo_full_name: &str, json: &str) -> Result<String, String> {
+    validate_repo_impl(repo_full_name).map_err(|_| "owner/repo形式が不正です".to_string())?;
+    let prs: Vec<PullRequest> =
+        serde_json::from_str(json).map_err(|e| format!("GitHub APIレスポンスの解析に失敗しました: {e}"))?;
+
+    if prs.is_empty() {
+        return Ok(format!(
+            "## {} のプルリクエスト一覧\nオープン中のプルリクエストはありません",
+            escape_cell(repo_full_name)
+        ));
+    }
+
+    let mut lines = vec![
+        format!("## {} のプルリクエスト一覧", escape_cell(repo_full_name)),
+        "| # | タイトル | 作成者 | 状態 | URL |".to_string(),
+        "|---|---|---|---|---|".to_string(),
+    ];
+    for pr in &prs {
+        let author = pr
+            .user
+            .as_ref()
+            .map(|u| u.login.as_str())
+            .unwrap_or("(不明)");
+        let state = if pr.draft {
+            "draft".to_string()
+        } else {
+            escape_cell(&pr.state)
+        };
+        lines.push(format!(
+            "| {} | {} | {} | {} | {} |",
+            pr.number,
+            escape_cell(&pr.title),
+            escape_cell(author),
+            state,
+            escape_cell(&pr.html_url)
+        ));
+    }
+    Ok(lines.join("\n"))
+}
+
+#[wasm_bindgen]
+pub fn format_pr_list(repo_full_name: &str, json: &str) -> Result<String, JsValue> {
+    format_pr_list_impl(repo_full_name, json).map_err(|message| JsValue::from_str(&message))
 }
 
 #[wasm_bindgen]
@@ -147,5 +214,41 @@ mod tests {
         let error =
             format_repo_view_impl("owner/repo", "", "", "", "", "", 0, 0, 0, false).unwrap_err();
         assert!(error.contains("GitHub APIレスポンス"));
+    }
+
+    #[test]
+    fn pr一覧をmarkdownテーブルへ整形する() {
+        let json = r#"[
+            {"number":42,"title":"Fix bug","html_url":"https://github.com/o/r/pull/42","state":"open","draft":false,"user":{"login":"alice"}},
+            {"number":43,"title":"WIP | feature","html_url":"https://github.com/o/r/pull/43","state":"open","draft":true,"user":{"login":"bob"}}
+        ]"#;
+        let output = format_pr_list_impl("o/r", json).unwrap();
+        assert!(output.contains("## o/r のプルリクエスト一覧"));
+        assert!(output.contains("| 42 | Fix bug | alice | open |"));
+        assert!(output.contains("| 43 | WIP \\| feature | bob | draft |"));
+    }
+
+    #[test]
+    fn pr0件は該当メッセージを返す() {
+        let output = format_pr_list_impl("o/r", "[]").unwrap();
+        assert!(output.contains("オープン中のプルリクエストはありません"));
+    }
+
+    #[test]
+    fn userが欠損している場合は不明として扱う() {
+        let json = r#"[{"number":1,"title":"t","html_url":"https://github.com/o/r/pull/1","state":"open","draft":false,"user":null}]"#;
+        let output = format_pr_list_impl("o/r", json).unwrap();
+        assert!(output.contains("| 1 | t | (不明) | open |"));
+    }
+
+    #[test]
+    fn 不正なjsonはエラーを返す() {
+        let error = format_pr_list_impl("o/r", "not json").unwrap_err();
+        assert!(error.contains("GitHub APIレスポンスの解析に失敗しました"));
+    }
+
+    #[test]
+    fn owner_repo形式が不正なら弾く() {
+        assert!(format_pr_list_impl("invalid", "[]").is_err());
     }
 }

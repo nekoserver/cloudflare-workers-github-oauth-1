@@ -145,6 +145,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko factor -a <日数> | 今日から指定日数後までのYYYYMMDD日付のうち、WASM(Rust実装)で素数と判定された日を一覧表示します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
+    '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
@@ -431,6 +432,7 @@ export type AichatSlashCommandDeps = {
   isPrimeViaWasm?: (n: number) => Promise<boolean>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
+  ghPrList?: (repoFullName: string) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
 };
@@ -824,6 +826,32 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'gh') {
+    const args = parts.slice(2);
+    if (args[0] !== 'pr' || args[1] !== 'list') {
+      return {
+        handled: true,
+        response: '❌ 対応しているコマンドは /neko gh pr list <owner/repo> のみです',
+      };
+    }
+    const repoArg = args[2];
+    if (!repoArg) {
+      return { handled: true, response: '❌ リポジトリを指定してください: /neko gh pr list <owner/repo>' };
+    }
+    if (!deps.ghPrList) {
+      return { handled: true, response: '❌ /neko gh pr list は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const result = await deps.ghPrList(repoArg);
+      return { handled: true, response: result };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko gh pr list の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'tokens') {
     if (!deps.hourlyTokenUsage) {
       return { handled: true, response: formatHourlyTokenUsage([]) };
@@ -866,6 +894,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko tlist, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko help\n詳細は /neko help を実行してください`,
   };
 }

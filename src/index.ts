@@ -87,6 +87,55 @@ async function extractGithubErrorMessage(res: Response): Promise<string | null> 
     return null;
   }
 }
+
+/**
+ * /neko gh pr list・GET /api/gh/pr-list 共通。GitHub REST API
+ * GET /repos/{owner}/{repo}/pulls をユーザーのGitHub OAuthトークンで呼び出し、
+ * gh-wasm(Rust実装のformat_pr_list)でMarkdownテーブルへ整形する。
+ * owner/repoの検証もgh-wasm(validate_repo)側で行う(wasm/README.mdに記載の
+ * Rust/WASMとWorker/JavaScriptの責務分担を踏襲)。
+ */
+async function fetchAndFormatGhPrList(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  userSub: string,
+  repoFullNameInput: string
+): Promise<string> {
+  // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+  // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+  // 既存テストが壊れるため)
+  const { validateRepoViaWasm, formatPrListViaWasm } = await import('./utils/ghWasmServer');
+  let repoFullName: string;
+  try {
+    repoFullName = validateRepoViaWasm(repoFullNameInput);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const [owner, repo] = repoFullName.split('/');
+
+  const userSession = await getUserSession(c.env.DB, userSub);
+  const accessToken = userSession?.githubAccessToken;
+  if (!accessToken) {
+    throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
+  }
+
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      },
+    }
+  );
+  if (!res.ok) {
+    const ghMessage = await extractGithubErrorMessage(res);
+    logger.warn('gh pr-list: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
+    throw new Error(describeGithubApiError('プルリクエスト一覧の取得', res.status, ghMessage));
+  }
+  const json = await res.text();
+  return formatPrListViaWasm(repoFullName, json);
+}
 import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -4559,6 +4608,17 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         'SELECT label, target_at FROM countdown_events WHERE user_id = ? AND target_at > ? ORDER BY target_at ASC'
       ).bind(user.sub, new Date().toISOString()).all<{ label: string; target_at: string }>();
       return (rows.results ?? []).map((r) => ({ label: r.label, targetAt: r.target_at }));
+    },
+    ghPrList: async (repoFullName) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      return fetchAndFormatGhPrList(c, user.sub, repoFullName);
     },
   });
   if (slashCommand.handled) {
@@ -10147,6 +10207,32 @@ app.get('/wasm-modules', authMiddleware, async (c) => {
   const user = c.get('user');
   const viewMode = resolveWasmModulesViewMode(c.req.header('Cookie'));
   return c.html(getWasmModulesPage(user.sub, viewMode));
+});
+
+/**
+ * gh-wasm(Rust実装)でGitHubのプルリクエスト一覧をMarkdownテーブルへ整形して返す。
+ * /neko gh pr list サブコマンドと同じロジック(fetchAndFormatGhPrList)を使う。
+ */
+app.get('/api/gh/pr-list', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const repo = (c.req.query('repo') ?? '').trim();
+  if (!repo) {
+    return jsonUtf8({ error: 'repo(owner/repo形式)は必須です' }, 400);
+  }
+  if (c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+    ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+    if (!isWasmModuleEnabled(row)) {
+      return jsonUtf8({ error: 'ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)' }, 503);
+    }
+  }
+  try {
+    const markdown = await fetchAndFormatGhPrList(c, user.sub, repo);
+    return jsonUtf8({ markdown });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
+  }
 });
 
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
