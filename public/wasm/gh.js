@@ -3,9 +3,10 @@
 /**
  * @param {string} repo_full_name
  * @param {string} json
+ * @param {boolean} mask_author
  * @returns {string}
  */
-export function format_pr_list(repo_full_name, json) {
+export function format_pr_list(repo_full_name, json, mask_author) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -13,7 +14,7 @@ export function format_pr_list(repo_full_name, json) {
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.format_pr_list(ptr0, len0, ptr1, len1);
+        const ret = wasm.format_pr_list(ptr0, len0, ptr1, len1, mask_author);
         var ptr3 = ret[0];
         var len3 = ret[1];
         if (ret[3]) {

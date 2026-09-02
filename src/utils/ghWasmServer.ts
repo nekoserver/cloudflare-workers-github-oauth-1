@@ -28,9 +28,11 @@ export function validateRepoViaWasm(value: string): string {
 /**
  * GitHub REST API `GET /repos/{owner}/{repo}/pulls` の生JSONレスポンス(文字列)を
  * gh-wasmでMarkdownテーブルへ整形する。実際のfetch(OAuthトークン付与含む)は
- * 呼び出し元(index.ts)が行い、この関数は整形のみを担う。
+ * 呼び出し元(index.ts)が行い、この関数は整形のみを担う。maskAuthorは
+ * 設定ページの「スラッシュコマンドからのプルリク応答で作成者を伏せる」
+ * トグル(Cookie: neko_pr_hide_author、デフォルトON)の値をそのまま渡す。
  */
-export function formatPrListViaWasm(repoFullName: string, json: string): string {
+export function formatPrListViaWasm(repoFullName: string, json: string, maskAuthor: boolean): string {
   ensureInit();
-  return format_pr_list(repoFullName, json);
+  return format_pr_list(repoFullName, json, maskAuthor);
 }

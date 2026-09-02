@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export function format_pr_list(repo_full_name: string, json: string): string;
+export function format_pr_list(repo_full_name: string, json: string, mask_author: boolean): string;
 
 export function format_repo_view(full_name: string, description: string, html_url: string, default_branch: string, visibility: string, license: string, stars: number, forks: number, open_issues: number, archived: boolean): string;
 
@@ -11,7 +11,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly format_pr_list: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly format_pr_list: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly format_repo_view: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number, number];
     readonly validate_repo: (a: number, b: number) => [number, number, number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
