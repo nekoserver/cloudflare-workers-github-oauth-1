@@ -61,7 +61,7 @@ import {
   describeGithubApiError,
   stripHtmlTags,
 } from './utils/ghAttach';
-import { resolveHideAuthorFromCookie } from './utils/ghPrList';
+import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
 
 /**
  * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
@@ -134,7 +134,41 @@ async function fetchAndFormatGhPrList(
     logger.warn('gh pr-list: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
     throw new Error(describeGithubApiError('プルリクエスト一覧の取得', res.status, ghMessage));
   }
-  const json = await res.text();
+  const prs: Array<Record<string, unknown>> = await res.json();
+  // GitHub REST APIの一覧取得(GET /repos/{owner}/{repo}/pulls)はmergeable_state
+  // を返さない(コンフリクト有無はPR個別取得でのみ得られる)ため、1件ずつ
+  // GET /repos/{owner}/{repo}/pulls/{number} を並列取得してmergeable_stateを
+  // 集める。個別取得が失敗しても一覧表示自体は継続させ、該当PRのみ
+  // gh-wasm側で「確認中」表示にフォールバックさせる(rule 8: 失敗はwarnログへ記録)。
+  const mergeableStateEntries = await Promise.all(
+    prs
+      .filter((pr): pr is Record<string, unknown> & { number: number } => typeof pr.number === 'number')
+      .map(async (pr): Promise<[number, string | null]> => {
+        try {
+          const detailRes = await fetch(
+            `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pr.number}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+              },
+            }
+          );
+          if (!detailRes.ok) {
+            logger.warn('gh pr-list: mergeable_state fetch failed', { repoFullName, userSub, number: pr.number, status: detailRes.status });
+            return [pr.number, null];
+          }
+          const detail = await detailRes.json<{ mergeable_state?: string | null }>();
+          return [pr.number, detail.mergeable_state ?? null];
+        } catch (err) {
+          logger.warn('gh pr-list: mergeable_state fetch threw', { repoFullName, userSub, number: pr.number, error: err instanceof Error ? err.message : String(err) });
+          return [pr.number, null];
+        }
+      })
+  );
+  const mergeableStates = new Map<number, string | null>(mergeableStateEntries);
+  const json = JSON.stringify(mergePrMergeableStates(prs, mergeableStates));
   // 設定ページの「スラッシュコマンドからのプルリク応答で作成者を伏せる」
   // トグル(Cookie: neko_pr_hide_author)。Cookie未設定(初回訪問等)の場合は
   // デフォルトON(伏せる)として扱う(設定ページ側の初期表示デフォルトと合わせる)。

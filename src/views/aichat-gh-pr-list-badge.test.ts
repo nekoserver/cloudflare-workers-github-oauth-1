@@ -37,10 +37,10 @@ function loadStyleGhPrListBubble() {
 
 const SAMPLE_MARKDOWN = [
   '## Pulls 一覧(Draft : 1/Open : 1)',
-  '| No. | タイトル | 作成者 | 状態 |',
-  '|---:|---|:---:|---|',
-  '| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open |',
-  '| [000043](https://github.com/o/r/pull/43) | WIP feature | *** | draft |',
+  '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
+  '|---:|---|:---:|---|---|',
+  '| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open | あり |',
+  '| [000043](https://github.com/o/r/pull/43) | WIP feature | *** | draft | なし |',
 ].join('\n');
 
 describe('styleGhPrListBubble', () => {
@@ -70,12 +70,13 @@ describe('styleGhPrListBubble', () => {
     const el = document.createElement('div');
     el.innerHTML = parseMd(SAMPLE_MARKDOWN);
     styleGhPrListBubble(el, SAMPLE_MARKDOWN);
-    const badges = el.querySelectorAll('table .gh-pr-state-badge');
-    expect(badges.length).toBe(2);
-    expect(badges[0].classList.contains('gh-pr-state-open')).toBe(true);
-    expect(badges[0].textContent).toBe('Open');
-    expect(badges[1].classList.contains('gh-pr-state-draft')).toBe(true);
-    expect(badges[1].textContent).toBe('Draft');
+    const rows = el.querySelectorAll('table tbody tr');
+    const row0Badges = rows[0].querySelectorAll('.gh-pr-state-badge');
+    const row1Badges = rows[1].querySelectorAll('.gh-pr-state-badge');
+    expect(row0Badges[0].classList.contains('gh-pr-state-open')).toBe(true);
+    expect(row0Badges[0].textContent).toBe('Open');
+    expect(row1Badges[0].classList.contains('gh-pr-state-draft')).toBe(true);
+    expect(row1Badges[0].textContent).toBe('Draft');
   });
 
   it('closed状態もバッジに変換する(将来state=allになった場合の保険)', () => {
@@ -83,16 +84,42 @@ describe('styleGhPrListBubble', () => {
     const styleGhPrListBubble = loadStyleGhPrListBubble();
     const md = [
       '## Pulls 一覧(Draft : 0/Open : 1)',
-      '| No. | タイトル | 作成者 | 状態 |',
-      '|---:|---|:---:|---|',
-      '| [000001](https://github.com/o/r/pull/1) | t | a | closed |',
+      '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
+      '|---:|---|:---:|---|---|',
+      '| [000001](https://github.com/o/r/pull/1) | t | a | closed | 確認中 |',
     ].join('\n');
     const el = document.createElement('div');
     el.innerHTML = parseMd(md);
     styleGhPrListBubble(el, md);
-    const badge = el.querySelector('table .gh-pr-state-badge');
-    expect(badge?.classList.contains('gh-pr-state-closed')).toBe(true);
-    expect(badge?.textContent).toBe('Closed');
+    const badges = el.querySelectorAll('table tbody tr:first-child .gh-pr-state-badge');
+    expect(badges[0].classList.contains('gh-pr-state-closed')).toBe(true);
+    expect(badges[0].textContent).toBe('Closed');
+  });
+
+  it('コンフリクト列(あり/なし/確認中)をGitHub準拠の色バッジ(span)へ置き換える', () => {
+    const parseMd = loadParseMd();
+    const styleGhPrListBubble = loadStyleGhPrListBubble();
+    const md = [
+      '## Pulls 一覧(Draft : 0/Open : 3)',
+      '| No. | タイトル | 作成者 | 状態 | コンフリクト |',
+      '|---:|---|:---:|---|---|',
+      '| [000001](https://github.com/o/r/pull/1) | a | a | open | あり |',
+      '| [000002](https://github.com/o/r/pull/2) | b | b | open | なし |',
+      '| [000003](https://github.com/o/r/pull/3) | c | c | open | 確認中 |',
+    ].join('\n');
+    const el = document.createElement('div');
+    el.innerHTML = parseMd(md);
+    styleGhPrListBubble(el, md);
+    const rows = el.querySelectorAll('table tbody tr');
+    const conflictBadge0 = rows[0].querySelectorAll('.gh-pr-state-badge')[1];
+    const conflictBadge1 = rows[1].querySelectorAll('.gh-pr-state-badge')[1];
+    const conflictBadge2 = rows[2].querySelectorAll('.gh-pr-state-badge')[1];
+    expect(conflictBadge0.classList.contains('gh-pr-state-closed')).toBe(true);
+    expect(conflictBadge0.textContent).toBe('あり');
+    expect(conflictBadge1.classList.contains('gh-pr-state-open')).toBe(true);
+    expect(conflictBadge1.textContent).toBe('なし');
+    expect(conflictBadge2.classList.contains('gh-pr-state-draft')).toBe(true);
+    expect(conflictBadge2.textContent).toBe('確認中');
   });
 
   it('見出しのDraft/Open件数をGitHub準拠の色バッジ(span)へ置き換える', () => {
