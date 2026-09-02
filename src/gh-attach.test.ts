@@ -192,6 +192,21 @@ describe('describeGithubApiError', () => {
     const msg = describeGithubApiError('Issue作成', 502, null);
     expect(msg).toBe('Issue作成に失敗しました(502)');
   });
+
+  // user-attachments/assetsエンドポイントは書き込み権限不足を403ではなく404で
+  // 返す(cli/cli本家の実装コメントより)。isUploadEndpoint=trueの場合のみ、
+  // 通常の「リポジトリが見つからない」ではなくrepoスコープ不足を案内する
+  it('isUploadEndpoint=trueかつ404の場合はrepoスコープ不足を案内する専用メッセージを返す', () => {
+    const msg = describeGithubApiError('アップロード', 404, null, true);
+    expect(msg).toContain('このリポジトリへのファイル添付権限がありません');
+    expect(msg).toContain('repoスコープ');
+    expect(msg).toContain('/auth/github/reauthorize');
+  });
+
+  it('isUploadEndpoint=falseの場合、404は通常のactionLabelメッセージのまま', () => {
+    const msg = describeGithubApiError('リポジトリ情報の取得', 404, 'Not Found');
+    expect(msg).toBe('リポジトリ情報の取得に失敗しました(404: Not Found)');
+  });
 });
 
 // 対象: GitHubがJSONでなくHTMLエラーページを返した場合の読める文字列への変換。
