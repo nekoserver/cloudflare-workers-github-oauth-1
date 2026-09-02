@@ -82,6 +82,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 3649850,
     builtAt: '2026-09-02',
   },
+  {
+    id: 'gh',
+    name: 'gh (GitHub CLI互換, Rust)',
+    description:
+      'GitHub CLI(gh)のうちGitHub REST APIで完結する部分だけをRustへ移植したプロトタイプ。owner/repo形式の検証と、gh repo view相当のリポジトリ概要をMarkdown整形する。Git・端末・OSキーチェーン等に依存する部分はWorker/JavaScript側の責務として分離している(GitHub API通信・OAuthトークン管理は未配線)',
+    wasmPath: 'public/wasm/gh_bg.wasm',
+    sourceDir: 'wasm/gh-wasm',
+    sourceFile: 'wasm/gh-wasm/src/lib.rs',
+    approxSize: '約27KB',
+    sizeBytes: 27685,
+    builtAt: '2026-08-29',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
