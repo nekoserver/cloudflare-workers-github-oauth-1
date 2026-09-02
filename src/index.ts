@@ -58,6 +58,7 @@ import {
   parseUploadAssetResponse,
   parseCreateIssueResponse,
   parseGithubErrorMessage,
+  describeGithubApiError,
 } from './utils/ghAttach';
 
 /**
@@ -66,8 +67,18 @@ import {
  * ステータスコードのみでエラーメッセージを組み立てる)。
  */
 async function extractGithubErrorMessage(res: Response): Promise<string | null> {
+  const clone = res.clone();
   try {
-    return parseGithubErrorMessage(await res.clone().json());
+    const parsed = parseGithubErrorMessage(await res.clone().json());
+    if (parsed) return parsed;
+  } catch {
+    // JSONでない場合はテキストとしてフォールバックする(下記)
+  }
+  try {
+    const text = (await clone.text()).trim();
+    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、原文が長すぎると
+    // ログ・エラーメッセージが読みにくくなるため200文字までに切り詰める
+    return text ? text.slice(0, 200) : null;
   } catch {
     return null;
   }
@@ -10900,7 +10911,7 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     if (!repoRes.ok) {
       const ghMessage = await extractGithubErrorMessage(repoRes);
       logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage });
-      return jsonUtf8({ error: `リポジトリ情報の取得に失敗しました(${repoRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
     }
     repoInfo = await repoRes.json();
   } catch (err) {
@@ -10927,7 +10938,7 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     if (!uploadRes.ok) {
       const ghMessage = await extractGithubErrorMessage(uploadRes);
       logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status, ghMessage });
-      return jsonUtf8({ error: `アップロードに失敗しました(${uploadRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage) }, 502);
     }
     const parsed = parseUploadAssetResponse(await uploadRes.json());
     if ('error' in parsed) {
@@ -10984,7 +10995,7 @@ app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
     if (!issueRes.ok) {
       const ghMessage = await extractGithubErrorMessage(issueRes);
       logger.warn('gh-attach: create issue failed', { owner, repo, user: user.sub, status: issueRes.status, ghMessage });
-      return jsonUtf8({ error: `Issue作成に失敗しました(${issueRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('Issue作成', issueRes.status, ghMessage) }, 502);
     }
     const parsed = parseCreateIssueResponse(await issueRes.json());
     if ('error' in parsed) {

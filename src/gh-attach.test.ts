@@ -8,6 +8,7 @@ import {
   parseUploadAssetResponse,
   parseCreateIssueResponse,
   parseGithubErrorMessage,
+  describeGithubApiError,
   MAX_ATTACH_BASE64_LENGTH,
 } from './utils/ghAttach';
 
@@ -141,5 +142,53 @@ describe('parseGithubErrorMessage', () => {
     expect(parseGithubErrorMessage({})).toBeNull();
     expect(parseGithubErrorMessage(null)).toBeNull();
     expect(parseGithubErrorMessage({ message: '' })).toBeNull();
+  });
+
+  // 422 Validation Failedはトップレベルのmessageだけでは原因が分からないため、
+  // errors配列(オブジェクト形式・文字列形式のどちらも)を連結して返す
+  it('422のerrors配列(オブジェクト形式)をmessageに連結する', () => {
+    const msg = parseGithubErrorMessage({
+      message: 'Validation Failed',
+      errors: [{ field: 'name', code: 'missing_field' }],
+    });
+    expect(msg).toBe('Validation Failed (name: missing_field)');
+  });
+
+  it('errors配列の要素にmessageがあればそちらを優先する', () => {
+    const msg = parseGithubErrorMessage({
+      message: 'Validation Failed',
+      errors: [{ field: 'content_type', message: 'is not a supported image type' }],
+    });
+    expect(msg).toBe('Validation Failed (content_type: is not a supported image type)');
+  });
+
+  it('errors配列(文字列形式)にも対応する', () => {
+    const msg = parseGithubErrorMessage({ message: 'Validation Failed', errors: ['file too large'] });
+    expect(msg).toBe('Validation Failed (file too large)');
+  });
+
+  it('トップレベルmessageが無くerrorsのみの場合はerrorsだけを返す', () => {
+    const msg = parseGithubErrorMessage({ errors: ['file too large'] });
+    expect(msg).toBe('file too large');
+  });
+});
+
+describe('describeGithubApiError', () => {
+  it('401の場合はトークン失効を案内する専用メッセージを返す(actionLabelは使わない)', () => {
+    const msg = describeGithubApiError('リポジトリ情報の取得', 401, 'Bad credentials');
+    expect(msg).toContain('GitHubアクセストークンが無効です');
+    expect(msg).toContain('Bad credentials');
+    expect(msg).toContain('/auth/logout');
+    expect(msg).not.toContain('リポジトリ情報の取得に失敗しました');
+  });
+
+  it('401以外はactionLabelを使ったメッセージを返す', () => {
+    const msg = describeGithubApiError('アップロード', 403, 'must have push access');
+    expect(msg).toBe('アップロードに失敗しました(403: must have push access)');
+  });
+
+  it('ghMessageがnullの場合はステータスコードのみ含める', () => {
+    const msg = describeGithubApiError('Issue作成', 502, null);
+    expect(msg).toBe('Issue作成に失敗しました(502)');
   });
 });

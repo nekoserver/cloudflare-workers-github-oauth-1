@@ -103,11 +103,63 @@ export function parseUploadAssetResponse(json: unknown): UploadAssetResponse {
  * ステータスコード単体(例: "401")だけではユーザーも呼び出し元も原因を
  * 追えないため、GitHubが返す具体的な理由("Bad credentials"等)を
  * エラーメッセージに含めて返せるようにする(CLAUDE.mdルール8の「記録」義務)。
+ *
+ * 422(Validation Failed)ではトップレベルのmessageだけでは
+ * 「何が」不正だったか分からないため、cli/cliのapi.HandleHTTPErrorに倣い
+ * errors配列の各要素(field/code/messageのいずれか)も連結する。
  */
 export function parseGithubErrorMessage(json: unknown): string | null {
   if (typeof json !== 'object' || json === null) return null;
-  const message = (json as Record<string, unknown>)['message'];
-  return typeof message === 'string' && message !== '' ? message : null;
+  const obj = json as Record<string, unknown>;
+  const message = obj['message'];
+  const topMessage = typeof message === 'string' && message !== '' ? message : null;
+
+  const errorsField = obj['errors'];
+  const detailParts: string[] = [];
+  if (Array.isArray(errorsField)) {
+    for (const e of errorsField) {
+      if (typeof e === 'string') {
+        if (e) detailParts.push(e);
+        continue;
+      }
+      if (typeof e === 'object' && e !== null) {
+        const eo = e as Record<string, unknown>;
+        const detailMessage = typeof eo['message'] === 'string' ? eo['message'] : null;
+        const field = typeof eo['field'] === 'string' ? eo['field'] : null;
+        const code = typeof eo['code'] === 'string' ? eo['code'] : null;
+        if (detailMessage) {
+          detailParts.push(field ? `${field}: ${detailMessage}` : detailMessage);
+        } else if (field && code) {
+          detailParts.push(`${field}: ${code}`);
+        }
+      }
+    }
+  }
+
+  if (topMessage && detailParts.length > 0) {
+    return `${topMessage} (${detailParts.join('; ')})`;
+  }
+  if (detailParts.length > 0) {
+    return detailParts.join('; ');
+  }
+  return topMessage;
+}
+
+/**
+ * GitHub APIのエラー(ステータスコード + messageフィールド)から、利用者に
+ * 見せる完全なエラーメッセージ文を組み立てる。401(Bad credentials)は
+ * 「D1に保存されたGitHubアクセストークン自体がGitHub側で無効化・失効している」
+ * ケースで、このAPI固有のバグではなく再ログインで解消するため、
+ * /wasm-modulesのソース取得APIと同じ案内文を付ける(既存パターンを踏襲)。
+ * actionLabelは「リポジトリ情報の取得」「アップロード」「Issue作成」等、
+ * 401以外の場合の文言に使う。
+ */
+export function describeGithubApiError(actionLabel: string, status: number, ghMessage: string | null): string {
+  const suffix = ghMessage ? `: ${ghMessage}` : '';
+  if (status === 401) {
+    return `GitHubアクセストークンが無効です(HTTP 401${suffix})。/auth/logout でログアウトし、再度ログインし直してください。`;
+  }
+  return `${actionLabel}に失敗しました(${status}${suffix})`;
 }
 
 export type CreateIssueResponse = { url: string; number: number } | { error: string };
