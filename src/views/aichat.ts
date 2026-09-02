@@ -6579,6 +6579,16 @@ export function getAiChatPage(user: {
         badge.className = 'gh-pr-state-badge ' + cls;
         badge.textContent = label;
         stateCell.appendChild(badge);
+
+        var conflictCell = cells[4];
+        if (!conflictCell) continue;
+        var conflictRaw = conflictCell.textContent.trim();
+        var conflictCls = conflictRaw === 'あり' ? 'gh-pr-state-closed' : (conflictRaw === '確認中' ? 'gh-pr-state-draft' : 'gh-pr-state-open');
+        conflictCell.textContent = '';
+        var conflictBadge = document.createElement('span');
+        conflictBadge.className = 'gh-pr-state-badge ' + conflictCls;
+        conflictBadge.textContent = conflictRaw;
+        conflictCell.appendChild(conflictBadge);
       }
     }
 

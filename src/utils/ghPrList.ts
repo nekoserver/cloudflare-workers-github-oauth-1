@@ -14,3 +14,23 @@
 export function resolveHideAuthorFromCookie(cookieValue: string | null): boolean {
   return cookieValue !== 'off';
 }
+
+/**
+ * GitHub REST APIの一覧取得(GET /repos/{owner}/{repo}/pulls)はmergeable_state
+ * を返さないため、Worker側で1件ずつ個別取得(GET /repos/{owner}/{repo}/pulls/{number})
+ * した結果をstatesへ集約し、この関数で一覧のJSON配列へ結合する。
+ * statesに該当するnumberが無い(個別取得に失敗した等)場合はmergeable_stateを
+ * 付与せず、gh-wasm側で「確認中」表示にフォールバックさせる。
+ */
+export function mergePrMergeableStates(
+  prs: Array<Record<string, unknown>>,
+  states: Map<number, string | null>
+): Array<Record<string, unknown>> {
+  return prs.map((pr) => {
+    const number = pr.number;
+    if (typeof number !== 'number' || !states.has(number)) {
+      return pr;
+    }
+    return { ...pr, mergeable_state: states.get(number) };
+  });
+}

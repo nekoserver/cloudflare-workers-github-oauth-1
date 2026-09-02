@@ -85,6 +85,23 @@ struct PullRequest {
     state: String,
     draft: bool,
     user: Option<PullRequestUser>,
+    // GitHub REST APIの一覧取得(GET /repos/{owner}/{repo}/pulls)は
+    // mergeable_stateを返さないため、Worker側で1件ずつ個別取得
+    // (GET /repos/{owner}/{repo}/pulls/{number})した結果をこのフィールドへ
+    // 詰めてから渡す。取得に失敗した場合はnullのまま(「確認中」表示)にする。
+    mergeable_state: Option<String>,
+}
+
+/// mergeable_stateの値をコンフリクト列の表示テキストへ変換する。
+/// "dirty"はGitHub上でコンフリクトが発生している状態を意味する。
+/// null/"unknown"はGitHub側でまだ計算中、またはWorker側で個別取得に
+/// 失敗した場合(「確認中」表示でユーザーに不確実性を伝える)。
+fn conflict_label(mergeable_state: &Option<String>) -> &'static str {
+    match mergeable_state.as_deref() {
+        Some("dirty") => "あり",
+        Some("unknown") | None => "確認中",
+        Some(_) => "なし",
+    }
 }
 
 /// `/neko gh pr list <owner/repo>` 用。GitHub REST API
@@ -121,8 +138,8 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
     // GitHub準拠の色バッジへ置き換える。ここではプレーンテキストのまま出力する。
     let mut lines = vec![
         format!("## Pulls 一覧(Draft : {draft_count}/Open : {open_count})"),
-        "| No. | タイトル | 作成者 | 状態 |".to_string(),
-        "|---:|---|:---:|---|".to_string(),
+        "| No. | タイトル | 作成者 | 状態 | コンフリクト |".to_string(),
+        "|---:|---|:---:|---|---|".to_string(),
     ];
     for pr in &prs {
         let author = if mask_author {
@@ -140,11 +157,12 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
             pr.number, repo_full_name, pr.number
         );
         lines.push(format!(
-            "| {} | {} | {} | {} |",
+            "| {} | {} | {} | {} | {} |",
             no_link,
             escape_cell(&pr.title),
             author,
-            state
+            state,
+            conflict_label(&pr.mergeable_state)
         ));
     }
     Ok(lines.join("\n"))
@@ -240,20 +258,35 @@ mod tests {
         ]"#;
         let output = format_pr_list_impl("o/r", json, false).unwrap();
         assert!(output.contains("## Pulls 一覧(Draft : 1/Open : 1)"));
-        assert!(output.contains("| No. | タイトル | 作成者 | 状態 |"));
+        assert!(output.contains("| No. | タイトル | 作成者 | 状態 | コンフリクト |"));
         assert!(!output.contains("URL"));
         // 列揃え: No.は右寄せ(6桁ゼロ埋めのリンクラベル、URL自体は非パディング)、作成者は中央寄せ
-        assert!(output.contains("|---:|---|:---:|---|"));
-        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open |"));
-        assert!(output.contains("| [000043](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft |"));
+        assert!(output.contains("|---:|---|:---:|---|---|"));
+        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open | 確認中 |"));
+        assert!(output.contains("| [000043](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft | 確認中 |"));
     }
 
     #[test]
     fn pr一覧をmarkdownテーブルへ整形する_作成者マスクあり() {
         let json = r#"[{"number":42,"title":"Fix bug","html_url":"https://github.com/o/r/pull/42","state":"open","draft":false,"user":{"login":"alice"}}]"#;
         let output = format_pr_list_impl("o/r", json, true).unwrap();
-        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | *** | open |"));
+        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | *** | open | 確認中 |"));
         assert!(!output.contains("alice"));
+    }
+
+    #[test]
+    fn mergeable_stateからコンフリクト列を判定する() {
+        let json = r#"[
+            {"number":1,"title":"a","html_url":"https://github.com/o/r/pull/1","state":"open","draft":false,"user":{"login":"a"},"mergeable_state":"dirty"},
+            {"number":2,"title":"b","html_url":"https://github.com/o/r/pull/2","state":"open","draft":false,"user":{"login":"b"},"mergeable_state":"clean"},
+            {"number":3,"title":"c","html_url":"https://github.com/o/r/pull/3","state":"open","draft":false,"user":{"login":"c"},"mergeable_state":"unknown"},
+            {"number":4,"title":"d","html_url":"https://github.com/o/r/pull/4","state":"open","draft":false,"user":{"login":"d"}}
+        ]"#;
+        let output = format_pr_list_impl("o/r", json, false).unwrap();
+        assert!(output.contains("| [000001](https://github.com/o/r/pull/1) | a | a | open | あり |"));
+        assert!(output.contains("| [000002](https://github.com/o/r/pull/2) | b | b | open | なし |"));
+        assert!(output.contains("| [000003](https://github.com/o/r/pull/3) | c | c | open | 確認中 |"));
+        assert!(output.contains("| [000004](https://github.com/o/r/pull/4) | d | d | open | 確認中 |"));
     }
 
     #[test]
@@ -280,7 +313,7 @@ mod tests {
     fn userが欠損している場合は不明として扱う_マスクなし() {
         let json = r#"[{"number":1,"title":"t","html_url":"https://github.com/o/r/pull/1","state":"open","draft":false,"user":null}]"#;
         let output = format_pr_list_impl("o/r", json, false).unwrap();
-        assert!(output.contains("| [000001](https://github.com/o/r/pull/1) | t | (不明) | open |"));
+        assert!(output.contains("| [000001](https://github.com/o/r/pull/1) | t | (不明) | open | 確認中 |"));
     }
 
     #[test]
