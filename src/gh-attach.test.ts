@@ -102,7 +102,7 @@ describe('buildUserAttachmentUploadUrl', () => {
   it('name/content_type/repository_idをクエリパラメータに含める', () => {
     const url = buildUserAttachmentUploadUrl({ name: 'login.png', contentType: 'image/png', repositoryId: 12345 });
     const parsed = new URL(url);
-    expect(parsed.origin + parsed.pathname).toBe('https://github.com/user-attachments/assets');
+    expect(parsed.origin + parsed.pathname).toBe('https://uploads.github.com/user-attachments/assets');
     expect(parsed.searchParams.get('name')).toBe('login.png');
     expect(parsed.searchParams.get('content_type')).toBe('image/png');
     expect(parsed.searchParams.get('repository_id')).toBe('12345');
