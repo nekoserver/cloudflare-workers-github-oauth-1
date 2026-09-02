@@ -724,6 +724,12 @@ const APIS = [
     { method:'DELETE', path:'/api/moondream-analyze-log/:id', desc:'Moondream分析呼び出しログを1件削除', path_params:['id'], pp:{id:'1'},
       res:{ok:true} },
   ]},
+  { group: 'GitHub Issue添付 (/gh-attach, WASM)', endpoints: [
+    { method:'POST', path:'/api/gh-attach/upload', desc:'画像をGitHubへアップロード(gh issue create --attachのWASM移植、実アップロードは専用のclassic PAT=GH_ATTACH_UPLOAD_TOKEN経由)', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'filename',req:true,s:'login.png'},{n:'dataUrl',req:true,s:'data:image/png;base64,iVBORw0KGgo...'}],
+      res:{url:'https://github.com/user-attachments/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'} },
+    { method:'POST', path:'/api/gh-attach/create-issue', desc:'画像添付済みMarkdown本文でGitHub Issueを作成', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'title',req:true,s:'ログイン画面のバグ'},{n:'body',s:'![ログイン画面](https://github.com/user-attachments/assets/xxxxxxxx)'}],
+      res:{url:'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/issues/123',number:123} },
+  ]},
   { group: 'その他', endpoints: [
     { method:'GET', path:'/api', desc:'API 情報・ルート一覧',
       res:{message:'Cloudflare Workers GitHub OAuth API',version:'1.0.0',authentication:{github_oauth:'GET /auth/github',logout:'GET /auth/logout'},endpoints:{public:['GET /api','GET /api/public'],protected:['GET /api/protected','GET /api/profile']}} },
