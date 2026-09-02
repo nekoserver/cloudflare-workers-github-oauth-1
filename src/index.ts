@@ -10913,13 +10913,25 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
 
   let repoInfo: { id?: number; permissions?: { push?: boolean } };
   try {
-    const repoRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+    const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const repoRes = await fetch(repoUrl, {
       headers: ghHeaders,
     });
     if (!repoRes.ok) {
       const ghMessage = await extractGithubErrorMessage(repoRes);
-      logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage });
-      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
+      // 診断用: トークンの種類だけを先頭5文字で判別する(秘密情報そのものは含めない)。
+      // gho_=classic OAuth App, ghu_=GitHub App user-to-server, ghp_/github_pat_=PAT。
+      // 原因不明の404が続いているため、推測ではなく実データで切り分けるための
+      // 一時的な診断出力(GitHubのレート制限情報・リクエストIDも合わせて出す)。
+      const tokenPrefix = accessToken.slice(0, 5);
+      const rateLimitRemaining = repoRes.headers.get('x-ratelimit-remaining');
+      const githubRequestId = repoRes.headers.get('x-github-request-id');
+      logger.warn('gh-attach: repo lookup failed', {
+        owner, repo, user: user.sub, status: repoRes.status, ghMessage,
+        tokenPrefix, rateLimitRemaining, githubRequestId, url: repoUrl,
+      });
+      const diag = ` [診断: token種別=${tokenPrefix}..., url=${repoUrl}, x-github-request-id=${githubRequestId ?? 'なし'}]`;
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) + diag }, 502);
     }
     repoInfo = await repoRes.json();
   } catch (err) {
