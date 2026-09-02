@@ -40,6 +40,7 @@ export function getWasmModulesPage(username: string, initialViewMode: 'panel' | 
       color: white; font-weight: 600; font-size: 16px; cursor: pointer;
     }
     .user-menu-container { position: relative; }
+    @media (display-mode: standalone) { .pwa-hide { display: none !important; } }
     .dropdown-menu {
       display: none;
       position: absolute;
@@ -231,7 +232,7 @@ export function getWasmModulesPage(username: string, initialViewMode: 'panel' | 
     <div class="user-menu">
       ${getThemeToggleHTML()}
       <span class="user-name">${safeUsername}</span>
-      <div class="user-menu-container">
+      <div class="user-menu-container pwa-hide">
         <div class="user-icon" title="${safeUsername}" onclick="toggleDropdown()">
           ${escapeHtml(username.substring(0, 2).toUpperCase())}
         </div>
