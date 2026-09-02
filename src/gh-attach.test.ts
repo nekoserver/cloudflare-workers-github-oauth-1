@@ -3,7 +3,6 @@ import {
   validateAttachDataUrl,
   decodeAttachDataUrlToBytes,
   parseOwnerRepo,
-  isUploadableTokenPrefix,
   canUploadWithPermission,
   buildUserAttachmentUploadUrl,
   parseUploadAssetResponse,
@@ -20,7 +19,17 @@ import {
 //   (1) 不正な形式・許可していないMIMEタイプ・巨大すぎる添付データを弾けない
 //   (2) owner/repo形式でない入力を弾けない
 //   (3) アップロード/Issue作成のレスポンスが期待した形でない場合にエラーを握りつぶす
-//   (4) アップロードトークンの種類・権限チェックが漏れる
+//   (4) リポジトリのpush権限チェックが漏れる
+//
+// 注意: 当初「トークンのプレフィックス(gho_/ghp_/github_pat_)で種別を判定し、
+// 該当しなければアップロードを拒否する」isUploadableTokenPrefix関数を実装して
+// いたが、実際のOAuthトークンで「このトークンの種類はファイル添付に対応して
+// いません」と誤って拒否される不具合が発生したため削除した。cli/cli本家の
+// checkUploadTokenType はトークンの取得経路(ローカルのkeyring/設定ファイル)
+// から種別を判定しており、文字列プレフィックスだけでは正しく判定できない
+// (根拠のない推測での事前ブロックだった)。トークン種別の妥当性は実際の
+// GitHub API(アップロードエンドポイント自体のレスポンス、および
+// canUploadWithPermissionによるpush権限チェック)に委ねる。
 
 describe('validateAttachDataUrl', () => {
   const validBase64 = Buffer.from('hello-image-bytes').toString('base64');
@@ -75,19 +84,6 @@ describe('parseOwnerRepo', () => {
 
   it('前後の空白はtrimしてからパースする', () => {
     expect(parseOwnerRepo('  owner/repo  ')).toEqual({ owner: 'owner', repo: 'repo' });
-  });
-});
-
-describe('isUploadableTokenPrefix', () => {
-  it('gho_/ghp_/github_pat_で始まるトークンを許可する', () => {
-    expect(isUploadableTokenPrefix('gho_abc')).toBe(true);
-    expect(isUploadableTokenPrefix('ghp_abc')).toBe(true);
-    expect(isUploadableTokenPrefix('github_pat_abc')).toBe(true);
-  });
-
-  it('それ以外のトークン(installation token等)は拒否する', () => {
-    expect(isUploadableTokenPrefix('ghs_installation_token')).toBe(false);
-    expect(isUploadableTokenPrefix('')).toBe(false);
   });
 });
 

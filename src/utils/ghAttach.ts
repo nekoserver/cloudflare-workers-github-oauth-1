@@ -60,16 +60,6 @@ export function parseOwnerRepo(input: string): OwnerRepo | null {
 }
 
 /**
- * cli/cli internal/attachments/client.go の checkUploadTokenType 相当。
- * user-attachments assetsエンドポイントはOAuth/PAT系トークンのみアップロードを許可し、
- * GitHub Appのinstallation tokenなどは拒否される(gh CLI側の制約を踏襲)。
- * このリポジトリのOAuthトークンは gho_ プレフィックスのユーザーOAuthトークンのため許可対象。
- */
-export function isUploadableTokenPrefix(token: string): boolean {
-  return token.startsWith('gho_') || token.startsWith('ghp_') || token.startsWith('github_pat_');
-}
-
-/**
  * cli/cli internal/attachments/client.go の checkPermission 相当。
  * リポジトリのviewerPermission(REST APIの permissions.push 等から得られる書き込み可否)
  * が無ければアップロードは拒否する。

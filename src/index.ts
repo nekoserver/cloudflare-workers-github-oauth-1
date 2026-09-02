@@ -53,7 +53,6 @@ import {
   validateAttachDataUrl,
   decodeAttachDataUrlToBytes,
   parseOwnerRepo,
-  isUploadableTokenPrefix,
   canUploadWithPermission,
   buildUserAttachmentUploadUrl,
   parseUploadAssetResponse,
@@ -10871,9 +10870,6 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   if (!accessToken) {
     return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
-  }
-  if (!isUploadableTokenPrefix(accessToken)) {
-    return jsonUtf8({ error: 'このトークンの種類はファイル添付に対応していません' }, 403);
   }
 
   const ghHeaders = {
