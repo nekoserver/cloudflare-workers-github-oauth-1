@@ -166,3 +166,15 @@ const markdown = ghAttachBuildMarkdown(JSON.stringify({ body, attachments }));
 
 `go.run(...)`が返すPromiseはGoの`main()`が終了するまで解決しない
 (`main_js.go`は`select {}`でブロックし続ける設計のため、意図的に待たない)。
+
+### 実アップロード先(uploads.github.com)はclassic PATでないと動かない
+
+`/gh-attach`ページ自体のMarkdown組み立て(このWASM)とは別に、実際の画像
+アップロードは`src/index.ts`の`POST /api/gh-attach/upload`がTypeScript側で
+`https://uploads.github.com/user-attachments/assets`へ`fetch`している。
+このエンドポイントはトークンの種類で挙動が変わることが実機で確認できた:
+GitHub Appのuser-to-serverトークン(`ghu_`)は404、fine-grained PATは403
+(`Resource not accessible by personal access token`)、**classic PAT
+(`ghp_`、`repo`スコープ)のみ成功**する。このため`GH_ATTACH_UPLOAD_TOKEN`
+という専用のclassic PATを別途`wrangler secret put`で設定する必要がある
+(詳細は`NOTICE.cloudflare-workers-github-oauth-1.20260902.md`参照)。
