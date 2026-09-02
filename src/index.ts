@@ -10902,7 +10902,11 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
   }
 
   const ghHeaders = {
-    'Authorization': `Bearer ${accessToken}`,
+    // go-gh(cli/cliが実際に使うHTTPクライアント)は Authorization: token <TOKEN>
+    // を使っており、Bearerではない。特にgithub.com側のuser-attachments/assets
+    // (Webアプリのレガシーエンドポイント)はBearerを認識せず未認証扱いとなり、
+    // Railsの汎用エラーページ(422 "Oh no")を返すことが実際に確認できた。
+    'Authorization': `token ${accessToken}`,
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
   };
@@ -10989,7 +10993,8 @@ app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
     const issueRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        // gh-attach: uploadと同じ理由でtokenスキームに統一する(上記コメント参照)
+        'Authorization': `token ${accessToken}`,
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
         'Content-Type': 'application/json',
