@@ -112,7 +112,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
-import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
+import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
 import {
   MOONDREAM_MODEL,
   MOONDREAM_DEFAULT_PROMPT,
@@ -4549,7 +4549,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const requestedModel = preferMoondream ? MOONDREAM_MODEL : (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-  const { primaryModel, fallbackModel } = resolveAichatModelsForRequest({
+  const { primaryModel, fallbackModel, secondFallbackModel } = resolveAichatModelsForRequest({
     requestedModel,
     hasImage: !!image,
     allowedModels: AICHAT_ALLOWED_MODELS,
@@ -4562,10 +4562,15 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-    const textMessages = buildAiMessages(message, systemPromptMode);
-    const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
-    const baseParams = { messages, max_tokens: maxTokens };
-    const runParams = getModelRunParams(model, baseParams);
+    let runParams: unknown;
+    if (model === AICHAT_MOONDREAM3_MODEL && image) {
+      runParams = buildMoondream3RunParams(image, message);
+    } else {
+      const textMessages = buildAiMessages(message, systemPromptMode);
+      const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
+      const baseParams = { messages, max_tokens: maxTokens };
+      runParams = getModelRunParams(model, baseParams);
+    }
     const result = await c.env.AI!.run(
       model as Parameters<typeof c.env.AI.run>[0],
       runParams as Parameters<typeof c.env.AI.run>[1]
@@ -4629,34 +4634,40 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
-  try {
-    const { text: response, usage } = await runAi(primaryModel);
-    const saved = await autoSave(response, primaryModel, usage);
-    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
-  } catch (primaryErr) {
-    logger.warn('AI chat primary model failed, trying fallback', {
-      model: primaryModel,
-      fallback: fallbackModel,
-      user: user.sub,
-      error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
-    });
-    if (primaryModel === fallbackModel) {
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
-    }
+  const candidates = [primaryModel, fallbackModel, secondFallbackModel].filter(
+    (m, i, arr): m is string => !!m && arr.indexOf(m) === i
+  );
+  let lastErr: unknown = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const model = candidates[i];
     try {
-      const { text: response, usage } = await runAi(fallbackModel);
-      const saved = await autoSave(response, fallbackModel, usage);
-      const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
-    } catch (fallbackErr) {
-      logger.warn('AI chat fallback model also failed', {
-        model: fallbackModel,
-        user: user.sub,
-        error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
+      const { text: response, usage } = await runAi(model);
+      const saved = await autoSave(response, model, usage);
+      const isFallback = i > 0;
+      return jsonUtf8({
+        response,
+        usedModel: model,
+        systemPromptMode,
+        ...(isFallback
+          ? { fallbackUsed: true, primaryError: lastErr instanceof Error ? lastErr.message : String(lastErr) }
+          : {}),
+        ...usage,
+        ...saved,
       });
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+    } catch (err) {
+      logger.warn(
+        i === 0 ? 'AI chat primary model failed, trying fallback' : 'AI chat fallback model failed, trying next',
+        {
+          model,
+          next: candidates[i + 1],
+          user: user.sub,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }
+      );
+      lastErr = err;
     }
   }
+  return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
 });
 
 /**
