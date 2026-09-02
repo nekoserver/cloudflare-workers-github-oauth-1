@@ -83,6 +83,12 @@ export function sha256HexViaWasm(input: string): string {
   が`WASM_MODULE_REGISTRY`自体を仮想ディレクトリとして渡す
   (`"name\ttype\tsize\tmtime"`形式のTSVをls-wasmへ渡し、整形済みテキストを受け取る)。
   `/neko ls [-l] [-a]`。ブラウザページは無くサーバー(Worker)実行のみ
+- `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
+  一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
+  `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
+  `/neko gh pr list <owner/repo>`・`GET /api/gh/pr-list?repo=<owner/repo>`。
+  ブラウザページは無くサーバー(Worker)実行のみ。同クレート内の
+  `gh repo view`相当(`format_repo_view`)は配線未実施のプロトタイプのまま
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
@@ -99,14 +105,26 @@ Rust実装がある。完全な`gh`はGit、端末、OSキーチェーン、対�
 | Rust/WASM | `owner/repo`の検証、GitHub API応答の整形、コマンド固有ロジック |
 | Worker/JavaScript | OAuthトークン管理、`fetch`によるGitHub API通信、HTTPエラー処理 |
 
-最初の対象は読み取り専用の`gh repo view <owner/repo>`である。`gh-wasm`は
-リポジトリ名の検証とAPI応答をMarkdownテーブルへ整形する関数を実装済みだが、
-公開WASM成果物とアプリへの配線はまだ行っていない。成果物を生成できる環境で
-以下を実行した後、既存モジュールと同様にdynamic importで配線する。
+最初の対象は読み取り専用の`gh repo view <owner/repo>`(`validate_repo`・
+`format_repo_view`、ブラウザ/アプリへの配線は未実施のプロトタイプのまま)と、
+`gh pr list <owner/repo>`(`format_pr_list`)。後者は実際にビルド・配線済みで、
+`/neko gh pr list <owner/repo>`(AIチャットのスラッシュコマンド)と
+`GET /api/gh/pr-list?repo=<owner/repo>`から呼び出せる
+(`src/utils/ghWasmServer.ts`がinitSyncでロードし、`src/index.ts`の
+`fetchAndFormatGhPrList`がGitHub REST API `GET /repos/{owner}/{repo}/pulls`を
+ユーザーのOAuthトークンでfetchしてから`format_pr_list`へ渡す)。
+
+`format_pr_list`は`serde_json`でGitHub APIレスポンス(PR配列のJSON文字列)を
+パースし、番号・タイトル・作成者・状態(draftの場合は"draft")・URLの
+Markdownテーブルへ整形する。CLAUDE.mdルール16(罫線・ツリー文字禁止)に
+従いMarkdownテーブルで表現し、セル内の`|`・改行はエスケープする。
+
+ビルド手順(`gh repo view`側の配線が今後必要になった場合も同じ手順):
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.127
+cd wasm/gh-wasm && cargo test                     # ネイティブ環境でロジック部分を検証
 cargo build --release --target wasm32-unknown-unknown --manifest-path wasm/gh-wasm/Cargo.toml
 wasm-bindgen --target web --out-dir public/wasm --out-name gh \
   wasm/gh-wasm/target/wasm32-unknown-unknown/release/gh_wasm.wasm

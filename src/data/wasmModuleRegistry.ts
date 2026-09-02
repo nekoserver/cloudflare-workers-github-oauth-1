@@ -82,6 +82,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 3649850,
     builtAt: '2026-09-02',
   },
+  {
+    id: 'gh',
+    name: 'gh pr list (Rust)',
+    description:
+      'GitHub CLI(cli/cli)の`gh pr list`相当。GitHub REST API(GET /repos/{owner}/{repo}/pulls)のJSONレスポンスをowner/repoの検証込みでMarkdownテーブルへ整形する。実際のfetch(OAuthトークン付与)はWorker(サーバー)側のTypeScriptが行う。AIチャットの/neko gh pr listサブコマンド・GET /api/gh/pr-listのサーバー実行で使用する(ブラウザページは無い)',
+    wasmPath: 'public/wasm/gh_bg.wasm',
+    sourceDir: 'wasm/gh-wasm',
+    sourceFile: 'wasm/gh-wasm/src/lib.rs',
+    approxSize: '約77KB',
+    sizeBytes: 78278,
+    builtAt: '2026-09-02',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
