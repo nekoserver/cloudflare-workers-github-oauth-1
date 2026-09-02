@@ -73,7 +73,10 @@ export function buildUserAttachmentUploadUrl(params: {
   contentType: string;
   repositoryId: number;
 }): string {
-  const url = new URL('https://github.com/user-attachments/assets');
+  // cli/cliのinternal/ghinstance.UserAssetUploadPrefixは "https://uploads.github.com/"
+  // を返す。github.com(Webアプリ本体)にはこのパスは存在せず、そちらへ送ると
+  // Railsの汎用エラーページ(422 "Oh no")が返る(実際に発生して判明した)。
+  const url = new URL('https://uploads.github.com/user-attachments/assets');
   url.searchParams.set('name', params.name);
   url.searchParams.set('content_type', params.contentType);
   url.searchParams.set('repository_id', String(params.repositoryId));
