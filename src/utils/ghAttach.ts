@@ -175,9 +175,11 @@ export function parseGithubErrorMessage(json: unknown): string | null {
  * cli/cli本家のuploadError.Error()と同じ意味(トークンにこのリポジトリへの
  * 書き込み権限が無い)として案内する。user-attachments/assetsエンドポイントは
  * 権限不足を403ではなく404で返す仕様のため(cli/cli internal/attachments/
- * client.goの実装コメント参照)、GET /repos/{owner}/{repo}のpermissions.push
- * がtrueでも、OAuthトークン自体にrepoスコープが付与されていなければここで404に
- * なりうる(コラボレーター権限とトークンのスコープは別物)。
+ * client.goの実装コメント参照)。アップロードには専用のclassic PAT
+ * (GH_ATTACH_UPLOAD_TOKEN)を使う設計にしたため、この404はそのPAT自体に
+ * 当該リポジトリへのrepoスコープ・書き込み権限が無いことを指す
+ * (GitHub Appのuser-to-serverトークンではこのエンドポイントが動作しないことが
+ * 実際に確認できたため、GITHUB_TOKENのような管理者設定のPATに切り替えた経緯がある)。
  */
 export function describeGithubApiError(
   actionLabel: string,
@@ -190,7 +192,7 @@ export function describeGithubApiError(
     return `GitHubアクセストークンが無効です(HTTP 401${suffix})。/auth/logout でログアウトし、再度ログインし直してください。`;
   }
   if (status === 404 && isUploadEndpoint) {
-    return `このリポジトリへのファイル添付権限がありません(HTTP 404${suffix})。GitHubアクセストークンにrepoスコープが付与されていない可能性があります。/auth/github/reauthorize で再認可してください。`;
+    return `このリポジトリへのファイル添付権限がありません(HTTP 404${suffix})。アップロード用PAT(GH_ATTACH_UPLOAD_TOKEN)にこのリポジトリへのrepoスコープ・書き込み権限が付与されているか、管理者が確認してください。`;
   }
   return `${actionLabel}に失敗しました(${status}${suffix})`;
 }

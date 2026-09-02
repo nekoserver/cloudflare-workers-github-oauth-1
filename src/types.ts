@@ -31,6 +31,13 @@ export type Bindings = {
   /** harness_hook_logへのPostToolUseフック書き込み用の共有シークレット */
   HARNESS_HOOK_SECRET?: string;
   GITHUB_TOKEN?: string;
+  /**
+   * /gh-attach（gh issue create --attachのWASM移植）のアップロード専用GitHub PAT
+   * （classic、repoスコープ必須）。uploads.github.com/user-attachments/assetsは
+   * GitHub Appのトークン（ghu_）では動作しないため、このアプリのOAuthトークンとは
+   * 別にclassic PATが必要（実際に404が再現し検証済み）。未設定時はアップロードが失敗する。
+   */
+  GH_ATTACH_UPLOAD_TOKEN?: string;
   AI?: Ai;
   AI_MODEL?: string;
   AI_CHAT_MODEL?: string;

@@ -194,13 +194,13 @@ describe('describeGithubApiError', () => {
   });
 
   // user-attachments/assetsエンドポイントは書き込み権限不足を403ではなく404で
-  // 返す(cli/cli本家の実装コメントより)。isUploadEndpoint=trueの場合のみ、
-  // 通常の「リポジトリが見つからない」ではなくrepoスコープ不足を案内する
-  it('isUploadEndpoint=trueかつ404の場合はrepoスコープ不足を案内する専用メッセージを返す', () => {
+  // 返す(cli/cli本家の実装コメントより)。アップロードは専用のclassic PAT
+  // (GH_ATTACH_UPLOAD_TOKEN)を使う設計のため、isUploadEndpoint=trueの場合、
+  // このPAT自体の権限不足を案内する
+  it('isUploadEndpoint=trueかつ404の場合はアップロード用PATの権限不足を案内する専用メッセージを返す', () => {
     const msg = describeGithubApiError('アップロード', 404, null, true);
     expect(msg).toContain('このリポジトリへのファイル添付権限がありません');
-    expect(msg).toContain('repoスコープ');
-    expect(msg).toContain('/auth/github/reauthorize');
+    expect(msg).toContain('GH_ATTACH_UPLOAD_TOKEN');
   });
 
   it('isUploadEndpoint=falseの場合、404は通常のactionLabelメッセージのまま', () => {
