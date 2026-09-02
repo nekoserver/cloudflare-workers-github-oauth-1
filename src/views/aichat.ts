@@ -666,7 +666,7 @@ export function getAiChatPage(user: {
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
-      max-width: 640px; width: 100%; margin: 0 auto;
+      max-width: 80%; width: 100%; margin: 0 auto;
       padding: 12px 16px 0; overflow: hidden; min-height: 0;
     }
     .chat-log {
