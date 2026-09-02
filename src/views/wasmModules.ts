@@ -237,7 +237,7 @@ export function getWasmModulesPage(username: string, initialViewMode: 'panel' | 
     </div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name">${safeUsername}</span>
+      <span class="user-name pwa-hide">${safeUsername}</span>
       <div class="user-menu-container pwa-hide">
         <div class="user-icon" title="${safeUsername}" onclick="toggleDropdown()">
           ${escapeHtml(username.substring(0, 2).toUpperCase())}
