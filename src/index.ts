@@ -59,6 +59,7 @@ import {
   parseCreateIssueResponse,
   parseGithubErrorMessage,
   describeGithubApiError,
+  stripHtmlTags,
 } from './utils/ghAttach';
 
 /**
@@ -75,9 +76,12 @@ async function extractGithubErrorMessage(res: Response): Promise<string | null> 
     // JSONでない場合はテキストとしてフォールバックする(下記)
   }
   try {
-    const text = (await clone.text()).trim();
-    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、原文が長すぎると
-    // ログ・エラーメッセージが読みにくくなるため200文字までに切り詰める
+    const raw = (await clone.text()).trim();
+    if (!raw) return null;
+    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、タグを除去して
+    // 読める形にし、原文が長すぎるとログ・エラーメッセージが読みにくくなるため
+    // 200文字までに切り詰める
+    const text = stripHtmlTags(raw);
     return text ? text.slice(0, 200) : null;
   } catch {
     return null;
