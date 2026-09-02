@@ -663,10 +663,33 @@ export function getAiChatPage(user: {
     .preview-area img { max-width: 100%; }
     .preview-area input[type="checkbox"] { margin-right: 4px; }
 
+    /* ======= 送信結果トースト ======= */
+    /* フォールバックせず指定中のモデルで処理されたか、フォールバックして
+       別モデルに切り替わったかを、送信直後に画面上部のトーストで明示する
+       (回答バブルの表示だけでは、フォールバックの結果なのか単なる表示上の
+       色/ラベルの取り違えなのか利用者が判断できないため)。 */
+    .aichat-send-toast-container {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 10000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none; align-items: center;
+    }
+    .aichat-send-toast {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); pointer-events: auto;
+      animation: aichatSendToastIn 0.2s ease-out; transition: opacity 0.3s ease-out;
+      white-space: nowrap;
+    }
+    .aichat-send-toast.aichat-send-toast-ok { background: #c6f6d5; color: #22543d; }
+    .aichat-send-toast.aichat-send-toast-fade { opacity: 0; }
+    @keyframes aichatSendToastIn {
+      from { transform: translateY(-12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
-      max-width: 640px; width: 100%; margin: 0 auto;
+      max-width: 80%; width: 100%; margin: 0 auto;
       padding: 12px 16px 0; overflow: hidden; min-height: 0;
     }
     .chat-log {
@@ -716,8 +739,27 @@ export function getAiChatPage(user: {
     .chat-bubble.thinking {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
+    /* ======= /neko gh pr list の応答バブル ======= */
+    /* 右端の余白をゼロにし、表(No./タイトル/作成者/状態)を目一杯まで広げる */
+    .chat-bubble.assistant.gh-pr-list-bubble { padding-right: 0; }
+    .gh-pr-list-bubble table { width: 100%; }
+    .gh-pr-list-bubble td a { text-decoration: none; }
+    .gh-pr-state-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+    }
+    .gh-pr-state-badge.gh-pr-state-open { background: #dafbe1; color: #1a7f37; }
+    .gh-pr-state-badge.gh-pr-state-draft { background: #f6f8fa; color: #656d76; border: 1px solid #d0d7de; }
+    .gh-pr-state-badge.gh-pr-state-closed { background: #ffebe9; color: #cf222e; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-open { background: rgba(63,185,80,0.18); color: #3fb950; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-draft { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-closed { background: rgba(248,81,73,0.18); color: #f85149; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
+    /* /neko系ローカルコマンド(clog等の表・テーブル表示)はchat-bubble-wrapで
+       包まれず基本の.chat-bubble(max-width:85%)のまま描画されるため、
+       AIモデル応答(100%)と揃うようassistant.preview-are全体を100%にする */
+    .chat-bubble.assistant.preview-area { max-width: 100%; }
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .bubble-label-fallback { color: var(--color-error, #cf222e); }
     .bubble-fallback-notice { font-size: 12px; color: var(--color-error, #cf222e); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-color); opacity: 0.85; }
@@ -782,6 +824,7 @@ export function getAiChatPage(user: {
   </style>
 </head>
 <body>
+  <div class="aichat-send-toast-container" id="aichatSendToastContainer"></div>
   <!-- ナビバー -->
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
@@ -3326,6 +3369,34 @@ export function getAiChatPage(user: {
         }
       });
       return max + 100;
+    }
+
+    /**
+     * 送信直後、指定中のモデルでフォールバックせず処理されたか、
+     * フォールバックして別モデルに切り替わったかをトーストで明示する。
+     * ok=trueなら薄緑色で「送信完了」、falseならフォールバック後の
+     * 実際に使われたモデルの色(MODEL_COLORS)を背景にして
+     * 「送信失敗 フォールバックし継続」を表示する。
+     * モデル色が取得できない場合は無彩色(グレー)にフォールバックする。
+     */
+    function showAichatSendToast(ok, fallbackModelColor) {
+      var container = document.getElementById('aichatSendToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      if (ok) {
+        toast.className = 'aichat-send-toast aichat-send-toast-ok';
+        toast.textContent = '送信完了';
+      } else {
+        toast.className = 'aichat-send-toast';
+        toast.style.background = fallbackModelColor || '#718096';
+        toast.style.color = '#fff';
+        toast.textContent = '送信失敗 フォールバックし継続';
+      }
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('aichat-send-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 4000);
     }
 
     function openQuestionHashModal(hash) {
@@ -6462,6 +6533,55 @@ export function getAiChatPage(user: {
     // 見出しの行末へ「登録」ボタンを追加し、押すとカウントダウンページと同じ
     // 登録機能一式(openCountdownQuickAddModal、src/utils/countdownQuickAdd.ts)を
     // 呼び出してその場で予定登録できるようにする。
+    /**
+     * /neko gh pr list の応答バブル向け。gh-wasm(Rust)が返すMarkdownテーブルの
+     * 見出し(「## Pulls 一覧(Draft : ◯/Open : △)」)を含む場合のみ適用する。
+     * No./作成者列の右寄せ・中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
+     * Markdownの列揃え記法とゼロ埋めとして既に出力済みなので、ここでは
+     * markdownRenderer.tsのparseMd()がHTMLをエスケープする都合上Markdown単体
+     * では表現できない「状態(open/draft)列をGitHub準拠の色バッジに置き換える」
+     * 処理と、応答バブル右端の余白ゼロ化(CSSクラス付与)のみを担う。
+     */
+    function styleGhPrListBubble(el, text) {
+      var body = String(text);
+      if (body.indexOf('Pulls 一覧') === -1) return;
+      el.classList.add('gh-pr-list-bubble');
+      var heading = el.querySelector('h2');
+      if (heading) {
+        var headingMatch = /Draft\\s*:\\s*(\\d+)\\/Open\\s*:\\s*(\\d+)/.exec(heading.textContent || '');
+        if (headingMatch) {
+          heading.textContent = '';
+          heading.appendChild(document.createTextNode('Pulls 一覧('));
+          var draftBadge = document.createElement('span');
+          draftBadge.className = 'gh-pr-state-badge gh-pr-state-draft';
+          draftBadge.textContent = 'Draft : ' + headingMatch[1];
+          heading.appendChild(draftBadge);
+          heading.appendChild(document.createTextNode(' / '));
+          var openBadge = document.createElement('span');
+          openBadge.className = 'gh-pr-state-badge gh-pr-state-open';
+          openBadge.textContent = 'Open : ' + headingMatch[2];
+          heading.appendChild(openBadge);
+          heading.appendChild(document.createTextNode(')'));
+        }
+      }
+      var table = el.querySelector('table');
+      if (!table) return;
+      var rows = table.querySelectorAll('tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        var cells = rows[i].querySelectorAll('td');
+        var stateCell = cells[3];
+        if (!stateCell) continue;
+        var raw = stateCell.textContent.trim().toLowerCase();
+        var cls = raw === 'draft' ? 'gh-pr-state-draft' : (raw === 'closed' ? 'gh-pr-state-closed' : 'gh-pr-state-open');
+        var label = raw === 'draft' ? 'Draft' : (raw === 'closed' ? 'Closed' : 'Open');
+        stateCell.textContent = '';
+        var badge = document.createElement('span');
+        badge.className = 'gh-pr-state-badge ' + cls;
+        badge.textContent = label;
+        stateCell.appendChild(badge);
+      }
+    }
+
     function addTlistRegisterButton(el, text) {
       var body = String(text);
       if (body.indexOf('## 次の予定一覧') !== 0) return;
@@ -6486,6 +6606,7 @@ export function getAiChatPage(user: {
       el.innerHTML = parseMd(text);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
+      if (isLocalCommand) styleGhPrListBubble(el, text);
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
@@ -6814,6 +6935,9 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
+            if (!isLocalCommand) {
+              showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
+            }
             assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
