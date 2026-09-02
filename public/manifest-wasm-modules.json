@@ -1,0 +1,19 @@
+{
+  "name": "WASMモジュール一覧",
+  "short_name": "WASMモジュール",
+  "description": "ブラウザ/サーバーで実行するWASMモジュールの一覧・ソース閲覧・起動時ON/OFF設定ページ",
+  "start_url": "/wasm-modules",
+  "scope": "/wasm-modules",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/wasm-modules-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
