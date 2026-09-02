@@ -10946,7 +10946,7 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     if (!uploadRes.ok) {
       const ghMessage = await extractGithubErrorMessage(uploadRes);
       logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status, ghMessage });
-      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage) }, 502);
+      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage, true) }, 502);
     }
     const parsed = parseUploadAssetResponse(await uploadRes.json());
     if ('error' in parsed) {
