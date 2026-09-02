@@ -761,6 +761,10 @@ export function getAiChatPage(user: {
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-yes { background: rgba(255,143,193,0.18); color: #ff8fc1; }
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-no { background: rgba(63,185,80,0.18); color: #3fb950; }
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-unknown { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
+    /* 見出し(h2)を「タイトル中央寄せ + Draft/Openバッジを右端」の1行に配置する */
+    .gh-pr-list-heading { display: flex; align-items: center; }
+    .gh-pr-list-heading-title { flex: 1; text-align: center; }
+    .gh-pr-list-heading-badges { display: flex; align-items: center; gap: 6px; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
     /* /neko系ローカルコマンド(clog等の表・テーブル表示)はchat-bubble-wrapで
@@ -6555,20 +6559,25 @@ export function getAiChatPage(user: {
       el.classList.add('gh-pr-list-bubble');
       var heading = el.querySelector('h2');
       if (heading) {
-        var headingMatch = /Draft\\s*:\\s*(\\d+)\\/Open\\s*:\\s*(\\d+)/.exec(heading.textContent || '');
+        var headingMatch = /Draft\\s*:\\s*(\\d+)\\s*\\/\\s*Open\\s*:\\s*(\\d+)/.exec(heading.textContent || '');
         if (headingMatch) {
           heading.textContent = '';
-          heading.appendChild(document.createTextNode('Pulls 一覧('));
+          heading.classList.add('gh-pr-list-heading');
+          var titleSpan = document.createElement('span');
+          titleSpan.className = 'gh-pr-list-heading-title';
+          titleSpan.textContent = 'Pulls 一覧';
+          heading.appendChild(titleSpan);
+          var badgesWrap = document.createElement('span');
+          badgesWrap.className = 'gh-pr-list-heading-badges';
           var draftBadge = document.createElement('span');
           draftBadge.className = 'gh-pr-state-badge gh-pr-state-draft';
           draftBadge.textContent = 'Draft : ' + headingMatch[1];
-          heading.appendChild(draftBadge);
-          heading.appendChild(document.createTextNode(' / '));
+          badgesWrap.appendChild(draftBadge);
           var openBadge = document.createElement('span');
           openBadge.className = 'gh-pr-state-badge gh-pr-state-open';
           openBadge.textContent = 'Open : ' + headingMatch[2];
-          heading.appendChild(openBadge);
-          heading.appendChild(document.createTextNode(')'));
+          badgesWrap.appendChild(openBadge);
+          heading.appendChild(badgesWrap);
         }
       }
       var table = el.querySelector('table');

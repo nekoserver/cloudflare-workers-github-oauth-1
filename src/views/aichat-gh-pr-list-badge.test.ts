@@ -128,7 +128,7 @@ describe('styleGhPrListBubble', () => {
     expect(html).toMatch(/\.gh-pr-state-badge\.gh-pr-conflict-no\s*\{\s*background:\s*#d4f5d4/);
   });
 
-  it('見出しのDraft/Open件数をGitHub準拠の色バッジ(span)へ置き換える', () => {
+  it('見出しのDraft/Open件数をGitHub準拠の色バッジ(span)へ置き換え、タイトルとバッジ群に分離する', () => {
     const parseMd = loadParseMd();
     const styleGhPrListBubble = loadStyleGhPrListBubble();
     const el = document.createElement('div');
@@ -136,11 +136,21 @@ describe('styleGhPrListBubble', () => {
     styleGhPrListBubble(el, SAMPLE_MARKDOWN);
     const heading = el.querySelector('h2');
     expect(heading).toBeTruthy();
-    const draftBadge = heading!.querySelector('.gh-pr-state-badge.gh-pr-state-draft');
-    const openBadge = heading!.querySelector('.gh-pr-state-badge.gh-pr-state-open');
+    expect(heading!.classList.contains('gh-pr-list-heading')).toBe(true);
+    const title = heading!.querySelector('.gh-pr-list-heading-title');
+    expect(title?.textContent).toBe('Pulls 一覧');
+    const badgesWrap = heading!.querySelector('.gh-pr-list-heading-badges');
+    expect(badgesWrap).toBeTruthy();
+    const draftBadge = badgesWrap!.querySelector('.gh-pr-state-badge.gh-pr-state-draft');
+    const openBadge = badgesWrap!.querySelector('.gh-pr-state-badge.gh-pr-state-open');
     expect(draftBadge?.textContent).toBe('Draft : 1');
     expect(openBadge?.textContent).toBe('Open : 1');
-    expect(heading!.textContent).toContain('Pulls 一覧(');
+  });
+
+  it('見出し(h2)はタイトル中央寄せ・バッジ右寄せのflexレイアウトCSSで定義されている', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toMatch(/\.gh-pr-list-heading\s*\{[^}]*display:\s*flex/);
+    expect(html).toMatch(/\.gh-pr-list-heading-title\s*\{[^}]*text-align:\s*center/);
   });
 
   it('No.・作成者・コンフリクト列は中央寄せになる(parseMdの列揃え反映)', () => {
