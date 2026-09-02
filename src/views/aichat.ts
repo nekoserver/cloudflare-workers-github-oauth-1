@@ -754,6 +754,13 @@ export function getAiChatPage(user: {
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-open { background: rgba(63,185,80,0.18); color: #3fb950; }
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-draft { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-closed { background: rgba(248,81,73,0.18); color: #f85149; }
+    /* コンフリクト列: 状態列とは別配色(あり=ピンク/なし=薄緑/確認中=グレー) */
+    .gh-pr-state-badge.gh-pr-conflict-yes { background: #ffd7e6; color: #9e1f5c; }
+    .gh-pr-state-badge.gh-pr-conflict-no { background: #d4f5d4; color: #1a7f37; }
+    .gh-pr-state-badge.gh-pr-conflict-unknown { background: #f6f8fa; color: #656d76; border: 1px solid #d0d7de; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-yes { background: rgba(255,143,193,0.18); color: #ff8fc1; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-no { background: rgba(63,185,80,0.18); color: #3fb950; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-unknown { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
     /* /neko系ローカルコマンド(clog等の表・テーブル表示)はchat-bubble-wrapで
@@ -6536,7 +6543,7 @@ export function getAiChatPage(user: {
     /**
      * /neko gh pr list の応答バブル向け。gh-wasm(Rust)が返すMarkdownテーブルの
      * 見出し(「## Pulls 一覧(Draft : ◯/Open : △)」)を含む場合のみ適用する。
-     * No./作成者列の右寄せ・中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
+     * No./作成者/コンフリクト列の中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
      * Markdownの列揃え記法とゼロ埋めとして既に出力済みなので、ここでは
      * markdownRenderer.tsのparseMd()がHTMLをエスケープする都合上Markdown単体
      * では表現できない「状態(open/draft)列をGitHub準拠の色バッジに置き換える」
@@ -6583,7 +6590,7 @@ export function getAiChatPage(user: {
         var conflictCell = cells[4];
         if (!conflictCell) continue;
         var conflictRaw = conflictCell.textContent.trim();
-        var conflictCls = conflictRaw === 'あり' ? 'gh-pr-state-closed' : (conflictRaw === '確認中' ? 'gh-pr-state-draft' : 'gh-pr-state-open');
+        var conflictCls = conflictRaw === 'あり' ? 'gh-pr-conflict-yes' : (conflictRaw === '確認中' ? 'gh-pr-conflict-unknown' : 'gh-pr-conflict-no');
         conflictCell.textContent = '';
         var conflictBadge = document.createElement('span');
         conflictBadge.className = 'gh-pr-state-badge ' + conflictCls;
