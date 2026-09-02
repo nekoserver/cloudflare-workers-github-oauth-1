@@ -70,6 +70,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 35040,
     builtAt: '2026-08-26',
   },
+  {
+    id: 'gh-attach',
+    name: 'gh issue create --attach (Go)',
+    description:
+      'GitHub CLI(cli/cli)の`gh issue create --attach`が実装するMarkdown組み立てロジック(本文中の画像参照の書き換え・未参照分の追記)をGo/js-wasmへ移植したもの。他のモジュールと異なりRust/wasm-bindgenではなくGo標準のwasm_exec.jsグルーコードで動く。実ファイルI/O・HTTP通信(GitHubへのアップロード・Issue作成)はブラウザWASMでは行えないため対象外とし、/gh-attachページのTypeScript(Cloudflare Workers)側が実際の通信を担う。ブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+    wasmPath: 'public/wasm/gh-attach.wasm',
+    sourceDir: 'wasm/gh-attach-wasm',
+    sourceFile: 'wasm/gh-attach-wasm/markdown.go',
+    approxSize: '約3.5MB',
+    sizeBytes: 3649850,
+    builtAt: '2026-09-02',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
