@@ -663,6 +663,29 @@ export function getAiChatPage(user: {
     .preview-area img { max-width: 100%; }
     .preview-area input[type="checkbox"] { margin-right: 4px; }
 
+    /* ======= 送信結果トースト ======= */
+    /* フォールバックせず指定中のモデルで処理されたか、フォールバックして
+       別モデルに切り替わったかを、送信直後に画面上部のトーストで明示する
+       (回答バブルの表示だけでは、フォールバックの結果なのか単なる表示上の
+       色/ラベルの取り違えなのか利用者が判断できないため)。 */
+    .aichat-send-toast-container {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 10000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none; align-items: center;
+    }
+    .aichat-send-toast {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); pointer-events: auto;
+      animation: aichatSendToastIn 0.2s ease-out; transition: opacity 0.3s ease-out;
+      white-space: nowrap;
+    }
+    .aichat-send-toast.aichat-send-toast-ok { background: #c6f6d5; color: #22543d; }
+    .aichat-send-toast.aichat-send-toast-fade { opacity: 0; }
+    @keyframes aichatSendToastIn {
+      from { transform: translateY(-12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
@@ -782,6 +805,7 @@ export function getAiChatPage(user: {
   </style>
 </head>
 <body>
+  <div class="aichat-send-toast-container" id="aichatSendToastContainer"></div>
   <!-- ナビバー -->
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
@@ -3326,6 +3350,34 @@ export function getAiChatPage(user: {
         }
       });
       return max + 100;
+    }
+
+    /**
+     * 送信直後、指定中のモデルでフォールバックせず処理されたか、
+     * フォールバックして別モデルに切り替わったかをトーストで明示する。
+     * ok=trueなら薄緑色で「送信完了」、falseならフォールバック後の
+     * 実際に使われたモデルの色(MODEL_COLORS)を背景にして
+     * 「送信失敗 フォールバックし継続」を表示する。
+     * モデル色が取得できない場合は無彩色(グレー)にフォールバックする。
+     */
+    function showAichatSendToast(ok, fallbackModelColor) {
+      var container = document.getElementById('aichatSendToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      if (ok) {
+        toast.className = 'aichat-send-toast aichat-send-toast-ok';
+        toast.textContent = '送信完了';
+      } else {
+        toast.className = 'aichat-send-toast';
+        toast.style.background = fallbackModelColor || '#718096';
+        toast.style.color = '#fff';
+        toast.textContent = '送信失敗 フォールバックし継続';
+      }
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('aichat-send-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 4000);
     }
 
     function openQuestionHashModal(hash) {
@@ -6814,6 +6866,9 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
+            if (!isLocalCommand) {
+              showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
+            }
             assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
