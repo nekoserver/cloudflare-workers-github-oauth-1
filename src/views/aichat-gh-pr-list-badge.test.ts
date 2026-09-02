@@ -36,7 +36,7 @@ function loadStyleGhPrListBubble() {
 }
 
 const SAMPLE_MARKDOWN = [
-  '## o/r のプルリクエスト一覧',
+  '## Pulls 一覧(Draft : 1/Open : 1)',
   '| No. | タイトル | 作成者 | 状態 |',
   '|---:|---|:---:|---|',
   '| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open |',
@@ -82,7 +82,7 @@ describe('styleGhPrListBubble', () => {
     const parseMd = loadParseMd();
     const styleGhPrListBubble = loadStyleGhPrListBubble();
     const md = [
-      '## o/r のプルリクエスト一覧',
+      '## Pulls 一覧(Draft : 0/Open : 1)',
       '| No. | タイトル | 作成者 | 状態 |',
       '|---:|---|:---:|---|',
       '| [000001](https://github.com/o/r/pull/1) | t | a | closed |',

@@ -108,11 +108,11 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
         serde_json::from_str(json).map_err(|e| format!("GitHub APIレスポンスの解析に失敗しました: {e}"))?;
 
     if prs.is_empty() {
-        return Ok(format!(
-            "## {} のプルリクエスト一覧\nオープン中のプルリクエストはありません",
-            escape_cell(&repo_full_name)
-        ));
+        return Ok("## Pulls 一覧(Draft : 0/Open : 0)\nオープン中のプルリクエストはありません".to_string());
     }
+
+    let draft_count = prs.iter().filter(|pr| pr.draft).count();
+    let open_count = prs.len() - draft_count;
 
     // 列揃えはMarkdownの区切り行記法(:---=左, ---:=右, :---:=中央)で指定する。
     // No.は6桁ゼロ埋め・右寄せ、作成者は中央寄せにする(利用者からの要望)。
@@ -120,7 +120,7 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
     // ブラウザ側(aichat.tsのstyleGhPrListBubble)でこの列のテキストを
     // GitHub準拠の色バッジへ置き換える。ここではプレーンテキストのまま出力する。
     let mut lines = vec![
-        format!("## {} のプルリクエスト一覧", escape_cell(&repo_full_name)),
+        format!("## Pulls 一覧(Draft : {draft_count}/Open : {open_count})"),
         "| No. | タイトル | 作成者 | 状態 |".to_string(),
         "|---:|---|:---:|---|".to_string(),
     ];
@@ -239,7 +239,7 @@ mod tests {
             {"number":43,"title":"WIP | feature","html_url":"https://github.com/o/r/pull/43","state":"open","draft":true,"user":{"login":"bob"}}
         ]"#;
         let output = format_pr_list_impl("o/r", json, false).unwrap();
-        assert!(output.contains("## o/r のプルリクエスト一覧"));
+        assert!(output.contains("## Pulls 一覧(Draft : 1/Open : 1)"));
         assert!(output.contains("| No. | タイトル | 作成者 | 状態 |"));
         assert!(!output.contains("URL"));
         // 列揃え: No.は右寄せ(6桁ゼロ埋めのリンクラベル、URL自体は非パディング)、作成者は中央寄せ
@@ -260,6 +260,20 @@ mod tests {
     fn pr0件は該当メッセージを返す() {
         let output = format_pr_list_impl("o/r", "[]", true).unwrap();
         assert!(output.contains("オープン中のプルリクエストはありません"));
+        assert!(output.contains("## Pulls 一覧(Draft : 0/Open : 0)"));
+    }
+
+    #[test]
+    fn draft_openの件数を見出しに表示する() {
+        let json = r#"[
+            {"number":1,"title":"a","html_url":"https://github.com/o/r/pull/1","state":"open","draft":true,"user":{"login":"a"}},
+            {"number":2,"title":"b","html_url":"https://github.com/o/r/pull/2","state":"open","draft":true,"user":{"login":"b"}},
+            {"number":3,"title":"c","html_url":"https://github.com/o/r/pull/3","state":"open","draft":false,"user":{"login":"c"}},
+            {"number":4,"title":"d","html_url":"https://github.com/o/r/pull/4","state":"open","draft":false,"user":{"login":"d"}},
+            {"number":5,"title":"e","html_url":"https://github.com/o/r/pull/5","state":"open","draft":false,"user":{"login":"e"}}
+        ]"#;
+        let output = format_pr_list_impl("o/r", json, false).unwrap();
+        assert!(output.contains("## Pulls 一覧(Draft : 2/Open : 3)"));
     }
 
     #[test]

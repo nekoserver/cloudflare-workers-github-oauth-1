@@ -756,6 +756,10 @@ export function getAiChatPage(user: {
     [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-closed { background: rgba(248,81,73,0.18); color: #f85149; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
+    /* /neko系ローカルコマンド(clog等の表・テーブル表示)はchat-bubble-wrapで
+       包まれず基本の.chat-bubble(max-width:85%)のまま描画されるため、
+       AIモデル応答(100%)と揃うようassistant.preview-are全体を100%にする */
+    .chat-bubble.assistant.preview-area { max-width: 100%; }
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .bubble-label-fallback { color: var(--color-error, #cf222e); }
     .bubble-fallback-notice { font-size: 12px; color: var(--color-error, #cf222e); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-color); opacity: 0.85; }
@@ -6531,7 +6535,7 @@ export function getAiChatPage(user: {
     // 呼び出してその場で予定登録できるようにする。
     /**
      * /neko gh pr list の応答バブル向け。gh-wasm(Rust)が返すMarkdownテーブルの
-     * 見出し(「## <owner>/<repo> のプルリクエスト一覧」)を含む場合のみ適用する。
+     * 見出し(「## Pulls 一覧(Draft : ◯/Open : △)」)を含む場合のみ適用する。
      * No./作成者列の右寄せ・中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
      * Markdownの列揃え記法とゼロ埋めとして既に出力済みなので、ここでは
      * markdownRenderer.tsのparseMd()がHTMLをエスケープする都合上Markdown単体
@@ -6540,7 +6544,7 @@ export function getAiChatPage(user: {
      */
     function styleGhPrListBubble(el, text) {
       var body = String(text);
-      if (body.indexOf('のプルリクエスト一覧') === -1) return;
+      if (body.indexOf('Pulls 一覧') === -1) return;
       el.classList.add('gh-pr-list-bubble');
       var table = el.querySelector('table');
       if (!table) return;
