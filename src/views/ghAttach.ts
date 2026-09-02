@@ -140,9 +140,25 @@ fileInputEl.addEventListener('change', () => {
   });
 });
 
-function showStatus(kind, html) {
+// GitHubのエラー応答やユーザー入力に由来する文字列をそのままinnerHTMLへ
+// 差し込むとXSS・意図しないタグ解釈(GitHubがHTMLエラーページを返した場合に
+// 内容が消える等)につながるため、常にtextContentで挿入する(常に安全な既定動作)。
+function showStatus(kind, text) {
   statusEl.className = 'status-msg show ' + kind;
-  statusEl.innerHTML = html;
+  statusEl.textContent = text;
+}
+
+// Issue作成成功時のみ、こちらで安全にリンクを組み立てて表示する
+// (URL自体はGitHub APIが返したものなのでhref/textContent双方に使って問題ない)。
+function showStatusWithLink(kind, prefixText, url) {
+  statusEl.className = 'status-msg show ' + kind;
+  statusEl.textContent = prefixText + ' ';
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = url;
+  statusEl.appendChild(a);
 }
 
 function fileToDataUrl(file) {
@@ -222,7 +238,7 @@ btnSubmit.addEventListener('click', async () => {
       throw new Error(issueJson.error || 'Issue作成に失敗しました');
     }
 
-    showStatus('ok', 'Issueを作成しました: <a href="' + issueJson.url + '" target="_blank" rel="noopener">' + issueJson.url + '</a>');
+    showStatusWithLink('ok', 'Issueを作成しました:', issueJson.url);
   } catch (err) {
     showStatus('error', err && err.message ? err.message : String(err));
   } finally {

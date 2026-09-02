@@ -99,6 +99,20 @@ export function parseUploadAssetResponse(json: unknown): UploadAssetResponse {
 }
 
 /**
+ * HTML文字列からタグを除去し、空白をまとめて読める1行程度のテキストにする。
+ * GitHubのuser-attachments assetsエンドポイント(undocumented API)がエラー時に
+ * JSONではなくHTMLエラーページを返すことがあり、生のHTMLをそのまま
+ * エラーメッセージに出すと空白だらけで実質何も読めない表示になってしまうため
+ * (実際にブラウザ側で「空行が何行も出る」不具合として発生した)。
+ */
+export function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * GitHub APIのエラーレスポンスJSONから message フィールドを取り出す。
  * ステータスコード単体(例: "401")だけではユーザーも呼び出し元も原因を
  * 追えないため、GitHubが返す具体的な理由("Bad credentials"等)を

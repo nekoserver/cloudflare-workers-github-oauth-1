@@ -9,6 +9,7 @@ import {
   parseCreateIssueResponse,
   parseGithubErrorMessage,
   describeGithubApiError,
+  stripHtmlTags,
   MAX_ATTACH_BASE64_LENGTH,
 } from './utils/ghAttach';
 
@@ -190,5 +191,23 @@ describe('describeGithubApiError', () => {
   it('ghMessageがnullの場合はステータスコードのみ含める', () => {
     const msg = describeGithubApiError('Issue作成', 502, null);
     expect(msg).toBe('Issue作成に失敗しました(502)');
+  });
+});
+
+// 対象: GitHubがJSONでなくHTMLエラーページを返した場合の読める文字列への変換。
+// 実際にブラウザ側で「タグが解釈されて空行だらけになり何も読めない」不具合が
+// 発生したため、生のHTMLをそのままエラーメッセージに使わないことを保証する。
+describe('stripHtmlTags', () => {
+  it('タグを除去し、空白をまとめて1行相当のテキストにする', () => {
+    const html = '<html>\n<head><title>Error</title></head>\n<body>\n  <h1>404</h1>\n  <p>Not Found</p>\n</body>\n</html>';
+    expect(stripHtmlTags(html)).toBe('Error 404 Not Found');
+  });
+
+  it('タグを含まないプレーンテキストはそのまま(前後空白のみ除去)返す', () => {
+    expect(stripHtmlTags('  plain text  ')).toBe('plain text');
+  });
+
+  it('空文字列はそのまま空文字列を返す', () => {
+    expect(stripHtmlTags('')).toBe('');
   });
 });
