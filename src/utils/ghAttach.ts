@@ -98,6 +98,18 @@ export function parseUploadAssetResponse(json: unknown): UploadAssetResponse {
   return { url };
 }
 
+/**
+ * GitHub APIのエラーレスポンスJSONから message フィールドを取り出す。
+ * ステータスコード単体(例: "401")だけではユーザーも呼び出し元も原因を
+ * 追えないため、GitHubが返す具体的な理由("Bad credentials"等)を
+ * エラーメッセージに含めて返せるようにする(CLAUDE.mdルール8の「記録」義務)。
+ */
+export function parseGithubErrorMessage(json: unknown): string | null {
+  if (typeof json !== 'object' || json === null) return null;
+  const message = (json as Record<string, unknown>)['message'];
+  return typeof message === 'string' && message !== '' ? message : null;
+}
+
 export type CreateIssueResponse = { url: string; number: number } | { error: string };
 
 export function parseCreateIssueResponse(json: unknown): CreateIssueResponse {
