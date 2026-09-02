@@ -8,6 +8,7 @@ import {
   parseUploadAssetResponse,
   parseCreateIssueResponse,
   parseGithubErrorMessage,
+  describeGithubApiError,
   MAX_ATTACH_BASE64_LENGTH,
 } from './utils/ghAttach';
 
@@ -141,5 +142,25 @@ describe('parseGithubErrorMessage', () => {
     expect(parseGithubErrorMessage({})).toBeNull();
     expect(parseGithubErrorMessage(null)).toBeNull();
     expect(parseGithubErrorMessage({ message: '' })).toBeNull();
+  });
+});
+
+describe('describeGithubApiError', () => {
+  it('401の場合はトークン失効を案内する専用メッセージを返す(actionLabelは使わない)', () => {
+    const msg = describeGithubApiError('リポジトリ情報の取得', 401, 'Bad credentials');
+    expect(msg).toContain('GitHubアクセストークンが無効です');
+    expect(msg).toContain('Bad credentials');
+    expect(msg).toContain('/auth/logout');
+    expect(msg).not.toContain('リポジトリ情報の取得に失敗しました');
+  });
+
+  it('401以外はactionLabelを使ったメッセージを返す', () => {
+    const msg = describeGithubApiError('アップロード', 403, 'must have push access');
+    expect(msg).toBe('アップロードに失敗しました(403: must have push access)');
+  });
+
+  it('ghMessageがnullの場合はステータスコードのみ含める', () => {
+    const msg = describeGithubApiError('Issue作成', 502, null);
+    expect(msg).toBe('Issue作成に失敗しました(502)');
   });
 });

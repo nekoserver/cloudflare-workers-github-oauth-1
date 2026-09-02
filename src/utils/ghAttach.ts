@@ -110,6 +110,23 @@ export function parseGithubErrorMessage(json: unknown): string | null {
   return typeof message === 'string' && message !== '' ? message : null;
 }
 
+/**
+ * GitHub APIのエラー(ステータスコード + messageフィールド)から、利用者に
+ * 見せる完全なエラーメッセージ文を組み立てる。401(Bad credentials)は
+ * 「D1に保存されたGitHubアクセストークン自体がGitHub側で無効化・失効している」
+ * ケースで、このAPI固有のバグではなく再ログインで解消するため、
+ * /wasm-modulesのソース取得APIと同じ案内文を付ける(既存パターンを踏襲)。
+ * actionLabelは「リポジトリ情報の取得」「アップロード」「Issue作成」等、
+ * 401以外の場合の文言に使う。
+ */
+export function describeGithubApiError(actionLabel: string, status: number, ghMessage: string | null): string {
+  const suffix = ghMessage ? `: ${ghMessage}` : '';
+  if (status === 401) {
+    return `GitHubアクセストークンが無効です(HTTP 401${suffix})。/auth/logout でログアウトし、再度ログインし直してください。`;
+  }
+  return `${actionLabel}に失敗しました(${status}${suffix})`;
+}
+
 export type CreateIssueResponse = { url: string; number: number } | { error: string };
 
 export function parseCreateIssueResponse(json: unknown): CreateIssueResponse {

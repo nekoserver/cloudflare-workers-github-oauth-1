@@ -58,6 +58,7 @@ import {
   parseUploadAssetResponse,
   parseCreateIssueResponse,
   parseGithubErrorMessage,
+  describeGithubApiError,
 } from './utils/ghAttach';
 
 /**
@@ -10900,7 +10901,7 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     if (!repoRes.ok) {
       const ghMessage = await extractGithubErrorMessage(repoRes);
       logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage });
-      return jsonUtf8({ error: `リポジトリ情報の取得に失敗しました(${repoRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
     }
     repoInfo = await repoRes.json();
   } catch (err) {
@@ -10927,7 +10928,7 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     if (!uploadRes.ok) {
       const ghMessage = await extractGithubErrorMessage(uploadRes);
       logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status, ghMessage });
-      return jsonUtf8({ error: `アップロードに失敗しました(${uploadRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage) }, 502);
     }
     const parsed = parseUploadAssetResponse(await uploadRes.json());
     if ('error' in parsed) {
@@ -10984,7 +10985,7 @@ app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
     if (!issueRes.ok) {
       const ghMessage = await extractGithubErrorMessage(issueRes);
       logger.warn('gh-attach: create issue failed', { owner, repo, user: user.sub, status: issueRes.status, ghMessage });
-      return jsonUtf8({ error: `Issue作成に失敗しました(${issueRes.status}${ghMessage ? ': ' + ghMessage : ''})` }, 502);
+      return jsonUtf8({ error: describeGithubApiError('Issue作成', issueRes.status, ghMessage) }, 502);
     }
     const parsed = parseCreateIssueResponse(await issueRes.json());
     if ('error' in parsed) {
