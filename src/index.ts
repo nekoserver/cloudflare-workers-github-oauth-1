@@ -10919,19 +10919,8 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     });
     if (!repoRes.ok) {
       const ghMessage = await extractGithubErrorMessage(repoRes);
-      // 診断用: トークンの種類だけを先頭5文字で判別する(秘密情報そのものは含めない)。
-      // gho_=classic OAuth App, ghu_=GitHub App user-to-server, ghp_/github_pat_=PAT。
-      // 原因不明の404が続いているため、推測ではなく実データで切り分けるための
-      // 一時的な診断出力(GitHubのレート制限情報・リクエストIDも合わせて出す)。
-      const tokenPrefix = accessToken.slice(0, 5);
-      const rateLimitRemaining = repoRes.headers.get('x-ratelimit-remaining');
-      const githubRequestId = repoRes.headers.get('x-github-request-id');
-      logger.warn('gh-attach: repo lookup failed', {
-        owner, repo, user: user.sub, status: repoRes.status, ghMessage,
-        tokenPrefix, rateLimitRemaining, githubRequestId, url: repoUrl,
-      });
-      const diag = ` [診断: token種別=${tokenPrefix}..., url=${repoUrl}, x-github-request-id=${githubRequestId ?? 'なし'}]`;
-      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) + diag }, 502);
+      logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage, url: repoUrl });
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
     }
     repoInfo = await repoRes.json();
   } catch (err) {
@@ -10946,13 +10935,31 @@ app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'このリポジトリへの書き込み権限がありません' }, 403);
   }
 
+  // uploads.github.com/user-attachments/assets はGitHub Appのトークン(ghu_)では
+  // 動作しないことが実際に確認できた(権限・インストール範囲を正しく設定しても404)。
+  // cli/cli本家はclassic OAuth App/PAT前提でこのエンドポイントを使っており、
+  // GitHub Appのuser-to-serverトークンでの動作は想定されていないと考えられる。
+  // そのため、アップロードだけはこのユーザーのOAuthセッションではなく、
+  // 管理者が別途用意したclassic PAT(GH_ATTACH_UPLOAD_TOKEN)を使う。
+  const uploadToken = c.env.GH_ATTACH_UPLOAD_TOKEN;
+  if (!uploadToken) {
+    return jsonUtf8({
+      error: 'アップロード機能が未設定です。管理者が GH_ATTACH_UPLOAD_TOKEN(repoスコープ付きのclassic PAT)を設定する必要があります。',
+    }, 503);
+  }
+
   const bytes = decodeAttachDataUrlToBytes(validation.base64);
   const uploadUrl = buildUserAttachmentUploadUrl({ name: filename, contentType: validation.mime, repositoryId: repoInfo.id });
 
   try {
     const uploadRes = await fetch(uploadUrl, {
       method: 'POST',
-      headers: { ...ghHeaders, 'Content-Type': 'application/octet-stream' },
+      headers: {
+        'Authorization': `token ${uploadToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/octet-stream',
+      },
       body: bytes.slice().buffer,
     });
     if (!uploadRes.ok) {
