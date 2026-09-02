@@ -6546,6 +6546,24 @@ export function getAiChatPage(user: {
       var body = String(text);
       if (body.indexOf('Pulls 一覧') === -1) return;
       el.classList.add('gh-pr-list-bubble');
+      var heading = el.querySelector('h2');
+      if (heading) {
+        var headingMatch = /Draft\\s*:\\s*(\\d+)\\/Open\\s*:\\s*(\\d+)/.exec(heading.textContent || '');
+        if (headingMatch) {
+          heading.textContent = '';
+          heading.appendChild(document.createTextNode('Pulls 一覧('));
+          var draftBadge = document.createElement('span');
+          draftBadge.className = 'gh-pr-state-badge gh-pr-state-draft';
+          draftBadge.textContent = 'Draft : ' + headingMatch[1];
+          heading.appendChild(draftBadge);
+          heading.appendChild(document.createTextNode(' / '));
+          var openBadge = document.createElement('span');
+          openBadge.className = 'gh-pr-state-badge gh-pr-state-open';
+          openBadge.textContent = 'Open : ' + headingMatch[2];
+          heading.appendChild(openBadge);
+          heading.appendChild(document.createTextNode(')'));
+        }
+      }
       var table = el.querySelector('table');
       if (!table) return;
       var rows = table.querySelectorAll('tbody tr');

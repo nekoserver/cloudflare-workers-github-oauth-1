@@ -70,7 +70,7 @@ describe('styleGhPrListBubble', () => {
     const el = document.createElement('div');
     el.innerHTML = parseMd(SAMPLE_MARKDOWN);
     styleGhPrListBubble(el, SAMPLE_MARKDOWN);
-    const badges = el.querySelectorAll('.gh-pr-state-badge');
+    const badges = el.querySelectorAll('table .gh-pr-state-badge');
     expect(badges.length).toBe(2);
     expect(badges[0].classList.contains('gh-pr-state-open')).toBe(true);
     expect(badges[0].textContent).toBe('Open');
@@ -90,9 +90,24 @@ describe('styleGhPrListBubble', () => {
     const el = document.createElement('div');
     el.innerHTML = parseMd(md);
     styleGhPrListBubble(el, md);
-    const badge = el.querySelector('.gh-pr-state-badge');
+    const badge = el.querySelector('table .gh-pr-state-badge');
     expect(badge?.classList.contains('gh-pr-state-closed')).toBe(true);
     expect(badge?.textContent).toBe('Closed');
+  });
+
+  it('見出しのDraft/Open件数をGitHub準拠の色バッジ(span)へ置き換える', () => {
+    const parseMd = loadParseMd();
+    const styleGhPrListBubble = loadStyleGhPrListBubble();
+    const el = document.createElement('div');
+    el.innerHTML = parseMd(SAMPLE_MARKDOWN);
+    styleGhPrListBubble(el, SAMPLE_MARKDOWN);
+    const heading = el.querySelector('h2');
+    expect(heading).toBeTruthy();
+    const draftBadge = heading!.querySelector('.gh-pr-state-badge.gh-pr-state-draft');
+    const openBadge = heading!.querySelector('.gh-pr-state-badge.gh-pr-state-open');
+    expect(draftBadge?.textContent).toBe('Draft : 1');
+    expect(openBadge?.textContent).toBe('Open : 1');
+    expect(heading!.textContent).toContain('Pulls 一覧(');
   });
 
   it('No.列は右寄せ(th/tdにtext-align:right)、作成者列は中央寄せになる(parseMdの列揃え反映)', () => {
