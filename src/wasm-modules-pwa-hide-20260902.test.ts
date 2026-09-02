@@ -33,6 +33,10 @@ describe('getWasmModulesPage: PWA(standalone)時の右上リンク非表示', ()
     expect(html).toMatch(/<div class="user-menu-container pwa-hide">/);
   });
 
+  it('ユーザー名表示(user-name)にもpwa-hideクラスが付いている(他ページのwebglSphere.ts等と同じ扱い)', () => {
+    expect(html).toMatch(/<span class="user-name pwa-hide">/);
+  });
+
   it('standalone表示時にpwa-hideを非表示にするCSSルールが定義されている', () => {
     expect(html).toContain('@media (display-mode: standalone) { .pwa-hide { display: none !important; } }');
   });
