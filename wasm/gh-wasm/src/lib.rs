@@ -114,10 +114,15 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
         ));
     }
 
+    // 列揃えはMarkdownの区切り行記法(:---=左, ---:=右, :---:=中央)で指定する。
+    // No.は6桁ゼロ埋め・右寄せ、作成者は中央寄せにする(利用者からの要望)。
+    // 状態(open/draft)列はMarkdown単体では色付きバッジにできないため、
+    // ブラウザ側(aichat.tsのstyleGhPrListBubble)でこの列のテキストを
+    // GitHub準拠の色バッジへ置き換える。ここではプレーンテキストのまま出力する。
     let mut lines = vec![
         format!("## {} のプルリクエスト一覧", escape_cell(&repo_full_name)),
         "| No. | タイトル | 作成者 | 状態 |".to_string(),
-        "|---|---|---|---|".to_string(),
+        "|---:|---|:---:|---|".to_string(),
     ];
     for pr in &prs {
         let author = if mask_author {
@@ -131,7 +136,7 @@ fn format_pr_list_impl(repo_full_name: &str, json: &str, mask_author: bool) -> R
             escape_cell(&pr.state)
         };
         let no_link = format!(
-            "[{}](https://github.com/{}/pull/{})",
+            "[{:06}](https://github.com/{}/pull/{})",
             pr.number, repo_full_name, pr.number
         );
         lines.push(format!(
@@ -237,15 +242,17 @@ mod tests {
         assert!(output.contains("## o/r のプルリクエスト一覧"));
         assert!(output.contains("| No. | タイトル | 作成者 | 状態 |"));
         assert!(!output.contains("URL"));
-        assert!(output.contains("| [42](https://github.com/o/r/pull/42) | Fix bug | alice | open |"));
-        assert!(output.contains("| [43](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft |"));
+        // 列揃え: No.は右寄せ(6桁ゼロ埋めのリンクラベル、URL自体は非パディング)、作成者は中央寄せ
+        assert!(output.contains("|---:|---|:---:|---|"));
+        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | alice | open |"));
+        assert!(output.contains("| [000043](https://github.com/o/r/pull/43) | WIP \\| feature | bob | draft |"));
     }
 
     #[test]
     fn pr一覧をmarkdownテーブルへ整形する_作成者マスクあり() {
         let json = r#"[{"number":42,"title":"Fix bug","html_url":"https://github.com/o/r/pull/42","state":"open","draft":false,"user":{"login":"alice"}}]"#;
         let output = format_pr_list_impl("o/r", json, true).unwrap();
-        assert!(output.contains("| [42](https://github.com/o/r/pull/42) | Fix bug | *** | open |"));
+        assert!(output.contains("| [000042](https://github.com/o/r/pull/42) | Fix bug | *** | open |"));
         assert!(!output.contains("alice"));
     }
 
@@ -259,7 +266,14 @@ mod tests {
     fn userが欠損している場合は不明として扱う_マスクなし() {
         let json = r#"[{"number":1,"title":"t","html_url":"https://github.com/o/r/pull/1","state":"open","draft":false,"user":null}]"#;
         let output = format_pr_list_impl("o/r", json, false).unwrap();
-        assert!(output.contains("| [1](https://github.com/o/r/pull/1) | t | (不明) | open |"));
+        assert!(output.contains("| [000001](https://github.com/o/r/pull/1) | t | (不明) | open |"));
+    }
+
+    #[test]
+    fn pr番号が6桁を超える場合はそのまま桁数を保つ() {
+        let json = r#"[{"number":1234567,"title":"t","html_url":"https://github.com/o/r/pull/1234567","state":"open","draft":false,"user":{"login":"a"}}]"#;
+        let output = format_pr_list_impl("o/r", json, false).unwrap();
+        assert!(output.contains("[1234567](https://github.com/o/r/pull/1234567)"));
     }
 
     #[test]

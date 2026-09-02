@@ -739,6 +739,21 @@ export function getAiChatPage(user: {
     .chat-bubble.thinking {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
+    /* ======= /neko gh pr list の応答バブル ======= */
+    /* 右端の余白をゼロにし、表(No./タイトル/作成者/状態)を目一杯まで広げる */
+    .chat-bubble.assistant.gh-pr-list-bubble { padding-right: 0; }
+    .gh-pr-list-bubble table { width: 100%; }
+    .gh-pr-list-bubble td a { text-decoration: none; }
+    .gh-pr-state-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+    }
+    .gh-pr-state-badge.gh-pr-state-open { background: #dafbe1; color: #1a7f37; }
+    .gh-pr-state-badge.gh-pr-state-draft { background: #f6f8fa; color: #656d76; border: 1px solid #d0d7de; }
+    .gh-pr-state-badge.gh-pr-state-closed { background: #ffebe9; color: #cf222e; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-open { background: rgba(63,185,80,0.18); color: #3fb950; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-draft { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-closed { background: rgba(248,81,73,0.18); color: #f85149; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -6514,6 +6529,37 @@ export function getAiChatPage(user: {
     // 見出しの行末へ「登録」ボタンを追加し、押すとカウントダウンページと同じ
     // 登録機能一式(openCountdownQuickAddModal、src/utils/countdownQuickAdd.ts)を
     // 呼び出してその場で予定登録できるようにする。
+    /**
+     * /neko gh pr list の応答バブル向け。gh-wasm(Rust)が返すMarkdownテーブルの
+     * 見出し(「## <owner>/<repo> のプルリクエスト一覧」)を含む場合のみ適用する。
+     * No./作成者列の右寄せ・中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
+     * Markdownの列揃え記法とゼロ埋めとして既に出力済みなので、ここでは
+     * markdownRenderer.tsのparseMd()がHTMLをエスケープする都合上Markdown単体
+     * では表現できない「状態(open/draft)列をGitHub準拠の色バッジに置き換える」
+     * 処理と、応答バブル右端の余白ゼロ化(CSSクラス付与)のみを担う。
+     */
+    function styleGhPrListBubble(el, text) {
+      var body = String(text);
+      if (body.indexOf('のプルリクエスト一覧') === -1) return;
+      el.classList.add('gh-pr-list-bubble');
+      var table = el.querySelector('table');
+      if (!table) return;
+      var rows = table.querySelectorAll('tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        var cells = rows[i].querySelectorAll('td');
+        var stateCell = cells[3];
+        if (!stateCell) continue;
+        var raw = stateCell.textContent.trim().toLowerCase();
+        var cls = raw === 'draft' ? 'gh-pr-state-draft' : (raw === 'closed' ? 'gh-pr-state-closed' : 'gh-pr-state-open');
+        var label = raw === 'draft' ? 'Draft' : (raw === 'closed' ? 'Closed' : 'Open');
+        stateCell.textContent = '';
+        var badge = document.createElement('span');
+        badge.className = 'gh-pr-state-badge ' + cls;
+        badge.textContent = label;
+        stateCell.appendChild(badge);
+      }
+    }
+
     function addTlistRegisterButton(el, text) {
       var body = String(text);
       if (body.indexOf('## 次の予定一覧') !== 0) return;
@@ -6538,6 +6584,7 @@ export function getAiChatPage(user: {
       el.innerHTML = parseMd(text);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
+      if (isLocalCommand) styleGhPrListBubble(el, text);
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
