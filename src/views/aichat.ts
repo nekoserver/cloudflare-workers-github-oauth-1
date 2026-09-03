@@ -712,6 +712,24 @@ export function getAiChatPage(user: {
     .chat-bubble.user {
       align-self: flex-end; background: var(--accent-color, #667eea); color: #fff; border-bottom-right-radius: 3px;
     }
+    /* ユーザー入力もMarkdownとして描画する(parseMd経由)ため、アクセントカラーの
+       背景でも読めるよう .preview-area の既定色(var(--text-primary)等)を上書きする */
+    .chat-bubble.user.preview-area h1, .chat-bubble.user.preview-area h2, .chat-bubble.user.preview-area h3,
+    .chat-bubble.user.preview-area h4, .chat-bubble.user.preview-area h5, .chat-bubble.user.preview-area h6 {
+      color: #fff; border-bottom-color: rgba(255,255,255,0.35);
+    }
+    .chat-bubble.user.preview-area blockquote {
+      background: rgba(255,255,255,0.12); border-left-color: rgba(255,255,255,0.6); color: #fff;
+    }
+    .chat-bubble.user.preview-area code, .chat-bubble.user.preview-area pre {
+      background: rgba(255,255,255,0.16); color: #fff;
+    }
+    .chat-bubble.user.preview-area th, .chat-bubble.user.preview-area td {
+      border-color: rgba(255,255,255,0.35);
+    }
+    .chat-bubble.user.preview-area th { background: rgba(255,255,255,0.14); color: #fff; }
+    .chat-bubble.user.preview-area a { color: #fff; text-decoration: underline; }
+    .chat-bubble.user.preview-area hr { border-top-color: rgba(255,255,255,0.35); }
     .chat-bubble.assistant {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-bottom-left-radius: 3px;
       position: relative; padding-bottom: 28px;
@@ -2918,7 +2936,7 @@ export function getAiChatPage(user: {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(truncateForHistoryPreview(text));
       } else {
-        el.className = 'chat-bubble user';
+        el.className = 'chat-bubble user preview-area';
         if (imageDataUrl) {
           var bubbleImg = document.createElement('img');
           bubbleImg.className = 'chat-bubble-image';
@@ -2927,7 +2945,7 @@ export function getAiChatPage(user: {
         }
         if (text) {
           var textEl = document.createElement('div');
-          textEl.textContent = text;
+          textEl.innerHTML = parseMd(truncateForHistoryPreview(text));
           el.appendChild(textEl);
         }
       }
@@ -3614,8 +3632,8 @@ export function getAiChatPage(user: {
       header.appendChild(closeBtn);
       box.appendChild(header);
       var qBubble = document.createElement('div');
-      qBubble.className = 'chat-bubble user';
-      qBubble.textContent = question;
+      qBubble.className = 'chat-bubble user preview-area';
+      qBubble.innerHTML = parseMd(question);
       box.appendChild(qBubble);
       var loading = document.createElement('div');
       loading.textContent = '応答を取得中…';
@@ -6721,7 +6739,11 @@ export function getAiChatPage(user: {
         }
       } else {
         el = document.createElement('div');
-        el.className = 'chat-bubble ' + role;
+        // ユーザー入力はMarkdownとして描画する(parseMdは内部でesc()により
+        // HTMLエスケープしてからMarkdown記法を適用するため、そのままinnerHTMLに
+        // 渡してもXSSにならない。'考え中...'等のthinking/errorバブルは
+        // システム生成の定型文なのでMarkdown解釈せずtextContentのままにする)。
+        el.className = 'chat-bubble ' + role + (role === 'user' ? ' preview-area' : '');
         if (imageDataUrl) {
           var bubbleImg = document.createElement('img');
           bubbleImg.className = 'chat-bubble-image';
@@ -6730,7 +6752,11 @@ export function getAiChatPage(user: {
         }
         if (text) {
           var textEl = document.createElement('div');
-          textEl.textContent = text;
+          if (role === 'user') {
+            textEl.innerHTML = parseMd(text);
+          } else {
+            textEl.textContent = text;
+          }
           el.appendChild(textEl);
         }
       }
