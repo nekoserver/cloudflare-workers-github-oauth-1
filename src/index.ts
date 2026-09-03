@@ -37,6 +37,7 @@ import { getHeritageAreaPage } from './views/heritageArea';
 import { getHeritageJourneyPage } from './views/heritageJourney';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
+import { getMegaminxPage } from './views/megaminx';
 import { getWebGLSolarPage } from './views/webglSolar';
 import { getMoondreamVlmPage } from './views/moondreamVlm';
 import { getMoondreamAnalyzeLogPage, type MoondreamAnalyzeLogRow } from './views/moondreamAnalyzeLog';
@@ -10649,6 +10650,11 @@ app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
 app.get('/webgl-cube', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLCubePage(user.sub));
+});
+
+app.get('/megaminx', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getMegaminxPage(user.sub));
 });
 
 app.get('/webgl-solar', authMiddleware, async (c) => {
