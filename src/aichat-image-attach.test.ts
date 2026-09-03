@@ -5,7 +5,10 @@ import {
   resolveAichatModelsForRequest,
   AICHAT_VISION_MODELS,
   AICHAT_DEFAULT_VISION_MODEL,
+  AICHAT_MOONDREAM3_MODEL,
   MAX_IMAGE_BASE64_LENGTH,
+  decodeImageDataUrlToBytes,
+  buildMoondream3RunParams,
 } from './utils/aichatImage';
 
 // 対象: AIチャットページの「＋」ボタンから写真を送信する機能のバックエンド側純粋関数
@@ -106,7 +109,7 @@ describe('resolveAichatModelsForRequest', () => {
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-3.1-8b-instruct-fp8',
     '@cf/meta/llama-4-scout-17b-16e-instruct',
-    '@cf/google/gemma-3-12b-it',
+    '@cf/google/gemma-4-26b-a4b-it',
   ]);
   const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
@@ -133,17 +136,18 @@ describe('resolveAichatModelsForRequest', () => {
     expect(r.primaryModel).toBe('@cf/meta/llama-3.1-70b-instruct');
   });
 
-  it('画像あり・vision対応モデルを明示指定した場合はそれを使い、fallbackはもう一方のvisionモデル', () => {
+  it('画像あり・gemma-4を明示指定した場合はgemma-4をprimaryとし、fallbackはmoondream3.1、secondFallbackはlllama-4-scout', () => {
     const r = resolveAichatModelsForRequest({
-      requestedModel: '@cf/google/gemma-3-12b-it',
+      requestedModel: '@cf/google/gemma-4-26b-a4b-it',
       hasImage: true,
       allowedModels,
       configuredModel: '',
       textFallbackModel,
     });
-    expect(r.primaryModel).toBe('@cf/google/gemma-3-12b-it');
-    expect(r.fallbackModel).toBe('@cf/meta/llama-4-scout-17b-16e-instruct');
-    expect(AICHAT_VISION_MODELS.has(r.fallbackModel)).toBe(true);
+    expect(r.primaryModel).toBe('@cf/google/gemma-4-26b-a4b-it');
+    expect(r.fallbackModel).toBe(AICHAT_MOONDREAM3_MODEL);
+    expect(r.secondFallbackModel).toBe('@cf/meta/llama-4-scout-17b-16e-instruct');
+    expect(AICHAT_VISION_MODELS.has(r.secondFallbackModel as string)).toBe(true);
   });
 
   it('画像あり・テキスト専用モデルを指定していた場合はvisionのデフォルトモデルに差し替える', () => {
@@ -158,7 +162,7 @@ describe('resolveAichatModelsForRequest', () => {
     expect(AICHAT_VISION_MODELS.has(r.primaryModel)).toBe(true);
   });
 
-  it('画像あり時、primaryとfallbackが異なるモデルになる(再試行が意味を持つ)', () => {
+  it('画像あり時、primaryはデフォルトのvisionモデル、fallbackはmoondream3.1、secondFallbackはもう一方のvisionモデル(再試行が意味を持つ)', () => {
     const r = resolveAichatModelsForRequest({
       requestedModel: '',
       hasImage: true,
@@ -166,8 +170,40 @@ describe('resolveAichatModelsForRequest', () => {
       configuredModel: '',
       textFallbackModel,
     });
+    expect(r.primaryModel).toBe(AICHAT_DEFAULT_VISION_MODEL);
+    expect(r.fallbackModel).toBe(AICHAT_MOONDREAM3_MODEL);
+    expect(r.secondFallbackModel).toBe('@cf/google/gemma-4-26b-a4b-it');
     expect(r.primaryModel).not.toBe(r.fallbackModel);
+    expect(r.fallbackModel).not.toBe(r.secondFallbackModel);
     expect(AICHAT_VISION_MODELS.has(r.primaryModel)).toBe(true);
-    expect(AICHAT_VISION_MODELS.has(r.fallbackModel)).toBe(true);
+    expect(AICHAT_VISION_MODELS.has(r.secondFallbackModel as string)).toBe(true);
+  });
+});
+
+describe('decodeImageDataUrlToBytes', () => {
+  it('data URLのbase64部分をデコードして元のバイト列を復元する', () => {
+    const original = new Uint8Array([0, 1, 2, 250, 255, 128]);
+    const base64 = Buffer.from(original).toString('base64');
+    const dataUrl = `data:image/png;base64,${base64}`;
+    const decoded = decodeImageDataUrlToBytes(dataUrl);
+    expect(Array.from(decoded)).toEqual(Array.from(original));
+  });
+});
+
+describe('buildMoondream3RunParams', () => {
+  it('imageをバイト値の配列に変換し、promptとmax_tokensを設定する', () => {
+    const original = new Uint8Array([1, 2, 3]);
+    const base64 = Buffer.from(original).toString('base64');
+    const dataUrl = `data:image/png;base64,${base64}`;
+    const result = buildMoondream3RunParams(dataUrl, 'この画像は何ですか?');
+    expect(result.image).toEqual([1, 2, 3]);
+    expect(result.prompt).toBe('この画像は何ですか?');
+    expect(result.max_tokens).toBe(512);
+  });
+
+  it('promptが空の場合はデフォルトの日本語プロンプトを使う', () => {
+    const dataUrl = 'data:image/png;base64,AAAA';
+    const result = buildMoondream3RunParams(dataUrl, '   ');
+    expect(result.prompt).toContain('日本語');
   });
 });

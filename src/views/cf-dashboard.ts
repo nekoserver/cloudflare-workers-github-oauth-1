@@ -91,7 +91,7 @@ h1 { font-size: 20px; margin-bottom: 4px; }
 </head>
 <body>
 <h1>Cloudflare D1 ダッシュボード</h1>
-<p class="subtitle">アカウント内の全 D1 データベースとテーブル行数を表示します</p>
+<p class="subtitle">このWorkerが使っているD1データベースのテーブル一覧と行数を表示します</p>
 
 <div id="main">
   <p class="loading">読み込み中…</p>
@@ -115,12 +115,8 @@ async function loadDatabases() {
   if (!data.configured) {
     main.innerHTML = \`
       <div class="notice">
-        <strong>Cloudflare API トークンが未設定です</strong><br>
-        以下の手順で設定してください:<br><br>
-        1. <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" style="color:var(--link)">Cloudflare API トークン</a> で「D1:Read, Account:Read」権限のトークンを発行<br>
-        2. ローカルで以下を実行:<br>
-        <code>wrangler secret put CLOUDFLARE_API_TOKEN</code><br>
-        <code>wrangler secret put CLOUDFLARE_ACCOUNT_ID</code>
+        <strong>D1データベースが未設定です</strong><br>
+        wrangler.tomlの[[d1_databases]]設定とデプロイ環境のバインディングを確認してください。
       </div>\`;
     return;
   }

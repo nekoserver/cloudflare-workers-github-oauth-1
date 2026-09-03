@@ -83,6 +83,12 @@ export function sha256HexViaWasm(input: string): string {
   が`WASM_MODULE_REGISTRY`自体を仮想ディレクトリとして渡す
   (`"name\ttype\tsize\tmtime"`形式のTSVをls-wasmへ渡し、整形済みテキストを受け取る)。
   `/neko ls [-l] [-a]`。ブラウザページは無くサーバー(Worker)実行のみ
+- `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
+  一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
+  `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
+  `/neko gh pr list <owner/repo>`・`GET /api/gh/pr-list?repo=<owner/repo>`。
+  ブラウザページは無くサーバー(Worker)実行のみ。同クレート内の
+  `gh repo view`相当(`format_repo_view`)は配線未実施のプロトタイプのまま
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
@@ -99,14 +105,26 @@ Rust実装がある。完全な`gh`はGit、端末、OSキーチェーン、対�
 | Rust/WASM | `owner/repo`の検証、GitHub API応答の整形、コマンド固有ロジック |
 | Worker/JavaScript | OAuthトークン管理、`fetch`によるGitHub API通信、HTTPエラー処理 |
 
-最初の対象は読み取り専用の`gh repo view <owner/repo>`である。`gh-wasm`は
-リポジトリ名の検証とAPI応答をMarkdownテーブルへ整形する関数を実装済みだが、
-公開WASM成果物とアプリへの配線はまだ行っていない。成果物を生成できる環境で
-以下を実行した後、既存モジュールと同様にdynamic importで配線する。
+最初の対象は読み取り専用の`gh repo view <owner/repo>`(`validate_repo`・
+`format_repo_view`、ブラウザ/アプリへの配線は未実施のプロトタイプのまま)と、
+`gh pr list <owner/repo>`(`format_pr_list`)。後者は実際にビルド・配線済みで、
+`/neko gh pr list <owner/repo>`(AIチャットのスラッシュコマンド)と
+`GET /api/gh/pr-list?repo=<owner/repo>`から呼び出せる
+(`src/utils/ghWasmServer.ts`がinitSyncでロードし、`src/index.ts`の
+`fetchAndFormatGhPrList`がGitHub REST API `GET /repos/{owner}/{repo}/pulls`を
+ユーザーのOAuthトークンでfetchしてから`format_pr_list`へ渡す)。
+
+`format_pr_list`は`serde_json`でGitHub APIレスポンス(PR配列のJSON文字列)を
+パースし、番号・タイトル・作成者・状態(draftの場合は"draft")・URLの
+Markdownテーブルへ整形する。CLAUDE.mdルール16(罫線・ツリー文字禁止)に
+従いMarkdownテーブルで表現し、セル内の`|`・改行はエスケープする。
+
+ビルド手順(`gh repo view`側の配線が今後必要になった場合も同じ手順):
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.127
+cd wasm/gh-wasm && cargo test                     # ネイティブ環境でロジック部分を検証
 cargo build --release --target wasm32-unknown-unknown --manifest-path wasm/gh-wasm/Cargo.toml
 wasm-bindgen --target web --out-dir public/wasm --out-name gh \
   wasm/gh-wasm/target/wasm32-unknown-unknown/release/gh_wasm.wasm
@@ -115,3 +133,66 @@ wasm-bindgen --target web --out-dir public/wasm --out-name gh \
 書き込み系コマンドは、CSRF対策、権限の明示、確認UI、監査ログを先に設計してから
 追加する。任意の`gh api`をそのまま公開すると、意図しない書き込みAPIも呼べるため
 許可リスト方式にする。
+
+## gh-attach-wasm(Go/js-wasm移植、`/gh-attach`ページで導入済み)
+
+`gh-attach-wasm/`は、上記gh-wasmとは別に、`gh issue create --attach`
+(cli/cli `internal/attachments`)が行うMarkdown組み立てロジックをGo製の
+まま(Rustへの書き直しなし)js/wasmターゲットへ移植したもの。RustのWASM
+モジュール群とは生成物の形式が異なる(wasm-bindgenの`initSync`ではなく、
+Go標準の`wasm_exec.js`グルーコード経由で`GOOS=js GOARCH=wasm`バイナリを実行する)。
+
+移植範囲は、実ファイルI/O(`os.Open`)とHTTP送信(`net/http`)を除いた
+「本文Markdown中の`![alt](filename)`参照を書き換え、未参照の添付は末尾に
+追記する」という純粋な文字列組み立て部分のみ(`markdown.go`)。実際の
+アップロード・Issue作成はCloudflare Workers側(`src/index.ts`の
+`/api/gh-attach/upload`・`/api/gh-attach/create-issue`)がユーザーの
+既存GitHub OAuthセッションのアクセストークンで行う。
+
+cli/cli本家の`references.go`(goldmarkベースの本格的なMarkdownパーサー、
+810行)は移植範囲に含めていない。ここでの参照検出は`![alt](filename)`と
+一致する正規表現による簡易実装であり、ネストした画像リンクや
+コードブロック内の見せかけの参照など、goldmark実装が正しく除外する
+エッジケースは扱わない(`markdown.go`冒頭のコメント参照)。
+
+### ビルド手順
+
+```bash
+cd wasm/gh-attach-wasm
+go test ./...                                    # ネイティブ環境でロジック部分を検証
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/gh-attach.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/gh-attach-wasm_exec.js
+```
+
+Rust版と異なり`wasm-bindgen`は使わない(Goの`js/wasm`ターゲットは標準ツール
+チェーンに同梱されており、追加のcrates.io/npmパッケージ取得が不要なため、
+このリポジトリのネットワークプロキシ制約(`wasm32-unknown-unknown`の
+std取得が拒否される問題、NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md
+参照)を受けない)。`public/wasm/gh-attach.wasm`と
+`public/wasm/gh-attach-wasm_exec.js`はビルド成果物なのでリポジトリに
+コミットする。
+
+### ブラウザ側の読み込み
+
+```js
+await import('/wasm/gh-attach-wasm_exec.js'); // globalThis.Go を定義
+const go = new Go();
+const result = await WebAssembly.instantiateStreaming(fetch('/wasm/gh-attach.wasm'), go.importObject);
+go.run(result.instance); // ここでglobalThis.ghAttachBuildMarkdownが登録される
+const markdown = ghAttachBuildMarkdown(JSON.stringify({ body, attachments }));
+```
+
+`go.run(...)`が返すPromiseはGoの`main()`が終了するまで解決しない
+(`main_js.go`は`select {}`でブロックし続ける設計のため、意図的に待たない)。
+
+### 実アップロード先(uploads.github.com)はclassic PATでないと動かない
+
+`/gh-attach`ページ自体のMarkdown組み立て(このWASM)とは別に、実際の画像
+アップロードは`src/index.ts`の`POST /api/gh-attach/upload`がTypeScript側で
+`https://uploads.github.com/user-attachments/assets`へ`fetch`している。
+このエンドポイントはトークンの種類で挙動が変わることが実機で確認できた:
+GitHub Appのuser-to-serverトークン(`ghu_`)は404、fine-grained PATは403
+(`Resource not accessible by personal access token`)、**classic PAT
+(`ghp_`、`repo`スコープ)のみ成功**する。このため`GH_ATTACH_UPLOAD_TOKEN`
+という専用のclassic PATを別途`wrangler secret put`で設定する必要がある
+(詳細は`NOTICE.cloudflare-workers-github-oauth-1.20260902.md`参照)。

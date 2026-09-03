@@ -17,6 +17,7 @@ import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
+import { getPublicKeysPage } from './views/publicKeys';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
@@ -37,6 +38,7 @@ import { getHeritageAreaPage } from './views/heritageArea';
 import { getHeritageJourneyPage } from './views/heritageJourney';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
+import { getMegaminxPage } from './views/megaminx';
 import { getWebGLSolarPage } from './views/webglSolar';
 import { getMoondreamVlmPage } from './views/moondreamVlm';
 import { getMoondreamAnalyzeLogPage, type MoondreamAnalyzeLogRow } from './views/moondreamAnalyzeLog';
@@ -47,6 +49,137 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getJsonExplorerPage } from './views/jsonExplorer';
+import { getBinHexPage } from './views/binHex';
+import { getGhAttachPage } from './views/ghAttach';
+import {
+  validateAttachDataUrl,
+  decodeAttachDataUrlToBytes,
+  parseOwnerRepo,
+  canUploadWithPermission,
+  buildUserAttachmentUploadUrl,
+  parseUploadAssetResponse,
+  parseCreateIssueResponse,
+  parseGithubErrorMessage,
+  describeGithubApiError,
+  stripHtmlTags,
+} from './utils/ghAttach';
+import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+
+/**
+ * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
+ * レスポンスボディがJSONでない・messageが無い場合はnullを返す(呼び出し元は
+ * ステータスコードのみでエラーメッセージを組み立てる)。
+ */
+async function extractGithubErrorMessage(res: Response): Promise<string | null> {
+  const clone = res.clone();
+  try {
+    const parsed = parseGithubErrorMessage(await res.clone().json());
+    if (parsed) return parsed;
+  } catch {
+    // JSONでない場合はテキストとしてフォールバックする(下記)
+  }
+  try {
+    const raw = (await clone.text()).trim();
+    if (!raw) return null;
+    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、タグを除去して
+    // 読める形にし、原文が長すぎるとログ・エラーメッセージが読みにくくなるため
+    // 200文字までに切り詰める
+    const text = stripHtmlTags(raw);
+    return text ? text.slice(0, 200) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * /neko gh pr list・GET /api/gh/pr-list 共通。GitHub REST API
+ * GET /repos/{owner}/{repo}/pulls をユーザーのGitHub OAuthトークンで呼び出し、
+ * gh-wasm(Rust実装のformat_pr_list)でMarkdownテーブルへ整形する。
+ * owner/repoの検証もgh-wasm(validate_repo)側で行う(wasm/README.mdに記載の
+ * Rust/WASMとWorker/JavaScriptの責務分担を踏襲)。
+ */
+async function fetchAndFormatGhPrList(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  userSub: string,
+  repoFullNameInput: string
+): Promise<string> {
+  // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+  // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+  // 既存テストが壊れるため)
+  const { validateRepoViaWasm, formatPrListViaWasm } = await import('./utils/ghWasmServer');
+  let repoFullName: string;
+  try {
+    repoFullName = validateRepoViaWasm(repoFullNameInput);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const [owner, repo] = repoFullName.split('/');
+
+  const userSession = await getUserSession(c.env.DB, userSub);
+  const accessToken = userSession?.githubAccessToken;
+  if (!accessToken) {
+    throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
+  }
+
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      },
+    }
+  );
+  if (!res.ok) {
+    const ghMessage = await extractGithubErrorMessage(res);
+    logger.warn('gh pr-list: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
+    throw new Error(describeGithubApiError('プルリクエスト一覧の取得', res.status, ghMessage));
+  }
+  const prs: Array<Record<string, unknown>> = await res.json();
+  // GitHub REST APIの一覧取得(GET /repos/{owner}/{repo}/pulls)はmergeable_state
+  // を返さない(コンフリクト有無はPR個別取得でのみ得られる)ため、1件ずつ
+  // GET /repos/{owner}/{repo}/pulls/{number} を並列取得してmergeable_stateを
+  // 集める。個別取得が失敗しても一覧表示自体は継続させ、該当PRのみ
+  // gh-wasm側で「確認中」表示にフォールバックさせる(rule 8: 失敗はwarnログへ記録)。
+  const mergeableStateEntries = await Promise.all(
+    prs
+      .filter((pr): pr is Record<string, unknown> & { number: number } => typeof pr.number === 'number')
+      .map(async (pr): Promise<[number, string | null]> => {
+        try {
+          const detailRes = await fetch(
+            `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pr.number}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+              },
+            }
+          );
+          if (!detailRes.ok) {
+            logger.warn('gh pr-list: mergeable_state fetch failed', { repoFullName, userSub, number: pr.number, status: detailRes.status });
+            return [pr.number, null];
+          }
+          const detail = await detailRes.json<{ mergeable_state?: string | null }>();
+          return [pr.number, detail.mergeable_state ?? null];
+        } catch (err) {
+          logger.warn('gh pr-list: mergeable_state fetch threw', { repoFullName, userSub, number: pr.number, error: err instanceof Error ? err.message : String(err) });
+          return [pr.number, null];
+        }
+      })
+  );
+  const mergeableStates = new Map<number, string | null>(mergeableStateEntries);
+  const json = JSON.stringify(mergePrMergeableStates(prs, mergeableStates));
+  // 設定ページの「スラッシュコマンドからのプルリク応答で作成者を伏せる」
+  // トグル(Cookie: neko_pr_hide_author)。Cookie未設定(初回訪問等)の場合は
+  // デフォルトON(伏せる)として扱う(設定ページ側の初期表示デフォルトと合わせる)。
+  const hideAuthorCookie = getCookieValue(c.req.header('Cookie'), 'neko_pr_hide_author');
+  const maskAuthor = resolveHideAuthorFromCookie(hideAuthorCookie);
+  return formatPrListViaWasm(repoFullName, json, maskAuthor);
+}
+import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -61,6 +194,7 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getCountdownPage } from './views/countdown';
 import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
@@ -109,7 +243,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
-import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
+import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
 import {
   MOONDREAM_MODEL,
   MOONDREAM_DEFAULT_PROMPT,
@@ -131,7 +265,19 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
-import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
+import {
+  isValidEcPublicKeyJwk,
+  generateChallengeValue,
+  computeChallengeExpiresAt,
+  validateChallengeRow,
+  verifyChallengeSignature,
+} from './utils/publicKeyAuth';
+import {
+  LOGIN_METHOD_GITHUB_OAUTH,
+  LOGIN_METHOD_PUBLIC_KEY,
+  type LoginMethod,
+} from './utils/loginHistory';
+import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
@@ -260,12 +406,17 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
   { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
   { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
-  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
+  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録。indent_level(0120)で/workflowページの処理段階を階層(インデント)表示する', syncPolicy: 'manual' },
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
   { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
   { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
+  { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる。gemma_input_tokens/gemma_output_tokens/gemma_total_tokens(0119)にレビュー呼び出し自体のトークン数を記録する', syncPolicy: 'auto' },
+  { name: 'kimi_code_generate_log', migration: '0118', description: '/kimi-codeページでkimi-k2.7-code(従量課金モデル)にコード生成を依頼した1リクエストごとのトークン数(input/output/total)ログ。POST /api/kimi-code/generateの呼び出しのたびに記録し、/api/kimi-code/token-usageで集計する', syncPolicy: 'auto' },
+  { name: 'user_public_keys', migration: '0121', description: '/public-keysページで登録するチャレンジ署名ログイン用の公開鍵(ECDSA P-256, JWK形式)。秘密鍵はブラウザ側のみで保持しサーバーには送らない。失効(revoked_at)・最終使用(last_used_at)を個別に管理する', syncPolicy: 'auto' },
+  { name: 'public_key_challenges', migration: '0122', description: 'チャレンジ署名ログインで発行したワンタイムチャレンジ文字列。有効期限(expires_at)・使用済み(used_at)でリプレイ再利用を防ぐ', syncPolicy: 'auto' },
+  { name: 'login_history', migration: '0124', description: 'ログインのたびに記録するログ(GitHub OAuth / 公開鍵チャレンジ署名のどちらでログインしたか)。user_sessions.last_login_method(0123)は直近1回分のみだが、こちらは全履歴を保持する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1629,6 +1780,59 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_waypoint_sets_dedup ON he
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_countdown_events_user_target ON countdown_events(user_id, target_at);`,
+  '0117': `CREATE TABLE IF NOT EXISTS kimi_gemma_reviews (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kimi_prompt TEXT NOT NULL,
+  kimi_code TEXT NOT NULL,
+  gemma_prompt TEXT NOT NULL,
+  gemma_response TEXT NOT NULL,
+  gemma_model TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_gemma_reviews_user_created ON kimi_gemma_reviews(user_id, created_at);`,
+  '0118': `CREATE TABLE IF NOT EXISTS kimi_code_generate_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_code_generate_log_user_created ON kimi_code_generate_log(user_id, created_at);`,
+  '0119': `ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_input_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_output_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_total_tokens INTEGER;`,
+  '0120': `ALTER TABLE workflow_steps ADD COLUMN indent_level INTEGER DEFAULT 0;`,
+  '0121': `CREATE TABLE IF NOT EXISTS user_public_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  public_key_jwk TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_public_keys_user_id ON user_public_keys(user_id);`,
+  '0122': `CREATE TABLE IF NOT EXISTS public_key_challenges (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_challenges(user_id);`,
+  '0123': `ALTER TABLE user_sessions ADD COLUMN last_login_method TEXT DEFAULT 'github_oauth';`,
+  '0124': `CREATE TABLE IF NOT EXISTS login_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user_id ON login_history(user_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1768,6 +1972,9 @@ export interface ColumnKeyInfo {
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
+  user_public_keys: { id: 'pk', user_id: 'fk+idx' },
+  public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
+  login_history: { id: 'pk', user_id: 'fk+idx' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -1864,6 +2071,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_master: { id: 'pk', moved_to: 'fk' },
   heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
   countdown_events: { id: 'pk', user_id: 'idx' },
+  kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
+  kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1907,6 +2116,7 @@ export function getFilterableColumns(tableName: string): string[] {
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
+  user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -1981,6 +2191,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_master: 'system',
   heritage_journey_waypoint_sets: 'system',
   countdown_events: 'system',
+  kimi_gemma_reviews: 'ai',
+  kimi_code_generate_log: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2076,6 +2288,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   workspaces: { team_id: 'teams' },
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
+  user_public_keys: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions' },
+  login_history: { user_id: 'user_sessions' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
@@ -2088,6 +2303,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_hit_details: { search_history_id: 'commit_search_history' },
   commit_search_keyword_labels: { user_id: 'user_sessions' },
   countdown_events: { user_id: 'user_sessions' },
+  kimi_gemma_reviews: { user_id: 'user_sessions' },
+  kimi_code_generate_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -3304,6 +3521,31 @@ async function updateUserSession(
   }
 }
 
+/**
+ * ログイン方式(GitHub OAuth / 公開鍵チャレンジ署名)を記録する。
+ * user_sessions.last_login_method(直近1回分、画面表示用)と login_history
+ * (全履歴、監査用)の両方に書き込む。ログイン自体を失敗させたくないため、
+ * 失敗してもログに残すだけでログイン処理は続行する(finalizeGithubLogin/
+ * finalizePasskeyLoginの成否には影響させない)。
+ */
+async function recordLoginMethod(db: D1Database | undefined, userId: string, method: LoginMethod): Promise<void> {
+  if (!db) return;
+  const now = new Date().toISOString();
+  try {
+    await db.prepare('UPDATE user_sessions SET last_login_method = ? WHERE user_id = ?')
+      .bind(method, userId).run();
+    await db.prepare(
+      'INSERT INTO login_history (id, user_id, method, created_at) VALUES (?, ?, ?, ?)'
+    ).bind(crypto.randomUUID(), userId, method, now).run();
+  } catch (error) {
+    logger.error('Failed to record login method', {
+      userId,
+      method,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
 // D1データベースからユーザーセッション情報を取得
 async function getUserSession(db: D1Database | undefined, userId: string): Promise<{
   timezone: string;
@@ -3316,6 +3558,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   toastDuration: number | null;
   idleTimeoutSeconds: number | null;
   heritageTourCountryFilter: string | null;
+  lastLoginMethod: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -3323,7 +3566,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter, last_login_method FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -3335,6 +3578,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toast_duration: number | null;
       idle_timeout_seconds: number | null;
       heritage_tour_country_filter: string | null;
+      last_login_method: string | null;
     }>();
 
     if (!result) {
@@ -3352,6 +3596,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toastDuration: result.toast_duration ?? null,
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
       heritageTourCountryFilter: result.heritage_tour_country_filter ?? null,
+      lastLoginMethod: result.last_login_method ?? null,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : '';
@@ -3383,6 +3628,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
           toastDuration: fallback.toast_duration ?? null,
           idleTimeoutSeconds: null,
           heritageTourCountryFilter: null,
+          lastLoginMethod: null,
         };
       } catch (fallbackError) {
         logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
@@ -3421,6 +3667,8 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     await ensureDefaultWorkspace(c.env.DB, params.githubLogin);
   }
 
+  await recordLoginMethod(c.env.DB, params.githubLogin, LOGIN_METHOD_GITHUB_OAUTH);
+
   const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
@@ -3452,6 +3700,59 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     idleTimeoutSeconds,
     sessionDuration: params.sessionDuration,
     returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_GITHUB_OAUTH,
+  });
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
+// チャレンジ署名ログイン(公開鍵によるパスキー的ログイン)の確定処理。
+// GitHub OAuthを経由しないため、以前のGitHubログインで作られたuser_sessions行
+// (timezone/session_duration/github_access_token等)を引き継ぎ、last_login_at等
+// だけを更新する(github_access_tokenを上書き消去しないようにgetUserSessionの
+// 値をそのままupdateUserSessionへ渡す)。
+async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: Variables }>, params: {
+  userId: string;
+  jwtSecret: string;
+  returnToPath: string;
+}): Promise<Response> {
+  const existing = await getUserSession(c.env.DB, params.userId);
+  const timezone = existing?.timezone ?? DEFAULT_TIMEZONE;
+  const sessionDuration = existing?.sessionDuration ?? '1h';
+
+  await updateUserSession(
+    c.env.DB,
+    params.userId,
+    timezone,
+    sessionDuration,
+    existing?.githubAccessToken ?? undefined,
+    existing?.githubGrantedScopes ?? undefined
+  );
+
+  await recordLoginMethod(c.env.DB, params.userId, LOGIN_METHOD_PUBLIC_KEY);
+
+  const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
+
+  const token = await createJWT(
+    { sub: params.userId },
+    params.jwtSecret,
+    sessionDurationSeconds
+  );
+
+  logger.info('Public key (passkey) authentication successful', { userId: params.userId });
+  logger.recordMetric(c.env.ANALYTICS, 'auth_public_key_success', {
+    userId: params.userId,
+    timestamp: Date.now(),
+  });
+
+  const redirectHeaders = buildAuthRedirectHeaders({
+    token,
+    sessionDurationSeconds,
+    idleTimeoutSeconds,
+    sessionDuration,
+    returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_PUBLIC_KEY,
   });
 
   return new Response(null, { status: 302, headers: redirectHeaders });
@@ -3660,6 +3961,114 @@ app.get('/', async (c) => {
 
   const returnTo = validateReturnTo(c.req.query('return_to'));
   return c.html(getLoginPage(returnTo));
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ発行。未ログイン状態から呼ばれるため
+ * 認証ミドルウェアなし。userId+keyIdの組み合わせで有効な(失効していない)
+ * 公開鍵が登録されている場合のみチャレンジを発行する。
+ */
+app.post('/auth/public-key/challenge', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    if (!userId || !keyId) {
+      return c.json({ error: 'userId, keyIdは必須です' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ id: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const now = new Date();
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, userId, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue passkey login challenge', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ署名検証。成功時はGitHub OAuthを経由せず
+ * セッションJWTを発行してログイン確定する(finalizePasskeyLogin)。
+ */
+app.post('/auth/public-key/verify', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return c.json({ error: 'サーバー設定エラー' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string; challengeId?: string; signature?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const challengeId = (body.challengeId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!userId || !keyId || !challengeId || !signature) {
+      return c.json({ error: 'userId, keyId, challengeId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, userId, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      logger.warn('Passkey login signature verification failed', { userId, keyId });
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    return await finalizePasskeyLogin(c, { userId, jwtSecret, returnToPath: '/welcome' });
+  } catch (error) {
+    logger.error('Failed to verify passkey login', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ログインの検証に失敗しました' }, 500);
+  }
 });
 
 /**
@@ -4200,6 +4609,14 @@ app.get('/welcome', authMiddleware, async (c) => {
     c.header('Set-Cookie', `show_welcome_message=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   }
 
+  // login_method Cookie(ログイン直後の1回のみ有効)を読み取り、今回のログインが
+  // どちらの方式だったかをウェルカムメッセージに反映する。永続的な表示は
+  // userSession.lastLoginMethod(user_sessions.last_login_method)側で行う
+  const loginMethodCookie = getCookieValue(cookieHeader, 'login_method');
+  if (loginMethodCookie) {
+    c.header('Set-Cookie', `login_method=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
+
   // リポジトリ総数を取得
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   let repoCount: number | null = null;
@@ -4221,6 +4638,8 @@ app.get('/welcome', authMiddleware, async (c) => {
     email: user.email,
     lastLoginAt: formattedLastLogin,
     showWelcomeMessage,
+    loginMethod: showWelcomeMessage ? loginMethodCookie : null,
+    lastLoginMethod: userSession?.lastLoginMethod ?? null,
     repoCount,
     expiresAt,
     expiresAtTimestamp: user.exp,
@@ -4486,6 +4905,17 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub, new Date().toISOString()).all<{ label: string; target_at: string }>();
       return (rows.results ?? []).map((r) => ({ label: r.label, targetAt: r.target_at }));
     },
+    ghPrList: async (repoFullName) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      return fetchAndFormatGhPrList(c, user.sub, repoFullName);
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
@@ -4514,7 +4944,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const requestedModel = preferMoondream ? MOONDREAM_MODEL : (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-  const { primaryModel, fallbackModel } = resolveAichatModelsForRequest({
+  const { primaryModel, fallbackModel, secondFallbackModel } = resolveAichatModelsForRequest({
     requestedModel,
     hasImage: !!image,
     allowedModels: AICHAT_ALLOWED_MODELS,
@@ -4527,10 +4957,15 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-    const textMessages = buildAiMessages(message, systemPromptMode);
-    const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
-    const baseParams = { messages, max_tokens: maxTokens };
-    const runParams = getModelRunParams(model, baseParams);
+    let runParams: unknown;
+    if (model === AICHAT_MOONDREAM3_MODEL && image) {
+      runParams = buildMoondream3RunParams(image, message);
+    } else {
+      const textMessages = buildAiMessages(message, systemPromptMode);
+      const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
+      const baseParams = { messages, max_tokens: maxTokens };
+      runParams = getModelRunParams(model, baseParams);
+    }
     const result = await c.env.AI!.run(
       model as Parameters<typeof c.env.AI.run>[0],
       runParams as Parameters<typeof c.env.AI.run>[1]
@@ -4594,34 +5029,40 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
-  try {
-    const { text: response, usage } = await runAi(primaryModel);
-    const saved = await autoSave(response, primaryModel, usage);
-    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
-  } catch (primaryErr) {
-    logger.warn('AI chat primary model failed, trying fallback', {
-      model: primaryModel,
-      fallback: fallbackModel,
-      user: user.sub,
-      error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
-    });
-    if (primaryModel === fallbackModel) {
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
-    }
+  const candidates = [primaryModel, fallbackModel, secondFallbackModel].filter(
+    (m, i, arr): m is string => !!m && arr.indexOf(m) === i
+  );
+  let lastErr: unknown = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const model = candidates[i];
     try {
-      const { text: response, usage } = await runAi(fallbackModel);
-      const saved = await autoSave(response, fallbackModel, usage);
-      const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
-    } catch (fallbackErr) {
-      logger.warn('AI chat fallback model also failed', {
-        model: fallbackModel,
-        user: user.sub,
-        error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
+      const { text: response, usage } = await runAi(model);
+      const saved = await autoSave(response, model, usage);
+      const isFallback = i > 0;
+      return jsonUtf8({
+        response,
+        usedModel: model,
+        systemPromptMode,
+        ...(isFallback
+          ? { fallbackUsed: true, primaryError: lastErr instanceof Error ? lastErr.message : String(lastErr) }
+          : {}),
+        ...usage,
+        ...saved,
       });
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+    } catch (err) {
+      logger.warn(
+        i === 0 ? 'AI chat primary model failed, trying fallback' : 'AI chat fallback model failed, trying next',
+        {
+          model,
+          next: candidates[i + 1],
+          user: user.sub,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }
+      );
+      lastErr = err;
     }
   }
+  return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
 });
 
 /**
@@ -4783,11 +5224,105 @@ export async function searchAichatMoondreamAnalyses(
   return { results: rows.results ?? [] };
 }
 
+/**
+ * /answer-graph・AIチャット左サイドパネルの検索対象ドロップダウンで
+ * 「kimi-gemma」を選んだ場合用。/kimi-codeページでkimi-k2.7-codeが生成した
+ * コードをgemma-4-26b-a4b-itにレビューさせた結果(kimi_gemma_reviews)を
+ * キーワード検索する。ai_chat_sharesの行を持たない独立したデータのため、
+ * questionにはkimi_prompt(生成指示)、answerにはgemma_response(レビュー結果)を
+ * 割り当てて返す。
+ */
+export async function searchKimiGemmaReviews(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; question: string; answer: string; model: string; created_at: string;
+  review_note: { label: string; text: string };
+}> }> {
+  const normalized = q.replace(/[・･]/g, '・');
+  const rows = await db
+    .prepare(
+      // answerには質問(kimi_prompt)に対する本来の回答であるkimi_code(生成コード)を
+      // 割り当てる。gemma_response(生成コードへの外部レビュー)をanswerに
+      // 割り当てると、通常の質問/回答バブルの並びでは「回答=別モデルによる
+      // レビュー文」になってしまい、実際に生成されたコードそのものがどの画面
+      // にも表示されなくなる(=質問と回答の対応関係が崩れる)ため、レビューは
+      // review_noteとして別フィールドに分離する。
+      `SELECT id, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model, created_at,
+              gemma_model, gemma_response
+       FROM kimi_gemma_reviews
+       WHERE user_id = ?
+         AND (
+           INSTR(REPLACE(kimi_prompt, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(kimi_code, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(gemma_response, '･', '・'), ?) > 0
+         )
+       ORDER BY created_at DESC LIMIT 30`
+    )
+    .bind(userId, normalized, normalized, normalized)
+    .all<{ id: string; question: string; answer: string; model: string; created_at: string; gemma_model: string; gemma_response: string }>();
+  const results = (rows.results ?? []).map((r) => {
+    const { gemma_model, gemma_response, ...rest } = r;
+    return { ...rest, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
+  });
+  return { results };
+}
+
+/**
+ * /kimi-codeページ用のトークン利用量集計。kimi-k2.7-code(従量課金モデル)は
+ * コード生成の時点(kimi_code_generate_log)で、gemma-4-26b-a4b-itはレビュー
+ * 呼び出しの時点(kimi_gemma_reviews.gemma_*_tokens)でそれぞれ記録している
+ * ため、2つのテーブルをUNION ALLしてperiod(月 or 日)・モデル別に合算する。
+ * トークン数が記録されていない行(NULL。呼び出し失敗時やこの機能追加前の
+ * 既存データ)は合算対象から除外する。
+ */
+export async function getKimiCodeTokenUsage(
+  db: D1Like,
+  userId: string,
+  since: string,
+  granularity: 'day' | 'month' = 'month',
+): Promise<{ rows: Array<{
+  period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number;
+}> }> {
+  const periodFormat = granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
+  const rows = await db
+    .prepare(
+      `SELECT period, model,
+              SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(total_tokens) AS total_tokens,
+              COUNT(*) AS request_count
+       FROM (
+         SELECT strftime('${periodFormat}', created_at) AS period, model,
+                input_tokens, output_tokens, total_tokens
+         FROM kimi_code_generate_log
+         WHERE user_id = ? AND created_at >= ? AND input_tokens IS NOT NULL
+         UNION ALL
+         SELECT strftime('${periodFormat}', created_at) AS period, gemma_model AS model,
+                gemma_input_tokens AS input_tokens, gemma_output_tokens AS output_tokens, gemma_total_tokens AS total_tokens
+         FROM kimi_gemma_reviews
+         WHERE user_id = ? AND created_at >= ? AND gemma_input_tokens IS NOT NULL
+       )
+       GROUP BY period, model
+       ORDER BY period ASC, model ASC`
+    )
+    .bind(userId, since, userId, since)
+    .all<{ period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number }>();
+  return { rows: rows.results ?? [] };
+}
+
 export interface AichatShareDetail {
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
   input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
   image_data_url: string | null;
+  /**
+   * kimi-gemma専用: answer(kimi-k2.7-codeが生成したコードそのもの)に対して、
+   * 別モデル(gemma-4-26b-a4b-it)がレビューした結果。question→answerの
+   * 1問1答とは別の「回答への外部レビュー」という副次的な関係のため、
+   * answerへ文字列結合せず専用フィールドとして分離する(応答バブルとは
+   * 別の注釈カードとして描画することを想定)。target='kimi-gemma'以外はnull。
+   */
+  review_note: { label: string; text: string } | null;
 }
 
 /**
@@ -4811,6 +5346,27 @@ export async function getAichatShareDetail(
   id: string,
   target: string,
 ): Promise<AichatShareDetail | null> {
+  if (target === 'kimi-gemma') {
+    // 質問(kimi_prompt)→回答(kimi_code)は通常のコード生成のQ&Aとして
+    // そのまま表示し、gemma_response(生成コードに対する外部レビュー)は
+    // 文字列結合でanswerに混ぜ込まず、review_noteという別フィールドで返す。
+    // 「回答自体」と「回答に対する別モデルの注釈」を画面側でも別要素として
+    // 描画できるようにするため(1問1答の型に無理に押し込めない)。
+    const row = await db
+      .prepare(
+        `SELECT id, id AS user_hash, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model,
+                gemma_model, gemma_response,
+                created_at, 0 AS access_count, NULL AS question_hash,
+                NULL AS input_tokens, NULL AS output_tokens, NULL AS total_tokens, NULL AS image_data_url
+         FROM kimi_gemma_reviews
+         WHERE id = ? AND user_id = ?`
+      )
+      .bind(id, userId)
+      .first<AichatShareDetail & { gemma_model: string; gemma_response: string }>();
+    if (!row) return null;
+    const { gemma_model, gemma_response, ...detail } = row;
+    return { ...detail, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
+  }
   if (target === 'moondream3.1') {
     const row = await db
       .prepare(
@@ -4824,7 +5380,7 @@ export async function getAichatShareDetail(
       )
       .bind(id, userId)
       .first<AichatShareDetail>();
-    return row ?? null;
+    return row ? { ...row, review_note: null } : null;
   }
   const row = await db
     .prepare(
@@ -4837,7 +5393,7 @@ export async function getAichatShareDetail(
     )
     .bind(id, userId)
     .first<AichatShareDetail>();
-  return row ?? null;
+  return row ? { ...row, review_note: null } : null;
 }
 
 /** /api/aichat/image-branches が返す1件分の型。llama-4はquestion/answer、moondream3.1はanalysis_textのみ埋める */
@@ -5250,8 +5806,14 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   // (加えてEXISTS句でmoondream分析結果もヒット判定には含む)を検索する。
   const target = (c.req.query('target') ?? '').trim();
   const db = c.env.DB as unknown as D1Like;
-  const { results } = target === 'moondream3.1'
+  // 検索対象ごとに戻り値の付随フィールド(user_hash/image_data_url/review_note等)が
+  // 異なるため、enrichSearchResultsWithKeywordCounts等の共通後処理へ渡す前に
+  // idを持つ緩い共通型へ揃える(TSがunion配列をそのままジェネリック推論できないため)。
+  type AichatSearchResultItem = { id: string; [key: string]: unknown };
+  const { results }: { results: AichatSearchResultItem[] } = target === 'moondream3.1'
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
+    : target === 'kimi-gemma'
+    ? await searchKimiGemmaReviews(db, user.sub, q)
     : await searchAiChatShares(db, user.sub, q);
   const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(db, user.sub, results);
   const enriched = await enrichSearchResultsWithVectorizedFlag(db, user.sub, withKeywordCounts);
@@ -9922,10 +10484,51 @@ app.get('/factor-wasm', authMiddleware, async (c) => {
   return c.html(getFactorWasmPage(user.sub));
 });
 
+app.get('/ruby-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
+  // このページはRubyバイナリ本体(ruby+stdlib.wasm)をjsDelivr CDNから、
+  // bare specifierを解決済みURLへ書き換えてくれるesm.sh経由でJSグルー
+  // コード(@ruby/wasm-wasi)を取得するため、script-src/connect-srcに
+  // 両ドメインを追加する
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getRubyWasmPage(user.sub));
+});
+
 app.get('/wasm-modules', authMiddleware, async (c) => {
   const user = c.get('user');
   const viewMode = resolveWasmModulesViewMode(c.req.header('Cookie'));
   return c.html(getWasmModulesPage(user.sub, viewMode));
+});
+
+/**
+ * gh-wasm(Rust実装)でGitHubのプルリクエスト一覧をMarkdownテーブルへ整形して返す。
+ * /neko gh pr list サブコマンドと同じロジック(fetchAndFormatGhPrList)を使う。
+ */
+app.get('/api/gh/pr-list', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const repo = (c.req.query('repo') ?? '').trim();
+  if (!repo) {
+    return jsonUtf8({ error: 'repo(owner/repo形式)は必須です' }, 400);
+  }
+  if (c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+    ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+    if (!isWasmModuleEnabled(row)) {
+      return jsonUtf8({ error: 'ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)' }, 503);
+    }
+  }
+  try {
+    const markdown = await fetchAndFormatGhPrList(c, user.sub, repo);
+    return jsonUtf8({ markdown });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
+  }
 });
 
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
@@ -10057,7 +10660,7 @@ async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]>
 
 async function loadWorkflowSteps(db: D1Database, workflowNo: string): Promise<WorkflowStep[]> {
   const rows = await db.prepare(
-    'SELECT step_order, stage_title, api_method, api_path, note FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
+    'SELECT step_order, stage_title, api_method, api_path, note, indent_level FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
   ).bind(workflowNo).all<WorkflowStep>();
   return rows.results ?? [];
 }
@@ -10300,6 +10903,11 @@ app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
 app.get('/webgl-cube', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLCubePage(user.sub));
+});
+
+app.get('/megaminx', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getMegaminxPage(user.sub));
 });
 
 app.get('/webgl-solar', authMiddleware, async (c) => {
@@ -10628,6 +11236,352 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/json-explorer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getJsonExplorerPage(user.sub));
+});
+
+app.get('/bin-hex', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getBinHexPage(user.sub));
+});
+
+app.get('/gh-attach', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま。
+  // sha256-wasm/factor-wasmと同じ理由・同じ対応)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGhAttachPage(user.sub));
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、画像アップロードAPI。
+ * cli/cli internal/attachments/client.go の postAsset 相当の処理をWorker側で行う。
+ * 実ファイルI/O(os.Open)・net/httpはブラウザWASMでは使えないため、この部分だけは
+ * WASM化せずWorker(サーバー)側のTypeScriptで実装している。
+ */
+app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; filename?: string; dataUrl?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const filename = (body.filename ?? '').trim();
+  const dataUrl = (body.dataUrl ?? '').trim();
+  if (!owner || !repo || !filename || !dataUrl) {
+    return jsonUtf8({ error: 'owner, repo, filename, dataUrl は必須です' }, 400);
+  }
+
+  const validation = validateAttachDataUrl(dataUrl);
+  if (!validation.ok) {
+    return jsonUtf8({ error: validation.reason }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+
+  const ghHeaders = {
+    // go-gh(cli/cliが実際に使うHTTPクライアント)は Authorization: token <TOKEN>
+    // を使っており、Bearerではない。特にgithub.com側のuser-attachments/assets
+    // (Webアプリのレガシーエンドポイント)はBearerを認識せず未認証扱いとなり、
+    // Railsの汎用エラーページ(422 "Oh no")を返すことが実際に確認できた。
+    'Authorization': `token ${accessToken}`,
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+
+  let repoInfo: { id?: number; permissions?: { push?: boolean } };
+  try {
+    const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const repoRes = await fetch(repoUrl, {
+      headers: ghHeaders,
+    });
+    if (!repoRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(repoRes);
+      logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage, url: repoUrl });
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
+    }
+    repoInfo = await repoRes.json();
+  } catch (err) {
+    logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'リポジトリ情報の取得に失敗しました' }, 502);
+  }
+
+  if (!repoInfo.id) {
+    return jsonUtf8({ error: 'リポジトリIDを取得できませんでした' }, 502);
+  }
+  if (!canUploadWithPermission(repoInfo.permissions?.push)) {
+    return jsonUtf8({ error: 'このリポジトリへの書き込み権限がありません' }, 403);
+  }
+
+  // uploads.github.com/user-attachments/assets はGitHub Appのトークン(ghu_)では
+  // 動作しないことが実際に確認できた(権限・インストール範囲を正しく設定しても404)。
+  // cli/cli本家はclassic OAuth App/PAT前提でこのエンドポイントを使っており、
+  // GitHub Appのuser-to-serverトークンでの動作は想定されていないと考えられる。
+  // そのため、アップロードだけはこのユーザーのOAuthセッションではなく、
+  // 管理者が別途用意したclassic PAT(GH_ATTACH_UPLOAD_TOKEN)を使う。
+  const uploadToken = c.env.GH_ATTACH_UPLOAD_TOKEN;
+  if (!uploadToken) {
+    return jsonUtf8({
+      error: 'アップロード機能が未設定です。管理者が GH_ATTACH_UPLOAD_TOKEN(repoスコープ付きのclassic PAT)を設定する必要があります。',
+    }, 503);
+  }
+
+  const bytes = decodeAttachDataUrlToBytes(validation.base64);
+  const uploadUrl = buildUserAttachmentUploadUrl({ name: filename, contentType: validation.mime, repositoryId: repoInfo.id });
+
+  try {
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${uploadToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes.slice().buffer,
+    });
+    if (!uploadRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(uploadRes);
+      logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status, ghMessage });
+      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage, true) }, 502);
+    }
+    const parsed = parseUploadAssetResponse(await uploadRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url });
+  } catch (err) {
+    logger.warn('gh-attach: upload request failed', { owner, repo, filename, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'アップロード中にエラーが発生しました' }, 502);
+  }
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、Issue作成API。
+ * 本文Markdownの組み立て(参照書き換え・未参照分の追記)はブラウザ側のWASM
+ * (wasm/gh-attach-wasm)で完了済みのものを受け取り、そのままIssue作成に使う。
+ */
+app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; title?: string; body?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const title = (body.title ?? '').trim();
+  const issueBody = body.body ?? '';
+  if (!owner || !repo || !title) {
+    return jsonUtf8({ error: 'owner, repo, title は必須です' }, 400);
+  }
+  if (!parseOwnerRepo(`${owner}/${repo}`)) {
+    return jsonUtf8({ error: 'owner/repoの形式が不正です' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+
+  try {
+    const issueRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
+      method: 'POST',
+      headers: {
+        // gh-attach: uploadと同じ理由でtokenスキームに統一する(上記コメント参照)
+        'Authorization': `token ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title, body: issueBody }),
+    });
+    if (!issueRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(issueRes);
+      logger.warn('gh-attach: create issue failed', { owner, repo, user: user.sub, status: issueRes.status, ghMessage });
+      return jsonUtf8({ error: describeGithubApiError('Issue作成', issueRes.status, ghMessage) }, 502);
+    }
+    const parsed = parseCreateIssueResponse(await issueRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url, number: parsed.number });
+  } catch (err) {
+    logger.warn('gh-attach: create issue request failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'Issue作成中にエラーが発生しました' }, 502);
+  }
+});
+
+export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
+export const GEMMA_CODE_REVIEW_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/**
+ * kimi-k2.7-codeやgemma-4-26b-a4b-itのようなチャット補完形式のモデルは、
+ * 単純なチャットモデルが使う .response ではなく choices[0].message.content で
+ * テキストを返すことがある。両方の形式に対応して本文テキストを取り出す純粋関数。
+ */
+export function extractChatCompletionText(result: unknown): string {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  if (typeof resultObj.response === 'string' && resultObj.response) return resultObj.response;
+  const choices = Array.isArray(resultObj.choices) ? resultObj.choices as unknown[] : [];
+  const first = choices[0];
+  if (first && typeof first === 'object') {
+    const message = (first as Record<string, unknown>).message;
+    if (message && typeof message === 'object') {
+      const content = (message as Record<string, unknown>).content;
+      if (typeof content === 'string') return content;
+    }
+  }
+  return '';
+}
+
+/** /api/kimi-code/gemma-review用。gemma-4-26b-a4b-itにコードレビューを依頼するプロンプトを組み立てる純粋関数 */
+export function buildGemmaCodeReviewPrompt(code: string): string {
+  return '次のコードをレビューしてください。バグ・改善点・注意すべき点を日本語で簡潔に指摘してください。\n\n```\n' + code + '\n```';
+}
+
+/** Ai.run()の結果からusage(トークン数)を取り出す。resultObjが取れていない場合は全てnullを返す */
+export function extractAiRunUsage(result: unknown): { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null } {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  const usageObj = (typeof resultObj['usage'] === 'object' && resultObj['usage'] !== null)
+    ? resultObj['usage'] as Record<string, unknown>
+    : {};
+  return extractAiUsage(usageObj);
+}
+
+app.get('/kimi-code', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getKimiCodePage(user.sub));
+});
+
+/**
+ * kimi-k2.7-codeへのプロンプト送信 API。account ID/APIトークンは使わず、
+ * Worker既存のAIバインディング(env.AI)経由で呼び出す(認証情報の管理コスト
+ * ゼロ・クライアント側への漏洩リスクもゼロにするため)。
+ */
+app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
+  const prompt = (body?.prompt ?? '').trim().slice(0, 8000);
+  if (!prompt) return jsonUtf8({ error: 'prompt は必須です' }, 400);
+  const systemPrompt = (body?.systemPrompt ?? '').trim().slice(0, 2000);
+  const messages: { role: string; content: string }[] = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  try {
+    const result = await c.env.AI.run(
+      KIMI_CODE_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const code = extractChatCompletionText(result);
+    if (!code) {
+      logger.warn('[kimi-code] 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
+    }
+    const usage = extractAiRunUsage(result);
+    // kimi-k2.7-codeは従量課金モデルのため、リクエストごとのトークン数を
+    // kimi_code_generate_logへ記録する(この後Gemmaレビューに進むかどうかに
+    // 関わらず、生成した時点で必ず1件残す。/api/kimi-code/token-usageで集計)。
+    if (c.env.DB) {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO kimi_code_generate_log (user_id, model, input_tokens, output_tokens, total_tokens)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, KIMI_CODE_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+        .run();
+    }
+    return jsonUtf8({ code, model: KIMI_CODE_MODEL, ...usage });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
+ * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
+ * パネルの検索(target=kimi-gemma)から後で読み出せる。
+ */
+app.post('/api/kimi-code/gemma-review', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ kimiPrompt?: string; code?: string }>().catch(() => null);
+  const kimiPrompt = (body?.kimiPrompt ?? '').trim().slice(0, 8000);
+  const code = (body?.code ?? '').trim().slice(0, 20000);
+  if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
+
+  const gemmaPrompt = buildGemmaCodeReviewPrompt(code);
+  try {
+    const result = await c.env.AI.run(
+      GEMMA_CODE_REVIEW_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages: [{ role: 'user', content: gemmaPrompt }] } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const raw = extractChatCompletionText(result);
+    const review = stripThinkTags(raw || '');
+    if (!review) {
+      logger.warn('[kimi-code] gemmaレビュー: 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: 'レビュー結果を取得できませんでした(空の応答)' }, 502);
+    }
+    const usage = extractAiRunUsage(result);
+    const id = crypto.randomUUID();
+    await c.env.DB
+      .prepare(
+        `INSERT INTO kimi_gemma_reviews (id, user_id, kimi_prompt, kimi_code, gemma_prompt, gemma_response, gemma_model, gemma_input_tokens, gemma_output_tokens, gemma_total_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, user.sub, kimiPrompt, code, gemmaPrompt, review, GEMMA_CODE_REVIEW_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+      .run();
+    return jsonUtf8({ id, review, model: GEMMA_CODE_REVIEW_MODEL, ...usage });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] gemmaレビュー呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'Gemmaレビューでサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページ用。kimi-k2.7-code(コード生成)・gemma-4-26b-a4b-it(レビュー)
+ * それぞれのトークン利用量を月or日・モデル別に集計する。
+ */
+app.get('/api/kimi-code/token-usage', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const granularity = c.req.query('granularity') === 'day' ? 'day' : 'month';
+  let since: string;
+  if (granularity === 'day') {
+    const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '30', 10), 1), 90);
+    since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else {
+    const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
+    since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  }
+  try {
+    const { rows } = await getKimiCodeTokenUsage(c.env.DB as unknown as D1Like, user.sub, since, granularity);
+    return jsonUtf8({ rows, granularity });
+  } catch {
+    return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
+  }
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
@@ -11084,6 +12038,15 @@ app.get('/api-keys', authMiddleware, (c) => {
 });
 
 /**
+ * 🔐公開鍵登録ページ（認証が必要）
+ * チャレンジ署名によるログイン確認用の公開鍵(ECDSA P-256)を登録・失効・照合テストする。
+ */
+app.get('/public-keys', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.html(getPublicKeysPage({ name: user.name, username: user.sub }));
+});
+
+/**
  * ユーザー情報ページ（認証が必要）
  */
 app.get('/userinfo', authMiddleware, async (c) => {
@@ -11120,28 +12083,28 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
  * D1 データベース一覧と各テーブルの行数を返す
  */
 app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です', configured: false }, 200);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です', configured: false }, 200);
   }
   try {
-    const databases = await listD1Databases(token, accountId);
-    return jsonUtf8({ configured: true, databases });
+    const names = await listD1TableNames(c.env.DB);
+    return jsonUtf8({
+      configured: true,
+      databases: [
+        { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
+      ],
+    });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
   }
 });
 
 app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です' }, 503);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です' }, 503);
   }
-  const dbId = c.req.param('dbId');
   try {
-    const tables = await getD1Tables(token, accountId, dbId);
+    const tables = await loadCfDashboardTables(c.env.DB);
     return jsonUtf8({ tables });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
@@ -15641,6 +16604,208 @@ app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキーの失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 登録済み公開鍵の一覧取得
+ */
+app.get('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keys: [] });
+  }
+  try {
+    const rows = await db.prepare(
+      'SELECT id, label, created_at, last_used_at, revoked_at FROM user_public_keys WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(user.sub).all<{
+      id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null;
+    }>();
+    return c.json({ keys: rows.results ?? [] });
+  } catch (error) {
+    logger.error('Failed to fetch public keys', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の登録。秘密鍵はブラウザ側で生成されサーバーには一切送られない。
+ * 秘密鍵成分(d)を含むJWKが誤って送られた場合はisValidEcPublicKeyJwkで拒否する。
+ */
+app.post('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ label?: string; publicKeyJwk?: unknown }>();
+    const label = (body.label ?? '').trim();
+    if (!label) {
+      return c.json({ error: 'ラベルは必須です' }, 400);
+    }
+    if (!isValidEcPublicKeyJwk(body.publicKeyJwk)) {
+      return c.json({ error: '公開鍵の形式が不正です(ECDSA P-256の公開鍵JWKが必要です)' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const publicKeyJwkJson = JSON.stringify(body.publicKeyJwk);
+
+    await db.prepare(
+      'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString()).run();
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label });
+    return c.json({
+      key: { id, label, createdAt: now.toISOString() },
+    }, 201);
+  } catch (error) {
+    logger.error('Failed to register public key', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の登録に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の失効。自分が登録した鍵のみ失効できる(user_idで絞り込み)。
+ */
+app.post('/api/public-keys/:id/revoke', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const result = await db.prepare(
+      'UPDATE user_public_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(new Date().toISOString(), keyId, user.sub).run();
+
+    if (!result.meta || result.meta.changes === 0) {
+      return c.json({ error: '対象の公開鍵が見つからないか、既に失効しています' }, 404);
+    }
+
+    logger.info('Revoked public key', { userId: user.sub, keyId });
+    return c.json({ message: '公開鍵を失効しました' });
+  } catch (error) {
+    logger.error('Failed to revoke public key', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ発行。指定した公開鍵(自分が登録した有効な鍵のみ)に対して、
+ * ワンタイムのランダム文字列を発行しD1に保存する(リプレイ防止のため使用済み管理する)。
+ */
+app.post('/api/public-keys/challenge', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ keyId?: string }>();
+    const keyId = (body.keyId ?? '').trim();
+    if (!keyId) {
+      return c.json({ error: 'keyIdは必須です' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, user.sub).first<{ id: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const now = new Date();
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, user.sub, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ署名の検証。チャレンジの有効期限・二重使用・ユーザー一致を確認したうえで、
+ * 登録済み公開鍵に対する署名をECDSAで検証する。成功時は鍵のlast_used_atを更新する。
+ */
+app.post('/api/public-keys/verify', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ challengeId?: string; keyId?: string; signature?: string }>();
+    const challengeId = (body.challengeId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!challengeId || !keyId || !signature) {
+      return c.json({ error: 'challengeId, keyId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, user.sub, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, user.sub).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    logger.info('Verified public key challenge', { userId: user.sub, keyId });
+    return c.json({ verified: true });
+  } catch (error) {
+    logger.error('Failed to verify public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの検証に失敗しました' }, 500);
   }
 });
 
