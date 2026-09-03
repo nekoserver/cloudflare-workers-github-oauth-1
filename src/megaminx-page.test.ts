@@ -55,6 +55,19 @@ describe('getMegaminxPage', () => {
     expect(html).toContain('type="x-shader/x-vertex"');
     expect(html).toContain('type="x-shader/x-fragment"');
   });
+
+  it('ソルブ・スクランブルは全手を瞬時に適用するのではなく、1手ずつ順に適用して途中経過を表示する', () => {
+    // 対象: doSolve/doScrambleが「一手ずつ動かしながら最終的に揃える」過程を
+    // 実際に画面へ反映すること(旧実装は全手をfor文で一気に適用してから
+    // 最後に1回だけ描画していたため、見た目が瞬時のリセットと区別できない
+    // という指摘を受けて修正した)。WebGLコンテキストが無いjsdom環境では
+    // 実際のアニメーション実行までは検証できない(このリポジトリの他の
+    // WebGLページ同様、目視確認はwrangler dev + 実ブラウザで行う)ため、
+    // ここではplayQueueの逐次適用ロジックがソースに存在することを検証する。
+    expect(html).toContain('function playQueue(');
+    expect(html).toContain('setTimeout(step, STEP_DELAY_MS)');
+    expect(html).toContain("statusPrefix + '... ' + idx + '/' + total + '手'");
+  });
 });
 
 describe('getMegaminxPage — ルート配線', () => {
