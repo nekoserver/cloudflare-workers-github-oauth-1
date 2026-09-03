@@ -42,6 +42,7 @@ export function assignModelColors(
 
 export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
   '@cf/google/gemma-4-26b-a4b-it': 65536,
+  '@cf/qwen/qwen3.8-27b': 4096,
 };
 
 /**
