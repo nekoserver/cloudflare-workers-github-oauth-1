@@ -80,6 +80,34 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('API問い合わせなし');
   });
 
+  it('indent_levelが設定された段階はmargin-leftでインデント表示される(階層表示)', () => {
+    const html = getWorkflowPage('testuser', workflows, {
+      workflow: workflows[0],
+      steps: [
+        { step_order: 1, stage_title: '親ステップ', api_method: 'GET', api_path: '/api/wasm-modules', note: null, indent_level: 0 },
+        { step_order: 2, stage_title: '子ステップ', api_method: 'GET', api_path: '/api/wasm-modules/source', note: null, indent_level: 1 },
+      ],
+    });
+    const parentStart = html.lastIndexOf('<li class="wf-step"', html.indexOf('親ステップ'));
+    const parentTag = html.slice(parentStart, html.indexOf('>', parentStart));
+    expect(parentTag).not.toContain('margin-left');
+    const childStart = html.lastIndexOf('<li class="wf-step"', html.indexOf('子ステップ'));
+    const childTag = html.slice(childStart, html.indexOf('>', childStart));
+    expect(childTag).toContain('margin-left:24px');
+  });
+
+  it('indent_level未指定(既存データ)の段階はインデント無しで表示される(後方互換)', () => {
+    const html = getWorkflowPage('testuser', workflows, {
+      workflow: workflows[0],
+      steps: [
+        { step_order: 1, stage_title: '通常ステップ', api_method: 'GET', api_path: '/api/wasm-modules', note: null },
+      ],
+    });
+    const start = html.lastIndexOf('<li class="wf-step"', html.indexOf('通常ステップ'));
+    const tag = html.slice(start, html.indexOf('>', start));
+    expect(tag).not.toContain('margin-left');
+  });
+
   it('未選択時はプレースホルダーを表示する', () => {
     const html = getWorkflowPage('testuser', workflows, null);
     expect(html).toContain('左のサイドバーからワークフローを選択してください');
@@ -336,6 +364,32 @@ describe('getWorkflowPage — サイドパネルのリンクをfetch+history.pus
     expect(main.innerHTML).toContain('AIチャット送信');
     expect(main.innerHTML).toContain('/api/aichat');
     expect(document.title).toContain('AIチャット送信');
+  });
+
+  it('(DOM実動作) fetch経由の差し替え後もindent_levelに応じてmargin-leftでインデント表示される', async () => {
+    const html = getWorkflowPage('testuser', workflows, { workflow: workflows[0], steps: [] });
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        workflow: workflows[1],
+        steps: [
+          { step_order: 1, stage_title: '親ステップ', api_method: 'GET', api_path: '/api/aichat', note: null, indent_level: 0 },
+          { step_order: 2, stage_title: '子ステップ', api_method: null, api_path: null, note: null, indent_level: 1 },
+        ],
+      }),
+    })));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const link = document.querySelector('[data-wf-no="0002"]') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const items = document.querySelectorAll('.wf-step');
+    expect(items[0].getAttribute('style')).toBeNull();
+    expect(items[1].getAttribute('style')).toContain('margin-left:24px');
   });
 
   it('クリックするとhistory.pushStateでURLを更新し、サイドバーのactive表示も切り替わる', async () => {
