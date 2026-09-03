@@ -1,0 +1,500 @@
+function escM(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export function getMegaminxPage(username: string): string {
+  const safeUser = escM(username);
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebGL Megaminx</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#0d1117; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+.topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
+h1 { font-size:14px; font-weight:700; }
+.badge { background:#0c2d4e; color:#58a6ff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
+.body { display:grid; grid-template-columns:1fr 260px; grid-template-rows:1fr; flex:1; min-height:0; }
+@media(max-width:700px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
+.canvas-wrap { position:relative; background:#0a0c10; overflow:hidden; }
+#c { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
+#c:active { cursor:grabbing; }
+.side { background:#0d1117; border-left:1px solid #30363d; overflow:hidden; padding:16px; display:flex; flex-direction:column; }
+.side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.btn-row { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+.btn { background:#21262d; border:1px solid #30363d; color:#e6edf3; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
+.btn:hover { background:#30363d; }
+.btn.primary { background:#1f6feb; border-color:#1f6feb; }
+.btn.primary:hover { background:#388bfd; }
+.btn.danger { background:#6e1c1c; border-color:#da3633; }
+.btn.danger:hover { background:#da3633; }
+.face-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-bottom:12px; }
+.face-btn { aspect-ratio:1; border:1px solid #30363d; border-radius:5px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#0d1117; }
+.face-btn:hover { filter:brightness(1.15); }
+hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
+.status { font-size:11px; color:#58a6ff; margin-bottom:6px; font-family:monospace; min-height:16px; }
+.moves-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
+.moves-box { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px; font-family:monospace; font-size:11px; color:#8b949e; flex:1; overflow-y:auto; line-height:2; word-break:break-all; max-height:120px; }
+.hint { font-size:11px; color:#8b949e; line-height:1.6; margin-bottom:10px; }
+.user-badge { font-size:11px; color:#8b949e; margin-left:auto; }
+</style>
+</head>
+<body>
+<script id="vs" type="x-shader/x-vertex">
+attribute vec3 aPos;
+attribute vec3 aNorm;
+attribute vec3 aCol;
+uniform mat4 uMVP;
+uniform mat3 uNR;
+varying vec3 vCol;
+void main() {
+  vec3 wn = normalize(uNR * aNorm);
+  vec3 ld = normalize(vec3(1.0, 2.0, 1.5));
+  float d = max(dot(wn, ld), 0.0);
+  vCol = aCol * (0.35 + 0.65 * d);
+  gl_Position = uMVP * vec4(aPos, 1.0);
+}
+</script>
+<script id="fs" type="x-shader/x-fragment">
+precision mediump float;
+varying vec3 vCol;
+void main() { gl_FragColor = vec4(vCol, 1.0); }
+</script>
+
+<div class="topbar">
+  <h1>Megaminx</h1>
+  <span class="badge">WebGL</span>
+  <span style="flex:1"></span>
+  <span class="user-badge">${safeUser}</span>
+</div>
+
+<div class="body">
+  <div class="canvas-wrap" id="cwrap">
+    <canvas id="c"></canvas>
+  </div>
+  <div class="side">
+    <h2>面を回す</h2>
+    <div class="hint">クリックで正回転、Shift+クリックで逆回転</div>
+    <div class="face-grid" id="faceGrid"></div>
+    <h2>操作</h2>
+    <div class="btn-row">
+      <button class="btn danger" id="btnS">スクランブル</button>
+      <button class="btn" id="btnR">リセット</button>
+    </div>
+    <hr>
+    <div class="status" id="st">ソルブ済み</div>
+    <div class="moves-label">手順</div>
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+      <div class="moves-box" id="mb"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ===== 幾何: src/utils/megaminxGeometry.tsのロジックをそのまま移植 =====
+  var PHI = (1 + Math.sqrt(5)) / 2;
+  function normalize(v) { var l = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]); return [v[0]/l, v[1]/l, v[2]/l]; }
+  function dot(a, b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+  function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function subtract(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+  function scale(a, s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+  function addv(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+  function distance(a, b) { var d = subtract(a, b); return Math.sqrt(dot(d, d)); }
+  function rotateAroundAxis(v, axis, angleRad) {
+    var cosA = Math.cos(angleRad), sinA = Math.sin(angleRad);
+    var kCrossV = cross(axis, v), kDotV = dot(axis, v);
+    return addv(addv(scale(v, cosA), scale(kCrossV, sinA)), scale(axis, kDotV * (1 - cosA)));
+  }
+
+  function buildVertices() {
+    var raw = [];
+    [1,-1].forEach(function(sx){ [1,-1].forEach(function(sy){ [1,-1].forEach(function(sz){ raw.push([sx,sy,sz]); }); }); });
+    [1,-1].forEach(function(sy){ [1,-1].forEach(function(sz){ raw.push([0, sy/PHI, sz*PHI]); }); });
+    [1,-1].forEach(function(sx){ [1,-1].forEach(function(sy){ raw.push([sx/PHI, sy*PHI, 0]); }); });
+    [1,-1].forEach(function(sx){ [1,-1].forEach(function(sz){ raw.push([sx*PHI, 0, sz/PHI]); }); });
+    return raw.map(normalize);
+  }
+
+  function buildAdjacency(vertices) {
+    var minDist = Infinity;
+    for (var i = 0; i < vertices.length; i++) for (var j = 0; j < vertices.length; j++) {
+      if (i === j) continue;
+      var d = distance(vertices[i], vertices[j]);
+      if (d < minDist) minDist = d;
+    }
+    return vertices.map(function(v, i) {
+      return vertices.map(function(w, j) { return {j:j, d:distance(v,w)}; })
+        .filter(function(x) { return x.j !== i && x.d < minDist * 1.05; })
+        .map(function(x) { return x.j; });
+    });
+  }
+
+  function traceFace(start, second, adjacency, vertices) {
+    var face = [start, second];
+    var prev = start, cur = second;
+    for (var step = 0; step < 20; step++) {
+      var candidates = adjacency[cur].filter(function(n) { return n !== prev; });
+      var best = null, bestScore = -Infinity;
+      for (var ci = 0; ci < candidates.length; ci++) {
+        var n = candidates[ci];
+        var d1 = subtract(vertices[cur], vertices[prev]);
+        var d2 = subtract(vertices[n], vertices[cur]);
+        var score = dot(cross(d1, d2), vertices[cur]);
+        if (score > bestScore) { bestScore = score; best = n; }
+      }
+      if (best === null) return null;
+      if (best === start) return face;
+      face.push(best);
+      prev = cur; cur = best;
+    }
+    return null;
+  }
+
+  function buildDodecahedronGeometry() {
+    var vertices = buildVertices();
+    var adjacency = buildAdjacency(vertices);
+    var seenDirectedEdges = {};
+    var cornerFaces = [];
+    for (var a = 0; a < vertices.length; a++) {
+      for (var bi = 0; bi < adjacency[a].length; bi++) {
+        var b = adjacency[a][bi];
+        var key = a + '_' + b;
+        if (seenDirectedEdges[key]) continue;
+        var face = traceFace(a, b, adjacency, vertices);
+        if (!face || face.length !== 5) continue;
+        for (var k = 0; k < 5; k++) seenDirectedEdges[face[k] + '_' + face[(k+1)%5]] = true;
+        cornerFaces.push(face);
+      }
+    }
+    var edgeKeyToId = {};
+    var edgeVertices = [];
+    function getOrCreateEdgeId(a2, b2) {
+      var key2 = a2 < b2 ? (a2+'_'+b2) : (b2+'_'+a2);
+      if (edgeKeyToId[key2] !== undefined) return edgeKeyToId[key2];
+      var id = edgeVertices.length;
+      edgeVertices.push([a2, b2]);
+      edgeKeyToId[key2] = id;
+      return id;
+    }
+    var faces = cornerFaces.map(function(corners) {
+      var edgeSlots = corners.map(function(a3, k2) { return getOrCreateEdgeId(a3, corners[(k2+1)%5]); });
+      var centroid = corners.reduce(function(acc, i) { return addv(acc, vertices[i]); }, [0,0,0]);
+      return { normal: normalize(centroid), cornerSlots: corners, edgeSlots: edgeSlots };
+    });
+    return { vertices: vertices, faces: faces, edgeVertices: edgeVertices };
+  }
+
+  // ===== パズル状態: src/utils/megaminx.tsのロジックをそのまま移植 =====
+  function edgeCenter(geometry, edgeId) {
+    var ev = geometry.edgeVertices[edgeId];
+    return addv(geometry.vertices[ev[0]], geometry.vertices[ev[1]]);
+  }
+
+  function createSolvedState(geometry) {
+    var cornerHomeFaces = geometry.vertices.map(function() { return []; });
+    var edgeHomeFaces = geometry.edgeVertices.map(function() { return []; });
+    geometry.faces.forEach(function(face, faceIndex) {
+      face.cornerSlots.forEach(function(v) { cornerHomeFaces[v].push(faceIndex); });
+      face.edgeSlots.forEach(function(e) { edgeHomeFaces[e].push(faceIndex); });
+    });
+    var cornerStickers = cornerHomeFaces.map(function(faceIds) {
+      return faceIds.map(function(f) { return { homeFace: f, dir: geometry.faces[f].normal }; });
+    });
+    var edgeStickers = edgeHomeFaces.map(function(faceIds) {
+      return faceIds.map(function(f) { return { homeFace: f, dir: geometry.faces[f].normal }; });
+    });
+    return {
+      cornerOccupant: geometry.vertices.map(function(_, i) { return i; }),
+      cornerStickers: cornerStickers,
+      edgeOccupant: geometry.edgeVertices.map(function(_, i) { return i; }),
+      edgeStickers: edgeStickers
+    };
+  }
+
+  function nearestSlot(rotatedPos, candidateSlots, slotPos) {
+    var best = candidateSlots[0], bestScore = -Infinity;
+    for (var i = 0; i < candidateSlots.length; i++) {
+      var s = candidateSlots[i];
+      var score = dot(rotatedPos, slotPos(s));
+      if (score > bestScore) { bestScore = score; best = s; }
+    }
+    return best;
+  }
+
+  function applyMove(state, geometry, faceIndex, direction) {
+    var face = geometry.faces[faceIndex];
+    var angle = direction * (2 * Math.PI / 5);
+
+    var newCornerOccupant = state.cornerOccupant.slice();
+    var newCornerStickers = state.cornerStickers.map(function(s) { return s.slice(); });
+    face.cornerSlots.forEach(function(slot) {
+      var rotatedPos = rotateAroundAxis(geometry.vertices[slot], face.normal, angle);
+      var destSlot = nearestSlot(rotatedPos, face.cornerSlots, function(s) { return geometry.vertices[s]; });
+      var pieceId = state.cornerOccupant[slot];
+      newCornerOccupant[destSlot] = pieceId;
+      newCornerStickers[pieceId] = state.cornerStickers[pieceId].map(function(st) {
+        return { homeFace: st.homeFace, dir: rotateAroundAxis(st.dir, face.normal, angle) };
+      });
+    });
+
+    var newEdgeOccupant = state.edgeOccupant.slice();
+    var newEdgeStickers = state.edgeStickers.map(function(s) { return s.slice(); });
+    face.edgeSlots.forEach(function(slot) {
+      var rotatedPos = rotateAroundAxis(edgeCenter(geometry, slot), face.normal, angle);
+      var destSlot = nearestSlot(rotatedPos, face.edgeSlots, function(s) { return edgeCenter(geometry, s); });
+      var pieceId = state.edgeOccupant[slot];
+      newEdgeOccupant[destSlot] = pieceId;
+      newEdgeStickers[pieceId] = state.edgeStickers[pieceId].map(function(st) {
+        return { homeFace: st.homeFace, dir: rotateAroundAxis(st.dir, face.normal, angle) };
+      });
+    });
+
+    return { cornerOccupant: newCornerOccupant, cornerStickers: newCornerStickers, edgeOccupant: newEdgeOccupant, edgeStickers: newEdgeStickers };
+  }
+
+  var SOLVED_DOT_THRESHOLD = 0.999;
+  function isSolved(state, geometry) {
+    for (var i = 0; i < state.cornerOccupant.length; i++) if (state.cornerOccupant[i] !== i) return false;
+    for (var j = 0; j < state.edgeOccupant.length; j++) if (state.edgeOccupant[j] !== j) return false;
+    for (var ci = 0; ci < state.cornerStickers.length; ci++) {
+      var cs = state.cornerStickers[ci];
+      for (var k = 0; k < cs.length; k++) if (dot(cs[k].dir, geometry.faces[cs[k].homeFace].normal) < SOLVED_DOT_THRESHOLD) return false;
+    }
+    for (var ei = 0; ei < state.edgeStickers.length; ei++) {
+      var es = state.edgeStickers[ei];
+      for (var m = 0; m < es.length; m++) if (dot(es[m].dir, geometry.faces[es[m].homeFace].normal) < SOLVED_DOT_THRESHOLD) return false;
+    }
+    return true;
+  }
+
+  function getFaceColors(state, geometry, faceIndex) {
+    var face = geometry.faces[faceIndex];
+    function colorOf(pieceId, stickers) {
+      var best = stickers[pieceId][0], bestScore = -Infinity;
+      for (var i = 0; i < stickers[pieceId].length; i++) {
+        var s = stickers[pieceId][i];
+        var score = dot(s.dir, face.normal);
+        if (score > bestScore) { bestScore = score; best = s; }
+      }
+      return best.homeFace;
+    }
+    var corners = face.cornerSlots.map(function(slot) { return colorOf(state.cornerOccupant[slot], state.cornerStickers); });
+    var edges = face.edgeSlots.map(function(slot) { return colorOf(state.edgeOccupant[slot], state.edgeStickers); });
+    return { center: faceIndex, corners: corners, edges: edges };
+  }
+
+  // ===== ページ固有: 描画・操作 =====
+  var geometry = buildDodecahedronGeometry();
+  var state = createSolvedState(geometry);
+
+  var FACE_COLORS = [
+    [0.95,0.95,0.95],[1.00,0.30,0.30],[1.00,0.60,0.10],[1.00,0.85,0.10],
+    [0.55,0.85,0.20],[0.10,0.65,0.55],[0.20,0.55,0.95],[0.45,0.35,0.90],
+    [0.85,0.30,0.75],[0.55,0.35,0.20],[0.75,0.75,0.75],[0.95,0.55,0.75]
+  ];
+  var FACE_HEX = FACE_COLORS.map(function(c) {
+    function h(v) { var s = Math.round(v*255).toString(16); return s.length<2?'0'+s:s; }
+    return '#'+h(c[0])+h(c[1])+h(c[2]);
+  });
+
+  var moveLog = [];
+  function faceName(i) { return 'F' + (i+1); }
+
+  function doMove(faceIndex, direction) {
+    state = applyMove(state, geometry, faceIndex, direction);
+    moveLog.push(faceName(faceIndex) + (direction === -1 ? "'" : ''));
+    updateStatus();
+    rebuildMesh();
+  }
+
+  function doScramble() {
+    var len = 30 + Math.floor(Math.random()*20);
+    for (var i = 0; i < len; i++) {
+      var f = Math.floor(Math.random()*12);
+      var d = Math.random() < 0.5 ? 1 : -1;
+      state = applyMove(state, geometry, f, d);
+      moveLog.push(faceName(f) + (d === -1 ? "'" : ''));
+    }
+    updateStatus();
+    rebuildMesh();
+  }
+
+  function doReset() {
+    state = createSolvedState(geometry);
+    moveLog = [];
+    updateStatus();
+    rebuildMesh();
+  }
+
+  var stEl = document.getElementById('st');
+  var mbEl = document.getElementById('mb');
+  function updateStatus() {
+    stEl.textContent = isSolved(state, geometry) ? 'ソルブ済み' : ('未ソルブ (' + moveLog.length + '手)');
+    mbEl.textContent = moveLog.join(' ');
+    mbEl.scrollTop = mbEl.scrollHeight;
+  }
+
+  var faceGrid = document.getElementById('faceGrid');
+  for (var fbi = 0; fbi < 12; fbi++) {
+    (function(fi) {
+      var b = document.createElement('div');
+      b.className = 'face-btn';
+      b.style.background = FACE_HEX[fi];
+      b.textContent = String(fi+1);
+      b.addEventListener('click', function(e) { doMove(fi, e.shiftKey ? -1 : 1); });
+      faceGrid.appendChild(b);
+    })(fbi);
+  }
+
+  document.getElementById('btnS').addEventListener('click', doScramble);
+  document.getElementById('btnR').addEventListener('click', doReset);
+
+  // ===== メッシュ構築(センター五角形+角5三角形+辺5台形) =====
+  var T = 0.34, S = 0.62;
+  function buildFaceMeshTriangles(faceIndex) {
+    var face = geometry.faces[faceIndex];
+    var verts = face.cornerSlots.map(function(i) { return geometry.vertices[i]; });
+    var centroid = verts.reduce(function(acc, v) { return addv(acc, v); }, [0,0,0]);
+    centroid = scale(centroid, 1/5);
+    // P[k]/Q[k]は辺kの両端付近の切断点(角ステッカーの外側の辺)。
+    // R[k]は頂点V[k]の内向き投影(中心ペンタゴンの頂点。辺kの中点ではなく
+    // 頂点k自身の方向に対応させる必要がある。辺の中点方向に対応させると
+    // 中心ペンタゴンと辺台形の境界がずれて隙間ができるバグになる
+    // (実際にスクリーンショットで黒い隙間として現れたため修正した)。
+    var P = [], Q = [], R = [];
+    for (var k = 0; k < 5; k++) {
+      var vk = verts[k], vk1 = verts[(k+1)%5];
+      P.push(addv(vk, scale(subtract(vk1, vk), T)));
+      Q.push(addv(vk, scale(subtract(vk1, vk), 1-T)));
+      R.push(addv(centroid, scale(subtract(vk, centroid), S)));
+    }
+    var colors = getFaceColors(state, geometry, faceIndex);
+    var tris = [];
+    function tri(a, b, c, col) { tris.push([a,b,c,col]); }
+    var centerCol = FACE_COLORS[colors.center];
+    for (var ci = 0; ci < 5; ci++) tri(centroid, R[ci], R[(ci+1)%5], centerCol);
+    for (var k2 = 0; k2 < 5; k2++) {
+      var cornerCol = FACE_COLORS[colors.corners[k2]];
+      var prevQ = Q[(k2+4)%5];
+      tri(verts[k2], prevQ, P[k2], cornerCol);
+      var edgeCol = FACE_COLORS[colors.edges[k2]];
+      var rNext = R[(k2+1)%5];
+      tri(P[k2], Q[k2], rNext, edgeCol);
+      tri(P[k2], rNext, R[k2], edgeCol);
+    }
+    return { tris: tris, normal: face.normal };
+  }
+
+  function buildAllVerts() {
+    var v = [];
+    for (var fi = 0; fi < 12; fi++) {
+      var m = buildFaceMeshTriangles(fi);
+      var n = m.normal;
+      m.tris.forEach(function(t) {
+        var pts = [t[0], t[1], t[2]];
+        var col = t[3];
+        pts.forEach(function(p) {
+          v.push(p[0], p[1], p[2], n[0], n[1], n[2], col[0], col[1], col[2]);
+        });
+      });
+    }
+    return new Float32Array(v);
+  }
+
+  // ===== WebGL =====
+  var canvas = document.getElementById('c');
+  var cwrap = document.getElementById('cwrap');
+  var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+  function cs(type, id) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, document.getElementById(id).textContent);
+    gl.compileShader(s);
+    return s;
+  }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, 'vs'));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, 'fs'));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  var aPos = gl.getAttribLocation(prog, 'aPos');
+  var aNorm = gl.getAttribLocation(prog, 'aNorm');
+  var aCol = gl.getAttribLocation(prog, 'aCol');
+  var uMVP = gl.getUniformLocation(prog, 'uMVP');
+  var uNR = gl.getUniformLocation(prog, 'uNR');
+  gl.enableVertexAttribArray(aPos);
+  gl.enableVertexAttribArray(aNorm);
+  gl.enableVertexAttribArray(aCol);
+  var vbo = gl.createBuffer();
+
+  var meshDirty = true;
+  function rebuildMesh() { meshDirty = true; }
+
+  function m4() { return new Float32Array(16); }
+  function idm(m) { for (var i=0;i<16;i++) m[i]=0; m[0]=m[5]=m[10]=m[15]=1; return m; }
+  function mul(o,a,b) { for (var i=0;i<4;i++) for (var j=0;j<4;j++) { var s=0; for (var k=0;k<4;k++) s+=a[i+k*4]*b[k+j*4]; o[i+j*4]=s; } return o; }
+  function persp(m,fov,asp,nr,fr) { idm(m); var f=1/Math.tan(fov/2); m[0]=f/asp; m[5]=f; m[10]=(fr+nr)/(nr-fr); m[11]=-1; m[14]=2*fr*nr/(nr-fr); m[15]=0; return m; }
+  function rX(m,r) { idm(m); var c=Math.cos(r),s=Math.sin(r); m[5]=c; m[6]=s; m[9]=-s; m[10]=c; return m; }
+  function rY(m,r) { idm(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c; m[2]=-s; m[8]=s; m[10]=c; return m; }
+  function tr(m,x,y,z) { idm(m); m[12]=x; m[13]=y; m[14]=z; return m; }
+
+  var proj=m4(), view=m4(), model=m4(), rx=m4(), ry=m4(), tmp=m4(), mvp=m4();
+  var rotXv=0.5, rotYv=0.6, zoom=3.4;
+  var drag=false, lx=0, ly=0, pinch0=0;
+
+  canvas.addEventListener('mousedown', function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
+  window.addEventListener('mouseup', function(){ drag=false; });
+  window.addEventListener('mousemove', function(e){ if(!drag) return; rotYv+=(e.clientX-lx)*0.01; rotXv+=(e.clientY-ly)*0.01; lx=e.clientX; ly=e.clientY; });
+  canvas.addEventListener('wheel', function(e){ e.preventDefault(); zoom=Math.max(2,Math.min(10,zoom+e.deltaY*0.01)); }, {passive:false});
+  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); if(e.touches.length===1){ drag=true; lx=e.touches[0].clientX; ly=e.touches[0].clientY; } else if(e.touches.length===2){ pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); } }, {passive:false});
+  canvas.addEventListener('touchmove', function(e){ e.preventDefault(); if(e.touches.length===1&&drag){ rotYv+=(e.touches[0].clientX-lx)*0.01; rotXv+=(e.touches[0].clientY-ly)*0.01; lx=e.touches[0].clientX; ly=e.touches[0].clientY; } else if(e.touches.length===2){ var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); zoom=Math.max(2,Math.min(10,zoom-(d-pinch0)*0.02)); pinch0=d; } }, {passive:false});
+  canvas.addEventListener('touchend', function(){ drag=false; });
+
+  function resize() {
+    var r = cwrap.getBoundingClientRect();
+    var w = Math.round(r.width), h = Math.round(r.height);
+    if (w>0 && h>0 && (canvas.width!==w || canvas.height!==h)) { canvas.width=w; canvas.height=h; }
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  gl.enable(gl.DEPTH_TEST);
+  updateStatus();
+
+  var cachedVerts = null;
+  function frame() {
+    requestAnimationFrame(frame);
+    resize();
+    var W = canvas.width, H = canvas.height;
+    if (W===0 || H===0) return;
+    gl.viewport(0,0,W,H);
+    gl.clearColor(0.04,0.05,0.06,1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    rX(rx, rotXv); rY(ry, rotYv);
+    mul(model, ry, rx);
+    tr(view, 0, 0, -zoom);
+    mul(tmp, view, model);
+    persp(proj, Math.PI/4, W/H, 0.1, 50);
+    mul(mvp, proj, tmp);
+    gl.uniformMatrix4fv(uMVP, false, mvp);
+    gl.uniformMatrix3fv(uNR, false, new Float32Array([model[0],model[1],model[2],model[4],model[5],model[6],model[8],model[9],model[10]]));
+
+    if (meshDirty || !cachedVerts) { cachedVerts = buildAllVerts(); meshDirty = false; }
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, cachedVerts, gl.DYNAMIC_DRAW);
+    var stride = 9*4;
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, stride, 12);
+    gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, stride, 24);
+    gl.drawArrays(gl.TRIANGLES, 0, cachedVerts.length/9);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>`;
+}
