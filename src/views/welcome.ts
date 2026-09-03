@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { loginMethodLabel, LOGIN_METHOD_PUBLIC_KEY } from '../utils/loginHistory';
 
 export function getWelcomePage(user: {
   name?: string;
@@ -11,6 +12,10 @@ export function getWelcomePage(user: {
   avatar?: string;
   lastLoginAt?: string | null;
   showWelcomeMessage?: boolean;
+  /** 今回のログインで使われた方式(login_method Cookie由来、1回のログインにつき1回だけ渡ってくる) */
+  loginMethod?: string | null;
+  /** user_sessions.last_login_method由来。ページを開くたびに表示する永続的な値 */
+  lastLoginMethod?: string | null;
   repoCount?: number | null;
   expiresAt?: string;
   expiresAtTimestamp?: number;
@@ -182,6 +187,19 @@ export function getWelcomePage(user: {
       margin-bottom: 32px;
     }
 
+    .login-method-badge {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      vertical-align: middle;
+    }
+    .login-method-badge-passkey {
+      background: var(--accent-color);
+      color: white;
+    }
+
     .user-info {
       background: var(--bg-secondary);
       border-radius: 12px;
@@ -309,7 +327,7 @@ export function getWelcomePage(user: {
   <div class="container">
     <div class="welcome-card">
       ${user.showWelcomeMessage ? `<h1 class="welcome-title">ようこそ、${displayName}さん！</h1>
-      <p class="welcome-subtitle">ログインに成功しました</p>` : ''}
+      <p class="welcome-subtitle">ログインに成功しました${user.loginMethod === LOGIN_METHOD_PUBLIC_KEY ? ' <span class="login-method-badge login-method-badge-passkey">🔐 パスキーでログイン</span>' : ''}</p>` : ''}
 
       <div class="user-info">
         <h3>ユーザー情報</h3>
@@ -327,6 +345,12 @@ export function getWelcomePage(user: {
         <div class="info-row">
           <span class="info-label">前回ログイン日時</span>
           <span class="info-value">${user.lastLoginAt}</span>
+        </div>
+        ` : ''}
+        ${user.lastLoginMethod ? `
+        <div class="info-row">
+          <span class="info-label">ログイン方法</span>
+          <span class="info-value">${escapeHtml(loginMethodLabel(user.lastLoginMethod))}</span>
         </div>
         ` : ''}
         ${user.repoCount != null ? `

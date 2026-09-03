@@ -37,12 +37,15 @@ export interface AuthRedirectParams {
   idleTimeoutSeconds: number;
   sessionDuration: string;
   returnToPath: string;
+  /** ログイン方式(loginHistory.ts の LOGIN_METHOD_*)。省略時は 'github_oauth' 扱い */
+  loginMethod?: string;
 }
 
 /**
  * ログイン完了時にセットするCookie群とリダイレクト先をまとめて組み立てる。
- * /auth/github/callback (即時ログイン) と /auth/email-confirm (確認後ログイン) の
- * 両方から共通利用するため、Headers生成を独立関数として切り出す。
+ * /auth/github/callback (即時ログイン)・/auth/email-confirm (確認後ログイン)・
+ * /auth/public-key/verify (パスキー的ログイン) の3経路から共通利用するため、
+ * Headers生成を独立関数として切り出す。
  */
 export function buildAuthRedirectHeaders(params: AuthRedirectParams): Headers {
   const headers = new Headers({ 'Location': params.returnToPath });
@@ -51,6 +54,7 @@ export function buildAuthRedirectHeaders(params: AuthRedirectParams): Headers {
   headers.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${params.idleTimeoutSeconds}`);
   headers.append('Set-Cookie', `user_session_duration=${params.sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
   headers.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
+  headers.append('Set-Cookie', `login_method=${params.loginMethod ?? 'github_oauth'}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
   headers.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   headers.append('Set-Cookie', `oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   headers.append('Set-Cookie', `oauth_return_to=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
