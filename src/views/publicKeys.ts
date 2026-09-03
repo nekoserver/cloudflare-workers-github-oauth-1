@@ -232,15 +232,46 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       });
     }
 
+    // 旧形式(バージョン変更前)はIndexedDBの値がCryptoKeyPairそのものだった。
+    // 新形式は{keyPair, userId, label}でラップしている。req.result.keyPairが
+    // 無ければ旧形式とみなしreq.result自体をCryptoKeyPairとして扱う
+    // (取り違えると「この端末に秘密鍵が見つかりません」と誤表示されるため)。
     function loadKeyPair(keyId) {
       return openKeyDb().then(function(db) {
         return new Promise(function(resolve, reject) {
           var tx = db.transaction(STORE_NAME, 'readonly');
           var req = tx.objectStore(STORE_NAME).get(keyId);
-          req.onsuccess = function() { resolve(req.result ? req.result.keyPair : null); };
+          req.onsuccess = function() {
+            if (!req.result) { resolve(null); return; }
+            resolve(req.result.keyPair || req.result);
+          };
           req.onerror = function() { reject(req.error); };
         });
       });
+    }
+
+    // 旧形式で保存された鍵を新形式({keyPair, userId, label})へ書き換える。
+    // サーバー側の登録済み一覧(このユーザーの鍵)と突き合わせ、旧形式の
+    // エントリだけを対象にする。/loginページのパスキーログイン一覧は
+    // userIdが無いと機能しないため、このページを開いたタイミングで直しておく。
+    function migrateLegacyKeyPairs(serverKeys) {
+      return openKeyDb().then(function(db) {
+        var tx = db.transaction(STORE_NAME, 'readwrite');
+        var store = tx.objectStore(STORE_NAME);
+        serverKeys.forEach(function(key) {
+          var getReq = store.get(key.id);
+          getReq.onsuccess = function() {
+            var value = getReq.result;
+            if (value && !value.userId) {
+              store.put({ keyPair: value.keyPair || value, userId: CURRENT_USER_ID, label: key.label }, key.id);
+            }
+          };
+        });
+        return new Promise(function(resolve) {
+          tx.oncomplete = function() { resolve(); };
+          tx.onerror = function() { resolve(); };
+        });
+      }).catch(function() { /* 移行に失敗してもページ表示は継続する */ });
     }
 
     function base64UrlEncode(buf) {
@@ -323,7 +354,11 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
     function loadKeys() {
       fetch('/api/public-keys', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
-        .then(function(data) { renderKeyTable(data.keys || []); })
+        .then(function(data) {
+          var keys = data.keys || [];
+          renderKeyTable(keys);
+          return migrateLegacyKeyPairs(keys);
+        })
         .catch(function() {
           document.getElementById('keyTableBody').innerHTML =
             '<tr class="empty-row"><td colspan="5">読み込みに失敗しました</td></tr>';

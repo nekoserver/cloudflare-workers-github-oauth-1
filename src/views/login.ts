@@ -262,6 +262,10 @@ export function getLoginPage(returnTo?: string | null): string {
       });
     }
 
+    // 旧形式(バージョン変更前)のIndexedDBエントリはCryptoKeyPairそのものが
+    // 値になっており、userId(どのアカウント宛のチャレンジを取得するか)を
+    // 持たない。userIdが無いとログインできないため一覧からは除外する
+    // (/public-keysページを開くと自動的に新形式へ移行され、次回から一覧に出る)。
     function listLocalKeys() {
       return openKeyDb().then(function(db) {
         return new Promise(function(resolve, reject) {
@@ -272,10 +276,11 @@ export function getLoginPage(returnTo?: string | null): string {
           tx.oncomplete = function() {
             var keys = keysReq.result || [];
             var values = valuesReq.result || [];
-            resolve(keys.map(function(keyId, i) {
+            var entries = keys.map(function(keyId, i) {
               var v = values[i] || {};
               return { keyId: keyId, userId: v.userId, label: v.label };
-            }));
+            }).filter(function(entry) { return !!entry.userId; });
+            resolve(entries);
           };
           tx.onerror = function() { reject(tx.error); };
         });
@@ -303,7 +308,7 @@ export function getLoginPage(returnTo?: string | null): string {
         return new Promise(function(resolve, reject) {
           var tx = db.transaction(STORE_NAME, 'readonly');
           var req = tx.objectStore(STORE_NAME).get(entry.keyId);
-          req.onsuccess = function() { resolve(req.result ? req.result.keyPair : null); };
+          req.onsuccess = function() { resolve(req.result ? (req.result.keyPair || req.result) : null); };
           req.onerror = function() { reject(req.error); };
         });
       }).then(function(keyPair) {
