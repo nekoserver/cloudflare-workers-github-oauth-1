@@ -12,7 +12,10 @@ import { getMegaminxPage } from './views/megaminx';
 //
 // 故障シナリオ:
 //   (1) script タグに構文エラーがあり、ページ全体が白紙になる
-//   (2) usernameがエスケープされずXSSになる
+//   (2) 画面右上にユーザー名が表示されてしまう(PWAでホーム画面から
+//       起動した場合、アドレスバーが無いためデッドリンク化しやすい
+//       要素をそもそもマークアップに含めないというCLAUDE.mdのPWA UI
+//       ルールに反する)
 //   (3) 面を回すボタン・スクランブル・リセットの要素が欠落し、
 //       クライアント側スクリプトがnullアクセスで例外になる
 
@@ -30,10 +33,10 @@ describe('getMegaminxPage', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  it('usernameのHTML特殊文字をエスケープする(XSS対策)', () => {
-    const xssHtml = getMegaminxPage('<script>alert(1)</script>');
-    expect(xssHtml).not.toContain('<script>alert(1)</script>');
-    expect(xssHtml).toContain('&lt;script&gt;');
+  it('画面右上にユーザー名を一切表示しない(PWA対応、条件分岐なしでマークアップから除外)', () => {
+    expect(html).not.toContain('tester');
+    const otherUserHtml = getMegaminxPage('another-user');
+    expect(otherUserHtml).not.toContain('another-user');
   });
 
   it('WebGLキャンバス・面選択グリッド・スクランブル/ソルブ/リセットボタン・手順表示の要素を含む', () => {
@@ -51,6 +54,19 @@ describe('getMegaminxPage', () => {
     expect(html).toContain('id="fs"');
     expect(html).toContain('type="x-shader/x-vertex"');
     expect(html).toContain('type="x-shader/x-fragment"');
+  });
+
+  it('ソルブ・スクランブルは全手を瞬時に適用するのではなく、1手ずつ順に適用して途中経過を表示する', () => {
+    // 対象: doSolve/doScrambleが「一手ずつ動かしながら最終的に揃える」過程を
+    // 実際に画面へ反映すること(旧実装は全手をfor文で一気に適用してから
+    // 最後に1回だけ描画していたため、見た目が瞬時のリセットと区別できない
+    // という指摘を受けて修正した)。WebGLコンテキストが無いjsdom環境では
+    // 実際のアニメーション実行までは検証できない(このリポジトリの他の
+    // WebGLページ同様、目視確認はwrangler dev + 実ブラウザで行う)ため、
+    // ここではplayQueueの逐次適用ロジックがソースに存在することを検証する。
+    expect(html).toContain('function playQueue(');
+    expect(html).toContain('setTimeout(step, STEP_DELAY_MS)');
+    expect(html).toContain("statusPrefix + '... ' + idx + '/' + total + '手'");
   });
 });
 

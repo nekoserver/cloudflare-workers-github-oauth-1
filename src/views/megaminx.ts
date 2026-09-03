@@ -1,9 +1,10 @@
-function escM(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
+// 対象: /megaminx ページ右上のユーザー名表示。PWA(display-mode:standalone)で
+// ホーム画面から起動した場合、アドレスバーが無いため右上のリンク・
+// ナビゲーション要素はデッドリンクになりやすい。CLAUDE.mdのPWA UIルールに
+// 従い、条件分岐でCSS的に隠すのではなく、そもそもマークアップに含めない
+// (/workflowページと同じ方針)。
 export function getMegaminxPage(username: string): string {
-  const safeUser = escM(username);
+  void username;
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -38,7 +39,6 @@ hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .moves-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
 .moves-box { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px; font-family:monospace; font-size:11px; color:#8b949e; flex:1; overflow-y:auto; line-height:2; word-break:break-all; max-height:120px; }
 .hint { font-size:11px; color:#8b949e; line-height:1.6; margin-bottom:10px; }
-.user-badge { font-size:11px; color:#8b949e; margin-left:auto; }
 </style>
 </head>
 <body>
@@ -67,7 +67,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   <h1>Megaminx</h1>
   <span class="badge">WebGL</span>
   <span style="flex:1"></span>
-  <span class="user-badge">${safeUser}</span>
 </div>
 
 <div class="body">
@@ -310,7 +309,49 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     moveHistory.push([faceIndex, direction]);
   }
 
+  var animating = false;
+  var STEP_DELAY_MS = 180;
+
+  function setControlsDisabled(disabled) {
+    document.querySelectorAll('.face-btn, #btnS, #btnV, #btnR').forEach(function(el) {
+      el.style.pointerEvents = disabled ? 'none' : '';
+      el.style.opacity = disabled ? '0.5' : '';
+    });
+  }
+
+  /**
+   * queueの手を1手ずつ、実際に画面に反映しながら順番に適用する。
+   * 「一手ずつ動かしながら最終的に揃える」ことが目に見えるように、
+   * applyMoveを全部先に計算してから最後に1回だけ描画する(旧実装)のではなく、
+   * 1手ごとにstateを更新・再描画・ステータス表示を挟んで次の手へ進める。
+   */
+  function playQueue(queue, statusPrefix, onEachMove, onDone) {
+    if (animating || queue.length === 0) { if (onDone) onDone(); return; }
+    animating = true;
+    setControlsDisabled(true);
+    var total = queue.length;
+    var idx = 0;
+    function step() {
+      if (idx >= total) {
+        animating = false;
+        setControlsDisabled(false);
+        updateStatus();
+        if (onDone) onDone();
+        return;
+      }
+      var m = queue[idx];
+      state = applyMove(state, geometry, m[0], m[1]);
+      if (onEachMove) onEachMove(m[0], m[1]);
+      idx++;
+      stEl.textContent = statusPrefix + '... ' + idx + '/' + total + '手';
+      rebuildMesh();
+      setTimeout(step, STEP_DELAY_MS);
+    }
+    step();
+  }
+
   function doMove(faceIndex, direction) {
+    if (animating) return;
     state = applyMove(state, geometry, faceIndex, direction);
     recordMove(faceIndex, direction);
     updateStatus();
@@ -318,29 +359,31 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   }
 
   function doScramble() {
+    if (animating) return;
     var len = 30 + Math.floor(Math.random()*20);
+    var queue = [];
     for (var i = 0; i < len; i++) {
-      var f = Math.floor(Math.random()*12);
-      var d = Math.random() < 0.5 ? 1 : -1;
-      state = applyMove(state, geometry, f, d);
-      recordMove(f, d);
+      queue.push([Math.floor(Math.random()*12), Math.random() < 0.5 ? 1 : -1]);
     }
-    updateStatus();
-    rebuildMesh();
+    playQueue(queue, 'スクランブル中', function(f, d) { recordMove(f, d); });
   }
 
   function doSolve() {
+    if (animating || moveHistory.length === 0) return;
+    var queue = [];
     for (var i = moveHistory.length - 1; i >= 0; i--) {
       var m = moveHistory[i];
-      state = applyMove(state, geometry, m[0], (m[1] === 1 ? -1 : 1));
+      queue.push([m[0], m[1] === 1 ? -1 : 1]);
     }
-    moveLog = [];
-    moveHistory = [];
-    updateStatus();
-    rebuildMesh();
+    playQueue(queue, 'ソルブ中', null, function() {
+      moveLog = [];
+      moveHistory = [];
+      updateStatus();
+    });
   }
 
   function doReset() {
+    if (animating) return;
     state = createSolvedState(geometry);
     moveLog = [];
     moveHistory = [];
