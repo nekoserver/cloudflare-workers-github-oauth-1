@@ -1,9 +1,10 @@
-function escM(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
+// 対象: /megaminx ページ右上のユーザー名表示。PWA(display-mode:standalone)で
+// ホーム画面から起動した場合、アドレスバーが無いため右上のリンク・
+// ナビゲーション要素はデッドリンクになりやすい。CLAUDE.mdのPWA UIルールに
+// 従い、条件分岐でCSS的に隠すのではなく、そもそもマークアップに含めない
+// (/workflowページと同じ方針)。
 export function getMegaminxPage(username: string): string {
-  const safeUser = escM(username);
+  void username;
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -38,7 +39,6 @@ hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .moves-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
 .moves-box { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px; font-family:monospace; font-size:11px; color:#8b949e; flex:1; overflow-y:auto; line-height:2; word-break:break-all; max-height:120px; }
 .hint { font-size:11px; color:#8b949e; line-height:1.6; margin-bottom:10px; }
-.user-badge { font-size:11px; color:#8b949e; margin-left:auto; }
 </style>
 </head>
 <body>
@@ -67,7 +67,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   <h1>Megaminx</h1>
   <span class="badge">WebGL</span>
   <span style="flex:1"></span>
-  <span class="user-badge">${safeUser}</span>
 </div>
 
 <div class="body">

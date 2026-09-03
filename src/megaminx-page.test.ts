@@ -12,7 +12,10 @@ import { getMegaminxPage } from './views/megaminx';
 //
 // 故障シナリオ:
 //   (1) script タグに構文エラーがあり、ページ全体が白紙になる
-//   (2) usernameがエスケープされずXSSになる
+//   (2) 画面右上にユーザー名が表示されてしまう(PWAでホーム画面から
+//       起動した場合、アドレスバーが無いためデッドリンク化しやすい
+//       要素をそもそもマークアップに含めないというCLAUDE.mdのPWA UI
+//       ルールに反する)
 //   (3) 面を回すボタン・スクランブル・リセットの要素が欠落し、
 //       クライアント側スクリプトがnullアクセスで例外になる
 
@@ -30,10 +33,10 @@ describe('getMegaminxPage', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  it('usernameのHTML特殊文字をエスケープする(XSS対策)', () => {
-    const xssHtml = getMegaminxPage('<script>alert(1)</script>');
-    expect(xssHtml).not.toContain('<script>alert(1)</script>');
-    expect(xssHtml).toContain('&lt;script&gt;');
+  it('画面右上にユーザー名を一切表示しない(PWA対応、条件分岐なしでマークアップから除外)', () => {
+    expect(html).not.toContain('tester');
+    const otherUserHtml = getMegaminxPage('another-user');
+    expect(otherUserHtml).not.toContain('another-user');
   });
 
   it('WebGLキャンバス・面選択グリッド・スクランブル/ソルブ/リセットボタン・手順表示の要素を含む', () => {
