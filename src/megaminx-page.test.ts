@@ -36,10 +36,11 @@ describe('getMegaminxPage', () => {
     expect(xssHtml).toContain('&lt;script&gt;');
   });
 
-  it('WebGLキャンバス・面選択グリッド・スクランブル/リセットボタン・手順表示の要素を含む', () => {
+  it('WebGLキャンバス・面選択グリッド・スクランブル/ソルブ/リセットボタン・手順表示の要素を含む', () => {
     expect(html).toContain('id="c"');
     expect(html).toContain('id="faceGrid"');
     expect(html).toContain('id="btnS"');
+    expect(html).toContain('id="btnV"');
     expect(html).toContain('id="btnR"');
     expect(html).toContain('id="st"');
     expect(html).toContain('id="mb"');

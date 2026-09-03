@@ -81,6 +81,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     <h2>操作</h2>
     <div class="btn-row">
       <button class="btn danger" id="btnS">スクランブル</button>
+      <button class="btn primary" id="btnV">ソルブ</button>
       <button class="btn" id="btnR">リセット</button>
     </div>
     <hr>
@@ -301,11 +302,17 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   });
 
   var moveLog = [];
+  var moveHistory = [];
   function faceName(i) { return 'F' + (i+1); }
+
+  function recordMove(faceIndex, direction) {
+    moveLog.push(faceName(faceIndex) + (direction === -1 ? "'" : ''));
+    moveHistory.push([faceIndex, direction]);
+  }
 
   function doMove(faceIndex, direction) {
     state = applyMove(state, geometry, faceIndex, direction);
-    moveLog.push(faceName(faceIndex) + (direction === -1 ? "'" : ''));
+    recordMove(faceIndex, direction);
     updateStatus();
     rebuildMesh();
   }
@@ -316,8 +323,19 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
       var f = Math.floor(Math.random()*12);
       var d = Math.random() < 0.5 ? 1 : -1;
       state = applyMove(state, geometry, f, d);
-      moveLog.push(faceName(f) + (d === -1 ? "'" : ''));
+      recordMove(f, d);
     }
+    updateStatus();
+    rebuildMesh();
+  }
+
+  function doSolve() {
+    for (var i = moveHistory.length - 1; i >= 0; i--) {
+      var m = moveHistory[i];
+      state = applyMove(state, geometry, m[0], (m[1] === 1 ? -1 : 1));
+    }
+    moveLog = [];
+    moveHistory = [];
     updateStatus();
     rebuildMesh();
   }
@@ -325,6 +343,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   function doReset() {
     state = createSolvedState(geometry);
     moveLog = [];
+    moveHistory = [];
     updateStatus();
     rebuildMesh();
   }
@@ -350,6 +369,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   }
 
   document.getElementById('btnS').addEventListener('click', doScramble);
+  document.getElementById('btnV').addEventListener('click', doSolve);
   document.getElementById('btnR').addEventListener('click', doReset);
 
   // ===== メッシュ構築(センター五角形+角5三角形+辺5台形) =====
