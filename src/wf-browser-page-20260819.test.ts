@@ -171,6 +171,68 @@ describe('getWfBrowserPage — 上部のワークフローバッジバー', () =
   });
 });
 
+describe('getWfBrowserPage — 「ワークフローで絞り込み:」パネルのON/OFFトグル', () => {
+  // 対象: 上部の「ワークフローで絞り込み:」バッジバー(#wfbBadgebar)に、
+  // バッジ一覧(#wfbBadgebarBadges)自体の表示/非表示を切り替えられる
+  // トグルボタン(#wfbBadgebarToggle)を追加する。localStorageに状態を
+  // 保存し、次回訪問時も状態を維持する。
+  //
+  // 故障シナリオ:
+  //   (1) トグルを押してもバッジ一覧が非表示にならない
+  //   (2) 再度押しても表示に戻らない
+  //   (3) localStorageへ状態が保存されず、リロードのたびに表示状態に戻る
+  const allWorkflows = [{ workflow_no: '0001', title: 'WASMモジュール管理' }];
+
+  function setup() {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+  }
+
+  it('トグルボタン・バッジ一覧用の要素が存在する', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
+    expect(html).toContain('id="wfbBadgebarToggle"');
+    expect(html).toContain('id="wfbBadgebarBadges"');
+  });
+
+  it('初期状態は表示中(aria-pressed="true"、wfb-badgebar-hiddenクラスなし)', () => {
+    localStorage.clear();
+    setup();
+    const toggle = document.getElementById('wfbBadgebarToggle')!;
+    const badges = document.getElementById('wfbBadgebarBadges')!;
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(badges.classList.contains('wfb-badgebar-hidden')).toBe(false);
+  });
+
+  it('トグルを押すとバッジ一覧が非表示になり、もう一度押すと表示に戻る', () => {
+    localStorage.clear();
+    setup();
+    const toggle = document.getElementById('wfbBadgebarToggle') as HTMLButtonElement;
+    const badges = document.getElementById('wfbBadgebarBadges')!;
+
+    toggle.click();
+    expect(badges.classList.contains('wfb-badgebar-hidden')).toBe(true);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+
+    toggle.click();
+    expect(badges.classList.contains('wfb-badgebar-hidden')).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('トグル状態はlocalStorageに保存され、再読み込み後も維持される', () => {
+    localStorage.clear();
+    setup();
+    (document.getElementById('wfbBadgebarToggle') as HTMLButtonElement).click();
+    expect(localStorage.getItem('wfbBadgebarCollapsed')).toBe('1');
+
+    setup();
+    const badges = document.getElementById('wfbBadgebarBadges')!;
+    expect(badges.classList.contains('wfb-badgebar-hidden')).toBe(true);
+  });
+});
+
 describe('getWfBrowserPage — 反映漏れ(workflow_stepsが未登録)の警告トースト', () => {
   const allWorkflows = [
     { workflow_no: '0001', title: 'WASMモジュール管理' },
