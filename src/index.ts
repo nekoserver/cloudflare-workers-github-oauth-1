@@ -17,6 +17,7 @@ import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
+import { getPublicKeysPage } from './views/publicKeys';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
@@ -264,6 +265,13 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
+import {
+  isValidEcPublicKeyJwk,
+  generateChallengeValue,
+  computeChallengeExpiresAt,
+  validateChallengeRow,
+  verifyChallengeSignature,
+} from './utils/publicKeyAuth';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
@@ -401,6 +409,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
   { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる。gemma_input_tokens/gemma_output_tokens/gemma_total_tokens(0119)にレビュー呼び出し自体のトークン数を記録する', syncPolicy: 'auto' },
   { name: 'kimi_code_generate_log', migration: '0118', description: '/kimi-codeページでkimi-k2.7-code(従量課金モデル)にコード生成を依頼した1リクエストごとのトークン数(input/output/total)ログ。POST /api/kimi-code/generateの呼び出しのたびに記録し、/api/kimi-code/token-usageで集計する', syncPolicy: 'auto' },
+  { name: 'user_public_keys', migration: '0121', description: '/public-keysページで登録するチャレンジ署名ログイン用の公開鍵(ECDSA P-256, JWK形式)。秘密鍵はブラウザ側のみで保持しサーバーには送らない。失効(revoked_at)・最終使用(last_used_at)を個別に管理する', syncPolicy: 'auto' },
+  { name: 'public_key_challenges', migration: '0122', description: 'チャレンジ署名ログインで発行したワンタイムチャレンジ文字列。有効期限(expires_at)・使用済み(used_at)でリプレイ再利用を防ぐ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1789,6 +1799,26 @@ CREATE INDEX IF NOT EXISTS idx_kimi_code_generate_log_user_created ON kimi_code_
 ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_output_tokens INTEGER;
 ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_total_tokens INTEGER;`,
   '0120': `ALTER TABLE workflow_steps ADD COLUMN indent_level INTEGER DEFAULT 0;`,
+  '0121': `CREATE TABLE IF NOT EXISTS user_public_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  public_key_jwk TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_public_keys_user_id ON user_public_keys(user_id);`,
+  '0122': `CREATE TABLE IF NOT EXISTS public_key_challenges (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_challenges(user_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1928,6 +1958,8 @@ export interface ColumnKeyInfo {
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
+  user_public_keys: { id: 'pk', user_id: 'fk+idx' },
+  public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -2069,6 +2101,7 @@ export function getFilterableColumns(tableName: string): string[] {
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
+  user_public_keys: 'auth', public_key_challenges: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -11785,6 +11818,15 @@ app.get('/api-keys', authMiddleware, (c) => {
 });
 
 /**
+ * 🔐公開鍵登録ページ（認証が必要）
+ * チャレンジ署名によるログイン確認用の公開鍵(ECDSA P-256)を登録・失効・照合テストする。
+ */
+app.get('/public-keys', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.html(getPublicKeysPage({ name: user.name, username: user.sub }));
+});
+
+/**
  * ユーザー情報ページ（認証が必要）
  */
 app.get('/userinfo', authMiddleware, async (c) => {
@@ -16342,6 +16384,208 @@ app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキーの失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 登録済み公開鍵の一覧取得
+ */
+app.get('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keys: [] });
+  }
+  try {
+    const rows = await db.prepare(
+      'SELECT id, label, created_at, last_used_at, revoked_at FROM user_public_keys WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(user.sub).all<{
+      id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null;
+    }>();
+    return c.json({ keys: rows.results ?? [] });
+  } catch (error) {
+    logger.error('Failed to fetch public keys', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の登録。秘密鍵はブラウザ側で生成されサーバーには一切送られない。
+ * 秘密鍵成分(d)を含むJWKが誤って送られた場合はisValidEcPublicKeyJwkで拒否する。
+ */
+app.post('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ label?: string; publicKeyJwk?: unknown }>();
+    const label = (body.label ?? '').trim();
+    if (!label) {
+      return c.json({ error: 'ラベルは必須です' }, 400);
+    }
+    if (!isValidEcPublicKeyJwk(body.publicKeyJwk)) {
+      return c.json({ error: '公開鍵の形式が不正です(ECDSA P-256の公開鍵JWKが必要です)' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const publicKeyJwkJson = JSON.stringify(body.publicKeyJwk);
+
+    await db.prepare(
+      'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString()).run();
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label });
+    return c.json({
+      key: { id, label, createdAt: now.toISOString() },
+    }, 201);
+  } catch (error) {
+    logger.error('Failed to register public key', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の登録に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の失効。自分が登録した鍵のみ失効できる(user_idで絞り込み)。
+ */
+app.post('/api/public-keys/:id/revoke', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const result = await db.prepare(
+      'UPDATE user_public_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(new Date().toISOString(), keyId, user.sub).run();
+
+    if (!result.meta || result.meta.changes === 0) {
+      return c.json({ error: '対象の公開鍵が見つからないか、既に失効しています' }, 404);
+    }
+
+    logger.info('Revoked public key', { userId: user.sub, keyId });
+    return c.json({ message: '公開鍵を失効しました' });
+  } catch (error) {
+    logger.error('Failed to revoke public key', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ発行。指定した公開鍵(自分が登録した有効な鍵のみ)に対して、
+ * ワンタイムのランダム文字列を発行しD1に保存する(リプレイ防止のため使用済み管理する)。
+ */
+app.post('/api/public-keys/challenge', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ keyId?: string }>();
+    const keyId = (body.keyId ?? '').trim();
+    if (!keyId) {
+      return c.json({ error: 'keyIdは必須です' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, user.sub).first<{ id: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const now = new Date();
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, user.sub, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ署名の検証。チャレンジの有効期限・二重使用・ユーザー一致を確認したうえで、
+ * 登録済み公開鍵に対する署名をECDSAで検証する。成功時は鍵のlast_used_atを更新する。
+ */
+app.post('/api/public-keys/verify', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ challengeId?: string; keyId?: string; signature?: string }>();
+    const challengeId = (body.challengeId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!challengeId || !keyId || !signature) {
+      return c.json({ error: 'challengeId, keyId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, user.sub, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, user.sub).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    logger.info('Verified public key challenge', { userId: user.sub, keyId });
+    return c.json({ verified: true });
+  } catch (error) {
+    logger.error('Failed to verify public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの検証に失敗しました' }, 500);
   }
 });
 
