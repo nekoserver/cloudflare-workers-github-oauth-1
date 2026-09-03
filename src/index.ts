@@ -392,7 +392,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
   { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
   { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
-  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
+  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録。indent_level(0120)で/workflowページの処理段階を階層(インデント)表示する', syncPolicy: 'manual' },
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
@@ -1787,6 +1787,7 @@ CREATE INDEX IF NOT EXISTS idx_kimi_code_generate_log_user_created ON kimi_code_
   '0119': `ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_input_tokens INTEGER;
 ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_output_tokens INTEGER;
 ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_total_tokens INTEGER;`,
+  '0120': `ALTER TABLE workflow_steps ADD COLUMN indent_level INTEGER DEFAULT 0;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -10405,7 +10406,7 @@ async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]>
 
 async function loadWorkflowSteps(db: D1Database, workflowNo: string): Promise<WorkflowStep[]> {
   const rows = await db.prepare(
-    'SELECT step_order, stage_title, api_method, api_path, note FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
+    'SELECT step_order, stage_title, api_method, api_path, note, indent_level FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
   ).bind(workflowNo).all<WorkflowStep>();
   return rows.results ?? [];
 }
