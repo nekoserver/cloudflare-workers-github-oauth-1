@@ -2288,6 +2288,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   workspaces: { team_id: 'teams' },
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
+  user_public_keys: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions' },
+  login_history: { user_id: 'user_sessions' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）

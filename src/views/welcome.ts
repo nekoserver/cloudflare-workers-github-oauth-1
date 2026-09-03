@@ -200,6 +200,19 @@ export function getWelcomePage(user: {
       color: white;
     }
 
+    .countdown-register-btn {
+      margin-left: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .countdown-register-btn:hover { background: var(--dropdown-hover); }
+    .countdown-register-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     .user-info {
       background: var(--bg-secondary);
       border-radius: 12px;
@@ -362,7 +375,9 @@ export function getWelcomePage(user: {
         ${user.expiresAt ? `
         <div class="info-row">
           <span class="info-label">セッションの有効期限</span>
-          <span class="info-value">${escapeHtml(user.expiresAt)}（${sessionDurationLabel(user.sessionDuration)}）</span>
+          <span class="info-value">${escapeHtml(user.expiresAt)}（${sessionDurationLabel(user.sessionDuration)}）
+            <button type="button" class="countdown-register-btn" id="countdownRegisterBtn" onclick="registerExpiryCountdown()">⏱️ カウントダウンに登録</button>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">残り</span>
@@ -430,6 +445,41 @@ export function getWelcomePage(user: {
       }
       updateTimeRemaining();
       setInterval(updateTimeRemaining, 1000);
+
+      // セッション有効期限をそのまま/countdownページのカウントダウンタイマーとして登録する。
+      // targetAtにはこのページで計算済みのexpiresAtTimestamp(UNIX秒)をそのまま使う
+      // (再計算による誤差を避けるため)。
+      window.registerExpiryCountdown = function() {
+        var btn = document.getElementById('countdownRegisterBtn');
+        if (btn) btn.disabled = true;
+        fetch('/api/countdown', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label: 'セッション有効期限',
+            targetAt: new Date(expiresAtTimestamp * 1000).toISOString(),
+          }),
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(res) {
+            if (!res.ok) {
+              alert(res.data.error || 'カウントダウンへの登録に失敗しました');
+              if (btn) btn.disabled = false;
+              return;
+            }
+            if (btn) {
+              btn.textContent = '✅ 登録しました';
+            }
+            if (confirm('カウントダウンに登録しました。/countdownページを開きますか?')) {
+              window.location.href = '/countdown';
+            }
+          })
+          .catch(function() {
+            alert('カウントダウンへの登録に失敗しました');
+            if (btn) btn.disabled = false;
+          });
+      };
     })();
     ` : ''}
   </script>
