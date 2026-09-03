@@ -161,6 +161,15 @@ export function getWfBrowserPage(
     }
     .wfb-badgebar-label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; }
     .wfb-badgebar-empty { font-size: 12px; color: var(--text-muted); }
+    .wfb-badgebar-toggle {
+      font-size: 11px; cursor: pointer; margin-right: 8px; flex-shrink: 0;
+      background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color);
+      border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+    }
+    .wfb-badgebar-toggle:hover { border-color: var(--accent-color, #667eea); }
+    .wfb-badgebar-toggle[aria-pressed="false"] { background: var(--bg-primary); color: var(--text-muted); }
+    .wfb-badgebar-badges { display: flex; flex-wrap: wrap; gap: 1px; align-items: center; }
+    .wfb-badgebar-badges.wfb-badgebar-hidden { display: none; }
     .wfb-wf-badge {
       font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; cursor: pointer;
       background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color);
@@ -218,7 +227,8 @@ export function getWfBrowserPage(
   </nav>
   <div class="wfb-badgebar" id="wfbBadgebar">
     <span class="wfb-badgebar-label">ワークフローで絞り込み:</span>
-    ${wfBadgesHtml}
+    <button type="button" id="wfbBadgebarToggle" class="wfb-badgebar-toggle" aria-pressed="true" title="パネルの表示/非表示を切り替え">🔼 表示中</button>
+    <span class="wfb-badgebar-badges" id="wfbBadgebarBadges">${wfBadgesHtml}</span>
   </div>
   ${toastHtml}
   ${successToastHtml}
@@ -269,6 +279,23 @@ export function getWfBrowserPage(
           }
           applyHighlight();
         });
+      });
+    })();
+    (function() {
+      var toggleBtn = document.getElementById('wfbBadgebarToggle');
+      var badgesEl = document.getElementById('wfbBadgebarBadges');
+      if (!toggleBtn || !badgesEl) return;
+      var STORAGE_KEY = 'wfbBadgebarCollapsed';
+      function applyState(collapsed) {
+        badgesEl.classList.toggle('wfb-badgebar-hidden', collapsed);
+        toggleBtn.setAttribute('aria-pressed', collapsed ? 'false' : 'true');
+        toggleBtn.textContent = collapsed ? '🔽 非表示中' : '🔼 表示中';
+      }
+      applyState(localStorage.getItem(STORAGE_KEY) === '1');
+      toggleBtn.addEventListener('click', function() {
+        var collapsed = !badgesEl.classList.contains('wfb-badgebar-hidden');
+        applyState(collapsed);
+        localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
       });
     })();
     (function() {
