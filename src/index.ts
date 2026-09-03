@@ -263,7 +263,7 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
-import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
+import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
@@ -11814,28 +11814,28 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
  * D1 データベース一覧と各テーブルの行数を返す
  */
 app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です', configured: false }, 200);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です', configured: false }, 200);
   }
   try {
-    const databases = await listD1Databases(token, accountId);
-    return jsonUtf8({ configured: true, databases });
+    const names = await listD1TableNames(c.env.DB);
+    return jsonUtf8({
+      configured: true,
+      databases: [
+        { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
+      ],
+    });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
   }
 });
 
 app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です' }, 503);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です' }, 503);
   }
-  const dbId = c.req.param('dbId');
   try {
-    const tables = await getD1Tables(token, accountId, dbId);
+    const tables = await loadCfDashboardTables(c.env.DB);
     return jsonUtf8({ tables });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);

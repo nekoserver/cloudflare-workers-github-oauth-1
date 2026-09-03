@@ -41,8 +41,6 @@ export type Bindings = {
   AI?: Ai;
   AI_MODEL?: string;
   AI_CHAT_MODEL?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
   /** 未設定時はテストメール送信機能自体を無効(デフォルトOFF)にする */
   RESEND_API_KEY?: string;
 };
