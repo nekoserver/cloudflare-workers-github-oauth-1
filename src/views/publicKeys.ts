@@ -10,6 +10,7 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 export function getPublicKeysPage(user: { name?: string; username: string }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
+  const usernameJson = JSON.stringify(user.username);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -202,8 +203,12 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
 
     // 秘密鍵(CryptoKeyPair)はIndexedDBに保存し、サーバーには送らない。
     // 鍵はサーバー側のuser_public_keys.idに紐づけて保存する。
+    // 値は{keyPair, userId, label}の形で保存し、ログインページ(/login)が
+    // userId/labelだけを読んでパスキーログインの選択肢一覧を作れるようにする
+    // (秘密鍵そのものはCryptoKeyオブジェクトのままIndexedDB外に出ない)。
     var DB_NAME = 'public-key-auth';
     var STORE_NAME = 'keypairs';
+    var CURRENT_USER_ID = ${usernameJson};
 
     function openKeyDb() {
       return new Promise(function(resolve, reject) {
@@ -216,11 +221,11 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       });
     }
 
-    function saveKeyPair(keyId, keyPair) {
+    function saveKeyPair(keyId, keyPair, label) {
       return openKeyDb().then(function(db) {
         return new Promise(function(resolve, reject) {
           var tx = db.transaction(STORE_NAME, 'readwrite');
-          tx.objectStore(STORE_NAME).put(keyPair, keyId);
+          tx.objectStore(STORE_NAME).put({ keyPair: keyPair, userId: CURRENT_USER_ID, label: label }, keyId);
           tx.oncomplete = function() { resolve(); };
           tx.onerror = function() { reject(tx.error); };
         });
@@ -232,7 +237,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
         return new Promise(function(resolve, reject) {
           var tx = db.transaction(STORE_NAME, 'readonly');
           var req = tx.objectStore(STORE_NAME).get(keyId);
-          req.onsuccess = function() { resolve(req.result || null); };
+          req.onsuccess = function() { resolve(req.result ? req.result.keyPair : null); };
           req.onerror = function() { reject(req.error); };
         });
       });
@@ -273,7 +278,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
                 alert(res.data.error || '公開鍵の登録に失敗しました');
                 return;
               }
-              return saveKeyPair(res.data.key.id, keyPair).then(function() {
+              return saveKeyPair(res.data.key.id, keyPair, label).then(function() {
                 labelEl.value = '';
                 loadKeys();
               });

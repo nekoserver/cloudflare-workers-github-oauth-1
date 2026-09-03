@@ -3656,6 +3656,55 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
   return new Response(null, { status: 302, headers: redirectHeaders });
 }
 
+// チャレンジ署名ログイン(公開鍵によるパスキー的ログイン)の確定処理。
+// GitHub OAuthを経由しないため、以前のGitHubログインで作られたuser_sessions行
+// (timezone/session_duration/github_access_token等)を引き継ぎ、last_login_at等
+// だけを更新する(github_access_tokenを上書き消去しないようにgetUserSessionの
+// 値をそのままupdateUserSessionへ渡す)。
+async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: Variables }>, params: {
+  userId: string;
+  jwtSecret: string;
+  returnToPath: string;
+}): Promise<Response> {
+  const existing = await getUserSession(c.env.DB, params.userId);
+  const timezone = existing?.timezone ?? DEFAULT_TIMEZONE;
+  const sessionDuration = existing?.sessionDuration ?? '1h';
+
+  await updateUserSession(
+    c.env.DB,
+    params.userId,
+    timezone,
+    sessionDuration,
+    existing?.githubAccessToken ?? undefined,
+    existing?.githubGrantedScopes ?? undefined
+  );
+
+  const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
+
+  const token = await createJWT(
+    { sub: params.userId },
+    params.jwtSecret,
+    sessionDurationSeconds
+  );
+
+  logger.info('Public key (passkey) authentication successful', { userId: params.userId });
+  logger.recordMetric(c.env.ANALYTICS, 'auth_public_key_success', {
+    userId: params.userId,
+    timestamp: Date.now(),
+  });
+
+  const redirectHeaders = buildAuthRedirectHeaders({
+    token,
+    sessionDurationSeconds,
+    idleTimeoutSeconds,
+    sessionDuration,
+    returnToPath: params.returnToPath,
+  });
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
 // D1データベースのユーザー設定を更新
 async function updateUserSettings(
   db: D1Database | undefined,
@@ -3859,6 +3908,114 @@ app.get('/', async (c) => {
 
   const returnTo = validateReturnTo(c.req.query('return_to'));
   return c.html(getLoginPage(returnTo));
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ発行。未ログイン状態から呼ばれるため
+ * 認証ミドルウェアなし。userId+keyIdの組み合わせで有効な(失効していない)
+ * 公開鍵が登録されている場合のみチャレンジを発行する。
+ */
+app.post('/auth/public-key/challenge', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    if (!userId || !keyId) {
+      return c.json({ error: 'userId, keyIdは必須です' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ id: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const now = new Date();
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, userId, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue passkey login challenge', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ署名検証。成功時はGitHub OAuthを経由せず
+ * セッションJWTを発行してログイン確定する(finalizePasskeyLogin)。
+ */
+app.post('/auth/public-key/verify', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return c.json({ error: 'サーバー設定エラー' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string; challengeId?: string; signature?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const challengeId = (body.challengeId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!userId || !keyId || !challengeId || !signature) {
+      return c.json({ error: 'userId, keyId, challengeId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, userId, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      logger.warn('Passkey login signature verification failed', { userId, keyId });
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    return await finalizePasskeyLogin(c, { userId, jwtSecret, returnToPath: '/welcome' });
+  } catch (error) {
+    logger.error('Failed to verify passkey login', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ログインの検証に失敗しました' }, 500);
+  }
 });
 
 /**
