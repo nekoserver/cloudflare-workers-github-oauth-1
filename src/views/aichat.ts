@@ -560,11 +560,16 @@ export function getAiChatPage(user: {
       background: rgba(15, 23, 42, 0.48); backdrop-filter: blur(4px);
     }
     .history-modal-backdrop.open { display: flex; }
+    .history-modal-backdrop.fullscreen { padding: 0; }
     .history-modal {
       width: min(720px, 100%); max-height: min(86vh, 760px);
       background: var(--bg-primary, #f8fafc); border: 1px solid var(--border-color);
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.28);
       display: flex; flex-direction: column; overflow: hidden;
+    }
+    .history-modal.fullscreen {
+      width: 100%; height: 100%; max-height: 100%;
+      border-radius: 0; border: none;
     }
     .history-modal-head {
       flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -609,6 +614,11 @@ export function getAiChatPage(user: {
       background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
     }
     .history-modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .history-modal-fullscreen-btn {
+      width: 30px; height: 30px; border: none; border-radius: 8px;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1;
+    }
+    .history-modal-fullscreen-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .history-modal-chat {
       flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 20px;
       display: flex; flex-direction: column; gap: 14px;
@@ -1364,6 +1374,7 @@ export function getAiChatPage(user: {
           <input class="history-modal-search-input" id="historyModalSearchInput" type="search" placeholder="キーワードで検索..." autocomplete="off">
           <button class="history-modal-search-btn" id="historyModalSearchBtn">🔍 検索</button>
         </div>
+        <button class="history-modal-fullscreen-btn" id="historyModalFullscreenBtn" aria-label="全画面表示切り替え" title="全画面表示切り替え">⬜︎</button>
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
@@ -2731,6 +2742,8 @@ export function getAiChatPage(user: {
     var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
+    var historyModalFullscreenBtn = document.getElementById('historyModalFullscreenBtn');
+    var historyModal = document.querySelector('.history-modal');
     var historyModalCurrentId = null;
 
     var historyModalSwipeItems = [];
@@ -2872,6 +2885,8 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.remove('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'true');
       historyModalBackdrop.style.zIndex = '';
+      historyModalBackdrop.classList.remove('fullscreen');
+      historyModal.classList.remove('fullscreen');
     }
 
     function clearHistorySelection() {
@@ -3549,6 +3564,8 @@ export function getAiChatPage(user: {
         if (selectOverlay.parentNode) document.body.removeChild(selectOverlay);
         historyModalBackdrop.classList.remove('open');
         historyModalBackdrop.setAttribute('aria-hidden', 'true');
+        historyModalBackdrop.classList.remove('fullscreen');
+        historyModal.classList.remove('fullscreen');
         openReAskResponseModal(selectedModel, question);
       });
       var noBtn = document.createElement('button');
@@ -4260,6 +4277,10 @@ export function getAiChatPage(user: {
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
       clearHistorySelection();
+    });
+    historyModalFullscreenBtn.addEventListener('click', function() {
+      var isFullscreen = historyModal.classList.toggle('fullscreen');
+      historyModalBackdrop.classList.toggle('fullscreen', isFullscreen);
     });
     historyModalBackdrop.addEventListener('click', function(e) {
       if (e.target === historyModalBackdrop) {
