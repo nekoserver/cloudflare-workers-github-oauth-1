@@ -176,6 +176,23 @@ export function getLoginPage(returnTo?: string | null): string {
       left: 0;
       color: var(--accent-color);
     }
+    .passkey-btn {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .passkey-btn:hover { background: var(--accent-hover); }
+    .passkey-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .theme-toggle-fixed {
       position: fixed;
       top: 16px;
@@ -200,6 +217,16 @@ export function getLoginPage(returnTo?: string | null): string {
       GitHubアカウントでログイン
     </a>
 
+    <div class="divider" id="passkeyDivider" style="display:none;">
+      <span>または</span>
+    </div>
+
+    <div id="passkeySection" style="display:none; margin-bottom: 24px;">
+      <p class="subtitle" style="font-size:13px; margin-bottom:12px;">このブラウザに登録済みの公開鍵でログイン</p>
+      <div id="passkeyList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <p id="passkeyError" style="display:none; color: var(--danger-color); font-size:13px; margin-top:8px;"></p>
+    </div>
+
     <div class="divider">
       <span>または</span>
     </div>
@@ -217,6 +244,126 @@ export function getLoginPage(returnTo?: string | null): string {
 
   <script>
     ${getThemeToggleScript()}
+
+    // /public-keysページで登録した公開鍵ペア(このブラウザのIndexedDBに保存)を使った
+    // チャレンジ署名ログイン(パスキー的なログイン)。GitHub OAuthを経由せず、
+    // このブラウザに秘密鍵が残っている端末でのみログインできる。
+    var DB_NAME = 'public-key-auth';
+    var STORE_NAME = 'keypairs';
+
+    function openKeyDb() {
+      return new Promise(function(resolve, reject) {
+        var req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function() {
+          req.result.createObjectStore(STORE_NAME);
+        };
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function() { reject(req.error); };
+      });
+    }
+
+    function listLocalKeys() {
+      return openKeyDb().then(function(db) {
+        return new Promise(function(resolve, reject) {
+          var tx = db.transaction(STORE_NAME, 'readonly');
+          var store = tx.objectStore(STORE_NAME);
+          var keysReq = store.getAllKeys();
+          var valuesReq = store.getAll();
+          tx.oncomplete = function() {
+            var keys = keysReq.result || [];
+            var values = valuesReq.result || [];
+            resolve(keys.map(function(keyId, i) {
+              var v = values[i] || {};
+              return { keyId: keyId, userId: v.userId, label: v.label };
+            }));
+          };
+          tx.onerror = function() { reject(tx.error); };
+        });
+      });
+    }
+
+    function base64UrlEncode(buf) {
+      var bytes = new Uint8Array(buf);
+      var binary = '';
+      for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
+    }
+
+    function showPasskeyError(message) {
+      var el = document.getElementById('passkeyError');
+      el.textContent = message;
+      el.style.display = 'block';
+    }
+
+    function loginWithPasskey(entry, btn) {
+      btn.disabled = true;
+      document.getElementById('passkeyError').style.display = 'none';
+
+      openKeyDb().then(function(db) {
+        return new Promise(function(resolve, reject) {
+          var tx = db.transaction(STORE_NAME, 'readonly');
+          var req = tx.objectStore(STORE_NAME).get(entry.keyId);
+          req.onsuccess = function() { resolve(req.result ? req.result.keyPair : null); };
+          req.onerror = function() { reject(req.error); };
+        });
+      }).then(function(keyPair) {
+        if (!keyPair) {
+          throw new Error('この端末に秘密鍵が見つかりません');
+        }
+        return fetch('/auth/public-key/challenge', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: entry.userId, keyId: entry.keyId }),
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(res) {
+            if (!res.ok) {
+              throw new Error(res.data.error || 'チャレンジの取得に失敗しました');
+            }
+            var data = new TextEncoder().encode(res.data.challenge);
+            return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, data)
+              .then(function(signature) {
+                return fetch('/auth/public-key/verify', {
+                  method: 'POST',
+                  credentials: 'same-origin',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    userId: entry.userId,
+                    keyId: entry.keyId,
+                    challengeId: res.data.challengeId,
+                    signature: base64UrlEncode(signature),
+                  }),
+                });
+              });
+          });
+      }).then(function(r) {
+        if (!r.ok) {
+          return r.json().then(function(data) {
+            throw new Error(data.error || 'ログインに失敗しました');
+          });
+        }
+        window.location.href = r.url || '/welcome';
+      }).catch(function(e) {
+        showPasskeyError(e && e.message ? e.message : 'ログインに失敗しました');
+        btn.disabled = false;
+      });
+    }
+
+    listLocalKeys().then(function(entries) {
+      if (!entries || entries.length === 0) return;
+      var list = document.getElementById('passkeyList');
+      list.innerHTML = '';
+      entries.forEach(function(entry) {
+        var btn = document.createElement('button');
+        btn.className = 'passkey-btn';
+        btn.textContent = '🔐 ' + (entry.label || entry.keyId) + ' (' + entry.userId + ') でログイン';
+        btn.onclick = function() { loginWithPasskey(entry, btn); };
+        list.appendChild(btn);
+      });
+      document.getElementById('passkeySection').style.display = 'block';
+      document.getElementById('passkeyDivider').style.display = 'block';
+    }).catch(function() { /* IndexedDB未対応/失敗時は通常のGitHubログインのみ表示 */ });
   </script>
 </body>
 </html>`;

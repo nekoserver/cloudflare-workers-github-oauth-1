@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { loginMethodLabel, LOGIN_METHOD_PUBLIC_KEY } from '../utils/loginHistory';
 
 export function getWelcomePage(user: {
   name?: string;
@@ -11,6 +12,10 @@ export function getWelcomePage(user: {
   avatar?: string;
   lastLoginAt?: string | null;
   showWelcomeMessage?: boolean;
+  /** 今回のログインで使われた方式(login_method Cookie由来、1回のログインにつき1回だけ渡ってくる) */
+  loginMethod?: string | null;
+  /** user_sessions.last_login_method由来。ページを開くたびに表示する永続的な値 */
+  lastLoginMethod?: string | null;
   repoCount?: number | null;
   expiresAt?: string;
   expiresAtTimestamp?: number;
@@ -182,6 +187,32 @@ export function getWelcomePage(user: {
       margin-bottom: 32px;
     }
 
+    .login-method-badge {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      vertical-align: middle;
+    }
+    .login-method-badge-passkey {
+      background: var(--accent-color);
+      color: white;
+    }
+
+    .countdown-register-btn {
+      margin-left: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .countdown-register-btn:hover { background: var(--dropdown-hover); }
+    .countdown-register-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     .user-info {
       background: var(--bg-secondary);
       border-radius: 12px;
@@ -309,7 +340,7 @@ export function getWelcomePage(user: {
   <div class="container">
     <div class="welcome-card">
       ${user.showWelcomeMessage ? `<h1 class="welcome-title">ようこそ、${displayName}さん！</h1>
-      <p class="welcome-subtitle">ログインに成功しました</p>` : ''}
+      <p class="welcome-subtitle">ログインに成功しました${user.loginMethod === LOGIN_METHOD_PUBLIC_KEY ? ' <span class="login-method-badge login-method-badge-passkey">🔐 パスキーでログイン</span>' : ''}</p>` : ''}
 
       <div class="user-info">
         <h3>ユーザー情報</h3>
@@ -329,6 +360,12 @@ export function getWelcomePage(user: {
           <span class="info-value">${user.lastLoginAt}</span>
         </div>
         ` : ''}
+        ${user.lastLoginMethod ? `
+        <div class="info-row">
+          <span class="info-label">ログイン方法</span>
+          <span class="info-value">${escapeHtml(loginMethodLabel(user.lastLoginMethod))}</span>
+        </div>
+        ` : ''}
         ${user.repoCount != null ? `
         <div class="info-row">
           <span class="info-label">リポジトリ総数</span>
@@ -338,7 +375,9 @@ export function getWelcomePage(user: {
         ${user.expiresAt ? `
         <div class="info-row">
           <span class="info-label">セッションの有効期限</span>
-          <span class="info-value">${escapeHtml(user.expiresAt)}（${sessionDurationLabel(user.sessionDuration)}）</span>
+          <span class="info-value">${escapeHtml(user.expiresAt)}（${sessionDurationLabel(user.sessionDuration)}）
+            <button type="button" class="countdown-register-btn" id="countdownRegisterBtn" onclick="registerExpiryCountdown()">⏱️ カウントダウンに登録</button>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">残り</span>
@@ -406,6 +445,41 @@ export function getWelcomePage(user: {
       }
       updateTimeRemaining();
       setInterval(updateTimeRemaining, 1000);
+
+      // セッション有効期限をそのまま/countdownページのカウントダウンタイマーとして登録する。
+      // targetAtにはこのページで計算済みのexpiresAtTimestamp(UNIX秒)をそのまま使う
+      // (再計算による誤差を避けるため)。
+      window.registerExpiryCountdown = function() {
+        var btn = document.getElementById('countdownRegisterBtn');
+        if (btn) btn.disabled = true;
+        fetch('/api/countdown', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label: 'セッション有効期限',
+            targetAt: new Date(expiresAtTimestamp * 1000).toISOString(),
+          }),
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(res) {
+            if (!res.ok) {
+              alert(res.data.error || 'カウントダウンへの登録に失敗しました');
+              if (btn) btn.disabled = false;
+              return;
+            }
+            if (btn) {
+              btn.textContent = '✅ 登録しました';
+            }
+            if (confirm('カウントダウンに登録しました。/countdownページを開きますか?')) {
+              window.location.href = '/countdown';
+            }
+          })
+          .catch(function() {
+            alert('カウントダウンへの登録に失敗しました');
+            if (btn) btn.disabled = false;
+          });
+      };
     })();
     ` : ''}
   </script>

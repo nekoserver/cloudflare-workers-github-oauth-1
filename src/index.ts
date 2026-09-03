@@ -272,6 +272,11 @@ import {
   validateChallengeRow,
   verifyChallengeSignature,
 } from './utils/publicKeyAuth';
+import {
+  LOGIN_METHOD_GITHUB_OAUTH,
+  LOGIN_METHOD_PUBLIC_KEY,
+  type LoginMethod,
+} from './utils/loginHistory';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
@@ -411,6 +416,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'kimi_code_generate_log', migration: '0118', description: '/kimi-codeページでkimi-k2.7-code(従量課金モデル)にコード生成を依頼した1リクエストごとのトークン数(input/output/total)ログ。POST /api/kimi-code/generateの呼び出しのたびに記録し、/api/kimi-code/token-usageで集計する', syncPolicy: 'auto' },
   { name: 'user_public_keys', migration: '0121', description: '/public-keysページで登録するチャレンジ署名ログイン用の公開鍵(ECDSA P-256, JWK形式)。秘密鍵はブラウザ側のみで保持しサーバーには送らない。失効(revoked_at)・最終使用(last_used_at)を個別に管理する', syncPolicy: 'auto' },
   { name: 'public_key_challenges', migration: '0122', description: 'チャレンジ署名ログインで発行したワンタイムチャレンジ文字列。有効期限(expires_at)・使用済み(used_at)でリプレイ再利用を防ぐ', syncPolicy: 'auto' },
+  { name: 'login_history', migration: '0124', description: 'ログインのたびに記録するログ(GitHub OAuth / 公開鍵チャレンジ署名のどちらでログインしたか)。user_sessions.last_login_method(0123)は直近1回分のみだが、こちらは全履歴を保持する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1819,6 +1825,14 @@ CREATE INDEX IF NOT EXISTS idx_user_public_keys_user_id ON user_public_keys(user
   used_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_challenges(user_id);`,
+  '0123': `ALTER TABLE user_sessions ADD COLUMN last_login_method TEXT DEFAULT 'github_oauth';`,
+  '0124': `CREATE TABLE IF NOT EXISTS login_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user_id ON login_history(user_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1960,6 +1974,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
   user_public_keys: { id: 'pk', user_id: 'fk+idx' },
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
+  login_history: { id: 'pk', user_id: 'fk+idx' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -2101,7 +2116,7 @@ export function getFilterableColumns(tableName: string): string[] {
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
-  user_public_keys: 'auth', public_key_challenges: 'auth',
+  user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -2273,6 +2288,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   workspaces: { team_id: 'teams' },
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
+  user_public_keys: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions' },
+  login_history: { user_id: 'user_sessions' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
@@ -3503,6 +3521,31 @@ async function updateUserSession(
   }
 }
 
+/**
+ * ログイン方式(GitHub OAuth / 公開鍵チャレンジ署名)を記録する。
+ * user_sessions.last_login_method(直近1回分、画面表示用)と login_history
+ * (全履歴、監査用)の両方に書き込む。ログイン自体を失敗させたくないため、
+ * 失敗してもログに残すだけでログイン処理は続行する(finalizeGithubLogin/
+ * finalizePasskeyLoginの成否には影響させない)。
+ */
+async function recordLoginMethod(db: D1Database | undefined, userId: string, method: LoginMethod): Promise<void> {
+  if (!db) return;
+  const now = new Date().toISOString();
+  try {
+    await db.prepare('UPDATE user_sessions SET last_login_method = ? WHERE user_id = ?')
+      .bind(method, userId).run();
+    await db.prepare(
+      'INSERT INTO login_history (id, user_id, method, created_at) VALUES (?, ?, ?, ?)'
+    ).bind(crypto.randomUUID(), userId, method, now).run();
+  } catch (error) {
+    logger.error('Failed to record login method', {
+      userId,
+      method,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
 // D1データベースからユーザーセッション情報を取得
 async function getUserSession(db: D1Database | undefined, userId: string): Promise<{
   timezone: string;
@@ -3515,6 +3558,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   toastDuration: number | null;
   idleTimeoutSeconds: number | null;
   heritageTourCountryFilter: string | null;
+  lastLoginMethod: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -3522,7 +3566,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter, last_login_method FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -3534,6 +3578,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toast_duration: number | null;
       idle_timeout_seconds: number | null;
       heritage_tour_country_filter: string | null;
+      last_login_method: string | null;
     }>();
 
     if (!result) {
@@ -3551,6 +3596,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toastDuration: result.toast_duration ?? null,
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
       heritageTourCountryFilter: result.heritage_tour_country_filter ?? null,
+      lastLoginMethod: result.last_login_method ?? null,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : '';
@@ -3582,6 +3628,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
           toastDuration: fallback.toast_duration ?? null,
           idleTimeoutSeconds: null,
           heritageTourCountryFilter: null,
+          lastLoginMethod: null,
         };
       } catch (fallbackError) {
         logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
@@ -3620,6 +3667,8 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     await ensureDefaultWorkspace(c.env.DB, params.githubLogin);
   }
 
+  await recordLoginMethod(c.env.DB, params.githubLogin, LOGIN_METHOD_GITHUB_OAUTH);
+
   const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
@@ -3651,6 +3700,59 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     idleTimeoutSeconds,
     sessionDuration: params.sessionDuration,
     returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_GITHUB_OAUTH,
+  });
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
+// チャレンジ署名ログイン(公開鍵によるパスキー的ログイン)の確定処理。
+// GitHub OAuthを経由しないため、以前のGitHubログインで作られたuser_sessions行
+// (timezone/session_duration/github_access_token等)を引き継ぎ、last_login_at等
+// だけを更新する(github_access_tokenを上書き消去しないようにgetUserSessionの
+// 値をそのままupdateUserSessionへ渡す)。
+async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: Variables }>, params: {
+  userId: string;
+  jwtSecret: string;
+  returnToPath: string;
+}): Promise<Response> {
+  const existing = await getUserSession(c.env.DB, params.userId);
+  const timezone = existing?.timezone ?? DEFAULT_TIMEZONE;
+  const sessionDuration = existing?.sessionDuration ?? '1h';
+
+  await updateUserSession(
+    c.env.DB,
+    params.userId,
+    timezone,
+    sessionDuration,
+    existing?.githubAccessToken ?? undefined,
+    existing?.githubGrantedScopes ?? undefined
+  );
+
+  await recordLoginMethod(c.env.DB, params.userId, LOGIN_METHOD_PUBLIC_KEY);
+
+  const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
+
+  const token = await createJWT(
+    { sub: params.userId },
+    params.jwtSecret,
+    sessionDurationSeconds
+  );
+
+  logger.info('Public key (passkey) authentication successful', { userId: params.userId });
+  logger.recordMetric(c.env.ANALYTICS, 'auth_public_key_success', {
+    userId: params.userId,
+    timestamp: Date.now(),
+  });
+
+  const redirectHeaders = buildAuthRedirectHeaders({
+    token,
+    sessionDurationSeconds,
+    idleTimeoutSeconds,
+    sessionDuration,
+    returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_PUBLIC_KEY,
   });
 
   return new Response(null, { status: 302, headers: redirectHeaders });
@@ -3859,6 +3961,114 @@ app.get('/', async (c) => {
 
   const returnTo = validateReturnTo(c.req.query('return_to'));
   return c.html(getLoginPage(returnTo));
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ発行。未ログイン状態から呼ばれるため
+ * 認証ミドルウェアなし。userId+keyIdの組み合わせで有効な(失効していない)
+ * 公開鍵が登録されている場合のみチャレンジを発行する。
+ */
+app.post('/auth/public-key/challenge', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    if (!userId || !keyId) {
+      return c.json({ error: 'userId, keyIdは必須です' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ id: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const now = new Date();
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, userId, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue passkey login challenge', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ署名検証。成功時はGitHub OAuthを経由せず
+ * セッションJWTを発行してログイン確定する(finalizePasskeyLogin)。
+ */
+app.post('/auth/public-key/verify', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return c.json({ error: 'サーバー設定エラー' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string; challengeId?: string; signature?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const challengeId = (body.challengeId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!userId || !keyId || !challengeId || !signature) {
+      return c.json({ error: 'userId, keyId, challengeId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, userId, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(keyId, userId).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      logger.warn('Passkey login signature verification failed', { userId, keyId });
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    return await finalizePasskeyLogin(c, { userId, jwtSecret, returnToPath: '/welcome' });
+  } catch (error) {
+    logger.error('Failed to verify passkey login', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ログインの検証に失敗しました' }, 500);
+  }
 });
 
 /**
@@ -4399,6 +4609,14 @@ app.get('/welcome', authMiddleware, async (c) => {
     c.header('Set-Cookie', `show_welcome_message=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   }
 
+  // login_method Cookie(ログイン直後の1回のみ有効)を読み取り、今回のログインが
+  // どちらの方式だったかをウェルカムメッセージに反映する。永続的な表示は
+  // userSession.lastLoginMethod(user_sessions.last_login_method)側で行う
+  const loginMethodCookie = getCookieValue(cookieHeader, 'login_method');
+  if (loginMethodCookie) {
+    c.header('Set-Cookie', `login_method=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
+
   // リポジトリ総数を取得
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   let repoCount: number | null = null;
@@ -4420,6 +4638,8 @@ app.get('/welcome', authMiddleware, async (c) => {
     email: user.email,
     lastLoginAt: formattedLastLogin,
     showWelcomeMessage,
+    loginMethod: showWelcomeMessage ? loginMethodCookie : null,
+    lastLoginMethod: userSession?.lastLoginMethod ?? null,
     repoCount,
     expiresAt,
     expiresAtTimestamp: user.exp,
