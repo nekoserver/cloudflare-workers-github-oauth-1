@@ -34,9 +34,11 @@ describe('getJsonExplorerPage: HTML構造', () => {
     expect(html).toContain('id="jsonTree"');
   });
 
-  it('抽出結果表示(パス・値のコピー)の要素が存在する', () => {
+  it('抽出結果表示(キー・パス・値のコピー)の要素が存在する', () => {
     expect(html).toContain('id="pathBox"');
+    expect(html).toContain('id="selectedKey"');
     expect(html).toContain('id="selectedPath"');
+    expect(html).toContain('id="btnCopyKey"');
     expect(html).toContain('id="btnCopyPath"');
     expect(html).toContain('id="btnCopyValue"');
     expect(html).toContain('id="extractOutput"');
@@ -71,6 +73,25 @@ describe('getJsonExplorerPage: formatPath(パス整形ロジック)', () => {
   it('オブジェクトキーはドット表記、配列添字は角括弧表記になる', () => {
     const formatPath = loadFn(html, 'formatPath');
     expect(formatPath(['a', 0, 'b'])).toBe('root.a[0].b');
+  });
+});
+
+describe('getJsonExplorerPage: getSelectedKeyLabel(選択したキーだけの切り出し)', () => {
+  const html = getJsonExplorerPage('tester');
+
+  it('ルート選択(空配列)の場合は"root"を返す', () => {
+    const getSelectedKeyLabel = loadFn(html, 'getSelectedKeyLabel');
+    expect(getSelectedKeyLabel([])).toBe('root');
+  });
+
+  it('末尾がオブジェクトキーの場合はキー名だけを返す(フルパスではない)', () => {
+    const getSelectedKeyLabel = loadFn(html, 'getSelectedKeyLabel');
+    expect(getSelectedKeyLabel(['a', 'b'])).toBe('b');
+  });
+
+  it('末尾が配列添字の場合は"[数字]"形式を返す', () => {
+    const getSelectedKeyLabel = loadFn(html, 'getSelectedKeyLabel');
+    expect(getSelectedKeyLabel(['a', 0])).toBe('[0]');
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseJsonSafe, formatJsonPath, getValueAtPath } from './utils/jsonExplorer';
+import { parseJsonSafe, formatJsonPath, getValueAtPath, getSelectedKeyLabel } from './utils/jsonExplorer';
 
 // 対象: /json-explorer ページ(JSONの展開/折り畳みツリー表示・要素抽出)が使う
 // src/utils/jsonExplorer.ts の純粋関数群。ツリーのDOM描画自体はブラウザ限定の
@@ -65,5 +65,19 @@ describe('getValueAtPath', () => {
 
   it('空のパスを渡すとルート自体を返す', () => {
     expect(getValueAtPath(sample, [])).toBe(sample);
+  });
+});
+
+describe('getSelectedKeyLabel', () => {
+  it('空配列(ルート選択)の場合は"root"を返す', () => {
+    expect(getSelectedKeyLabel([])).toBe('root');
+  });
+
+  it('末尾がオブジェクトキーの場合はそのままのキー名を返す', () => {
+    expect(getSelectedKeyLabel(['a', 'b'])).toBe('b');
+  });
+
+  it('末尾が配列添字の場合は"[数字]"形式を返す', () => {
+    expect(getSelectedKeyLabel(['a', 0])).toBe('[0]');
   });
 });
