@@ -48,3 +48,16 @@ export function getValueAtPath(root: unknown, segments: JsonPathSegment[]): unkn
   }
   return current;
 }
+
+/**
+ * パスの末尾セグメント(選択したノード自身のキー/添字)だけを取り出して
+ * 短いラベルにする。ノードをクリックした際、フルパス(root.a[0].b)とは別に
+ * 「今どのキーを選択したか」を一目で分かるようにするために使う。
+ * ルート自体を選択した場合(空配列)は'root'を返す。オブジェクトの
+ * キーはそのまま、配列の添字は"[数字]"の形にする(パス整形と統一)。
+ */
+export function getSelectedKeyLabel(segments: JsonPathSegment[]): string {
+  if (segments.length === 0) return 'root';
+  const last = segments[segments.length - 1];
+  return typeof last === 'number' ? '[' + last + ']' : String(last);
+}

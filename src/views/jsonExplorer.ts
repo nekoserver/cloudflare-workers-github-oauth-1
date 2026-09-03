@@ -132,7 +132,9 @@ textarea:focus { border-color: var(--accent); }
   <div class="panel-label"><span>ツリー(ノードをクリックすると下に抽出結果を表示)</span></div>
   <div id="jsonTree"><div class="empty">JSONを解析するとここにツリーが表示されます</div></div>
   <div id="pathBox" style="display:none;">
+    <span>キー: <code id="selectedKey"></code></span>
     <span>パス: <code id="selectedPath"></code></span>
+    <button class="btn sm copy-btn" id="btnCopyKey">キーをコピー</button>
     <button class="btn sm copy-btn" id="btnCopyPath">パスをコピー</button>
     <button class="btn sm copy-btn" id="btnCopyValue">抽出結果をコピー</button>
   </div>
@@ -145,6 +147,7 @@ textarea:focus { border-color: var(--accent); }
   var errorMsg = document.getElementById('errorMsg');
   var jsonTree = document.getElementById('jsonTree');
   var pathBox = document.getElementById('pathBox');
+  var selectedKeyEl = document.getElementById('selectedKey');
   var selectedPathEl = document.getElementById('selectedPath');
   var extractOutput = document.getElementById('extractOutput');
   var rootValue = null;
@@ -157,6 +160,14 @@ textarea:focus { border-color: var(--accent); }
   function clearError() {
     errorMsg.textContent = '';
     errorMsg.classList.remove('show');
+  }
+
+  // 選択中ノードの末尾キー(root.a[0].bなら"b")だけを取り出した短いラベル。
+  // フルパスとは別に「今どのキーを選んだか」を一目で分かるようにする。
+  function getSelectedKeyLabel(segments) {
+    if (segments.length === 0) return 'root';
+    var last = segments[segments.length - 1];
+    return typeof last === 'number' ? '[' + last + ']' : String(last);
   }
 
   function formatPath(segments) {
@@ -257,6 +268,7 @@ textarea:focus { border-color: var(--accent); }
 
   function showExtracted(segments, value) {
     pathBox.style.display = 'flex';
+    selectedKeyEl.textContent = getSelectedKeyLabel(segments);
     selectedPathEl.textContent = formatPath(segments);
     extractOutput.style.display = 'block';
     extractOutput.value = JSON.stringify(value, null, 2);
@@ -320,6 +332,9 @@ textarea:focus { border-color: var(--accent); }
     });
   }
 
+  document.getElementById('btnCopyKey').addEventListener('click', function(e) {
+    copyText(selectedKeyEl.textContent, e.currentTarget);
+  });
   document.getElementById('btnCopyPath').addEventListener('click', function(e) {
     copyText(selectedPathEl.textContent, e.currentTarget);
   });
