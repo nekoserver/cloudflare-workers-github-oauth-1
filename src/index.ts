@@ -10823,6 +10823,25 @@ export function rankWines(
     .slice(0, Math.max(0, limit));
 }
 
+export const WINE_SEARCH_ALLOWED_LIMITS = [20, 30, 50, 100] as const;
+export const WINE_SEARCH_DEFAULT_LIMIT = 30;
+export const WINE_SEARCH_DEFAULT_HIT_THRESHOLD = 0.5;
+
+/**
+ * 「表示件数(limit)」とは独立に、類似度が閾値以上の候補が全体で何件
+ * あるかを数える(=ヒット件数)。表示件数を絞っても実際の一致件数を
+ * ユーザーが把握できるようにするための集計で、上位limit件のスコアには
+ * 依存しない。
+ */
+export function countWineHits(
+  queryVector: number[],
+  candidates: WineSearchCandidate[],
+  threshold: number,
+): number {
+  if (queryVector.length === 0) return 0;
+  return candidates.filter((c) => cosineSimilarity(queryVector, c.vector) >= threshold).length;
+}
+
 export interface WineBulkRegisterError {
   wine: string;
   error: string;
@@ -10913,6 +10932,38 @@ function rowToWineDetail(row: Record<string, unknown> | null): WineDetailFields 
   return out;
 }
 
+export interface WineDetailByIdResult {
+  id: number;
+  wineName: string;
+  model: string;
+  dim: number;
+  details: WineDetailFields | null;
+}
+
+/**
+ * wine_embeddings.id(連番インデックス)を主キーに、銘柄名・モデル・
+ * 次元数・全特性値(wine_detailsとの1:1 JOIN)をまとめて1件返す。
+ * 一覧(POST /api/wine/search)ではマスクされうる特性値も、個別詳細
+ * (GET /api/wine/:id)では常にすべて返す。該当行が無ければnullを返し、
+ * 例外は投げない(呼び出し元がHTTP 404に変換する)。
+ */
+export async function getWineDetailById(db: D1Database, id: number): Promise<WineDetailByIdResult | null> {
+  const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const row = await db.prepare(
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.model AS model, e.dim AS dim, ${cols}
+     FROM wine_embeddings e LEFT JOIN wine_details d ON d.wine_id = e.id
+     WHERE e.id = ?`
+  ).bind(id).first<Record<string, unknown>>();
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    wineName: String(row.wine_name),
+    model: String(row.model),
+    dim: Number(row.dim),
+    details: rowToWineDetail(row),
+  };
+}
+
 app.get('/wine-search', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWineSearchPage(user.sub));
@@ -10947,10 +10998,19 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     vector: blobToFloats(r.vector as ArrayBuffer),
     details: rowToWineDetail(r),
   }));
-  const results = rankWines(queryVector, candidates, 30);
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (WINE_SEARCH_ALLOWED_LIMITS as readonly number[]).includes(rawLimit as number)
+    ? (rawLimit as number)
+    : WINE_SEARCH_DEFAULT_LIMIT;
+  const rawThreshold = (body as Record<string, unknown>).threshold;
+  const threshold = (typeof rawThreshold === 'number' && rawThreshold >= 0 && rawThreshold <= 1)
+    ? rawThreshold
+    : WINE_SEARCH_DEFAULT_HIT_THRESHOLD;
+  const results = rankWines(queryVector, candidates, limit);
+  const hitCount = countWineHits(queryVector, candidates, threshold);
   const debugRequested = (body as Record<string, unknown>).debug === true;
   if (!debugRequested) {
-    return jsonUtf8({ results, total: candidates.length });
+    return jsonUtf8({ results, total: candidates.length, hitCount, threshold, limit });
   }
   const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
   const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
@@ -10964,10 +11024,22 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
   return jsonUtf8({
     results,
     total: candidates.length,
+    hitCount,
+    threshold,
+    limit,
     debugQueryDim: queryVector.length,
     debugCandidateDims: candidateDims,
     debugRawVectorType,
   });
+});
+
+app.get('/api/wine/:id', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '不正なIDです' }, 400);
+  const detail = await getWineDetailById(c.env.DB, id);
+  if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
+  return jsonUtf8(detail);
 });
 
 app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
