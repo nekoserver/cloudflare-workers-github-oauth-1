@@ -10948,6 +10948,10 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     details: rowToWineDetail(r),
   }));
   const results = rankWines(queryVector, candidates, 30);
+  const debugRequested = (body as Record<string, unknown>).debug === true;
+  if (!debugRequested) {
+    return jsonUtf8({ results, total: candidates.length });
+  }
   const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
   const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
   const debugRawVectorType = Array.isArray(rawSample)
@@ -10963,7 +10967,6 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     debugQueryDim: queryVector.length,
     debugCandidateDims: candidateDims,
     debugRawVectorType,
-    debugBuildMarker: 'WINE_BUILD_MARKER_20260904E',
   });
 });
 

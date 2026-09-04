@@ -460,16 +460,22 @@ describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () 
   });
 });
 
-// 対象: /wine-searchページに置いた「ワイン埋め込み一括登録」ボタン(一時的な運用UI、
-// curlでPOST /api/wine/bulk-registerを叩く手間を省くためのもの)。
+// 対象: /wine-searchページに置いた「ワイン埋め込み一括登録」ボタンと診断情報表示
+// (デバッグ用の運用UI、curlでPOST /api/wine/bulk-registerを叩く手間を省く・
+// D1のBLOB型不整合のような不具合を再調査する際に使う)。通常時は誤操作や
+// 情報漏えいを避けるため`hidden`属性で隠し、URLに`?debug=1`を付けた場合
+// のみJSで表示する。
 // 故障シナリオ: テンプレートリテラルのエスケープ崩れ(ルール29)でページ全体が白紙になる。
-describe('getWineSearchPage の一時ボタン', () => {
-  it('ワイン埋め込み一括登録ボタンとエスケープ崩れの無いスクリプトを含む', async () => {
+describe('getWineSearchPage のデバッグモード用UI', () => {
+  it('一括登録ボタン・診断情報表示は通常時hiddenで、エスケープ崩れの無いスクリプトを含む', async () => {
     const { getWineSearchPage } = await import('./views/wineSearch');
     const html = getWineSearchPage('tester');
+    expect(html).toContain('id="tempAdminBox" hidden');
     expect(html).toContain('id="bulkRegisterBtn"');
     expect(html).toContain('id="bulkRegisterResult"');
     expect(html).toContain("fetch('/api/wine/bulk-register'");
+    expect(html).toContain("get('debug') === '1'");
+    expect(html).toContain('debugQueryDim');
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
   });

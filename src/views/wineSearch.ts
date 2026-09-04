@@ -152,8 +152,8 @@ export function getWineSearchPage(username: string): string {
     <div class="title">ワイン銘柄検索</div>
     <div class="subtitle">フリーワードをplamo-embedding-1bでベクタ化し、登録済みワイン銘柄とのコサイン類似度が高い順に表示します</div>
 
-    <div class="temp-admin-box" id="tempAdminBox">
-      <span class="temp-admin-label">⚠️ 一時ボタン(初回データ投入用・後で削除予定) [build:WINE_BUILD_MARKER_20260904E]</span>
+    <div class="temp-admin-box" id="tempAdminBox" hidden>
+      <span class="temp-admin-label">⚠️ デバッグモード(?debug=1): 一括登録・診断情報表示</span>
       <button type="button" class="temp-admin-btn" id="bulkRegisterBtn">ワイン埋め込み一括登録を実行</button>
       <span class="temp-admin-result" id="bulkRegisterResult"></span>
     </div>
@@ -218,6 +218,13 @@ export function getWineSearchPage(username: string): string {
     var tableBody = document.getElementById('wineTableBody');
     var emptyMsg = document.getElementById('emptyMsg');
 
+    var isDebugMode = (function() {
+      try { return new URLSearchParams(location.search).get('debug') === '1'; } catch (e) { return false; }
+    })();
+    if (isDebugMode) {
+      document.getElementById('tempAdminBox').hidden = false;
+    }
+
     function fmtScore(v) {
       return (typeof v === 'number') ? v.toFixed(3) : '不明';
     }
@@ -265,7 +272,7 @@ export function getWineSearchPage(username: string): string {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: q }),
+        body: JSON.stringify({ q: q, debug: isDebugMode }),
       })
         .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
         .then(function(res) {
@@ -277,8 +284,11 @@ export function getWineSearchPage(username: string): string {
             return;
           }
           var results = res.data.results || [];
-          var debugInfo = ' [デバッグ] query次元:' + res.data.debugQueryDim + ' / 登録済み次元:' + JSON.stringify(res.data.debugCandidateDims) + ' / 生vector型:' + res.data.debugRawVectorType + ' / APIビルド:' + res.data.debugBuildMarker;
-          setStatus(results.length + ' 件 / 登録済み ' + (res.data.total || 0) + ' 銘柄' + debugInfo, false);
+          var statusText = results.length + ' 件 / 登録済み ' + (res.data.total || 0) + ' 銘柄';
+          if (isDebugMode && res.data.debugQueryDim !== undefined) {
+            statusText += ' [デバッグ] query次元:' + res.data.debugQueryDim + ' / 登録済み次元:' + JSON.stringify(res.data.debugCandidateDims) + ' / 生vector型:' + res.data.debugRawVectorType;
+          }
+          setStatus(statusText, false);
           if (results.length === 0) {
             tableWrap.style.display = 'none';
             emptyMsg.style.display = 'block';
