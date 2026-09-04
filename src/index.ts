@@ -10959,26 +10959,49 @@ function rowToWineDetail(row: Record<string, unknown> | null): WineDetailFields 
   return out;
 }
 
+export const WINE_METADATA_COLUMNS: (keyof WineMetadataSeedRow)[] = [
+  'katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style',
+  'characteristics', 'pairing_foods', 'pairing_food_count', 'pairing_reasons',
+  'food_reason_pairs', 'source_urls', 'source_url_count', 'source_linked_count',
+  'source_rate', 'metadata_research_url', 'metadata_status', 'metadata_note',
+];
+
 export interface WineDetailByIdResult {
   id: number;
   wineName: string;
   model: string;
   dim: number;
   details: WineDetailFields | null;
+  metadata: Partial<Record<keyof WineMetadataSeedRow, unknown>> | null;
+}
+
+function rowToWineMetadata(row: Record<string, unknown> | null): Partial<Record<keyof WineMetadataSeedRow, unknown>> | null {
+  if (!row) return null;
+  const hasAny = WINE_METADATA_COLUMNS.some((c) => row[`meta_${c}`] !== null && row[`meta_${c}`] !== undefined);
+  if (!hasAny) return null;
+  const out: Partial<Record<keyof WineMetadataSeedRow, unknown>> = {};
+  for (const c of WINE_METADATA_COLUMNS) {
+    out[c] = row[`meta_${c}`];
+  }
+  return out;
 }
 
 /**
  * wine_embeddings.id(連番インデックス)を主キーに、銘柄名・モデル・
- * 次元数・全特性値(wine_detailsとの1:1 JOIN)をまとめて1件返す。
+ * 次元数・全特性値(wine_detailsとの1:1 JOIN)・個別詳細(wine_metadataとの
+ * 1:1 JOIN、産地・品種・特徴・ペアリング料理等)をまとめて1件返す。
  * 一覧(POST /api/wine/search)ではマスクされうる特性値も、個別詳細
  * (GET /api/wine/:id)では常にすべて返す。該当行が無ければnullを返し、
  * 例外は投げない(呼び出し元がHTTP 404に変換する)。
  */
 export async function getWineDetailById(db: D1Database, id: number): Promise<WineDetailByIdResult | null> {
   const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const metaCols = WINE_METADATA_COLUMNS.map((c) => `m.${c} AS meta_${c}`).join(', ');
   const row = await db.prepare(
-    `SELECT e.id AS id, e.wine_name AS wine_name, e.model AS model, e.dim AS dim, ${cols}
-     FROM wine_embeddings e LEFT JOIN wine_details d ON d.wine_id = e.id
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.model AS model, e.dim AS dim, ${cols}, ${metaCols}
+     FROM wine_embeddings e
+     LEFT JOIN wine_details d ON d.wine_id = e.id
+     LEFT JOIN wine_metadata m ON m.id = e.id
      WHERE e.id = ?`
   ).bind(id).first<Record<string, unknown>>();
   if (!row) return null;
@@ -10988,6 +11011,7 @@ export async function getWineDetailById(db: D1Database, id: number): Promise<Win
     model: String(row.model),
     dim: Number(row.dim),
     details: rowToWineDetail(row),
+    metadata: rowToWineMetadata(row),
   };
 }
 
@@ -11068,13 +11092,6 @@ app.get('/api/wine/:id', authMiddleware, async (c) => {
   if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
   return jsonUtf8(detail);
 });
-
-export const WINE_METADATA_COLUMNS: (keyof WineMetadataSeedRow)[] = [
-  'katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style',
-  'characteristics', 'pairing_foods', 'pairing_food_count', 'pairing_reasons',
-  'food_reason_pairs', 'source_urls', 'source_url_count', 'source_linked_count',
-  'source_rate', 'metadata_research_url', 'metadata_status', 'metadata_note',
-];
 
 export interface WineMetadataBulkRegisterError {
   wine: string;
