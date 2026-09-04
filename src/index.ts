@@ -201,6 +201,9 @@ import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdown
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
+import { getWineSearchPage } from './views/wineSearch';
+import { WINE_VECTOR_SEED, type WineSeedRow } from './data/wineVectors';
+import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadata';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
@@ -419,6 +422,9 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'user_public_keys', migration: '0121', description: '/public-keysページで登録するチャレンジ署名ログイン用の公開鍵(ECDSA P-256, JWK形式)。秘密鍵はブラウザ側のみで保持しサーバーには送らない。失効(revoked_at)・最終使用(last_used_at)を個別に管理する', syncPolicy: 'auto' },
   { name: 'public_key_challenges', migration: '0122', description: 'チャレンジ署名ログインで発行したワンタイムチャレンジ文字列。有効期限(expires_at)・使用済み(used_at)でリプレイ再利用を防ぐ', syncPolicy: 'auto' },
   { name: 'login_history', migration: '0124', description: 'ログインのたびに記録するログ(GitHub OAuth / 公開鍵チャレンジ署名のどちらでログインしたか)。user_sessions.last_login_method(0123)は直近1回分のみだが、こちらは全履歴を保持する', syncPolicy: 'auto' },
+  { name: 'wine_embeddings', migration: '0125', description: '/wine-searchページのワイン銘柄名をplamo-embedding-1bでベクタ化したキャッシュ(全ユーザー共通データ、テナント分離なし)', syncPolicy: 'manual' },
+  { name: 'wine_details', migration: '0125', description: '/wine-searchページで表示するワインのペアリング特性データ(seeds/wine_initial_vectors_v83.csvが元データ)。wine_embeddings.idと1:1', syncPolicy: 'manual' },
+  { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1835,7 +1841,75 @@ CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_chall
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_login_history_user_id ON login_history(user_id);`,
-  '0125': `ALTER TABLE user_public_keys ADD COLUMN expires_at TEXT;`,
+  '0125': `CREATE TABLE IF NOT EXISTS wine_embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  wine_name TEXT NOT NULL UNIQUE,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS wine_details (
+  wine_id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  pairing_count INTEGER NOT NULL DEFAULT 0,
+  source_linked_count INTEGER NOT NULL DEFAULT 0,
+  source_rate REAL NOT NULL DEFAULT 0,
+  reliability REAL NOT NULL DEFAULT 0,
+  fat REAL NOT NULL DEFAULT 0,
+  sweet REAL NOT NULL DEFAULT 0,
+  acid REAL NOT NULL DEFAULT 0,
+  salt REAL NOT NULL DEFAULT 0,
+  spice REAL NOT NULL DEFAULT 0,
+  umami REAL NOT NULL DEFAULT 0,
+  bitter REAL NOT NULL DEFAULT 0,
+  richness REAL NOT NULL DEFAULT 0,
+  raw REAL NOT NULL DEFAULT 0,
+  fried REAL NOT NULL DEFAULT 0,
+  grilled_smoked REAL NOT NULL DEFAULT 0,
+  creamy_butter REAL NOT NULL DEFAULT 0,
+  tomato REAL NOT NULL DEFAULT 0,
+  herbal_green REAL NOT NULL DEFAULT 0,
+  seafood REAL NOT NULL DEFAULT 0,
+  shellfish REAL NOT NULL DEFAULT 0,
+  white_fish REAL NOT NULL DEFAULT 0,
+  oily_fish REAL NOT NULL DEFAULT 0,
+  sushi REAL NOT NULL DEFAULT 0,
+  red_meat REAL NOT NULL DEFAULT 0,
+  poultry REAL NOT NULL DEFAULT 0,
+  pork REAL NOT NULL DEFAULT 0,
+  lamb REAL NOT NULL DEFAULT 0,
+  dairy REAL NOT NULL DEFAULT 0,
+  mushroom_truffle REAL NOT NULL DEFAULT 0,
+  vegetable REAL NOT NULL DEFAULT 0,
+  dessert REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0126': `CREATE TABLE IF NOT EXISTS wine_metadata (
+  id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  wine_name TEXT NOT NULL,
+  katakana_name TEXT,
+  country TEXT,
+  production_area TEXT,
+  wine_type TEXT,
+  grape_or_style TEXT,
+  characteristics TEXT,
+  pairing_foods TEXT,
+  pairing_food_count INTEGER,
+  pairing_reasons TEXT,
+  food_reason_pairs TEXT,
+  source_urls TEXT,
+  source_url_count INTEGER,
+  source_linked_count INTEGER,
+  source_rate REAL,
+  metadata_research_url TEXT,
+  metadata_status TEXT,
+  metadata_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0127': `ALTER TABLE user_public_keys ADD COLUMN expires_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1978,6 +2052,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_public_keys: { id: 'pk', user_id: 'fk+idx' },
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   login_history: { id: 'pk', user_id: 'fk+idx' },
+  wine_embeddings: { id: 'pk', wine_name: 'uk' },
+  wine_details: { wine_id: 'pk+fk' },
+  wine_metadata: { id: 'pk+fk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -2120,6 +2197,7 @@ export function getFilterableColumns(tableName: string): string[] {
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
   user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth',
+  wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -2294,6 +2372,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   user_public_keys: { user_id: 'user_sessions' },
   public_key_challenges: { user_id: 'user_sessions' },
   login_history: { user_id: 'user_sessions' },
+  wine_details: { wine_id: 'wine_embeddings' },
+  wine_metadata: { id: 'wine_embeddings' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
@@ -7394,8 +7474,26 @@ export function floatsToBlob(vec: number[]): ArrayBuffer {
   return new Float32Array(vec).buffer;
 }
 
-export function blobToFloats(blob: ArrayBuffer): number[] {
-  return Array.from(new Float32Array(blob));
+/**
+ * D1のBLOB列は実行環境によってArrayBuffer・Uint8Array(TypedArray)・
+ * 素のnumber[](JSON経由のシリアライズ等)のいずれかで返ってくる可能性が
+ * ある。いずれの場合も「バイト列を要素配列としてコピーする」誤ったAPI
+ * オーバーロードを踏まないよう、必ずバイト列(Uint8Array)へ正規化して
+ * からArrayBufferとして再解釈する。
+ */
+export function blobToFloats(blob: ArrayBuffer | Uint8Array | number[]): number[] {
+  let bytes: Uint8Array;
+  if (blob instanceof ArrayBuffer) {
+    bytes = new Uint8Array(blob);
+  } else if (ArrayBuffer.isView(blob)) {
+    bytes = new Uint8Array(blob.buffer, blob.byteOffset, blob.byteLength);
+  } else if (Array.isArray(blob)) {
+    bytes = Uint8Array.from(blob);
+  } else {
+    bytes = new Uint8Array(blob as ArrayBufferLike);
+  }
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return Array.from(new Float32Array(buffer));
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -10652,6 +10750,420 @@ app.get('/file-deps', authMiddleware, async (c) => {
 app.get('/cheese-search', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getCheeseSearchPage(user.sub));
+});
+
+/**
+ * ワイン銘柄名(wine_embeddings.wine_name)の埋め込みキャッシュを読み書きする。
+ * aichat_keyword_embeddingsのgetOrComputeKeywordEmbeddingと同じ方針だが、
+ * ワインは全ユーザー共通データのためuser_idによるテナント分離を持たない。
+ * 同一モデルでキャッシュ済みならAIを呼ばずそのベクトルを返す。
+ */
+export async function getOrComputeWineEmbedding(
+  db: D1Database,
+  ai: Ai,
+  wineName: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<number[]> {
+  const row = await db.prepare(
+    `SELECT vector, model FROM wine_embeddings WHERE wine_name = ?`
+  ).bind(wineName).first<{ vector: ArrayBuffer; model: string }>();
+  if (row && row.model === model) return blobToFloats(row.vector);
+  const vector = await embedTextWithModel(ai, model, wineName);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO wine_embeddings (wine_name, model, dim, vector, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(wine_name) DO UPDATE SET
+       model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
+  ).bind(wineName, model, vector.length, floatsToBlob(vector), now, now).run();
+  return vector;
+}
+
+export interface WineDetailFields {
+  pairing_count: number;
+  source_linked_count: number;
+  source_rate: number;
+  reliability: number;
+  fat: number;
+  sweet: number;
+  acid: number;
+  salt: number;
+  spice: number;
+  umami: number;
+  bitter: number;
+  richness: number;
+  raw: number;
+  fried: number;
+  grilled_smoked: number;
+  creamy_butter: number;
+  tomato: number;
+  herbal_green: number;
+  seafood: number;
+  shellfish: number;
+  white_fish: number;
+  oily_fish: number;
+  sushi: number;
+  red_meat: number;
+  poultry: number;
+  pork: number;
+  lamb: number;
+  dairy: number;
+  mushroom_truffle: number;
+  vegetable: number;
+  dessert: number;
+}
+
+export const WINE_DETAIL_COLUMNS: (keyof WineDetailFields)[] = [
+  'pairing_count', 'source_linked_count', 'source_rate', 'reliability',
+  'fat', 'sweet', 'acid', 'salt', 'spice', 'umami', 'bitter', 'richness',
+  'raw', 'fried', 'grilled_smoked', 'creamy_butter', 'tomato', 'herbal_green',
+  'seafood', 'shellfish', 'white_fish', 'oily_fish', 'sushi', 'red_meat',
+  'poultry', 'pork', 'lamb', 'dairy', 'mushroom_truffle', 'vegetable', 'dessert',
+];
+
+export interface WineSearchCandidate {
+  id: number;
+  wineName: string;
+  vector: number[];
+  details: WineDetailFields | null;
+}
+
+export interface WineSearchResult {
+  id: number;
+  wineName: string;
+  similarity: number;
+  details: WineDetailFields | null;
+}
+
+/**
+ * ワイン検索の候補一覧をクエリベクトルとのコサイン類似度降順で並べ、
+ * 上位limit件を返す(rankSimilarKeywordsと同じ方針)。
+ * クエリベクトルが空(埋め込み失敗時)の場合は空配列を返す。
+ */
+export function rankWines(
+  queryVector: number[],
+  candidates: WineSearchCandidate[],
+  limit = 30,
+): WineSearchResult[] {
+  if (queryVector.length === 0) return [];
+  return candidates
+    .map((c) => ({ id: c.id, wineName: c.wineName, similarity: cosineSimilarity(queryVector, c.vector), details: c.details }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, Math.max(0, limit));
+}
+
+export const WINE_SEARCH_ALLOWED_LIMITS = [20, 30, 50, 100] as const;
+export const WINE_SEARCH_DEFAULT_LIMIT = 30;
+export const WINE_SEARCH_DEFAULT_HIT_THRESHOLD = 0.5;
+
+/**
+ * 「表示件数(limit)」とは独立に、類似度が閾値以上の候補が全体で何件
+ * あるかを数える(=ヒット件数)。表示件数を絞っても実際の一致件数を
+ * ユーザーが把握できるようにするための集計で、上位limit件のスコアには
+ * 依存しない。
+ */
+export function countWineHits(
+  queryVector: number[],
+  candidates: WineSearchCandidate[],
+  threshold: number,
+): number {
+  if (queryVector.length === 0) return 0;
+  return candidates.filter((c) => cosineSimilarity(queryVector, c.vector) >= threshold).length;
+}
+
+export interface WineBulkRegisterError {
+  wine: string;
+  error: string;
+}
+
+export interface WineBulkRegisterResult {
+  totalSeed: number;
+  alreadyRegistered: number;
+  attempted: number;
+  succeeded: number;
+  errors: WineBulkRegisterError[];
+  remaining: number;
+}
+
+/**
+ * seeds/wine_initial_vectors_v83.csv由来のシード(WINE_VECTOR_SEED)から、
+ * まだwine_embeddingsに登録されていないワイン名だけを埋め込み計算し、
+ * wine_embeddings/wine_detailsへ保存する(POST /api/wine/bulk-register)。
+ * この環境にはCLOUDFLARE_API_TOKENが無くWorkers AI呼び出しができないため、
+ * 実際の実行はデプロイ後にユーザーがこのエンドポイントを叩く前提。
+ *
+ * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する。
+ * 失敗はerrorsに記録して呼び出し元(APIレスポンス)へそのまま返す
+ * (CLAUDE.mdルール8: 記録・通知の義務)。
+ *
+ * limitを指定すると、未登録分のうち先頭limit件だけを処理して残り件数を
+ * remainingとして返す。クライアント側はこれをポーリング的に繰り返し呼び出す
+ * ことで「何件目/残り何件」の進捗表示ができる(1リクエストで616件全部
+ * 処理すると進捗が見えないため)。limit省略時は従来通り全件処理する。
+ */
+export async function bulkRegisterWines(
+  db: D1Database,
+  ai: Ai,
+  seeds: WineSeedRow[],
+  limit?: number,
+): Promise<WineBulkRegisterResult> {
+  const existingRows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
+  const existingSet = new Set((existingRows.results ?? []).map((r) => r.wine_name));
+  const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
+  const toRegister = (typeof limit === 'number' && limit > 0) ? notRegistered.slice(0, limit) : notRegistered;
+  let succeeded = 0;
+  const errors: WineBulkRegisterError[] = [];
+
+  for (const w of toRegister) {
+    try {
+      const vector = await getOrComputeWineEmbedding(db, ai, w.wine);
+      if (vector.length === 0) {
+        errors.push({ wine: w.wine, error: '埋め込みが空でした(AI呼び出し失敗の可能性があります)' });
+        continue;
+      }
+      const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(w.wine).first<{ id: number }>();
+      if (!idRow) {
+        errors.push({ wine: w.wine, error: '埋め込み保存後にIDが取得できませんでした' });
+        continue;
+      }
+      const now = new Date().toISOString();
+      const cols = ['wine_id', ...WINE_DETAIL_COLUMNS, 'created_at', 'updated_at'];
+      const placeholders = cols.map(() => '?').join(', ');
+      const updateSet = WINE_DETAIL_COLUMNS.map((c) => `${c} = excluded.${c}`).join(', ') + ', updated_at = excluded.updated_at';
+      await db.prepare(
+        `INSERT INTO wine_details (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT(wine_id) DO UPDATE SET ${updateSet}`
+      ).bind(idRow.id, ...WINE_DETAIL_COLUMNS.map((c) => w[c]), now, now).run();
+      succeeded++;
+    } catch (e) {
+      errors.push({ wine: w.wine, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return {
+    totalSeed: seeds.length,
+    alreadyRegistered: existingSet.size,
+    attempted: toRegister.length,
+    succeeded,
+    errors,
+    remaining: notRegistered.length - toRegister.length,
+  };
+}
+
+function rowToWineDetail(row: Record<string, unknown> | null): WineDetailFields | null {
+  if (!row) return null;
+  const hasAny = WINE_DETAIL_COLUMNS.some((c) => row[c] !== null && row[c] !== undefined);
+  if (!hasAny) return null;
+  const out = {} as WineDetailFields;
+  for (const c of WINE_DETAIL_COLUMNS) {
+    out[c] = typeof row[c] === 'number' ? row[c] as number : Number(row[c] ?? 0);
+  }
+  return out;
+}
+
+export const WINE_METADATA_COLUMNS: (keyof WineMetadataSeedRow)[] = [
+  'katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style',
+  'characteristics', 'pairing_foods', 'pairing_food_count', 'pairing_reasons',
+  'food_reason_pairs', 'source_urls', 'source_url_count', 'source_linked_count',
+  'source_rate', 'metadata_research_url', 'metadata_status', 'metadata_note',
+];
+
+export interface WineDetailByIdResult {
+  id: number;
+  wineName: string;
+  model: string;
+  dim: number;
+  details: WineDetailFields | null;
+  metadata: Partial<Record<keyof WineMetadataSeedRow, unknown>> | null;
+}
+
+function rowToWineMetadata(row: Record<string, unknown> | null): Partial<Record<keyof WineMetadataSeedRow, unknown>> | null {
+  if (!row) return null;
+  const hasAny = WINE_METADATA_COLUMNS.some((c) => row[`meta_${c}`] !== null && row[`meta_${c}`] !== undefined);
+  if (!hasAny) return null;
+  const out: Partial<Record<keyof WineMetadataSeedRow, unknown>> = {};
+  for (const c of WINE_METADATA_COLUMNS) {
+    out[c] = row[`meta_${c}`];
+  }
+  return out;
+}
+
+/**
+ * wine_embeddings.id(連番インデックス)を主キーに、銘柄名・モデル・
+ * 次元数・全特性値(wine_detailsとの1:1 JOIN)・個別詳細(wine_metadataとの
+ * 1:1 JOIN、産地・品種・特徴・ペアリング料理等)をまとめて1件返す。
+ * 一覧(POST /api/wine/search)ではマスクされうる特性値も、個別詳細
+ * (GET /api/wine/:id)では常にすべて返す。該当行が無ければnullを返し、
+ * 例外は投げない(呼び出し元がHTTP 404に変換する)。
+ */
+export async function getWineDetailById(db: D1Database, id: number): Promise<WineDetailByIdResult | null> {
+  const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const metaCols = WINE_METADATA_COLUMNS.map((c) => `m.${c} AS meta_${c}`).join(', ');
+  const row = await db.prepare(
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.model AS model, e.dim AS dim, ${cols}, ${metaCols}
+     FROM wine_embeddings e
+     LEFT JOIN wine_details d ON d.wine_id = e.id
+     LEFT JOIN wine_metadata m ON m.id = e.id
+     WHERE e.id = ?`
+  ).bind(id).first<Record<string, unknown>>();
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    wineName: String(row.wine_name),
+    model: String(row.model),
+    dim: Number(row.dim),
+    details: rowToWineDetail(row),
+    metadata: rowToWineMetadata(row),
+  };
+}
+
+app.get('/wine-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWineSearchPage(user.sub));
+});
+
+app.post('/api/wine/search', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ results: [], total: 0, error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const raw = typeof (body as Record<string, unknown>).q === 'string' ? (body as Record<string, unknown>).q as string : '';
+  const q = raw.trim().slice(0, 500);
+  if (!q) return jsonUtf8({ results: [], total: 0, error: '検索文字列を入力してください' }, 400);
+
+  let queryVector: number[];
+  try {
+    queryVector = await embedTextWithModel(c.env.AI, PLAMO_EMBEDDING_MODEL, q);
+  } catch (e) {
+    return jsonUtf8({ results: [], total: 0, error: '埋め込み計算に失敗しました: ' + (e instanceof Error ? e.message : String(e)) }, 502);
+  }
+  if (queryVector.length === 0) {
+    return jsonUtf8({ results: [], total: 0, error: '埋め込み計算に失敗しました(空のベクトルが返されました)' }, 502);
+  }
+
+  const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const rows = await c.env.DB.prepare(
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.vector AS vector, ${cols}
+     FROM wine_embeddings e LEFT JOIN wine_details d ON d.wine_id = e.id`
+  ).all<Record<string, unknown>>();
+  const candidates: WineSearchCandidate[] = (rows.results ?? []).map((r) => ({
+    id: Number(r.id),
+    wineName: String(r.wine_name),
+    vector: blobToFloats(r.vector as ArrayBuffer),
+    details: rowToWineDetail(r),
+  }));
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (WINE_SEARCH_ALLOWED_LIMITS as readonly number[]).includes(rawLimit as number)
+    ? (rawLimit as number)
+    : WINE_SEARCH_DEFAULT_LIMIT;
+  const rawThreshold = (body as Record<string, unknown>).threshold;
+  const threshold = (typeof rawThreshold === 'number' && rawThreshold >= 0 && rawThreshold <= 1)
+    ? rawThreshold
+    : WINE_SEARCH_DEFAULT_HIT_THRESHOLD;
+  const results = rankWines(queryVector, candidates, limit);
+  const hitCount = countWineHits(queryVector, candidates, threshold);
+  const debugRequested = (body as Record<string, unknown>).debug === true;
+  if (!debugRequested) {
+    return jsonUtf8({ results, total: candidates.length, hitCount, threshold, limit });
+  }
+  const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
+  const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
+  const debugRawVectorType = Array.isArray(rawSample)
+    ? 'Array(length=' + rawSample.length + ')'
+    : (rawSample instanceof ArrayBuffer)
+      ? 'ArrayBuffer(byteLength=' + rawSample.byteLength + ')'
+      : (rawSample && typeof rawSample === 'object')
+        ? (rawSample.constructor ? rawSample.constructor.name : typeof rawSample) + '(byteLength=' + (rawSample as ArrayBufferView).byteLength + ')'
+        : typeof rawSample;
+  return jsonUtf8({
+    results,
+    total: candidates.length,
+    hitCount,
+    threshold,
+    limit,
+    debugQueryDim: queryVector.length,
+    debugCandidateDims: candidateDims,
+    debugRawVectorType,
+  });
+});
+
+app.get('/api/wine/:id', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '不正なIDです' }, 400);
+  const detail = await getWineDetailById(c.env.DB, id);
+  if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
+  return jsonUtf8(detail);
+});
+
+export interface WineMetadataBulkRegisterError {
+  wine: string;
+  error: string;
+}
+
+export interface WineMetadataBulkRegisterResult {
+  totalSeed: number;
+  succeeded: number;
+  skipped: number;
+  errors: WineMetadataBulkRegisterError[];
+}
+
+/**
+ * wine_616_individual_metadata_researched_v2.csv由来のシード(WINE_METADATA_SEED)から
+ * wine_metadataへ一括登録する(POST /api/wine/bulk-register-metadata)。
+ * AI呼び出しは不要(数値・文字列データの投入のみ)。wine_nameでwine_embeddingsと
+ * 突き合わせてidを解決するため、対応する埋め込みが未登録の銘柄はエラーではなく
+ * skippedとして扱う(過去に発覚したVALUES句サブクエリでのゴミ行混入バグ
+ * (#1631)と同じ問題を避けるため、必ずSELECTで実在するidを取得してから使う)。
+ * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する
+ * (CLAUDE.mdルール8: 記録・通知の義務)。
+ */
+export async function bulkRegisterWineMetadata(
+  db: D1Database,
+  seeds: WineMetadataSeedRow[],
+): Promise<WineMetadataBulkRegisterResult> {
+  let succeeded = 0;
+  let skipped = 0;
+  const errors: WineMetadataBulkRegisterError[] = [];
+
+  for (const row of seeds) {
+    try {
+      const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(row.wine_name).first<{ id: number }>();
+      if (!idRow) {
+        skipped++;
+        continue;
+      }
+      const now = new Date().toISOString();
+      const cols = ['id', 'wine_name', ...WINE_METADATA_COLUMNS, 'created_at', 'updated_at'];
+      const placeholders = cols.map(() => '?').join(', ');
+      const updateSet = ['wine_name', ...WINE_METADATA_COLUMNS].map((c) => `${c} = excluded.${c}`).join(', ') + ', updated_at = excluded.updated_at';
+      await db.prepare(
+        `INSERT INTO wine_metadata (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT(id) DO UPDATE SET ${updateSet}`
+      ).bind(idRow.id, row.wine_name, ...WINE_METADATA_COLUMNS.map((c) => row[c]), now, now).run();
+      succeeded++;
+    } catch (e) {
+      errors.push({ wine: row.wine_name, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return { totalSeed: seeds.length, succeeded, skipped, errors };
+}
+
+app.post('/api/wine/bulk-register-metadata', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const result = await bulkRegisterWineMetadata(c.env.DB, WINE_METADATA_SEED);
+  return jsonUtf8(result);
+});
+
+app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0) ? Math.floor(rawLimit) : undefined;
+  const result = await bulkRegisterWines(c.env.DB, c.env.AI, WINE_VECTOR_SEED, limit);
+  return jsonUtf8(result);
 });
 
 async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]> {
