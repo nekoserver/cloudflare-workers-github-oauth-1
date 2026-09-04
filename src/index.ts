@@ -421,6 +421,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'login_history', migration: '0124', description: 'ログインのたびに記録するログ(GitHub OAuth / 公開鍵チャレンジ署名のどちらでログインしたか)。user_sessions.last_login_method(0123)は直近1回分のみだが、こちらは全履歴を保持する', syncPolicy: 'auto' },
   { name: 'wine_embeddings', migration: '0125', description: '/wine-searchページのワイン銘柄名をplamo-embedding-1bでベクタ化したキャッシュ(全ユーザー共通データ、テナント分離なし)', syncPolicy: 'manual' },
   { name: 'wine_details', migration: '0125', description: '/wine-searchページで表示するワインのペアリング特性データ(seeds/wine_initial_vectors_v83.csvが元データ)。wine_embeddings.idと1:1', syncPolicy: 'manual' },
+  { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1882,6 +1883,29 @@ CREATE TABLE IF NOT EXISTS wine_details (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`,
+  '0126': `CREATE TABLE IF NOT EXISTS wine_metadata (
+  id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  wine_name TEXT NOT NULL,
+  katakana_name TEXT,
+  country TEXT,
+  production_area TEXT,
+  wine_type TEXT,
+  grape_or_style TEXT,
+  characteristics TEXT,
+  pairing_foods TEXT,
+  pairing_food_count INTEGER,
+  pairing_reasons TEXT,
+  food_reason_pairs TEXT,
+  source_urls TEXT,
+  source_url_count INTEGER,
+  source_linked_count INTEGER,
+  source_rate REAL,
+  metadata_research_url TEXT,
+  metadata_status TEXT,
+  metadata_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2026,6 +2050,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   login_history: { id: 'pk', user_id: 'fk+idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
+  wine_metadata: { id: 'pk+fk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -2168,7 +2193,7 @@ export function getFilterableColumns(tableName: string): string[] {
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
   user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth',
-  wine_embeddings: 'wine', wine_details: 'wine',
+  wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -2344,6 +2369,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   public_key_challenges: { user_id: 'user_sessions' },
   login_history: { user_id: 'user_sessions' },
   wine_details: { wine_id: 'wine_embeddings' },
+  wine_metadata: { id: 'wine_embeddings' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
