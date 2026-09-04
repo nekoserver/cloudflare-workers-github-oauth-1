@@ -391,6 +391,34 @@ describe('getWineDetailById', () => {
     const detail = await getWineDetailById(db, 999999);
     expect(detail).toBeNull();
   });
+
+  it('wine_metadataに行がある場合は産地・特徴などの個別詳細も含めて返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await bulkRegisterWines(db, ai, [seedRow({ wine: 'ワインA' })]);
+    const idRow = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get('ワインA') as { id: number };
+    const now = new Date().toISOString();
+    rawDb.prepare(
+      `INSERT INTO wine_metadata (id, wine_name, country, characteristics, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(idRow.id, 'ワインA', '日本', '柑橘香が強い', now, now);
+    const detail = await getWineDetailById(db, idRow.id);
+    expect(detail!.metadata).not.toBeNull();
+    expect(detail!.metadata!.country).toBe('日本');
+    expect(detail!.metadata!.characteristics).toBe('柑橘香が強い');
+  });
+
+  it('故障シナリオ: wine_metadataに行が無い場合はmetadataがnullになる(details=nullと同様に落ちない)', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await bulkRegisterWines(db, ai, [seedRow({ wine: 'ワインA' })]);
+    const idRow = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get('ワインA') as { id: number };
+    rawDb.prepare(`DELETE FROM wine_details WHERE wine_id = ?`).run(idRow.id);
+    const detail = await getWineDetailById(db, idRow.id);
+    expect(detail).not.toBeNull();
+    expect(detail!.metadata).toBeNull();
+  });
 });
 
 function metadataRow(overrides: Partial<WineMetadataSeedRow> = {}): WineMetadataSeedRow {
@@ -641,12 +669,16 @@ describe('getWineSearchPage の件数選択・マスク・個別詳細モーダ�
     expect(html).toContain('res.data.hitCount');
   });
 
-  it('ワイン名クリックで個別詳細モーダルを開きGET /api/wine/:idを呼ぶ', async () => {
+  it('行(任意のセル)クリックで個別詳細モーダルを開きGET /api/wine/:idを呼び、動的z-index(getNextZ)を使う', async () => {
     const { getWineSearchPage } = await import('./views/wineSearch');
     const html = getWineSearchPage('tester');
     expect(html).toContain('id="detailModalOverlay"');
     expect(html).toContain('id="detailModalTitle"');
     expect(html).toContain("fetch('/api/wine/' + encodeURIComponent(id)");
+    expect(html).toContain('class="wine-row"');
+    expect(html).toContain("closest('.wine-row')");
+    expect(html).toContain('function getNextZ()');
+    expect(html).toContain('detailModalOverlay.style.zIndex = String(getNextZ())');
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
   });

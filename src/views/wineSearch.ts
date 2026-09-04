@@ -113,6 +113,7 @@ export function getWineSearchPage(username: string): string {
     .wine-table td { color: var(--text-secondary); }
     .wine-table td.empty { color: var(--text-muted); font-style: italic; }
     .wine-table tr:hover td { background: var(--bg-secondary); }
+    .wine-table tr.wine-row { cursor: pointer; }
     .wine-name { font-weight: 700; color: var(--text-primary); cursor: pointer; text-decoration: underline dotted; }
     .similarity-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #0969da; color: #fff; font-size: 11px; }
     .empty-msg { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
@@ -297,6 +298,8 @@ export function getWineSearchPage(username: string): string {
     var lastResults = [];
     var DETAIL_COLUMN_KEYS = ['fat', 'sweet', 'acid', 'salt', 'spice', 'umami', 'bitter', 'richness', 'red_meat', 'poultry', 'seafood', 'dessert'];
     var DETAIL_COLUMN_LABELS = { fat: '脂肪', sweet: '甘味', acid: '酸味', salt: '塩味', spice: 'スパイス', umami: '旨味', bitter: '苦味', richness: 'コク', red_meat: '赤肉', poultry: '鶏肉', seafood: '魚介', dessert: 'デザート' };
+    var METADATA_COLUMN_KEYS = ['katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style', 'characteristics', 'pairing_foods', 'pairing_reasons', 'source_urls', 'metadata_status'];
+    var METADATA_COLUMN_LABELS = { katakana_name: 'カタカナ表記', country: '生産国', production_area: '産地', wine_type: 'タイプ', grape_or_style: '品種/スタイル', characteristics: '特徴', pairing_foods: '合う料理', pairing_reasons: '理由', source_urls: '出典URL', metadata_status: '調査ステータス' };
 
     var isDebugMode = (function() {
       try { return new URLSearchParams(location.search).get('debug') === '1'; } catch (e) { return false; }
@@ -316,9 +319,9 @@ export function getWineSearchPage(username: string): string {
     }
 
     function renderRow(item) {
-      var html = '<tr>';
+      var html = '<tr class="wine-row" data-id="' + item.id + '" data-wine-name="' + escHtml(item.wineName) + '">';
       html += '<td><span class="similarity-badge">' + fmtScore(item.similarity) + '</span></td>';
-      html += '<td class="wine-name" data-id="' + item.id + '">' + escHtml(item.wineName) + '</td>';
+      html += '<td class="wine-name">' + escHtml(item.wineName) + '</td>';
       var d = item.details;
       for (var i = 0; i < DETAIL_COLUMN_KEYS.length; i++) {
         html += fmtDetail(d, DETAIL_COLUMN_KEYS[i]);
@@ -399,10 +402,28 @@ export function getWineSearchPage(username: string): string {
     var detailModalTable = document.getElementById('detailModalTable');
     var detailModalCloseBtn = document.getElementById('detailModalCloseBtn');
 
-    function openWineDetailModal(id) {
-      detailModalTitle.textContent = '読み込み中...';
+    function getNextZ() {
+      var max = 100;
+      document.querySelectorAll('[style*="z-index"]').forEach(function(el) {
+        var z = parseInt(el.style.zIndex, 10);
+        if (!isNaN(z) && z < 9000 && z > max) max = z;
+      });
+      var staticZDefaults = { detailModalOverlay: 1000 };
+      Object.keys(staticZDefaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.classList.contains('open')) {
+          var z = parseInt(el.style.zIndex, 10) || staticZDefaults[id];
+          if (z > max) max = z;
+        }
+      });
+      return max + 100;
+    }
+
+    function openWineDetailModal(id, wineName) {
+      detailModalTitle.textContent = wineName || '読み込み中...';
       detailModalMeta.textContent = '';
       detailModalTable.innerHTML = '';
+      detailModalOverlay.style.zIndex = String(getNextZ());
       detailModalOverlay.classList.add('open');
       fetch('/api/wine/' + encodeURIComponent(id), { credentials: 'same-origin' })
         .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
@@ -416,6 +437,12 @@ export function getWineSearchPage(username: string): string {
           detailModalTitle.textContent = d.wineName;
           detailModalMeta.textContent = 'ID: ' + d.id + ' / モデル: ' + d.model + ' / 次元数: ' + d.dim;
           var rows = '';
+          var m = d.metadata;
+          for (var j = 0; j < METADATA_COLUMN_KEYS.length; j++) {
+            var mkey = METADATA_COLUMN_KEYS[j];
+            var mv = m && m[mkey] != null && m[mkey] !== '' ? escHtml(m[mkey]) : '不明';
+            rows += '<tr><td>' + (METADATA_COLUMN_LABELS[mkey] || mkey) + '</td><td>' + mv + '</td></tr>';
+          }
           for (var i = 0; i < DETAIL_COLUMN_KEYS.length; i++) {
             var key = DETAIL_COLUMN_KEYS[i];
             var v = d.details && typeof d.details[key] === 'number' ? d.details[key].toFixed(4) : '不明';
@@ -430,9 +457,9 @@ export function getWineSearchPage(username: string): string {
     }
 
     tableBody.addEventListener('click', function(e) {
-      var target = e.target;
-      if (target && target.classList && target.classList.contains('wine-name')) {
-        openWineDetailModal(target.getAttribute('data-id'));
+      var row = e.target && e.target.closest ? e.target.closest('.wine-row') : null;
+      if (row) {
+        openWineDetailModal(row.getAttribute('data-id'), row.getAttribute('data-wine-name'));
       }
     });
     detailModalCloseBtn.addEventListener('click', function() {
