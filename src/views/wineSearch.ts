@@ -301,31 +301,54 @@ export function getWineSearchPage(username: string): string {
 
     var bulkRegisterBtn = document.getElementById('bulkRegisterBtn');
     var bulkRegisterResult = document.getElementById('bulkRegisterResult');
+    var BULK_REGISTER_BATCH_SIZE = 10;
+
+    function bulkRegisterOneBatch() {
+      return fetch('/api/wine/bulk-register', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: BULK_REGISTER_BATCH_SIZE }),
+      }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); });
+    }
 
     function runBulkRegister() {
       bulkRegisterBtn.disabled = true;
-      bulkRegisterResult.textContent = '実行中(件数が多いため数十秒かかることがあります)...';
-      fetch('/api/wine/bulk-register', {
-        method: 'POST',
-        credentials: 'same-origin',
-      })
-        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
-        .then(function(res) {
-          bulkRegisterBtn.disabled = false;
+      var totalSucceeded = 0;
+      var totalErrors = [];
+      var totalSeed = 0;
+
+      function step() {
+        bulkRegisterResult.textContent = '実行中... 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
+        return bulkRegisterOneBatch().then(function(res) {
           if (!res.ok || res.data.error) {
-            bulkRegisterResult.textContent = '失敗: ' + (res.data.error || 'エラーが発生しました');
-            return;
+            throw new Error(res.data.error || 'エラーが発生しました');
           }
           var d = res.data;
-          var msg = '完了: 登録済み' + d.alreadyRegistered + '件 / 新規成功' + d.succeeded + '件 / エラー' + (d.errors ? d.errors.length : 0) + '件';
-          if (d.errors && d.errors.length > 0) {
-            msg += '(' + d.errors.slice(0, 3).map(function(e) { return e.wine; }).join('、') + (d.errors.length > 3 ? '…' : '') + ')';
+          totalSucceeded += d.succeeded;
+          totalErrors = totalErrors.concat(d.errors || []);
+          totalSeed = d.totalSeed;
+          var processedSoFar = totalSeed - d.remaining;
+          bulkRegisterResult.textContent = '処理中: ' + processedSoFar + ' / ' + totalSeed + ' 件(残り' + d.remaining + '件) / 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
+          if (d.remaining > 0) {
+            return step();
+          }
+          return null;
+        });
+      }
+
+      step()
+        .then(function() {
+          bulkRegisterBtn.disabled = false;
+          var msg = '完了: 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
+          if (totalErrors.length > 0) {
+            msg += '(' + totalErrors.slice(0, 3).map(function(e) { return e.wine; }).join('、') + (totalErrors.length > 3 ? '…' : '') + ')';
           }
           bulkRegisterResult.textContent = msg;
         })
         .catch(function(err) {
           bulkRegisterBtn.disabled = false;
-          bulkRegisterResult.textContent = '失敗: ' + (err && err.message ? err.message : String(err));
+          bulkRegisterResult.textContent = '失敗: ' + (err && err.message ? err.message : String(err)) + '(新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件まで完了)';
         });
     }
     bulkRegisterBtn.addEventListener('click', runBulkRegister);

@@ -10816,6 +10816,7 @@ export interface WineBulkRegisterResult {
   attempted: number;
   succeeded: number;
   errors: WineBulkRegisterError[];
+  remaining: number;
 }
 
 /**
@@ -10828,15 +10829,22 @@ export interface WineBulkRegisterResult {
  * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する。
  * 失敗はerrorsに記録して呼び出し元(APIレスポンス)へそのまま返す
  * (CLAUDE.mdルール8: 記録・通知の義務)。
+ *
+ * limitを指定すると、未登録分のうち先頭limit件だけを処理して残り件数を
+ * remainingとして返す。クライアント側はこれをポーリング的に繰り返し呼び出す
+ * ことで「何件目/残り何件」の進捗表示ができる(1リクエストで616件全部
+ * 処理すると進捗が見えないため)。limit省略時は従来通り全件処理する。
  */
 export async function bulkRegisterWines(
   db: D1Database,
   ai: Ai,
   seeds: WineSeedRow[],
+  limit?: number,
 ): Promise<WineBulkRegisterResult> {
   const existingRows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
   const existingSet = new Set((existingRows.results ?? []).map((r) => r.wine_name));
-  const toRegister = seeds.filter((w) => !existingSet.has(w.wine));
+  const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
+  const toRegister = (typeof limit === 'number' && limit > 0) ? notRegistered.slice(0, limit) : notRegistered;
   let succeeded = 0;
   const errors: WineBulkRegisterError[] = [];
 
@@ -10866,7 +10874,14 @@ export async function bulkRegisterWines(
     }
   }
 
-  return { totalSeed: seeds.length, alreadyRegistered: existingSet.size, attempted: toRegister.length, succeeded, errors };
+  return {
+    totalSeed: seeds.length,
+    alreadyRegistered: existingSet.size,
+    attempted: toRegister.length,
+    succeeded,
+    errors,
+    remaining: notRegistered.length - toRegister.length,
+  };
 }
 
 function rowToWineDetail(row: Record<string, unknown> | null): WineDetailFields | null {
@@ -10927,7 +10942,10 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
 app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
-  const result = await bulkRegisterWines(c.env.DB, c.env.AI, WINE_VECTOR_SEED);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0) ? Math.floor(rawLimit) : undefined;
+  const result = await bulkRegisterWines(c.env.DB, c.env.AI, WINE_VECTOR_SEED, limit);
   return jsonUtf8(result);
 });
 
