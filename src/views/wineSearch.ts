@@ -210,6 +210,8 @@ export function getWineSearchPage(username: string): string {
       <span class="temp-admin-label">⚠️ デバッグモード(?debug=1): 一括登録・診断情報表示</span>
       <button type="button" class="temp-admin-btn" id="bulkRegisterBtn">ワイン埋め込み一括登録を実行</button>
       <span class="temp-admin-result" id="bulkRegisterResult"></span>
+      <button type="button" class="temp-admin-btn" id="bulkRegisterMetadataBtn">ワイン個別詳細を一括登録</button>
+      <span class="temp-admin-result" id="bulkRegisterMetadataResult"></span>
     </div>
 
     <div class="search-row">
@@ -493,6 +495,34 @@ export function getWineSearchPage(username: string): string {
         });
     }
     bulkRegisterBtn.addEventListener('click', runBulkRegister);
+
+    var bulkRegisterMetadataBtn = document.getElementById('bulkRegisterMetadataBtn');
+    var bulkRegisterMetadataResult = document.getElementById('bulkRegisterMetadataResult');
+
+    function runBulkRegisterMetadata() {
+      bulkRegisterMetadataBtn.disabled = true;
+      bulkRegisterMetadataResult.textContent = '実行中...';
+      fetch('/api/wine/bulk-register-metadata', {
+        method: 'POST',
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          bulkRegisterMetadataBtn.disabled = false;
+          if (!res.ok || res.data.error) {
+            bulkRegisterMetadataResult.textContent = '失敗: ' + (res.data.error || 'エラーが発生しました');
+            return;
+          }
+          var d = res.data;
+          var msg = '完了: 成功' + d.succeeded + '件 / スキップ' + d.skipped + '件(未登録の埋め込みあり) / エラー' + (d.errors ? d.errors.length : 0) + '件';
+          bulkRegisterMetadataResult.textContent = msg;
+        })
+        .catch(function(err) {
+          bulkRegisterMetadataBtn.disabled = false;
+          bulkRegisterMetadataResult.textContent = '失敗: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+    bulkRegisterMetadataBtn.addEventListener('click', runBulkRegisterMetadata);
   </script>
 </body>
 </html>`;

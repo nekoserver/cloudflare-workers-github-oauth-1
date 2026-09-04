@@ -7,6 +7,7 @@ import {
   countWineHits,
   bulkRegisterWines,
   getWineDetailById,
+  bulkRegisterWineMetadata,
   floatsToBlob,
   blobToFloats,
   PLAMO_EMBEDDING_MODEL,
@@ -14,6 +15,7 @@ import {
   type WineSeedRow,
   type WineSearchCandidate,
 } from './index';
+import type { WineMetadataSeedRow } from './data/wineMetadata';
 
 // 対象: /wine-search ページ、POST /api/wine/search、POST /api/wine/bulk-register。
 // seeds/wine_initial_vectors_v83.csv のワイン特性データを wine_embeddings/wine_details
@@ -107,6 +109,29 @@ function setupDb(): DatabaseSync {
       mushroom_truffle REAL NOT NULL DEFAULT 0,
       vegetable REAL NOT NULL DEFAULT 0,
       dessert REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE wine_metadata (
+      id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+      wine_name TEXT NOT NULL,
+      katakana_name TEXT,
+      country TEXT,
+      production_area TEXT,
+      wine_type TEXT,
+      grape_or_style TEXT,
+      characteristics TEXT,
+      pairing_foods TEXT,
+      pairing_food_count INTEGER,
+      pairing_reasons TEXT,
+      food_reason_pairs TEXT,
+      source_urls TEXT,
+      source_url_count INTEGER,
+      source_linked_count INTEGER,
+      source_rate REAL,
+      metadata_research_url TEXT,
+      metadata_status TEXT,
+      metadata_note TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -368,6 +393,61 @@ describe('getWineDetailById', () => {
   });
 });
 
+function metadataRow(overrides: Partial<WineMetadataSeedRow> = {}): WineMetadataSeedRow {
+  return {
+    wine_name: 'ワインA',
+    katakana_name: null,
+    country: null,
+    production_area: null,
+    wine_type: null,
+    grape_or_style: null,
+    characteristics: null,
+    pairing_foods: null,
+    pairing_food_count: null,
+    pairing_reasons: null,
+    food_reason_pairs: null,
+    source_urls: null,
+    source_url_count: null,
+    source_linked_count: null,
+    source_rate: null,
+    metadata_research_url: null,
+    metadata_status: null,
+    metadata_note: null,
+    ...overrides,
+  };
+}
+
+// 対象: wine_616_individual_metadata_researched_v2.csv由来のシード(WINE_METADATA_SEED)を
+// wine_metadataへ一括登録する機能(POST /api/wine/bulk-register-metadata)。
+// wine_nameでwine_embeddingsと突き合わせてidを解決するため、対応する埋め込みが
+// 未登録の銘柄をエラーではなくskippedとして扱えるかがポイント(過去のゴミ行
+// 混入バグ(#1631)と同じ問題を作らないため)。
+describe('bulkRegisterWineMetadata', () => {
+  it('wine_embeddingsに存在する銘柄はwine_metadataへ登録される', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await bulkRegisterWines(db, ai, [seedRow({ wine: 'ワインA' })]);
+    const result = await bulkRegisterWineMetadata(db, [metadataRow({ wine_name: 'ワインA', country: '日本' })]);
+    expect(result.succeeded).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toEqual([]);
+    const row = rawDb.prepare(`SELECT country FROM wine_metadata WHERE wine_name = ?`).get('ワインA') as { country: string };
+    expect(row.country).toBe('日本');
+  });
+
+  it('故障シナリオ: wine_embeddingsに未登録の銘柄はエラーにせずskippedとして扱う', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const result = await bulkRegisterWineMetadata(db, [metadataRow({ wine_name: '未登録ワイン' })]);
+    expect(result.succeeded).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.errors).toEqual([]);
+    const row = rawDb.prepare(`SELECT COUNT(*) AS c FROM wine_metadata`).get() as { c: number };
+    expect(row.c).toBe(0);
+  });
+});
+
 describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () => {
   function buildApp(db: D1Database | undefined, ai: Ai | undefined) {
     const app = new Hono<{ Bindings: { DB?: D1Database; AI?: Ai } }>();
@@ -522,6 +602,8 @@ describe('getWineSearchPage のデバッグモード用UI', () => {
     expect(html).toContain('id="bulkRegisterBtn"');
     expect(html).toContain('id="bulkRegisterResult"');
     expect(html).toContain("fetch('/api/wine/bulk-register'");
+    expect(html).toContain('id="bulkRegisterMetadataBtn"');
+    expect(html).toContain("fetch('/api/wine/bulk-register-metadata'");
     expect(html).toContain("get('debug') === '1'");
     expect(html).toContain('debugQueryDim');
     expect(html).not.toContain("\\'");
