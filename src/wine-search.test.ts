@@ -258,6 +258,22 @@ describe('bulkRegisterWines', () => {
     const okRow = rawDb.prepare(`SELECT 1 as found FROM wine_embeddings WHERE wine_name = ?`).get('成功する銘柄');
     expect(okRow).toBeTruthy();
   });
+
+  it('limitを指定すると先頭limit件だけ処理しremainingに残り件数を返す(進捗表示用)', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    const seeds = [seedRow({ wine: 'ワインA' }), seedRow({ wine: 'ワインB' }), seedRow({ wine: 'ワインC' })];
+    const result1 = await bulkRegisterWines(db, ai, seeds, 2);
+    expect(result1.attempted).toBe(2);
+    expect(result1.succeeded).toBe(2);
+    expect(result1.remaining).toBe(1);
+
+    const result2 = await bulkRegisterWines(db, ai, seeds, 2);
+    expect(result2.attempted).toBe(1);
+    expect(result2.succeeded).toBe(1);
+    expect(result2.remaining).toBe(0);
+  });
 });
 
 describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () => {
