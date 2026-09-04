@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS wine_metadata (
+  id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  wine_name TEXT NOT NULL,
+  katakana_name TEXT,
+  country TEXT,
+  production_area TEXT,
+  wine_type TEXT,
+  grape_or_style TEXT,
+  characteristics TEXT,
+  pairing_foods TEXT,
+  pairing_food_count INTEGER,
+  pairing_reasons TEXT,
+  food_reason_pairs TEXT,
+  source_urls TEXT,
+  source_url_count INTEGER,
+  source_linked_count INTEGER,
+  source_rate REAL,
+  metadata_research_url TEXT,
+  metadata_status TEXT,
+  metadata_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
