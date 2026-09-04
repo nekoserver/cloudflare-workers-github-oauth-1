@@ -277,7 +277,8 @@ export function getWineSearchPage(username: string): string {
             return;
           }
           var results = res.data.results || [];
-          setStatus(results.length + ' 件 / 登録済み ' + (res.data.total || 0) + ' 銘柄', false);
+          var debugInfo = ' [デバッグ] query次元:' + res.data.debugQueryDim + ' / 登録済み次元:' + JSON.stringify(res.data.debugCandidateDims);
+          setStatus(results.length + ' 件 / 登録済み ' + (res.data.total || 0) + ' 銘柄' + debugInfo, false);
           if (results.length === 0) {
             tableWrap.style.display = 'none';
             emptyMsg.style.display = 'block';
