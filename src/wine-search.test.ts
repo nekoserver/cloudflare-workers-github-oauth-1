@@ -399,3 +399,18 @@ describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () 
     expect(data.results[0].similarity).toBeGreaterThan(data.results[1].similarity);
   });
 });
+
+// 対象: /wine-searchページに置いた「ワイン埋め込み一括登録」ボタン(一時的な運用UI、
+// curlでPOST /api/wine/bulk-registerを叩く手間を省くためのもの)。
+// 故障シナリオ: テンプレートリテラルのエスケープ崩れ(ルール29)でページ全体が白紙になる。
+describe('getWineSearchPage の一時ボタン', () => {
+  it('ワイン埋め込み一括登録ボタンとエスケープ崩れの無いスクリプトを含む', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="bulkRegisterBtn"');
+    expect(html).toContain('id="bulkRegisterResult"');
+    expect(html).toContain("fetch('/api/wine/bulk-register'");
+    expect(html).not.toContain("\\'");
+    expect(html).not.toContain('&#39;&#39;');
+  });
+});
