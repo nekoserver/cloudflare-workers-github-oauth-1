@@ -271,6 +271,8 @@ import {
   computeChallengeExpiresAt,
   validateChallengeRow,
   verifyChallengeSignature,
+  resolvePublicKeyExpiryDays,
+  computePublicKeyExpiresAt,
 } from './utils/publicKeyAuth';
 import {
   LOGIN_METHOD_GITHUB_OAUTH,
@@ -1833,6 +1835,7 @@ CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_chall
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_login_history_user_id ON login_history(user_id);`,
+  '0125': `ALTER TABLE user_public_keys ADD COLUMN expires_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -3981,14 +3984,14 @@ app.post('/auth/public-key/challenge', async (c) => {
       return c.json({ error: 'userId, keyIdは必須です' }, 400);
     }
 
+    const now = new Date();
     const keyRow = await db.prepare(
-      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
-    ).bind(keyId, userId).first<{ id: string }>();
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, userId, now.toISOString()).first<{ id: string }>();
     if (!keyRow) {
-      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
-    const now = new Date();
     const challengeId = crypto.randomUUID();
     const challenge = generateChallengeValue();
     const expiresAt = computeChallengeExpiresAt(now);
@@ -4043,10 +4046,10 @@ app.post('/auth/public-key/verify', async (c) => {
     }
 
     const keyRow = await db.prepare(
-      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
-    ).bind(keyId, userId).first<{ public_key_jwk: string }>();
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, userId, now.toISOString()).first<{ public_key_jwk: string }>();
     if (!keyRow) {
-      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
     const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
@@ -16618,9 +16621,9 @@ app.get('/api/public-keys', authMiddleware, async (c) => {
   }
   try {
     const rows = await db.prepare(
-      'SELECT id, label, created_at, last_used_at, revoked_at FROM user_public_keys WHERE user_id = ? ORDER BY created_at DESC'
+      'SELECT id, label, created_at, last_used_at, revoked_at, expires_at FROM user_public_keys WHERE user_id = ? ORDER BY created_at DESC'
     ).bind(user.sub).all<{
-      id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null;
+      id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null; expires_at: string | null;
     }>();
     return c.json({ keys: rows.results ?? [] });
   } catch (error) {
@@ -16643,7 +16646,7 @@ app.post('/api/public-keys', authMiddleware, async (c) => {
     return c.json({ error: 'D1 is not configured' }, 500);
   }
   try {
-    const body = await c.req.json<{ label?: string; publicKeyJwk?: unknown }>();
+    const body = await c.req.json<{ label?: string; publicKeyJwk?: unknown; expiresInDays?: number | string | null }>();
     const label = (body.label ?? '').trim();
     if (!label) {
       return c.json({ error: 'ラベルは必須です' }, 400);
@@ -16655,14 +16658,16 @@ app.post('/api/public-keys', authMiddleware, async (c) => {
     const id = crypto.randomUUID();
     const now = new Date();
     const publicKeyJwkJson = JSON.stringify(body.publicKeyJwk);
+    const expiryDays = resolvePublicKeyExpiryDays(body.expiresInDays ?? null);
+    const expiresAt = computePublicKeyExpiresAt(expiryDays, now);
 
     await db.prepare(
-      'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString()).run();
+      'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString(), expiresAt).run();
 
-    logger.info('Registered public key', { userId: user.sub, keyId: id, label });
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt });
     return c.json({
-      key: { id, label, createdAt: now.toISOString() },
+      key: { id, label, createdAt: now.toISOString(), expiresAt },
     }, 201);
   } catch (error) {
     logger.error('Failed to register public key', {
@@ -16721,14 +16726,14 @@ app.post('/api/public-keys/challenge', authMiddleware, async (c) => {
       return c.json({ error: 'keyIdは必須です' }, 400);
     }
 
+    const now = new Date();
     const keyRow = await db.prepare(
-      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
-    ).bind(keyId, user.sub).first<{ id: string }>();
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, user.sub, now.toISOString()).first<{ id: string }>();
     if (!keyRow) {
-      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
-    const now = new Date();
     const challengeId = crypto.randomUUID();
     const challenge = generateChallengeValue();
     const expiresAt = computeChallengeExpiresAt(now);
@@ -16780,10 +16785,10 @@ app.post('/api/public-keys/verify', authMiddleware, async (c) => {
     }
 
     const keyRow = await db.prepare(
-      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
-    ).bind(keyId, user.sub).first<{ public_key_jwk: string }>();
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, user.sub, now.toISOString()).first<{ public_key_jwk: string }>();
     if (!keyRow) {
-      return c.json({ error: '対象の公開鍵が見つからないか、失効しています' }, 404);
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
     const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);

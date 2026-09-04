@@ -72,7 +72,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
     .create-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 24px; padding: 20px; background: var(--bg-secondary); border-radius: 8px; }
     .form-group { display: flex; flex-direction: column; gap: 4px; }
     .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
-    .form-group input[type="text"] {
+    .form-group input[type="text"], .form-group select {
       padding: 8px 10px; border: 1px solid var(--input-border); border-radius: 6px;
       font-size: 14px; color: var(--text-secondary); background: var(--input-bg);
     }
@@ -99,6 +99,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
     .status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
     .status-active { background: var(--success-color); color: white; }
     .status-revoked { background: var(--danger-color); color: white; }
+    .status-expired { background: #a0a0a0; color: white; }
     .status-no-key { background: #a0a0a0; color: white; }
     .empty-row td { text-align: center; color: var(--text-muted); padding: 24px; }
     .actions-cell { display: flex; gap: 6px; align-items: center; }
@@ -161,6 +162,17 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
           <label for="newKeyLabel">ラベル</label>
           <input type="text" id="newKeyLabel" placeholder="例: 自宅PC" maxlength="100">
         </div>
+        <div class="form-group">
+          <label for="newKeyExpiry">有効期限</label>
+          <select id="newKeyExpiry">
+            <option value="30">30日</option>
+            <option value="90">90日</option>
+            <option value="365">1年</option>
+            <option value="730">2年</option>
+            <option value="1825">5年</option>
+            <option value="null" selected>無期限</option>
+          </select>
+        </div>
         <button class="btn btn-primary" id="generateBtn" onclick="generateAndRegisterKey()">鍵ペアを生成して登録</button>
       </div>
 
@@ -170,12 +182,13 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
             <th>ラベル</th>
             <th>状態</th>
             <th>登録日</th>
+            <th>有効期限</th>
             <th>最終照合</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody id="keyTableBody">
-          <tr class="empty-row"><td colspan="5">読み込み中...</td></tr>
+          <tr class="empty-row"><td colspan="6">読み込み中...</td></tr>
         </tbody>
       </table>
 
@@ -283,12 +296,15 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
 
     function generateAndRegisterKey() {
       var labelEl = document.getElementById('newKeyLabel');
+      var expiryEl = document.getElementById('newKeyExpiry');
       var btn = document.getElementById('generateBtn');
       var label = labelEl.value.trim();
       if (!label) {
         alert('ラベルを入力してください');
         return;
       }
+      var expiryVal = expiryEl.value;
+      var expiresInDays = expiryVal === 'null' ? null : parseInt(expiryVal, 10);
       btn.disabled = true;
 
       crypto.subtle.generateKey(
@@ -301,7 +317,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label: label, publicKeyJwk: publicKeyJwk }),
+            body: JSON.stringify({ label: label, publicKeyJwk: publicKeyJwk, expiresInDays: expiresInDays }),
           })
             .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
             .then(function(res) {
@@ -322,28 +338,34 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       });
     }
 
+    function isKeyExpired(item) {
+      return !!item.expires_at && new Date(item.expires_at).getTime() <= Date.now();
+    }
+
     function formatStatus(item) {
       if (item.revoked_at) return '<span class="status-badge status-revoked">失効済み</span>';
+      if (isKeyExpired(item)) return '<span class="status-badge status-expired">期限切れ</span>';
       return '<span class="status-badge status-active">有効</span>';
     }
 
     function renderKeyTable(keys) {
       var body = document.getElementById('keyTableBody');
       if (!keys || keys.length === 0) {
-        body.innerHTML = '<tr class="empty-row"><td colspan="5">まだ登録された公開鍵がありません</td></tr>';
+        body.innerHTML = '<tr class="empty-row"><td colspan="6">まだ登録された公開鍵がありません</td></tr>';
         return;
       }
       body.innerHTML = keys.map(function(item) {
-        var revoked = !!item.revoked_at;
+        var disabled = !!item.revoked_at || isKeyExpired(item);
         return '<tr>' +
           '<td>' + escapeHtmlClient(item.label) + '</td>' +
           '<td>' + formatStatus(item) + '</td>' +
           '<td>' + escapeHtmlClient(item.created_at) + '</td>' +
+          '<td>' + (item.expires_at ? escapeHtmlClient(item.expires_at) : '無期限') + '</td>' +
           '<td>' + (item.last_used_at ? escapeHtmlClient(item.last_used_at) : '未使用') + '</td>' +
           '<td>' +
             '<div class="actions-cell">' +
-              '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="runVerifyTest(&#39;' + item.id + '&#39;, this)">🔏 照合テスト</button>' +
-              '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
+              '<button class="icon-btn" ' + (disabled ? 'disabled' : '') + ' onclick="runVerifyTest(&#39;' + item.id + '&#39;, this)">🔏 照合テスト</button>' +
+              '<button class="icon-btn" ' + (item.revoked_at ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
             '</div>' +
             '<div class="verify-result" id="verifyResult-' + item.id + '"></div>' +
           '</td>' +
@@ -361,7 +383,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
         })
         .catch(function() {
           document.getElementById('keyTableBody').innerHTML =
-            '<tr class="empty-row"><td colspan="5">読み込みに失敗しました</td></tr>';
+            '<tr class="empty-row"><td colspan="6">読み込みに失敗しました</td></tr>';
         });
     }
 
