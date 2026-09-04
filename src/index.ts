@@ -10951,6 +10951,7 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     total: candidates.length,
     debugQueryDim: queryVector.length,
     debugCandidateDims: candidateDims,
+    debugBuildMarker: 'WINE_BUILD_MARKER_20260904D',
   });
 });
 
