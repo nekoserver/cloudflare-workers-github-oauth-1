@@ -34,16 +34,10 @@ function wrapD1(db: DatabaseSync) {
       const stmt = db.prepare(sql);
       const toSqliteArgs = (args: unknown[]) =>
         args.map((a) => (a instanceof ArrayBuffer ? new Uint8Array(a) : a));
-      const toD1Row = (row: unknown): unknown => {
-        if (row && typeof row === 'object') {
-          const out: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
-            out[k] = v instanceof Uint8Array ? v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength) : v;
-          }
-          return out;
-        }
-        return row;
-      };
+      // 実際のD1はBLOB列をUint8Arrayとして返すため、テストのモックでも
+      // ArrayBufferへ変換せずそのまま返す(変換してしまうと、本番でだけ
+      // 起きるUint8Array起因の不具合をテストがすり抜けてしまう)。
+      const toD1Row = (row: unknown): unknown => row;
       const makeChain = (sqliteArgs: unknown[]) => ({
         async first<T>(): Promise<T | null> {
           const row = stmt.get(...(sqliteArgs as never[]));
@@ -173,6 +167,46 @@ describe('getOrComputeWineEmbedding', () => {
     expect(vector).toEqual([]);
     const row = rawDb.prepare(`SELECT 1 as found FROM wine_embeddings WHERE wine_name = ?`).get('空ベクトルワイン');
     expect(row).toBeUndefined();
+  });
+});
+
+// 根本原因: D1のBLOB列は実行環境によってArrayBufferではなくUint8Array
+// (バイト列)として返ってくることがある。`new Float32Array(uint8)`は
+// 「バイト列を要素配列としてコピーする」オーバーロードを呼んでしまい、
+// 本来の要素数(例: 2048)ではなくバイト数(例: 8192 = 2048 * 4)の配列に
+// なってしまう。これによりワイン検索でクエリベクトル(2048次元、AI呼び出し
+// 直後のnumber[]なのでこの問題を踏まない)と登録済みベクトル(D1から読み
+// 出したUint8Array経由で8192次元に化ける)の次元が食い違い、
+// cosineSimilarityが常に0を返す不具合が実運用で発生した。
+describe('blobToFloats (D1のBLOB列がUint8Arrayで返るケースの回帰テスト)', () => {
+  it('ArrayBufferを渡した場合は従来通り正しい要素数で復元できる', () => {
+    const vec = [0.1, 0.2, 0.3, 0.4];
+    const blob = floatsToBlob(vec);
+    expect(blob instanceof ArrayBuffer).toBe(true);
+    const restored = blobToFloats(blob);
+    expect(restored).toHaveLength(vec.length);
+    restored.forEach((v, i) => expect(v).toBeCloseTo(vec[i], 5));
+  });
+
+  it('Uint8Array(D1が実際に返す形)を渡してもバイト数ではなく正しい要素数で復元できる', () => {
+    const vec = new Array(2048).fill(0).map((_, i) => Math.sin(i));
+    const arrayBuffer = floatsToBlob(vec);
+    const uint8 = new Uint8Array(arrayBuffer);
+    expect(uint8.length).toBe(vec.length * 4);
+    const restored = blobToFloats(uint8);
+    expect(restored).toHaveLength(vec.length);
+    expect(restored).not.toHaveLength(uint8.length);
+    restored.forEach((v, i) => expect(v).toBeCloseTo(vec[i], 4));
+  });
+
+  it('Uint8Arrayがバッファの一部分だけを指すview(byteOffsetあり)でも正しく復元できる', () => {
+    const vec = [1, 2, 3];
+    const blob = floatsToBlob(vec);
+    const padded = new Uint8Array(4 + blob.byteLength);
+    padded.set(new Uint8Array(blob), 4);
+    const view = new Uint8Array(padded.buffer, 4, blob.byteLength);
+    const restored = blobToFloats(view);
+    expect(restored).toEqual(vec);
   });
 });
 

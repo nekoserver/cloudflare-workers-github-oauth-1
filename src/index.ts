@@ -7444,8 +7444,23 @@ export function floatsToBlob(vec: number[]): ArrayBuffer {
   return new Float32Array(vec).buffer;
 }
 
-export function blobToFloats(blob: ArrayBuffer): number[] {
-  return Array.from(new Float32Array(blob));
+/**
+ * 根本原因(バグ修正対象): D1のBLOB列は実行環境によってArrayBufferでは
+ * なくUint8Array(バイト列)として返ってくることがある。Uint8Arrayを
+ * そのまま`new Float32Array(uint8)`に渡すと「バイト列を要素配列として
+ * 解釈しコピーする」オーバーロードが呼ばれてしまい、本来の要素数(例: 2048)
+ * ではなくバイト数(例: 8192 = 2048 * 4バイト)の配列になってしまう
+ * (値も本来のfloatではなく0〜255のバイト値になる)。これによりワイン
+ * 検索でクエリベクトル(2048次元)と登録済みベクトル(見かけ上8192次元)の
+ * 次元が食い違い、cosineSimilarityが常に0を返す不具合が起きていた。
+ * Uint8Array/Bufferで渡された場合はバイト列をそのまま(要素をコピーせず)
+ * ArrayBufferとして再解釈してから変換することで、常に正しい要素数に戻す。
+ */
+export function blobToFloats(blob: ArrayBuffer | Uint8Array): number[] {
+  const buffer = ArrayBuffer.isView(blob)
+    ? blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength)
+    : blob;
+  return Array.from(new Float32Array(buffer as ArrayBuffer));
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
