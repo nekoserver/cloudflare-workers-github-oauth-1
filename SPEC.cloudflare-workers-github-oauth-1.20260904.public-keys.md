@@ -103,6 +103,64 @@ GitHub OAuthを経由せず「サーバーが発行したチャレンジ文字�
 署名を検証する。検証の成否に関わらずチャレンジは即座に`used_at`を立てて
 消費済みにする(検証失敗時の再試行によるチャレンジ使い回しを防ぐため)。
 
+## 5.1 異常検知・記録・通知(セキュリティ)
+
+**対象**: `src/utils/publicKeySecurity.ts`、`flagPublicKeySecurityEvent()`
+(`src/index.ts`)、D1 `public_key_security_events`(移行`0128`)。
+
+秘密鍵が何らかの方法で別環境に持ち出され、悪用が試みられた場合を想定し、
+チャレンジ発行・検証の4エンドポイント(`/auth/public-key/challenge`・
+`verify`、`/api/public-keys/challenge`・`verify`)すべてで、以下2種類の
+異常を検知するたびにD1へ記録しSlackへ通知する。
+
+- `key_not_found`: 対象鍵が見つからない(`userId`/`keyId`の組み合わせ不一致・
+  失効・期限切れのいずれか)
+- `signature_mismatch`: 対象鍵は存在するが、署名が登録済み公開鍵と
+  一致しない(=リクエスト元が正しい秘密鍵を持っていない)
+
+DB記録(`public_key_security_events`: `user_id`, `key_id`, `event_type`,
+`detail`, `ip`, `created_at`)に失敗してもSlack通知は継続し、Slack通知に
+失敗してもログイン処理自体のエラーレスポンスは継続する
+([`cd882a0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/cd882a0))。
+
+### 5.1.1 通知文言の例
+
+`buildPublicKeySecurityAlertText()`が組み立てるSlack通知本文は以下の形式
+(`ユーザー`・`鍵ID`・`種別`・`詳細`・`IP`・`時刻`の6項目を必ず含む)。
+
+```text
+[セキュリティ警告] 公開鍵ログインの異常
+ユーザー: octocat
+鍵ID: a1b2c3d4-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+種別: key_not_found
+詳細: チャレンジ検証時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか)
+IP: 203.0.113.10
+時刻: 2026-09-04T19:52:08.469Z
+```
+
+```text
+[セキュリティ警告] 公開鍵ログインの異常
+ユーザー: octocat
+鍵ID: a1b2c3d4-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+種別: signature_mismatch
+詳細: 登録済み公開鍵に対し秘密鍵が一致しない署名を受信(パスキーログイン)
+IP: 203.0.113.10
+時刻: 2026-09-04T19:52:08.470Z
+```
+
+`detail`の文言はエンドポイントごとに固定文が渡されており、4箇所での
+実際の文言は以下の通り(`src/publicKeySecurityEvents-20260904.test.ts`で
+イベント種別の呼び分けをソースレベルに固定している)。
+
+| エンドポイント | `event_type` | `detail` |
+|---|---|---|
+| `/auth/public-key/challenge` | `key_not_found` | チャレンジ発行時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか) |
+| `/auth/public-key/verify` | `key_not_found` | チャレンジ検証時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか) |
+| `/auth/public-key/verify` | `signature_mismatch` | 登録済み公開鍵に対し秘密鍵が一致しない署名を受信(パスキーログイン) |
+| `/api/public-keys/challenge` | `key_not_found` | チャレンジ発行時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか) |
+| `/api/public-keys/verify` | `key_not_found` | チャレンジ検証時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか) |
+| `/api/public-keys/verify` | `signature_mismatch` | 登録済み公開鍵に対し秘密鍵が一致しない署名を受信(照合テスト) |
+
 ## 6. パスキー的ログインの確定処理
 
 **対象**: `src/index.ts` の `finalizePasskeyLogin`。
@@ -145,6 +203,7 @@ GitHub OAuthを経由しないため、以前のGitHubログインで作成さ�
 - [`05a8aa4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/05a8aa4) ログイン方式(GitHub OAuth/パスキー)を記録し画面に表示
 - [`7eb8803`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/7eb8803) IndexedDB保存形式変更で壊れた既存の登録済み鍵を修復する
 - [`60fd090`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/60fd090) 公開鍵登録に有効期限(30日/90日/1年/2年/5年/無期限)を追加する
+- [`cd882a0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/cd882a0) 公開鍵ログインの異常(鍵未検出・署名不一致)を検知・記録・通知する
 
 ## 9. 注意事項
 
