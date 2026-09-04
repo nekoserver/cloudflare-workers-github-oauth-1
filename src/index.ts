@@ -203,6 +203,7 @@ import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
 import { getWineSearchPage } from './views/wineSearch';
 import { WINE_VECTOR_SEED, type WineSeedRow } from './data/wineVectors';
+import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadata';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
@@ -11066,6 +11067,73 @@ app.get('/api/wine/:id', authMiddleware, async (c) => {
   const detail = await getWineDetailById(c.env.DB, id);
   if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
   return jsonUtf8(detail);
+});
+
+export const WINE_METADATA_COLUMNS: (keyof WineMetadataSeedRow)[] = [
+  'katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style',
+  'characteristics', 'pairing_foods', 'pairing_food_count', 'pairing_reasons',
+  'food_reason_pairs', 'source_urls', 'source_url_count', 'source_linked_count',
+  'source_rate', 'metadata_research_url', 'metadata_status', 'metadata_note',
+];
+
+export interface WineMetadataBulkRegisterError {
+  wine: string;
+  error: string;
+}
+
+export interface WineMetadataBulkRegisterResult {
+  totalSeed: number;
+  succeeded: number;
+  skipped: number;
+  errors: WineMetadataBulkRegisterError[];
+}
+
+/**
+ * wine_616_individual_metadata_researched_v2.csv由来のシード(WINE_METADATA_SEED)から
+ * wine_metadataへ一括登録する(POST /api/wine/bulk-register-metadata)。
+ * AI呼び出しは不要(数値・文字列データの投入のみ)。wine_nameでwine_embeddingsと
+ * 突き合わせてidを解決するため、対応する埋め込みが未登録の銘柄はエラーではなく
+ * skippedとして扱う(過去に発覚したVALUES句サブクエリでのゴミ行混入バグ
+ * (#1631)と同じ問題を避けるため、必ずSELECTで実在するidを取得してから使う)。
+ * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する
+ * (CLAUDE.mdルール8: 記録・通知の義務)。
+ */
+export async function bulkRegisterWineMetadata(
+  db: D1Database,
+  seeds: WineMetadataSeedRow[],
+): Promise<WineMetadataBulkRegisterResult> {
+  let succeeded = 0;
+  let skipped = 0;
+  const errors: WineMetadataBulkRegisterError[] = [];
+
+  for (const row of seeds) {
+    try {
+      const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(row.wine_name).first<{ id: number }>();
+      if (!idRow) {
+        skipped++;
+        continue;
+      }
+      const now = new Date().toISOString();
+      const cols = ['id', 'wine_name', ...WINE_METADATA_COLUMNS, 'created_at', 'updated_at'];
+      const placeholders = cols.map(() => '?').join(', ');
+      const updateSet = ['wine_name', ...WINE_METADATA_COLUMNS].map((c) => `${c} = excluded.${c}`).join(', ') + ', updated_at = excluded.updated_at';
+      await db.prepare(
+        `INSERT INTO wine_metadata (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT(id) DO UPDATE SET ${updateSet}`
+      ).bind(idRow.id, row.wine_name, ...WINE_METADATA_COLUMNS.map((c) => row[c]), now, now).run();
+      succeeded++;
+    } catch (e) {
+      errors.push({ wine: row.wine_name, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return { totalSeed: seeds.length, succeeded, skipped, errors };
+}
+
+app.post('/api/wine/bulk-register-metadata', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const result = await bulkRegisterWineMetadata(c.env.DB, WINE_METADATA_SEED);
+  return jsonUtf8(result);
 });
 
 app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
