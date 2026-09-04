@@ -6,6 +6,9 @@ import {
   generateChallengeValue,
   verifyChallengeSignature,
   base64UrlEncode,
+  resolvePublicKeyExpiryDays,
+  computePublicKeyExpiresAt,
+  isPublicKeyExpired,
   type PublicKeyChallengeRow,
 } from './utils/publicKeyAuth';
 
@@ -149,5 +152,75 @@ describe('verifyChallengeSignature', () => {
     const jwk = await crypto.subtle.exportKey('jwk', privateKey);
     const ok = await verifyChallengeSignature(JSON.stringify(jwk), 'anything', 'AAAA');
     expect(ok).toBe(false);
+  });
+});
+
+describe('resolvePublicKeyExpiryDays', () => {
+  it('30/90/365/730/1825はそのまま許可する', () => {
+    expect(resolvePublicKeyExpiryDays(30)).toBe(30);
+    expect(resolvePublicKeyExpiryDays(90)).toBe(90);
+    expect(resolvePublicKeyExpiryDays(365)).toBe(365);
+    expect(resolvePublicKeyExpiryDays(730)).toBe(730);
+    expect(resolvePublicKeyExpiryDays(1825)).toBe(1825);
+  });
+
+  it('文字列で渡されても数値として解釈する', () => {
+    expect(resolvePublicKeyExpiryDays('365')).toBe(365);
+  });
+
+  it('null/undefined/空文字/"none"は無期限(null)を返す', () => {
+    expect(resolvePublicKeyExpiryDays(null)).toBeNull();
+    expect(resolvePublicKeyExpiryDays(undefined)).toBeNull();
+    expect(resolvePublicKeyExpiryDays('')).toBeNull();
+    expect(resolvePublicKeyExpiryDays('none')).toBeNull();
+  });
+
+  it('許可されていない値(不正な日数)は無期限にフォールバックする(短命化事故を防ぐ)', () => {
+    expect(resolvePublicKeyExpiryDays(7)).toBeNull();
+    expect(resolvePublicKeyExpiryDays('abc')).toBeNull();
+    expect(resolvePublicKeyExpiryDays(-1)).toBeNull();
+  });
+});
+
+describe('computePublicKeyExpiresAt', () => {
+  const now = new Date('2026-09-03T00:00:00Z');
+
+  it('nullを渡すとnull(無期限)を返す', () => {
+    expect(computePublicKeyExpiresAt(null, now)).toBeNull();
+  });
+
+  it('30日後のISO文字列を返す', () => {
+    const result = computePublicKeyExpiresAt(30, now);
+    expect(new Date(result!).getTime() - now.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
+  });
+
+  it('1年(365日)後のISO文字列を返す', () => {
+    const result = computePublicKeyExpiresAt(365, now);
+    expect(new Date(result!).getTime() - now.getTime()).toBe(365 * 24 * 60 * 60 * 1000);
+  });
+
+  it('5年(1825日)後のISO文字列を返す', () => {
+    const result = computePublicKeyExpiresAt(1825, now);
+    expect(new Date(result!).getTime() - now.getTime()).toBe(1825 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe('isPublicKeyExpired', () => {
+  const now = new Date('2026-09-03T00:00:00Z');
+
+  it('expires_atがnull(無期限)なら常にfalse', () => {
+    expect(isPublicKeyExpired(null, now)).toBe(false);
+  });
+
+  it('現在時刻より未来ならfalse', () => {
+    expect(isPublicKeyExpired(new Date(now.getTime() + 1000).toISOString(), now)).toBe(false);
+  });
+
+  it('現在時刻を過ぎていればtrue', () => {
+    expect(isPublicKeyExpired(new Date(now.getTime() - 1000).toISOString(), now)).toBe(true);
+  });
+
+  it('現在時刻ちょうどはtrue(境界値)', () => {
+    expect(isPublicKeyExpired(now.toISOString(), now)).toBe(true);
   });
 });

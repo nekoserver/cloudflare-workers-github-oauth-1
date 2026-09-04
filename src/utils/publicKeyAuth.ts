@@ -59,6 +59,37 @@ export function isValidEcPublicKeyJwk(jwk: unknown): jwk is JsonWebKey {
   return true;
 }
 
+export type PublicKeyExpiryDays = 30 | 90 | 365 | 730 | 1825 | null;
+
+const ALLOWED_PUBLIC_KEY_EXPIRY_DAYS: ReadonlySet<number> = new Set([30, 90, 365, 730, 1825]);
+
+/**
+ * 公開鍵登録フォームから渡された有効期限入力を検証する。
+ * 30日・90日・1年(365日)・2年(730日)・5年(1825日)・null(無期限)以外は
+ * すべて無期限として扱わず、デフォルトの無期限にフォールバックする
+ * (不正な値をそのまま短い期限として登録してしまい、意図せず鍵が
+ * 使えなくなる事故を防ぐ。api_keysの30日デフォルトとは逆に、鍵の
+ * 用途上「作ったら失効させるまで使い続ける」が既定の挙動だったため)。
+ */
+export function resolvePublicKeyExpiryDays(input: unknown): PublicKeyExpiryDays {
+  if (input === null || input === undefined || input === 'null' || input === 'none' || input === '') return null;
+  const n = typeof input === 'number' ? input : Number(input);
+  if (Number.isFinite(n) && ALLOWED_PUBLIC_KEY_EXPIRY_DAYS.has(n)) return n as PublicKeyExpiryDays;
+  return null;
+}
+
+/** 有効期限日数(または無期限)から、実際の有効期限ISO文字列(またはnull)を計算する。 */
+export function computePublicKeyExpiresAt(days: PublicKeyExpiryDays, now: Date): string | null {
+  if (days === null) return null;
+  return new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** 公開鍵の有効期限(expires_at)が現在時刻を過ぎているかどうかを判定する。 */
+export function isPublicKeyExpired(expiresAt: string | null, now: Date): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt).getTime() <= now.getTime();
+}
+
 export type PublicKeyChallengeRow = {
   user_id: string;
   key_id: string;
