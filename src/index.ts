@@ -10915,7 +10915,13 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     details: rowToWineDetail(r),
   }));
   const results = rankWines(queryVector, candidates, 30);
-  return jsonUtf8({ results, total: candidates.length });
+  const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
+  return jsonUtf8({
+    results,
+    total: candidates.length,
+    debugQueryDim: queryVector.length,
+    debugCandidateDims: candidateDims,
+  });
 });
 
 app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
