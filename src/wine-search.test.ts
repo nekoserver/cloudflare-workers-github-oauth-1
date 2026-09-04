@@ -4,7 +4,9 @@ import { Hono } from 'hono';
 import {
   getOrComputeWineEmbedding,
   rankWines,
+  countWineHits,
   bulkRegisterWines,
+  getWineDetailById,
   floatsToBlob,
   blobToFloats,
   PLAMO_EMBEDDING_MODEL,
@@ -251,6 +253,27 @@ describe('rankWines', () => {
   });
 });
 
+// 対象: 「ヒット件数」= 表示件数(limit)とは独立に、類似度が閾値以上の
+// 候補が全体で何件あるかを数える機能。表示件数を絞っても実際に閾値を
+// 超えている件数が分かるようにする(「30件表示」と「全体で何件ヒットして
+// いるか」の混同を防ぐ)。
+describe('countWineHits', () => {
+  it('閾値以上の類似度を持つ候補の件数だけをカウントする(表示件数のlimitとは無関係)', () => {
+    const candidates: WineSearchCandidate[] = [
+      { id: 1, wineName: 'A', vector: [1, 0], details: null },
+      { id: 2, wineName: 'B', vector: [0.99, 0.01], details: null },
+      { id: 3, wineName: 'C', vector: [0, 1], details: null },
+    ];
+    expect(countWineHits([1, 0], candidates, 0.5)).toBe(2);
+    expect(countWineHits([1, 0], candidates, 0.99999)).toBe(1);
+  });
+
+  it('故障シナリオ: 候補が0件、またはクエリベクトルが空の場合は0を返す', () => {
+    expect(countWineHits([1, 0], [], 0.5)).toBe(0);
+    expect(countWineHits([], [{ id: 1, wineName: 'A', vector: [1, 0], details: null }], 0.5)).toBe(0);
+  });
+});
+
 describe('bulkRegisterWines', () => {
   it('未登録の銘柄だけを登録し、wine_detailsも保存する', async () => {
     const rawDb = setupDb();
@@ -317,6 +340,31 @@ describe('bulkRegisterWines', () => {
     expect(result2.attempted).toBe(1);
     expect(result2.succeeded).toBe(1);
     expect(result2.remaining).toBe(0);
+  });
+});
+
+// 対象: wine_embeddings.id(連番インデックス)を指定して1銘柄ぶんの
+// 全詳細(銘柄名・モデル・次元数・特性値)を取得する機能(GET /api/wine/:id)。
+// 一覧表示ではマスクされている特性値も、個別詳細では常にすべて返す。
+describe('getWineDetailById', () => {
+  it('存在するIDを指定すると銘柄名・モデル・特性値を含む詳細を返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await bulkRegisterWines(db, ai, [seedRow({ wine: 'ワインA', fat: 0.42 })]);
+    const idRow = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get('ワインA') as { id: number };
+    const detail = await getWineDetailById(db, idRow.id);
+    expect(detail).not.toBeNull();
+    expect(detail!.wineName).toBe('ワインA');
+    expect(detail!.model).toBe(PLAMO_EMBEDDING_MODEL);
+    expect(detail!.details!.fat).toBeCloseTo(0.42, 5);
+  });
+
+  it('故障シナリオ: 存在しないIDの場合はnullを返す(例外を投げない)', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const detail = await getWineDetailById(db, 999999);
+    expect(detail).toBeNull();
   });
 });
 
@@ -460,16 +508,63 @@ describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () 
   });
 });
 
-// 対象: /wine-searchページに置いた「ワイン埋め込み一括登録」ボタン(一時的な運用UI、
-// curlでPOST /api/wine/bulk-registerを叩く手間を省くためのもの)。
+// 対象: /wine-searchページに置いた「ワイン埋め込み一括登録」ボタンと診断情報表示
+// (デバッグ用の運用UI、curlでPOST /api/wine/bulk-registerを叩く手間を省く・
+// D1のBLOB型不整合のような不具合を再調査する際に使う)。通常時は誤操作や
+// 情報漏えいを避けるため`hidden`属性で隠し、URLに`?debug=1`を付けた場合
+// のみJSで表示する。
 // 故障シナリオ: テンプレートリテラルのエスケープ崩れ(ルール29)でページ全体が白紙になる。
-describe('getWineSearchPage の一時ボタン', () => {
-  it('ワイン埋め込み一括登録ボタンとエスケープ崩れの無いスクリプトを含む', async () => {
+describe('getWineSearchPage のデバッグモード用UI', () => {
+  it('一括登録ボタン・診断情報表示は通常時hiddenで、エスケープ崩れの無いスクリプトを含む', async () => {
     const { getWineSearchPage } = await import('./views/wineSearch');
     const html = getWineSearchPage('tester');
+    expect(html).toContain('id="tempAdminBox" hidden');
     expect(html).toContain('id="bulkRegisterBtn"');
     expect(html).toContain('id="bulkRegisterResult"');
     expect(html).toContain("fetch('/api/wine/bulk-register'");
+    expect(html).toContain("get('debug') === '1'");
+    expect(html).toContain('debugQueryDim');
+    expect(html).not.toContain("\\'");
+    expect(html).not.toContain('&#39;&#39;');
+  });
+});
+
+// 対象: 出力件数の選択(20/30/50/100)、特性列のマスク表示(デフォルト非表示・
+// トグルで表示切替)、ワイン名クリックによる個別詳細モーダル(GET /api/wine/:id)。
+// 故障シナリオ: テンプレートリテラルのエスケープ崩れでページ全体が白紙になる。
+describe('getWineSearchPage の件数選択・マスク・個別詳細モーダル', () => {
+  it('出力件数の選択肢(20/30/50/100)を含み、検索時にlimitとして送信する', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="limitSelect"');
+    expect(html).toContain('value="20"');
+    expect(html).toContain('value="30" selected');
+    expect(html).toContain('value="50"');
+    expect(html).toContain('value="100"');
+    expect(html).toContain('limit: limit');
+  });
+
+  it('特性列はデフォルトでマスクされ、トグルボタンで表示/非表示を切り替えられる', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="maskToggleBtn"');
+    expect(html).toContain('var isMasked = true;');
+    expect(html).toContain("'<td class=\"masked\">");
+  });
+
+  it('ヒット件数(閾値以上の件数)を表示件数(limit)とは別に表示する', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('ヒット件数');
+    expect(html).toContain('res.data.hitCount');
+  });
+
+  it('ワイン名クリックで個別詳細モーダルを開きGET /api/wine/:idを呼ぶ', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="detailModalOverlay"');
+    expect(html).toContain('id="detailModalTitle"');
+    expect(html).toContain("fetch('/api/wine/' + encodeURIComponent(id)");
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
   });
