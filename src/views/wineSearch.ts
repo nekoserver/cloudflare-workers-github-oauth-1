@@ -97,6 +97,29 @@ export function getWineSearchPage(username: string): string {
     .wine-name { font-weight: 700; color: var(--text-primary); }
     .similarity-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #0969da; color: #fff; font-size: 11px; }
     .empty-msg { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
+    .temp-admin-box {
+      border: 1px dashed #d29922;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .temp-admin-label { font-size: 12px; color: #9a6700; font-weight: 700; }
+    .temp-admin-btn {
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #d29922;
+      background: #fff8c5;
+      color: #9a6700;
+      cursor: pointer;
+    }
+    .temp-admin-btn:disabled { opacity: 0.6; cursor: default; }
+    .temp-admin-result { font-size: 12px; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -128,6 +151,12 @@ export function getWineSearchPage(username: string): string {
   <div class="container">
     <div class="title">ワイン銘柄検索</div>
     <div class="subtitle">フリーワードをplamo-embedding-1bでベクタ化し、登録済みワイン銘柄とのコサイン類似度が高い順に表示します</div>
+
+    <div class="temp-admin-box" id="tempAdminBox">
+      <span class="temp-admin-label">⚠️ 一時ボタン(初回データ投入用・後で削除予定)</span>
+      <button type="button" class="temp-admin-btn" id="bulkRegisterBtn">ワイン埋め込み一括登録を実行</button>
+      <span class="temp-admin-result" id="bulkRegisterResult"></span>
+    </div>
 
     <div class="search-row">
       <input type="text" id="freeword" class="search-box" placeholder="例: 芳醇でコクのある赤ワイン、魚介に合う白ワイン">
@@ -268,6 +297,37 @@ export function getWineSearchPage(username: string): string {
     freewordInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') runSearch();
     });
+
+    var bulkRegisterBtn = document.getElementById('bulkRegisterBtn');
+    var bulkRegisterResult = document.getElementById('bulkRegisterResult');
+
+    function runBulkRegister() {
+      bulkRegisterBtn.disabled = true;
+      bulkRegisterResult.textContent = '実行中(件数が多いため数十秒かかることがあります)...';
+      fetch('/api/wine/bulk-register', {
+        method: 'POST',
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          bulkRegisterBtn.disabled = false;
+          if (!res.ok || res.data.error) {
+            bulkRegisterResult.textContent = '失敗: ' + (res.data.error || 'エラーが発生しました');
+            return;
+          }
+          var d = res.data;
+          var msg = '完了: 登録済み' + d.alreadyRegistered + '件 / 新規成功' + d.succeeded + '件 / エラー' + (d.errors ? d.errors.length : 0) + '件';
+          if (d.errors && d.errors.length > 0) {
+            msg += '(' + d.errors.slice(0, 3).map(function(e) { return e.wine; }).join('、') + (d.errors.length > 3 ? '…' : '') + ')';
+          }
+          bulkRegisterResult.textContent = msg;
+        })
+        .catch(function(err) {
+          bulkRegisterBtn.disabled = false;
+          bulkRegisterResult.textContent = '失敗: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+    bulkRegisterBtn.addEventListener('click', runBulkRegister);
   </script>
 </body>
 </html>`;
