@@ -114,9 +114,44 @@ CREATE TABLE IF NOT EXISTS wine_details (
 - この環境には`CLOUDFLARE_API_TOKEN`が無く、Workers AI(`env.AI.run`)の実呼び出しができないため、
   `POST /api/wine/bulk-register`は実装のみでこのセッションでは実行できない。デプロイ後にユーザーが叩く。
 - `wine_details`は`wine_embeddings.id`への外部キー(`wine_id`)を主キーとする1:1関係。
-  `seeds/wine_details_616.sql`の`INSERT`はサブクエリで`wine_name`から`wine_id`を解決するため、
-  対応する`wine_embeddings`行が存在しない銘柄は無視(何も挿入されない)される。
-  そのため実運用上は`POST /api/wine/bulk-register`を先に実行するのが確実(このエンドポイントは
-  埋め込み計算とdetails保存を1トランザクション的に順に行う)。
+  実運用上は`POST /api/wine/bulk-register`を先に実行するのが確実(このエンドポイントは
+  埋め込み計算とdetails保存を1件ずつ順に行い、常に実在するIDを使う)。
 - `wine_embeddings`/`wine_details`は`syncPolicy: 'manual'`として登録した(自動生成データではなく
   CSV由来のマスタデータのため)。
+
+## 追記(バグ修正): `seeds/wine_details_616.sql`のゴミ行混入バグ
+
+**対象**: `seeds/wine_details_616.sql`(手動SQL投入用シード)、`scripts/gen-wine-details-sql.ts`(新規追加)、
+`src/wine-search.test.ts`の回帰テスト — `wine_embeddings`が未登録の状態で`wine_details`用SQLを
+先に実行すると、詳細データがどのワインとも紐付かず検索結果が全て「不明」になる不具合を修正する。
+
+### 根本原因
+
+当初の`seeds/wine_details_616.sql`は次の形式で生成していた。
+
+```sql
+INSERT INTO wine_details (wine_id, ...) VALUES ((SELECT id FROM wine_embeddings WHERE wine_name = 'X'), ...)
+```
+
+`wine_embeddings`にまだ`'X'`が登録されていない場合、サブクエリは`NULL`を返す。しかし
+`wine_details.wine_id`は`INTEGER PRIMARY KEY`(SQLiteのrowidエイリアス)であり、かつD1は
+既定で`PRAGMA foreign_keys`が`OFF`のため外部キー制約違反にもならない。SQLiteの仕様上
+「`NULL`を`INTEGER PRIMARY KEY`へINSERTすると新しいrowidが自動採番される」ため、
+エラーも出さずに**無関係な`wine_id`を持つゴミ行が616件ぶん静かに作られていた**。
+`POST /api/wine/bulk-register`実行前にこのSQLを流すと、`wine_details`の内容が
+実際のワインと一切紐付かず、`/wine-search`の検索結果は詳細列が常に「不明」表示になる。
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `scripts/gen-wine-details-sql.ts` | `src/data/wineVectors.ts`から`wine_details`用SQLを再生成するスクリプトを新規追加。`INSERT INTO ... SELECT e.id, ... FROM wine_embeddings e WHERE e.wine_name = 'X'`という**INSERT-SELECT形式**に変更し、該当銘柄が未登録なら0行のままとなり(ゴミ行を作らない)ことを保証する |
+| `seeds/wine_details_616.sql` | 上記スクリプトで再生成(全616件、INSERT-SELECT形式) |
+| `src/wine-search.test.ts` | 回帰テスト3件を追加: (1)`wine_embeddings`が空の状態で流しても`wine_details`が0件のままである、(2)一部の銘柄だけ登録済みの状態で流すとその銘柄だけ正しい`wine_id`で入る、(3)VALUES句サブクエリ形式が再混入していないかの静的チェック |
+
+### 注意事項
+
+- 既存のランタイム経路(`bulkRegisterWines`関数、`POST /api/wine/bulk-register`)は元々
+  埋め込み保存直後に取得した実在のIDを使っており、このバグの影響を受けていない。
+  影響があったのは手動SQL投入用の`seeds/wine_details_616.sql`のみ。
+- 再生成する場合は `npx tsx scripts/gen-wine-details-sql.ts > seeds/wine_details_616.sql` を実行すること。
