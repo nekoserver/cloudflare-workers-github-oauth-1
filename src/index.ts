@@ -7445,22 +7445,25 @@ export function floatsToBlob(vec: number[]): ArrayBuffer {
 }
 
 /**
- * 根本原因(バグ修正対象): D1のBLOB列は実行環境によってArrayBufferでは
- * なくUint8Array(バイト列)として返ってくることがある。Uint8Arrayを
- * そのまま`new Float32Array(uint8)`に渡すと「バイト列を要素配列として
- * 解釈しコピーする」オーバーロードが呼ばれてしまい、本来の要素数(例: 2048)
- * ではなくバイト数(例: 8192 = 2048 * 4バイト)の配列になってしまう
- * (値も本来のfloatではなく0〜255のバイト値になる)。これによりワイン
- * 検索でクエリベクトル(2048次元)と登録済みベクトル(見かけ上8192次元)の
- * 次元が食い違い、cosineSimilarityが常に0を返す不具合が起きていた。
- * Uint8Array/Bufferで渡された場合はバイト列をそのまま(要素をコピーせず)
- * ArrayBufferとして再解釈してから変換することで、常に正しい要素数に戻す。
+ * D1のBLOB列は実行環境によってArrayBuffer・Uint8Array(TypedArray)・
+ * 素のnumber[](JSON経由のシリアライズ等)のいずれかで返ってくる可能性が
+ * ある。いずれの場合も「バイト列を要素配列としてコピーする」誤ったAPI
+ * オーバーロードを踏まないよう、必ずバイト列(Uint8Array)へ正規化して
+ * からArrayBufferとして再解釈する。
  */
-export function blobToFloats(blob: ArrayBuffer | Uint8Array): number[] {
-  const buffer = ArrayBuffer.isView(blob)
-    ? blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength)
-    : blob;
-  return Array.from(new Float32Array(buffer as ArrayBuffer));
+export function blobToFloats(blob: ArrayBuffer | Uint8Array | number[]): number[] {
+  let bytes: Uint8Array;
+  if (blob instanceof ArrayBuffer) {
+    bytes = new Uint8Array(blob);
+  } else if (ArrayBuffer.isView(blob)) {
+    bytes = new Uint8Array(blob.buffer, blob.byteOffset, blob.byteLength);
+  } else if (Array.isArray(blob)) {
+    bytes = Uint8Array.from(blob);
+  } else {
+    bytes = new Uint8Array(blob as ArrayBufferLike);
+  }
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return Array.from(new Float32Array(buffer));
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -10946,12 +10949,21 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
   }));
   const results = rankWines(queryVector, candidates, 30);
   const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
+  const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
+  const debugRawVectorType = Array.isArray(rawSample)
+    ? 'Array(length=' + rawSample.length + ')'
+    : (rawSample instanceof ArrayBuffer)
+      ? 'ArrayBuffer(byteLength=' + rawSample.byteLength + ')'
+      : (rawSample && typeof rawSample === 'object')
+        ? (rawSample.constructor ? rawSample.constructor.name : typeof rawSample) + '(byteLength=' + (rawSample as ArrayBufferView).byteLength + ')'
+        : typeof rawSample;
   return jsonUtf8({
     results,
     total: candidates.length,
     debugQueryDim: queryVector.length,
     debugCandidateDims: candidateDims,
-    debugBuildMarker: 'WINE_BUILD_MARKER_20260904D',
+    debugRawVectorType,
+    debugBuildMarker: 'WINE_BUILD_MARKER_20260904E',
   });
 });
 

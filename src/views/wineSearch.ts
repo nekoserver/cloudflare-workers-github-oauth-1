@@ -153,7 +153,7 @@ export function getWineSearchPage(username: string): string {
     <div class="subtitle">フリーワードをplamo-embedding-1bでベクタ化し、登録済みワイン銘柄とのコサイン類似度が高い順に表示します</div>
 
     <div class="temp-admin-box" id="tempAdminBox">
-      <span class="temp-admin-label">⚠️ 一時ボタン(初回データ投入用・後で削除予定) [build:WINE_BUILD_MARKER_20260904D]</span>
+      <span class="temp-admin-label">⚠️ 一時ボタン(初回データ投入用・後で削除予定) [build:WINE_BUILD_MARKER_20260904E]</span>
       <button type="button" class="temp-admin-btn" id="bulkRegisterBtn">ワイン埋め込み一括登録を実行</button>
       <span class="temp-admin-result" id="bulkRegisterResult"></span>
     </div>
@@ -277,7 +277,7 @@ export function getWineSearchPage(username: string): string {
             return;
           }
           var results = res.data.results || [];
-          var debugInfo = ' [デバッグ] query次元:' + res.data.debugQueryDim + ' / 登録済み次元:' + JSON.stringify(res.data.debugCandidateDims) + ' / APIビルド:' + res.data.debugBuildMarker;
+          var debugInfo = ' [デバッグ] query次元:' + res.data.debugQueryDim + ' / 登録済み次元:' + JSON.stringify(res.data.debugCandidateDims) + ' / 生vector型:' + res.data.debugRawVectorType + ' / APIビルド:' + res.data.debugBuildMarker;
           setStatus(results.length + ' 件 / 登録済み ' + (res.data.total || 0) + ' 銘柄' + debugInfo, false);
           if (results.length === 0) {
             tableWrap.style.display = 'none';

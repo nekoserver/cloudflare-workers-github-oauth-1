@@ -208,6 +208,16 @@ describe('blobToFloats (D1のBLOB列がUint8Arrayで返るケースの回帰テ�
     const restored = blobToFloats(view);
     expect(restored).toEqual(vec);
   });
+
+  it('素のnumber[](JSON経由でシリアライズされたバイト列)で渡ってもバイト数ではなく正しい要素数で復元できる', () => {
+    const vec = [1.5, -2.5, 3.5];
+    const arrayBuffer = floatsToBlob(vec);
+    const plainByteArray = Array.from(new Uint8Array(arrayBuffer));
+    expect(plainByteArray.length).toBe(vec.length * 4);
+    const restored = blobToFloats(plainByteArray);
+    expect(restored).toHaveLength(vec.length);
+    restored.forEach((v, i) => expect(v).toBeCloseTo(vec[i], 4));
+  });
 });
 
 describe('rankWines', () => {
