@@ -28,7 +28,6 @@
 | `src/index.ts` | `STATUS_TABLE_DEFINITIONS`/`STATUS_MIGRATION_SQL`/`TABLE_COLUMN_KEYS`/`TABLE_GROUP_MAP`/`COLUMN_FK_TARGETS`へ`wine_embeddings`/`wine_details`を登録。`getOrComputeWineEmbedding`(埋め込みキャッシュ読み書き)・`rankWines`(コサイン類似度降順ランキング)・`bulkRegisterWines`(CSVシードの一括登録)・`rowToWineDetail`を追加。`GET /wine-search`・`POST /api/wine/search`・`POST /api/wine/bulk-register`ルートを追加 |
 | `src/views/wineSearch.ts` | 検索ページ本体(cheeseSearch.tsを参考にしたPWA対応UI、右上に外部リンクなし) |
 | `src/data/wineVectors.ts` | CSVから自動生成した`WINE_VECTOR_SEED`(616件の`WineSeedRow[]`) |
-| `seeds/wine_details_616.sql` | `wine_details`への全616件分INSERT文(`--`コメントなし、`wine_embeddings`にwine_nameが存在する行にのみ効くサブクエリ形式) |
 | `src/wine-search.test.ts` | 新規テスト18件(下記参照) |
 
 ### テーブル定義
@@ -114,44 +113,45 @@ CREATE TABLE IF NOT EXISTS wine_details (
 - この環境には`CLOUDFLARE_API_TOKEN`が無く、Workers AI(`env.AI.run`)の実呼び出しができないため、
   `POST /api/wine/bulk-register`は実装のみでこのセッションでは実行できない。デプロイ後にユーザーが叩く。
 - `wine_details`は`wine_embeddings.id`への外部キー(`wine_id`)を主キーとする1:1関係。
-  実運用上は`POST /api/wine/bulk-register`を先に実行するのが確実(このエンドポイントは
-  埋め込み計算とdetails保存を1件ずつ順に行い、常に実在するIDを使う)。
+  埋め込みが存在しない銘柄の`wine_id`は決めようがないため、`wine_details`は
+  「手動SQLで先に流す」ことができない。**`POST /api/wine/bulk-register`が唯一の投入経路**であり、
+  このエンドポイントが埋め込み計算の直後に実在するIDを使って`wine_details`にも保存するため、
+  それ以外の手順は不要。
 - `wine_embeddings`/`wine_details`は`syncPolicy: 'manual'`として登録した(自動生成データではなく
   CSV由来のマスタデータのため)。
 
-## 追記(バグ修正): `seeds/wine_details_616.sql`のゴミ行混入バグ
+## 追記(設計修正): `wine_details`手動SQLシードを廃止
 
-**対象**: `seeds/wine_details_616.sql`(手動SQL投入用シード)、`scripts/gen-wine-details-sql.ts`(新規追加)、
-`src/wine-search.test.ts`の回帰テスト — `wine_embeddings`が未登録の状態で`wine_details`用SQLを
-先に実行すると、詳細データがどのワインとも紐付かず検索結果が全て「不明」になる不具合を修正する。
+**対象**: 一時的に追加していた`seeds/wine_details_616.sql`(手動SQL投入用)と生成スクリプト
+`scripts/gen-wine-details-sql.ts` — チェーン依存(`wine_embeddings`に銘柄が無いと`wine_id`が
+決まらない)のため、この手動SQLは「先に流しても意味がない」上に「後から流しても
+`bulk-register`が既にwine_detailsへ保存済みなので二度手間」という、そもそも不要な
+仕組みだったため削除した。
 
-### 根本原因
+### 経緯
 
-当初の`seeds/wine_details_616.sql`は次の形式で生成していた。
-
-```sql
-INSERT INTO wine_details (wine_id, ...) VALUES ((SELECT id FROM wine_embeddings WHERE wine_name = 'X'), ...)
-```
-
-`wine_embeddings`にまだ`'X'`が登録されていない場合、サブクエリは`NULL`を返す。しかし
-`wine_details.wine_id`は`INTEGER PRIMARY KEY`(SQLiteのrowidエイリアス)であり、かつD1は
-既定で`PRAGMA foreign_keys`が`OFF`のため外部キー制約違反にもならない。SQLiteの仕様上
-「`NULL`を`INTEGER PRIMARY KEY`へINSERTすると新しいrowidが自動採番される」ため、
-エラーも出さずに**無関係な`wine_id`を持つゴミ行が616件ぶん静かに作られていた**。
-`POST /api/wine/bulk-register`実行前にこのSQLを流すと、`wine_details`の内容が
-実際のワインと一切紐付かず、`/wine-search`の検索結果は詳細列が常に「不明」表示になる。
+当初`seeds/wine_details_616.sql`を`INSERT INTO wine_details (wine_id, ...)
+VALUES ((SELECT id FROM wine_embeddings WHERE wine_name = 'X'), ...)`という
+VALUES句サブクエリ形式で生成していたが、`wine_embeddings`にまだ`'X'`が登録されて
+いない状態で実行すると、サブクエリが返す`NULL`が`INTEGER PRIMARY KEY`(SQLiteの
+rowidエイリアス)へ渡り、D1は既定で`PRAGMA foreign_keys`がOFFのため制約違反にも
+ならず、**無関係な`wine_id`を持つゴミ行が616件エラーなく作られる**バグがあった。
+一度は`INSERT ... SELECT`形式(該当行が無ければ0行のまま)に修正したが、
+そもそも`wine_details`は`bulk-register`実行時に必ず埋め込み保存と同じ処理内で
+書き込まれるため、独立した手動SQLシード自体が不要というのが根本的な結論。
 
 ### 修正内容
 
 | ファイル | 変更概要 |
 |---|---|
-| `scripts/gen-wine-details-sql.ts` | `src/data/wineVectors.ts`から`wine_details`用SQLを再生成するスクリプトを新規追加。`INSERT INTO ... SELECT e.id, ... FROM wine_embeddings e WHERE e.wine_name = 'X'`という**INSERT-SELECT形式**に変更し、該当銘柄が未登録なら0行のままとなり(ゴミ行を作らない)ことを保証する |
-| `seeds/wine_details_616.sql` | 上記スクリプトで再生成(全616件、INSERT-SELECT形式) |
-| `src/wine-search.test.ts` | 回帰テスト3件を追加: (1)`wine_embeddings`が空の状態で流しても`wine_details`が0件のままである、(2)一部の銘柄だけ登録済みの状態で流すとその銘柄だけ正しい`wine_id`で入る、(3)VALUES句サブクエリ形式が再混入していないかの静的チェック |
+| `seeds/wine_details_616.sql` | 削除(不要) |
+| `scripts/gen-wine-details-sql.ts` | 削除(不要) |
+| `src/wine-search.test.ts` | 上記ファイルを前提にした回帰テスト3件を削除 |
 
-### 注意事項
+### 結論・正しい運用手順
 
-- 既存のランタイム経路(`bulkRegisterWines`関数、`POST /api/wine/bulk-register`)は元々
-  埋め込み保存直後に取得した実在のIDを使っており、このバグの影響を受けていない。
-  影響があったのは手動SQL投入用の`seeds/wine_details_616.sql`のみ。
-- 再生成する場合は `npx tsx scripts/gen-wine-details-sql.ts > seeds/wine_details_616.sql` を実行すること。
+1. デプロイ
+2. マイグレーション適用(`wine_embeddings`/`wine_details`のテーブル作成)
+3. `POST /api/wine/bulk-register` を1回叩く(これだけで616銘柄の埋め込み計算と
+   `wine_details`への保存が両方完了する)
+4. `/wine-search` で検索確認
