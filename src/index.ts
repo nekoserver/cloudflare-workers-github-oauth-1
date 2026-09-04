@@ -278,6 +278,11 @@ import {
   computePublicKeyExpiresAt,
 } from './utils/publicKeyAuth';
 import {
+  buildPublicKeySecurityAlertText,
+  recordPublicKeySecurityEvent,
+  type PublicKeySecurityEventType,
+} from './utils/publicKeySecurity';
+import {
   LOGIN_METHOD_GITHUB_OAUTH,
   LOGIN_METHOD_PUBLIC_KEY,
   type LoginMethod,
@@ -425,6 +430,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'wine_embeddings', migration: '0125', description: '/wine-searchページのワイン銘柄名をplamo-embedding-1bでベクタ化したキャッシュ(全ユーザー共通データ、テナント分離なし)', syncPolicy: 'manual' },
   { name: 'wine_details', migration: '0125', description: '/wine-searchページで表示するワインのペアリング特性データ(seeds/wine_initial_vectors_v83.csvが元データ)。wine_embeddings.idと1:1', syncPolicy: 'manual' },
   { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
+  { name: 'public_key_security_events', migration: '0128', description: '公開鍵チャレンジ署名ログインの異常検知ログ。対象鍵が見つからない(userId/keyId不一致・失効・期限切れ)場合はkey_not_found、署名が登録済み公開鍵と一致しない(=秘密鍵が違う)場合はsignature_mismatchとして記録し、同時にSlack通知する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1910,6 +1916,17 @@ CREATE TABLE IF NOT EXISTS wine_details (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`,
   '0127': `ALTER TABLE user_public_keys ADD COLUMN expires_at TEXT;`,
+  '0128': `CREATE TABLE IF NOT EXISTS public_key_security_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  detail TEXT,
+  ip TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_public_key_security_events_user_id ON public_key_security_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_public_key_security_events_created_at ON public_key_security_events(created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2052,6 +2069,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_public_keys: { id: 'pk', user_id: 'fk+idx' },
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   login_history: { id: 'pk', user_id: 'fk+idx' },
+  public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
   wine_metadata: { id: 'pk+fk' },
@@ -2196,7 +2214,7 @@ export function getFilterableColumns(tableName: string): string[] {
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
-  user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth',
+  user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth', public_key_security_events: 'auth',
   wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
@@ -2372,6 +2390,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   user_public_keys: { user_id: 'user_sessions' },
   public_key_challenges: { user_id: 'user_sessions' },
   login_history: { user_id: 'user_sessions' },
+  public_key_security_events: { user_id: 'user_sessions' },
   wine_details: { wine_id: 'wine_embeddings' },
   wine_metadata: { id: 'wine_embeddings' },
 
@@ -3789,6 +3808,46 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
   return new Response(null, { status: 302, headers: redirectHeaders });
 }
 
+/**
+ * 公開鍵チャレンジ署名の異常(対象鍵が見つからない・署名が一致しない)を検知した際に、
+ * D1(public_key_security_events)へ記録しSlackへ通知する。秘密鍵が別環境に
+ * 持ち出されて悪用された場合に、いつ・どのユーザー宛の・どの鍵で何が起きたかを
+ * 追跡できるようにする(CLAUDE.mdルール8: catchで握りつぶす場合の記録・通知義務)。
+ * DB記録に失敗しても検知自体(呼び出し元のエラーレスポンス)は継続する。
+ */
+async function flagPublicKeySecurityEvent(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  params: { userId: string; keyId: string; eventType: PublicKeySecurityEventType; detail: string }
+): Promise<void> {
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+  const createdAt = new Date().toISOString();
+  const eventParams = { ...params, ip };
+
+  const db = c.env.DB;
+  if (db) {
+    try {
+      await recordPublicKeySecurityEvent(db, eventParams, crypto.randomUUID(), createdAt);
+    } catch (error) {
+      logger.error('Failed to record public key security event', {
+        userId: params.userId,
+        keyId: params.keyId,
+        eventType: params.eventType,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    postSlackMessage({
+      token: slackToken,
+      channel: slackChannel,
+      text: buildPublicKeySecurityAlertText(eventParams, createdAt),
+    }).catch(() => {});
+  }
+}
+
 // チャレンジ署名ログイン(公開鍵によるパスキー的ログイン)の確定処理。
 // GitHub OAuthを経由しないため、以前のGitHubログインで作られたuser_sessions行
 // (timezone/session_duration/github_access_token等)を引き継ぎ、last_login_at等
@@ -4069,6 +4128,10 @@ app.post('/auth/public-key/challenge', async (c) => {
       'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
     ).bind(keyId, userId, now.toISOString()).first<{ id: string }>();
     if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ発行時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか)',
+      });
       return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
@@ -4129,6 +4192,10 @@ app.post('/auth/public-key/verify', async (c) => {
       'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
     ).bind(keyId, userId, now.toISOString()).first<{ public_key_jwk: string }>();
     if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ検証時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか)',
+      });
       return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
@@ -4139,6 +4206,10 @@ app.post('/auth/public-key/verify', async (c) => {
 
     if (!verified) {
       logger.warn('Passkey login signature verification failed', { userId, keyId });
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'signature_mismatch',
+        detail: '登録済み公開鍵に対し秘密鍵が一致しない署名を受信(パスキーログイン)',
+      });
       return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
     }
 
@@ -17243,6 +17314,10 @@ app.post('/api/public-keys/challenge', authMiddleware, async (c) => {
       'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
     ).bind(keyId, user.sub, now.toISOString()).first<{ id: string }>();
     if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ発行時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか)',
+      });
       return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
@@ -17300,6 +17375,10 @@ app.post('/api/public-keys/verify', authMiddleware, async (c) => {
       'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
     ).bind(keyId, user.sub, now.toISOString()).first<{ public_key_jwk: string }>();
     if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ検証時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか)',
+      });
       return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
     }
 
@@ -17309,6 +17388,10 @@ app.post('/api/public-keys/verify', authMiddleware, async (c) => {
       .bind(now.toISOString(), challengeId).run();
 
     if (!verified) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'signature_mismatch',
+        detail: '登録済み公開鍵に対し秘密鍵が一致しない署名を受信(照合テスト)',
+      });
       return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
     }
 
