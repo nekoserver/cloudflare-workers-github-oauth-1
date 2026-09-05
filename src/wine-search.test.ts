@@ -5,6 +5,9 @@ import {
   getOrComputeWineEmbedding,
   rankWines,
   countWineHits,
+  parsePairingFoods,
+  pickFoodEmoji,
+  aggregateFoodBadges,
   bulkRegisterWines,
   getWineDetailById,
   bulkRegisterWineMetadata,
@@ -256,9 +259,9 @@ describe('blobToFloats (D1のBLOB列がUint8Arrayで返るケースの回帰テ�
 describe('rankWines', () => {
   it('コサイン類似度の降順で上位limit件を返す', () => {
     const candidates: WineSearchCandidate[] = [
-      { id: 1, wineName: 'A', vector: [1, 0], details: null },
-      { id: 2, wineName: 'B', vector: [0, 1], details: null },
-      { id: 3, wineName: 'C', vector: [0.9, 0.1], details: null },
+      { id: 1, wineName: 'A', vector: [1, 0], details: null, pairingFoods: null },
+      { id: 2, wineName: 'B', vector: [0, 1], details: null, pairingFoods: null },
+      { id: 3, wineName: 'C', vector: [0.9, 0.1], details: null, pairingFoods: null },
     ];
     const results = rankWines([1, 0], candidates, 2);
     expect(results).toHaveLength(2);
@@ -271,13 +274,13 @@ describe('rankWines', () => {
   });
 
   it('クエリベクトルが空(埋め込み失敗)の場合は空配列を返す', () => {
-    const candidates: WineSearchCandidate[] = [{ id: 1, wineName: 'A', vector: [1, 0], details: null }];
+    const candidates: WineSearchCandidate[] = [{ id: 1, wineName: 'A', vector: [1, 0], details: null, pairingFoods: null }];
     expect(rankWines([], candidates, 30)).toEqual([]);
   });
 
   it('故障シナリオ(2): wine_detailsが無い(details=null)候補が混じっても落ちない', () => {
     const candidates: WineSearchCandidate[] = [
-      { id: 1, wineName: 'A', vector: [1, 0], details: null },
+      { id: 1, wineName: 'A', vector: [1, 0], details: null, pairingFoods: null },
     ];
     const results = rankWines([1, 0], candidates, 30);
     expect(results[0].details).toBeNull();
@@ -291,9 +294,9 @@ describe('rankWines', () => {
 describe('countWineHits', () => {
   it('閾値以上の類似度を持つ候補の件数だけをカウントする(表示件数のlimitとは無関係)', () => {
     const candidates: WineSearchCandidate[] = [
-      { id: 1, wineName: 'A', vector: [1, 0], details: null },
-      { id: 2, wineName: 'B', vector: [0.99, 0.01], details: null },
-      { id: 3, wineName: 'C', vector: [0, 1], details: null },
+      { id: 1, wineName: 'A', vector: [1, 0], details: null, pairingFoods: null },
+      { id: 2, wineName: 'B', vector: [0.99, 0.01], details: null, pairingFoods: null },
+      { id: 3, wineName: 'C', vector: [0, 1], details: null, pairingFoods: null },
     ];
     expect(countWineHits([1, 0], candidates, 0.5)).toBe(2);
     expect(countWineHits([1, 0], candidates, 0.99999)).toBe(1);
@@ -301,7 +304,56 @@ describe('countWineHits', () => {
 
   it('故障シナリオ: 候補が0件、またはクエリベクトルが空の場合は0を返す', () => {
     expect(countWineHits([1, 0], [], 0.5)).toBe(0);
-    expect(countWineHits([], [{ id: 1, wineName: 'A', vector: [1, 0], details: null }], 0.5)).toBe(0);
+    expect(countWineHits([], [{ id: 1, wineName: 'A', vector: [1, 0], details: null, pairingFoods: null }], 0.5)).toBe(0);
+  });
+});
+
+// 対象: 検索結果の「合う料理」バッジ機能。wine_metadata.pairing_foodsは
+// 「牡蠣 / 魚介 / 白身魚」のようにスラッシュ区切りで複数の料理をまとめて
+// 保持しているため、これを個別の料理名に分割し、検索結果全体での出現回数を
+// 集計して降順に並べたバッジ一覧(絵文字付き)を返す機能。
+describe('parsePairingFoods', () => {
+  it('半角/全角スラッシュ区切りの文字列を個別の料理名の配列に分割する', () => {
+    expect(parsePairingFoods('牡蠣 / 魚介 / 白身魚')).toEqual(['牡蠣', '魚介', '白身魚']);
+    expect(parsePairingFoods('鶏の唐揚げ／トマト系パスタ')).toEqual(['鶏の唐揚げ', 'トマト系パスタ']);
+  });
+
+  it('故障シナリオ: null/undefined/空文字の場合は空配列を返す', () => {
+    expect(parsePairingFoods(null)).toEqual([]);
+    expect(parsePairingFoods(undefined)).toEqual([]);
+    expect(parsePairingFoods('')).toEqual([]);
+  });
+});
+
+describe('pickFoodEmoji', () => {
+  it('料理名からそれらしい絵文字を推定する', () => {
+    expect(pickFoodEmoji('寿司')).toBe('🍣');
+    expect(pickFoodEmoji('魚介')).toBe('🦐');
+    expect(pickFoodEmoji('鶏の唐揚げ')).toBe('🍗');
+    expect(pickFoodEmoji('チーズ')).toBe('🧀');
+  });
+
+  it('故障シナリオ: 未知の料理名は汎用の食器アイコンにフォールバックする', () => {
+    expect(pickFoodEmoji('未知の謎料理')).toBe('🍽️');
+  });
+});
+
+describe('aggregateFoodBadges', () => {
+  it('検索結果全体でpairing_foodsを集計し出現回数の降順で返す', () => {
+    const results = [
+      { pairingFoods: '牡蠣 / 魚介 / 白身魚' },
+      { pairingFoods: '魚介 / 白身魚' },
+      { pairingFoods: '魚介' },
+    ];
+    const badges = aggregateFoodBadges(results);
+    expect(badges[0]).toEqual({ food: '魚介', emoji: '🦐', count: 3 });
+    expect(badges[1]).toEqual({ food: '白身魚', emoji: '🐟', count: 2 });
+    expect(badges[2]).toEqual({ food: '牡蠣', emoji: '🦐', count: 1 });
+  });
+
+  it('故障シナリオ: 結果が0件、またはpairingFoodsが全てnullでもクラッシュせず空配列を返す', () => {
+    expect(aggregateFoodBadges([])).toEqual([]);
+    expect(aggregateFoodBadges([{ pairingFoods: null }, { pairingFoods: null }])).toEqual([]);
   });
 });
 
@@ -466,6 +518,40 @@ describe('GET /api/wine/consistency-check のルーティング(実アプリで�
   });
 });
 
+// 対象: 検索結果の「合う料理」バッジをPOST /api/wine/searchの実レスポンスで
+// 検証する(スタブではなく本物のapp)。wine_metadataとのJOINが正しく機能し、
+// foodBadgesが表示中の結果全体から集計されることを確認する。
+describe('POST /api/wine/search の foodBadges (実アプリでの回帰テスト)', () => {
+  it('検索結果に対応するwine_metadata.pairing_foodsを集計しfoodBadgesとして返す', async () => {
+    const realApp = (await import('./index')).default;
+    const { createJWT } = await import('./utils/jwt');
+    const token = await createJWT({ sub: 'test-user', name: 'Test' }, 'test-secret');
+    const rawDb = setupDb();
+    const now = new Date().toISOString();
+    rawDb.prepare(`INSERT INTO wine_embeddings (wine_name, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('シャルドネA', PLAMO_EMBEDDING_MODEL, 2, Buffer.from(floatsToBlob([1, 0])), now, now);
+    rawDb.prepare(`INSERT INTO wine_embeddings (wine_name, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('シャルドネB', PLAMO_EMBEDDING_MODEL, 2, Buffer.from(floatsToBlob([1, 0])), now, now);
+    const idA = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get('シャルドネA') as { id: number };
+    const idB = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get('シャルドネB') as { id: number };
+    rawDb.prepare(`INSERT INTO wine_metadata (id, wine_name, pairing_foods, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(idA.id, 'シャルドネA', '魚介 / 白身魚', now, now);
+    rawDb.prepare(`INSERT INTO wine_metadata (id, wine_name, pairing_foods, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(idB.id, 'シャルドネB', '魚介', now, now);
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = { run: vi.fn(async () => ({ data: [[1, 0]] })) } as unknown as Ai;
+    const res = await realApp.request(
+      '/api/wine/search',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ q: 'シャルドネ' }) },
+      { JWT_SECRET: 'test-secret', DB: db, AI: ai },
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json() as { foodBadges: { food: string; emoji: string; count: number }[] };
+    expect(data.foodBadges[0]).toEqual({ food: '魚介', emoji: '🦐', count: 2 });
+    expect(data.foodBadges[1]).toEqual({ food: '白身魚', emoji: '🐟', count: 1 });
+  });
+});
+
 // 対象: wine_embeddings.id(連番インデックス)を指定して1銘柄ぶんの
 // 全詳細(銘柄名・モデル・次元数・特性値)を取得する機能(GET /api/wine/:id)。
 // 一覧表示ではマスクされている特性値も、個別詳細では常にすべて返す。
@@ -610,7 +696,7 @@ describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () 
       const rows = await env.DB.prepare(
         `SELECT e.id AS id, e.wine_name AS wine_name, e.vector AS vector FROM wine_embeddings e`
       ).bind().all<{ id: number; wine_name: string; vector: ArrayBuffer }>();
-      const candidates: WineSearchCandidate[] = (rows.results ?? []).map((r) => ({ id: r.id, wineName: r.wine_name, vector: blobToFloats(r.vector), details: null }));
+      const candidates: WineSearchCandidate[] = (rows.results ?? []).map((r) => ({ id: r.id, wineName: r.wine_name, vector: blobToFloats(r.vector), details: null, pairingFoods: null }));
       const results = rankWines(queryVector, candidates, 30);
       return new Response(JSON.stringify({ results, total: candidates.length }), { status: 200 });
     });
@@ -769,6 +855,16 @@ describe('getWineSearchPage の件数選択・マスク・個別詳細モーダ�
     const html = getWineSearchPage('tester');
     expect(html).toContain('ヒット件数');
     expect(html).toContain('res.data.hitCount');
+  });
+
+  it('検索結果の枠上に「合う料理」バッジ(絵文字・出現回数付き)を表示する要素とロジックを含む', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="foodBadgeRow"');
+    expect(html).toContain('class="food-badge"');
+    expect(html).toContain('renderFoodBadges(res.data.foodBadges)');
+    expect(html).not.toContain("\\'");
+    expect(html).not.toContain('&#39;&#39;');
   });
 
   it('行(任意のセル)クリックで個別詳細モーダルを開きGET /api/wine/:idを呼び、動的z-index(getNextZ)を使う', async () => {
