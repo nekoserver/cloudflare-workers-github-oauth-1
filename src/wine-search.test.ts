@@ -8,6 +8,7 @@ import {
   bulkRegisterWines,
   getWineDetailById,
   bulkRegisterWineMetadata,
+  checkWineSeedConsistency,
   floatsToBlob,
   blobToFloats,
   PLAMO_EMBEDDING_MODEL,
@@ -368,6 +369,48 @@ describe('bulkRegisterWines', () => {
   });
 });
 
+// 対象: 「オリジナルのシード件数(WINE_VECTOR_SEED.length)」と「実際に
+// wine_embeddingsへ埋め込みが入っている件数」を突き合わせる機能。
+// 一括登録が途中で失敗・中断した場合に、検索対象から漏れているワインが
+// 無いかを確認できるようにする(CLAUDE.mdルール12: 推測せずデータで裏を取る)。
+describe('checkWineSeedConsistency', () => {
+  it('シード件数と埋め込み件数が一致する場合はmatches=trueを返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    const seeds = [seedRow({ wine: 'ワインA' }), seedRow({ wine: 'ワインB' })];
+    await bulkRegisterWines(db, ai, seeds);
+    const result = await checkWineSeedConsistency(db, seeds);
+    expect(result.seedTotal).toBe(2);
+    expect(result.embeddedTotal).toBe(2);
+    expect(result.matches).toBe(true);
+    expect(result.missingCount).toBe(0);
+  });
+
+  it('故障シナリオ: 一部だけ埋め込みが入っている場合はmatches=falseで不足銘柄名を返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    const seeds = [seedRow({ wine: 'ワインA' }), seedRow({ wine: 'ワインB' }), seedRow({ wine: 'ワインC' })];
+    await bulkRegisterWines(db, ai, seeds, 1);
+    const result = await checkWineSeedConsistency(db, seeds);
+    expect(result.seedTotal).toBe(3);
+    expect(result.embeddedTotal).toBe(1);
+    expect(result.matches).toBe(false);
+    expect(result.missingCount).toBe(2);
+    expect(result.missingSample).toEqual(['ワインB', 'ワインC']);
+  });
+
+  it('故障シナリオ: wine_embeddingsが0件でもクラッシュせずmatches=falseを返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const seeds = [seedRow({ wine: 'ワインA' })];
+    const result = await checkWineSeedConsistency(db, seeds);
+    expect(result.embeddedTotal).toBe(0);
+    expect(result.matches).toBe(false);
+  });
+});
+
 // 対象: wine_embeddings.id(連番インデックス)を指定して1銘柄ぶんの
 // 全詳細(銘柄名・モデル・次元数・特性値)を取得する機能(GET /api/wine/:id)。
 // 一覧表示ではマスクされている特性値も、個別詳細では常にすべて返す。
@@ -632,6 +675,8 @@ describe('getWineSearchPage のデバッグモード用UI', () => {
     expect(html).toContain("fetch('/api/wine/bulk-register'");
     expect(html).toContain('id="bulkRegisterMetadataBtn"');
     expect(html).toContain("fetch('/api/wine/bulk-register-metadata'");
+    expect(html).toContain('id="consistencyCheckBtn"');
+    expect(html).toContain("fetch('/api/wine/consistency-check'");
     expect(html).toContain("get('debug') === '1'");
     expect(html).toContain('debugQueryDim');
     expect(html).not.toContain("\\'");

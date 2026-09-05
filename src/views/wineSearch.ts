@@ -213,6 +213,8 @@ export function getWineSearchPage(username: string): string {
       <span class="temp-admin-result" id="bulkRegisterResult"></span>
       <button type="button" class="temp-admin-btn" id="bulkRegisterMetadataBtn">ワイン個別詳細を一括登録</button>
       <span class="temp-admin-result" id="bulkRegisterMetadataResult"></span>
+      <button type="button" class="temp-admin-btn" id="consistencyCheckBtn">シード件数と埋め込み件数の整合性チェック</button>
+      <span class="temp-admin-result" id="consistencyCheckResult"></span>
     </div>
 
     <div class="search-row">
@@ -550,6 +552,34 @@ export function getWineSearchPage(username: string): string {
         });
     }
     bulkRegisterMetadataBtn.addEventListener('click', runBulkRegisterMetadata);
+
+    var consistencyCheckBtn = document.getElementById('consistencyCheckBtn');
+    var consistencyCheckResult = document.getElementById('consistencyCheckResult');
+
+    function runConsistencyCheck() {
+      consistencyCheckBtn.disabled = true;
+      consistencyCheckResult.textContent = '確認中...';
+      fetch('/api/wine/consistency-check', { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          consistencyCheckBtn.disabled = false;
+          if (!res.ok || res.data.error) {
+            consistencyCheckResult.textContent = '失敗: ' + (res.data.error || 'エラーが発生しました');
+            return;
+          }
+          var d = res.data;
+          var msg = (d.matches ? '✅ 一致' : '❌ 不一致') + ': シード' + d.seedTotal + '件 / 埋め込み' + d.embeddedTotal + '件';
+          if (!d.matches && d.missingSample && d.missingSample.length > 0) {
+            msg += '(未埋め込み例: ' + d.missingSample.join('、') + (d.missingCount > d.missingSample.length ? '…他' + (d.missingCount - d.missingSample.length) + '件' : '') + ')';
+          }
+          consistencyCheckResult.textContent = msg;
+        })
+        .catch(function(err) {
+          consistencyCheckBtn.disabled = false;
+          consistencyCheckResult.textContent = '失敗: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+    consistencyCheckBtn.addEventListener('click', runConsistencyCheck);
   </script>
 </body>
 </html>`;
