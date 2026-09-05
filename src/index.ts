@@ -11162,6 +11162,67 @@ export async function getWineDetailById(db: D1Database, id: number): Promise<Win
   };
 }
 
+export interface WineByFoodResultRow {
+  id: number;
+  wineName: string;
+  pairingFoods: string | null;
+  country: string | null;
+  wineType: string | null;
+  characteristics: string | null;
+}
+
+/**
+ * 「合う料理」バッジをタップした時に、検索キーワードとタップした料理の
+ * 両方に一致する銘柄をwine_metadataから抽出する。料理はpairing_foods列
+ * (「牡蠣 / 魚介 / 白身魚」形式)への部分一致、検索キーワードはwine_name・
+ * grape_or_style・characteristics・wine_type・country・production_areaの
+ * いずれかへの部分一致とする(新規追加分は銘柄名に品種名を含まないことが
+ * 多く、wine_name単独の一致だけでは検索キーワードとの関連性を拾えない
+ * ため)。キーワードが空の場合は料理の一致のみで絞り込む。
+ */
+export async function searchWineByFoodAndKeyword(
+  db: D1Database,
+  food: string,
+  keyword: string,
+): Promise<WineByFoodResultRow[]> {
+  const foodPattern = `%${food}%`;
+  const conditions = ['m.pairing_foods LIKE ?'];
+  const params: string[] = [foodPattern];
+  const trimmedKeyword = keyword.trim();
+  if (trimmedKeyword) {
+    const keywordPattern = `%${trimmedKeyword}%`;
+    conditions.push(`(
+      m.wine_name LIKE ? OR m.grape_or_style LIKE ? OR m.characteristics LIKE ? OR
+      m.wine_type LIKE ? OR m.country LIKE ? OR m.production_area LIKE ?
+    )`);
+    params.push(keywordPattern, keywordPattern, keywordPattern, keywordPattern, keywordPattern, keywordPattern);
+  }
+  const rows = await db.prepare(
+    `SELECT m.id AS id, m.wine_name AS wine_name, m.pairing_foods AS pairing_foods,
+            m.country AS country, m.wine_type AS wine_type, m.characteristics AS characteristics
+     FROM wine_metadata m
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY m.wine_name`
+  ).bind(...params).all<Record<string, unknown>>();
+  return (rows.results ?? []).map((r) => ({
+    id: Number(r.id),
+    wineName: String(r.wine_name),
+    pairingFoods: typeof r.pairing_foods === 'string' ? r.pairing_foods : null,
+    country: typeof r.country === 'string' ? r.country : null,
+    wineType: typeof r.wine_type === 'string' ? r.wine_type : null,
+    characteristics: typeof r.characteristics === 'string' ? r.characteristics : null,
+  }));
+}
+
+app.get('/api/wine/by-food', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const food = (c.req.query('food') ?? '').trim();
+  if (!food) return jsonUtf8({ error: '料理名(food)を指定してください' }, 400);
+  const keyword = c.req.query('q') ?? '';
+  const results = await searchWineByFoodAndKeyword(c.env.DB, food, keyword);
+  return jsonUtf8({ results, total: results.length });
+});
+
 app.get('/wine-search', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWineSearchPage(user.sub));

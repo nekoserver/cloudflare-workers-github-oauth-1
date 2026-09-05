@@ -127,6 +127,7 @@ export function getWineSearchPage(username: string): string {
       font-size: 12px;
       color: var(--text-primary);
       white-space: nowrap;
+      cursor: pointer;
     }
     .food-badge-count { color: var(--text-muted); font-size: 11px; }
     .wine-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; }
@@ -176,6 +177,14 @@ export function getWineSearchPage(username: string): string {
       color: var(--text-primary);
       cursor: pointer;
     }
+    .food-results-row {
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+    }
+    .food-results-row:hover { background: var(--bg-secondary); }
+    .food-results-row .wine-name { font-weight: 700; color: var(--text-primary); display: block; }
+    .food-results-row .food-results-meta { font-size: 12px; color: var(--text-muted); }
     .temp-admin-box {
       border: 1px dashed #d29922;
       background: var(--bg-secondary);
@@ -292,6 +301,15 @@ export function getWineSearchPage(username: string): string {
     </div>
   </div>
 
+  <div class="detail-modal-overlay" id="foodResultsModalOverlay">
+    <div class="detail-modal">
+      <h3 id="foodResultsModalTitle"></h3>
+      <div class="detail-modal-meta" id="foodResultsModalMeta"></div>
+      <div id="foodResultsModalList"></div>
+      <button type="button" class="detail-modal-close-btn" id="foodResultsModalCloseBtn">閉じる</button>
+    </div>
+  </div>
+
   <script>
     ${getThemeToggleScript()}
 
@@ -370,7 +388,7 @@ export function getWineSearchPage(username: string): string {
         return;
       }
       foodBadgeRow.innerHTML = foodBadges.map(function(b) {
-        return '<span class="food-badge">' + escHtml(b.emoji) + ' ' + escHtml(b.food) + '<span class="food-badge-count">(' + b.count + ')</span></span>';
+        return '<span class="food-badge" data-food="' + escHtml(b.food) + '">' + escHtml(b.emoji) + ' ' + escHtml(b.food) + '<span class="food-badge-count">(' + b.count + ')</span></span>';
       }).join('');
       foodBadgeRow.style.display = 'flex';
       tableWrap.classList.add('has-food-badges');
@@ -453,7 +471,7 @@ export function getWineSearchPage(username: string): string {
         var z = parseInt(el.style.zIndex, 10);
         if (!isNaN(z) && z < 9000 && z > max) max = z;
       });
-      var staticZDefaults = { detailModalOverlay: 1000 };
+      var staticZDefaults = { detailModalOverlay: 1000, foodResultsModalOverlay: 1000 };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
         if (el && el.classList.contains('open')) {
@@ -512,6 +530,63 @@ export function getWineSearchPage(username: string): string {
     });
     detailModalOverlay.addEventListener('click', function(e) {
       if (e.target === detailModalOverlay) detailModalOverlay.classList.remove('open');
+    });
+
+    var foodResultsModalOverlay = document.getElementById('foodResultsModalOverlay');
+    var foodResultsModalTitle = document.getElementById('foodResultsModalTitle');
+    var foodResultsModalMeta = document.getElementById('foodResultsModalMeta');
+    var foodResultsModalList = document.getElementById('foodResultsModalList');
+    var foodResultsModalCloseBtn = document.getElementById('foodResultsModalCloseBtn');
+
+    function openFoodResultsModal(food) {
+      foodResultsModalTitle.textContent = escHtml(food) + ' が合う銘柄';
+      foodResultsModalMeta.textContent = '検索中...';
+      foodResultsModalList.innerHTML = '';
+      foodResultsModalOverlay.style.zIndex = String(getNextZ());
+      foodResultsModalOverlay.classList.add('open');
+      var q = freewordInput.value.trim();
+      fetch('/api/wine/by-food?food=' + encodeURIComponent(food) + '&q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          if (!res.ok || res.data.error) {
+            foodResultsModalMeta.textContent = res.data.error || '取得に失敗しました';
+            return;
+          }
+          var results = res.data.results || [];
+          foodResultsModalMeta.textContent = results.length + ' 件';
+          if (results.length === 0) {
+            foodResultsModalList.innerHTML = '<div class="food-results-meta">該当する銘柄がありませんでした。</div>';
+            return;
+          }
+          foodResultsModalList.innerHTML = results.map(function(r) {
+            return '<div class="food-results-row" data-id="' + r.id + '" data-wine-name="' + escHtml(r.wineName) + '">' +
+              '<span class="wine-name">' + escHtml(r.wineName) + '</span>' +
+              '<span class="food-results-meta">' + escHtml(r.country || '') + (r.wineType ? ' / ' + escHtml(r.wineType) : '') + '</span>' +
+              '</div>';
+          }).join('');
+        })
+        .catch(function(err) {
+          foodResultsModalMeta.textContent = err && err.message ? err.message : String(err);
+        });
+    }
+
+    foodBadgeRow.addEventListener('click', function(e) {
+      var badge = e.target && e.target.closest ? e.target.closest('.food-badge') : null;
+      if (badge) {
+        openFoodResultsModal(badge.getAttribute('data-food'));
+      }
+    });
+    foodResultsModalList.addEventListener('click', function(e) {
+      var row = e.target && e.target.closest ? e.target.closest('.food-results-row') : null;
+      if (row) {
+        openWineDetailModal(row.getAttribute('data-id'), row.getAttribute('data-wine-name'));
+      }
+    });
+    foodResultsModalCloseBtn.addEventListener('click', function() {
+      foodResultsModalOverlay.classList.remove('open');
+    });
+    foodResultsModalOverlay.addEventListener('click', function(e) {
+      if (e.target === foodResultsModalOverlay) foodResultsModalOverlay.classList.remove('open');
     });
 
     var bulkRegisterBtn = document.getElementById('bulkRegisterBtn');

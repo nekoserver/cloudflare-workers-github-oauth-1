@@ -12,6 +12,7 @@ import {
   getWineDetailById,
   bulkRegisterWineMetadata,
   checkWineSeedConsistency,
+  searchWineByFoodAndKeyword,
   floatsToBlob,
   blobToFloats,
   PLAMO_EMBEDDING_MODEL,
@@ -605,6 +606,55 @@ describe('getWineDetailById', () => {
   });
 });
 
+// 対象: 検索結果の「合う料理」バッジをタップした時に、検索キーワードと
+// タップした料理の両方に一致する銘柄をwine_metadataから抽出する機能
+// (GET /api/wine/by-food)。抽出した一覧はモーダルに表示され、その中の
+// 各行をタップすると個別詳細モーダル(GET /api/wine/:id)が開く想定。
+describe('searchWineByFoodAndKeyword', () => {
+  async function seedMetadata(rawDb: DatabaseSync, db: D1Database, ai: Ai, rows: { wine: string; pairing_foods: string; grape_or_style?: string | null; wine_name_override?: string }[]) {
+    for (const r of rows) {
+      await bulkRegisterWines(db, ai, [seedRow({ wine: r.wine })]);
+      const idRow = rawDb.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).get(r.wine) as { id: number };
+      const now = new Date().toISOString();
+      rawDb.prepare(
+        `INSERT INTO wine_metadata (id, wine_name, pairing_foods, grape_or_style, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(idRow.id, r.wine, r.pairing_foods, r.grape_or_style ?? null, now, now);
+    }
+  }
+
+  it('料理名とキーワードの両方に一致する銘柄だけを返す', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await seedMetadata(rawDb, db, ai, [
+      { wine: 'シャルドネ系ワインA', pairing_foods: '魚介 / 白身魚', grape_or_style: 'Chardonnay' },
+      { wine: '無関係なワインB', pairing_foods: '魚介', grape_or_style: 'Chardonnay' },
+      { wine: 'シャルドネ系ワインC', pairing_foods: '牛肉', grape_or_style: 'Chardonnay' },
+    ]);
+    const results = await searchWineByFoodAndKeyword(db, '魚介', 'シャルドネ');
+    expect(results.map((r) => r.wineName)).toEqual(['シャルドネ系ワインA']);
+  });
+
+  it('キーワードが空文字の場合は料理の一致のみで絞り込む', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const ai = makeAi([1, 2, 3]);
+    await seedMetadata(rawDb, db, ai, [
+      { wine: 'ワインA', pairing_foods: '魚介 / 白身魚' },
+      { wine: 'ワインB', pairing_foods: '牛肉' },
+    ]);
+    const results = await searchWineByFoodAndKeyword(db, '魚介', '');
+    expect(results.map((r) => r.wineName)).toEqual(['ワインA']);
+  });
+
+  it('故障シナリオ: 一致する銘柄が無い場合は空配列を返す(例外を投げない)', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const results = await searchWineByFoodAndKeyword(db, '存在しない料理', 'キーワード');
+    expect(results).toEqual([]);
+  });
+});
+
 function metadataRow(overrides: Partial<WineMetadataSeedRow> = {}): WineMetadataSeedRow {
   return {
     wine_name: 'ワインA',
@@ -863,6 +913,18 @@ describe('getWineSearchPage の件数選択・マスク・個別詳細モーダ�
     expect(html).toContain('id="foodBadgeRow"');
     expect(html).toContain('class="food-badge"');
     expect(html).toContain('renderFoodBadges(res.data.foodBadges)');
+    expect(html).not.toContain("\\'");
+    expect(html).not.toContain('&#39;&#39;');
+  });
+
+  it('合う料理バッジをタップした時に開く一覧モーダル(GET /api/wine/by-food)の要素とロジックを含む', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).toContain('id="foodResultsModalOverlay"');
+    expect(html).toContain('id="foodResultsModalList"');
+    expect(html).toContain("fetch('/api/wine/by-food?food=' + encodeURIComponent(food)");
+    expect(html).toContain('foodResultsModalOverlay.style.zIndex = String(getNextZ())');
+    expect(html).toContain("closest('.food-results-row')");
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
   });
