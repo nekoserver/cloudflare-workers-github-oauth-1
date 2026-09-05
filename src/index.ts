@@ -16747,8 +16747,9 @@ app.post('/webhook/cf-auth', async (c) => {
 });
 
 /**
- * Cloudflareの他ワーカー(cf-wh1)からのHMAC-SHA256署名付きwebhook受信エンドポイント。
- * X-Hub-Signature-256 ヘッダー(sha256=<hex>形式)で署名検証を行い、
+ * Cloudflare CASB等からのStandard Webhooks形式(webhook-id/webhook-timestamp/webhook-signature
+ * ヘッダー)で署名されたwebhook受信エンドポイント。verifyResendWebhookSignatureは
+ * Svix/Standard Webhooksと同一のHMAC-SHA256アルゴリズムのため共通利用する。
  * 検証結果とペイロードをwebhook_logへ記録する。
  */
 app.post('/webhook/cf-wh1', async (c) => {
@@ -16759,9 +16760,12 @@ app.post('/webhook/cf-wh1', async (c) => {
   }
 
   const rawBody = await c.req.text();
-  const signatureHeader = c.req.header('X-Hub-Signature-256');
 
-  const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  const verification = await verifyResendWebhookSignature(rawBody, {
+    id: c.req.header('webhook-id'),
+    timestamp: c.req.header('webhook-timestamp'),
+    signature: c.req.header('webhook-signature'),
+  }, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-wh1 webhook', { reason: verification.reason });
     c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
