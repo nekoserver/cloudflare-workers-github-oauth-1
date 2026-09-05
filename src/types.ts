@@ -28,6 +28,8 @@ export type Bindings = {
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
   CF_AUTH_WEBHOOK_SECRET?: string;
+  /** /webhook/cf-wh1（Cloudflareからのwebhook）のHMAC-SHA256署名検証用シークレット */
+  CF_WH1_WEBHOOK_SECRET?: string;
   /** harness_hook_logへのPostToolUseフック書き込み用の共有シークレット */
   HARNESS_HOOK_SECRET?: string;
   GITHUB_TOKEN?: string;

@@ -16747,6 +16747,46 @@ app.post('/webhook/cf-auth', async (c) => {
 });
 
 /**
+ * Cloudflareの他ワーカー(cf-wh1)からのHMAC-SHA256署名付きwebhook受信エンドポイント。
+ * X-Hub-Signature-256 ヘッダー(sha256=<hex>形式)で署名検証を行い、
+ * 検証結果とペイロードをwebhook_logへ記録する。
+ */
+app.post('/webhook/cf-wh1', async (c) => {
+  const webhookSecret = c.env.CF_WH1_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('CF_WH1_WEBHOOK_SECRET is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+  const signatureHeader = c.req.header('X-Hub-Signature-256');
+
+  const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected cf-wh1 webhook', { reason: verification.reason });
+    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    c.executionCtx?.waitUntil(
+      logWebhookEvent(c.env.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload')
+    );
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+
+  logger.info('cf-wh1 webhook received', { event });
+  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
+
+  return c.json({ result: 'OK' });
+});
+
+/**
  * Resend webhookのペイロード検証・重複排除・通知・ログ記録を行う共通処理。
  * sourceIdがnull（/webhook/resend からの呼び出し）の場合はresend_webhook_sourcesに依存しない
  * 単一アカウント運用として扱い、resend_webhook_log.source_idはNULLで記録される。
