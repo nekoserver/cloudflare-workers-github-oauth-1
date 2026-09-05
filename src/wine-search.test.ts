@@ -136,6 +136,11 @@ function setupDb(): DatabaseSync {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE user_sessions (
+      user_id TEXT PRIMARY KEY,
+      revoked_at TEXT,
+      last_activity_at TEXT
+    );
   `);
   return db;
 }
@@ -408,6 +413,31 @@ describe('checkWineSeedConsistency', () => {
     const result = await checkWineSeedConsistency(db, seeds);
     expect(result.embeddedTotal).toBe(0);
     expect(result.matches).toBe(false);
+  });
+});
+
+// 根本原因: GET /api/wine/:id (動的パラメータ)がGET /api/wine/consistency-check
+// (固定パス)より先に登録されていたため、後者へのリクエストが
+// id="consistency-check"として/api/wine/:idにマッチしてしまい、
+// 数値チェックで弾かれて「不正なIDです」が返っていた。実際のHonoアプリ
+// (スタブではなく本物のapp)でルーティングを検証し、再発を防ぐ。
+describe('GET /api/wine/consistency-check のルーティング(実アプリでの回帰テスト)', () => {
+  it('/api/wine/:idに"consistency-check"という文字列がマッチせず、専用ハンドラが呼ばれる', async () => {
+    const realApp = (await import('./index')).default;
+    const { createJWT } = await import('./utils/jwt');
+    const token = await createJWT({ sub: 'test-user', name: 'Test' }, 'test-secret');
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const res = await realApp.request(
+      '/api/wine/consistency-check',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { JWT_SECRET: 'test-secret', DB: db },
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json() as { seedTotal: number; embeddedTotal: number; error?: string };
+    expect(data.error).toBeUndefined();
+    expect(typeof data.seedTotal).toBe('number');
+    expect(typeof data.embeddedTotal).toBe('number');
   });
 });
 
