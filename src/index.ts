@@ -11167,6 +11167,44 @@ app.get('/api/wine/:id', authMiddleware, async (c) => {
   return jsonUtf8(detail);
 });
 
+export interface WineSeedConsistencyResult {
+  seedTotal: number;
+  embeddedTotal: number;
+  matches: boolean;
+  missingCount: number;
+  missingSample: string[];
+}
+
+/**
+ * 「オリジナルのシード件数(WINE_VECTOR_SEED.length)」と「実際に
+ * wine_embeddingsへ埋め込みが入っている件数」を突き合わせる。
+ * 一括登録が途中で失敗・中断した場合や、シード側だけ後から追加された
+ * 場合に、検索対象から漏れているワインが無いかを確認できるようにする
+ * (CLAUDE.mdルール12: 推測せずデータで裏を取る)。
+ * missingSampleは差分の原因調査用に、未登録の銘柄名を先頭5件だけ返す。
+ */
+export async function checkWineSeedConsistency(
+  db: D1Database,
+  seeds: WineSeedRow[],
+): Promise<WineSeedConsistencyResult> {
+  const rows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
+  const embeddedSet = new Set((rows.results ?? []).map((r) => r.wine_name));
+  const missing = seeds.filter((s) => !embeddedSet.has(s.wine)).map((s) => s.wine);
+  return {
+    seedTotal: seeds.length,
+    embeddedTotal: embeddedSet.size,
+    matches: seeds.length === embeddedSet.size && missing.length === 0,
+    missingCount: missing.length,
+    missingSample: missing.slice(0, 5),
+  };
+}
+
+app.get('/api/wine/consistency-check', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const result = await checkWineSeedConsistency(c.env.DB, WINE_VECTOR_SEED);
+  return jsonUtf8(result);
+});
+
 export interface WineMetadataBulkRegisterError {
   wine: string;
   error: string;
