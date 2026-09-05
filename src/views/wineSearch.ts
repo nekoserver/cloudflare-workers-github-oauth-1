@@ -489,6 +489,7 @@ export function getWineSearchPage(username: string): string {
       var totalSucceeded = 0;
       var totalErrors = [];
       var totalSeed = 0;
+      var allSucceededWines = [];
 
       function step() {
         bulkRegisterResult.textContent = '実行中... 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
@@ -499,6 +500,7 @@ export function getWineSearchPage(username: string): string {
           var d = res.data;
           totalSucceeded += d.succeeded;
           totalErrors = totalErrors.concat(d.errors || []);
+          allSucceededWines = allSucceededWines.concat(d.succeededWines || []);
           totalSeed = d.totalSeed;
           var processedSoFar = totalSeed - d.remaining;
           bulkRegisterResult.textContent = '処理中: ' + processedSoFar + ' / ' + totalSeed + ' 件(残り' + d.remaining + '件) / 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
@@ -513,8 +515,11 @@ export function getWineSearchPage(username: string): string {
         .then(function() {
           bulkRegisterBtn.disabled = false;
           var msg = '完了: 新規成功' + totalSucceeded + '件 / エラー' + totalErrors.length + '件';
+          if (allSucceededWines.length > 0) {
+            msg += '(新規登録: ' + allSucceededWines.slice(0, 5).join('、') + (allSucceededWines.length > 5 ? '…他' + (allSucceededWines.length - 5) + '件' : '') + ')';
+          }
           if (totalErrors.length > 0) {
-            msg += '(' + totalErrors.slice(0, 3).map(function(e) { return e.wine; }).join('、') + (totalErrors.length > 3 ? '…' : '') + ')';
+            msg += '(エラー: ' + totalErrors.slice(0, 3).map(function(e) { return e.wine; }).join('、') + (totalErrors.length > 3 ? '…' : '') + ')';
           }
           bulkRegisterResult.textContent = msg;
         })

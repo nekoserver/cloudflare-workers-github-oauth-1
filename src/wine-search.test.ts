@@ -335,6 +335,31 @@ describe('bulkRegisterWines', () => {
     expect(ai2.run).toHaveBeenCalledTimes(1);
   });
 
+  // 対象: 既存616件相当+新規追加分だけがシードに増えた状況(実運用でワイン
+  // ベクタデータを追加した場合)で、bulkRegisterWinesが本当に「差分だけ」を
+  // 処理することを保証する回帰テスト。succeededWinesで実際に処理した銘柄名を
+  // 検証可能にし、既存分に一切触れない(AIを呼ばない)ことも確認する。
+  it('故障シナリオ: 大量の既存データ+新規追加分がある状況でも、差分(新規分)だけを処理しsucceededWinesで検証できる', async () => {
+    const rawDb = setupDb();
+    const db = wrapD1(rawDb) as unknown as D1Database;
+    const existingAi = makeAi([1, 0, 0]);
+    const existingSeeds = Array.from({ length: 50 }, (_, i) => seedRow({ wine: `既存ワイン${i}` }));
+    for (const s of existingSeeds) {
+      await bulkRegisterWines(db, existingAi, [s]);
+    }
+
+    const newAi = makeAi([0, 1, 0]);
+    const newSeeds = [seedRow({ wine: '新規ワインA' }), seedRow({ wine: '新規ワインB' }), seedRow({ wine: '新規ワインC' })];
+    const allSeeds = [...existingSeeds, ...newSeeds];
+    const result = await bulkRegisterWines(db, newAi, allSeeds);
+
+    expect(result.alreadyRegistered).toBe(50);
+    expect(result.attempted).toBe(3);
+    expect(result.succeeded).toBe(3);
+    expect(result.succeededWines).toEqual(['新規ワインA', '新規ワインB', '新規ワインC']);
+    expect(newAi.run).toHaveBeenCalledTimes(3);
+  });
+
   it('故障シナリオ(5): 一部の銘柄でAI呼び出しが失敗しても他の銘柄の登録は継続し、失敗はerrorsに記録される', async () => {
     const rawDb = setupDb();
     const db = wrapD1(rawDb) as unknown as D1Database;
@@ -703,6 +728,8 @@ describe('getWineSearchPage のデバッグモード用UI', () => {
     expect(html).toContain('id="bulkRegisterBtn"');
     expect(html).toContain('id="bulkRegisterResult"');
     expect(html).toContain("fetch('/api/wine/bulk-register'");
+    expect(html).toContain('allSucceededWines');
+    expect(html).toContain('新規登録:');
     expect(html).toContain('id="bulkRegisterMetadataBtn"');
     expect(html).toContain("fetch('/api/wine/bulk-register-metadata'");
     expect(html).toContain('id="consistencyCheckBtn"');
