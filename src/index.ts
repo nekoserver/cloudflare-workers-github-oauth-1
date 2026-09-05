@@ -11158,15 +11158,6 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
   });
 });
 
-app.get('/api/wine/:id', authMiddleware, async (c) => {
-  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const id = Number(c.req.param('id'));
-  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '不正なIDです' }, 400);
-  const detail = await getWineDetailById(c.env.DB, id);
-  if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
-  return jsonUtf8(detail);
-});
-
 export interface WineSeedConsistencyResult {
   seedTotal: number;
   embeddedTotal: number;
@@ -11199,10 +11190,24 @@ export async function checkWineSeedConsistency(
   };
 }
 
+// 根本原因: GET /api/wine/:id (動的パラメータ)より前にGET /api/wine/consistency-check
+// (固定パス)を登録しないと、`/api/wine/consistency-check`へのリクエストが
+// `/api/wine/:id`(id="consistency-check")にマッチしてしまい、数値チェックで
+// 弾かれて「不正なIDです」が返っていた。固定パスのルートは必ず動的パラメータの
+// ルートより先に登録すること。
 app.get('/api/wine/consistency-check', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const result = await checkWineSeedConsistency(c.env.DB, WINE_VECTOR_SEED);
   return jsonUtf8(result);
+});
+
+app.get('/api/wine/:id', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '不正なIDです' }, 400);
+  const detail = await getWineDetailById(c.env.DB, id);
+  if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
+  return jsonUtf8(detail);
 });
 
 export interface WineMetadataBulkRegisterError {
