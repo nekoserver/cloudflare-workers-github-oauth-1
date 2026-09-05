@@ -106,7 +106,31 @@ export function getWineSearchPage(username: string): string {
     .status-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
     .status-msg { font-size: 13px; color: var(--text-muted); min-height: 18px; }
     .status-msg.error { color: #cf222e; }
+    .food-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px 10px 0 0;
+      border-bottom: none;
+      background: var(--bg-secondary);
+    }
+    .food-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+    .food-badge-count { color: var(--text-muted); font-size: 11px; }
     .wine-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; }
+    .wine-table-wrap.has-food-badges { border-top-left-radius: 0; border-top-right-radius: 0; }
     .wine-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--card-bg); }
     .wine-table th, .wine-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
     .wine-table th { color: var(--text-muted); font-weight: 600; background: var(--bg-secondary); position: sticky; top: 0; }
@@ -232,6 +256,7 @@ export function getWineSearchPage(username: string): string {
       <button type="button" class="mask-toggle-btn" id="maskToggleBtn">特性を表示</button>
     </div>
 
+    <div class="food-badge-row" id="foodBadgeRow" style="display:none;"></div>
     <div class="wine-table-wrap" id="wineTableWrap" style="display:none;">
       <table class="wine-table">
         <thead>
@@ -295,6 +320,7 @@ export function getWineSearchPage(username: string): string {
     var tableWrap = document.getElementById('wineTableWrap');
     var tableBody = document.getElementById('wineTableBody');
     var emptyMsg = document.getElementById('emptyMsg');
+    var foodBadgeRow = document.getElementById('foodBadgeRow');
     var maskToggleBtn = document.getElementById('maskToggleBtn');
     var isMasked = true;
     var lastResults = [];
@@ -336,6 +362,20 @@ export function getWineSearchPage(username: string): string {
       tableBody.innerHTML = lastResults.map(renderRow).join('');
     }
 
+    function renderFoodBadges(foodBadges) {
+      if (!foodBadges || foodBadges.length === 0) {
+        foodBadgeRow.style.display = 'none';
+        foodBadgeRow.innerHTML = '';
+        tableWrap.classList.remove('has-food-badges');
+        return;
+      }
+      foodBadgeRow.innerHTML = foodBadges.map(function(b) {
+        return '<span class="food-badge">' + escHtml(b.emoji) + ' ' + escHtml(b.food) + '<span class="food-badge-count">(' + b.count + ')</span></span>';
+      }).join('');
+      foodBadgeRow.style.display = 'flex';
+      tableWrap.classList.add('has-food-badges');
+    }
+
     function setStatus(text, isError) {
       statusMsg.textContent = text || '';
       statusMsg.classList.toggle('error', !!isError);
@@ -363,6 +403,7 @@ export function getWineSearchPage(username: string): string {
             setStatus(res.data.error || '検索に失敗しました', true);
             tableWrap.style.display = 'none';
             emptyMsg.style.display = 'none';
+            renderFoodBadges([]);
             return;
           }
           var results = res.data.results || [];
@@ -375,11 +416,13 @@ export function getWineSearchPage(username: string): string {
           if (results.length === 0) {
             tableWrap.style.display = 'none';
             emptyMsg.style.display = 'block';
+            renderFoodBadges([]);
             return;
           }
           emptyMsg.style.display = 'none';
           tableWrap.style.display = 'block';
           renderTable();
+          renderFoodBadges(res.data.foodBadges);
         })
         .catch(function(err) {
           searchBtn.disabled = false;

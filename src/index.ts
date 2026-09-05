@@ -10898,6 +10898,7 @@ export interface WineSearchCandidate {
   wineName: string;
   vector: number[];
   details: WineDetailFields | null;
+  pairingFoods: string | null;
 }
 
 export interface WineSearchResult {
@@ -10905,6 +10906,7 @@ export interface WineSearchResult {
   wineName: string;
   similarity: number;
   details: WineDetailFields | null;
+  pairingFoods: string | null;
 }
 
 /**
@@ -10919,7 +10921,7 @@ export function rankWines(
 ): WineSearchResult[] {
   if (queryVector.length === 0) return [];
   return candidates
-    .map((c) => ({ id: c.id, wineName: c.wineName, similarity: cosineSimilarity(queryVector, c.vector), details: c.details }))
+    .map((c) => ({ id: c.id, wineName: c.wineName, similarity: cosineSimilarity(queryVector, c.vector), details: c.details, pairingFoods: c.pairingFoods }))
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, Math.max(0, limit));
 }
@@ -10941,6 +10943,73 @@ export function countWineHits(
 ): number {
   if (queryVector.length === 0) return 0;
   return candidates.filter((c) => cosineSimilarity(queryVector, c.vector) >= threshold).length;
+}
+
+/**
+ * wine_metadata.pairing_foodsは「牡蠣 / 魚介 / 白身魚」のように区切り文字
+ * (半角/全角スラッシュ)で複数の料理を1つの文字列にまとめて保持している。
+ * バッジ集計のために個別の料理名へ分割する。前後の空白・空要素は除去する。
+ */
+export function parsePairingFoods(pairingFoods: string | null | undefined): string[] {
+  if (!pairingFoods) return [];
+  return pairingFoods
+    .split(/[/／]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+const FOOD_EMOJI_RULES: [RegExp, string][] = [
+  [/寿司|すし|鮨/, '🍣'],
+  [/牡蠣|貝|海老|エビ|蟹|カニ|ロブスター|甲殻類|シーフード|魚介|海鮮/, '🦐'],
+  [/魚|サーモン|鮭/, '🐟'],
+  [/鶏|チキン|唐揚げ|焼き鳥/, '🍗'],
+  [/牛肉|ステーキ|ローストビーフ|赤身肉|ラグー|ボロネーゼ/, '🥩'],
+  [/ラム|羊/, '🐑'],
+  [/豚|ベーコン|生ハム|シャルキュトリ/, '🥓'],
+  [/ジビエ|鹿|鴨/, '🦌'],
+  [/チーズ/, '🧀'],
+  [/パスタ|ピザ/, '🍝'],
+  [/リゾット/, '🍚'],
+  [/サラダ|野菜/, '🥗'],
+  [/キノコ|茸/, '🍄'],
+  [/デザート|チョコレート|菓子|タルト|フルーツ/, '🍰'],
+  [/スパイス|辛/, '🌶️'],
+  [/キャビア/, '🐟'],
+];
+
+/**
+ * 料理名から見た目に分かりやすい絵文字を推定する。既知のキーワードに
+ * 一致しなければ汎用の食器アイコンにフォールバックする(完璧な分類は
+ * 目的ではなく、ひと目で識別しやすくすることが目的)。
+ */
+export function pickFoodEmoji(food: string): string {
+  for (const [pattern, emoji] of FOOD_EMOJI_RULES) {
+    if (pattern.test(food)) return emoji;
+  }
+  return '🍽️';
+}
+
+export interface WineFoodBadge {
+  food: string;
+  emoji: string;
+  count: number;
+}
+
+/**
+ * 検索結果(表示されているresults)全体でwine_metadata.pairing_foodsを
+ * 集計し、出現回数の多い順に並べたバッジ一覧を返す。同数の場合は
+ * 出現順(=元のresultsの並び順、つまり類似度順)を保つ安定ソートとする。
+ */
+export function aggregateFoodBadges(results: { pairingFoods: string | null }[]): WineFoodBadge[] {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    for (const food of parsePairingFoods(r.pairingFoods)) {
+      counts.set(food, (counts.get(food) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([food, count]) => ({ food, emoji: pickFoodEmoji(food), count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 export interface WineBulkRegisterError {
@@ -11118,14 +11187,17 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
 
   const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
   const rows = await c.env.DB.prepare(
-    `SELECT e.id AS id, e.wine_name AS wine_name, e.vector AS vector, ${cols}
-     FROM wine_embeddings e LEFT JOIN wine_details d ON d.wine_id = e.id`
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.vector AS vector, m.pairing_foods AS pairing_foods, ${cols}
+     FROM wine_embeddings e
+     LEFT JOIN wine_details d ON d.wine_id = e.id
+     LEFT JOIN wine_metadata m ON m.id = e.id`
   ).all<Record<string, unknown>>();
   const candidates: WineSearchCandidate[] = (rows.results ?? []).map((r) => ({
     id: Number(r.id),
     wineName: String(r.wine_name),
     vector: blobToFloats(r.vector as ArrayBuffer),
     details: rowToWineDetail(r),
+    pairingFoods: typeof r.pairing_foods === 'string' ? r.pairing_foods : null,
   }));
   const rawLimit = (body as Record<string, unknown>).limit;
   const limit = (WINE_SEARCH_ALLOWED_LIMITS as readonly number[]).includes(rawLimit as number)
@@ -11137,9 +11209,10 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     : WINE_SEARCH_DEFAULT_HIT_THRESHOLD;
   const results = rankWines(queryVector, candidates, limit);
   const hitCount = countWineHits(queryVector, candidates, threshold);
+  const foodBadges = aggregateFoodBadges(results);
   const debugRequested = (body as Record<string, unknown>).debug === true;
   if (!debugRequested) {
-    return jsonUtf8({ results, total: candidates.length, hitCount, threshold, limit });
+    return jsonUtf8({ results, total: candidates.length, hitCount, threshold, limit, foodBadges });
   }
   const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
   const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
@@ -11156,6 +11229,7 @@ app.post('/api/wine/search', authMiddleware, async (c) => {
     hitCount,
     threshold,
     limit,
+    foodBadges,
     debugQueryDim: queryVector.length,
     debugCandidateDims: candidateDims,
     debugRawVectorType,
