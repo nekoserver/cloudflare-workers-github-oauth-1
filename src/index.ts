@@ -10953,6 +10953,7 @@ export interface WineBulkRegisterResult {
   alreadyRegistered: number;
   attempted: number;
   succeeded: number;
+  succeededWines: string[];
   errors: WineBulkRegisterError[];
   remaining: number;
 }
@@ -10984,6 +10985,7 @@ export async function bulkRegisterWines(
   const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
   const toRegister = (typeof limit === 'number' && limit > 0) ? notRegistered.slice(0, limit) : notRegistered;
   let succeeded = 0;
+  const succeededWines: string[] = [];
   const errors: WineBulkRegisterError[] = [];
 
   for (const w of toRegister) {
@@ -11007,6 +11009,7 @@ export async function bulkRegisterWines(
          ON CONFLICT(wine_id) DO UPDATE SET ${updateSet}`
       ).bind(idRow.id, ...WINE_DETAIL_COLUMNS.map((c) => w[c]), now, now).run();
       succeeded++;
+      succeededWines.push(w.wine);
     } catch (e) {
       errors.push({ wine: w.wine, error: e instanceof Error ? e.message : String(e) });
     }
@@ -11017,6 +11020,7 @@ export async function bulkRegisterWines(
     alreadyRegistered: existingSet.size,
     attempted: toRegister.length,
     succeeded,
+    succeededWines,
     errors,
     remaining: notRegistered.length - toRegister.length,
   };
