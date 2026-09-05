@@ -55,3 +55,83 @@ describe('/wine-search 検索結果行タップ→個別詳細モーダル', () 
     expect(parseInt(overlay.style.zIndex, 10)).toBeGreaterThan(5000);
   });
 });
+
+// 対象: 検索結果の「合う料理」バッジをタップすると、検索キーワードと
+// タップした料理の両方に一致する銘柄一覧を最上位レイヤーのモーダルに表示し、
+// その中の各行をタップすると個別詳細モーダルがさらに前面(より上のレイヤー)
+// に表示される、という2段階のモーダル遷移。
+//
+// 故障シナリオ:
+//   (1) バッジをタップしても何も起きない(data-food属性やイベント委譲の不備)
+//   (2) 一覧モーダルの行をタップしても個別詳細モーダルが開かない
+//   (3) 個別詳細モーダルが一覧モーダルより背面に表示されてしまう(z-index逆転)
+describe('/wine-search 合う料理バッジ→一覧モーダル→個別詳細モーダル', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  async function setupWithBadge() {
+    const html = getWineSearchPage('tester');
+    const bodyIdx = html.indexOf('<body>') + 6;
+    const scriptIdx = html.indexOf('<script>', bodyIdx);
+    document.body.innerHTML = html.slice(bodyIdx, scriptIdx);
+    const fetchMock = vi.fn((url: string) => {
+      if (String(url).indexOf('/api/wine/by-food') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            results: [{ id: 7, wineName: '一致した銘柄', pairingFoods: '魚介', country: '日本', wineType: '白', characteristics: null }],
+            total: 1,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ id: 7, wineName: '一致した銘柄', model: 'm', dim: 2048, details: null, metadata: null }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const scriptSrc = html.slice(scriptIdx + 8, html.indexOf('</script>', scriptIdx));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    const foodBadgeRow = document.getElementById('foodBadgeRow')!;
+    foodBadgeRow.innerHTML = '<span class="food-badge" data-food="魚介">🦐 魚介<span class="food-badge-count">(3)</span></span>';
+    return { fetchMock, foodBadgeRow };
+  }
+
+  it('バッジをタップすると検索キーワード+料理で絞り込んだ一覧が最上位レイヤーのモーダルに表示される', async () => {
+    const { fetchMock, foodBadgeRow } = await setupWithBadge();
+    (document.getElementById('freeword') as HTMLInputElement).value = 'シャルドネ';
+    var fixedEl = document.createElement('div');
+    fixedEl.style.cssText = 'position:fixed;z-index:5000;';
+    document.body.appendChild(fixedEl);
+
+    const badge = foodBadgeRow.querySelector('.food-badge') as HTMLElement;
+    badge.dispatchEvent(new Event('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/wine/by-food?food=%E9%AD%9A%E4%BB%8B&q=%E3%82%B7%E3%83%A3%E3%83%AB%E3%83%89%E3%83%8D'),
+      expect.anything(),
+    );
+    const foodResultsOverlay = document.getElementById('foodResultsModalOverlay')!;
+    expect(foodResultsOverlay.classList.contains('open')).toBe(true);
+    expect(parseInt(foodResultsOverlay.style.zIndex, 10)).toBeGreaterThan(5000);
+    expect(document.getElementById('foodResultsModalList')!.textContent).toContain('一致した銘柄');
+  });
+
+  it('一覧モーダルの行をタップすると個別詳細モーダルが一覧モーダルより前面(より上のレイヤー)に開く', async () => {
+    const { foodBadgeRow } = await setupWithBadge();
+    const badge = foodBadgeRow.querySelector('.food-badge') as HTMLElement;
+    badge.dispatchEvent(new Event('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const row = document.querySelector('.food-results-row') as HTMLElement;
+    expect(row).not.toBeNull();
+    row.dispatchEvent(new Event('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const detailOverlay = document.getElementById('detailModalOverlay')!;
+    const foodResultsOverlay = document.getElementById('foodResultsModalOverlay')!;
+    expect(detailOverlay.classList.contains('open')).toBe(true);
+    expect(parseInt(detailOverlay.style.zIndex, 10)).toBeGreaterThan(parseInt(foodResultsOverlay.style.zIndex, 10));
+  });
+});
