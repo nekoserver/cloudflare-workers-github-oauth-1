@@ -274,6 +274,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`](NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md)
 - PWA(ホーム画面追加・standalone表示・アドレスバー表示不具合):
   [`NOTICE.cloudflare-workers-github-oauth-1.pwa.md`](NOTICE.cloudflare-workers-github-oauth-1.pwa.md)
+- gitのshallow clone(コミット履歴を根拠にした調査が壊れる・`git fetch --unshallow`での対処):
+  [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 
 ---
 
