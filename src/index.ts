@@ -197,6 +197,7 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
+import { getD1QueryCatalogPage, type D1QueryCatalogRow } from './views/d1QueryCatalog';
 import { getCountdownPage } from './views/countdown';
 import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
@@ -367,6 +368,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_subqueries', migration: '0045', description: 'AIチャットサブクエリマスタ', syncPolicy: 'manual' },
   { name: 'aichat_share_subquery_links', migration: '0046', description: 'AIチャット共有質問×サブクエリリンク', syncPolicy: 'auto' },
   { name: 'aichat_model_colors', migration: '0048', description: 'AIチャットモデルカラー設定', syncPolicy: 'manual' },
+  { name: 'd1_query_catalog', migration: '0129', description: 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', syncPolicy: 'manual' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -1928,6 +1930,22 @@ CREATE TABLE IF NOT EXISTS wine_details (
 );
 CREATE INDEX IF NOT EXISTS idx_public_key_security_events_user_id ON public_key_security_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_public_key_security_events_created_at ON public_key_security_events(created_at);`,
+  '0129': `CREATE TABLE IF NOT EXISTS d1_query_catalog (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query_name TEXT NOT NULL,
+  command TEXT NOT NULL,
+  command_confirmed INTEGER NOT NULL DEFAULT 0,
+  table_name TEXT,
+  source_file TEXT NOT NULL DEFAULT 'src/index.ts',
+  source_line INTEGER NOT NULL,
+  sql_text TEXT NOT NULL,
+  migration_file TEXT,
+  last_commit_hash TEXT,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(source_file, source_line)
+);
+CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
+CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_query_name ON d1_query_catalog(query_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2071,6 +2089,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   login_history: { id: 'pk', user_id: 'fk+idx' },
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
+  d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
   wine_metadata: { id: 'pk+fk' },
@@ -2274,6 +2293,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_moondream_analyses: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
+  d1_query_catalog: 'd1-query-catalog',
   ts_repository:          'ts-catalog',
   ts_function_catalog:    'ts-catalog',
   ts_function_callers:    'ts-catalog',
@@ -2340,6 +2360,7 @@ export const GROUP_LABELS: Record<string, string> = {
   config: 'Config / Settings',
   search: 'Search',
   'ts-catalog': 'TS Function Catalog',
+  'd1-query-catalog': 'D1 Query Catalog',
   undefined: 'Undefined',
 };
 
@@ -10666,6 +10687,25 @@ app.get('/sqlc-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getSqlcWasmPage(user.sub));
+});
+
+app.get('/d1-query-catalog', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  let rows: D1QueryCatalogRow[] = [];
+  if (db) {
+    try {
+      const result = await db.prepare(
+        `SELECT query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash
+         FROM d1_query_catalog
+         ORDER BY table_name, query_name`
+      ).all<D1QueryCatalogRow>();
+      rows = result.results ?? [];
+    } catch (error) {
+      logger.warn('d1-query-catalog: fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
+    }
+  }
+  return c.html(getD1QueryCatalogPage(user.sub, rows));
 });
 
 app.get('/ruby-wasm', authMiddleware, async (c) => {
