@@ -130,8 +130,9 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
-    td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; }
-    .sql-cell { max-width: 420px; word-break: break-word; }
+    td { color: var(--text-primary); }
+    td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
+    .sql-cell { white-space: nowrap; }
     .badge {
       font-size: 11px;
       padding: 2px 6px;

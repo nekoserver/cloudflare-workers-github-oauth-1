@@ -8,6 +8,11 @@
  *   (1) DB未設定・クエリ失敗時にページ全体がエラーにならず空一覧で表示される
  *   (2) ユーザー名によるXSS
  *   (3) SQL本文・クエリ名にHTML特殊文字が含まれてもエスケープされる
+ *   (4) `td`に明示的な文字色が無く、ダークモードで黒文字が暗背景に重なり読めなくなる
+ *       (CLAUDE.CSS.mdルール: 色は必ずCSS変数を使う。実機で発見・修正した回帰)
+ *   (5) SQLセルに`word-break: break-word`を残したまま列が縮むと、長い識別子が
+ *       1〜3文字ずつ縦に折り返されて実質読めなくなる(テーブルレイアウトが列を
+ *       極端に狭めた場合の挙動)。横スクロールに倒すことで回避する
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -102,6 +107,19 @@ describe('GET /d1-query-catalog', () => {
     ]);
     expect(html).not.toContain('<b>Evil</b>');
     expect(html).not.toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('tdに明示的な文字色(var(--text-primary))が設定されている(ダークモードで黒文字が読めなくなる回帰の防止)', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/td\s*\{[^}]*color:\s*var\(--text-primary\)/);
+  });
+
+  it('SQLセルにword-break: break-wordが残っていない(縦一文字折り返しの回帰の防止)', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    const sqlCellRule = html.match(/\.sql-cell\s*\{[^}]*\}/);
+    expect(sqlCellRule).not.toBeNull();
+    expect(sqlCellRule![0]).not.toContain('word-break');
+    expect(sqlCellRule![0]).toContain('white-space: nowrap');
   });
 
   it('コマンド確定件数がサマリに表示される', () => {
