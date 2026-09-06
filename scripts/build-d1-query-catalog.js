@@ -48,12 +48,22 @@ function tableNames(sql) {
     /\bUPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
     /\bTABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
     /\bJOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
+    // CREATE [UNIQUE] INDEX ... ON <table>(...) — インデックス作成文の対象テーブル
+    /\bON\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/gi,
   ];
   for (const re of patterns) {
     let m;
     while ((m = re.exec(sql))) names.add(m[1]);
   }
   return [...names];
+}
+
+// isDynamicTableRef: PRAGMA table_info(${tableName}) のように、テーブル名が
+// JS側のテンプレートリテラル変数展開(${...})に依存していて静的に解決できない
+// クエリを検出する。tableNames()が1件も返せず、かつこれがtrueの場合は
+// 「検出漏れ(不明)」ではなく「実行時にしか決まらない(動的)」と区別して表示する。
+function isDynamicTableRef(sql) {
+  return /\$\{[^}]*\}/.test(sql);
 }
 
 function pascal(s) {
@@ -86,7 +96,7 @@ console.error(`extracted ${matches.length} template-literal prepare() calls (con
 // name synthesis with per-table+verb counters
 const seen = new Map();
 for (const q of matches) {
-  const table = q.tables[0] || "Unknown";
+  const table = q.tables[0] || (isDynamicTableRef(q.sql) ? "Dynamic" : "Unknown");
   const base = pascal(q.verb.toLowerCase()) + pascal(table);
   const c = (seen.get(base) || 0) + 1;
   seen.set(base, c);
@@ -173,7 +183,7 @@ function commitLink(hash) {
 
 let byTable = new Map();
 for (const q of matches) {
-  const t = q.tables[0] || "(不明)";
+  const t = q.tables[0] || (isDynamicTableRef(q.sql) ? "(動的)" : "(不明)");
   if (!byTable.has(t)) byTable.set(t, []);
   byTable.get(t).push(q);
 }

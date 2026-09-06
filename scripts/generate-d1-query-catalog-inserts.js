@@ -41,12 +41,21 @@ function tableNames(sql) {
     /\bUPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
     /\bTABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
     /\bJOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi,
+    // CREATE [UNIQUE] INDEX ... ON <table>(...) — インデックス作成文の対象テーブル
+    /\bON\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/gi,
   ];
   for (const re of patterns) {
     let m;
     while ((m = re.exec(sql))) names.add(m[1]);
   }
   return [...names];
+}
+
+// isDynamicTableRef: PRAGMA table_info(${tableName}) のように、テーブル名が
+// JS側のテンプレートリテラル変数展開(${...})に依存していて静的に解決できない
+// クエリを検出する。build-d1-query-catalog.jsと同じ判定ロジック。
+function isDynamicTableRef(sql) {
+  return /\$\{[^}]*\}/.test(sql);
 }
 
 function pascal(s) {
