@@ -89,6 +89,11 @@ export function sha256HexViaWasm(input: string): string {
   `/neko gh pr list <owner/repo>`・`GET /api/gh/pr-list?repo=<owner/repo>`。
   ブラウザページは無くサーバー(Worker)実行のみ。同クレート内の
   `gh repo view`相当(`format_repo_view`)は配線未実施のプロトタイプのまま
+- `sqlc-wasm`: sqlc(https://sqlc.dev/)の`-- name: GetAuthor :one`形式の
+  クエリアノテーションをパースし、名前・コマンド種別・行番号・SQL本文を
+  Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
+  gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
+  `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
@@ -196,3 +201,59 @@ GitHub Appのuser-to-serverトークン(`ghu_`)は404、fine-grained PATは403
 (`ghp_`、`repo`スコープ)のみ成功**する。このため`GH_ATTACH_UPLOAD_TOKEN`
 という専用のclassic PATを別途`wrangler secret put`で設定する必要がある
 (詳細は`NOTICE.cloudflare-workers-github-oauth-1.20260902.md`参照)。
+
+## sqlc-wasm移植プロトタイプ
+
+`sqlc-wasm/`は、Go製のSQLコード生成ツール[sqlc](https://sqlc.dev/)を
+Workers/ブラウザ向けに移植できるか検証するプロトタイプ。sqlc本体は
+PostgreSQL/MySQL/SQLite向けのSQL構文解析器、スキーマとの型突き合わせ、
+Goの構造体・クエリ関数のコード生成までを行う大規模なツールであり、
+そのままブラウザWASMへ移植する対象ではない。
+
+移植範囲は、sqlcのクエリファイルが使う「クエリアノテーション」構文
+(`-- name: GetAuthor :one` のようなコメント行で、SQL文1つ1つに名前と
+コマンド種別を付与する。sqlcの`internal/metadata`パッケージが定義する
+仕様)を検出・検証するテキスト処理部分のみ(`annotations.go`)。
+
+| 担当 | 処理 |
+|---|---|
+| Go/WASM(`sqlc-wasm`) | アノテーション行の検出、クエリ名・コマンド種別の妥当性検証、SQL本文の抽出、Markdownテーブルへの整形 |
+| (対象外) | SQL構文解析(PostgreSQL/MySQL/SQLite文法)、スキーマとの型突き合わせ、Goコード生成 |
+
+対応コマンド種別: `one`, `many`, `exec`, `execrows`, `execlastid`,
+`execresult`, `batchexec`, `batchmany`, `batchone`, `copyfrom`
+(https://docs.sqlc.dev/en/latest/reference/query-annotations.html)。
+
+gh-attach-wasmと同じ理由(`wasm32-unknown-unknown`のC言語コード生成を
+含むクレートがビルドできないというRust側の制約を受けない)でGo標準の
+`GOOS=js GOARCH=wasm`ターゲット・`wasm_exec.js`グルーコードを使う。
+
+### ビルド手順
+
+```bash
+cd wasm/sqlc-wasm
+go test ./...                                    # ネイティブ環境でロジック部分を検証
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/sqlc.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/sqlc-wasm_exec.js
+```
+
+`public/wasm/sqlc.wasm`と`public/wasm/sqlc-wasm_exec.js`はビルド成果物
+なのでリポジトリにコミットする。
+
+### ブラウザ側の読み込み
+
+```js
+await import('/wasm/sqlc-wasm_exec.js'); // globalThis.Go を定義
+const go = new Go();
+const result = await WebAssembly.instantiateStreaming(fetch('/wasm/sqlc.wasm'), go.importObject);
+go.run(result.instance); // ここでglobalThis.sqlcParseQueryAnnotationsが登録される
+const markdown = sqlcParseQueryAnnotations(sqlText); // Markdownテーブル文字列を返す
+```
+
+### 今後の拡張余地
+
+`sqlc generate`本体(SQL構文解析・型突き合わせ・コード生成)は、
+PostgreSQL/MySQL/SQLite文法のパーサーが必要でこのプロトタイプの範囲を
+大きく超えるため未着手。将来必要になった場合は、公式が構文解析器の
+WASMビルドを配布していないか先に確認すること
+(`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`の教訓と同じ)。
