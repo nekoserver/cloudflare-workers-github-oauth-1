@@ -94,6 +94,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 78278,
     builtAt: '2026-09-02',
   },
+  {
+    id: 'sqlc',
+    name: 'sqlc query annotations (Go)',
+    description:
+      'sqlc(https://sqlc.dev/)の`-- name: GetAuthor :one`形式のクエリアノテーションをパースし、名前・コマンド種別・行番号・SQL本文をMarkdownテーブルへ整形する。SQL方言の構文解析やコード生成は対象外。gh-attach-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/sqlc-wasmページのブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+    wasmPath: 'public/wasm/sqlc.wasm',
+    sourceDir: 'wasm/sqlc-wasm',
+    sourceFile: 'wasm/sqlc-wasm/annotations.go',
+    approxSize: '約2.4MB',
+    sizeBytes: 2402703,
+    builtAt: '2026-09-06',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
