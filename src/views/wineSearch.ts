@@ -344,8 +344,13 @@ export function getWineSearchPage(username: string): string {
     var lastResults = [];
     var DETAIL_COLUMN_KEYS = ['fat', 'sweet', 'acid', 'salt', 'spice', 'umami', 'bitter', 'richness', 'red_meat', 'poultry', 'seafood', 'dessert'];
     var DETAIL_COLUMN_LABELS = { fat: '脂肪', sweet: '甘味', acid: '酸味', salt: '塩味', spice: 'スパイス', umami: '旨味', bitter: '苦味', richness: 'コク', red_meat: '赤肉', poultry: '鶏肉', seafood: '魚介', dessert: 'デザート' };
-    var METADATA_COLUMN_KEYS = ['katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style', 'characteristics', 'pairing_foods', 'pairing_reasons', 'source_urls', 'metadata_status'];
-    var METADATA_COLUMN_LABELS = { katakana_name: 'カタカナ表記', country: '生産国', production_area: '産地', wine_type: 'タイプ', grape_or_style: '品種/スタイル', characteristics: '特徴', pairing_foods: '合う料理', pairing_reasons: '理由', source_urls: '出典URL', metadata_status: '調査ステータス' };
+    var METADATA_COLUMN_KEYS = ['katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style', 'characteristics', 'pairing_foods', 'pairing_reasons', 'metadata_status'];
+    var METADATA_COLUMN_LABELS = { katakana_name: 'カタカナ表記', country: '生産国', production_area: '産地', wine_type: 'タイプ', grape_or_style: '品種/スタイル', characteristics: '特徴', pairing_foods: '合う料理', pairing_reasons: '理由', metadata_status: '調査ステータス' };
+    var isPwaStandalone = (function() {
+      try {
+        return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      } catch (e) { return false; }
+    })();
 
     var isDebugMode = (function() {
       try { return new URLSearchParams(location.search).get('debug') === '1'; } catch (e) { return false; }
@@ -498,7 +503,10 @@ export function getWineSearchPage(username: string): string {
           }
           var d = res.data;
           detailModalTitle.textContent = d.wineName;
-          detailModalMeta.textContent = 'ID: ' + d.id + ' / モデル: ' + d.model + ' / 次元数: ' + d.dim;
+          var metaText = 'ID: ' + d.id;
+          if (!isPwaStandalone) { metaText += ' / モデル: ' + d.model; }
+          metaText += ' / 次元数: ' + d.dim;
+          detailModalMeta.textContent = metaText;
           var rows = '';
           var m = d.metadata;
           for (var j = 0; j < METADATA_COLUMN_KEYS.length; j++) {

@@ -56,6 +56,66 @@ describe('/wine-search 検索結果行タップ→個別詳細モーダル', () 
   });
 });
 
+// 対象: 個別詳細モーダルの表示内容。出典URL列は常に表示しない。
+// 埋め込みモデル名の行はPWA(display-mode: standalone)でのみ非表示にする。
+//
+// 故障シナリオ:
+//   (1) wine_metadataにsource_urlsの値があると出典URL列が表示されてしまう
+//   (2) 通常のブラウザ表示でもモデル名の行が消えてしまう(PWA判定漏れ)
+//   (3) PWA(standalone)表示なのにモデル名の行が残ってしまう
+describe('/wine-search 個別詳細モーダルの表示項目(出典URL非表示・PWAでのモデル名非表示)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  function setupWithStandalone(isStandalone: boolean) {
+    const html = getWineSearchPage('tester');
+    const bodyIdx = html.indexOf('<body>') + 6;
+    const scriptIdx = html.indexOf('<script>', bodyIdx);
+    document.body.innerHTML = html.slice(bodyIdx, scriptIdx);
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query.indexOf('standalone') !== -1 ? isStandalone : false,
+      media: query,
+      addListener: () => {},
+      removeListener: () => {},
+    })));
+    const fetchMock = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        id: 42,
+        wineName: 'テストワイン',
+        model: 'plamo-embedding-1b',
+        dim: 2048,
+        details: null,
+        metadata: { source_urls: 'https://example.com/should-not-be-shown', country: '日本' },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const scriptSrc = html.slice(scriptIdx + 8, html.indexOf('</script>', scriptIdx));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    const tableBody = document.getElementById('wineTableBody')!;
+    tableBody.innerHTML = '<tr class="wine-row" data-id="42" data-wine-name="テストワイン"><td class="wine-name">テストワイン</td></tr>';
+    return tableBody;
+  }
+
+  it('通常のブラウザ表示ではモデル名を表示し、出典URL列は表示しない', async () => {
+    const tableBody = setupWithStandalone(false);
+    (tableBody.querySelector('.wine-name') as HTMLElement).dispatchEvent(new Event('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.getElementById('detailModalMeta')!.textContent).toContain('モデル');
+    expect(document.getElementById('detailModalTable')!.textContent).not.toContain('出典');
+    expect(document.getElementById('detailModalTable')!.textContent).not.toContain('should-not-be-shown');
+  });
+
+  it('PWA(standalone)表示ではモデル名を表示せず、出典URL列も表示しない', async () => {
+    const tableBody = setupWithStandalone(true);
+    (tableBody.querySelector('.wine-name') as HTMLElement).dispatchEvent(new Event('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.getElementById('detailModalMeta')!.textContent).not.toContain('モデル');
+    expect(document.getElementById('detailModalTable')!.textContent).not.toContain('出典');
+    expect(document.getElementById('detailModalTable')!.textContent).not.toContain('should-not-be-shown');
+  });
+});
+
 // 対象: 検索結果の「合う料理」バッジをタップすると、検索キーワードと
 // タップした料理の両方に一致する銘柄一覧を最上位レイヤーのモーダルに表示し、
 // その中の各行をタップすると個別詳細モーダルがさらに前面(より上のレイヤー)
