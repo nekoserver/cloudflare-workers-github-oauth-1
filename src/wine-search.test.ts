@@ -929,6 +929,16 @@ describe('getWineSearchPage の件数選択・マスク・個別詳細モーダ�
     expect(html).not.toContain('&#39;&#39;');
   });
 
+  it('個別詳細モーダルに出典URL列を表示せず、PWA(standalone)ではモデル名を非表示にするロジックを含む', async () => {
+    const { getWineSearchPage } = await import('./views/wineSearch');
+    const html = getWineSearchPage('tester');
+    expect(html).not.toContain("source_urls: '出典URL'");
+    expect(html).not.toMatch(/METADATA_COLUMN_KEYS\s*=\s*\[[^\]]*source_urls/);
+    expect(html).toContain('isPwaStandalone');
+    expect(html).toContain("display-mode: standalone");
+    expect(html).toContain('if (!isPwaStandalone)');
+  });
+
   it('行(任意のセル)クリックで個別詳細モーダルを開きGET /api/wine/:idを呼び、動的z-index(getNextZ)を使う', async () => {
     const { getWineSearchPage } = await import('./views/wineSearch');
     const html = getWineSearchPage('tester');
