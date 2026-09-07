@@ -39,10 +39,31 @@ function createMockDb(prefRow: { pref_value: string; updated_at: string } | null
 }
 
 describe('LEGACY_STORAGE_ENTRIES', () => {
-  it('airline_network_dest_flagsは/airline-networkページの設定として登録されている', () => {
-    const entry = LEGACY_STORAGE_ENTRIES.find((e) => e.key === 'airline_network_dest_flags');
-    expect(entry).toBeDefined();
-    expect(entry?.page).toBe('/airline-network');
+  // airline_network_* は個別キーを1つずつ登録するのではなく、前方一致(isPrefix)の
+  // 1エントリで/airline-network由来のキーを網羅的に拾う。今後 /airline-network
+  // 側に新しいCookie/localStorageキーが増えても、このレジストリへの追加登録なしに
+  // 正しいページとして判定できることを保証する。
+  it.each([
+    ['airline_network_dest_flags', 'cookie'],
+    ['airline_network_dest_airports', 'cookie'],
+    ['airline_network_country_hubs', 'cookie'],
+    ['airline_network_display_mode', 'cookie'],
+    ['airline_network_country_hubs_v2', 'localStorage'],
+    ['airline_network_some_future_key', 'cookie'],
+  ] as const)('%s(%s)は前方一致で/airline-networkページと判定される', (key, storage) => {
+    const matched = LEGACY_STORAGE_ENTRIES.find((e) => {
+      if (e.storage !== storage) return false;
+      return e.isPrefix ? key.indexOf(e.key) === 0 : e.key === key;
+    });
+    expect(matched).toBeDefined();
+    expect(matched?.page).toBe('/airline-network');
+  });
+
+  it('airline_networkのprefixエントリはcookie/localStorageの両方に存在する', () => {
+    const cookieEntry = LEGACY_STORAGE_ENTRIES.find((e) => e.key === 'airline_network_' && e.storage === 'cookie' && e.isPrefix);
+    const lsEntry = LEGACY_STORAGE_ENTRIES.find((e) => e.key === 'airline_network_' && e.storage === 'localStorage' && e.isPrefix);
+    expect(cookieEntry).toBeDefined();
+    expect(lsEntry).toBeDefined();
   });
 });
 
