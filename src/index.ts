@@ -182,6 +182,47 @@ async function fetchAndFormatGhPrList(
   const maskAuthor = resolveHideAuthorFromCookie(hideAuthorCookie);
   return formatPrListViaWasm(repoFullName, json, maskAuthor);
 }
+
+/**
+ * `/neko mlb` 用に、MLB Stats APIから指定日(YYYY-MM-DD)の試合予定を取得し、
+ * 開始時刻・対戦カード・両チーム先発投手だけの軽量な形に整形する。
+ * /mlb ページの/api/mlb-scheduleと同じhydrateパラメータ(team,venue,probablePitcher)を
+ * 使い、先発投手が未発表の試合はnullのまま返す(呼び出し側でMarkdown整形時に
+ * 「未定」でフォールバックする)。
+ */
+async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbTodayGame[]> {
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}&hydrate=team,venue,probablePitcher`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) {
+    throw new Error(`MLBスケジュールの取得に失敗しました(status ${res.status})`);
+  }
+  const data = await res.json<{ dates?: Array<{ games?: unknown[] }> }>();
+  const rawGames = data.dates?.[0]?.games ?? [];
+  const games: MlbTodayGame[] = [];
+  for (const raw of rawGames) {
+    const g = raw as {
+      gameDate?: string;
+      teams?: {
+        home?: { team?: { id?: number; abbreviation?: string; name?: string }; probablePitcher?: { fullName?: string } };
+        away?: { team?: { id?: number; abbreviation?: string; name?: string }; probablePitcher?: { fullName?: string } };
+      };
+    };
+    const ht = g.teams?.home?.team;
+    const at = g.teams?.away?.team;
+    if (!ht?.id || !at?.id) continue;
+    games.push({
+      gameDate: g.gameDate ?? '',
+      awayTeamId: at.id,
+      homeTeamId: ht.id,
+      awayAbbr: at.abbreviation || (at.name ?? '').slice(0, 3).toUpperCase(),
+      homeAbbr: ht.abbreviation || (ht.name ?? '').slice(0, 3).toUpperCase(),
+      awayPitcher: g.teams?.away?.probablePitcher?.fullName ?? null,
+      homePitcher: g.teams?.home?.probablePitcher?.fullName ?? null,
+    });
+  }
+  return games;
+}
+
 import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -250,7 +291,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5147,6 +5188,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       }
       return fetchAndFormatGhPrList(c, user.sub, repoFullName);
     },
+    fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
   });
   if (slashCommand.handled) {
     return jsonUtf8({
