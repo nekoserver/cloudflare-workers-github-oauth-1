@@ -24,6 +24,8 @@ import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { getCallGraphPage } from './views/callGraph';
+import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
@@ -14062,6 +14064,62 @@ app.get('/function-changelog', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render function-changelog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * 関数呼び出しグラフ(D1連動版)。
+ * リポジトリ直下の call-graph.html は手作業でノード・エッジをハードコードした
+ * 静的スナップショットで、コードの変更に追従しない。このルートは
+ * ts_function_catalog(関数定義一覧)とts_function_callers(呼び出し元マッピング)
+ * から都度ノード・エッジを組み立てて表示する(buildCallGraphData参照)。
+ */
+app.get('/call-graph', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  try {
+    const repoIdParam = c.req.query('repo');
+    const selectedRepoId = repoIdParam ? parseInt(repoIdParam, 10) : null;
+
+    const reposResult = await db.prepare(
+      `SELECT id, full_name FROM ts_repository ORDER BY id`
+    ).all<{ id: number; full_name: string }>();
+    const repos = reposResult.results ?? [];
+
+    let nodes: CallGraphNode[] = [];
+    let edges: CallGraphEdge[] = [];
+
+    if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
+      const [catalogResult, callerResult] = await Promise.all([
+        db.prepare(`
+          SELECT f.id, f.file_path, f.function_name, COALESCE(f.purpose,'') AS purpose,
+            f.is_exported, f.is_async, f.start_line, f.end_line,
+            COUNT(c.id) AS caller_count
+          FROM ts_function_catalog f
+          LEFT JOIN ts_function_callers c ON c.callee_id = f.id
+          WHERE f.repo_id = ? AND f.is_deleted = 0
+          GROUP BY f.id
+        `).bind(selectedRepoId).all<CallGraphCatalogRow>(),
+        db.prepare(
+          `SELECT callee_id, caller_file, caller_line FROM ts_function_callers WHERE repo_id = ?`
+        ).bind(selectedRepoId).all<CallGraphCallerRow>(),
+      ]);
+      const built = buildCallGraphData(catalogResult.results ?? [], callerResult.results ?? []);
+      nodes = built.nodes;
+      edges = built.edges;
+    }
+
+    const html = getCallGraphPage(user.sub, repos, selectedRepoId, nodes, edges);
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (error) {
+    logger.warn('Failed to render call-graph', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render call-graph', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 
