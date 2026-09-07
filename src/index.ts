@@ -12613,7 +12613,7 @@ app.get('/api/mlb-schedule', authMiddleware, async (c) => {
   } else {
     const d = date || new Date().toISOString().slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return c.json({error: 'invalid date'}, 400);
-    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=team,venue,lineups,linescore`;
+    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=team,venue,lineups,linescore,probablePitcher`;
   }
   try {
     const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
