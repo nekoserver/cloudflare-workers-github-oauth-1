@@ -43,7 +43,7 @@ describe('/mlb ページ: 当日の試合一覧ヘッダーの先発投手モー
     const idx = scriptSrc.indexOf('function showTodayPitchersModal');
     const fnBody = scriptSrc.slice(idx, idx + 1200);
     const awayIdx = fnBody.indexOf('tpm-pitcher">\'+awayP');
-    const cardIdx = fnBody.indexOf('tpm-card">\'+g.awayAbbr');
+    const cardIdx = fnBody.indexOf('tpm-card">\'+abbrBadge(g.awayTeamId');
     const homeIdx = fnBody.indexOf('tpm-pitcher">\'+homeP');
     expect(awayIdx).toBeGreaterThan(-1);
     expect(cardIdx).toBeGreaterThan(awayIdx);
