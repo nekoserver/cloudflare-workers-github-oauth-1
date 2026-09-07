@@ -125,7 +125,7 @@ function groupByTable(rows: D1QueryCatalogRow[]): [string, D1QueryCatalogRow[]][
   return [...byTable.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[]): string {
+export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[], initialSort: 'name' | 'count' = 'count'): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
   const reportUrl = `https://github.com/${OWNER_REPO}/blob/main/REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md`;
@@ -139,9 +139,15 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     })
     .join('\n');
   const tableCheckboxAllHtml = `<label class="table-checkbox table-checkbox-all"><input type="checkbox" id="tableFilterAll" checked> すべて <span class="table-checkbox-count">(${rows.length})</span></label>`;
-  const bandsHtml = groupByTable(rows)
+  const groupedTables = groupByTable(rows);
+  if (initialSort === 'count') {
+    groupedTables.sort((a, b) => b[1].length - a[1].length);
+  }
+  const bandsHtml = groupedTables
     .map(([table, tableRows]) => renderTableBand(table, tableRows))
     .join('\n');
+  const nameSortPressed = initialSort === 'name' ? 'true' : 'false';
+  const countSortPressed = initialSort === 'count' ? 'true' : 'false';
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -383,8 +389,8 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
 
       <div class="band-sort-controls">
         <span class="filter-label">並び替え:</span>
-        <button type="button" class="sort-btn" data-sort="name" aria-pressed="true">テーブル名順</button>
-        <button type="button" class="sort-btn" data-sort="count" aria-pressed="false">件数の多い順</button>
+        <button type="button" class="sort-btn" data-sort="name" aria-pressed="${nameSortPressed}">テーブル名順</button>
+        <button type="button" class="sort-btn" data-sort="count" aria-pressed="${countSortPressed}">件数の多い順</button>
       </div>
       <div id="tableBands">
         ${bandsHtml}
@@ -484,23 +490,69 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     tableCheckboxes.forEach(function(cb) { cb.addEventListener('change', applyFilters); });
     verbFilter.addEventListener('change', applyFilters);
 
-    // 帯の並び替え: テーブル名順(初期表示、data-table)/ 件数の多い順(data-count)
+    // 帯の並び替え: テーブル名順(data-table)/ 件数の多い順(data-count、既定)。
+    // 選択結果はCookieへ永続化する(サーバー側で初期表示の並び順に反映するため)。
+    // Cookieへ書き込めなかった場合はlocalStorageへフォールバックする。
+    var SORT_STORAGE_KEY = 'd1QueryCatalogSort';
+    var SORT_COOKIE_NAME = 'd1_query_catalog_sort';
+
+    function persistSort(key) {
+      try {
+        document.cookie = SORT_COOKIE_NAME + '=' + key + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+      } catch (e) { /* ignore */ }
+      var cookieOk = document.cookie.indexOf(SORT_COOKIE_NAME + '=' + key) !== -1;
+      if (!cookieOk) {
+        try { localStorage.setItem(SORT_STORAGE_KEY, key); } catch (e2) { /* ignore */ }
+      }
+    }
+
+    function loadStoredSort() {
+      var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + SORT_COOKIE_NAME + '=([^;]*)'));
+      if (m) return m[1];
+      try {
+        return localStorage.getItem(SORT_STORAGE_KEY);
+      } catch (e) {
+        return null;
+      }
+    }
+
     var tableBandsContainer = document.getElementById('tableBands');
     var sortButtons = Array.prototype.slice.call(document.querySelectorAll('.sort-btn'));
+
+    function applySort(sortKey, persist) {
+      var btn = null;
+      for (var i = 0; i < sortButtons.length; i++) {
+        if (sortButtons[i].getAttribute('data-sort') === sortKey) { btn = sortButtons[i]; break; }
+      }
+      if (!btn) return;
+      var bands = Array.prototype.slice.call(tableBandsContainer.querySelectorAll('.table-band'));
+      bands.sort(function(a, b) {
+        if (sortKey === 'count') {
+          return Number(b.getAttribute('data-count')) - Number(a.getAttribute('data-count'));
+        }
+        return (a.getAttribute('data-table') || '').localeCompare(b.getAttribute('data-table') || '');
+      });
+      bands.forEach(function(band) { tableBandsContainer.appendChild(band); });
+      sortButtons.forEach(function(b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+      if (persist) persistSort(sortKey);
+    }
+
     sortButtons.forEach(function(btn) {
       btn.addEventListener('click', function() {
-        var sortKey = btn.getAttribute('data-sort');
-        var bands = Array.prototype.slice.call(tableBandsContainer.querySelectorAll('.table-band'));
-        bands.sort(function(a, b) {
-          if (sortKey === 'count') {
-            return Number(b.getAttribute('data-count')) - Number(a.getAttribute('data-count'));
-          }
-          return (a.getAttribute('data-table') || '').localeCompare(b.getAttribute('data-table') || '');
-        });
-        bands.forEach(function(band) { tableBandsContainer.appendChild(band); });
-        sortButtons.forEach(function(b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+        applySort(btn.getAttribute('data-sort'), true);
       });
     });
+
+    // Cookieが読めずサーバー側の初期並び順に反映されなかった場合(例: Cookie未対応環境で
+    // localStorageのみに設定が残っている場合)に備え、クライアント側でも保存済みの
+    // 並び順を確認し、現在の表示と異なれば揃える。
+    (function() {
+      var stored = loadStoredSort();
+      if (stored !== 'name' && stored !== 'count') return;
+      var currentlyPressed = document.querySelector('.sort-btn[aria-pressed="true"]');
+      if (currentlyPressed && currentlyPressed.getAttribute('data-sort') === stored) return;
+      applySort(stored, false);
+    })();
   </script>
 </body>
 </html>`;

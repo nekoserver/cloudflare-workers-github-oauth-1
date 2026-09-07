@@ -10706,7 +10706,9 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
       logger.warn('d1-query-catalog: fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
     }
   }
-  return c.html(getD1QueryCatalogPage(user.sub, rows));
+  const sortCookie = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_sort');
+  const initialSort = sortCookie === 'name' ? 'name' : 'count';
+  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort));
 });
 
 app.get('/ruby-wasm', authMiddleware, async (c) => {

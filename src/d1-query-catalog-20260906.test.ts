@@ -279,7 +279,14 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('data-table="bar" data-count="1"');
     expect(html).toContain('data-sort="name"');
     expect(html).toContain('data-sort="count"');
-    expect(html).toMatch(/class="sort-btn" data-sort="name" aria-pressed="true"/);
+    // 既定(initialSort未指定時)は件数の多い順
+    expect(html).toMatch(/class="sort-btn" data-sort="count" aria-pressed="true"/);
+    // 件数の多い順が既定のため、bar(1件)よりfoo(2件)が先に描画される
+    const fooIdx = html.indexOf('data-table="foo"');
+    const barIdx = html.indexOf('data-table="bar"');
+    expect(fooIdx).toBeGreaterThan(-1);
+    expect(barIdx).toBeGreaterThan(-1);
+    expect(fooIdx).toBeLessThan(barIdx);
   });
 
   it('帯の行頭(band-nameより前)に件数(band-count)が表示される', () => {
@@ -314,5 +321,81 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('<td class="commit-at-cell"><code>(なし)</code></td>');
+  });
+
+  it('initialSort未指定時は既定で件数の多い順(count)が選択状態になる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/data-sort="count" aria-pressed="true"/);
+    expect(html).toMatch(/data-sort="name" aria-pressed="false"/);
+  });
+
+  it('initialSort="name"を渡すとテーブル名順が選択状態になり、帯もテーブル名の昇順で描画される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'zzz', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO zzz VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'zzz', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO zzz VALUES (2)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'aaa', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM aaa', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ], 'name');
+    expect(html).toMatch(/data-sort="name" aria-pressed="true"/);
+    const aaaIdx = html.indexOf('data-table="aaa"');
+    const zzzIdx = html.indexOf('data-table="zzz"');
+    expect(aaaIdx).toBeGreaterThan(-1);
+    expect(zzzIdx).toBeGreaterThan(-1);
+    expect(aaaIdx).toBeLessThan(zzzIdx);
+  });
+
+  it('initialSort="count"(既定)では件数の多いテーブルが先に描画される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'aaa_small', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO aaa_small VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'zzz_big', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO zzz_big VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'zzz_big', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM zzz_big', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ], 'count');
+    const smallIdx = html.indexOf('data-table="aaa_small"');
+    const bigIdx = html.indexOf('data-table="zzz_big"');
+    expect(smallIdx).toBeGreaterThan(-1);
+    expect(bigIdx).toBeGreaterThan(-1);
+    // アルファベット順ならaaa_smallが先だが、件数順(zzz_bigが2件)ではzzz_bigが先
+    expect(bigIdx).toBeLessThan(smallIdx);
+  });
+
+  it('並び替え選択はCookieへ書き込むJSと、Cookieが読めない場合のlocalStorageフォールバックを含む', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain("SORT_COOKIE_NAME + '=' + key + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000'");
+    expect(html).toContain('localStorage.setItem(SORT_STORAGE_KEY, key)');
+    expect(html).toContain('localStorage.getItem(SORT_STORAGE_KEY)');
+  });
+});
+
+describe('GET /d1-query-catalog: 並び替え設定Cookieの反映', () => {
+  it('d1_query_catalog_sort=nameのCookieがあればテーブル名順が初期選択される', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/d1-query-catalog',
+      { headers: { Authorization: authHeader, Cookie: 'd1_query_catalog_sort=name' } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    const html = await res.text();
+    expect(html).toMatch(/data-sort="name" aria-pressed="true"/);
+  });
+
+  it('Cookieが無い場合は件数の多い順(count)が既定で初期選択される', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/d1-query-catalog',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    const html = await res.text();
+    expect(html).toMatch(/data-sort="count" aria-pressed="true"/);
+  });
+
+  it('不正な値のCookieは無視され、件数の多い順(count)にフォールバックする', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/d1-query-catalog',
+      { headers: { Authorization: authHeader, Cookie: 'd1_query_catalog_sort=bogus' } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    const html = await res.text();
+    expect(html).toMatch(/data-sort="count" aria-pressed="true"/);
   });
 });
