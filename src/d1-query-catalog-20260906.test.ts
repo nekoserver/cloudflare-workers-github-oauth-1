@@ -18,6 +18,8 @@
  *   (7) テーブル選択パネルに「すべて」の選択解除ショートカットが無い
  *   (8) 帯同士の余白が過剰(margin-bottom: 20px)で、閉じた状態でも一覧性が悪い
  *   (9) 帯に件数(data-count)が無い、または並び替えボタンが無くソートできない
+ *   (10) 「コマンド」と「SQL」の間に「最終コミット日時」列が無い、または
+ *        YMD HMS形式で表示されない
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -107,7 +109,7 @@ describe('GET /d1-query-catalog', () => {
         source_line: 1,
         sql_text: "SELECT '<img src=x onerror=alert(1)>' FROM foo",
         migration_file: null,
-        last_commit_hash: null,
+        last_commit_hash: null, last_commit_at: null,
       },
     ]);
     expect(html).not.toContain('<b>Evil</b>');
@@ -129,17 +131,17 @@ describe('GET /d1-query-catalog', () => {
 
   it('コマンド確定件数がサマリに表示される', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('2件中、コマンド種別確定済み1件');
   });
 
   it('発行SQL種別の複数選択セレクトボックスが、出現回数の多い順で表示される', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t2 VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t1', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t2 VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t1', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     const selectMatch = html.match(/<select id="verbFilter"[^>]*>([\s\S]*?)<\/select>/);
     expect(selectMatch).not.toBeNull();
@@ -158,23 +160,23 @@ describe('GET /d1-query-catalog', () => {
 
   it('各行にdata-verb属性が付与され、テーブル名を決め打ちせずSQL種別で横断検索できる', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'UPDATE foo SET x = 1', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'UPDATE foo SET x = 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('data-verb="UPDATE"');
   });
 
   it('テーブル名不明でも発行SQL種別(PRAGMA等)は判定できる', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 0, table_name: null, source_file: 'src/index.ts', source_line: 1, sql_text: 'PRAGMA table_info(${tableName})', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 0, table_name: null, source_file: 'src/index.ts', source_line: 1, sql_text: 'PRAGMA table_info(${tableName})', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('data-verb="PRAGMA"');
   });
 
   it('テーブル選択パネルの開閉ボタンとチェックボックス一覧が、出現回数の多い順で描画される', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t1 VALUES (2)', migration_file: null, last_commit_hash: null },
-      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t2', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t1 VALUES (2)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t2', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('id="tablePanelToggle"');
     expect(html).toContain('aria-expanded="false"');
@@ -197,8 +199,8 @@ describe('GET /d1-query-catalog', () => {
 
   it('出力がテーブル名ごとの帯(見出しバー)+ミニ表にまとめられ、行に単独のテーブル列が無い', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('<section class="table-band" data-table="foo" data-count="1">');
     expect(html).toContain('<section class="table-band" data-table="bar" data-count="1">');
@@ -210,8 +212,8 @@ describe('GET /d1-query-catalog', () => {
 
   it('帯はテーブル名の昇順で並ぶ', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'zzz_table', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO zzz_table VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'aaa_table', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM aaa_table', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'zzz_table', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO zzz_table VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'aaa_table', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM aaa_table', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     const aaaIdx = html.indexOf('data-table="aaa_table"');
     const zzzIdx = html.indexOf('data-table="zzz_table"');
@@ -222,8 +224,8 @@ describe('GET /d1-query-catalog', () => {
 
   it('各テーブル帯はページ読み込み時すべて閉じている(aria-expanded=false・table-wrapがhidden)', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     const bandMatches = [...html.matchAll(/<section class="table-band"[^>]*>[\s\S]*?<button type="button" class="band-header" aria-expanded="(\w+)">[\s\S]*?<div class="table-wrap"( hidden)?>/g)];
     expect(bandMatches.length).toBe(2);
@@ -235,7 +237,7 @@ describe('GET /d1-query-catalog', () => {
 
   it('帯の見出しはクリック可能なbutton要素で、開閉用の矢印アイコンを持つ', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('<button type="button" class="band-header" aria-expanded="false">');
     expect(html).toContain('<span class="band-toggle-arrow">▾</span>');
@@ -243,8 +245,8 @@ describe('GET /d1-query-catalog', () => {
 
   it('テーブル選択パネルの最上段に「すべて」チェックボックスがあり、初期状態でチェック済み', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     const panelMatch = html.match(/<div class="filter-panel" id="tablePanel" hidden>([\s\S]*?)<\/div>/);
     expect(panelMatch).not.toBeNull();
@@ -269,9 +271,9 @@ describe('GET /d1-query-catalog', () => {
 
   it('各帯にdata-count属性(クエリ件数)が付与され、件数順で並び替えるボタンがある', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
-      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO foo VALUES (2)', migration_file: null, last_commit_hash: null },
-      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO foo VALUES (2)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain('data-table="foo" data-count="2"');
     expect(html).toContain('data-table="bar" data-count="1"');
@@ -282,12 +284,35 @@ describe('GET /d1-query-catalog', () => {
 
   it('帯の行頭(band-nameより前)に件数(band-count)が表示される', () => {
     const html = getD1QueryCatalogPage('tester', [
-      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     const countIdx = html.indexOf('<span class="band-count">1件</span>');
     const nameIdx = html.indexOf('<span class="band-name">foo</span>');
     expect(countIdx).toBeGreaterThan(-1);
     expect(nameIdx).toBeGreaterThan(-1);
     expect(countIdx).toBeLessThan(nameIdx);
+  });
+
+  it('「コマンド」と「SQL」の間に「最終コミット日時」列がありYMD HMS形式で表示される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: 'abcdef1234567890', last_commit_at: '2026-05-31 00:36:59' },
+    ]);
+    const headerMatch = html.match(/<th>コマンド<\/th>\s*<th>([^<]+)<\/th>\s*<th>SQL<\/th>/);
+    expect(headerMatch).not.toBeNull();
+    expect(headerMatch![1]).toBe('最終コミット日時');
+    expect(html).toContain('<td class="commit-at-cell"><code>2026-05-31 00:36:59</code></td>');
+    // 位置関係: コマンドセルの直後・SQLセルの直前に日時セルが来る
+    const commandCellIdx = html.indexOf(':exec');
+    const commitAtIdx = html.indexOf('class="commit-at-cell"');
+    const sqlCellIdx = html.indexOf('class="sql-cell"', commitAtIdx);
+    expect(commandCellIdx).toBeLessThan(commitAtIdx);
+    expect(commitAtIdx).toBeLessThan(sqlCellIdx);
+  });
+
+  it('最終コミット日時が無い場合は「(なし)」と表示される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+    expect(html).toContain('<td class="commit-at-cell"><code>(なし)</code></td>');
   });
 });

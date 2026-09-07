@@ -13,6 +13,7 @@ export type D1QueryCatalogRow = {
   sql_text: string;
   migration_file: string | null;
   last_commit_hash: string | null;
+  last_commit_at: string | null;
 };
 
 function commitLink(hash: string): string {
@@ -70,9 +71,11 @@ function renderRow(row: D1QueryCatalogRow): string {
   const sqlOneLine = escapeHtml(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
   const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
+  const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
   return `<tr data-verb="${verb}">
     <td>${escapeHtml(row.query_name)}</td>
     <td>:${escapeHtml(row.command)} ${badge}</td>
+    <td class="commit-at-cell"><code>${commitAt}</code></td>
     <td class="sql-cell"><code>${sqlOneLine}</code></td>
     <td>${migration}</td>
     <td>${commit}</td>
@@ -97,6 +100,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[]): string {
           <tr>
             <th>クエリ名</th>
             <th>コマンド</th>
+            <th>最終コミット日時</th>
             <th>SQL</th>
             <th>migration</th>
             <th>最終変更コミット</th>
@@ -313,6 +317,7 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     td { color: var(--text-primary); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-cell { white-space: nowrap; }
+    .commit-at-cell { white-space: nowrap; }
     .badge {
       font-size: 11px;
       padding: 2px 6px;

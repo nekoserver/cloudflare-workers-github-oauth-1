@@ -1,6 +1,6 @@
 /**
- * migrations/0129_create_d1_query_catalog.sql の d1_query_catalog テーブルへ、
- * src/index.ts の db.prepare(`SQL`) 呼び出し一覧をINSERTするSQLを生成する。
+ * migrations/0129_create_d1_query_catalog.sql・0130_add_last_commit_at_to_d1_query_catalog.sql の
+ * d1_query_catalog テーブルへ、src/index.ts の db.prepare(`SQL`) 呼び出し一覧をINSERTするSQLを生成する。
  *
  * scripts/build-d1-query-catalog.js と同じ抽出ロジック(重複実装、リポジトリの
  * 既存スクリプト群と同じくスタンドアロンで完結させる方針に合わせた)。
@@ -107,17 +107,22 @@ function snippetFor(sql) {
   return sql.replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
+// latestCommitFor: そのクエリのSQL本文を最後に変更したコミットのハッシュと、
+// そのコミットの著者日時(YYYY-MM-DD HH:MM:SS、著者のローカルタイムゾーン)を
+// 1回のgit呼び出しでまとめて取得する。
 function latestCommitFor(sql) {
   const snippet = snippetFor(sql);
   try {
     const out = execFileSync(
       "git",
-      ["log", "-1", "--format=%H", `-S${snippet}`, "--", "src/index.ts"],
+      ["log", "-1", "--format=%H%x1f%ad", "--date=format:%Y-%m-%d %H:%M:%S", `-S${snippet}`, "--", "src/index.ts"],
       { cwd: REPO, maxBuffer: 10 * 1024 * 1024 }
     ).toString().trim();
-    return out || null;
+    if (!out) return { hash: null, at: null };
+    const [hash, at] = out.split("\x1f");
+    return { hash: hash || null, at: at || null };
   } catch {
-    return null;
+    return { hash: null, at: null };
   }
 }
 
@@ -125,7 +130,9 @@ console.error(`generating INSERTs for ${matches.length} queries...`);
 let done = 0;
 for (const q of matches) {
   q.migrationFile = q.table ? (tableToFirstMigration.get(q.table) || null) : null;
-  q.lastCommit = latestCommitFor(q.sql);
+  const { hash, at } = latestCommitFor(q.sql);
+  q.lastCommit = hash;
+  q.lastCommitAt = at;
   done++;
   if (done % 50 === 0) console.error(`  ${done}/${matches.length}`);
 }
@@ -143,11 +150,11 @@ let out = [];
 for (let i = 0; i < matches.length; i += BATCH_SIZE) {
   const batch = matches.slice(i, i + BATCH_SIZE);
   out.push(
-    "INSERT INTO d1_query_catalog (query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash) VALUES\n" +
+    "INSERT INTO d1_query_catalog (query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash, last_commit_at) VALUES\n" +
     batch.map(q =>
-      `(${sqlValue(q.name)}, ${sqlValue(q.cmd)}, ${q.confirmed ? 1 : 0}, ${sqlValue(q.table)}, 'src/index.ts', ${q.startLine}, ${sqlValue(q.sql)}, ${sqlValue(q.migrationFile)}, ${sqlValue(q.lastCommit)})`
+      `(${sqlValue(q.name)}, ${sqlValue(q.cmd)}, ${q.confirmed ? 1 : 0}, ${sqlValue(q.table)}, 'src/index.ts', ${q.startLine}, ${sqlValue(q.sql)}, ${sqlValue(q.migrationFile)}, ${sqlValue(q.lastCommit)}, ${sqlValue(q.lastCommitAt)})`
     ).join(",\n") +
-    "\nON CONFLICT(source_file, source_line) DO UPDATE SET query_name = excluded.query_name, command = excluded.command, command_confirmed = excluded.command_confirmed, table_name = excluded.table_name, sql_text = excluded.sql_text, migration_file = excluded.migration_file, last_commit_hash = excluded.last_commit_hash;"
+    "\nON CONFLICT(source_file, source_line) DO UPDATE SET query_name = excluded.query_name, command = excluded.command, command_confirmed = excluded.command_confirmed, table_name = excluded.table_name, sql_text = excluded.sql_text, migration_file = excluded.migration_file, last_commit_hash = excluded.last_commit_hash, last_commit_at = excluded.last_commit_at;"
   );
 }
 
