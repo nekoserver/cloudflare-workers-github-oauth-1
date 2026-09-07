@@ -3,7 +3,8 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 import {
   EQUAL_EARTH_MAP_WIDTH,
   EQUAL_EARTH_MAP_HEIGHT,
-  EQUAL_EARTH_CONTINENT_PATHS,
+  EQUAL_EARTH_LAND_PATH_D,
+  EQUAL_EARTH_LAKES_PATH_D,
   EQUAL_EARTH_GRATICULE_PATHS,
   EQUAL_EARTH_CITIES,
 } from '../data/equalEarthMapData';
@@ -11,10 +12,6 @@ import {
 export function getEqualEarthMapPage(username: string): string {
   const safeUsername = escapeHtml(username);
   const citiesJson = JSON.stringify(EQUAL_EARTH_CITIES);
-
-  const continentPathsHtml = EQUAL_EARTH_CONTINENT_PATHS.map(
-    (c) => `<path class="continent" d="${c.d}"><title>${escapeHtml(c.name)}</title></path>`
-  ).join('\n');
 
   const graticulePathsHtml = EQUAL_EARTH_GRATICULE_PATHS.map((d) => `<path class="graticule" d="${d}"></path>`).join('\n');
 
@@ -103,7 +100,8 @@ export function getEqualEarthMapPage(username: string): string {
     }
     .map-viewport.dragging { cursor: grabbing; }
     .map-svg { display: block; width: 100%; height: 100%; }
-    .continent { fill: var(--accent-color, #667eea); fill-opacity: 0.35; stroke: var(--text-secondary); stroke-width: 1; stroke-linejoin: round; }
+    .land { fill: var(--accent-color, #667eea); fill-opacity: 0.4; stroke: var(--text-secondary); stroke-width: 0.75; stroke-linejoin: round; }
+    .lake { fill: var(--bg-secondary); stroke: var(--text-secondary); stroke-width: 0.5; }
     .graticule { fill: none; stroke: var(--border-color); stroke-width: 1; }
     .city-dot { fill: #ef4444; stroke: #fff; stroke-width: 1.5; cursor: pointer; }
     .city-dot.highlighted { fill: #eab308; }
@@ -151,7 +149,7 @@ export function getEqualEarthMapPage(username: string): string {
       <div class="title">イコールアース図法(Equal Earth projection)白地図</div>
       <div class="subtitle">
         主要都市のメニューを選ぶと、その座標を中心に地図がズームします。マウスホイール/ピンチ操作での拡大縮小、ドラッグでのパンにも対応しています。
-        輪郭は実測の海岸線データではなく、主要な緯度経度の頂点による簡略化(低ポリゴン)形状です。
+        海岸線・湖はNatural Earth(Public Domain)の実測データ(1:110m解像度)を投影しています。
       </div>
       <div class="map-layout">
         <div class="city-menu" id="cityMenu">
@@ -167,8 +165,9 @@ export function getEqualEarthMapPage(username: string): string {
             <g class="graticule-layer">
               ${graticulePathsHtml}
             </g>
-            <g class="continent-layer">
-              ${continentPathsHtml}
+            <g class="land-layer">
+              <path class="land" d="${EQUAL_EARTH_LAND_PATH_D}"></path>
+              <path class="lake" d="${EQUAL_EARTH_LAKES_PATH_D}"></path>
             </g>
             <g class="city-layer" id="cityLayer">
               ${cityDotsHtml}

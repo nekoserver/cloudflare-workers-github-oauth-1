@@ -17,7 +17,8 @@ import {
   EQUAL_EARTH_MAP_WIDTH,
   EQUAL_EARTH_MAP_HEIGHT,
   EQUAL_EARTH_CITIES,
-  EQUAL_EARTH_CONTINENT_PATHS,
+  EQUAL_EARTH_LAND_PATH_D,
+  EQUAL_EARTH_LAKES_PATH_D,
 } from './data/equalEarthMapData';
 
 const JWT_SECRET = 'test-secret';
@@ -50,13 +51,17 @@ describe('EQUAL_EARTH_CITIES', () => {
   });
 });
 
-describe('EQUAL_EARTH_CONTINENT_PATHS', () => {
-  it('全大陸のパスが空でないSVG path dで構成されている', () => {
-    expect(EQUAL_EARTH_CONTINENT_PATHS.length).toBeGreaterThan(0);
-    for (const continent of EQUAL_EARTH_CONTINENT_PATHS) {
-      expect(continent.d.length).toBeGreaterThan(0);
-      expect(continent.d.startsWith('M')).toBe(true);
-    }
+describe('EQUAL_EARTH_LAND_PATH_D / EQUAL_EARTH_LAKES_PATH_D', () => {
+  it('陸地・湖のパスが空でないSVG path dで構成されている(Natural Earthの実海岸線データ)', () => {
+    expect(EQUAL_EARTH_LAND_PATH_D.length).toBeGreaterThan(1000);
+    expect(EQUAL_EARTH_LAND_PATH_D.startsWith('M')).toBe(true);
+    expect(EQUAL_EARTH_LAKES_PATH_D.length).toBeGreaterThan(0);
+    expect(EQUAL_EARTH_LAKES_PATH_D.startsWith('M')).toBe(true);
+  });
+
+  it('陸地パスに複数のサブパス(大陸・島)が含まれる', () => {
+    const subpathCount = (EQUAL_EARTH_LAND_PATH_D.match(/M/g) ?? []).length;
+    expect(subpathCount).toBeGreaterThan(50);
   });
 });
 
