@@ -100,12 +100,20 @@ canvas:active { cursor:grabbing; }
 .game-hdr-clock:hover { background:#21262d; }
 .tpm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; }
 .tpm-overlay.open { display:block; }
-.tpm-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:340px; max-width:92vw; max-height:80vh; background:#0d1117; border:1px solid #30363d; border-radius:10px; display:none; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+.tpm-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:480px; max-width:92vw; max-height:80vh; background:#0d1117; border:1px solid #30363d; border-radius:10px; display:none; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.5); }
 .tpm-modal.open { display:flex; }
-.tpm-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #30363d; font-size:13px; font-weight:700; color:#e6edf3; }
+.tpm-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #30363d; font-size:13px; font-weight:700; color:#e6edf3; flex-shrink:0; }
 .tpm-close { background:none; border:none; color:#8b949e; font-size:14px; cursor:pointer; padding:2px 6px; }
 .tpm-close:hover { color:#e6edf3; }
-.tpm-body { overflow-y:auto; padding:6px 0; }
+.tpm-content { display:flex; flex:1; min-height:0; }
+.tpm-filter { width:96px; flex-shrink:0; border-right:1px solid #30363d; overflow-y:auto; padding:6px 0; }
+.tpm-filter-item { padding:6px 10px; font-size:11px; color:#8b949e; cursor:pointer; white-space:nowrap; }
+.tpm-filter-item:hover { background:#161b22; }
+.tpm-filter-item.tpm-filter-top { font-weight:700; color:#e6edf3; margin-top:6px; }
+.tpm-filter-item.tpm-filter-top:first-child { margin-top:0; }
+.tpm-filter-item.tpm-filter-sub { padding-left:20px; font-size:10px; }
+.tpm-filter-item.active { color:#58a6ff; background:rgba(88,166,255,0.1); }
+.tpm-body { flex:1; min-width:0; overflow-y:auto; padding:6px 0; }
 .tpm-row { padding:8px 14px; border-bottom:1px solid #21262d; }
 .tpm-time { font-family:monospace; font-size:10px; color:#58a6ff; margin-bottom:4px; }
 .tpm-matchup { display:flex; align-items:center; justify-content:space-between; gap:6px; }
@@ -230,10 +238,23 @@ void main(){
 <div id="todayPitchersOverlay" class="tpm-overlay"></div>
 <div id="todayPitchersModal" class="tpm-modal">
   <div class="tpm-hdr">
-    <span>&#9918;&#65039; 本日の先発投手&#128368;&#65039;</span>
+    <span>&#9918;&#65039; 本日の先発投手&#9200;</span>
     <button class="tpm-close" id="todayPitchersClose">&#10005;</button>
   </div>
-  <div id="todayPitchersBody" class="tpm-body"></div>
+  <div class="tpm-content">
+    <div id="todayPitchersFilter" class="tpm-filter">
+      <div class="tpm-filter-item tpm-filter-top active" data-filter="all">すべて</div>
+      <div class="tpm-filter-item tpm-filter-top" data-filter="AL">AL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-EAST">EAST</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-CENTRAL">CENTRAL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-WEST">WEST</div>
+      <div class="tpm-filter-item tpm-filter-top" data-filter="NL">NL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-EAST">EAST</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-CENTRAL">CENTRAL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-WEST">WEST</div>
+    </div>
+    <div id="todayPitchersBody" class="tpm-body"></div>
+  </div>
 </div>
 
 <script>
@@ -831,11 +852,23 @@ void main(){
     return maxZ+100;
   }
 
-  function showTodayPitchersModal(games){
-    var overlay=document.getElementById('todayPitchersOverlay');
-    var modal=document.getElementById('todayPitchersModal');
+  var todayPitcherGamesAll=[];
+  var todayPitcherFilter='all';
+  var PITCHER_FILTER_DIVIDX={'AL-EAST':0,'AL-CENTRAL':1,'AL-WEST':2,'NL-EAST':3,'NL-CENTRAL':4,'NL-WEST':5};
+
+  function pitcherFilterTeamIds(filter){
+    if(filter==='all')return null;
+    if(filter==='AL')return DIVISIONS[0].teams.concat(DIVISIONS[1].teams,DIVISIONS[2].teams);
+    if(filter==='NL')return DIVISIONS[3].teams.concat(DIVISIONS[4].teams,DIVISIONS[5].teams);
+    var di=PITCHER_FILTER_DIVIDX[filter];
+    return di!==undefined?DIVISIONS[di].teams:null;
+  }
+
+  function renderTodayPitchersBody(){
     var body=document.getElementById('todayPitchersBody');
-    var sorted=games.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
+    var teamIds=pitcherFilterTeamIds(todayPitcherFilter);
+    var filtered=teamIds?todayPitcherGamesAll.filter(function(g){return teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0;}):todayPitcherGamesAll;
+    var sorted=filtered.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
     var html='';
     for(var i=0;i<sorted.length;i++){
       var g=sorted[i];
@@ -851,13 +884,36 @@ void main(){
       html+='</div>';
       html+='</div>';
     }
-    if(!sorted.length)html='<div class="drw-msg">本日の試合はありません</div>';
+    if(!sorted.length)html='<div class="drw-msg">該当する試合はありません</div>';
     body.innerHTML=html;
+  }
+
+  function showTodayPitchersModal(games){
+    var overlay=document.getElementById('todayPitchersOverlay');
+    var modal=document.getElementById('todayPitchersModal');
+    todayPitcherGamesAll=games;
+    todayPitcherFilter='all';
+    document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){
+      el.classList.toggle('active',el.dataset.filter==='all');
+    });
+    renderTodayPitchersBody();
     var nextZ=getNextZ();
     overlay.style.zIndex=String(nextZ);
     modal.style.zIndex=String(nextZ+1);
     overlay.classList.add('open');
     modal.classList.add('open');
+  }
+
+  var pitcherFilterMenu=document.getElementById('todayPitchersFilter');
+  if(pitcherFilterMenu){
+    pitcherFilterMenu.addEventListener('click',function(e){
+      var item=e.target.closest?e.target.closest('.tpm-filter-item'):null;
+      if(!item)return;
+      todayPitcherFilter=item.dataset.filter;
+      document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){el.classList.remove('active');});
+      item.classList.add('active');
+      renderTodayPitchersBody();
+    });
   }
 
   function closeTodayPitchersModal(){
