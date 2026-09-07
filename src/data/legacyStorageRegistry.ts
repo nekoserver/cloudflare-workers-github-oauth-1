@@ -63,6 +63,7 @@ export const LEGACY_STORAGE_ENTRIES: LegacyStorageEntry[] = [
   { key: 'kw_panel_no_all_focus', storage: 'cookie', page: '/settings', description: 'キーワードパネルの全選択フォーカス無効化' },
   { key: 'kw_panel_tap_close', storage: 'cookie', page: '/settings', description: 'キーワードパネルのタップ閉じ動作' },
   { key: 'kw_pal_', isPrefix: true, storage: 'cookie', page: '/answer-graph', description: 'キーワードごとのパレット選択(動的キー、末尾がキーワード)' },
+  { key: 'airline_network_dest_flags', storage: 'cookie', page: '/airline-network', description: '就航先絞り込みフラグの選択状態' },
   { key: 'heritage_journey_dest_country_filter', storage: 'cookie', page: '/heritage-journey', description: '到達国フィルタ' },
   { key: 'heritage_journey_start_city', storage: 'cookie', page: '/heritage-journey', description: '出発地の選択都市' },
   { key: 'heritage_journey_end_city', storage: 'cookie', page: '/heritage-journey', description: '到着地の選択都市' },
