@@ -33,12 +33,15 @@ async function makeAuthHeader() {
   return `Bearer ${token}`;
 }
 
-function createMockDb(rows: Record<string, unknown>[] = []) {
+function createMockDb(rows: Record<string, unknown>[] = [], prefValue: string | null = null) {
   return {
     prepare: vi.fn().mockImplementation((sql: string) => ({
       bind: vi.fn().mockReturnValue({
         first: vi.fn().mockImplementation(() => {
           if (sql.includes('user_sessions')) return Promise.resolve({ revoked_at: null });
+          if (sql.includes('user_preferences')) {
+            return Promise.resolve(prefValue !== null ? { pref_value: prefValue } : null);
+          }
           return Promise.resolve(null);
         }),
         all: vi.fn().mockResolvedValue({ results: [] }),
@@ -357,27 +360,28 @@ describe('GET /d1-query-catalog', () => {
     expect(bigIdx).toBeLessThan(smallIdx);
   });
 
-  it('並び替え選択はCookieへ書き込むJSと、Cookieが読めない場合のlocalStorageフォールバックを含む', () => {
+  it('並び替え選択はPOST /api/preferences/d1_query_catalog_sortへfetchで保存する(Cookie/localStorageは使わない)', () => {
     const html = getD1QueryCatalogPage('tester', []);
-    expect(html).toContain("SORT_COOKIE_NAME + '=' + key + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000'");
-    expect(html).toContain('localStorage.setItem(SORT_STORAGE_KEY, key)');
-    expect(html).toContain('localStorage.getItem(SORT_STORAGE_KEY)');
+    expect(html).toContain("fetch('/api/preferences/d1_query_catalog_sort'");
+    expect(html).not.toContain('d1_query_catalog_sort=');
+    expect(html).not.toContain('localStorage.setItem');
+    expect(html).not.toContain('localStorage.getItem');
   });
 });
 
-describe('GET /d1-query-catalog: 並び替え設定Cookieの反映', () => {
-  it('d1_query_catalog_sort=nameのCookieがあればテーブル名順が初期選択される', async () => {
+describe('GET /d1-query-catalog: 並び替え設定(user_preferences)の反映', () => {
+  it('user_preferencesにname設定があればテーブル名順が初期選択される', async () => {
     const authHeader = await makeAuthHeader();
     const res = await app.request(
       '/d1-query-catalog',
-      { headers: { Authorization: authHeader, Cookie: 'd1_query_catalog_sort=name' } },
-      { JWT_SECRET, DB: createMockDb() }
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb([], 'name') }
     );
     const html = await res.text();
     expect(html).toMatch(/data-sort="name" aria-pressed="true"/);
   });
 
-  it('Cookieが無い場合は件数の多い順(count)が既定で初期選択される', async () => {
+  it('user_preferencesに設定が無くCookieも無い場合は件数の多い順(count)が既定で初期選択される', async () => {
     const authHeader = await makeAuthHeader();
     const res = await app.request(
       '/d1-query-catalog',
@@ -388,7 +392,18 @@ describe('GET /d1-query-catalog: 並び替え設定Cookieの反映', () => {
     expect(html).toMatch(/data-sort="count" aria-pressed="true"/);
   });
 
-  it('不正な値のCookieは無視され、件数の多い順(count)にフォールバックする', async () => {
+  it('user_preferencesに設定が無いが旧d1_query_catalog_sort Cookieが残っている場合、移行互換でその値を初期選択に使う', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/d1-query-catalog',
+      { headers: { Authorization: authHeader, Cookie: 'd1_query_catalog_sort=name' } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    const html = await res.text();
+    expect(html).toMatch(/data-sort="name" aria-pressed="true"/);
+  });
+
+  it('旧Cookieの値が不正な場合は無視され、件数の多い順(count)にフォールバックする', async () => {
     const authHeader = await makeAuthHeader();
     const res = await app.request(
       '/d1-query-catalog',

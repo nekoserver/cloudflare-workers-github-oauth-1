@@ -491,33 +491,19 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     verbFilter.addEventListener('change', applyFilters);
 
     // 帯の並び替え: テーブル名順(data-table)/ 件数の多い順(data-count、既定)。
-    // 選択結果はCookieへ永続化する(サーバー側で初期表示の並び順に反映するため)。
-    // Cookieへ書き込めなかった場合はlocalStorageへフォールバックする。
-    var SORT_STORAGE_KEY = 'd1QueryCatalogSort';
-    var SORT_COOKIE_NAME = 'd1_query_catalog_sort';
-
-    function persistSort(key) {
-      try {
-        document.cookie = SORT_COOKIE_NAME + '=' + key + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
-      } catch (e) { /* ignore */ }
-      var cookieOk = document.cookie.indexOf(SORT_COOKIE_NAME + '=' + key) !== -1;
-      if (!cookieOk) {
-        try { localStorage.setItem(SORT_STORAGE_KEY, key); } catch (e2) { /* ignore */ }
-      }
-    }
-
-    function loadStoredSort() {
-      var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + SORT_COOKIE_NAME + '=([^;]*)'));
-      if (m) return m[1];
-      try {
-        return localStorage.getItem(SORT_STORAGE_KEY);
-      } catch (e) {
-        return null;
-      }
-    }
-
+    // 選択結果はPOST /api/preferences/d1_query_catalog_sort でD1(user_preferences)へ
+    // 永続化する。次回アクセス時はサーバー側がD1の値を読んで初期表示に反映するため、
+    // Cookie/localStorageは使わない(SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md参照)。
     var tableBandsContainer = document.getElementById('tableBands');
     var sortButtons = Array.prototype.slice.call(document.querySelectorAll('.sort-btn'));
+
+    function persistSort(key) {
+      fetch('/api/preferences/d1_query_catalog_sort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: key }),
+      }).catch(function() { /* 保存に失敗しても表示上の並び替え自体は継続する */ });
+    }
 
     function applySort(sortKey, persist) {
       var btn = null;
@@ -542,17 +528,6 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         applySort(btn.getAttribute('data-sort'), true);
       });
     });
-
-    // Cookieが読めずサーバー側の初期並び順に反映されなかった場合(例: Cookie未対応環境で
-    // localStorageのみに設定が残っている場合)に備え、クライアント側でも保存済みの
-    // 並び順を確認し、現在の表示と異なれば揃える。
-    (function() {
-      var stored = loadStoredSort();
-      if (stored !== 'name' && stored !== 'count') return;
-      var currentlyPressed = document.querySelector('.sort-btn[aria-pressed="true"]');
-      if (currentlyPressed && currentlyPressed.getAttribute('data-sort') === stored) return;
-      applySort(stored, false);
-    })();
   </script>
 </body>
 </html>`;

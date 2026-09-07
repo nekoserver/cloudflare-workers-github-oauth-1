@@ -369,6 +369,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_share_subquery_links', migration: '0046', description: 'AIチャット共有質問×サブクエリリンク', syncPolicy: 'auto' },
   { name: 'aichat_model_colors', migration: '0048', description: 'AIチャットモデルカラー設定', syncPolicy: 'manual' },
   { name: 'd1_query_catalog', migration: '0129', description: 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', syncPolicy: 'manual' },
+  { name: 'user_preferences', migration: '0131', description: 'ユーザー設定(キー単位)。個別Cookie乱立の解消先。USER_PREFERENCE_KEYSに許可リストあり', syncPolicy: 'manual' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -1947,6 +1948,14 @@ CREATE INDEX IF NOT EXISTS idx_public_key_security_events_created_at ON public_k
 CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
 CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_query_name ON d1_query_catalog(query_name);`,
   '0130': `ALTER TABLE d1_query_catalog ADD COLUMN last_commit_at TEXT;`,
+  '0131': `CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id TEXT NOT NULL,
+  pref_key TEXT NOT NULL,
+  pref_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, pref_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_updated_at ON user_preferences(updated_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2091,6 +2100,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   login_history: { id: 'pk', user_id: 'fk+idx' },
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
   d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
+  user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
   wine_metadata: { id: 'pk+fk' },
@@ -2295,6 +2305,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   d1_query_catalog: 'd1-query-catalog',
+  user_preferences: 'auth',
   ts_repository:          'ts-catalog',
   ts_function_catalog:    'ts-catalog',
   ts_function_callers:    'ts-catalog',
@@ -2414,6 +2425,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   public_key_challenges: { user_id: 'user_sessions' },
   login_history: { user_id: 'user_sessions' },
   public_key_security_events: { user_id: 'user_sessions' },
+  user_preferences: { user_id: 'user_sessions' },
   wine_details: { wine_id: 'wine_embeddings' },
   wine_metadata: { id: 'wine_embeddings' },
 
@@ -2522,6 +2534,20 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // ========================================================================
   workflow_steps: { workflow_no: 'workflow_registry' },
   workflow_hierarchy: { child_workflow_no: 'workflow_registry', parent_workflow_no: 'workflow_registry' },
+};
+
+/**
+ * user_preferences(キー単位のユーザー設定テーブル)の許可リスト。
+ * SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md参照。
+ *
+ * 個別Cookieの乱立を解消するため、新規設定はここへキーを追加したうえで
+ * POST /api/preferences/:key経由でD1へ書き込む。許可リストに無いキーへの
+ * 書き込みはAPI側で拒否する(ゴミの新規発生を防ぐ)。設定を廃止するときは
+ * ここからキーを外し、`DELETE FROM user_preferences WHERE pref_key = '<キー>'`
+ * をmigrationとして提示する。
+ */
+export const USER_PREFERENCE_KEYS: Record<string, { description: string; values: string[] | 'free' }> = {
+  d1_query_catalog_sort: { description: '/d1-query-catalogの帯の並び替え順', values: ['name', 'count'] },
 };
 
 /**
@@ -10706,8 +10732,31 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
       logger.warn('d1-query-catalog: fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
     }
   }
-  const sortCookie = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_sort');
-  const initialSort = sortCookie === 'name' ? 'name' : 'count';
+  let initialSort: 'name' | 'count' = 'count';
+  if (db) {
+    try {
+      const pref = await db.prepare(
+        `SELECT pref_value FROM user_preferences WHERE user_id = ? AND pref_key = 'd1_query_catalog_sort'`
+      ).bind(user.sub).first<{ pref_value: string }>();
+      if (pref?.pref_value === 'name' || pref?.pref_value === 'count') {
+        initialSort = pref.pref_value;
+      } else {
+        // 移行互換: user_preferencesに値が無い場合、旧d1_query_catalog_sort Cookieが
+        // 残っていればその値を一度だけD1へ取り込む(SPEC.20260907.user-preferences.md 4章5番)。
+        const sortCookie = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_sort');
+        if (sortCookie === 'name' || sortCookie === 'count') {
+          initialSort = sortCookie;
+          await db.prepare(
+            `INSERT INTO user_preferences (user_id, pref_key, pref_value, updated_at)
+             VALUES (?, 'd1_query_catalog_sort', ?, datetime('now'))
+             ON CONFLICT(user_id, pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at = excluded.updated_at`
+          ).bind(user.sub, sortCookie).run();
+        }
+      }
+    } catch (error) {
+      logger.warn('d1-query-catalog: preference fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
+    }
+  }
   return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort));
 });
 
@@ -17832,6 +17881,47 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'テーマの変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * user_preferences(キー単位のユーザー設定テーブル)への汎用書き込みエンドポイント。
+ * SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md参照。
+ * 個別Cookie乱立を解消するため、新規設定はここへ集約する。
+ * USER_PREFERENCE_KEYSに無いキー・許可されていない値は拒否する。
+ */
+app.post('/api/preferences/:key', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const key = c.req.param('key');
+  const def = USER_PREFERENCE_KEYS[key];
+  if (!def) {
+    return c.json({ error: `未知の設定キーです: ${key}` }, 400);
+  }
+  try {
+    const { value } = await c.req.json();
+    if (typeof value !== 'string' || value === '') {
+      return c.json({ error: '値が不正です' }, 400);
+    }
+    if (def.values !== 'free' && !def.values.includes(value)) {
+      return c.json({ error: `不正な値です: ${value}` }, 400);
+    }
+    const db = c.env.DB;
+    if (!db) {
+      return c.json({ error: 'DB not available' }, 500);
+    }
+    await db.prepare(
+      `INSERT INTO user_preferences (user_id, pref_key, pref_value, updated_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at = excluded.updated_at`
+    ).bind(user.sub, key, value).run();
+    return c.json({ message: '設定を保存しました', key, value }, 200);
+  } catch (error) {
+    logger.error('User preference update error', {
+      userId: user?.sub,
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '設定の保存に失敗しました' }, 500);
   }
 });
 
