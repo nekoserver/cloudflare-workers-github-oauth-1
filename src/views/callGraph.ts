@@ -28,15 +28,21 @@ export function getCallGraphPage(
   const groupsJson = JSON.stringify(
     Object.fromEntries(groupsPresent.map((g) => [g, GROUP_META[g] ?? { color: '#8b949e', label: g }]))
   );
+  const groupCounts = new Map<string, number>();
+  for (const n of nodes) groupCounts.set(n.group, (groupCounts.get(n.group) ?? 0) + 1);
 
   const repoOptionsHtml = repos
     .map((r) => `<option value="${r.id}" ${r.id === selectedRepoId ? 'selected' : ''}>${escapeHtml(r.full_name)}</option>`)
     .join('\n');
 
+  // リポジトリ選択済みの場合、上部バーは初期状態で折りたたんでおく(トグルボタンのみ表示)。
+  const topBarCollapsedInitially = selectedRepoId !== null;
+
   const legendHtml = groupsPresent
     .map((g) => {
       const meta = GROUP_META[g] ?? { color: '#8b949e', label: g };
-      return `<div class="legend-item"><div class="legend-dot" style="background:${meta.color}"></div>${escapeHtml(meta.label)}</div>`;
+      const count = groupCounts.get(g) ?? 0;
+      return `<div class="legend-item"><div class="legend-dot" style="background:${meta.color}"></div>${escapeHtml(meta.label)} ${count}</div>`;
     })
     .join('\n');
 
@@ -75,6 +81,14 @@ export function getCallGraphPage(
   }
   #top-bar a { text-decoration: none; }
   #top-bar a:hover { border-color: #58a6ff; color: #58a6ff; }
+  #top-bar-toggle {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+  }
+  #top-bar-toggle:hover { border-color: #58a6ff; color: #58a6ff; }
+  #top-bar-content { display: flex; align-items: center; gap: 10px; }
+  #top-bar.collapsed #top-bar-content { display: none; }
+  #top-bar:not(.collapsed) #top-bar-toggle { display: none; }
 
   #search-box {
     background: #161b22; border: 1px solid #30363d; border-radius: 6px;
@@ -94,6 +108,9 @@ export function getCallGraphPage(
   #note {
     background: #161b22cc; border: 1px solid #30363d; border-radius: 6px;
     padding: 8px 10px; font-size: 11px; color: #8b949e; line-height: 1.6;
+  }
+  #note-dismiss {
+    margin-top: 8px; font-size: 11px; padding: 4px 10px;
   }
 
   #info-panel {
@@ -148,14 +165,17 @@ export function getCallGraphPage(
 
 <canvas id="canvas"></canvas>
 
-<div id="top-bar">
-  <span>関数呼び出しグラフ(D1連動: ts_function_catalog / ts_function_callers)</span>
-  <form method="get" action="/call-graph" style="display:flex; align-items:center; gap:6px;">
-    <select name="repo" onchange="this.form.submit()">
-      <option value="">リポジトリを選択...</option>
-      ${repoOptionsHtml}
-    </select>
-  </form>
+<div id="top-bar" class="${topBarCollapsedInitially ? 'collapsed' : ''}">
+  <button id="top-bar-toggle" type="button" aria-label="関数呼び出しグラフの設定を開閉する">⚙ 関数呼び出しグラフ</button>
+  <div id="top-bar-content">
+    <span>関数呼び出しグラフ(D1連動: ts_function_catalog / ts_function_callers)</span>
+    <form method="get" action="/call-graph" style="display:flex; align-items:center; gap:6px;">
+      <select name="repo" onchange="this.form.submit()">
+        <option value="">リポジトリを選択...</option>
+        ${repoOptionsHtml}
+      </select>
+    </form>
+  </div>
 </div>
 
 <div id="ui">
@@ -169,6 +189,7 @@ export function getCallGraphPage(
     また ts_function_callers は呼び出し元の「ファイル+行番号」のみを記録しており、
     その行が catalog 上のどの関数の範囲にも一致しない場合は
     ファイル単位の「呼び出し元不明」ノードにまとめて表示しています。
+    <div><button id="note-dismiss" type="button">了解</button></div>
   </div>
 </div>
 
@@ -704,6 +725,14 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 document.getElementById('search-box').addEventListener('input', e => {
   searchQuery = e.target.value.trim();
   simRunning = true; simStep = 0;
+});
+
+document.getElementById('top-bar-toggle').addEventListener('click', () => {
+  document.getElementById('top-bar').classList.toggle('collapsed');
+});
+
+document.getElementById('note-dismiss').addEventListener('click', () => {
+  document.getElementById('note').remove();
 });
 
 window.addEventListener('resize', () => {
