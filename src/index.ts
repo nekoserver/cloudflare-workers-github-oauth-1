@@ -2602,10 +2602,33 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   // origin_webhook_log_id → resend_webhook_log.id
   'email_suppression_list.origin_webhook_log_id': 'id',
 
-  // request_id 系 → ai_summary_log.id
-  'ai_summary_reviews.summary_request_id': 'id',
-  'commit_agent_log.request_id': 'id',
-  'ai_summary_link_access_log.request_id': 'id',
+  // AI要約の関連ログは ai_summary_log.request_id (UNIQUE) を参照
+  'ai_summary_reviews.summary_request_id': 'request_id',
+
+  // ID名が異なる参照先 → 各マスターの id (PK)
+  'wine_details.wine_id': 'id',
+  'ai_chat_shares.image_id': 'id',
+  'aichat_search_log.share_id': 'id',
+  'aichat_search_history.share_id': 'id',
+  'aichat_search_impressions.share_id': 'id',
+  'aichat_share_subquery_links.subquery_id': 'id',
+  'aichat_keyword_category_map.category_id': 'id',
+  'aichat_keyword_category_suggestions.suggested_category_id': 'id',
+  'aichat_answer_category_scores.share_id': 'id',
+  'aichat_answer_category_scores.category_id': 'id',
+  'aichat_answer_vectors.share_id': 'id',
+  'aichat_answer_keyword_vectors.share_id': 'id',
+  'aichat_moondream_analyses.share_id': 'id',
+  'aichat_moondream_analyses.image_id': 'id',
+  'heritage_question_view_log.question_master_id': 'id',
+  'ts_function_catalog.repo_id': 'id',
+  'ts_function_callers.repo_id': 'id',
+  'ts_function_callers.callee_id': 'id',
+  'ts_commit_log.repo_id': 'id',
+  'ts_commit_function_map.repo_id': 'id',
+  'ts_function_impact.repo_id': 'id',
+  'ts_commit_quality.repo_id': 'id',
+  'api_search_keyword_sections.keyword_id': 'id',
 
   // search_history_id → commit_search_history.id
   'commit_search_repo_stats.search_history_id': 'id',
