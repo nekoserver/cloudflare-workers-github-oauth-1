@@ -4,14 +4,14 @@
  * このスクリプトを再実行せず、生成済みの静的データをそのままページに埋め込む。
  *
  * 投影式は Šavrič, Patterson, Jenny (2018) の Equal Earth projection の閉形式。
- * 大陸の輪郭は実測の海岸線データではなく、主要な緯度経度の頂点を用いた簡略化
- * (低ポリゴン)形状であり、あくまで「白地図」として大陸の位置・概形が分かる
- * ことを目的とした近似である。頂点間はCatmull-Rom曲線をベジェ曲線へ変換して
- * 滑らかに結び、直線区切りの多角形よりも自然な海岸線らしい見た目にしている。
+ * 大陸・湖の輪郭は Natural Earth の 1:110m Cultural/Physical Vectors
+ * (Public Domain, https://www.naturalearthdata.com/about/terms-of-use/) の
+ * land / lakes レイヤーを scripts/data/*.geojson として同梱し、これを実際の
+ * 海岸線データとして使用する(手作業の簡略化ポリゴンではない)。
  *
  * 実行方法: npx tsx scripts/generate-equal-earth-map-data.ts
  */
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 const A1 = 1.340264;
@@ -35,78 +35,78 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
-// [経度, 緯度] (度)のリング(閉多角形)。実測の海岸線ではなく簡略化した近似形状。
-// 半島(イタリア半島・スカンジナビア半島・インド亜大陸・アラビア半島・
-// バハカリフォルニア半島・フロリダ半島等)は、輪郭を辿る途中で
-// 「出て戻る」形で頂点を追加することで表現している。
-const CONTINENT_RINGS_DEG: { name: string; ring: [number, number][] }[] = [
-  {
-    name: 'North America',
-    ring: [
-      [-165, 68], [-155, 71], [-130, 70], [-100, 73], [-90, 66], [-80, 68], [-70, 58], [-65, 60],
-      [-55, 50], [-65, 45], [-75, 35], [-80, 25], [-80, 24], [-82, 26], [-88, 30], [-94, 29],
-      [-97, 26], [-105, 20], [-110, 23], [-114, 22], [-112, 28], [-115, 30], [-124, 40], [-124, 49],
-      [-130, 55], [-140, 60], [-165, 68],
-    ],
-  },
-  {
-    name: 'South America',
-    ring: [
-      [-80, 10], [-77, 8], [-60, 10], [-50, 0], [-48, -2], [-40, -5], [-35, -8], [-38, -14],
-      [-40, -20], [-48, -25], [-53, -29], [-58, -34], [-63, -40], [-68, -54], [-72, -48],
-      [-73, -40], [-71, -30], [-72, -20], [-75, -10], [-80, -5], [-80, 10],
-    ],
-  },
-  {
-    name: 'Africa',
-    ring: [
-      [-17, 15], [-10, 5], [8, 5], [9, 0], [12, -5], [13, -15], [15, -25], [18, -34], [22, -34],
-      [26, -33], [30, -30], [33, -26], [35, -20], [38, -17], [40, -15], [42, -5], [43, 0],
-      [45, 3], [48, 8], [51, 10], [43, 11], [42, 15], [38, 16], [35, 15], [33, 20], [32, 28],
-      [28, 31], [25, 32], [15, 35], [10, 37], [0, 35], [-6, 35], [-10, 30], [-17, 15],
-    ],
-  },
-  {
-    name: 'Eurasia',
-    ring: [
-      [-9, 43], [-5, 36], [0, 45], [5, 50], [8, 58], [15, 60], [20, 58], [25, 65], [30, 60],
-      [40, 66], [60, 70], [90, 75], [130, 75], [160, 70], [170, 65], [178, 60], [170, 55],
-      [160, 55], [150, 50], [140, 45], [130, 35], [122, 30], [110, 20], [100, 10], [95, 5],
-      [90, 8], [80, 8], [78, 8], [73, 15], [68, 24], [60, 25], [58, 20], [50, 13], [44, 12],
-      [48, 20], [50, 30], [35, 37], [28, 40], [23, 35], [18, 40], [15, 38], [13, 42], [16, 44],
-      [13, 46], [10, 44], [3, 44], [-2, 43], [-9, 43],
-    ],
-  },
-  {
-    name: 'Australia',
-    ring: [
-      [113, -22], [114, -30], [118, -34], [130, -32], [137, -35], [145, -38], [150, -37],
-      [153, -28], [150, -15], [145, -11], [143, -10], [141, -12], [137, -16], [135, -12],
-      [130, -15], [122, -18], [113, -22],
-    ],
-  },
-  {
-    name: 'Greenland',
-    ring: [[-45, 60], [-25, 70], [-25, 80], [-45, 83], [-65, 80], [-70, 70], [-55, 60], [-45, 60]],
-  },
-  {
-    name: 'Madagascar',
-    ring: [[43, -25], [44, -16], [49, -13], [50, -22], [47, -25], [43, -25]],
-  },
-  {
-    name: 'UK & Ireland',
-    ring: [[-9, 54], [-6, 52], [-2, 51], [1, 52], [0, 55], [-3, 58], [-6, 58], [-9, 54]],
-  },
-  {
-    name: 'New Zealand',
-    ring: [[172, -41], [175, -37], [178, -38], [177, -44], [168, -46], [166, -42], [172, -41]],
-  },
-];
+function projectDeg(lon: number, lat: number): [number, number] {
+  const [x, yUp] = equalEarthRaw(toRad(lon), toRad(lat));
+  return [x, -yUp]; // SVGはyが下向きに増えるため反転する
+}
 
-// 南極大陸は実際の海岸線を辿ると±180度をまたぐため、簡略化して
-// 全経度幅をカバる帯として表現する(投影範囲の計算後にx方向いっぱいに広げる)。
-const ANTARCTICA_LAT_TOP = -63;
-const ANTARCTICA_LAT_BOTTOM = -89;
+type GeoRing = [number, number][];
+type GeoJsonFeatureCollection = {
+  type: 'FeatureCollection';
+  features: { type: 'Feature'; geometry: { type: 'Polygon' | 'MultiPolygon'; coordinates: unknown } }[];
+};
+
+// GeoJSONのPolygon/MultiPolygonから、全リング(外周+穴)をフラットな配列で取り出す。
+function extractRings(fc: GeoJsonFeatureCollection): GeoRing[] {
+  const rings: GeoRing[] = [];
+  for (const feature of fc.features) {
+    const geom = feature.geometry;
+    if (geom.type === 'Polygon') {
+      for (const ring of geom.coordinates as GeoRing[]) rings.push(ring);
+    } else {
+      for (const polygon of geom.coordinates as GeoRing[][]) {
+        for (const ring of polygon) rings.push(ring);
+      }
+    }
+  }
+  return rings;
+}
+
+// 経線180度をまたぐリングは、投影後に地図を横断する偽の直線が生じてしまうため、
+// 経度が180度を超えて急変する箇所でサブパスを分割する(単純な対蹠線カット)。
+function ringToSubpaths(ring: GeoRing): GeoRing[] {
+  const subpaths: GeoRing[] = [[]];
+  for (let i = 0; i < ring.length; i++) {
+    const point = ring[i];
+    if (i > 0) {
+      const prev = ring[i - 1];
+      if (Math.abs(point[0] - prev[0]) > 180) {
+        subpaths.push([]);
+      }
+    }
+    subpaths[subpaths.length - 1].push(point);
+  }
+  return subpaths.filter((sp) => sp.length >= 2);
+}
+
+// 経線(縦線)・緯線(横線)のグラティキュール(格子線)を生成する。
+function buildGraticuleLines(): { lon: number; lat: number }[][] {
+  const lines: { lon: number; lat: number }[][] = [];
+  for (let lon = -180; lon <= 180; lon += 30) {
+    const line: { lon: number; lat: number }[] = [];
+    for (let lat = -90; lat <= 90; lat += 3) line.push({ lon, lat });
+    lines.push(line);
+  }
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const line: { lon: number; lat: number }[] = [];
+    for (let lon = -180; lon <= 180; lon += 3) line.push({ lon, lat });
+    lines.push(line);
+  }
+  return lines;
+}
+
+// 全ジオメトリのバウンディングボックスを求め、目的の描画幅に収まるよう
+// 縦横同一スケールで拡大・平行移動する(等積図法の性質を崩さないため)。
+function computeBounds(allPoints: [number, number][]): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of allPoints) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, maxX, minY, maxY };
+}
 
 const CITIES_DEG: { name: string; lon: number; lat: number }[] = [
   { name: '東京', lon: 139.6917, lat: 35.6895 },
@@ -138,63 +138,17 @@ const CITIES_DEG: { name: string; lon: number; lat: number }[] = [
   { name: 'トロント', lon: -79.3832, lat: 43.6532 },
 ];
 
-function projectDeg(lon: number, lat: number): [number, number] {
-  const [x, yUp] = equalEarthRaw(toRad(lon), toRad(lat));
-  return [x, -yUp]; // SVGはyが下向きに増えるため反転する
-}
-
-// 経線(縦線)・緯線(横線)のグラティキュール(格子線)を生成する。
-function buildGraticuleLines(): { lon: number; lat: number }[][] {
-  const lines: { lon: number; lat: number }[][] = [];
-  for (let lon = -180; lon <= 180; lon += 30) {
-    const line: { lon: number; lat: number }[] = [];
-    for (let lat = -90; lat <= 90; lat += 3) line.push({ lon, lat });
-    lines.push(line);
-  }
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const line: { lon: number; lat: number }[] = [];
-    for (let lon = -180; lon <= 180; lon += 3) line.push({ lon, lat });
-    lines.push(line);
-  }
-  return lines;
-}
-
-// 一様Catmull-Rom曲線(閉じたリング)をSVGのC(3次ベジェ)コマンド列に変換する
-// (tension = 1/6 の標準的な変換)。直線の多角形よりも自然な海岸線に見せるため。
-function smoothClosedRingPath(points: [number, number][]): string {
-  const n = points.length;
-  let d = `M${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`;
-  for (let i = 0; i < n; i++) {
-    const p0 = points[(i - 1 + n) % n];
-    const p1 = points[i];
-    const p2 = points[(i + 1) % n];
-    const p3 = points[(i + 2) % n];
-    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += `C${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
-  }
-  return `${d}Z`;
-}
-
-// 全ジオメトリのバウンディングボックスを求め、目的の描画幅に収まるよう
-// 縦横同一スケールで拡大・平行移動する(等積図法の性質を崩さないため)。
-function computeBounds(allPoints: [number, number][]): { minX: number; maxX: number; minY: number; maxY: number } {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const [x, y] of allPoints) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, maxX, minY, maxY };
-}
-
 const TARGET_WIDTH = 2600;
 const PADDING = 40;
 
 function main() {
+  const dataDir = join(__dirname, 'data');
+  const landFc: GeoJsonFeatureCollection = JSON.parse(readFileSync(join(dataDir, 'ne_110m_land.geojson'), 'utf-8'));
+  const lakesFc: GeoJsonFeatureCollection = JSON.parse(readFileSync(join(dataDir, 'ne_110m_lakes.geojson'), 'utf-8'));
+
+  const landRings = extractRings(landFc);
+  const lakeRings = extractRings(lakesFc);
+
   const graticuleLines = buildGraticuleLines();
 
   // スケール計算用に、経緯線の格子点全て(=地図全体の外周に相当)を集める。
@@ -213,9 +167,15 @@ function main() {
     return [(x - bounds.minX) * scale + PADDING, (y - bounds.minY) * scale + PADDING];
   }
 
-  function smoothRingSvg(ring: [number, number][]): string {
-    const pts = ring.map(([lon, lat]) => toSvg(...projectDeg(lon, lat)));
-    return smoothClosedRingPath(pts);
+  function ringsToPathD(rings: GeoRing[]): string {
+    let d = '';
+    for (const ring of rings) {
+      for (const subpath of ringToSubpaths(ring)) {
+        const pts = subpath.map(([lon, lat]) => toSvg(...projectDeg(lon, lat)));
+        d += 'M' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L') + 'Z';
+      }
+    }
+    return d;
   }
 
   function pathFromLineSvg(line: { lon: number; lat: number }[]): string {
@@ -223,18 +183,8 @@ function main() {
     return 'M' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L');
   }
 
-  const continentPaths = CONTINENT_RINGS_DEG.map((c) => ({ name: c.name, d: smoothRingSvg(c.ring) }));
-
-  // 南極大陸: 実際の海岸線ではなく、地図全幅をカバーする帯として簡略表現する。
-  const antarcticaTopY = toSvg(0, projectDeg(0, ANTARCTICA_LAT_TOP)[1])[1];
-  const antarcticaBottomY = toSvg(0, projectDeg(0, ANTARCTICA_LAT_BOTTOM)[1])[1];
-  const antarcticaPath =
-    `M${PADDING.toFixed(2)},${antarcticaTopY.toFixed(2)}` +
-    `L${(mapWidth - PADDING).toFixed(2)},${antarcticaTopY.toFixed(2)}` +
-    `L${(mapWidth - PADDING).toFixed(2)},${antarcticaBottomY.toFixed(2)}` +
-    `L${PADDING.toFixed(2)},${antarcticaBottomY.toFixed(2)}Z`;
-  continentPaths.push({ name: 'Antarctica', d: antarcticaPath });
-
+  const landPathD = ringsToPathD(landRings);
+  const lakePathD = ringsToPathD(lakeRings);
   const graticulePaths = graticuleLines.map((line) => pathFromLineSvg(line));
 
   const cities = CITIES_DEG.map((c) => {
@@ -245,17 +195,16 @@ function main() {
   const output = `/**
  * イコールアース図法(Equal Earth projection)の白地図データ。
  * scripts/generate-equal-earth-map-data.ts の実行結果を書き出したもの(自動生成)。
- * 大陸の輪郭は実測の海岸線データではなく、主要な緯度経度の頂点をCatmull-Rom曲線で
- * 滑らかに結んだ簡略化(低ポリゴン)形状であり、大陸の位置・概形が分かることを
- * 目的とした近似である。
+ * 大陸・湖の輪郭は Natural Earth 1:110m land/lakes(Public Domain)を実際の
+ * 海岸線データとして投影したものであり、手作業の簡略化ポリゴンではない。
  *
  * 再生成: npx tsx scripts/generate-equal-earth-map-data.ts
  */
 export const EQUAL_EARTH_MAP_WIDTH = ${mapWidth};
 export const EQUAL_EARTH_MAP_HEIGHT = ${mapHeight};
 
-export type EqualEarthContinentPath = { name: string; d: string };
-export const EQUAL_EARTH_CONTINENT_PATHS: EqualEarthContinentPath[] = ${JSON.stringify(continentPaths, null, 2)};
+export const EQUAL_EARTH_LAND_PATH_D: string = ${JSON.stringify(landPathD)};
+export const EQUAL_EARTH_LAKES_PATH_D: string = ${JSON.stringify(lakePathD)};
 
 export const EQUAL_EARTH_GRATICULE_PATHS: string[] = ${JSON.stringify(graticulePaths, null, 2)};
 
