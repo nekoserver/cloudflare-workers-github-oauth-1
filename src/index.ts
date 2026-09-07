@@ -1946,6 +1946,7 @@ CREATE INDEX IF NOT EXISTS idx_public_key_security_events_created_at ON public_k
 );
 CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
 CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_query_name ON d1_query_catalog(query_name);`,
+  '0130': `ALTER TABLE d1_query_catalog ADD COLUMN last_commit_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -10696,7 +10697,7 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
   if (db) {
     try {
       const result = await db.prepare(
-        `SELECT query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash
+        `SELECT query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash, last_commit_at
          FROM d1_query_catalog
          ORDER BY table_name, query_name`
       ).all<D1QueryCatalogRow>();
