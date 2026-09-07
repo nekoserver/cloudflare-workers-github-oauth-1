@@ -85,10 +85,10 @@ function renderRow(row: D1QueryCatalogRow): string {
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
 function renderTableBand(table: string, rows: D1QueryCatalogRow[]): string {
   const rowsHtml = rows.map(renderRow).join('\n');
-  return `<section class="table-band" data-table="${escapeHtml(table)}">
+  return `<section class="table-band" data-table="${escapeHtml(table)}" data-count="${rows.length}">
     <button type="button" class="band-header" aria-expanded="false">
-      <span class="band-name">${escapeHtml(table)}</span>
       <span class="band-count">${rows.length}件</span>
+      <span class="band-name">${escapeHtml(table)}</span>
       <span class="band-toggle-arrow">▾</span>
     </button>
     <div class="table-wrap" hidden>
@@ -134,6 +134,7 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       return `<label class="table-checkbox"><input type="checkbox" value="${safeTable}"> ${safeTable} <span class="table-checkbox-count">(${count})</span></label>`;
     })
     .join('\n');
+  const tableCheckboxAllHtml = `<label class="table-checkbox table-checkbox-all"><input type="checkbox" id="tableFilterAll" checked> すべて <span class="table-checkbox-count">(${rows.length})</span></label>`;
   const bandsHtml = groupByTable(rows)
     .map(([table, tableRows]) => renderTableBand(table, tableRows))
     .join('\n');
@@ -248,6 +249,7 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       cursor: pointer;
     }
     .table-checkbox-count { color: var(--text-muted); margin-left: auto; }
+    .table-checkbox-all { font-weight: 700; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; padding-bottom: 8px; }
     select#verbFilter {
       width: 100%;
       max-width: 320px;
@@ -262,7 +264,19 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     }
     select#verbFilter option { padding: 4px 6px; }
     .filter-hint { font-size: 12px; color: var(--text-muted); margin: -4px 0 12px; }
-    .table-band { margin-bottom: 20px; }
+    .band-sort-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .sort-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .sort-btn[aria-pressed="true"] { background: var(--accent-color, #667eea); color: white; border-color: var(--accent-color, #667eea); }
+    .table-band { margin-bottom: 1px; }
     .band-header {
       display: flex;
       align-items: baseline;
@@ -278,7 +292,13 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     .band-header:hover { background: var(--border-color); }
     .band-header[aria-expanded="true"] { border-radius: 8px 8px 0 0; }
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--text-primary); font-size: 14px; }
-    .band-count { font-size: 12px; color: var(--text-muted); }
+    .band-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .band-toggle-arrow { margin-left: auto; color: var(--text-muted); transition: transform 0.15s; }
     .band-header[aria-expanded="true"] .band-toggle-arrow { transform: rotate(180deg); }
     .table-band .table-wrap {
@@ -346,6 +366,7 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         <span class="panel-toggle-arrow">▾</span>
       </button>
       <div class="filter-panel" id="tablePanel" hidden>
+        ${tableCheckboxAllHtml}
         ${tableCheckboxesHtml}
       </div>
 
@@ -355,6 +376,11 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       </select>
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
 
+      <div class="band-sort-controls">
+        <span class="filter-label">並び替え:</span>
+        <button type="button" class="sort-btn" data-sort="name" aria-pressed="true">テーブル名順</button>
+        <button type="button" class="sort-btn" data-sort="count" aria-pressed="false">件数の多い順</button>
+      </div>
       <div id="tableBands">
         ${bandsHtml}
       </div>
@@ -385,8 +411,27 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       tablePanel.hidden = expanded;
     });
 
-    var tableCheckboxes = Array.prototype.slice.call(tablePanel.querySelectorAll('input[type="checkbox"]'));
+    var tableCheckboxAll = document.getElementById('tableFilterAll');
+    var tableCheckboxes = Array.prototype.slice.call(tablePanel.querySelectorAll('input[type="checkbox"]:not(#tableFilterAll)'));
     var verbFilter = document.getElementById('verbFilter');
+
+    // 「すべて」は個別チェックボックスの選択を解除するショートカット。
+    // 個別チェックボックスを1つでも選ぶと自動的に外れ、全て外すと自動的に戻る。
+    tableCheckboxAll.addEventListener('change', function() {
+      if (tableCheckboxAll.checked) {
+        tableCheckboxes.forEach(function(cb) { cb.checked = false; });
+      }
+      applyFilters();
+    });
+    tableCheckboxes.forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        if (cb.checked) {
+          tableCheckboxAll.checked = false;
+        } else if (tableCheckboxes.every(function(c) { return !c.checked; })) {
+          tableCheckboxAll.checked = true;
+        }
+      });
+    });
 
     // 帯(テーブル名の見出しバー)はページ読み込み時すべて閉じている。
     // ヘッダークリックで個別に開閉できる。
@@ -433,6 +478,24 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
 
     tableCheckboxes.forEach(function(cb) { cb.addEventListener('change', applyFilters); });
     verbFilter.addEventListener('change', applyFilters);
+
+    // 帯の並び替え: テーブル名順(初期表示、data-table)/ 件数の多い順(data-count)
+    var tableBandsContainer = document.getElementById('tableBands');
+    var sortButtons = Array.prototype.slice.call(document.querySelectorAll('.sort-btn'));
+    sortButtons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var sortKey = btn.getAttribute('data-sort');
+        var bands = Array.prototype.slice.call(tableBandsContainer.querySelectorAll('.table-band'));
+        bands.sort(function(a, b) {
+          if (sortKey === 'count') {
+            return Number(b.getAttribute('data-count')) - Number(a.getAttribute('data-count'));
+          }
+          return (a.getAttribute('data-table') || '').localeCompare(b.getAttribute('data-table') || '');
+        });
+        bands.forEach(function(band) { tableBandsContainer.appendChild(band); });
+        sortButtons.forEach(function(b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+      });
+    });
   </script>
 </body>
 </html>`;

@@ -15,6 +15,9 @@
  *       極端に狭めた場合の挙動)。横スクロールに倒すことで回避する
  *   (6) テーブル選択パネルの開閉ボタン・チェックボックスが正しく描画されず、
  *       テーブル名を帯(見出しバー)にまとめた出力にならない
+ *   (7) テーブル選択パネルに「すべて」の選択解除ショートカットが無い
+ *   (8) 帯同士の余白が過剰(margin-bottom: 20px)で、閉じた状態でも一覧性が悪い
+ *   (9) 帯に件数(data-count)が無い、または並び替えボタンが無くソートできない
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -197,8 +200,8 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
       { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
     ]);
-    expect(html).toContain('<section class="table-band" data-table="foo">');
-    expect(html).toContain('<section class="table-band" data-table="bar">');
+    expect(html).toContain('<section class="table-band" data-table="foo" data-count="1">');
+    expect(html).toContain('<section class="table-band" data-table="bar" data-count="1">');
     expect(html).toContain('<span class="band-name">foo</span>');
     expect(html).toContain('<span class="band-count">1件</span>');
     // 帯に集約したため、行内に個別の「テーブル」列(th)は無い
@@ -236,5 +239,55 @@ describe('GET /d1-query-catalog', () => {
     ]);
     expect(html).toContain('<button type="button" class="band-header" aria-expanded="false">');
     expect(html).toContain('<span class="band-toggle-arrow">▾</span>');
+  });
+
+  it('テーブル選択パネルの最上段に「すべて」チェックボックスがあり、初期状態でチェック済み', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+    ]);
+    const panelMatch = html.match(/<div class="filter-panel" id="tablePanel" hidden>([\s\S]*?)<\/div>/);
+    expect(panelMatch).not.toBeNull();
+    const panelText = panelMatch![1];
+    const allIdx = panelText.indexOf('id="tableFilterAll"');
+    const fooIdx = panelText.indexOf('value="foo"');
+    expect(allIdx).toBeGreaterThan(-1);
+    expect(fooIdx).toBeGreaterThan(-1);
+    // 「すべて」は最上段(個別チェックボックスより前)にある
+    expect(allIdx).toBeLessThan(fooIdx);
+    expect(panelText).toMatch(/id="tableFilterAll" checked/);
+    // 「すべて」の件数は全クエリ数(2件)
+    expect(panelText).toContain('(2)');
+  });
+
+  it('帯同士の余白(margin-bottom)が最小化されている(20pxのような広い余白の回帰防止)', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    const rule = html.match(/\.table-band\s*\{[^}]*\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toMatch(/margin-bottom:\s*[12]px/);
+  });
+
+  it('各帯にdata-count属性(クエリ件数)が付与され、件数順で並び替えるボタンがある', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO foo VALUES (2)', migration_file: null, last_commit_hash: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('data-table="foo" data-count="2"');
+    expect(html).toContain('data-table="bar" data-count="1"');
+    expect(html).toContain('data-sort="name"');
+    expect(html).toContain('data-sort="count"');
+    expect(html).toMatch(/class="sort-btn" data-sort="name" aria-pressed="true"/);
+  });
+
+  it('帯の行頭(band-nameより前)に件数(band-count)が表示される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+    ]);
+    const countIdx = html.indexOf('<span class="band-count">1件</span>');
+    const nameIdx = html.indexOf('<span class="band-name">foo</span>');
+    expect(countIdx).toBeGreaterThan(-1);
+    expect(nameIdx).toBeGreaterThan(-1);
+    expect(countIdx).toBeLessThan(nameIdx);
   });
 });
