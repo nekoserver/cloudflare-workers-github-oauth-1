@@ -38,6 +38,14 @@ function createMockDb(prefRow: { pref_value: string; updated_at: string } | null
   return { db, bindMock, firstMock };
 }
 
+describe('LEGACY_STORAGE_ENTRIES', () => {
+  it('airline_network_dest_flagsは/airline-networkページの設定として登録されている', () => {
+    const entry = LEGACY_STORAGE_ENTRIES.find((e) => e.key === 'airline_network_dest_flags');
+    expect(entry).toBeDefined();
+    expect(entry?.page).toBe('/airline-network');
+  });
+});
+
 describe('GET /legacy-storage-inventory', () => {
   it('レジストリの内容(キー・移行先キー)がページHTMLに埋め込まれる', async () => {
     const authHeader = await makeAuthHeader();
@@ -69,6 +77,23 @@ describe('GET /legacy-storage-inventory', () => {
     expect(html).toContain('id="localStorageCapacityChart"');
     expect(html).toContain('function computePageUsage');
     expect(html).toContain('function renderCapacityChart');
+  });
+
+  it('合計行の使用率(%)には100を掛けた値が使われる(0〜1の比率のまま表示しない)', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb();
+    const res = await app.request(
+      '/legacy-storage-inventory',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: db }
+    );
+    const html = await res.text();
+    // 合計行を追加する箇所で、比率(0〜1)に対して明示的に100を掛けていることを
+    // ソース上で確認する(掛け忘れると0.001のような値がそのまま%表示され、
+    // 実際の使用率よりも大幅に小さく見えてしまう)。
+    expect(html).toContain('gaugePctRatio * 100');
+    expect(html).toContain('capacity-rank-row-total');
+    expect(html).toContain('>合計<');
   });
 
   it('未認証の場合はページを返さない', async () => {

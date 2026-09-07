@@ -131,14 +131,23 @@ export function getLegacyStorageInventoryPage(username: string): string {
       overflow: hidden;
     }
     .capacity-rank-fill { height: 100%; min-width: 2px; }
+    .capacity-rank-fill-total { background: var(--accent-color, #667eea); }
     .capacity-rank-value {
-      width: 130px;
+      width: 160px;
       flex-shrink: 0;
       text-align: right;
       font-family: 'SFMono-Regular', Consolas, monospace;
       color: var(--text-muted);
       white-space: nowrap;
     }
+    .capacity-rank-row-total {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+      font-weight: 600;
+    }
+    .capacity-rank-row-total .capacity-rank-label,
+    .capacity-rank-row-total .capacity-rank-value { color: var(--text-primary); }
   </style>
 </head>
 <body>
@@ -250,13 +259,24 @@ export function getLegacyStorageInventoryPage(username: string): string {
         '</div>';
       }).join('');
 
-      var gaugePct = Math.min((totalUsed / quotaBytes) * 100, 100);
+      // 使用率(%)は必ず「実バイト数 / quotaBytes」の比に100を掛けた値にする。
+      // 100を掛け忘れると0〜1の小数(小数点以下の桁がほぼ0の値)がそのまま
+      // 「%」表示されてしまい、実際の使用率より大幅に小さい値に見えてしまうため注意。
+      var gaugePctRatio = quotaBytes > 0 ? (totalUsed / quotaBytes) : 0;
+      var gaugePct = Math.min(gaugePctRatio * 100, 100);
+      var totalPct = quotaBytes > 0 ? (gaugePctRatio * 100).toFixed(2) : '0.00';
+      var totalRowHtml = '<div class="capacity-rank-row capacity-rank-row-total">' +
+        '<div class="capacity-rank-label">合計</div>' +
+        '<div class="capacity-rank-track"><div class="capacity-rank-fill capacity-rank-fill-total" style="width:' + gaugePct.toFixed(2) + '%;"></div></div>' +
+        '<div class="capacity-rank-value">' + formatBytes(totalUsed) + ' / ' + formatBytes(quotaBytes) + ' (' + totalPct + '%)</div>' +
+      '</div>';
+
       container.innerHTML =
         '<div class="capacity-summary">' + formatBytes(totalUsed) + ' / ' + formatBytes(quotaBytes) + ' 使用(残り ' + formatBytes(remaining) + ')' +
           (overflow ? '<span class="capacity-overflow-badge">目安を超過</span>' : '') +
         '</div>' +
         '<div class="capacity-gauge-track"><div class="capacity-gauge-fill" style="width:' + gaugePct.toFixed(2) + '%;"></div></div>' +
-        rowsHtml;
+        rowsHtml + totalRowHtml;
     }
 
     function readCookies() {
