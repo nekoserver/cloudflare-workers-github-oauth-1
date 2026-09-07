@@ -198,6 +198,7 @@ import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getD1QueryCatalogPage, type D1QueryCatalogRow } from './views/d1QueryCatalog';
+import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getCountdownPage } from './views/countdown';
 import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
@@ -10760,6 +10761,16 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
   return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort));
 });
 
+/**
+ * ブラウザに現在保存されているCookie/localStorageの値を、
+ * どのページの設定なのか・D1(user_preferences)への移行先がすでにあるか
+ * (パージ可能/復元可能)で一覧表示するページ。走査自体はクライアントJSで行う。
+ */
+app.get('/legacy-storage-inventory', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getLegacyStorageInventoryPage(user.sub));
+});
+
 app.get('/ruby-wasm', authMiddleware, async (c) => {
   const user = c.get('user');
   // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
@@ -17922,6 +17933,38 @@ app.post('/api/preferences/:key', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '設定の保存に失敗しました' }, 500);
+  }
+});
+
+/**
+ * user_preferencesの読み取り専用エンドポイント。
+ * /legacy-storage-inventory ページが、Cookie/localStorageの値をD1へ
+ * 復元(Restore)してよいか(=D1に未だ値が無いか)を判定するために使う。
+ * USER_PREFERENCE_KEYSに無いキーは400で拒否する(POST側と同じ許可リスト)。
+ */
+app.get('/api/preferences/:key', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const key = c.req.param('key');
+  const def = USER_PREFERENCE_KEYS[key];
+  if (!def) {
+    return c.json({ error: `未知の設定キーです: ${key}` }, 400);
+  }
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'DB not available' }, 500);
+  }
+  try {
+    const row = await db.prepare(
+      `SELECT pref_value, updated_at FROM user_preferences WHERE user_id = ? AND pref_key = ?`
+    ).bind(user.sub, key).first<{ pref_value: string; updated_at: string }>();
+    return c.json({ key, value: row?.pref_value ?? null, updatedAt: row?.updated_at ?? null }, 200);
+  } catch (error) {
+    logger.error('User preference fetch error', {
+      userId: user?.sub,
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '設定の取得に失敗しました' }, 500);
   }
 });
 
