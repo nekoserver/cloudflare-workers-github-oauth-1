@@ -56,6 +56,21 @@ describe('GET /legacy-storage-inventory', () => {
     expect(html).toContain('/api/preferences/');
   });
 
+  it('ページ別ストレージ占有量グラフの描画先コンテナと集計関数が含まれる', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb();
+    const res = await app.request(
+      '/legacy-storage-inventory',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: db }
+    );
+    const html = await res.text();
+    expect(html).toContain('id="cookieCapacityChart"');
+    expect(html).toContain('id="localStorageCapacityChart"');
+    expect(html).toContain('function computePageUsage');
+    expect(html).toContain('function renderCapacityChart');
+  });
+
   it('未認証の場合はページを返さない', async () => {
     const { db } = createMockDb();
     const res = await app.request('/legacy-storage-inventory', {}, { JWT_SECRET, DB: db });
