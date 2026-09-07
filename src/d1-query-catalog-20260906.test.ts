@@ -216,4 +216,25 @@ describe('GET /d1-query-catalog', () => {
     expect(zzzIdx).toBeGreaterThan(-1);
     expect(aaaIdx).toBeLessThan(zzzIdx);
   });
+
+  it('各テーブル帯はページ読み込み時すべて閉じている(aria-expanded=false・table-wrapがhidden)', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+    ]);
+    const bandMatches = [...html.matchAll(/<section class="table-band"[^>]*>[\s\S]*?<button type="button" class="band-header" aria-expanded="(\w+)">[\s\S]*?<div class="table-wrap"( hidden)?>/g)];
+    expect(bandMatches.length).toBe(2);
+    for (const m of bandMatches) {
+      expect(m[1]).toBe('false');
+      expect(m[2]).toBe(' hidden');
+    }
+  });
+
+  it('帯の見出しはクリック可能なbutton要素で、開閉用の矢印アイコンを持つ', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('<button type="button" class="band-header" aria-expanded="false">');
+    expect(html).toContain('<span class="band-toggle-arrow">▾</span>');
+  });
 });

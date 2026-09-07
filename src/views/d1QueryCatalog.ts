@@ -86,11 +86,12 @@ function renderRow(row: D1QueryCatalogRow): string {
 function renderTableBand(table: string, rows: D1QueryCatalogRow[]): string {
   const rowsHtml = rows.map(renderRow).join('\n');
   return `<section class="table-band" data-table="${escapeHtml(table)}">
-    <div class="band-header">
+    <button type="button" class="band-header" aria-expanded="false">
       <span class="band-name">${escapeHtml(table)}</span>
       <span class="band-count">${rows.length}件</span>
-    </div>
-    <div class="table-wrap">
+      <span class="band-toggle-arrow">▾</span>
+    </button>
+    <div class="table-wrap" hidden>
       <table>
         <thead>
           <tr>
@@ -266,13 +267,20 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       display: flex;
       align-items: baseline;
       gap: 8px;
+      width: 100%;
       background: var(--bg-secondary);
       border: 1px solid var(--border-color);
-      border-radius: 8px 8px 0 0;
+      border-radius: 8px;
       padding: 8px 12px;
+      font-family: inherit;
+      cursor: pointer;
     }
+    .band-header:hover { background: var(--border-color); }
+    .band-header[aria-expanded="true"] { border-radius: 8px 8px 0 0; }
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--text-primary); font-size: 14px; }
     .band-count { font-size: 12px; color: var(--text-muted); }
+    .band-toggle-arrow { margin-left: auto; color: var(--text-muted); transition: transform 0.15s; }
+    .band-header[aria-expanded="true"] .band-toggle-arrow { transform: rotate(180deg); }
     .table-band .table-wrap {
       border: 1px solid var(--border-color);
       border-top: none;
@@ -380,10 +388,28 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     var tableCheckboxes = Array.prototype.slice.call(tablePanel.querySelectorAll('input[type="checkbox"]'));
     var verbFilter = document.getElementById('verbFilter');
 
+    // 帯(テーブル名の見出しバー)はページ読み込み時すべて閉じている。
+    // ヘッダークリックで個別に開閉できる。
+    function setBandExpanded(band, expanded) {
+      var header = band.querySelector('.band-header');
+      var wrap = band.querySelector('.table-wrap');
+      header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      wrap.hidden = !expanded;
+    }
+
+    document.querySelectorAll('.table-band').forEach(function(band) {
+      var header = band.querySelector('.band-header');
+      header.addEventListener('click', function() {
+        var expanded = header.getAttribute('aria-expanded') === 'true';
+        setBandExpanded(band, !expanded);
+      });
+    });
+
     function applyFilters() {
       var selectedTables = tableCheckboxes.filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
         .map(function(o) { return o.value; });
+      var filtersActive = selectedTables.length > 0 || selectedVerbs.length > 0;
 
       document.querySelectorAll('.table-band').forEach(function(band) {
         var table = band.getAttribute('data-table') || '';
@@ -397,6 +423,11 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
           if (visible) anyRowVisible = true;
         });
         band.hidden = !anyRowVisible;
+        // フィルタで絞り込んだ結果を確認するたびに手動で開く手間を省くため、
+        // 何らかの条件を選択して該当した帯だけは自動的に開く。
+        if (filtersActive && anyRowVisible) {
+          setBandExpanded(band, true);
+        }
       });
     }
 
