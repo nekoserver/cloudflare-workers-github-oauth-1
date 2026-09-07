@@ -36,26 +36,6 @@ function sqlVerb(sql: string): string {
   return 'OTHER';
 }
 
-function renderRow(row: D1QueryCatalogRow): string {
-  const badge = row.command_confirmed
-    ? '<span class="badge badge-confirmed">確定</span>'
-    : '<span class="badge badge-inferred">推測</span>';
-  const table = escapeHtml(row.table_name ?? '(不明)');
-  const verb = escapeHtml(sqlVerb(row.sql_text));
-  const sqlOneLine = escapeHtml(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
-  const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
-  const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
-  return `<tr data-table="${table}" data-verb="${verb}">
-    <td>${escapeHtml(row.query_name)}</td>
-    <td>:${escapeHtml(row.command)} ${badge}</td>
-    <td>${table}</td>
-    <td class="sql-cell"><code>${sqlOneLine}</code></td>
-    <td>${migration}</td>
-    <td>${commit}</td>
-    <td>${row.source_file}:${row.source_line}</td>
-  </tr>`;
-}
-
 // verbCounts: 発行SQL種別ごとの出現回数を、多い順に並べる。
 // セレクトボックスの選択肢順(=よく使われる操作から選べる)に使う。
 function verbCounts(rows: D1QueryCatalogRow[]): { verb: string; count: number }[] {
@@ -69,13 +49,92 @@ function verbCounts(rows: D1QueryCatalogRow[]): { verb: string; count: number }[
     .sort((a, b) => b.count - a.count);
 }
 
+// tableCounts: テーブル名ごとの出現回数を、多い順に並べる。
+// テーブル選択パネル内のチェックボックスの並び順に使う。
+function tableCounts(rows: D1QueryCatalogRow[]): { table: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const t = row.table_name ?? '(不明)';
+    counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([table, count]) => ({ table, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function renderRow(row: D1QueryCatalogRow): string {
+  const badge = row.command_confirmed
+    ? '<span class="badge badge-confirmed">確定</span>'
+    : '<span class="badge badge-inferred">推測</span>';
+  const verb = escapeHtml(sqlVerb(row.sql_text));
+  const sqlOneLine = escapeHtml(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
+  const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
+  const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
+  return `<tr data-verb="${verb}">
+    <td>${escapeHtml(row.query_name)}</td>
+    <td>:${escapeHtml(row.command)} ${badge}</td>
+    <td class="sql-cell"><code>${sqlOneLine}</code></td>
+    <td>${migration}</td>
+    <td>${commit}</td>
+    <td>${row.source_file}:${row.source_line}</td>
+  </tr>`;
+}
+
+// renderTableBand: 1テーブル分のクエリ一覧を「帯(見出しバー)+その下のミニ表」として
+// 描画する。行ごとに繰り返していたテーブル名を帯へ集約し、テーブル単位で
+// パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
+function renderTableBand(table: string, rows: D1QueryCatalogRow[]): string {
+  const rowsHtml = rows.map(renderRow).join('\n');
+  return `<section class="table-band" data-table="${escapeHtml(table)}">
+    <div class="band-header">
+      <span class="band-name">${escapeHtml(table)}</span>
+      <span class="band-count">${rows.length}件</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>クエリ名</th>
+            <th>コマンド</th>
+            <th>SQL</th>
+            <th>migration</th>
+            <th>最終変更コミット</th>
+            <th>位置</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function groupByTable(rows: D1QueryCatalogRow[]): [string, D1QueryCatalogRow[]][] {
+  const byTable = new Map<string, D1QueryCatalogRow[]>();
+  for (const row of rows) {
+    const t = row.table_name ?? '(不明)';
+    if (!byTable.has(t)) byTable.set(t, []);
+    byTable.get(t)!.push(row);
+  }
+  return [...byTable.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
 export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[]): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
-  const rowsHtml = rows.map(renderRow).join('\n');
   const reportUrl = `https://github.com/${OWNER_REPO}/blob/main/REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md`;
   const verbOptionsHtml = verbCounts(rows)
     .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
+    .join('\n');
+  const tableCheckboxesHtml = tableCounts(rows)
+    .map(({ table, count }) => {
+      const safeTable = escapeHtml(table);
+      return `<label class="table-checkbox"><input type="checkbox" value="${safeTable}"> ${safeTable} <span class="table-checkbox-count">(${count})</span></label>`;
+    })
+    .join('\n');
+  const bandsHtml = groupByTable(rows)
+    .map(([table, tableRows]) => renderTableBand(table, tableRows))
     .join('\n');
 
   return `<!DOCTYPE html>
@@ -147,7 +206,11 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 16px; }
     .subtitle a { color: var(--accent-color, #667eea); }
     .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
-    input#tableFilter {
+    .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .panel-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       width: 100%;
       max-width: 320px;
       padding: 10px 12px;
@@ -156,9 +219,34 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       background: var(--bg-secondary);
       color: var(--text-primary);
       font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-align: left;
+    }
+    .panel-toggle:hover { background: var(--border-color); }
+    .panel-toggle-arrow { margin-left: auto; transition: transform 0.15s; }
+    .panel-toggle[aria-expanded="true"] .panel-toggle-arrow { transform: rotate(180deg); }
+    .filter-panel {
+      max-width: 320px;
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      padding: 8px 12px;
       margin-bottom: 8px;
     }
-    .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .table-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .table-checkbox-count { color: var(--text-muted); margin-left: auto; }
     select#verbFilter {
       width: 100%;
       max-width: 320px;
@@ -173,6 +261,23 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     }
     select#verbFilter option { padding: 4px 6px; }
     .filter-hint { font-size: 12px; color: var(--text-muted); margin: -4px 0 12px; }
+    .table-band { margin-bottom: 20px; }
+    .band-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px 8px 0 0;
+      padding: 8px 12px;
+    }
+    .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--text-primary); font-size: 14px; }
+    .band-count { font-size: 12px; color: var(--text-muted); }
+    .table-band .table-wrap {
+      border: 1px solid var(--border-color);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+    }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
@@ -227,32 +332,25 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         を参照。
       </div>
       <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
-      <div class="filter-label">テーブル名で絞り込み</div>
-      <input type="text" id="tableFilter" placeholder="テーブル名で絞り込み" autocomplete="off">
+
+      <button type="button" class="panel-toggle" id="tablePanelToggle" aria-expanded="false" aria-controls="tablePanel">
+        <span>テーブルで絞り込み(出現回数の多い順、複数選択可)</span>
+        <span class="panel-toggle-arrow">▾</span>
+      </button>
+      <div class="filter-panel" id="tablePanel" hidden>
+        ${tableCheckboxesHtml}
+      </div>
+
       <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
       <select id="verbFilter" multiple size="6">
         ${verbOptionsHtml}
       </select>
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
-      <div class="table-wrap">
-        <table id="catalogTable">
-          <thead>
-            <tr>
-              <th>クエリ名</th>
-              <th>コマンド</th>
-              <th>テーブル</th>
-              <th>SQL</th>
-              <th>migration</th>
-              <th>最終変更コミット</th>
-              <th>位置</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-        ${rows.length === 0 ? '<div class="empty-state">データがありません。migrations/0129_create_d1_query_catalog.sql適用後、カタログデータのINSERTを実行してください。</div>' : ''}
+
+      <div id="tableBands">
+        ${bandsHtml}
       </div>
+      ${rows.length === 0 ? '<div class="empty-state">データがありません。migrations/0129_create_d1_query_catalog.sql適用後、カタログデータのINSERTを実行してください。</div>' : ''}
     </div>
   </div>
 
@@ -271,24 +369,38 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       }
     });
 
-    var filterInput = document.getElementById('tableFilter');
+    var tablePanelToggle = document.getElementById('tablePanelToggle');
+    var tablePanel = document.getElementById('tablePanel');
+    tablePanelToggle.addEventListener('click', function() {
+      var expanded = tablePanelToggle.getAttribute('aria-expanded') === 'true';
+      tablePanelToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      tablePanel.hidden = expanded;
+    });
+
+    var tableCheckboxes = Array.prototype.slice.call(tablePanel.querySelectorAll('input[type="checkbox"]'));
     var verbFilter = document.getElementById('verbFilter');
 
     function applyFilters() {
-      var q = filterInput.value.trim().toLowerCase();
+      var selectedTables = tableCheckboxes.filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
         .map(function(o) { return o.value; });
-      var rows = document.querySelectorAll('#catalogTable tbody tr');
-      rows.forEach(function(row) {
-        var table = (row.getAttribute('data-table') || '').toLowerCase();
-        var verb = row.getAttribute('data-verb') || '';
-        var matchesTable = (q === '' || table.indexOf(q) !== -1);
-        var matchesVerb = (selectedVerbs.length === 0 || selectedVerbs.indexOf(verb) !== -1);
-        row.style.display = (matchesTable && matchesVerb) ? '' : 'none';
+
+      document.querySelectorAll('.table-band').forEach(function(band) {
+        var table = band.getAttribute('data-table') || '';
+        var tableMatches = (selectedTables.length === 0 || selectedTables.indexOf(table) !== -1);
+        var anyRowVisible = false;
+        band.querySelectorAll('tbody tr').forEach(function(row) {
+          var verb = row.getAttribute('data-verb') || '';
+          var verbMatches = (selectedVerbs.length === 0 || selectedVerbs.indexOf(verb) !== -1);
+          var visible = tableMatches && verbMatches;
+          row.style.display = visible ? '' : 'none';
+          if (visible) anyRowVisible = true;
+        });
+        band.hidden = !anyRowVisible;
       });
     }
 
-    filterInput.addEventListener('input', applyFilters);
+    tableCheckboxes.forEach(function(cb) { cb.addEventListener('change', applyFilters); });
     verbFilter.addEventListener('change', applyFilters);
   </script>
 </body>

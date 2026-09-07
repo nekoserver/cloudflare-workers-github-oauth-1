@@ -13,6 +13,8 @@
  *   (5) SQLセルに`word-break: break-word`を残したまま列が縮むと、長い識別子が
  *       1〜3文字ずつ縦に折り返されて実質読めなくなる(テーブルレイアウトが列を
  *       極端に狭めた場合の挙動)。横スクロールに倒すことで回避する
+ *   (6) テーブル選択パネルの開閉ボタン・チェックボックスが正しく描画されず、
+ *       テーブル名を帯(見出しバー)にまとめた出力にならない
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -163,5 +165,55 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'A', command: 'exec', command_confirmed: 0, table_name: null, source_file: 'src/index.ts', source_line: 1, sql_text: 'PRAGMA table_info(${tableName})', migration_file: null, last_commit_hash: null },
     ]);
     expect(html).toContain('data-verb="PRAGMA"');
+  });
+
+  it('テーブル選択パネルの開閉ボタンとチェックボックス一覧が、出現回数の多い順で描画される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t1 VALUES (2)', migration_file: null, last_commit_hash: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t2', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('id="tablePanelToggle"');
+    expect(html).toContain('aria-expanded="false"');
+    const panelMatch = html.match(/<div class="filter-panel" id="tablePanel" hidden>([\s\S]*?)<\/div>/);
+    expect(panelMatch).not.toBeNull();
+    const panelText = panelMatch![1];
+    const t1Idx = panelText.indexOf('value="t1"');
+    const t2Idx = panelText.indexOf('value="t2"');
+    expect(t1Idx).toBeGreaterThan(-1);
+    expect(t2Idx).toBeGreaterThan(-1);
+    expect(t1Idx).toBeLessThan(t2Idx);
+    expect(panelText).toContain('(2)');
+    expect(panelText).toContain('(1)');
+  });
+
+  it('パネルはhidden属性で初期状態は閉じている', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('<div class="filter-panel" id="tablePanel" hidden>');
+  });
+
+  it('出力がテーブル名ごとの帯(見出しバー)+ミニ表にまとめられ、行に単独のテーブル列が無い', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('<section class="table-band" data-table="foo">');
+    expect(html).toContain('<section class="table-band" data-table="bar">');
+    expect(html).toContain('<span class="band-name">foo</span>');
+    expect(html).toContain('<span class="band-count">1件</span>');
+    // 帯に集約したため、行内に個別の「テーブル」列(th)は無い
+    expect(html).not.toContain('<th>テーブル</th>');
+  });
+
+  it('帯はテーブル名の昇順で並ぶ', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'zzz_table', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO zzz_table VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'aaa_table', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM aaa_table', migration_file: null, last_commit_hash: null },
+    ]);
+    const aaaIdx = html.indexOf('data-table="aaa_table"');
+    const zzzIdx = html.indexOf('data-table="zzz_table"');
+    expect(aaaIdx).toBeGreaterThan(-1);
+    expect(zzzIdx).toBeGreaterThan(-1);
+    expect(aaaIdx).toBeLessThan(zzzIdx);
   });
 });
