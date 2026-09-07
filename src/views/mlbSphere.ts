@@ -880,7 +880,7 @@ void main(){
 
   var drawer=document.getElementById('left-drawer');
   var drawerOverlay=document.getElementById('drawer-overlay');
-  function openDrawer(){drawer.classList.add('open');drawerOverlay.classList.add('open');}
+  function openDrawer(){drawer.classList.add('open');drawerOverlay.classList.add('open');switchTab('games');}
   function closeDrawer(){drawer.classList.remove('open');drawerOverlay.classList.remove('open');}
   document.getElementById('btnGames').addEventListener('click',openDrawer);
   document.getElementById('drwClose').addEventListener('click',closeDrawer);
