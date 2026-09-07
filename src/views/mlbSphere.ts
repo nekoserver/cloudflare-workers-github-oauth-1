@@ -230,7 +230,7 @@ void main(){
 <div id="todayPitchersOverlay" class="tpm-overlay"></div>
 <div id="todayPitchersModal" class="tpm-modal">
   <div class="tpm-hdr">
-    <span>&#9200; 本日の先発投手</span>
+    <span>&#9918;&#65039; 本日の先発投手&#128368;&#65039;</span>
     <button class="tpm-close" id="todayPitchersClose">&#10005;</button>
   </div>
   <div id="todayPitchersBody" class="tpm-body"></div>
@@ -756,7 +756,7 @@ void main(){
       return;
     }
     var isTodayHdr=(dateStr===toDateStr(new Date()));
-    var html=asHtml+'<div class="game-date-hdr">'+label+' ('+games.length+'試合)'+(isTodayHdr?'<span class="game-hdr-clock" id="todayGamesClockBtn" title="本日の対戦カードと先発投手を表示">&#9200;</span>':'')+'</div>';
+    var html=asHtml+'<div class="game-date-hdr">'+label+' ('+games.length+'試合)'+(isTodayHdr?'<span class="game-hdr-clock" id="todayGamesClockBtn" title="本日の対戦カードと先発投手を表示">&#9918;&#65039;</span>':'')+'</div>';
     var nowMs=Date.now();
     for(var i=0;i<games.length;i++){
       var g=games[i], sd=MLB_STADIUMS[g.homeId];
