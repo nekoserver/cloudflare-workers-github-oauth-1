@@ -199,6 +199,7 @@ import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getD1QueryCatalogPage, type D1QueryCatalogRow } from './views/d1QueryCatalog';
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
+import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
 import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
@@ -10769,6 +10770,15 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
 app.get('/legacy-storage-inventory', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getLegacyStorageInventoryPage(user.sub));
+});
+
+/**
+ * イコールアース図法(Equal Earth projection)の白地図ページ。
+ * 主要都市のメニューを選択すると、その座標を中心に地図がスクロールする。
+ */
+app.get('/equal-earth-map', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getEqualEarthMapPage(user.sub));
 });
 
 app.get('/ruby-wasm', authMiddleware, async (c) => {
