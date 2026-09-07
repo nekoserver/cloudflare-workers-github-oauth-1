@@ -42,7 +42,7 @@ describe('/mlb ページ: 試合カード・先発投手モーダルのチーム
   });
 
   it('先発投手モーダルの対戦カードもアウェイ・ホームそれぞれ別のteamIdでabbrBadgeを呼ぶ', () => {
-    const idx = scriptSrc.indexOf('function showTodayPitchersModal');
+    const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = scriptSrc.slice(idx, idx + 1200);
     expect(fnBody).toContain('abbrBadge(g.awayTeamId,g.awayAbbr)');
