@@ -88,6 +88,57 @@ export function getLegacyStorageInventoryPage(username: string): string {
     button.action-btn:hover:not(:disabled) { background: var(--dropdown-hover); }
     button.action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .empty-state { padding: 40px; text-align: center; color: var(--text-muted); }
+    .capacity-section { margin-bottom: 28px; }
+    .capacity-section-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+    .capacity-section-note { font-size: 11px; color: var(--text-faint); margin-bottom: 16px; }
+    .capacity-chart { margin-bottom: 20px; }
+    .capacity-chart-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px; }
+    .capacity-summary { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .capacity-overflow-badge {
+      display: inline-block;
+      background: #ffebe9;
+      color: #cf222e;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    .capacity-gauge-track {
+      height: 10px;
+      border-radius: 5px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .capacity-gauge-fill { height: 100%; background: var(--accent-color, #667eea); min-width: 2px; }
+    .capacity-rank-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-size: 12px; }
+    .capacity-rank-label {
+      width: 140px;
+      flex-shrink: 0;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .capacity-rank-track {
+      flex: 1;
+      height: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .capacity-rank-fill { height: 100%; min-width: 2px; }
+    .capacity-rank-value {
+      width: 130px;
+      flex-shrink: 0;
+      text-align: right;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -103,6 +154,20 @@ export function getLegacyStorageInventoryPage(username: string): string {
         このブラウザに現在保存されているCookie・localStorageの値を走査し、どのページの設定なのか、
         D1(user_preferences)への移行先が既にあるか、D1の値とブラウザの値が一致しているか(同期済み/差異あり/復元可能)を一覧表示します。
         値が一致していない状態でパージすると未同期の値が失われるため、パージボタンは「同期済み」の場合のみ有効になります。
+      </div>
+      <div class="capacity-section">
+        <div class="capacity-section-title">ページ別ストレージ占有量(多い順・残り容量含む)</div>
+        <div class="capacity-section-note">
+          ※ CookieもlocalStorageも仕様上の厳密な総容量はブラウザ実装依存のため、以下は一般的に使われる目安値(Cookie: 4096バイト×180件, localStorage: 5MB)に基づく参考値です。
+        </div>
+        <div class="capacity-chart">
+          <div class="capacity-chart-title">Cookie</div>
+          <div id="cookieCapacityChart"></div>
+        </div>
+        <div class="capacity-chart">
+          <div class="capacity-chart-title">localStorage</div>
+          <div id="localStorageCapacityChart"></div>
+        </div>
       </div>
       <div id="statusLine" class="status-line">読み込み中...</div>
       <div class="table-wrap">
@@ -128,6 +193,71 @@ export function getLegacyStorageInventoryPage(username: string): string {
     ${getThemeToggleScript()}
 
     var REGISTRY = ${registryJson};
+
+    // Cookie/localStorageの厳密な総容量はブラウザ実装依存で仕様上定義されていないため、
+    // 一般に目安として使われる値を採用する(あくまで参考値であることをUI上にも明記する)。
+    var COOKIE_QUOTA_BYTES = 4096 * 180;
+    var LOCAL_STORAGE_QUOTA_BYTES = 5 * 1024 * 1024;
+    var PAGE_COLORS = ['#6366f1', '#ec4899', '#22c55e', '#f59e0b', '#06b6d4', '#a855f7', '#ef4444', '#84cc16', '#3b82f6', '#eab308'];
+
+    function byteLength(s) {
+      try {
+        return new TextEncoder().encode(String(s)).length;
+      } catch (e) {
+        return String(s).length;
+      }
+    }
+
+    function formatBytes(n) {
+      if (n < 1024) return n + ' B';
+      return (n / 1024).toFixed(1) + ' KB';
+    }
+
+    function computePageUsage(rows, storage) {
+      var totals = {};
+      rows.forEach(function (row) {
+        if (row.storage !== storage) return;
+        var pageLabel = row.entry ? row.entry.page : '(不明)';
+        var size = byteLength(row.key) + byteLength(row.value);
+        totals[pageLabel] = (totals[pageLabel] || 0) + size;
+      });
+      return Object.keys(totals)
+        .map(function (page) { return { page: page, bytes: totals[page] }; })
+        .sort(function (a, b) { return b.bytes - a.bytes; });
+    }
+
+    // ページ別の占有量を「多い順」のランキング形式の横棒グラフで表示する。
+    // ページ間の棒の長さは、そのグラフの中で最も占有量が多いページを基準に
+    // 相対比較できるようスケールする(quotaBytesを基準にすると、Cookie/
+    // localStorageの一般的な使用量は総容量に対してごく僅かなため、
+    // どのページも棒が視認できないほど細くなってしまうことを避けるため)。
+    // 残り容量は、別途「使用量ゲージ」として合計使用量とquotaBytesの比で表示する。
+    function renderCapacityChart(containerId, usage, quotaBytes) {
+      var container = document.getElementById(containerId);
+      var totalUsed = usage.reduce(function (sum, u) { return sum + u.bytes; }, 0);
+      var remaining = Math.max(quotaBytes - totalUsed, 0);
+      var overflow = totalUsed > quotaBytes;
+      var rankScale = Math.max(usage.length > 0 ? usage[0].bytes : 0, 1);
+
+      var rowsHtml = usage.map(function (u, i) {
+        var pct = Math.min((u.bytes / rankScale) * 100, 100);
+        var color = PAGE_COLORS[i % PAGE_COLORS.length];
+        var pctOfQuota = quotaBytes > 0 ? (u.bytes / quotaBytes * 100).toFixed(2) : '0.00';
+        return '<div class="capacity-rank-row">' +
+          '<div class="capacity-rank-label" title="' + escapeHtmlClient(u.page) + '">' + escapeHtmlClient(u.page) + '</div>' +
+          '<div class="capacity-rank-track"><div class="capacity-rank-fill" style="width:' + pct.toFixed(2) + '%; background:' + color + ';"></div></div>' +
+          '<div class="capacity-rank-value">' + formatBytes(u.bytes) + ' (全体の' + pctOfQuota + '%)</div>' +
+        '</div>';
+      }).join('');
+
+      var gaugePct = Math.min((totalUsed / quotaBytes) * 100, 100);
+      container.innerHTML =
+        '<div class="capacity-summary">' + formatBytes(totalUsed) + ' / ' + formatBytes(quotaBytes) + ' 使用(残り ' + formatBytes(remaining) + ')' +
+          (overflow ? '<span class="capacity-overflow-badge">目安を超過</span>' : '') +
+        '</div>' +
+        '<div class="capacity-gauge-track"><div class="capacity-gauge-fill" style="width:' + gaugePct.toFixed(2) + '%;"></div></div>' +
+        rowsHtml;
+    }
 
     function readCookies() {
       var out = {};
@@ -279,6 +409,8 @@ export function getLegacyStorageInventoryPage(username: string): string {
 
     function init() {
       var rows = buildRows();
+      renderCapacityChart('cookieCapacityChart', computePageUsage(rows, 'cookie'), COOKIE_QUOTA_BYTES);
+      renderCapacityChart('localStorageCapacityChart', computePageUsage(rows, 'localStorage'), LOCAL_STORAGE_QUOTA_BYTES);
       var body = document.getElementById('inventoryBody');
       var statusLine = document.getElementById('statusLine');
       var emptyState = document.getElementById('emptyState');
