@@ -595,6 +595,10 @@ const APIS = [
       res:{enabled:true} },
     { method:'POST', path:'/api/settings/slack-notify', desc:'Slack通知ON/OFF設定', body:[{n:'enabled',req:true,s:true}],
       res:{ok:true,enabled:true} },
+    { method:'GET',  path:'/api/preferences/:key', desc:'ユーザー設定値をキー単位で取得(D1のuser_preferences。USER_PREFERENCE_KEYSの許可リストに無いキーは400)', path_params:['key'], pp:{key:'d1_query_catalog_sort'},
+      res:{key:'d1_query_catalog_sort',value:'count',updatedAt:'2026-06-15 00:00:00'} },
+    { method:'POST', path:'/api/preferences/:key', desc:'ユーザー設定値をキー単位で保存(UPSERT)。個別Cookie乱立の解消先', path_params:['key'], pp:{key:'d1_query_catalog_sort'}, body:[{n:'value',req:true,s:'count'}],
+      res:{message:'設定を保存しました',key:'d1_query_catalog_sort',value:'count'} },
   ]},
   { group: 'APIキー管理', endpoints: [
     { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)',
