@@ -17,6 +17,7 @@ const minimalData: CacheStatusData = {
   cacheStats: { totalGithubFetch: 0, totalCacheSave: 0, totalCacheLookup: 0, totalCacheHit: 0, entries: [] },
   tables: [],
   tableGroupMap: {},
+  tablePageMap: {},
   unclassifiedAutoDetectedTables: [],
   groupLabels: {},
   groupColors: {},
