@@ -69,7 +69,8 @@ export function getLegacyStorageInventoryPage(username: string): string {
       font-weight: 600;
       white-space: nowrap;
     }
-    .badge-purgeable { background: #fff8c5; color: #9a6700; }
+    .badge-synced { background: #dafbe1; color: #1a7f37; }
+    .badge-diverged { background: #ffebe9; color: #cf222e; }
     .badge-restorable { background: #ddf4ff; color: #0969da; }
     .badge-unsupported { background: #f0f0f0; color: #656d76; }
     .badge-storage-cookie { background: #ffebe9; color: #cf222e; }
@@ -100,7 +101,8 @@ export function getLegacyStorageInventoryPage(username: string): string {
       <div class="title">Cookie / localStorage 個別値の移行状況</div>
       <div class="subtitle">
         このブラウザに現在保存されているCookie・localStorageの値を走査し、どのページの設定なのか、
-        D1(user_preferences)への移行先が既にあるか(パージ可能/復元可能)を一覧表示します。
+        D1(user_preferences)への移行先が既にあるか、D1の値とブラウザの値が一致しているか(同期済み/差異あり/復元可能)を一覧表示します。
+        値が一致していない状態でパージすると未同期の値が失われるため、パージボタンは「同期済み」の場合のみ有効になります。
       </div>
       <div id="statusLine" class="status-line">読み込み中...</div>
       <div class="table-wrap">
@@ -230,10 +232,17 @@ export function getLegacyStorageInventoryPage(username: string): string {
           return res.json();
         })
         .then(function (data) {
-          if (data.value !== null && data.value !== undefined) {
-            setStatus(rowEl, '<span class="badge badge-purgeable">パージ可能</span>', false, true);
-          } else {
+          if (data.value === null || data.value === undefined) {
+            // D1にまだ値が無い場合、パージするとブラウザ側の値が唯一のコピーのまま
+            // 消えてしまうため、復元のみ有効にする
             setStatus(rowEl, '<span class="badge badge-restorable">復元可能</span>', true, false);
+          } else if (data.value === row.value) {
+            // D1とブラウザの値が完全一致 = 既に安全にパージできる状態
+            setStatus(rowEl, '<span class="badge badge-synced">同期済み</span>', false, true);
+          } else {
+            // D1に値はあるがブラウザの値と異なる = 未同期。ここでパージを許すと
+            // ブラウザ側の値が失われる(D1側は古い値のまま)ため、パージは禁止する
+            setStatus(rowEl, '<span class="badge badge-diverged">差異あり(未同期)</span>', true, false);
           }
         })
         .catch(function () {
