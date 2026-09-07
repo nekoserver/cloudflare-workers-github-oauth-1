@@ -83,6 +83,59 @@ describe('GET /call-graph', () => {
     expect(html).toContain('"to":"utils/bar.ts::bar"');
   });
 
+  it('repo指定時は上部バーが初期状態で折りたたまれている(トグルボタンのみ)', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb({ catalog: [], callers: [] });
+    const res = await app.request('/call-graph?repo=1', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).toContain('id="top-bar" class="collapsed"');
+    expect(html).toContain('id="top-bar-toggle"');
+  });
+
+  it('repo未指定時は上部バーが展開された状態になる', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb();
+    const res = await app.request('/call-graph', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).toContain('id="top-bar" class="">');
+  });
+
+  it('凡例の各グループ末尾に実際のノード数が表示される', async () => {
+    const authHeader = await makeAuthHeader();
+    const catalog = [
+      { id: 1, file_path: 'index.ts', function_name: 'foo', purpose: '', is_exported: 1, is_async: 0, start_line: 10, end_line: 20, caller_count: 0 },
+      { id: 2, file_path: 'index.ts', function_name: 'foo2', purpose: '', is_exported: 1, is_async: 0, start_line: 30, end_line: 40, caller_count: 0 },
+      { id: 3, file_path: 'utils/bar.ts', function_name: 'bar', purpose: '', is_exported: 1, is_async: 0, start_line: 1, end_line: 5, caller_count: 0 },
+    ];
+    const { db } = createMockDb({ catalog, callers: [] });
+    const res = await app.request('/call-graph?repo=1', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    // index.tsグループに2件、utilグループに1件のノードがある
+    expect(html).toMatch(/index\.ts\s*2</);
+    expect(html).toMatch(/Util\s*1</);
+  });
+
+  it('注意書きに「了解」ボタンが含まれる', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb();
+    const res = await app.request('/call-graph', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).toContain('id="note-dismiss"');
+    expect(html).toContain('>了解<');
+  });
+
+  it('折りたたみ状態に応じてトグルボタンと本文が排他的に表示されるCSSが埋め込まれている(inline styleで上書きされていないこと)', async () => {
+    const authHeader = await makeAuthHeader();
+    const { db } = createMockDb();
+    const res = await app.request('/call-graph', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).toContain('#top-bar.collapsed #top-bar-content { display: none; }');
+    expect(html).toContain('#top-bar:not(.collapsed) #top-bar-toggle { display: none; }');
+    // #top-bar-contentにinline styleでdisplay:flexを直書きすると、上記のCSSクラスによる
+    // display:noneがinline styleの優先度に負けて効かなくなるため、直書きしていないことを確認する。
+    expect(html).not.toContain('id="top-bar-content" style=');
+  });
+
   it('存在しないrepo_idでもクラッシュせず空データで描画する', async () => {
     const authHeader = await makeAuthHeader();
     const { db } = createMockDb({ catalog: [], callers: [] });
