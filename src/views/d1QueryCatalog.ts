@@ -21,15 +21,31 @@ function commitLink(hash: string): string {
   return `<a href="${url}" target="_blank" rel="noopener noreferrer"><code>${short}</code></a>`;
 }
 
+// sqlVerb: SQL本文の先頭キーワードから発行SQL種別(INSERT/SELECT/UPDATE/DELETE/CREATE)を
+// 判定する。テーブル名(table_name)は不明・動的なクエリでも、発行SQLの種別は
+// 文字列の先頭を見るだけで必ず判定できるため、テーブル名で決め打ちせず横断的に
+// 絞り込むための独立したフィルタ軸として使う。
+function sqlVerb(sql: string): string {
+  const s = sql.trim().toUpperCase();
+  if (s.startsWith('SELECT')) return 'SELECT';
+  if (s.startsWith('INSERT')) return 'INSERT';
+  if (s.startsWith('UPDATE')) return 'UPDATE';
+  if (s.startsWith('DELETE')) return 'DELETE';
+  if (s.startsWith('CREATE')) return 'CREATE';
+  if (s.startsWith('PRAGMA')) return 'PRAGMA';
+  return 'OTHER';
+}
+
 function renderRow(row: D1QueryCatalogRow): string {
   const badge = row.command_confirmed
     ? '<span class="badge badge-confirmed">確定</span>'
     : '<span class="badge badge-inferred">推測</span>';
   const table = escapeHtml(row.table_name ?? '(不明)');
+  const verb = escapeHtml(sqlVerb(row.sql_text));
   const sqlOneLine = escapeHtml(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
   const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
-  return `<tr data-table="${table}">
+  return `<tr data-table="${table}" data-verb="${verb}">
     <td>${escapeHtml(row.query_name)}</td>
     <td>:${escapeHtml(row.command)} ${badge}</td>
     <td>${table}</td>
@@ -40,11 +56,27 @@ function renderRow(row: D1QueryCatalogRow): string {
   </tr>`;
 }
 
+// verbCounts: 発行SQL種別ごとの出現回数を、多い順に並べる。
+// セレクトボックスの選択肢順(=よく使われる操作から選べる)に使う。
+function verbCounts(rows: D1QueryCatalogRow[]): { verb: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const v = sqlVerb(row.sql_text);
+    counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([verb, count]) => ({ verb, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[]): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
   const rowsHtml = rows.map(renderRow).join('\n');
   const reportUrl = `https://github.com/${OWNER_REPO}/blob/main/REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md`;
+  const verbOptionsHtml = verbCounts(rows)
+    .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -124,8 +156,23 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       background: var(--bg-secondary);
       color: var(--text-primary);
       font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    select#verbFilter {
+      width: 100%;
+      max-width: 320px;
+      padding: 6px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: 'Monaco', 'Courier New', monospace;
       margin-bottom: 16px;
     }
+    select#verbFilter option { padding: 4px 6px; }
+    .filter-hint { font-size: 12px; color: var(--text-muted); margin: -4px 0 12px; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
@@ -180,7 +227,13 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         を参照。
       </div>
       <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
+      <div class="filter-label">テーブル名で絞り込み</div>
       <input type="text" id="tableFilter" placeholder="テーブル名で絞り込み" autocomplete="off">
+      <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
+      <select id="verbFilter" multiple size="6">
+        ${verbOptionsHtml}
+      </select>
+      <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
       <div class="table-wrap">
         <table id="catalogTable">
           <thead>
@@ -219,14 +272,24 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     });
 
     var filterInput = document.getElementById('tableFilter');
-    filterInput.addEventListener('input', function() {
+    var verbFilter = document.getElementById('verbFilter');
+
+    function applyFilters() {
       var q = filterInput.value.trim().toLowerCase();
+      var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
+        .map(function(o) { return o.value; });
       var rows = document.querySelectorAll('#catalogTable tbody tr');
       rows.forEach(function(row) {
         var table = (row.getAttribute('data-table') || '').toLowerCase();
-        row.style.display = (q === '' || table.indexOf(q) !== -1) ? '' : 'none';
+        var verb = row.getAttribute('data-verb') || '';
+        var matchesTable = (q === '' || table.indexOf(q) !== -1);
+        var matchesVerb = (selectedVerbs.length === 0 || selectedVerbs.indexOf(verb) !== -1);
+        row.style.display = (matchesTable && matchesVerb) ? '' : 'none';
       });
-    });
+    }
+
+    filterInput.addEventListener('input', applyFilters);
+    verbFilter.addEventListener('change', applyFilters);
   </script>
 </body>
 </html>`;

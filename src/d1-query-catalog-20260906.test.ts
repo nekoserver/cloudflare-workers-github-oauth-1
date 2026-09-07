@@ -129,4 +129,39 @@ describe('GET /d1-query-catalog', () => {
     ]);
     expect(html).toContain('2件中、コマンド種別確定済み1件');
   });
+
+  it('発行SQL種別の複数選択セレクトボックスが、出現回数の多い順で表示される', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't2', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t2 VALUES (1)', migration_file: null, last_commit_hash: null },
+      { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT * FROM t1', migration_file: null, last_commit_hash: null },
+    ]);
+    const selectMatch = html.match(/<select id="verbFilter"[^>]*>([\s\S]*?)<\/select>/);
+    expect(selectMatch).not.toBeNull();
+    const optionsText = selectMatch![1];
+    const insertIdx = optionsText.indexOf('INSERT (2)');
+    const selectIdx = optionsText.indexOf('SELECT (1)');
+    expect(insertIdx).toBeGreaterThan(-1);
+    expect(selectIdx).toBeGreaterThan(-1);
+    expect(insertIdx).toBeLessThan(selectIdx);
+  });
+
+  it('multiple属性が指定されており複数選択できる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/<select id="verbFilter"[^>]*\bmultiple\b/);
+  });
+
+  it('各行にdata-verb属性が付与され、テーブル名を決め打ちせずSQL種別で横断検索できる', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'UPDATE foo SET x = 1', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('data-verb="UPDATE"');
+  });
+
+  it('テーブル名不明でも発行SQL種別(PRAGMA等)は判定できる', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'exec', command_confirmed: 0, table_name: null, source_file: 'src/index.ts', source_line: 1, sql_text: 'PRAGMA table_info(${tableName})', migration_file: null, last_commit_hash: null },
+    ]);
+    expect(html).toContain('data-verb="PRAGMA"');
+  });
 });
