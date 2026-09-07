@@ -83,4 +83,24 @@ describe('GET /equal-earth-map', () => {
     const res = await app.request('/equal-earth-map', {}, { JWT_SECRET });
     expect(res.status).not.toBe(200);
   });
+
+  it('ズームボタン・全体表示ボタン・ピンチ/ホイール/ドラッグの操作ハンドラが埋め込まれている', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request('/equal-earth-map', { headers: { Authorization: authHeader } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('id="zoomInBtn"');
+    expect(html).toContain('id="zoomOutBtn"');
+    expect(html).toContain('id="resetViewBtn"');
+    expect(html).toContain("'wheel'");
+    expect(html).toContain("addEventListener('pointerdown'");
+    expect(html).toContain("addEventListener('pointermove'");
+    expect(html).toContain('lastPinchDistance');
+  });
+
+  it('オーバーレイのズームボタン上のpointerdownはパン処理をスキップする(ボタンのclickを妨げないため)', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request('/equal-earth-map', { headers: { Authorization: authHeader } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain(".closest('.map-controls')");
+  });
 });
