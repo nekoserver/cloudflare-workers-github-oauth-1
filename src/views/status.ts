@@ -112,6 +112,7 @@ export interface CacheStatusData {
   };
   tables: TableStatusEntry[];
   tableGroupMap: Record<string, string>;
+  tablePageMap: Record<string, { method: string; path: string }[]>;
   unclassifiedAutoDetectedTables: string[];
   groupLabels: Record<string, string>;
   groupColors: Record<string, string>;
@@ -213,6 +214,10 @@ export function getCacheStatusPage(user: {
     const groupNum = groupIdMap[groupName] || 0;
     const migrationNum = parseInt(t.migration.replace(/[^0-9]/g, ''), 10) || 0;
     const rowCountNum = t.exists && t.rowCount !== null ? t.rowCount : -1;
+    const pageRefs = data.tablePageMap[t.name] || [];
+    const pagesCell = pageRefs.length > 0
+      ? pageRefs.map(p => `<span class="table-page-badge">${escapeHtml(p.method)} ${escapeHtml(p.path)}</span>`).join(' ')
+      : '<span class="table-page-badge table-page-badge-unknown">(不明)</span>';
     return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-row-count="${rowCountNum}" data-migration="${escapeHtml(t.migration)}" data-table-name="${escapeHtml(t.name)}">
       <td class="group-id-cell">${groupNum}</td>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
@@ -221,6 +226,7 @@ export function getCacheStatusPage(user: {
       <td class="center"><span class="sync-policy-badge ${policy.cls}">${policy.text}</span></td>
       <td class="migration-name"><button type="button" class="status-link-button migration-button" data-migration-sql="${escapeHtml(t.migration)}" data-migration-table="${escapeHtml(t.name)}">${escapeHtml(t.migration)}</button></td>
       <td>${escapeHtml(t.description)}</td>
+      <td class="table-pages-cell">${pagesCell}</td>
     </tr>`;
   }).join('');
 
@@ -634,6 +640,30 @@ export function getCacheStatusPage(user: {
     .data-table .mono { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-muted); }
     .data-table .migration-name { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
     .data-table .group-id-cell { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-faint); width: 30px; }
+    .data-table .table-pages-cell { min-width: 200px; }
+    .table-page-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+      white-space: nowrap;
+      margin: 1px 2px;
+    }
+    .table-page-badge-unknown { color: var(--text-faint); border-style: dashed; }
+    .table-pages-note-icon {
+      display: inline-block;
+      width: 13px; height: 13px; line-height: 13px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      color: var(--text-faint);
+      font-size: 10px; text-align: center;
+      margin-left: 4px; cursor: help;
+      border: 1px solid var(--border-color);
+    }
     .data-table code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
     .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
     .status-ok { color: #48bb78; font-weight: 700; font-size: 12px; }
@@ -1548,6 +1578,7 @@ export function getCacheStatusPage(user: {
                 <th style="text-align:center">更新</th>
                 <th style="cursor:pointer;user-select:none" id="migrationSortTh">マイグレーション ⇅</th>
                 <th>説明</th>
+                <th>関連ページ<span class="table-pages-note-icon" title="src/index.tsのルート定義を静的解析した近似結果です。ミドルウェア経由の共通処理は反映されません。">?</span></th>
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>

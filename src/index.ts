@@ -22,6 +22,7 @@ import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
+import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { getCallGraphPage } from './views/callGraph';
@@ -13078,6 +13079,7 @@ app.get('/status', authMiddleware, async (c) => {
     },
     tables: [],
     tableGroupMap: TABLE_GROUP_MAP,
+    tablePageMap: TABLE_PAGE_MAP,
     unclassifiedAutoDetectedTables: [],
     groupLabels: GROUP_LABELS,
     groupColors: GROUP_COLORS,
