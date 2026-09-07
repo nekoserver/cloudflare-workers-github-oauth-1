@@ -65,6 +65,7 @@ canvas:active { cursor:grabbing; }
 .team-badge.has-game { opacity:1; border-color:rgba(255,255,255,0.2); cursor:pointer; }
 .team-badge.has-game:hover { border-color:#58a6ff; }
 .team-badge.active { border-color:#58a6ff !important; box-shadow:0 0 0 1px rgba(88,166,255,0.4); }
+.abbr-badge { display:inline-block; font-size:9px; font-weight:700; font-family:monospace; padding:1px 5px; border-radius:4px; color:#fff; letter-spacing:0.5px; }
 #drawer-overlay { position:fixed; inset:0; z-index:68; background:rgba(0,0,0,.55); display:none; }
 #drawer-overlay.open { display:block; }
 #left-drawer { position:fixed; top:0; left:0; bottom:0; width:320px; max-width:92vw; z-index:69; background:#0d1117; border-right:2px solid #30363d; transform:translateX(-100%); transition:transform .3s ease; display:flex; flex-direction:column; }
@@ -789,9 +790,9 @@ void main(){
       }
       html+='<div class="'+cardCls+'" data-hid="'+g.homeId+'">';
       html+='<div class="game-matchup">';
-      html+='<span class="game-away">'+g.awayAbbr+' '+g.awayName+'</span>';
+      html+='<span class="game-away">'+abbrBadge(g.awayTeamId,g.awayAbbr)+' '+g.awayName+'</span>';
       html+='<span class="game-vs"> @ </span>';
-      html+='<span class="game-home">'+(sd?sd.abbr:'')+' '+g.homeName+'</span>';
+      html+='<span class="game-home">'+abbrBadge(g.homeId,sd?sd.abbr:'')+' '+g.homeName+'</span>';
       html+='</div>';
       html+='<div class="game-meta">';
       html+='<div class="game-venue">&#127967; '+venue+(city?' &mdash; '+city:'')+'</div>';
@@ -810,6 +811,12 @@ void main(){
         showTodayPitchersModal(games);
       });
     }
+  }
+
+  function abbrBadge(teamId,abbrText){
+    var sd=MLB_STADIUMS[teamId];
+    var bg=sd?sd.color:'#333';
+    return '<span class="abbr-badge" style="background:'+bg+'">'+abbrText+'</span>';
   }
 
   function getNextZ(){
@@ -839,7 +846,7 @@ void main(){
       html+='<div class="tpm-time">'+timeStr+'</div>';
       html+='<div class="tpm-matchup">';
       html+='<span class="tpm-pitcher">'+awayP+'</span>';
-      html+='<span class="tpm-card">'+g.awayAbbr+' @ '+(MLB_STADIUMS[g.homeId]?MLB_STADIUMS[g.homeId].abbr:'')+'</span>';
+      html+='<span class="tpm-card">'+abbrBadge(g.awayTeamId,g.awayAbbr)+' @ '+abbrBadge(g.homeId,MLB_STADIUMS[g.homeId]?MLB_STADIUMS[g.homeId].abbr:'')+'</span>';
       html+='<span class="tpm-pitcher">'+homeP+'</span>';
       html+='</div>';
       html+='</div>';
