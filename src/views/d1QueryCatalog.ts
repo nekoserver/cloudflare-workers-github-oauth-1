@@ -126,7 +126,13 @@ function groupByTable(rows: D1QueryCatalogRow[]): [string, D1QueryCatalogRow[]][
   return [...byTable.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[], initialSort: 'name' | 'count' = 'count'): string {
+export function getD1QueryCatalogPage(
+  username: string,
+  rows: D1QueryCatalogRow[],
+  initialSort: 'name' | 'count' = 'count',
+  columnCounts: Record<string, number> = {},
+  singleTableSelection = true,
+): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
   const reportUrl = `https://github.com/${OWNER_REPO}/blob/main/REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md`;
@@ -136,7 +142,8 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
   const tableBadgesHtml = tableCounts(rows)
     .map(({ table, count }) => {
       const safeTable = escapeHtml(table);
-      return `<button type="button" class="table-filter-badge" data-table="${safeTable}" aria-pressed="false"><span class="table-badge-count">${count}</span><span aria-hidden="true">(</span><span class="table-badge-name">${safeTable}</span><span aria-hidden="true">)</span></button>`;
+      const columnCount = columnCounts[table] ?? 0;
+      return `<button type="button" class="table-filter-badge" data-table="${safeTable}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false"><span class="table-badge-count">${count}</span><span aria-hidden="true">(</span><span class="table-badge-name">${safeTable}</span> <span class="table-column-count">(${columnCount}カラム)</span><span aria-hidden="true">)</span></button>`;
     })
     .join('\n');
   const groupedTables = groupByTable(rows);
@@ -148,6 +155,7 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     .join('\n');
   const nameSortPressed = initialSort === 'name' ? 'true' : 'false';
   const countSortPressed = initialSort === 'count' ? 'true' : 'false';
+  const tableSelectionMode = singleTableSelection ? 'single' : 'multiple';
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -247,6 +255,9 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
       padding: 12px;
       margin: 0 0 12px;
     }
+    .filter-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .filter-panel-header .filter-label { margin-bottom: 0; }
+    .panel-sort-toggle { flex: 0 0 auto; padding: 4px 9px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font-size: 12px; }
     .table-badge-list {
       display: flex;
       flex-wrap: wrap;
@@ -406,7 +417,10 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         <span class="panel-toggle-arrow">▾</span>
       </button>
       <div class="filter-panel" id="tablePanel" hidden>
-        <div class="filter-label">出現回数（テーブル名）— 出現回数の多い順・1つのみ選択可</div>
+        <div class="filter-panel-header">
+          <div class="filter-label">出現回数（テーブル名・カラム数）— <span id="tableSelectionRule">${singleTableSelection ? '1つのみ選択可（デフォルト）' : '複数選択可'}</span></div>
+          <button type="button" class="panel-sort-toggle" id="tableBadgeSortToggle" data-sort="occurrence" aria-label="テーブルの並び替え基準を切り替える">出現回数 / カラム数</button>
+        </div>
         <div class="table-badge-list">
           ${tableBadgesHtml}
         </div>
@@ -597,14 +611,34 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     var tableBadges = Array.prototype.slice.call(tablePanel.querySelectorAll('.table-filter-badge'));
     var verbFilter = document.getElementById('verbFilter');
 
-    // テーブルは常に単一選択。新しいバッジを押すたび、以前の選択と
-    // テーブルフィルタを解除してから、押されたバッジだけを適用する。
+    var tableSelectionMode = '${tableSelectionMode}';
+    // 既定は単一選択。設定ページで複数選択へ変更されている場合だけ、
+    // 押したバッジそれぞれの選択状態を保持する。
     tableBadges.forEach(function(badge) {
       badge.addEventListener('click', function() {
-        tableBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });
-        badge.setAttribute('aria-pressed', 'true');
+        var wasPressed = badge.getAttribute('aria-pressed') === 'true';
+        if (tableSelectionMode === 'single') {
+          tableBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });
+          badge.setAttribute('aria-pressed', 'true');
+        } else {
+          badge.setAttribute('aria-pressed', wasPressed ? 'false' : 'true');
+        }
         applyFilters();
       });
+    });
+
+    var tableBadgeSortToggle = document.getElementById('tableBadgeSortToggle');
+    tableBadgeSortToggle.addEventListener('click', function() {
+      var nextSort = tableBadgeSortToggle.getAttribute('data-sort') === 'occurrence' ? 'columns' : 'occurrence';
+      tableBadgeSortToggle.setAttribute('data-sort', nextSort);
+      tableBadgeSortToggle.setAttribute('aria-pressed', nextSort === 'columns' ? 'true' : 'false');
+      tableBadgeSortToggle.textContent = nextSort === 'columns' ? 'カラム数 / 出現回数' : '出現回数 / カラム数';
+      tableBadges.sort(function(a, b) {
+        var attr = nextSort === 'columns' ? 'data-column-count' : 'data-occurrence-count';
+        var difference = Number(b.getAttribute(attr)) - Number(a.getAttribute(attr));
+        return difference || (a.getAttribute('data-table') || '').localeCompare(b.getAttribute('data-table') || '');
+      });
+      tableBadges.forEach(function(badge) { badge.parentNode.appendChild(badge); });
     });
 
     // 帯(テーブル名の見出しバー)はページ読み込み時すべて閉じている。
@@ -625,15 +659,20 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     });
 
     function applyFilters() {
+      var selectedTables = tableBadges.filter(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; })
+        .map(function(badge) { return badge.getAttribute('data-table'); });
       var selectedBadge = tableBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });
       var selectedTable = selectedBadge ? selectedBadge.getAttribute('data-table') : null;
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
         .map(function(o) { return o.value; });
-      var filtersActive = selectedTable !== null || selectedVerbs.length > 0;
+      var filtersActive = selectedTables.length > 0 || selectedVerbs.length > 0;
 
       document.querySelectorAll('.table-band').forEach(function(band) {
         var table = band.getAttribute('data-table') || '';
         var tableMatches = (selectedTable === null || selectedTable === table);
+        if (tableSelectionMode === 'multiple') {
+          tableMatches = selectedTables.length === 0 || selectedTables.indexOf(table) !== -1;
+        }
         var anyRowVisible = false;
         band.querySelectorAll('tbody tr').forEach(function(row) {
           var verb = row.getAttribute('data-verb') || '';

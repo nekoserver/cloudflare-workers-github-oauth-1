@@ -34,6 +34,7 @@ export function getSettingsPage(user: {
   aichatPreferMoondream?: string;
   heritageTourCountryFilter?: string;
   wasmModulesViewMode?: string;
+  d1QueryCatalogSingleTable?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -69,6 +70,7 @@ export function getSettingsPage(user: {
   const currentAichatPreferMoondream = user.aichatPreferMoondream === 'off' ? 'off' : 'on';
   const currentHeritageTourCountryFilter = user.heritageTourCountryFilter === 'off' ? 'off' : 'on';
   const currentWasmModulesViewMode = user.wasmModulesViewMode === 'panel' ? 'panel' : 'list';
+  const currentD1QueryCatalogSingleTable = user.d1QueryCatalogSingleTable === 'off' ? 'off' : 'on';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -704,6 +706,16 @@ export function getSettingsPage(user: {
                 <option value="@cf/pfnet/plamo-embedding-1b" ${currentAichatAutoVectorizeModel === '@cf/pfnet/plamo-embedding-1b' ? 'selected' : ''}>plamo-embedding-1b（デフォルト）</option>
                 <option value="@cf/google/embeddinggemma-300m" ${currentAichatAutoVectorizeModel === '@cf/google/embeddinggemma-300m' ? 'selected' : ''}>embeddinggemma-300m</option>
               </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">D1クエリカタログ: テーブル選択の対象を常に1つに限定する（デフォルト）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="d1QueryCatalogSingleTableLabel">${currentD1QueryCatalogSingleTable === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="d1QueryCatalogSingleTableCheckbox" onchange="onD1QueryCatalogSingleTableChange()" ${currentD1QueryCatalogSingleTable === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="info-item">
@@ -1736,6 +1748,24 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('answer-graphの空行非表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onD1QueryCatalogSingleTableChange() {
+      var cb = document.getElementById('d1QueryCatalogSingleTableCheckbox');
+      var label = document.getElementById('d1QueryCatalogSingleTableLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/d1-query-catalog-single-table', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode: mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('D1クエリカタログのテーブル選択設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }

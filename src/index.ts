@@ -10813,6 +10813,7 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
   );
   const db = c.env.DB;
   let rows: D1QueryCatalogRow[] = [];
+  const columnCounts: Record<string, number> = {};
   if (db) {
     try {
       const result = await db.prepare(
@@ -10821,6 +10822,16 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
          ORDER BY table_name, query_name`
       ).all<D1QueryCatalogRow>();
       rows = result.results ?? [];
+      const tableNames = [...new Set(rows.map(row => row.table_name).filter((name): name is string => Boolean(name)))];
+      await Promise.all(tableNames.map(async (tableName) => {
+        try {
+          const escapedTableName = tableName.replace(/"/g, '""');
+          const info = await db.prepare(`PRAGMA table_info("${escapedTableName}")`).all<{ name: string }>();
+          columnCounts[tableName] = info.results?.length ?? 0;
+        } catch {
+          columnCounts[tableName] = 0;
+        }
+      }));
     } catch (error) {
       logger.warn('d1-query-catalog: fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
     }
@@ -10850,7 +10861,8 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
       logger.warn('d1-query-catalog: preference fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
     }
   }
-  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort));
+  const singleTableSelection = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_single_table') !== 'off';
+  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection));
 });
 
 /**
@@ -12907,6 +12919,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_apis_sidebar_accordion',
     'user_apis_desc_mode',
     'user_apis_nav_flash',
+    'd1_query_catalog_single_table',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -12921,6 +12934,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
+  const d1QueryCatalogSingleTable = cookieVals['d1_query_catalog_single_table'] === 'off' ? 'off' : 'on';
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
@@ -12993,6 +13007,7 @@ app.get('/settings', authMiddleware, async (c) => {
     apisSidebarAccordion,
     apisDescMode,
     apisNavFlash,
+    d1QueryCatalogSingleTable,
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
@@ -18455,6 +18470,19 @@ app.post('/api/settings/answer-graph-hide-empty-rows', authMiddleware, async (c)
     return c.json({ message: 'answer-graphの空行非表示設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'answer-graphの空行非表示設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/d1-query-catalog-single-table', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `d1_query_catalog_single_table=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'D1クエリカタログのテーブル選択設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'D1クエリカタログのテーブル選択設定の変更に失敗しました' }, 500);
   }
 });
 
