@@ -42,9 +42,9 @@ describe('/mlb ページ: 当日の試合一覧ヘッダーの先発投手モー
   it('モーダル内の各行は「先発投手 / 対戦カード / 先発投手」の順で構築される', () => {
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
     const fnBody = scriptSrc.slice(idx, idx + 1900);
-    const awayIdx = fnBody.indexOf('tpm-pitcher">\'+awayP');
+    const awayIdx = fnBody.indexOf('\'">\'+awayP');
     const cardIdx = fnBody.indexOf('tpm-card">\'+abbrBadge(g.awayTeamId');
-    const homeIdx = fnBody.indexOf('tpm-pitcher">\'+homeP');
+    const homeIdx = fnBody.indexOf('\'">\'+homeP');
     expect(awayIdx).toBeGreaterThan(-1);
     expect(cardIdx).toBeGreaterThan(awayIdx);
     expect(homeIdx).toBeGreaterThan(cardIdx);
