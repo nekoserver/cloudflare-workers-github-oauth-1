@@ -45,7 +45,7 @@ describe('/mlb ページ: 試合カード・先発投手モーダルのチーム
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = scriptSrc.slice(idx, idx + 1700);
-    expect(fnBody).toContain('abbrBadge(g.awayTeamId,g.awayAbbr)');
+    expect(fnBody).toContain('abbrBadge(g.awayTeamId,g.awayAbbr,isAwayDim)');
     expect(fnBody).toContain('abbrBadge(g.homeId,MLB_STADIUMS[g.homeId]');
   });
 });

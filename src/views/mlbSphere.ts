@@ -115,7 +115,8 @@ canvas:active { cursor:grabbing; }
 .tpm-filter-item.active { color:#58a6ff; background:rgba(88,166,255,0.1); }
 .tpm-body { flex:1; min-width:0; overflow-y:auto; padding:6px 0; }
 .tpm-row { padding:8px 14px; border-bottom:1px solid #21262d; }
-.tpm-row-dim { opacity:0.32; filter:grayscale(0.6); }
+.tpm-dim { opacity:0.32; }
+.abbr-badge-dim { opacity:0.4; filter:grayscale(0.7); }
 .tpm-time { font-family:monospace; font-size:10px; color:#58a6ff; margin-bottom:4px; }
 .tpm-matchup { display:flex; align-items:center; justify-content:space-between; gap:6px; }
 .tpm-pitcher { font-size:11px; color:#c9d1d9; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -835,10 +836,10 @@ void main(){
     }
   }
 
-  function abbrBadge(teamId,abbrText){
+  function abbrBadge(teamId,abbrText,dim){
     var sd=MLB_STADIUMS[teamId];
     var bg=sd?sd.color:'#333';
-    return '<span class="abbr-badge" style="background:'+bg+'">'+abbrText+'</span>';
+    return '<span class="abbr-badge'+(dim?' abbr-badge-dim':'')+'" style="background:'+bg+'">'+abbrText+'</span>';
   }
 
   function getNextZ(){
@@ -895,9 +896,11 @@ void main(){
     var body=document.getElementById('todayPitchersBody');
     var teamIds=pitcherFilterTeamIds(todayPitcherFilter);
     var grayout=teamIds&&pitcherFilterGrayoutEnabled();
-    // グレーアウト設定がONの場合は一覧を絞り込まず、対象外行に見た目だけ
-    // 反映する(モーダルの縦幅が選択のたびに変わらないようにするため)。
-    // 従来通りの「非表示」を選んでいる場合のみ、ここで実際に絞り込む。
+    // グレーアウト設定がONの場合は一覧を絞り込まず、フィルター対象外の
+    // チーム(away/homeどちらか、あるいは両方)の略称・先発投手名だけを
+    // チーム単位でグレーアウトする(試合行ごと・一括では除去しない)。
+    // 従来通りの「非表示」を選んでいる場合のみ、ここで試合単位で絞り込む
+    // (away/homeどちらもフィルター対象外の試合のみを一覧から取り除く)。
     var list=(teamIds&&!grayout)?todayPitcherGamesAll.filter(function(g){return teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0;}):todayPitcherGamesAll;
     var sorted=list.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
     var html='';
@@ -906,13 +909,14 @@ void main(){
       var awayP=g.awayPitcher||'未定';
       var homeP=g.homePitcher||'未定';
       var timeStr=fmtTime(g.gameDate,'America/New_York','ET')+' / '+fmtTime(g.gameDate,'Asia/Tokyo','JST');
-      var isDim=!!(grayout&&teamIds&&teamIds.indexOf(g.awayTeamId)<0&&teamIds.indexOf(g.homeId)<0);
-      html+='<div class="tpm-row'+(isDim?' tpm-row-dim':'')+'">';
+      var isAwayDim=!!(grayout&&teamIds&&teamIds.indexOf(g.awayTeamId)<0);
+      var isHomeDim=!!(grayout&&teamIds&&teamIds.indexOf(g.homeId)<0);
+      html+='<div class="tpm-row">';
       html+='<div class="tpm-time">'+timeStr+'</div>';
       html+='<div class="tpm-matchup">';
-      html+='<span class="tpm-pitcher">'+awayP+'</span>';
-      html+='<span class="tpm-card">'+abbrBadge(g.awayTeamId,g.awayAbbr)+' @ '+abbrBadge(g.homeId,MLB_STADIUMS[g.homeId]?MLB_STADIUMS[g.homeId].abbr:'')+'</span>';
-      html+='<span class="tpm-pitcher">'+homeP+'</span>';
+      html+='<span class="tpm-pitcher'+(isAwayDim?' tpm-dim':'')+'">'+awayP+'</span>';
+      html+='<span class="tpm-card">'+abbrBadge(g.awayTeamId,g.awayAbbr,isAwayDim)+' @ '+abbrBadge(g.homeId,MLB_STADIUMS[g.homeId]?MLB_STADIUMS[g.homeId].abbr:'',isHomeDim)+'</span>';
+      html+='<span class="tpm-pitcher'+(isHomeDim?' tpm-dim':'')+'">'+homeP+'</span>';
       html+='</div>';
       html+='</div>';
     }
