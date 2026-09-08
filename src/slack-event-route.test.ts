@@ -46,7 +46,7 @@ describe("POST /slack/event", () => {
   });
 
   it('waitUntilでバックグラウンド実行し、Slackへの200応答をブロックしない', () => {
-    expect(eventBlock).toContain('c.executionCtx?.waitUntil(');
+    expect(eventBlock).toContain('safeWaitUntil(c, ');
   });
 
   it('スレッド返信のため thread_ts(無ければts)をスレッドIDとして渡す', () => {

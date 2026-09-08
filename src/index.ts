@@ -3048,6 +3048,24 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
   }
 }
 
+/**
+ * c.executionCtx?.waitUntil(...) は、ExecutionContextが存在しない実行環境
+ * (Hono app.request()を直接呼ぶテスト・ローカルツール等)では`c.executionCtx`
+ * というgetter自体が例外を投げるため、オプショナルチェイニング(?.)では
+ * 保護できず、リクエスト全体が想定外の500になってしまう(webhookハンドラの
+ * テストで実際に再現した)。本番のCloudflare Workersランタイムでは通常
+ * ExecutionContextは必ず渡されるため表面化しにくいが、waitUntil呼び出し側で
+ * try/catchして安全に無視できるようにしておく。
+ */
+function safeWaitUntil(c: Context<{ Bindings: Bindings; Variables: Variables }>, promise: Promise<unknown>): void {
+  try {
+    c.executionCtx.waitUntil(promise);
+  } catch {
+    // ExecutionContext未提供の環境(テスト等)。バックグラウンド処理を
+    // スキップするだけで、レスポンス自体には影響させない。
+  }
+}
+
 async function logWebhookEvent(
   db: D1Database | undefined,
   source: string,
@@ -12025,14 +12043,14 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     if (!analysis) {
       const resultKeys = typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object';
       logger.warn('[moondream-analyze] 空の応答', { resultKeys });
-      c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+      safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
         userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
         promptLength, imageBytes: imageByteLength,
         errorMessage: `空の応答(resultKeys=${resultKeys})`, imageDataUrl: image, promptText,
       }));
       return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
     }
-    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+    safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'ok', model: MOONDREAM_MODEL,
       promptLength, imageBytes: imageByteLength,
       imageDataUrl: image, promptText, analysisText: analysis,
@@ -12041,7 +12059,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     logger.error('[moondream-analyze] 呼び出し失敗', { error: errorMessage });
-    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+    safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
       promptLength, imageBytes: imageByteLength,
       errorMessage, imageDataUrl: image, promptText,
@@ -14841,7 +14859,7 @@ app.post('/webhook/github', async (c) => {
       reason: verification.reason,
       path: c.req.path,
     });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -14858,7 +14876,7 @@ app.post('/webhook/github', async (c) => {
   const action = typeof payload?.action === 'string' ? payload.action : 'unknown';
 
   logger.info('GitHub webhook received', { eventType, action, deliveryId });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
 
   // installation イベントを処理
   if (eventType === 'installation' || eventType === 'installation_repositories') {
@@ -17000,7 +17018,7 @@ app.post('/slack/interactions', async (c) => {
   }
 
   if (result.aiReplyTask) {
-    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, result.aiReplyTask));
+    safeWaitUntil(c, dispatchSlackAiReply(c.env, result.aiReplyTask));
   }
 
   return c.text('', 200);
@@ -17034,7 +17052,7 @@ app.post('/slack/event', async (c) => {
 
   const mentionEvent = result.eventCallback?.event;
   if (mentionEvent && mentionEvent.type === 'app_mention' && !mentionEvent.bot_id && mentionEvent.channel) {
-    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, {
+    safeWaitUntil(c, dispatchSlackAiReply(c.env, {
       text: mentionEvent.text ?? '',
       channel: mentionEvent.channel,
       threadTs: mentionEvent.thread_ts ?? mentionEvent.ts ?? '',
@@ -17111,7 +17129,7 @@ app.post('/webhook/cf-auth', async (c) => {
   const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-auth webhook', { reason: verification.reason });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -17122,18 +17140,22 @@ app.post('/webhook/cf-auth', async (c) => {
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
-  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+  // GitHubリポジトリのwebhook(push等)はイベント種別をJSON本文ではなく
+  // X-GitHub-Eventヘッダーで送るため、そちらを優先する(/webhook/githubの
+  // GitHub App webhookと同じ扱い)。本文にevent文字列を含む独自送信元(ログイン
+  // 通知等)はそちらをフォールバックとして使う。
+  const event = c.req.header('X-GitHub-Event') ?? (typeof payload.event === 'string' ? payload.event : 'unknown');
   const usernameFromPayload = extractCfAuthUsername(payload);
   const user = usernameFromPayload ?? 'unknown';
   const action = typeof payload.action === 'string' ? payload.action : '';
 
   logger.info('cf-auth webhook received', { event, user, action });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
 
   // ユーザー名が特定できない場合はアクセス権限を判定できないためNG
   if (!usernameFromPayload) {
     logger.warn('cf-auth webhook payload missing username', { event, action });
-    c.executionCtx?.waitUntil(
+    safeWaitUntil(c, 
       logCfAuthAccessResult(c.env.DB, user, event, action, 'NG', 'username not found in payload')
     );
     return c.json({ result: 'NG', reason: 'username not found in payload' }, 400);
@@ -17143,7 +17165,7 @@ app.post('/webhook/cf-auth', async (c) => {
   const hasAccess = userSession !== null;
 
   logger.info('cf-auth access check result', { user: usernameFromPayload, hasAccess });
-  c.executionCtx?.waitUntil(
+  safeWaitUntil(c, 
     logCfAuthAccessResult(
       c.env.DB,
       usernameFromPayload,
@@ -17200,7 +17222,7 @@ app.post('/webhook/cf-wh1', async (c) => {
   }, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-wh1 webhook', { reason: verification.reason });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -17208,7 +17230,7 @@ app.post('/webhook/cf-wh1', async (c) => {
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
-    c.executionCtx?.waitUntil(
+    safeWaitUntil(c, 
       logWebhookEvent(c.env.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload')
     );
     return c.json({ error: 'Invalid webhook payload' }, 400);
@@ -17217,7 +17239,7 @@ app.post('/webhook/cf-wh1', async (c) => {
   const event = typeof payload.event === 'string' ? payload.event : 'unknown';
 
   logger.info('cf-wh1 webhook received', { event });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
 
   return c.json({ result: 'OK' });
 });
@@ -17250,7 +17272,7 @@ async function handleResendWebhookCore(
       path: c.req.path,
       method: c.req.method,
     });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -17290,7 +17312,7 @@ async function handleResendWebhookCore(
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
