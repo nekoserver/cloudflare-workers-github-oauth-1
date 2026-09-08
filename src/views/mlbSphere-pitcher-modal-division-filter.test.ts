@@ -56,26 +56,27 @@ describe('/mlb ページ: 先発投手モーダルのリーグ・地区フィル
     expect(fnBody).toContain("DIVISIONS[3].teams.concat(DIVISIONS[4].teams,DIVISIONS[5].teams)");
   });
 
-  it('renderTodayPitchersBody()はフィルターが\'all\'以外のとき、away/homeどちらかがteamIdsに含まれる試合のみに絞り込む', () => {
+  it('renderTodayPitchersBody()はグレーアウト設定が\'hide\'のときのみ、away/homeどちらかがteamIdsに含まれる試合だけに絞り込む', () => {
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = scriptSrc.slice(idx, idx + 500);
+    const fnBody = scriptSrc.slice(idx, idx + 700);
+    expect(fnBody).toContain('teamIds&&!grayout');
     expect(fnBody).toContain('teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0');
   });
 
-  it('showTodayPitchersModal()はモーダルを開くたびにフィルターを\'all\'へリセットする', () => {
+  it('showTodayPitchersModal()はモーダルを開くたびにCookieに保存済みのフィルターを復元する', () => {
     const idx = scriptSrc.indexOf('function showTodayPitchersModal');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = scriptSrc.slice(idx, idx + 500);
-    expect(fnBody).toContain("todayPitcherFilter='all'");
+    expect(fnBody).toContain('todayPitcherFilter=loadSavedPitcherFilter()');
   });
 
-  it('フィルター項目のクリックでtodayPitcherFilterを更新し、activeクラスを再描画のうえrenderTodayPitchersBody()を呼ぶ', () => {
+  it('フィルター項目のクリックでtodayPitcherFilterを更新し、Cookieへ保存のうえrenderTodayPitchersBody()を呼ぶ', () => {
     const idx = scriptSrc.indexOf('pitcherFilterMenu.addEventListener');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = scriptSrc.slice(idx, idx + 500);
     expect(fnBody).toContain('todayPitcherFilter=item.dataset.filter');
-    expect(fnBody).toContain("item.classList.add('active')");
+    expect(fnBody).toContain("setCookieValueClient('mlb_pitcher_filter',todayPitcherFilter)");
     expect(fnBody).toContain('renderTodayPitchersBody()');
   });
 });

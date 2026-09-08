@@ -630,6 +630,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">MLBページ「本日の先発投手」モーダルでリーグ/地区を選んだ時、対象外の試合を非表示にせずグレーアウト表示にする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="mlbPitcherFilterGrayoutLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="mlbPitcherFilterGrayoutCheckbox" onchange="onMlbPitcherFilterGrayoutChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">AIチャット画面の左サイドバーを余白タップでも閉じられるようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="aichatSidebarTapCloseLabel">ON</span>
@@ -1193,6 +1203,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       writeSettingCookieWithFallback('neko_pr_hide_author', enabled ? 'on' : 'off', 31536000);
+    }
+
+    (function() {
+      // 既定はグレーアウト('gray')。Cookie/localStorageに'hide'が
+      // 保存されている場合のみ従来の非表示挙動に戻す。
+      var val = readSettingCookieOrLocalStorage('mlb_pitcher_filter_mode', 'gray');
+      var cb = document.getElementById('mlbPitcherFilterGrayoutCheckbox');
+      var label = document.getElementById('mlbPitcherFilterGrayoutLabel');
+      if (cb) cb.checked = (val !== 'hide');
+      if (label) label.textContent = (val !== 'hide') ? 'ON' : 'OFF';
+    })();
+
+    function onMlbPitcherFilterGrayoutChange() {
+      var cb = document.getElementById('mlbPitcherFilterGrayoutCheckbox');
+      var label = document.getElementById('mlbPitcherFilterGrayoutLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      writeSettingCookieWithFallback('mlb_pitcher_filter_mode', enabled ? 'gray' : 'hide', 31536000);
     }
 
     (function() {
