@@ -22,6 +22,53 @@ function commitLink(hash: string): string {
   return `<a href="${url}" target="_blank" rel="noopener noreferrer"><code>${short}</code></a>`;
 }
 
+const SQL_KEYWORDS = new Set([
+  'ABORT', 'ACTION', 'ADD', 'AFTER', 'ALL', 'ALTER', 'ANALYZE', 'AND', 'AS', 'ASC', 'ATTACH',
+  'AUTOINCREMENT', 'BEFORE', 'BEGIN', 'BETWEEN', 'BY', 'CASCADE', 'CASE', 'CAST', 'CHECK',
+  'COLLATE', 'COLUMN', 'COMMIT', 'CONFLICT', 'CONSTRAINT', 'CREATE', 'CROSS', 'CURRENT_DATE',
+  'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'DATABASE', 'DEFAULT', 'DEFERRABLE', 'DEFERRED', 'DELETE',
+  'DESC', 'DETACH', 'DISTINCT', 'DO', 'DROP', 'EACH', 'ELSE', 'END', 'ESCAPE', 'EXCEPT',
+  'EXCLUDE', 'EXCLUSIVE', 'EXISTS', 'EXPLAIN', 'FAIL', 'FILTER', 'FIRST', 'FOLLOWING', 'FOR',
+  'FOREIGN', 'FROM', 'FULL', 'GENERATED', 'GLOB', 'GROUP', 'GROUPS', 'HAVING', 'IF', 'IGNORE',
+  'IMMEDIATE', 'IN', 'INDEX', 'INDEXED', 'INITIALLY', 'INNER', 'INSERT', 'INSTEAD', 'INTERSECT',
+  'INTO', 'IS', 'ISNULL', 'JOIN', 'KEY', 'LAST', 'LEFT', 'LIKE', 'LIMIT', 'MATCH', 'MATERIALIZED',
+  'NATURAL', 'NO', 'NOT', 'NOTHING', 'NOTNULL', 'NULL', 'NULLS', 'OF', 'OFFSET', 'ON', 'OR',
+  'ORDER', 'OTHERS', 'OUTER', 'OVER', 'PARTITION', 'PLAN', 'PRAGMA', 'PRECEDING', 'PRIMARY',
+  'QUERY', 'RAISE', 'RANGE', 'RECURSIVE', 'REFERENCES', 'REGEXP', 'REINDEX', 'RELEASE', 'RENAME',
+  'REPLACE', 'RESTRICT', 'RETURNING', 'RIGHT', 'ROLLBACK', 'ROW', 'ROWS', 'SAVEPOINT', 'SELECT',
+  'SET', 'TABLE', 'TEMP', 'TEMPORARY', 'THEN', 'TIES', 'TO', 'TRANSACTION', 'TRIGGER', 'UNBOUNDED',
+  'UNION', 'UNIQUE', 'UPDATE', 'USING', 'VACUUM', 'VALUES', 'VIEW', 'VIRTUAL', 'WHEN', 'WHERE',
+  'WINDOW', 'WITH', 'WITHOUT',
+]);
+
+/** Escapes SQL and wraps SQLite tokens without ever interpreting SQL as HTML. */
+function highlightSql(sql: string): string {
+  const tokenPattern = /(--[^\n]*|\/\*[\s\S]*?\*\/|'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[(?:\]\]|[^\]])*\]|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b|[?:@$][A-Za-z0-9_]*)/g;
+  let result = '';
+  let lastIndex = 0;
+  for (const match of sql.matchAll(tokenPattern)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+    result += escapeHtml(sql.slice(lastIndex, index));
+    let type = '';
+    if (token.startsWith('--') || token.startsWith('/*')) type = 'comment';
+    else if (/^['"`\[]/.test(token)) type = 'string';
+    else if (/^\d/.test(token)) type = 'number';
+    else if (/^[?:@$]/.test(token)) type = 'parameter';
+    else if (SQL_KEYWORDS.has(token.toUpperCase())) type = 'keyword';
+    result += type ? `<span class="sql-token sql-${type}">${escapeHtml(token)}</span>` : escapeHtml(token);
+    lastIndex = index + token.length;
+  }
+  return result + escapeHtml(sql.slice(lastIndex));
+}
+
+function sourceColor(sourceFile: string): string {
+  let hash = 0;
+  for (let i = 0; i < sourceFile.length; i += 1) hash = ((hash * 31) + sourceFile.charCodeAt(i)) >>> 0;
+  // ファイル名から色相を直接作ることで、固定パレットより衝突しにくく、再描画しても同色になる。
+  return `hsl(${hash % 360} 68% 43%)`;
+}
+
 // sqlVerb: SQL本文の先頭キーワードから発行SQL種別(INSERT/SELECT/UPDATE/DELETE/CREATE)を
 // 判定する。テーブル名(table_name)は不明・動的なクエリでも、発行SQLの種別は
 // 文字列の先頭を見るだけで必ず判定できるため、テーブル名で決め打ちせず横断的に
@@ -52,14 +99,21 @@ function verbCounts(rows: D1QueryCatalogRow[]): { verb: string; count: number }[
 
 // tableCounts: テーブル名ごとの出現回数を、多い順に並べる。
 // テーブル選択パネル内のバッジの並び順に使う。
-function tableCounts(rows: D1QueryCatalogRow[]): { table: string; count: number }[] {
-  const counts = new Map<string, number>();
+function tableCounts(rows: D1QueryCatalogRow[]): { table: string; count: number; sourceFile: string }[] {
+  const counts = new Map<string, { count: number; sources: Map<string, number> }>();
   for (const row of rows) {
     const t = row.table_name ?? '(不明)';
-    counts.set(t, (counts.get(t) ?? 0) + 1);
+    const entry = counts.get(t) ?? { count: 0, sources: new Map<string, number>() };
+    entry.count += 1;
+    entry.sources.set(row.source_file, (entry.sources.get(row.source_file) ?? 0) + 1);
+    counts.set(t, entry);
   }
   return [...counts.entries()]
-    .map(([table, count]) => ({ table, count }))
+    .map(([table, entry]) => ({
+      table,
+      count: entry.count,
+      sourceFile: [...entry.sources.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0],
+    }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -68,7 +122,7 @@ function renderRow(row: D1QueryCatalogRow): string {
     ? '<span class="badge badge-confirmed">確定</span>'
     : '<span class="badge badge-inferred">推測</span>';
   const verb = escapeHtml(sqlVerb(row.sql_text));
-  const sqlOneLine = escapeHtml(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
+  const sqlOneLine = highlightSql(row.sql_text.replace(/\s+/g, ' ').trim().slice(0, 200));
   const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
@@ -140,10 +194,11 @@ export function getD1QueryCatalogPage(
     .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
     .join('\n');
   const tableBadgesHtml = tableCounts(rows)
-    .map(({ table, count }) => {
+    .map(({ table, count, sourceFile }) => {
       const safeTable = escapeHtml(table);
+      const safeSourceFile = escapeHtml(sourceFile);
       const columnCount = columnCounts[table] ?? 0;
-      return `<button type="button" class="table-filter-badge" data-table="${safeTable}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false"><span class="table-badge-count">${count}</span><span aria-hidden="true">(</span><span class="table-badge-name">${safeTable}</span> <span class="table-column-count">(${columnCount}カラム)</span><span aria-hidden="true">)</span></button>`;
+      return `<button type="button" class="table-filter-badge" style="--source-color:${sourceColor(sourceFile)}" data-table="${safeTable}" data-source-file="${safeSourceFile}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false" title="呼び出し元: ${safeSourceFile}"><span class="table-badge-count">${count}</span><span class="table-badge-name">${safeTable}</span><span class="table-column-count" aria-label="${columnCount}カラム">${columnCount}</span></button>`;
     })
     .join('\n');
   const groupedTables = groupByTable(rows);
@@ -266,18 +321,36 @@ export function getD1QueryCatalogPage(
       gap: 8px;
     }
     .table-filter-badge {
-      border: 1px solid var(--border-color);
-      border-radius: 999px;
-      background: var(--card-bg);
-      padding: 6px 10px;
+      border: 0;
+      background: transparent;
+      padding: 2px 0;
       font-size: 13px;
       color: var(--text-primary);
       font-family: 'Monaco', 'Courier New', monospace;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.16));
     }
-    .table-filter-badge:hover { border-color: var(--accent-color); }
-    .table-filter-badge[aria-pressed="true"] { background: var(--accent-color, #667eea); color: white; border-color: var(--accent-color, #667eea); }
-    .table-badge-count { font-weight: 700; }
+    .table-filter-badge:hover, .table-filter-badge:focus-visible { filter: brightness(1.12) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2)); outline: none; }
+    .table-filter-badge[aria-pressed="true"] .table-badge-name { background: var(--source-color); color: white; }
+    .table-filter-badge[aria-pressed="true"] .table-badge-count { background: var(--source-color); color: white; }
+    .table-badge-count {
+      width: 29px; height: 29px; border: 2px solid var(--source-color); border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+      background: var(--card-bg); color: var(--source-color); font-weight: 800; z-index: 1;
+    }
+    .table-badge-name {
+      min-height: 29px; display: inline-flex; align-items: center; padding: 4px 12px 4px 15px;
+      margin-left: -5px; background: color-mix(in srgb, var(--source-color) 14%, var(--card-bg));
+      border: 2px solid var(--source-color); border-radius: 0 999px 999px 0; font-weight: 700;
+    }
+    .table-column-count {
+      width: 0; height: 0; margin-left: 5px; border-top: 14px solid transparent;
+      border-bottom: 14px solid transparent; border-left: 22px solid var(--source-color);
+      color: transparent; font-size: 0; position: relative;
+    }
+    .table-column-count::after { content: attr(aria-label); position: absolute; width: max-content; left: 7px; top: -8px; color: var(--text-muted); font: 10px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     select#verbFilter {
       width: 100%;
       max-width: 320px;
@@ -340,6 +413,16 @@ export function getD1QueryCatalogPage(
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
+    .sql-token { font-weight: 600; }
+    .sql-keyword { color: #7c3aed; font-weight: 800; }
+    .sql-string { color: #047857; }
+    .sql-number { color: #c2410c; }
+    .sql-comment { color: var(--text-muted); font-style: italic; }
+    .sql-parameter { color: #0369a1; font-weight: 700; }
+    [data-theme="dark"] .sql-keyword { color: #c4b5fd; }
+    [data-theme="dark"] .sql-string { color: #6ee7b7; }
+    [data-theme="dark"] .sql-number { color: #fdba74; }
+    [data-theme="dark"] .sql-parameter { color: #7dd3fc; }
     .sql-cell { white-space: nowrap; }
     .sql-detail-button { appearance: none; border: 0; background: transparent; color: inherit; padding: 0; cursor: pointer; text-align: left; }
     .sql-detail-button:hover code, .sql-detail-button:focus-visible code { color: var(--accent-color); text-decoration: underline; }
