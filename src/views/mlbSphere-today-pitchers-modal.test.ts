@@ -34,14 +34,14 @@ describe('/mlb ページ: 当日の試合一覧ヘッダーの先発投手モー
   it('renderTodayPitchersBody内で試合をgameDate昇順にソートしている', () => {
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = scriptSrc.slice(idx, idx + 900);
+    const fnBody = scriptSrc.slice(idx, idx + 1700);
     expect(fnBody).toContain('.slice().sort');
     expect(fnBody).toContain('a.gameDate<b.gameDate');
   });
 
   it('モーダル内の各行は「先発投手 / 対戦カード / 先発投手」の順で構築される', () => {
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
-    const fnBody = scriptSrc.slice(idx, idx + 1200);
+    const fnBody = scriptSrc.slice(idx, idx + 1900);
     const awayIdx = fnBody.indexOf('tpm-pitcher">\'+awayP');
     const cardIdx = fnBody.indexOf('tpm-card">\'+abbrBadge(g.awayTeamId');
     const homeIdx = fnBody.indexOf('tpm-pitcher">\'+homeP');
@@ -69,7 +69,7 @@ describe('/mlb ページ: 当日の試合一覧ヘッダーの先発投手モー
 
   it('先発投手が未発表の場合は「未定」でフォールバックし、空文字にならない', () => {
     const idx = scriptSrc.indexOf('function renderTodayPitchersBody');
-    const fnBody = scriptSrc.slice(idx, idx + 900);
+    const fnBody = scriptSrc.slice(idx, idx + 1900);
     expect(fnBody).toContain("g.awayPitcher||'未定'");
     expect(fnBody).toContain("g.homePitcher||'未定'");
   });

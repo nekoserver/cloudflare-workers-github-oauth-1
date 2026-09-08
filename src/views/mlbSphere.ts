@@ -115,6 +115,7 @@ canvas:active { cursor:grabbing; }
 .tpm-filter-item.active { color:#58a6ff; background:rgba(88,166,255,0.1); }
 .tpm-body { flex:1; min-width:0; overflow-y:auto; padding:6px 0; }
 .tpm-row { padding:8px 14px; border-bottom:1px solid #21262d; }
+.tpm-row-dim { opacity:0.32; filter:grayscale(0.6); }
 .tpm-time { font-family:monospace; font-size:10px; color:#58a6ff; margin-bottom:4px; }
 .tpm-matchup { display:flex; align-items:center; justify-content:space-between; gap:6px; }
 .tpm-pitcher { font-size:11px; color:#c9d1d9; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -855,6 +856,26 @@ void main(){
   var todayPitcherGamesAll=[];
   var todayPitcherFilter='all';
   var PITCHER_FILTER_DIVIDX={'AL-EAST':0,'AL-CENTRAL':1,'AL-WEST':2,'NL-EAST':3,'NL-CENTRAL':4,'NL-WEST':5};
+  var PITCHER_FILTER_VALUES=['all','AL','NL','AL-EAST','AL-CENTRAL','AL-WEST','NL-EAST','NL-CENTRAL','NL-WEST'];
+
+  function getCookieValueClient(name){
+    var m=document.cookie.match('(^|;\\s*)'+name+'=([^;]*)');
+    return m?decodeURIComponent(m[2]):null;
+  }
+  function setCookieValueClient(name,value){
+    try{document.cookie=name+'='+encodeURIComponent(value)+'; Path=/; Secure; SameSite=Lax; Max-Age=31536000';}catch(e){}
+  }
+
+  /** 設定ページの「対象外の試合をグレーアウト」トグル。既定はON(グレーアウト)、'hide'なら従来通り非表示にする。 */
+  function pitcherFilterGrayoutEnabled(){
+    return getCookieValueClient('mlb_pitcher_filter_mode')!=='hide';
+  }
+
+  /** 最後に選択したリーグ/地区フィルターをCookieから復元する(未保存・不正値は'all')。 */
+  function loadSavedPitcherFilter(){
+    var v=getCookieValueClient('mlb_pitcher_filter');
+    return v&&PITCHER_FILTER_VALUES.indexOf(v)>=0?v:'all';
+  }
 
   function pitcherFilterTeamIds(filter){
     if(filter==='all')return null;
@@ -864,18 +885,29 @@ void main(){
     return di!==undefined?DIVISIONS[di].teams:null;
   }
 
+  function setActivePitcherFilterMenuItem(filter){
+    document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){
+      el.classList.toggle('active',el.dataset.filter===filter);
+    });
+  }
+
   function renderTodayPitchersBody(){
     var body=document.getElementById('todayPitchersBody');
     var teamIds=pitcherFilterTeamIds(todayPitcherFilter);
-    var filtered=teamIds?todayPitcherGamesAll.filter(function(g){return teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0;}):todayPitcherGamesAll;
-    var sorted=filtered.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
+    var grayout=teamIds&&pitcherFilterGrayoutEnabled();
+    // グレーアウト設定がONの場合は一覧を絞り込まず、対象外行に見た目だけ
+    // 反映する(モーダルの縦幅が選択のたびに変わらないようにするため)。
+    // 従来通りの「非表示」を選んでいる場合のみ、ここで実際に絞り込む。
+    var list=(teamIds&&!grayout)?todayPitcherGamesAll.filter(function(g){return teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0;}):todayPitcherGamesAll;
+    var sorted=list.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
     var html='';
     for(var i=0;i<sorted.length;i++){
       var g=sorted[i];
       var awayP=g.awayPitcher||'未定';
       var homeP=g.homePitcher||'未定';
       var timeStr=fmtTime(g.gameDate,'America/New_York','ET')+' / '+fmtTime(g.gameDate,'Asia/Tokyo','JST');
-      html+='<div class="tpm-row">';
+      var isDim=!!(grayout&&teamIds&&teamIds.indexOf(g.awayTeamId)<0&&teamIds.indexOf(g.homeId)<0);
+      html+='<div class="tpm-row'+(isDim?' tpm-row-dim':'')+'">';
       html+='<div class="tpm-time">'+timeStr+'</div>';
       html+='<div class="tpm-matchup">';
       html+='<span class="tpm-pitcher">'+awayP+'</span>';
@@ -892,10 +924,8 @@ void main(){
     var overlay=document.getElementById('todayPitchersOverlay');
     var modal=document.getElementById('todayPitchersModal');
     todayPitcherGamesAll=games;
-    todayPitcherFilter='all';
-    document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){
-      el.classList.toggle('active',el.dataset.filter==='all');
-    });
+    todayPitcherFilter=loadSavedPitcherFilter();
+    setActivePitcherFilterMenuItem(todayPitcherFilter);
     renderTodayPitchersBody();
     var nextZ=getNextZ();
     overlay.style.zIndex=String(nextZ);
@@ -910,8 +940,8 @@ void main(){
       var item=e.target.closest?e.target.closest('.tpm-filter-item'):null;
       if(!item)return;
       todayPitcherFilter=item.dataset.filter;
-      document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){el.classList.remove('active');});
-      item.classList.add('active');
+      setCookieValueClient('mlb_pitcher_filter',todayPitcherFilter);
+      setActivePitcherFilterMenuItem(todayPitcherFilter);
       renderTodayPitchersBody();
     });
   }
