@@ -13,9 +13,9 @@
  *   (5) SQLセルに`word-break: break-word`を残したまま列が縮むと、長い識別子が
  *       1〜3文字ずつ縦に折り返されて実質読めなくなる(テーブルレイアウトが列を
  *       極端に狭めた場合の挙動)。横スクロールに倒すことで回避する
- *   (6) テーブル選択パネルの開閉ボタン・チェックボックスが正しく描画されず、
+ *   (6) テーブル選択パネルのトグルボタン・単一選択バッジが正しく描画されず、
  *       テーブル名を帯(見出しバー)にまとめた出力にならない
- *   (7) テーブル選択パネルに「すべて」の選択解除ショートカットが無い
+ *   (7) テーブルバッジを切り替えても以前の選択・フィルタ状態が解除されない
  *   (8) 帯同士の余白が過剰(margin-bottom: 20px)で、閉じた状態でも一覧性が悪い
  *   (9) 帯に件数(data-count)が無い、または並び替えボタンが無くソートできない
  *   (10) 「コマンド」と「SQL」の間に「最終コミット日時」列が無い、または
@@ -179,7 +179,7 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('data-verb="PRAGMA"');
   });
 
-  it('テーブル選択パネルの開閉ボタンとチェックボックス一覧が、出現回数の多い順で描画される', () => {
+  it('テーブル選択パネルのトグルボタンとバッジ一覧が、出現回数の多い順で描画される', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO t1 VALUES (2)', migration_file: null, last_commit_hash: null, last_commit_at: null },
@@ -187,16 +187,19 @@ describe('GET /d1-query-catalog', () => {
     ]);
     expect(html).toContain('id="tablePanelToggle"');
     expect(html).toContain('aria-expanded="false"');
-    const panelMatch = html.match(/<div class="filter-panel" id="tablePanel" hidden>([\s\S]*?)<\/div>/);
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('<span>テーブルで絞り込み</span>');
+    const panelMatch = html.match(/<div class="table-badge-list">([\s\S]*?)<\/div>/);
     expect(panelMatch).not.toBeNull();
     const panelText = panelMatch![1];
-    const t1Idx = panelText.indexOf('value="t1"');
-    const t2Idx = panelText.indexOf('value="t2"');
+    const t1Idx = panelText.indexOf('data-table="t1"');
+    const t2Idx = panelText.indexOf('data-table="t2"');
     expect(t1Idx).toBeGreaterThan(-1);
     expect(t2Idx).toBeGreaterThan(-1);
     expect(t1Idx).toBeLessThan(t2Idx);
-    expect(panelText).toContain('(2)');
-    expect(panelText).toContain('(1)');
+    expect(panelText).toContain('<span class="table-badge-count">2</span>');
+    expect(panelText).toContain('<span class="table-badge-name">t1</span>');
+    expect(panelText).not.toContain('type="checkbox"');
   });
 
   it('パネルはhidden属性で初期状態は閉じている', () => {
@@ -222,8 +225,8 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'zzz_table', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO zzz_table VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'aaa_table', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM aaa_table', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
-    const aaaIdx = html.indexOf('data-table="aaa_table"');
-    const zzzIdx = html.indexOf('data-table="zzz_table"');
+    const aaaIdx = html.indexOf('<section class="table-band" data-table="aaa_table"');
+    const zzzIdx = html.indexOf('<section class="table-band" data-table="zzz_table"');
     expect(aaaIdx).toBeGreaterThan(-1);
     expect(zzzIdx).toBeGreaterThan(-1);
     expect(aaaIdx).toBeLessThan(zzzIdx);
@@ -250,23 +253,23 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('<span class="band-toggle-arrow">▾</span>');
   });
 
-  it('テーブル選択パネルの最上段に「すべて」チェックボックスがあり、初期状態でチェック済み', () => {
+  it('テーブルバッジは単一選択で、新しく押すたび以前の選択を解除して即時フィルタする', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
-    const panelMatch = html.match(/<div class="filter-panel" id="tablePanel" hidden>([\s\S]*?)<\/div>/);
-    expect(panelMatch).not.toBeNull();
-    const panelText = panelMatch![1];
-    const allIdx = panelText.indexOf('id="tableFilterAll"');
-    const fooIdx = panelText.indexOf('value="foo"');
-    expect(allIdx).toBeGreaterThan(-1);
-    expect(fooIdx).toBeGreaterThan(-1);
-    // 「すべて」は最上段(個別チェックボックスより前)にある
-    expect(allIdx).toBeLessThan(fooIdx);
-    expect(panelText).toMatch(/id="tableFilterAll" checked/);
-    // 「すべて」の件数は全クエリ数(2件)
-    expect(panelText).toContain('(2)');
+    expect(html).toContain("tableBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });");
+    expect(html).toContain("badge.setAttribute('aria-pressed', 'true');");
+    expect(html).toContain('applyFilters();');
+    expect(html).toContain("var selectedBadge = tableBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });");
+    expect(html).toContain("var tableMatches = (selectedTable === null || selectedTable === table);");
+    expect(html).not.toContain('tableFilterAll');
+  });
+
+  it('選択パネルはトグル直下で横幅いっぱいになり、バッジを左詰めで折り返す', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/\.filter-panel\s*\{[^}]*width:\s*100%/);
+    expect(html).toMatch(/\.table-badge-list\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap[^}]*justify-content:\s*flex-start/);
   });
 
   it('帯同士の余白(margin-bottom)が最小化されている(20pxのような広い余白の回帰防止)', () => {
@@ -353,6 +356,7 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('id="copySqlButton"');
     expect(html).toContain('id="copySqlcButton"');
     expect(html).toContain('id="closeSqlDetailButton"');
+    expect(html).toContain('SQL構文・D1スキーマとの整合性やコード生成は検証対象外です。');
   });
 
   it('SQL詳細はsqlc WASMを遅延ロードし、初期化Promiseを再利用する', () => {
@@ -385,8 +389,8 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'aaa', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM aaa', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ], 'name');
     expect(html).toMatch(/data-sort="name" aria-pressed="true"/);
-    const aaaIdx = html.indexOf('data-table="aaa"');
-    const zzzIdx = html.indexOf('data-table="zzz"');
+    const aaaIdx = html.indexOf('<section class="table-band" data-table="aaa"');
+    const zzzIdx = html.indexOf('<section class="table-band" data-table="zzz"');
     expect(aaaIdx).toBeGreaterThan(-1);
     expect(zzzIdx).toBeGreaterThan(-1);
     expect(aaaIdx).toBeLessThan(zzzIdx);
@@ -398,8 +402,8 @@ describe('GET /d1-query-catalog', () => {
       { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'zzz_big', source_file: 'src/index.ts', source_line: 2, sql_text: 'INSERT INTO zzz_big VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'C', command: 'one', command_confirmed: 1, table_name: 'zzz_big', source_file: 'src/index.ts', source_line: 3, sql_text: 'SELECT 1 FROM zzz_big', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ], 'count');
-    const smallIdx = html.indexOf('data-table="aaa_small"');
-    const bigIdx = html.indexOf('data-table="zzz_big"');
+    const smallIdx = html.indexOf('<section class="table-band" data-table="aaa_small"');
+    const bigIdx = html.indexOf('<section class="table-band" data-table="zzz_big"');
     expect(smallIdx).toBeGreaterThan(-1);
     expect(bigIdx).toBeGreaterThan(-1);
     // アルファベット順ならaaa_smallが先だが、件数順(zzz_bigが2件)ではzzz_bigが先
