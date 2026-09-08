@@ -118,6 +118,8 @@ canvas:active { cursor:grabbing; }
 .tpm-dim { opacity:0.32; }
 .abbr-badge-dim { opacity:0.4; filter:grayscale(0.7); }
 .tpm-time { font-family:monospace; font-size:10px; color:#58a6ff; margin-bottom:4px; }
+.tpm-live { color:#3fb950; font-weight:700; }
+.tpm-final { color:#555d68; }
 .tpm-matchup { display:flex; align-items:center; justify-content:space-between; gap:6px; }
 .tpm-pitcher { font-size:11px; color:#c9d1d9; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tpm-pitcher:last-child { text-align:right; }
@@ -892,6 +894,21 @@ void main(){
     });
   }
 
+  /** 試合開始前は開始時刻(ET/JST)、LIVE中・終了後は現時点のスコアを返す。先発投手モーダル用。 */
+  function pitcherModalTimeOrScoreHtml(g){
+    var state=(g.status&&g.status.abstractGameState)||'Preview';
+    if(state==='Live'){
+      var innTxt=g.inning?(((g.inningHalf||'').charAt(0)==='B'?'B':'T')+g.inning):'';
+      var scoreTxt=(g.awayScore!=null&&g.homeScore!=null)?(' '+g.awayScore+'-'+g.homeScore):'';
+      return '<span class="tpm-live">&#9679; LIVE'+scoreTxt+(innTxt?' '+innTxt:'')+'</span>';
+    }
+    if(state==='Final'){
+      var finalTxt=(g.awayScore!=null&&g.homeScore!=null)?(' '+g.awayScore+'-'+g.homeScore):'';
+      return '<span class="tpm-final">&#32199;&#20102;'+finalTxt+'</span>';
+    }
+    return fmtTime(g.gameDate,'America/New_York','ET')+' / '+fmtTime(g.gameDate,'Asia/Tokyo','JST');
+  }
+
   function renderTodayPitchersBody(){
     var body=document.getElementById('todayPitchersBody');
     var teamIds=pitcherFilterTeamIds(todayPitcherFilter);
@@ -908,7 +925,7 @@ void main(){
       var g=sorted[i];
       var awayP=g.awayPitcher||'未定';
       var homeP=g.homePitcher||'未定';
-      var timeStr=fmtTime(g.gameDate,'America/New_York','ET')+' / '+fmtTime(g.gameDate,'Asia/Tokyo','JST');
+      var timeStr=pitcherModalTimeOrScoreHtml(g);
       var isAwayDim=!!(grayout&&teamIds&&teamIds.indexOf(g.awayTeamId)<0);
       var isHomeDim=!!(grayout&&teamIds&&teamIds.indexOf(g.homeId)<0);
       html+='<div class="tpm-row">';
@@ -1031,6 +1048,11 @@ void main(){
           }
           buildGameList(todayGames,dateStr);
           if(activeHomeId>=0)tooltip.innerHTML=buildTooltipHtml(activeHomeId);
+          // 先発投手モーダルを開いたまま試合が進行している場合、モーダル内の
+          // 開始時刻/スコア表示も最新化する(todayPitcherGamesAllはtodayGamesと
+          // 同じオブジェクト参照を保持しているため、再描画だけで反映できる)。
+          var pitchersModalEl=document.getElementById('todayPitchersModal');
+          if(pitchersModalEl&&pitchersModalEl.classList.contains('open'))renderTodayPitchersBody();
         })
         .catch(function(){});
     },30000);
