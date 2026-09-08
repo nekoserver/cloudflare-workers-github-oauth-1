@@ -229,10 +229,14 @@ export function getD1QueryCatalogPage(
       min-height: 100vh;
     }
     .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 10px var(--navbar-shadow);
-      padding: 16px 32px;
+      padding: 0 20px;
+      height: 44px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -241,7 +245,7 @@ export function getD1QueryCatalogPage(
     .user-menu { display: flex; align-items: center; gap: 12px; }
     .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
-      width: 40px; height: 40px; border-radius: 50%;
+      width: 32px; height: 32px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex; align-items: center; justify-content: center;
       color: white; font-weight: 600; font-size: 16px; cursor: pointer;
