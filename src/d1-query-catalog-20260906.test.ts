@@ -24,6 +24,7 @@
  *   (12) SQL詳細用WASMがページ初期表示から読み込まれる、または行ごとに再初期化される
  *   (13) SQL全文を未エスケープで埋め込みXSSが起きる、またはWASM実行用CSPが不足する
  *   (14) 詳細ダイアログが既存モーダルの背面に入り、キーボードで開閉・復帰できない
+ *   (15) 一覧では色分けされるSQLが、詳細ダイアログではプレーンテキストに戻る
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -121,6 +122,30 @@ describe('GET /d1-query-catalog', () => {
     ]);
     expect(html).not.toContain('<b>Evil</b>');
     expect(html).not.toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('SQL詳細モーダル用の全文にもシンタックスハイライトを適用する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      {
+        query_name: 'HighlightedQuery',
+        command: 'many',
+        command_confirmed: 1,
+        table_name: 'users',
+        source_file: 'src/index.ts',
+        source_line: 1,
+        sql_text: "SELECT id FROM users WHERE name = 'Alice' AND score >= 10 -- active only",
+        migration_file: null,
+        last_commit_hash: null,
+        last_commit_at: null,
+      },
+    ]);
+    const highlightedSql = html.match(/<span class="query-detail-sql-highlighted" hidden>([\s\S]*?)<\/span><\/td>/);
+    expect(highlightedSql).not.toBeNull();
+    expect(highlightedSql![1]).toContain('<span class="sql-token sql-keyword">SELECT</span>');
+    expect(highlightedSql![1]).toContain('<span class="sql-token sql-string">&#39;Alice&#39;</span>');
+    expect(highlightedSql![1]).toContain('<span class="sql-token sql-number">10</span>');
+    expect(highlightedSql![1]).toContain('<span class="sql-token sql-comment">-- active only</span>');
+    expect(html).toContain("document.getElementById('sqlDetailSql').innerHTML = highlightedSql ? highlightedSql.innerHTML : '';");
   });
 
   it('tdに明示的な文字色(var(--text-primary))が設定されている(ダークモードで黒文字が読めなくなる回帰の防止)', () => {
