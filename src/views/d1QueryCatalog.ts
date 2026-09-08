@@ -322,7 +322,8 @@ export function getD1QueryCatalogPage(
       flex-wrap: wrap;
       align-items: center;
       justify-content: flex-start;
-      gap: 8px;
+      column-gap: 8px;
+      row-gap: 1px;
     }
     .table-filter-badge {
       border: 0;
@@ -350,11 +351,11 @@ export function getD1QueryCatalogPage(
       border: 2px solid var(--source-color); border-radius: 0 999px 999px 0; font-weight: 700;
     }
     .table-column-count {
-      width: 0; height: 0; margin-left: 5px; border-top: 14px solid transparent;
-      border-bottom: 14px solid transparent; border-left: 22px solid var(--source-color);
-      color: transparent; font-size: 0; position: relative;
+      min-width: 22px; min-height: 22px; margin-left: 3px; padding: 1px 4px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 999px; background: var(--source-color); color: white;
+      font: 8px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .table-column-count::after { content: attr(aria-label); position: absolute; width: max-content; left: 7px; top: -8px; padding: 1px; color: white; font: 8px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     select#verbFilter {
       width: 100%;
       max-width: 320px;

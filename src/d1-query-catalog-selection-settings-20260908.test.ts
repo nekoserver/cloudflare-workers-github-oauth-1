@@ -33,7 +33,7 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toContain("nextSort === 'columns' ? 'data-column-count' : 'data-occurrence-count'");
   });
 
-  it('テーブルバッジを丸・角丸・三角の構成にし、呼び出し元ファイル由来の色を付ける', () => {
+  it('テーブルバッジを丸・角丸の構成にし、呼び出し元ファイル由来の色を付ける', () => {
     const html = getD1QueryCatalogPage('u', [
       row('from_index', 'A'),
       { ...row('from_helper', 'B'), source_file: 'src/utils/helper.ts' },
@@ -47,7 +47,10 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(indexBadge.match(/--source-color:([^";]+)/)?.[1]).not.toBe(helperBadge.match(/--source-color:([^";]+)/)?.[1]);
     expect(html).toContain('.table-badge-count {');
     expect(html).toContain('border-radius: 50%');
-    expect(html).toContain('border-left: 22px solid var(--source-color)');
+    expect(html).toContain('.table-column-count {');
+    expect(html).not.toContain('border-left: 22px solid var(--source-color)');
+    expect(html).not.toContain('.table-column-count::after');
+    expect(html).toMatch(/\.table-badge-list\s*\{[^}]*row-gap:\s*1px/);
   });
 
   it('表内SQLのキーワード・文字列・数値・パラメータを安全にハイライトする', () => {
