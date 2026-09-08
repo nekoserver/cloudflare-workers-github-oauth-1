@@ -9,6 +9,17 @@ const row = (table_name: string, query_name: string): D1QueryCatalogRow => ({
 });
 
 describe('D1クエリカタログのテーブル選択設定', () => {
+  it('横断検索とテーブル名選択を最上段のツールバーに並べ、説明見出しを表示しない', () => {
+    const html = getD1QueryCatalogPage('u', [row('a', 'A')]);
+    const toolbar = html.match(/<div class="catalog-filter-toolbar">([\s\S]*?)<\/div>\s*<div class="filter-panel"/)?.[1] ?? '';
+
+    expect(toolbar).toContain('id="verbFilter"');
+    expect(toolbar).toContain('id="tablePanelToggle"');
+    expect(toolbar.indexOf('id="verbFilter"')).toBeLessThan(toolbar.indexOf('id="tablePanelToggle"'));
+    expect(html).not.toContain('<div class="title">D1クエリカタログ</div>');
+    expect(html).not.toContain('db.prepare()</code> 呼び出しから合成した sqlc 風アノテーション一覧');
+  });
+
   it('単一選択をデフォルトとし、Cookie由来の複数選択も描画できる', () => {
     expect(getD1QueryCatalogPage('u', [row('a', 'A')])).toContain("var tableSelectionMode = 'single'");
     expect(getD1QueryCatalogPage('u', [row('a', 'A')], 'count', {}, false)).toContain("var tableSelectionMode = 'multiple'");
