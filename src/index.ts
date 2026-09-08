@@ -10806,6 +10806,11 @@ app.get('/sqlc-wasm', authMiddleware, async (c) => {
 
 app.get('/d1-query-catalog', authMiddleware, async (c) => {
   const user = c.get('user');
+  // SQL詳細ダイアログでsqlc WASMを遅延実行するため、このページだけ許可する。
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
   const db = c.env.DB;
   let rows: D1QueryCatalogRow[] = [];
   if (db) {

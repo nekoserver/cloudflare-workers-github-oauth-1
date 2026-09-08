@@ -20,6 +20,10 @@
  *   (9) 帯に件数(data-count)が無い、または並び替えボタンが無くソートできない
  *   (10) 「コマンド」と「SQL」の間に「最終コミット日時」列が無い、または
  *        YMD HMS形式で表示されない
+ *   (11) SQLセルをタップしても詳細ダイアログが開けず、SQL全文やカタログ情報を確認できない
+ *   (12) SQL詳細用WASMがページ初期表示から読み込まれる、または行ごとに再初期化される
+ *   (13) SQL全文を未エスケープで埋め込みXSSが起きる、またはWASM実行用CSPが不足する
+ *   (14) 詳細ダイアログが既存モーダルの背面に入り、キーボードで開閉・復帰できない
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -326,6 +330,48 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('<td class="commit-at-cell"><code>(なし)</code></td>');
   });
 
+  it('SQLセルは詳細ダイアログを開くbuttonで、SQL全文を安全な非表示要素に保持する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'GetA', command: 'one', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 12, sql_text: "SELECT '<script>alert(1)</script>'\nFROM foo", migration_file: '0001.sql', last_commit_hash: null, last_commit_at: null },
+    ]);
+    expect(html).toContain('class="sql-detail-button"');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain('aria-controls="sqlDetailDialog"');
+    expect(html).toContain('class="query-detail-sql" hidden');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).toContain('FROM foo</span>');
+    expect(html).not.toContain("SELECT '<script>alert(1)</script>'");
+  });
+
+  it('最上位SQL詳細dialogにカタログ情報・WASM状態・コピー操作がある', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('<dialog id="sqlDetailDialog"');
+    expect(html).toContain('id="sqlDetailTitle"');
+    expect(html).toContain('id="sqlDetailWasmStatus"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('id="sqlDetailResult"');
+    expect(html).toContain('id="copySqlButton"');
+    expect(html).toContain('id="copySqlcButton"');
+    expect(html).toContain('id="closeSqlDetailButton"');
+  });
+
+  it('SQL詳細はsqlc WASMを遅延ロードし、初期化Promiseを再利用する', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain("import('/wasm/sqlc-wasm_exec.js')");
+    expect(html).toContain("fetch('/wasm/sqlc.wasm')");
+    expect(html).toContain('var sqlcWasmPromise = null');
+    expect(html).toContain('function ensureSqlcWasm()');
+    expect(html).toContain('sqlcParseQueryAnnotations(sqlcInput)');
+  });
+
+  it('SQL詳細dialogを開く前にgetNextZを適用し、静的モーダル一覧へ登録する', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('function getNextZ()');
+    expect(html).toContain('sqlDetailDialog: 1000');
+    expect(html).toContain('sqlDetailDialog.style.zIndex = String(getNextZ())');
+    expect(html).toContain('sqlDetailDialog.showModal()');
+  });
+
   it('initialSort未指定時は既定で件数の多い順(count)が選択状態になる', () => {
     const html = getD1QueryCatalogPage('tester', []);
     expect(html).toMatch(/data-sort="count" aria-pressed="true"/);
@@ -370,6 +416,16 @@ describe('GET /d1-query-catalog', () => {
 });
 
 describe('GET /d1-query-catalog: 並び替え設定(user_preferences)の反映', () => {
+  it('ページ限定CSPでWASM実行を許可する', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/d1-query-catalog',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    expect(res.headers.get('Content-Security-Policy')).toContain("'wasm-unsafe-eval'");
+  });
+
   it('user_preferencesにname設定があればテーブル名順が初期選択される', async () => {
     const authHeader = await makeAuthHeader();
     const res = await app.request(

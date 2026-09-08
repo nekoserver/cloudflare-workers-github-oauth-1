@@ -72,14 +72,15 @@ function renderRow(row: D1QueryCatalogRow): string {
   const migration = row.migration_file ? escapeHtml(row.migration_file) : '(なし)';
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
+  const table = row.table_name ? escapeHtml(row.table_name) : '(不明)';
   return `<tr data-verb="${verb}">
-    <td>${escapeHtml(row.query_name)}</td>
-    <td>:${escapeHtml(row.command)} ${badge}</td>
+    <td><span class="query-detail-name">${escapeHtml(row.query_name)}</span></td>
+    <td>:<span class="query-detail-command">${escapeHtml(row.command)}</span> ${badge}<span class="query-detail-confirmed" hidden>${row.command_confirmed ? '確定' : '推測'}</span></td>
     <td class="commit-at-cell"><code>${commitAt}</code></td>
-    <td class="sql-cell"><code>${sqlOneLine}</code></td>
-    <td>${migration}</td>
+    <td class="sql-cell"><button type="button" class="sql-detail-button" aria-haspopup="dialog" aria-controls="sqlDetailDialog" aria-label="${escapeHtml(row.query_name)}のSQL詳細を表示"><code>${sqlOneLine}</code></button><span class="query-detail-sql" hidden>${escapeHtml(row.sql_text)}</span></td>
+    <td><span class="query-detail-migration">${migration}</span></td>
     <td>${commit}</td>
-    <td>${row.source_file}:${row.source_line}</td>
+    <td><span class="query-detail-source">${escapeHtml(row.source_file)}:${row.source_line}</span><span class="query-detail-table" hidden>${table}</span><span class="query-detail-commit-at" hidden>${commitAt}</span></td>
   </tr>`;
 }
 
@@ -323,6 +324,8 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     td { color: var(--text-primary); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-cell { white-space: nowrap; }
+    .sql-detail-button { appearance: none; border: 0; background: transparent; color: inherit; padding: 0; cursor: pointer; text-align: left; }
+    .sql-detail-button:hover code, .sql-detail-button:focus-visible code { color: var(--accent-color); text-decoration: underline; }
     .commit-at-cell { white-space: nowrap; }
     .badge {
       font-size: 11px;
@@ -333,6 +336,25 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     .badge-confirmed { background: #dcfce7; color: #166534; }
     .badge-inferred { background: #fef3c7; color: #92400e; }
     .empty-state { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
+    .sql-detail-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); margin: auto; padding: 0; border: 1px solid var(--border-color); border-radius: 14px; background: var(--card-bg); color: var(--text-primary); box-shadow: 0 18px 50px var(--card-shadow); }
+    .sql-detail-dialog::backdrop { background: var(--modal-overlay); }
+    .sql-detail-header, .sql-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; background: var(--bg-secondary); }
+    .sql-detail-header { border-bottom: 1px solid var(--border-color); }
+    .sql-detail-footer { border-top: 1px solid var(--border-color); justify-content: flex-end; flex-wrap: wrap; }
+    .sql-detail-title { font-size: 18px; }
+    .sql-detail-body { padding: 20px; overflow-y: auto; }
+    .sql-detail-meta { display: grid; grid-template-columns: 150px 1fr; gap: 8px 12px; margin-bottom: 18px; font-size: 13px; }
+    .sql-detail-meta dt { color: var(--text-muted); }
+    .sql-detail-meta dd { color: var(--text-primary); word-break: break-word; }
+    .sql-detail-section { margin-top: 16px; }
+    .sql-detail-section-title { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .sql-detail-code { margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--code-bg); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font: 12px/1.6 'Monaco', 'Courier New', monospace; }
+    .sql-detail-status { font-size: 13px; color: var(--text-muted); }
+    .sql-detail-status.ready { color: var(--success-color); }
+    .sql-detail-status.error { color: var(--danger-color); }
+    .sql-detail-action, .sql-detail-close { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-family: inherit; }
+    .sql-detail-action:hover, .sql-detail-close:hover { border-color: var(--accent-color); }
+    @media (max-width: 600px) { .sql-detail-meta { grid-template-columns: 1fr; gap: 2px; } .sql-detail-meta dd { margin-bottom: 8px; } }
   </style>
 </head>
 <body>
@@ -399,6 +421,36 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
     </div>
   </div>
 
+  <dialog id="sqlDetailDialog" class="sql-detail-dialog" aria-labelledby="sqlDetailTitle">
+    <div class="sql-detail-header">
+      <h2 class="sql-detail-title" id="sqlDetailTitle">SQL詳細・sqlc/WASM軽量チェック</h2>
+      <button type="button" class="sql-detail-close" id="closeSqlDetailButton" aria-label="SQL詳細を閉じる">閉じる</button>
+    </div>
+    <div class="sql-detail-body">
+      <dl class="sql-detail-meta">
+        <dt>クエリ名</dt><dd id="sqlDetailName"></dd>
+        <dt>コマンド</dt><dd id="sqlDetailCommand"></dd>
+        <dt>テーブル</dt><dd id="sqlDetailTable"></dd>
+        <dt>ソース位置</dt><dd id="sqlDetailSource"></dd>
+        <dt>migration</dt><dd id="sqlDetailMigration"></dd>
+        <dt>最終コミット日時</dt><dd id="sqlDetailCommitAt"></dd>
+      </dl>
+      <div class="sql-detail-section">
+        <div class="sql-detail-section-title">SQL全文</div>
+        <pre class="sql-detail-code" id="sqlDetailSql"></pre>
+      </div>
+      <div class="sql-detail-section">
+        <div class="sql-detail-section-title">sqlcアノテーション検証</div>
+        <div class="sql-detail-status" id="sqlDetailWasmStatus" aria-live="polite">SQLを選択すると検証します。</div>
+        <pre class="sql-detail-code" id="sqlDetailResult" hidden></pre>
+      </div>
+    </div>
+    <div class="sql-detail-footer">
+      <button type="button" class="sql-detail-action" id="copySqlButton">SQLをコピー</button>
+      <button type="button" class="sql-detail-action" id="copySqlcButton">sqlc形式をコピー</button>
+    </div>
+  </dialog>
+
   <script type="module">
     ${getThemeToggleScript()}
 
@@ -413,6 +465,115 @@ export function getD1QueryCatalogPage(username: string, rows: D1QueryCatalogRow[
         menu.classList.remove('open');
       }
     });
+
+    var sqlDetailDialog = document.getElementById('sqlDetailDialog');
+    var sqlDetailWasmStatus = document.getElementById('sqlDetailWasmStatus');
+    var sqlDetailResult = document.getElementById('sqlDetailResult');
+    var currentSql = '';
+    var currentSqlcInput = '';
+    var lastSqlDetailTrigger = null;
+    var sqlcWasmPromise = null;
+    var sqlDetailRequestId = 0;
+
+    function getNextZ() {
+      var staticZDefaults = { sqlDetailDialog: 1000 };
+      var max = 900;
+      document.querySelectorAll('*').forEach(function(el) {
+        if (window.getComputedStyle(el).position !== 'fixed') return;
+        var z = parseInt(window.getComputedStyle(el).zIndex, 10);
+        if (!isNaN(z) && z > max) max = z;
+      });
+      Object.keys(staticZDefaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        var z = el ? parseInt(el.style.zIndex, 10) : NaN;
+        if (!isNaN(z) && z > max) max = z;
+        if (isNaN(z) && staticZDefaults[id] > max) max = staticZDefaults[id];
+      });
+      return max + 100;
+    }
+
+    function ensureSqlcWasm() {
+      if (typeof globalThis.sqlcParseQueryAnnotations === 'function') return Promise.resolve();
+      if (!sqlcWasmPromise) {
+        sqlcWasmPromise = (async function() {
+          await import('/wasm/sqlc-wasm_exec.js');
+          var go = new Go();
+          var result = await WebAssembly.instantiateStreaming(fetch('/wasm/sqlc.wasm'), go.importObject);
+          go.run(result.instance);
+          if (typeof globalThis.sqlcParseQueryAnnotations !== 'function') {
+            throw new Error('sqlcParseQueryAnnotationsが登録されませんでした');
+          }
+        })().catch(function(error) {
+          sqlcWasmPromise = null;
+          throw error;
+        });
+      }
+      return sqlcWasmPromise;
+    }
+
+    function rowText(row, selector) {
+      var el = row.querySelector(selector);
+      return el ? (el.textContent || '') : '';
+    }
+
+    async function openSqlDetail(button) {
+      var row = button.closest('tr');
+      if (!row) return;
+      lastSqlDetailTrigger = button;
+      currentSql = rowText(row, '.query-detail-sql');
+      var queryName = rowText(row, '.query-detail-name');
+      var command = rowText(row, '.query-detail-command');
+      currentSqlcInput = '-- name: ' + queryName + ' :' + command + '\\n' + currentSql;
+      var sqlcInput = currentSqlcInput;
+      var requestId = ++sqlDetailRequestId;
+      document.getElementById('sqlDetailName').textContent = queryName;
+      document.getElementById('sqlDetailCommand').textContent = ':' + command + ' (' + rowText(row, '.query-detail-confirmed') + ')';
+      document.getElementById('sqlDetailTable').textContent = rowText(row, '.query-detail-table');
+      document.getElementById('sqlDetailSource').textContent = rowText(row, '.query-detail-source');
+      document.getElementById('sqlDetailMigration').textContent = rowText(row, '.query-detail-migration');
+      document.getElementById('sqlDetailCommitAt').textContent = rowText(row, '.query-detail-commit-at');
+      document.getElementById('sqlDetailSql').textContent = currentSql;
+      sqlDetailResult.hidden = true;
+      sqlDetailResult.textContent = '';
+      sqlDetailWasmStatus.textContent = 'sqlc/WASMを読み込み、アノテーションを検証しています…';
+      sqlDetailWasmStatus.className = 'sql-detail-status';
+      sqlDetailDialog.style.zIndex = String(getNextZ());
+      if (!sqlDetailDialog.open) sqlDetailDialog.showModal();
+      try {
+        await ensureSqlcWasm();
+        if (requestId !== sqlDetailRequestId) return;
+        var markdown = globalThis.sqlcParseQueryAnnotations(sqlcInput);
+        sqlDetailResult.textContent = markdown;
+        sqlDetailResult.hidden = false;
+        sqlDetailWasmStatus.textContent = markdown.indexOf('エラー:') === -1 ? '検証完了: アノテーションエラーはありません。' : '検証完了: エラーがあります。';
+        sqlDetailWasmStatus.className = markdown.indexOf('エラー:') === -1 ? 'sql-detail-status ready' : 'sql-detail-status error';
+      } catch (error) {
+        if (requestId !== sqlDetailRequestId) return;
+        sqlDetailWasmStatus.textContent = 'sqlc/WASMの読み込みまたは検証に失敗しました: ' + (error && error.message ? error.message : String(error));
+        sqlDetailWasmStatus.className = 'sql-detail-status error';
+      }
+    }
+
+    document.querySelectorAll('.sql-detail-button').forEach(function(button) {
+      button.addEventListener('click', function() { openSqlDetail(button); });
+    });
+    document.getElementById('closeSqlDetailButton').addEventListener('click', function() { sqlDetailDialog.close(); });
+    sqlDetailDialog.addEventListener('close', function() {
+      if (lastSqlDetailTrigger) lastSqlDetailTrigger.focus();
+    });
+
+    async function copySqlDetail(text, label) {
+      try {
+        await navigator.clipboard.writeText(text);
+        sqlDetailWasmStatus.textContent = label + 'をコピーしました。';
+        sqlDetailWasmStatus.className = 'sql-detail-status ready';
+      } catch (error) {
+        sqlDetailWasmStatus.textContent = label + 'のコピーに失敗しました: ' + (error && error.message ? error.message : String(error));
+        sqlDetailWasmStatus.className = 'sql-detail-status error';
+      }
+    }
+    document.getElementById('copySqlButton').addEventListener('click', function() { copySqlDetail(currentSql, 'SQL'); });
+    document.getElementById('copySqlcButton').addEventListener('click', function() { copySqlDetail(currentSqlcInput, 'sqlc形式'); });
 
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');
