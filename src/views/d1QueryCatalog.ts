@@ -189,7 +189,6 @@ export function getD1QueryCatalogPage(
 ): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
-  const reportUrl = `https://github.com/${OWNER_REPO}/blob/main/REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md`;
   const verbOptionsHtml = verbCounts(rows)
     .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
     .join('\n');
@@ -274,18 +273,17 @@ export function getD1QueryCatalogPage(
     .dropdown-item:hover { background: var(--bg-secondary); }
     .dropdown-item.logout { color: #e53e3e; }
     .dropdown-item.switch-account { color: var(--accent-color, #667eea); }
-    .container { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 8px 20px 20px; }
     .card {
       background: var(--card-bg);
       border-radius: 16px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-      padding: 32px;
+      padding: 12px 16px 16px;
     }
-    .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-    .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 16px; }
-    .subtitle a { color: var(--accent-color, #667eea); }
-    .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+    .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .catalog-filter-toolbar { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; margin-bottom: 8px; }
+    .verb-filter-control { flex: 0 1 320px; min-width: 0; }
     .panel-toggle {
       display: flex;
       align-items: center;
@@ -299,7 +297,7 @@ export function getD1QueryCatalogPage(
       font-size: 14px;
       font-family: inherit;
       cursor: pointer;
-      margin-bottom: 8px;
+      margin-top: 20px;
       text-align: left;
     }
     .panel-toggle:hover { border-color: var(--accent-color); }
@@ -367,10 +365,10 @@ export function getD1QueryCatalogPage(
       color: var(--text-primary);
       font-size: 13px;
       font-family: 'Monaco', 'Courier New', monospace;
-      margin-bottom: 16px;
+      margin-bottom: 0;
     }
     select#verbFilter option { padding: 4px 6px; }
-    .filter-hint { font-size: 12px; color: var(--text-muted); margin: -4px 0 12px; }
+    .filter-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
     .band-sort-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .sort-btn {
       padding: 4px 10px;
@@ -461,7 +459,13 @@ export function getD1QueryCatalogPage(
     .sql-detail-status.error { color: var(--danger-color); }
     .sql-detail-action, .sql-detail-close { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-family: inherit; }
     .sql-detail-action:hover, .sql-detail-close:hover { border-color: var(--accent-color); }
-    @media (max-width: 600px) { .sql-detail-meta { grid-template-columns: 1fr; gap: 2px; } .sql-detail-meta dd { margin-bottom: 8px; } }
+    @media (max-width: 600px) {
+      .catalog-filter-toolbar { flex-wrap: wrap; gap: 4px 8px; }
+      .verb-filter-control { flex-basis: calc(100% - 8px); }
+      .panel-toggle { margin-top: 0; }
+      .sql-detail-meta { grid-template-columns: 1fr; gap: 2px; }
+      .sql-detail-meta dd { margin-bottom: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -492,19 +496,18 @@ export function getD1QueryCatalogPage(
 
   <div class="container">
     <div class="card">
-      <div class="title">D1クエリカタログ</div>
-      <div class="subtitle">
-        <code>src/index.ts</code> の <code>db.prepare()</code> 呼び出しから合成した sqlc 風アノテーション一覧。
-        migrationファイル・変更コミットとの詳細な突き合わせは
-        <a href="${reportUrl}" target="_blank" rel="noopener noreferrer">REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md</a>
-        を参照。
+      <div class="catalog-filter-toolbar">
+        <div class="verb-filter-control">
+          <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
+          <select id="verbFilter" multiple size="6">
+            ${verbOptionsHtml}
+          </select>
+        </div>
+        <button type="button" class="panel-toggle" id="tablePanelToggle" aria-expanded="false" aria-pressed="false" aria-controls="tablePanel">
+          <span>テーブルで絞り込み</span>
+          <span class="panel-toggle-arrow">▾</span>
+        </button>
       </div>
-      <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
-
-      <button type="button" class="panel-toggle" id="tablePanelToggle" aria-expanded="false" aria-pressed="false" aria-controls="tablePanel">
-        <span>テーブルで絞り込み</span>
-        <span class="panel-toggle-arrow">▾</span>
-      </button>
       <div class="filter-panel" id="tablePanel" hidden>
         <div class="filter-panel-header">
           <div class="filter-label">出現回数（テーブル名・カラム数）— <span id="tableSelectionRule">${singleTableSelection ? '1つのみ選択可（デフォルト）' : '複数選択可'}</span></div>
@@ -518,11 +521,8 @@ export function getD1QueryCatalogPage(
         </div>
       </div>
 
-      <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
-      <select id="verbFilter" multiple size="6">
-        ${verbOptionsHtml}
-      </select>
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
+      <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
 
       <div class="band-sort-controls">
         <span class="filter-label">並び替え:</span>
