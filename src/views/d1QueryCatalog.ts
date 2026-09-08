@@ -131,7 +131,7 @@ function renderRow(row: D1QueryCatalogRow): string {
     <td><span class="query-detail-name">${escapeHtml(row.query_name)}</span></td>
     <td>:<span class="query-detail-command">${escapeHtml(row.command)}</span> ${badge}<span class="query-detail-confirmed" hidden>${row.command_confirmed ? '確定' : '推測'}</span></td>
     <td class="commit-at-cell"><code>${commitAt}</code></td>
-    <td class="sql-cell"><button type="button" class="sql-detail-button" aria-haspopup="dialog" aria-controls="sqlDetailDialog" aria-label="${escapeHtml(row.query_name)}のSQL詳細を表示"><code>${sqlOneLine}</code></button><span class="query-detail-sql" hidden>${escapeHtml(row.sql_text)}</span></td>
+    <td class="sql-cell"><button type="button" class="sql-detail-button" aria-haspopup="dialog" aria-controls="sqlDetailDialog" aria-label="${escapeHtml(row.query_name)}のSQL詳細を表示"><code>${sqlOneLine}</code></button><span class="query-detail-sql" hidden>${escapeHtml(row.sql_text)}</span><span class="query-detail-sql-highlighted" hidden>${highlightSql(row.sql_text)}</span></td>
     <td><span class="query-detail-migration">${migration}</span></td>
     <td>${commit}</td>
     <td><span class="query-detail-source">${escapeHtml(row.source_file)}:${row.source_line}</span><span class="query-detail-table" hidden>${table}</span><span class="query-detail-commit-at" hidden>${commitAt}</span></td>
@@ -644,7 +644,8 @@ export function getD1QueryCatalogPage(
       document.getElementById('sqlDetailSource').textContent = rowText(row, '.query-detail-source');
       document.getElementById('sqlDetailMigration').textContent = rowText(row, '.query-detail-migration');
       document.getElementById('sqlDetailCommitAt').textContent = rowText(row, '.query-detail-commit-at');
-      document.getElementById('sqlDetailSql').textContent = currentSql;
+      var highlightedSql = row.querySelector('.query-detail-sql-highlighted');
+      document.getElementById('sqlDetailSql').innerHTML = highlightedSql ? highlightedSql.innerHTML : '';
       sqlDetailResult.hidden = true;
       sqlDetailResult.textContent = '';
       sqlDetailWasmStatus.textContent = 'sqlc/WASMを読み込み、アノテーションを検証しています…';
