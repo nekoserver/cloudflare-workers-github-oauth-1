@@ -312,7 +312,9 @@ export function getD1QueryCatalogPage(
     }
     .filter-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .filter-panel-header .filter-label { margin-bottom: 0; }
-    .panel-sort-toggle { flex: 0 0 auto; padding: 4px 9px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font-size: 12px; }
+    .filter-panel-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+    .table-filter-clear, .panel-sort-toggle { padding: 4px 9px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font-size: 12px; }
+    .table-filter-clear:hover, .table-filter-clear:focus-visible, .panel-sort-toggle:hover, .panel-sort-toggle:focus-visible { border-color: var(--accent-color); }
     .table-badge-list {
       display: flex;
       flex-wrap: wrap;
@@ -323,8 +325,8 @@ export function getD1QueryCatalogPage(
     .table-filter-badge {
       border: 0;
       background: transparent;
-      padding: 2px 0;
-      font-size: 13px;
+      padding: 1px;
+      font-size: 11px;
       color: var(--text-primary);
       font-family: 'Monaco', 'Courier New', monospace;
       cursor: pointer;
@@ -338,10 +340,10 @@ export function getD1QueryCatalogPage(
     .table-badge-count {
       width: 29px; height: 29px; border: 2px solid var(--source-color); border-radius: 50%;
       display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-      background: var(--card-bg); color: var(--source-color); font-weight: 800; z-index: 1;
+      padding: 1px; background: var(--source-color); color: white; font-weight: 800; z-index: 1;
     }
     .table-badge-name {
-      min-height: 29px; display: inline-flex; align-items: center; padding: 4px 12px 4px 15px;
+      min-height: 29px; display: inline-flex; align-items: center; padding: 1px;
       margin-left: -5px; background: color-mix(in srgb, var(--source-color) 14%, var(--card-bg));
       border: 2px solid var(--source-color); border-radius: 0 999px 999px 0; font-weight: 700;
     }
@@ -350,7 +352,7 @@ export function getD1QueryCatalogPage(
       border-bottom: 14px solid transparent; border-left: 22px solid var(--source-color);
       color: transparent; font-size: 0; position: relative;
     }
-    .table-column-count::after { content: attr(aria-label); position: absolute; width: max-content; left: 7px; top: -8px; color: var(--text-muted); font: 10px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .table-column-count::after { content: attr(aria-label); position: absolute; width: max-content; left: 7px; top: -8px; padding: 1px; color: white; font: 8px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     select#verbFilter {
       width: 100%;
       max-width: 320px;
@@ -502,7 +504,10 @@ export function getD1QueryCatalogPage(
       <div class="filter-panel" id="tablePanel" hidden>
         <div class="filter-panel-header">
           <div class="filter-label">出現回数（テーブル名・カラム数）— <span id="tableSelectionRule">${singleTableSelection ? '1つのみ選択可（デフォルト）' : '複数選択可'}</span></div>
-          <button type="button" class="panel-sort-toggle" id="tableBadgeSortToggle" data-sort="occurrence" aria-label="テーブルの並び替え基準を切り替える">出現回数 / カラム数</button>
+          <div class="filter-panel-actions">
+            <button type="button" class="table-filter-clear" id="tableFilterClear">すべて解除</button>
+            <button type="button" class="panel-sort-toggle" id="tableBadgeSortToggle" data-sort="occurrence" aria-label="テーブルの並び替え基準を切り替える">出現回数 / カラム数</button>
+          </div>
         </div>
         <div class="table-badge-list">
           ${tableBadgesHtml}
@@ -702,12 +707,17 @@ export function getD1QueryCatalogPage(
         var wasPressed = badge.getAttribute('aria-pressed') === 'true';
         if (tableSelectionMode === 'single') {
           tableBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });
-          badge.setAttribute('aria-pressed', 'true');
+          badge.setAttribute('aria-pressed', wasPressed ? 'false' : 'true');
         } else {
           badge.setAttribute('aria-pressed', wasPressed ? 'false' : 'true');
         }
         applyFilters();
       });
+    });
+
+    document.getElementById('tableFilterClear').addEventListener('click', function() {
+      tableBadges.forEach(function(badge) { badge.setAttribute('aria-pressed', 'false'); });
+      applyFilters();
     });
 
     var tableBadgeSortToggle = document.getElementById('tableBadgeSortToggle');

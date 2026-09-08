@@ -253,17 +253,35 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('<span class="band-toggle-arrow">▾</span>');
   });
 
-  it('テーブルバッジは単一選択で、新しく押すたび以前の選択を解除して即時フィルタする', () => {
+  it('テーブルバッジは単一選択で、新しく押すたび以前の選択を解除し、再タップなら選択自体を解除する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'one', command_confirmed: 1, table_name: 'bar', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT 1 FROM bar', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
     expect(html).toContain("tableBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });");
-    expect(html).toContain("badge.setAttribute('aria-pressed', 'true');");
+    expect(html).toContain("badge.setAttribute('aria-pressed', wasPressed ? 'false' : 'true');");
     expect(html).toContain('applyFilters();');
     expect(html).toContain("var selectedBadge = tableBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });");
     expect(html).toContain("var tableMatches = (selectedTable === null || selectedTable === table);");
     expect(html).not.toContain('tableFilterAll');
+  });
+
+  it('並び替えトグルの左に「すべて解除」を置き、選択バッジと画面下の絞り込みを解除する', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    const clearIdx = html.indexOf('id="tableFilterClear"');
+    const toggleIdx = html.indexOf('id="tableBadgeSortToggle"');
+    expect(clearIdx).toBeGreaterThan(-1);
+    expect(toggleIdx).toBeGreaterThan(clearIdx);
+    expect(html).toContain("tableBadges.forEach(function(badge) { badge.setAttribute('aria-pressed', 'false'); });");
+    expect(html.slice(html.indexOf("document.getElementById('tableFilterClear')"))).toContain('applyFilters();');
+  });
+
+  it('テーブルバッジの余白と文字を小さくし、件数・カラム数を白文字で表示する', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/\.table-filter-badge\s*\{[^}]*padding:\s*1px;[^}]*font-size:\s*11px;/);
+    expect(html).toMatch(/\.table-badge-count\s*\{[^}]*padding:\s*1px;[^}]*color:\s*white;/);
+    expect(html).toMatch(/\.table-badge-name\s*\{[^}]*padding:\s*1px;/);
+    expect(html).toMatch(/\.table-column-count::after\s*\{[^}]*padding:\s*1px;[^}]*color:\s*white;[^}]*font:\s*8px/);
   });
 
   it('選択パネルはトグル直下で横幅いっぱいになり、バッジを左詰めで折り返す', () => {
