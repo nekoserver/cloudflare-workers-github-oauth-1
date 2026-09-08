@@ -78,6 +78,13 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('D1クエリカタログ');
   });
 
+  it('最上部の帯は最小の44px高でスクロール時も固定表示される', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toMatch(/\.navbar\s*\{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*200;/s);
+    expect(html).toMatch(/\.navbar\s*\{[^}]*padding:\s*0 20px;[^}]*height:\s*44px;/s);
+    expect(html).toMatch(/\.user-icon\s*\{[^}]*width:\s*32px;\s*height:\s*32px;/s);
+  });
+
   it('DBクエリが失敗しても500にならず空一覧で表示される', async () => {
     const authHeader = await makeAuthHeader();
     const failingDb = {
