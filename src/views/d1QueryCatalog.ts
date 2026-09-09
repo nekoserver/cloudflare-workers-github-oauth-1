@@ -247,6 +247,7 @@ export function getD1QueryCatalogPage(
   columnCounts: Record<string, number> = {},
   singleTableSelection = true,
   tableClassifications: Record<string, D1QueryCatalogTableClassification> = {},
+  expandCategoryTables = false,
 ): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
@@ -1045,6 +1046,7 @@ export function getD1QueryCatalogPage(
     });
 
     var tableSelectionMode = '${tableSelectionMode}';
+    var expandCategoryTables = ${expandCategoryTables ? 'true' : 'false'};
     // 既定は単一選択。設定ページで複数選択へ変更されている場合だけ、
     // 押したバッジそれぞれの選択状態を保持する。
     tableBadges.forEach(function(badge) {
@@ -1109,7 +1111,10 @@ export function getD1QueryCatalogPage(
       var selectedTable = selectedBadge ? selectedBadge.getAttribute('data-table') : null;
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
         .map(function(o) { return o.value; });
-      var filtersActive = selectedGroup !== null || selectedTables.length > 0 || selectedVerbs.length > 0;
+      // FK分類だけを選んだときは、既定では該当テーブルの帯を一括展開しない。
+      // 従来の動作が必要な場合のみ設定ページのCookie設定で有効化する。
+      var shouldAutoExpand = selectedTables.length > 0 || selectedVerbs.length > 0
+        || (expandCategoryTables && selectedGroup !== null);
 
       document.querySelectorAll('.table-band').forEach(function(band) {
         var table = band.getAttribute('data-table') || '';
@@ -1128,9 +1133,9 @@ export function getD1QueryCatalogPage(
           if (visible) anyRowVisible = true;
         });
         band.hidden = !anyRowVisible;
-        // フィルタで絞り込んだ結果を確認するたびに手動で開く手間を省くため、
-        // 何らかの条件を選択して該当した帯だけは自動的に開く。
-        if (filtersActive && anyRowVisible) {
+        // テーブル・SQL種別の選択時、または明示的に許可されたFK分類選択時だけ、
+        // 該当する帯を自動的に開く。
+        if (shouldAutoExpand && anyRowVisible) {
           setBandExpanded(band, true);
         }
       });

@@ -189,4 +189,24 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toContain("fetch('/api/settings/d1-query-catalog-single-table'");
     expect(html).toContain('id="d1QueryCatalogSingleTableCheckbox"');
   });
+
+  it('FK分類の選択では既定でテーブルを自動展開せず、Cookie由来の設定で有効化できる', () => {
+    const defaultHtml = getD1QueryCatalogPage('u', [row('auth_sessions', 'A')]);
+    const enabledHtml = getD1QueryCatalogPage('u', [row('auth_sessions', 'A')], 'count', {}, true, {}, true);
+
+    expect(defaultHtml).toContain('var expandCategoryTables = false;');
+    expect(enabledHtml).toContain('var expandCategoryTables = true;');
+    expect(defaultHtml).toContain('|| (expandCategoryTables && selectedGroup !== null);');
+    expect(defaultHtml).toContain('if (shouldAutoExpand && anyRowVisible)');
+  });
+
+  it('設定ページでFK分類選択時のテーブル自動展開を変更でき、デフォルトはOFF', () => {
+    const defaultHtml = getSettingsPage({ username: 'u', issuedAt: '', expiresAt: '', expiresAtTimestamp: 0 });
+    const enabledHtml = getSettingsPage({ username: 'u', issuedAt: '', expiresAt: '', expiresAtTimestamp: 0, d1QueryCatalogExpandCategoryTables: 'on' });
+
+    expect(defaultHtml).toContain('クエリーマネージャ: FK分類カテゴリの選択時に該当テーブルをすべて自動で開く');
+    expect(defaultHtml).toContain('id="d1QueryCatalogExpandCategoryTablesCheckbox" onchange="onD1QueryCatalogExpandCategoryTablesChange()" >');
+    expect(defaultHtml).toContain("fetch('/api/settings/d1-query-catalog-expand-category-tables'");
+    expect(enabledHtml).toContain('id="d1QueryCatalogExpandCategoryTablesCheckbox" onchange="onD1QueryCatalogExpandCategoryTablesChange()" checked>');
+  });
 });

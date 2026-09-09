@@ -144,6 +144,7 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/aichat-prefer-moondream', desc: '画像添付時にmoondreamを優先する設定' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/answer-graph-hide-empty-rows', desc: 'answer-graphの空行非表示設定' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/answer-graph-trail-session-storage', desc: 'answer-graphのパン屑リストのsessionStorage保存設定' },
+  { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/d1-query-catalog-expand-category-tables', desc: 'クエリーマネージャのFK分類選択時のテーブル自動展開設定' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/wasm-modules-view-mode', desc: 'WASMモジュール一覧の表示モード設定(panel/list)' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/email-confirm-login', desc: 'ログイン確認メールゲートON/OFF設定' },
   { group: 'プロフィール・設定', method: 'GET', path: '/api/settings/slack-notify', desc: 'Slack通知設定の現在値取得(CF_AUTH_WEBHOOK_SECRETのBearer認証が必要)' },

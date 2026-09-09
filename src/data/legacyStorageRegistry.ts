@@ -62,6 +62,7 @@ export const LEGACY_STORAGE_ENTRIES: LegacyStorageEntry[] = [
   { key: 'kp_hide_zero_hits', storage: 'cookie', page: '/settings', description: 'ヒット数0件のキーワードを隠す設定' },
   { key: 'kw_panel_no_all_focus', storage: 'cookie', page: '/settings', description: 'キーワードパネルの全選択フォーカス無効化' },
   { key: 'kw_panel_tap_close', storage: 'cookie', page: '/settings', description: 'キーワードパネルのタップ閉じ動作' },
+  { key: 'd1_query_catalog_expand_category_tables', storage: 'cookie', page: '/settings', description: 'クエリーマネージャのFK分類選択時のテーブル自動展開設定' },
   { key: 'kw_pal_', isPrefix: true, storage: 'cookie', page: '/answer-graph', description: 'キーワードごとのパレット選択(動的キー、末尾がキーワード)' },
   { key: 'airline_network_', isPrefix: true, storage: 'cookie', page: '/airline-network', description: '就航先・拠点空港・表示モード等の絞り込み設定(動的キー、airline_network_で始まるものは全て/airline-network由来)' },
   { key: 'airline_network_', isPrefix: true, storage: 'localStorage', page: '/airline-network', description: '拠点空港選択状態などの保存値(動的キー、airline_network_で始まるものは全て/airline-network由来)' },

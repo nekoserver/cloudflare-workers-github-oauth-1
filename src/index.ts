@@ -10894,6 +10894,7 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
     }
   }
   const singleTableSelection = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_single_table') !== 'off';
+  const expandCategoryTables = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_expand_category_tables') === 'on';
   const fkTargets = new Set(Object.values(COLUMN_FK_TARGETS).flatMap(columns => Object.values(columns)));
   const tableClassifications: Record<string, D1QueryCatalogTableClassification> = Object.fromEntries(
     [...new Set(rows.map(row => row.table_name).filter((name): name is string => Boolean(name)))].map(tableName => {
@@ -10908,7 +10909,7 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
       }];
     }),
   );
-  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications));
+  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications, expandCategoryTables));
 });
 
 /**
@@ -12966,6 +12967,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_apis_desc_mode',
     'user_apis_nav_flash',
     'd1_query_catalog_single_table',
+    'd1_query_catalog_expand_category_tables',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -12981,6 +12983,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
   const d1QueryCatalogSingleTable = cookieVals['d1_query_catalog_single_table'] === 'off' ? 'off' : 'on';
+  const d1QueryCatalogExpandCategoryTables = cookieVals['d1_query_catalog_expand_category_tables'] === 'on' ? 'on' : 'off';
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
@@ -13054,6 +13057,7 @@ app.get('/settings', authMiddleware, async (c) => {
     apisDescMode,
     apisNavFlash,
     d1QueryCatalogSingleTable,
+    d1QueryCatalogExpandCategoryTables,
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
@@ -18529,6 +18533,19 @@ app.post('/api/settings/d1-query-catalog-single-table', authMiddleware, async (c
     return c.json({ message: 'D1クエリカタログのテーブル選択設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'D1クエリカタログのテーブル選択設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/d1-query-catalog-expand-category-tables', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `d1_query_catalog_expand_category_tables=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'クエリーマネージャのFK分類テーブル自動展開設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'クエリーマネージャのFK分類テーブル自動展開設定の変更に失敗しました' }, 500);
   }
 });
 
