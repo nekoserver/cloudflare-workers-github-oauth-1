@@ -425,7 +425,12 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('id="postgresSql"');
     expect(html).toContain('id="postgresDifferences"');
     expect(html).toContain('function postgresCandidate(sql)');
-    expect(html).toContain("return '$' + parameterIndex");
+    expect(html).toContain("replacement = '$' + parameterIndex");
+    expect(html).toContain('function renderPostgresSql(sql, ranges)');
+    expect(html).toContain("target.className = 'sql-dialect-difference'");
+    expect(html).toContain("tokenNode.className = 'sql-token sql-' + type");
+    expect(html).toContain('D1クエリから変換された箇所、またはPostgreSQLとの方言差がある箇所です。');
+    expect(html).toContain('renderPostgresSql(candidate.sql, addDialectRanges(candidate.sql, candidate.ranges))');
     expect(html).toContain('INSERT OR IGNORE / REPLACE はPostgreSQLでそのまま使えません。');
     expect(html).toContain('group_concatはPostgreSQLでは通常string_aggへ置き換えます。');
     expect(html).toContain('PostgreSQLとの差分候補を表示しました');

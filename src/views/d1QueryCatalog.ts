@@ -476,6 +476,9 @@ export function getD1QueryCatalogPage(
     .sql-detail-tool:disabled { cursor: wait; opacity: 0.7; }
     .sql-dialect-result { margin-top: 10px; }
     .sql-dialect-result-title { margin: 12px 0 6px; color: var(--text-muted); font-size: 12px; }
+    .sql-dialect-legend { margin: 0 0 6px; color: var(--text-muted); font-size: 12px; }
+    .sql-dialect-difference { padding: 1px 2px; border-radius: 3px; background: #fde047; color: #713f12; box-shadow: inset 0 -2px 0 #e11d48; font-weight: 800; }
+    [data-theme="dark"] .sql-dialect-difference { background: #9a3412; color: #fff7ed; box-shadow: inset 0 -2px 0 #fbbf24; }
     .sql-detail-action, .sql-detail-close { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-family: inherit; }
     .sql-detail-action:hover, .sql-detail-close:hover { border-color: var(--accent-color); }
     @media (max-width: 600px) {
@@ -584,6 +587,7 @@ export function getD1QueryCatalogPage(
         <pre class="sql-detail-code" id="sqlDetailResult" hidden></pre>
         <div class="sql-dialect-result" id="postgresComparison" hidden>
           <div class="sql-dialect-result-title">PostgreSQL向けクエリ候補</div>
+          <p class="sql-dialect-legend"><span class="sql-dialect-difference">強調表示</span> はD1クエリから変換された箇所、またはPostgreSQLとの方言差がある箇所です。</p>
           <pre class="sql-detail-code" id="postgresSql"></pre>
           <div class="sql-dialect-result-title">検出した差分・確認事項</div>
           <ul class="sql-detail-help" id="postgresDifferences"></ul>
@@ -689,11 +693,81 @@ export function getD1QueryCatalogPage(
 
     function postgresCandidate(sql) {
       var parameterIndex = 0;
-      return sql.replace(/\\?(\\d+)?/g, function(_match, explicitIndex) {
-        if (explicitIndex) return '$' + explicitIndex;
-        parameterIndex += 1;
-        return '$' + parameterIndex;
+      var outputDelta = 0;
+      var ranges = [];
+      var candidate = sql.replace(/\\?(\\d+)?/g, function(match, explicitIndex, inputOffset) {
+        var replacement;
+        if (explicitIndex) replacement = '$' + explicitIndex;
+        else {
+          parameterIndex += 1;
+          replacement = '$' + parameterIndex;
+        }
+        var outputOffset = inputOffset + outputDelta;
+        ranges.push({ start: outputOffset, end: outputOffset + replacement.length });
+        outputDelta += replacement.length - match.length;
+        return replacement;
       });
+      return { sql: candidate, ranges: ranges };
+    }
+
+    function addDialectRanges(sql, ranges) {
+      [
+        /\\bINSERT\\s+OR\\s+(?:IGNORE|REPLACE)\\b/gi,
+        /\\b(?:datetime|date|strftime)\\s*\\(/gi,
+        /\\bgroup_concat\\s*\\(/gi,
+        /\\bjson_(?:extract|array_length|each)\\s*\\(/gi,
+        /\\bAUTOINCREMENT\\b/gi,
+        /\\bCOLLATE\\s+NOCASE\\b/gi
+      ].forEach(function(pattern) {
+        var match;
+        while ((match = pattern.exec(sql)) !== null) ranges.push({ start: match.index, end: match.index + match[0].length });
+      });
+      return ranges.sort(function(a, b) { return a.start - b.start; });
+    }
+
+    function appendSqlTokens(container, sql) {
+      var keywords = new Set(${JSON.stringify([...SQL_KEYWORDS])});
+      var pattern = /(--[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/|'(?:''|[^'])*'|"(?:""|[^"])*"|\\x60(?:\\x60\\x60|[^\\x60])*\\x60|\\[(?:\\]\\]|[^\\]])*\\]|\\b\\d+(?:\\.\\d+)?\\b|\\b[A-Za-z_][A-Za-z0-9_]*\\b|[?:@$][A-Za-z0-9_]*)/g;
+      var lastIndex = 0;
+      var match;
+      while ((match = pattern.exec(sql)) !== null) {
+        container.appendChild(document.createTextNode(sql.slice(lastIndex, match.index)));
+        var token = match[0];
+        var type = '';
+        if (token.indexOf('--') === 0 || token.indexOf('/*') === 0) type = 'comment';
+        else if (/^['"\\x60\\[]/.test(token)) type = 'string';
+        else if (/^\\d/.test(token)) type = 'number';
+        else if (/^[?:@$]/.test(token)) type = 'parameter';
+        else if (keywords.has(token.toUpperCase())) type = 'keyword';
+        var tokenNode = document.createElement('span');
+        if (type) tokenNode.className = 'sql-token sql-' + type;
+        tokenNode.textContent = token;
+        container.appendChild(tokenNode);
+        lastIndex = match.index + token.length;
+      }
+      container.appendChild(document.createTextNode(sql.slice(lastIndex)));
+    }
+
+    function renderPostgresSql(sql, ranges) {
+      var container = document.getElementById('postgresSql');
+      container.replaceChildren();
+      var boundaries = [0, sql.length];
+      ranges.forEach(function(range) { boundaries.push(range.start, range.end); });
+      boundaries = Array.from(new Set(boundaries)).sort(function(a, b) { return a - b; });
+      for (var index = 0; index < boundaries.length - 1; index += 1) {
+        var start = boundaries[index];
+        var end = boundaries[index + 1];
+        if (start === end) continue;
+        var differs = ranges.some(function(range) { return start >= range.start && end <= range.end; });
+        var target = container;
+        if (differs) {
+          target = document.createElement('mark');
+          target.className = 'sql-dialect-difference';
+          target.title = 'D1クエリとの差分';
+          container.appendChild(target);
+        }
+        appendSqlTokens(target, sql.slice(start, end));
+      }
     }
 
     function compareWithPostgres() {
@@ -707,7 +781,7 @@ export function getD1QueryCatalogPage(
       if (/\\bAUTOINCREMENT\\b/i.test(currentSql)) differences.push('AUTOINCREMENTはPostgreSQLではIDENTITY列またはsequenceを使用します。');
       if (/\\bCOLLATE\\s+NOCASE\\b/i.test(currentSql)) differences.push('COLLATE NOCASEはPostgreSQLに同名の照合順序がありません。citext、ILIKE、適切なcollationを検討してください。');
       if (!differences.length) differences.push('この軽量比較で既知の表層差は検出されませんでした。型、関数、RETURNING、NULL順序、大小文字、スキーマは実際のPostgreSQLで別途検証してください。');
-      document.getElementById('postgresSql').textContent = candidate;
+      renderPostgresSql(candidate.sql, addDialectRanges(candidate.sql, candidate.ranges));
       var list = document.getElementById('postgresDifferences');
       list.replaceChildren();
       differences.forEach(function(message) {
