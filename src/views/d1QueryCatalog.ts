@@ -145,6 +145,28 @@ function categoryCounts(
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
+/** SQL行そのものをFK分類カテゴリ別に集計する（サイドバーのバッジはテーブル数）。 */
+function queryCategoryCounts(
+  rows: D1QueryCatalogRow[],
+  classifications: Record<string, D1QueryCatalogTableClassification>,
+): { group: string; label: string; count: number; color: string }[] {
+  const counts = new Map<string, { label: string; count: number; color: string }>();
+  for (const row of rows) {
+    const classification = classifications[row.table_name ?? '(不明)'];
+    const group = classification?.group ?? 'undefined';
+    const entry = counts.get(group) ?? {
+      label: classification?.groupLabel ?? '未分類',
+      count: 0,
+      color: classification?.color ?? '#8b949e',
+    };
+    entry.count += 1;
+    counts.set(group, entry);
+  }
+  return [...counts.entries()]
+    .map(([group, entry]) => ({ group, ...entry }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
 function renderRow(row: D1QueryCatalogRow): string {
   const badge = row.command_confirmed
     ? '<span class="badge badge-confirmed">確定</span>'
@@ -247,6 +269,20 @@ export function getD1QueryCatalogPage(
   const categoryBadgesHtml = categoryCounts(rows, tableClassifications)
     .map(({ group, label, count, color }) => `<button type="button" class="category-filter-badge" style="--category-color:${escapeHtml(color)}" data-group="${escapeHtml(group)}" aria-pressed="false"><span class="category-filter-count">${count}</span><span class="category-filter-name">${escapeHtml(label)}</span></button>`)
     .join('\n');
+  const queryCategories = queryCategoryCounts(rows, tableClassifications);
+  let queryCategoryOffset = 0;
+  const queryCategoryGradient = queryCategories.map(({ count, color }) => {
+    const start = rows.length === 0 ? 0 : (queryCategoryOffset / rows.length) * 100;
+    queryCategoryOffset += count;
+    const end = rows.length === 0 ? 0 : (queryCategoryOffset / rows.length) * 100;
+    return `${escapeHtml(color)} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+  }).join(', ');
+  const queryCategoryAriaLabel = queryCategories
+    .map(({ label, count }) => `${label} ${count}件`)
+    .join('、');
+  const queryCategoryLegendHtml = queryCategories
+    .map(({ label, count, color }) => `<li><span class="category-chart-swatch" style="--category-color:${escapeHtml(color)}"></span><span class="category-chart-label">${escapeHtml(label)}</span><strong>${count}件</strong><span class="category-chart-percent">${rows.length === 0 ? '0.0' : ((count / rows.length) * 100).toFixed(1)}%</span></li>`)
+    .join('\n');
   const groupedTables = groupByTable(rows);
   if (initialSort === 'count') {
     groupedTables.sort((a, b) => b[1].length - a[1].length);
@@ -337,6 +373,17 @@ export function getD1QueryCatalogPage(
     .category-filter-count { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border-right: 1px solid var(--category-color); border-radius: 50%; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
     .category-filter-name { min-width: 0; padding: 5px 8px; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .category-filter-empty { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    .category-chart { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+    .category-chart-pie { position: relative; width: min(150px, 100%); aspect-ratio: 1; margin: 0 auto 10px; border-radius: 50%; background: var(--category-chart-gradient, var(--border-color)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 12%, transparent); }
+    .category-chart-pie::after { content: ''; position: absolute; inset: 27%; border-radius: 50%; background: var(--bg-secondary); }
+    .category-chart-total { position: absolute; z-index: 1; inset: 27%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-primary); font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .category-chart-total small { color: var(--text-muted); font-size: 10px; font-weight: 600; }
+    .category-chart-legend { display: flex; flex-direction: column; gap: 5px; list-style: none; }
+    .category-chart-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 10px; }
+    .category-chart-swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--category-color); }
+    .category-chart-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .category-chart-legend strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .category-chart-percent { min-width: 34px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
     .catalog-main { min-width: 0; }
     .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
@@ -596,6 +643,11 @@ export function getD1QueryCatalogPage(
     <div class="card">
       <div class="catalog-layout">
         <aside class="category-filter-sidebar" aria-label="FK分類による絞り込み">
+          <figure class="category-chart" aria-labelledby="categoryChartTitle">
+            <figcaption class="category-filter-title" id="categoryChartTitle">FK分類カテゴリ別 SQL件数</figcaption>
+            ${rows.length > 0 ? `<div class="category-chart-pie" role="img" aria-label="全${rows.length}件。${escapeHtml(queryCategoryAriaLabel)}" style="--category-chart-gradient:conic-gradient(${queryCategoryGradient})"><span class="category-chart-total">${rows.length}<small>SQL</small></span></div>
+            <ul class="category-chart-legend">${queryCategoryLegendHtml}</ul>` : '<div class="category-filter-empty">集計対象のSQLがありません</div>'}
+          </figure>
           <div class="category-filter-title">FK分類</div>
           <div class="category-filter-list">
             ${categoryBadgesHtml || '<div class="category-filter-empty">分類カテゴリがありません</div>'}
