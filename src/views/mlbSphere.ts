@@ -164,6 +164,9 @@ canvas:active { cursor:grabbing; }
 .jp-next-date { color:#f0883e; font-size:10px; }
 .jp-next-none { color:#484f58; font-size:10px; }
 .jp-loading { color:#484f58; font-style:italic; font-size:11px; padding:12px; text-align:center; }
+@keyframes jp-today-start-flash { 0%,100% { background:transparent; } 50% { background:rgba(255,215,0,.72); } }
+.jp-starts-today.jp-start-flash { animation:jp-today-start-flash .6s ease-in-out 3; }
+@media(prefers-reduced-motion:reduce){ .jp-starts-today.jp-start-flash { animation:none; background:rgba(255,215,0,.42); } }
 </style>
 </head>
 <body>
@@ -787,12 +790,11 @@ void main(){
     for(var i=0;i<games.length;i++){
       var g=games[i], sd=MLB_STADIUMS[g.homeId];
       var state=(g.status&&g.status.abstractGameState)||'Preview';
-      var isLive=state==='Live', isFinal=state==='Final';
+      var isFinal=state==='Final';
       var venue=sd?sd.name:(g.venue||'');
       var city=sd?sd.city:'';
       var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
-      var endMs=startMs+3.5*3600000;
-      var isLiveNow=isLive||(startMs>0&&nowMs>=startMs&&nowMs<=endMs&&!isFinal);
+      var isLiveNow=isGameInProgress(g,nowMs);
       var isUpNext=!isLiveNow&&!isFinal&&startMs>0&&nowMs<startMs&&(startMs-nowMs)<=1800000;
       var cardCls='game-card'+(isLiveNow?' live-now':isUpNext?' up-next':'');
       var timeHtml='';
@@ -838,6 +840,16 @@ void main(){
     var sd=MLB_STADIUMS[teamId];
     var bg=sd?sd.color:'#333';
     return '<span class="abbr-badge'+(dim?' abbr-badge-dim':'')+'" style="background:'+bg+'">'+abbrText+'</span>';
+  }
+
+  /** MLB API の状態更新が遅れていても、予定時刻から試合中表示へ切り替える。 */
+  function isGameInProgress(g,nowMs){
+    var state=(g.status&&g.status.abstractGameState)||'Preview';
+    if(state==='Live')return true;
+    if(state==='Final')return false;
+    var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
+    var currentMs=nowMs===undefined?Date.now():nowMs;
+    return startMs>0&&currentMs>=startMs&&currentMs<=startMs+3.5*3600000;
   }
 
   function getNextZ(){
@@ -893,8 +905,7 @@ void main(){
   /** 試合開始前は開始時刻(ET/JST)、試合中は「試合中」バッジとJST、終了後は最終スコアを返す。 */
   function pitcherModalTimeOrScoreHtml(g){
     var state=(g.status&&g.status.abstractGameState)||'Preview';
-    var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
-    var isInProgress=state==='Live'||(state!=='Final'&&startMs>0&&Date.now()>=startMs&&Date.now()<=startMs+3.5*3600000);
+    var isInProgress=isGameInProgress(g);
     if(isInProgress){
       return '<span class="tpm-live"><span class="in-progress-badge">&#35430;&#21512;&#20013;</span>'+fmtTime(g.gameDate,'Asia/Tokyo','JST')+'</span>';
     }
@@ -1020,10 +1031,8 @@ void main(){
   var livePoller=null;
   function startLivePolling(dateStr){
     if(livePoller)clearInterval(livePoller);
+    if(dateStr!==toDateStr(new Date())){livePoller=null;return;}
     livePoller=setInterval(function(){
-      var hasLive=false;
-      for(var i=0;i<todayGames.length;i++){if((todayGames[i].status&&todayGames[i].status.abstractGameState)==='Live'){hasLive=true;break;}}
-      if(!hasLive){clearInterval(livePoller);livePoller=null;return;}
       fetch('/api/mlb-schedule?date='+dateStr)
         .then(function(r){return r.json();})
         .then(function(data){
@@ -1049,6 +1058,11 @@ void main(){
           // 同じオブジェクト参照を保持しているため、再描画だけで反映できる)。
           var pitchersModalEl=document.getElementById('todayPitchersModal');
           if(pitchersModalEl&&pitchersModalEl.classList.contains('open'))renderTodayPitchersBody();
+          var hasUnfinished=false;
+          for(var k=0;k<todayGames.length;k++){
+            if((todayGames[k].status&&todayGames[k].status.abstractGameState)!=='Final'){hasUnfinished=true;break;}
+          }
+          if(!hasUnfinished){clearInterval(livePoller);livePoller=null;}
         })
         .catch(function(){});
     },30000);
@@ -1203,6 +1217,24 @@ void main(){
     return '<span class="jp-next-date">'+label+'</span>';
   }
 
+  function isPitcherScheduledToday(playerId){
+    var next=jpNextCache['ns'+playerId];
+    return !!next&&next.date===toDateStr(new Date());
+  }
+
+  var jpFlashTimer=null;
+  function scheduleJPTodayStartFlash(){
+    if(jpFlashTimer)clearTimeout(jpFlashTimer);
+    jpFlashTimer=setTimeout(function(){
+      if(activeTab!=='jp')return;
+      document.querySelectorAll('.jp-starts-today').forEach(function(row){
+        row.classList.remove('jp-start-flash');
+        void row.offsetWidth;
+        row.classList.add('jp-start-flash');
+      });
+    },3000);
+  }
+
   function renderJPView(){
     var pitchers=JP_PLAYERS.filter(function(p){return p.type==='P'||p.type==='2W';});
     var hitters=JP_PLAYERS.filter(function(p){return p.type==='H'||p.type==='2W';});
@@ -1225,7 +1257,7 @@ void main(){
       var whip=ps?fmtWHIP(st.whip):'-';
       var so=st.strikeOuts!==undefined?st.strikeOuts:'-';
       var statCls=ps?'jp-stat':'jp-stat-na';
-      html+='<tr>';
+      html+='<tr class="jp-pitcher-row'+(isPitcherScheduledToday(p.id)?' jp-starts-today':'')+'" data-player-id="'+p.id+'">';
       html+='<td><div class="jp-name">'+p.name+'<span class="jp-num">#'+p.num+'</span></div>';
       html+='<span class="jp-team-tag" style="background:'+color+'">'+p.team+'</span> <span class="jp-pos">'+p.pos+'</span></td>';
       html+='<td>'+buildJPTodayCell(p.teamId,p.id)+'</td>';
@@ -1356,6 +1388,7 @@ void main(){
       tabJP.className='drw-tab active';
       renderJPView();
       fetchAllJPStats();
+      scheduleJPTodayStartFlash();
     }
   }
 
