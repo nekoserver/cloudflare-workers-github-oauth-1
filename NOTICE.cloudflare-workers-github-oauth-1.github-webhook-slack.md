@@ -88,7 +88,29 @@ dynamicneko/cf-authには`main`へのpushでCloudflare Workersへ自動デプロ
 
 **教訓**: モノレポ的にサブディレクトリを切っているリポジトリで「〇〇の中に`.github/workflows/`を置けばそのサブプロジェクトだけデプロイされるはず」という発想は**GitHub Actionsでは通用しない**(GitLab CIの`include`のような仕組みとは違う)。workflowは常にリポジトリルートの`.github/workflows/`に置き、対象を絞りたい場合は`paths`フィルタと`working-directory`で表現すること。新しいサブプロジェクトのCI/CDを追加するときは、**まずリポジトリルートに`.github/workflows/`があるかを確認してから**workflowファイルを作ること。
 
-## 9. 調査の順番
+## 9. Worker間の直接呼び出しで踏んだ2つの罠(`/neko hellodw` → dynamicneko)
+
+**対象**: 本体WorkerのAIチャット`/neko hellodw`サブコマンドが、dynamicneko(Cloudflare Dynamic Worker Loaderを使ったWorker)の`GET /api/ping`を呼んで起動確認する経路。経路A/B/C(1節)とは別に、Worker同士が直接HTTPで通信するケース全般に当てはまる教訓。
+
+### 9-1. `*.workers.dev`同士の公開`fetch()`はCloudflareに拒否される(`HTTP 404 error code: 1042`)
+
+最初の実装は、本体Workerから`DYNAMICNEKO_URL`(dynamicnekoの`*.workers.dev` URL)へ通常の`fetch()`で呼びに行く作りだった。コード上は正しく見えたが、実際に叩くと**`HTTP 404 error code: 1042`で拒否された**。これはCloudflareの既知の制限で、**`*.workers.dev`ドメイン同士のWorkerが互いを公開`fetch()`で直接呼び合うことを許可していない**(ループ悪用防止のための仕様)。
+
+このリポジトリには既に同じ問題を回避した実装(`dynamicneko/cf-auth/src/webhook.ts`が本体Workerを呼ぶ際の**Service Binding**経由呼び出し)が存在していたのに、それを踏襲せず新規に公開fetch方式で実装してしまったのが原因。
+
+**教訓**: **Cloudflare Workers同士が同一アカウント内で通信する場合は、最初から公開URLへの`fetch()`ではなくService Binding(`[[services]]`)を検討すること。** 特に`*.workers.dev`ドメインを使っている場合は公開fetchが機能しない前提で設計する。既存コードに同種の通信パターン(他のWorkerを呼ぶ処理)が無いか先に探し、あれば実装方式を踏襲する。
+
+**対処**: `wrangler.toml`に`[[services]] binding = "DYNAMICNEKO" service = "dynamicneko"`を追加し、`pingDynamicWorker()`をURL文字列ではなく`Fetcher`(Service Binding)経由の呼び出しに変更した。
+
+### 9-2. 呼び出し元と受け側で環境変数名を揃え忘れた
+
+Service Binding化で1042エラーは解消したが、次に`HTTP 401 Unauthorized`が発生した。原因は単純な環境変数名の食い違い: 呼び出し元(本体Worker)は`DYNAMICNEKO_PING_SECRET`という名前でsecretを設定していたが、受け側(dynamicneko)のコードは`c.env.PING_SECRET`という**別の名前**を読んでいた。ユーザーは「両方に同じ値を入れた」と認識していたが、**変数名が違うため受け側は常に未設定を見ていた**。
+
+**教訓**: 別リポジトリ間でBearerトークン等の共有シークレットをやり取りする設計をするときは、**送信側・受信側で同じ変数名を使うか、コード内のコメント・READMEで対応関係を明示すること**。「値さえ揃えれば動く」という思い込みは、変数名の食い違いという最も気づきにくい原因を見落とす。実装時にどちらか一方だけを見て変数名を決めず、両リポジトリのコードを並べて確認してから実装すること。
+
+**対処**: dynamicneko側のコードを、呼び出し元が実際に使っていた`DYNAMICNEKO_PING_SECRET`に合わせて修正した(値の再設定は不要、コードの変数名だけの問題だった)。
+
+## 10. 調査の順番
 
 「Slackやdynamicnekoに通知が来ない/見えない」と言われたら、次の順で切り分けること。
 
@@ -97,3 +119,4 @@ dynamicneko/cf-authには`main`へのpushでCloudflare Workersへ自動デプロ
 3. 経路Cなら、本体Worker側のログ(`dispatchNotification`失敗時の`logger.error`)で送信自体が失敗していないか確認する。
 4. 200が返っているのに見えない場合、**受信側が実際にデータを永続化し、かつそれを表示する経路が存在するか**を疑う(5節の事故と同じパターン)。
 5. コードを直しても直らない場合、そもそも該当ブランチがマージ・デプロイされているか確認する。このリポジトリ・dynamicnekoともClaude Codeセッションから`wrangler deploy`はできないため、PRマージだけでは本番に反映されない。**さらに、マージすれば自動デプロイされる想定のリポジトリでは、そのworkflowファイルがリポジトリルートの`.github/workflows/`に正しく置かれているかも確認する**(8節)。GitHub Actionsタブで実際に該当のワークフロー実行が記録されているかを見るのが一番早い。
+6. **本体Worker以外のWorkerを新たに直接呼ぶ処理を実装するときは、公開`fetch()`ではなくService Bindingを先に検討し、送受信両側の環境変数名を実装前に突き合わせる**(9節)。`HTTP 404 error code: 1042`が出たら1042専用の原因(`*.workers.dev`同士の直接fetch)を、`HTTP 401`が出たら変数名の食い違いをまず疑う。
