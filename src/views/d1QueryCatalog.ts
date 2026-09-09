@@ -308,9 +308,10 @@ export function getD1QueryCatalogPage(
       width: 100%;
       border: 1px solid var(--border-color);
       border-radius: 8px;
-      background: var(--bg-secondary);
+      background: color-mix(in srgb, var(--card-bg) 88%, var(--accent-color, #667eea));
       padding: 12px;
       margin: 0 0 12px;
+      box-shadow: inset 0 1px 0 color-mix(in srgb, white 35%, transparent);
     }
     .filter-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .filter-panel-header .filter-label { margin-bottom: 0; }
@@ -326,6 +327,8 @@ export function getD1QueryCatalogPage(
       row-gap: 1px;
     }
     .table-filter-badge {
+      --badge-middle: color-mix(in srgb, var(--source-color) 48%, var(--card-bg));
+      --badge-foreground: color-mix(in srgb, var(--source-color) 72%, var(--text-primary));
       border: 0;
       background: transparent;
       padding: 1px;
@@ -338,22 +341,31 @@ export function getD1QueryCatalogPage(
       filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.16));
     }
     .table-filter-badge:hover, .table-filter-badge:focus-visible { filter: brightness(1.12) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2)); outline: none; }
-    .table-filter-badge[aria-pressed="true"] .table-badge-name { background: var(--source-color); color: white; }
-    .table-filter-badge[aria-pressed="true"] .table-badge-count { background: var(--source-color); color: white; }
+    .table-filter-badge[aria-pressed="true"] .table-badge-name,
+    .table-filter-badge[aria-pressed="true"] .table-badge-count,
+    .table-filter-badge[aria-pressed="true"] .table-column-count { background: var(--source-color); color: white; }
+    .table-badge-list.has-selection .table-filter-badge:not([aria-pressed="true"]) {
+      --source-color: color-mix(in srgb, var(--text-muted) 42%, var(--card-bg));
+      --badge-middle: color-mix(in srgb, var(--text-muted) 24%, var(--card-bg));
+      --badge-foreground: var(--text-muted);
+      filter: grayscale(1);
+      opacity: 0.68;
+    }
     .table-badge-count {
       width: 29px; height: 29px; border: 2px solid var(--source-color); border-radius: 50%;
       display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-      padding: 1px; background: var(--source-color); color: white; font-weight: 800; z-index: 1;
+      padding: 1px; background: var(--badge-middle); color: var(--badge-foreground); font-weight: 800; z-index: 1;
     }
     .table-badge-name {
       min-height: 29px; display: inline-flex; align-items: center; padding: 1px;
-      margin-left: -5px; background: color-mix(in srgb, var(--source-color) 14%, var(--card-bg));
+      margin-left: -5px; background: var(--badge-middle); color: var(--badge-foreground);
       border: 2px solid var(--source-color); border-radius: 0 999px 999px 0; font-weight: 700;
     }
     .table-column-count {
       min-width: 22px; min-height: 22px; margin-left: 3px; padding: 1px 4px;
       display: inline-flex; align-items: center; justify-content: center;
-      border-radius: 999px; background: var(--source-color); color: white;
+      border: 1px solid var(--source-color); border-radius: 999px;
+      background: var(--badge-middle); color: var(--badge-foreground);
       font: 8px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     select#verbFilter {
@@ -695,14 +707,22 @@ export function getD1QueryCatalogPage(
 
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');
+    function setTablePanelExpanded(expanded) {
+      tablePanelToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      tablePanelToggle.setAttribute('aria-pressed', expanded ? 'true' : 'false');
+      tablePanel.hidden = !expanded;
+    }
     tablePanelToggle.addEventListener('click', function() {
       var expanded = tablePanelToggle.getAttribute('aria-expanded') === 'true';
-      tablePanelToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      tablePanelToggle.setAttribute('aria-pressed', expanded ? 'false' : 'true');
-      tablePanel.hidden = expanded;
+      setTablePanelExpanded(!expanded);
+    });
+    document.addEventListener('click', function(event) {
+      if (tablePanel.hidden || tablePanel.contains(event.target) || tablePanelToggle.contains(event.target)) return;
+      setTablePanelExpanded(false);
     });
 
     var tableBadges = Array.prototype.slice.call(tablePanel.querySelectorAll('.table-filter-badge'));
+    var tableBadgeList = tablePanel.querySelector('.table-badge-list');
     var verbFilter = document.getElementById('verbFilter');
 
     var tableSelectionMode = '${tableSelectionMode}';
@@ -760,6 +780,7 @@ export function getD1QueryCatalogPage(
     function applyFilters() {
       var selectedTables = tableBadges.filter(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; })
         .map(function(badge) { return badge.getAttribute('data-table'); });
+      tableBadgeList.classList.toggle('has-selection', selectedTables.length > 0);
       var selectedBadge = tableBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });
       var selectedTable = selectedBadge ? selectedBadge.getAttribute('data-table') : null;
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
