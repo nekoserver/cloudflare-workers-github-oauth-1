@@ -416,6 +416,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_model_colors', migration: '0048', description: 'AIチャットモデルカラー設定', syncPolicy: 'manual' },
   { name: 'd1_query_catalog', migration: '0129', description: 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', syncPolicy: 'manual' },
   { name: 'user_preferences', migration: '0131', description: 'ユーザー設定(キー単位)。個別Cookie乱立の解消先。USER_PREFERENCE_KEYSに許可リストあり', syncPolicy: 'manual' },
+  { name: 'alt_notify_ingest_log', migration: '0132', description: 'AltワーカーWebhook受信ログ(NOTIFY_TARGET=worker送信先の到達確認)', syncPolicy: 'manual' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -2002,6 +2003,18 @@ CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_query_name ON d1_query_catalog(q
   PRIMARY KEY (user_id, pref_key)
 );
 CREATE INDEX IF NOT EXISTS idx_user_preferences_updated_at ON user_preferences(updated_at);`,
+  '0132': `CREATE TABLE IF NOT EXISTS alt_notify_ingest_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  channel TEXT,
+  text TEXT NOT NULL,
+  blocks_json TEXT,
+  thread_ts TEXT,
+  linked_request_id TEXT,
+  received_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_received_at ON alt_notify_ingest_log(received_at);
+CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_linked_request_id ON alt_notify_ingest_log(linked_request_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2146,6 +2159,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   login_history: { id: 'pk', user_id: 'fk+idx' },
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
   d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
+  alt_notify_ingest_log: { id: 'pk', received_at: 'idx', linked_request_id: 'idx' },
   user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
@@ -2319,6 +2333,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   api_search_keyword_sections: 'system',
   webhook_log: 'system',
   cf_auth_access_log: 'system',
+  alt_notify_ingest_log: 'system',
   uuid_history: 'system',
   heritage_cities: 'system',
   heritage_city_fetched: 'system',
