@@ -76,7 +76,19 @@ dynamicneko/cf-auth側の`/ingest`実装は当初、受信データをKVに`inge
 
 `SLACK_BOT_USER_ID`(自App自身のBot User ID、`U`始まり)を追加し、設定済みなら`event.user`と比較して自App自身の発言だけを除外するように変更した(未設定時は従来通りの安全側デフォルト)。確認方法: `curl -X POST https://slack.com/api/auth.test -H "Authorization: Bearer $SLACK_OAUTH_TOKEN"`の`user_id`フィールド。
 
-## 7. 調査の順番
+## 8. 同じ「見た目は成功・実は経路が途切れている」パターン: GitHub Actionsのworkflowファイル配置ミス
+
+5節のKV write-only事故と全く同じ性質の事故が、もう1段手前の「デプロイそのもの」でも起きていた。
+
+dynamicneko/cf-authには`main`へのpushでCloudflare Workersへ自動デプロイするGitHub Actions workflowが用意されていたが、ファイルが`cf-auth/.github/workflows/deploy.yml`という**cf-authサブディレクトリの中**に置かれていた。**GitHub Actionsはリポジトリルート直下の`.github/workflows/`しか走査しない**ため、このworkflowは一度も実行されたことがなかった可能性が高い。
+
+つまり「PRをマージした(≒`main`へのpushというGitHubイベントは正常に発生している)のに、その先の自動デプロイという処理が誰にも実行されていない」という、5節と同型の事故だった。`git push`自体は成功するので、この種のミスは**pushする側からは何も異常に見えない**のが厄介な点。
+
+**対処**: `.github/workflows/deploy-cf-auth.yml`としてリポジトリルートへ移動し、`working-directory: cf-auth`を指定。あわせて`paths: ["cf-auth/**"]`フィルタを付けて無関係な変更では起動しないようにし、デプロイ前に`type-check`・`test`を実行するステップも追加した(元のworkflowにはテスト実行が無かった)。
+
+**教訓**: モノレポ的にサブディレクトリを切っているリポジトリで「〇〇の中に`.github/workflows/`を置けばそのサブプロジェクトだけデプロイされるはず」という発想は**GitHub Actionsでは通用しない**(GitLab CIの`include`のような仕組みとは違う)。workflowは常にリポジトリルートの`.github/workflows/`に置き、対象を絞りたい場合は`paths`フィルタと`working-directory`で表現すること。新しいサブプロジェクトのCI/CDを追加するときは、**まずリポジトリルートに`.github/workflows/`があるかを確認してから**workflowファイルを作ること。
+
+## 9. 調査の順番
 
 「Slackやdynamicnekoに通知が来ない/見えない」と言われたら、次の順で切り分けること。
 
@@ -84,4 +96,4 @@ dynamicneko/cf-auth側の`/ingest`実装は当初、受信データをKVに`inge
 2. `NOTIFY_TARGET`が意図通りの値(`slack`か`worker`)になっているか確認する。
 3. 経路Cなら、本体Worker側のログ(`dispatchNotification`失敗時の`logger.error`)で送信自体が失敗していないか確認する。
 4. 200が返っているのに見えない場合、**受信側が実際にデータを永続化し、かつそれを表示する経路が存在するか**を疑う(5節の事故と同じパターン)。
-5. コードを直しても直らない場合、そもそも該当ブランチがマージ・デプロイされているか確認する。このリポジトリ・dynamicnekoともClaude Codeセッションから`wrangler deploy`はできないため、PRマージだけでは本番に反映されない。
+5. コードを直しても直らない場合、そもそも該当ブランチがマージ・デプロイされているか確認する。このリポジトリ・dynamicnekoともClaude Codeセッションから`wrangler deploy`はできないため、PRマージだけでは本番に反映されない。**さらに、マージすれば自動デプロイされる想定のリポジトリでは、そのworkflowファイルがリポジトリルートの`.github/workflows/`に正しく置かれているかも確認する**(8節)。GitHub Actionsタブで実際に該当のワークフロー実行が記録されているかを見るのが一番早い。
