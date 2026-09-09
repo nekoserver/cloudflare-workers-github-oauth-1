@@ -15052,7 +15052,11 @@ app.post('/slack/event', async (c) => {
   }
 
   const mentionEvent = result.eventCallback?.event;
-  if (mentionEvent && mentionEvent.type === 'app_mention' && !mentionEvent.bot_id && mentionEvent.channel) {
+  const selfUserId = c.env.SLACK_BOT_USER_ID;
+  // SLACK_BOT_USER_ID 未設定時は従来通り bot_id 付きイベントを一律除外する(安全側デフォルト)。
+  // 設定済みなら event.user が自App自身のときだけ除外し、他Bot経由のメンションは処理する。
+  const isSelfMention = selfUserId ? mentionEvent?.user === selfUserId : Boolean(mentionEvent?.bot_id);
+  if (mentionEvent && mentionEvent.type === 'app_mention' && !isSelfMention && mentionEvent.channel) {
     c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, {
       text: mentionEvent.text ?? '',
       channel: mentionEvent.channel,
