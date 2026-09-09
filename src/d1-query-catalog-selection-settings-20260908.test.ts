@@ -9,6 +9,31 @@ const row = (table_name: string, query_name: string): D1QueryCatalogRow => ({
 });
 
 describe('D1クエリカタログのテーブル選択設定', () => {
+  it('全SQLをFK分類カテゴリ別に集計した円グラフと件数・割合を表示する', () => {
+    const html = getD1QueryCatalogPage('u', [
+      row('auth_sessions', 'A'),
+      row('auth_sessions', 'B'),
+      row('ai_logs', 'C'),
+      row('unclassified', 'D'),
+    ], 'count', {}, true, {
+      auth_sessions: { group: 'auth', groupLabel: '認証', color: '#388bfd', fkRole: 'source' },
+      ai_logs: { group: 'ai', groupLabel: 'AI', color: '#a371f7', fkRole: 'both' },
+    });
+
+    expect(html).toContain('id="categoryChartTitle">FK分類カテゴリ別 SQL件数</figcaption>');
+    expect(html).toContain('class="category-chart-pie" role="img"');
+    expect(html).toContain('aria-label="全4件。認証 2件、AI 1件、未分類 1件"');
+    expect(html).toContain('--category-chart-gradient:conic-gradient(#388bfd 0.00% 50.00%, #a371f7 50.00% 75.00%, #8b949e 75.00% 100.00%)');
+    expect(html).toMatch(/<li><span class="category-chart-swatch"[^<]*<\/span><span class="category-chart-label">認証<\/span><strong>2件<\/strong><span class="category-chart-percent">50\.0%<\/span>/);
+    expect(html).toContain('<span class="category-chart-label">未分類</span><strong>1件</strong><span class="category-chart-percent">25.0%</span>');
+  });
+
+  it('SQLがない場合は円グラフの代わりに空状態を表示する', () => {
+    const html = getD1QueryCatalogPage('u', []);
+    expect(html).toContain('集計対象のSQLがありません');
+    expect(html).not.toContain('class="category-chart-pie"');
+  });
+
   it('左サイドパネルに分類カテゴリを該当テーブル数の多い順で表示し、右側の表をカテゴリで絞り込める', () => {
     const html = getD1QueryCatalogPage('u', [
       row('auth_sessions', 'A'),
