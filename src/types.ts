@@ -17,6 +17,8 @@ export type Bindings = {
   SLACK_CLIENT_SECRET?: string;
   SLACK_CLIENT_ID?: string;
   SLACK_CHANNEL_ID?: string;
+  /** 自App自身のBot User ID(U始まり)。app_mentionイベントのevent.userと比較し、自App自身の発言だけを除外するために使う。未設定時はbot_id付きイベントを一律除外する(安全側デフォルト) */
+  SLACK_BOT_USER_ID?: string;
   /** 通知の送信先スイッチ。'worker' で外部Workerへ切替、未設定・それ以外は 'slack'（従来どおり） */
   NOTIFY_TARGET?: string;
   /** NOTIFY_TARGET=worker のときの送信先URL */

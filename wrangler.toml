@@ -31,6 +31,11 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #   wrangler secret put GITHUB_TOKEN        # PR diff取得用（GitHub PAT）
 #
 # オプション（[vars] または secret で設定可能）:
+#   SLACK_BOT_USER_ID  # 自App自身のBot User ID（U始まり）。app_mentionイベントで自App自身の
+#                       # 発言だけを除外し、他Bot経由の正当なメンションは処理できるようにする。
+#                       # 未設定時はbot_id付きイベントを一律除外する（安全側デフォルト）。
+#                       # 確認方法: curl -X POST https://slack.com/api/auth.test \
+#                       #   -H "Authorization: Bearer $SLACK_OAUTH_TOKEN" のuser_idフィールド
 #   GH_ATTACH_UPLOAD_TOKEN  # /gh-attach（gh issue create --attachのWASM移植）が
 #     使うアップロード専用のGitHub PAT（classic、repo スコープ必須）。
 #     uploads.github.com/user-attachments/assets はGitHub Appのトークン（ghu_）

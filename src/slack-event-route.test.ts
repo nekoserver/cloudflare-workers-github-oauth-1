@@ -39,10 +39,19 @@ describe("POST /slack/event", () => {
     expect(eventBlock).toContain("return c.text('', 200);");
   });
 
-  it('app_mentionイベント(bot自身の発言を除く)をdispatchSlackAiReplyへディスパッチする', () => {
+  it('app_mentionイベント(自App自身の発言を除く)をdispatchSlackAiReplyへディスパッチする', () => {
     expect(eventBlock).toContain("mentionEvent.type === 'app_mention'");
-    expect(eventBlock).toContain('!mentionEvent.bot_id');
     expect(eventBlock).toContain('dispatchSlackAiReply(c.env, {');
+  });
+
+  it('SLACK_BOT_USER_ID未設定時は従来通りbot_id付きイベントを一律除外する(安全側デフォルト)', () => {
+    expect(eventBlock).toContain('const selfUserId = c.env.SLACK_BOT_USER_ID;');
+    expect(eventBlock).toContain('const isSelfMention = selfUserId');
+    expect(eventBlock).toMatch(/selfUserId\s*\?\s*mentionEvent\?\.user === selfUserId\s*:\s*Boolean\(mentionEvent\?\.bot_id\)/);
+  });
+
+  it('SLACK_BOT_USER_ID設定時はevent.userで自App自身の発言だけを除外し、他Bot経由のメンションは処理する', () => {
+    expect(eventBlock).toContain('!isSelfMention');
   });
 
   it('waitUntilでバックグラウンド実行し、Slackへの200応答をブロックしない', () => {
