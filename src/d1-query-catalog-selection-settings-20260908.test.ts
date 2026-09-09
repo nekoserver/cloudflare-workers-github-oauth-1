@@ -33,8 +33,19 @@ describe('D1クエリカタログのテーブル選択設定', () => {
 
     expect(html).toContain("categoryChart.addEventListener('touchstart'");
     expect(html).toContain("categoryChart.addEventListener('touchend'");
-    expect(html).toContain("if (Math.abs(swipeDistance) >= 48) categoryFilterSidebar.classList.add('chart-collapsed');");
+    expect(html).toContain('if (Math.abs(swipeDistance) >= 48) setCategoryChartCollapsed(true);');
     expect(html).toMatch(/\.category-filter-sidebar\.chart-collapsed \.category-chart\s*\{[^}]*max-height:\s*0;[^}]*transform:\s*translateY\(-18px\)/s);
+  });
+
+  it('FK分類行の矢印で内訳を開閉し、FK分類を上下にスライドする', () => {
+    const html = getD1QueryCatalogPage('u', [row('auth_sessions', 'A')]);
+
+    expect(html).toContain('<div class="category-filter-heading">');
+    expect(html).toContain('id="categorySectionToggle" aria-controls="categoryChart" aria-expanded="true" aria-label="FK分類を上へ移動">▲</button>');
+    expect(html).toMatch(/\.category-filter-heading \.category-filter-title\s*\{[^}]*flex:\s*1;[^}]*padding-left:\s*28px/);
+    expect(html).toContain("categorySectionToggle.textContent = collapsed ? '▼' : '▲';");
+    expect(html).toContain("categorySectionToggle.setAttribute('aria-label', collapsed ? 'FK分類を下へ移動' : 'FK分類を上へ移動');");
+    expect(html).toContain("setCategoryChartCollapsed(!categoryFilterSidebar.classList.contains('chart-collapsed'));");
   });
 
   it('SQLがない場合は円グラフの代わりに空状態を表示する', () => {
