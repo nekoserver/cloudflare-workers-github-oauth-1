@@ -856,10 +856,20 @@ export function getAiChatPage(user: {
     }
     .moondream-analysis {
       margin-top: 10px; background: var(--card-bg); border: 1px solid var(--border-color);
-      border-radius: 6px; padding: 8px 10px;
+      border-radius: 6px; padding: 8px 10px; width: 100%; max-width: 100%; min-width: 0;
     }
     .moondream-analysis-label { font-size: 11px; font-weight: 600; color: var(--accent-color); margin-bottom: 4px; }
-    .moondream-analysis-body { font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.6; }
+    .moondream-analysis-body {
+      min-width: 0; max-width: 100%; font-size: 12px; color: var(--text-secondary);
+      white-space: normal; line-height: 1.6; overflow-wrap: anywhere; word-break: break-word;
+    }
+    /* Moondreamは列数の多い表や長いコード/URLを返すことがある。文章は折り返し、
+       折り返すと読みにくい表とコードだけをパネル内で横スクロール可能にする。 */
+    .moondream-analysis-body table {
+      display: block; width: max-content; min-width: 100%; max-width: 100%; overflow-x: auto;
+    }
+    .moondream-analysis-body th, .moondream-analysis-body td { overflow-wrap: normal; word-break: normal; }
+    .moondream-analysis-body pre { max-width: 100%; overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -6931,8 +6941,9 @@ export function getAiChatPage(user: {
       label.className = 'moondream-analysis-label';
       label.textContent = '🖼️ 画像分析(Moondream)';
       var body = document.createElement('div');
-      body.className = 'moondream-analysis-body';
-      body.textContent = analysisText;
+      body.className = 'moondream-analysis-body preview-area';
+      // AIチャット本体と同じ、安全な共有Markdownパーサーで画像分析も描画する。
+      body.innerHTML = parseMd(analysisText);
       panel.appendChild(label);
       panel.appendChild(body);
       bubbleEl.appendChild(panel);
