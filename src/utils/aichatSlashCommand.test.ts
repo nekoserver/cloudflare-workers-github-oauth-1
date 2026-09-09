@@ -228,6 +228,8 @@ describe('interpretAichatSlashCommand', () => {
   it('/neko help は全サブコマンドのヘルプを返す', async () => {
     const result = await interpretAichatSlashCommand('/neko help', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: formatAichatSlashCommandHelp() });
+    expect((result as { response: string }).response).toContain('| /neko mlb |');
+    expect((result as { response: string }).response).not.toContain('/neko mlb [AL\\|NL] [EAST\\|CENTRAL\\|WEST]');
   });
 
   it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', async () => {

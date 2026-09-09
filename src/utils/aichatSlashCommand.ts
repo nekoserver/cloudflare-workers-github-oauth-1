@@ -156,7 +156,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
-    '| /neko mlb [AL\\|NL] [EAST\\|CENTRAL\\|WEST] | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
+    '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
