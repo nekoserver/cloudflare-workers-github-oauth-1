@@ -277,6 +277,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.pwa.md`](NOTICE.cloudflare-workers-github-oauth-1.pwa.md)
 - gitのshallow clone(コミット履歴を根拠にした調査が壊れる・`git fetch --unshallow`での対処):
   [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
+- GitHub webhook → Slack/外部Worker(Altワーカー)通知パイプライン(経路A/B/Cの区別・write-onlyデータストア事故・Slack app_mentionのbot判定):
+  [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md)
 
 ---
 
