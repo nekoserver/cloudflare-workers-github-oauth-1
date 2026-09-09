@@ -17,12 +17,16 @@ import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
+import { getPublicKeysPage } from './views/publicKeys';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
+import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { getCallGraphPage } from './views/callGraph';
+import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
@@ -37,6 +41,7 @@ import { getHeritageAreaPage } from './views/heritageArea';
 import { getHeritageJourneyPage } from './views/heritageJourney';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
+import { getMegaminxPage } from './views/megaminx';
 import { getWebGLSolarPage } from './views/webglSolar';
 import { getMoondreamVlmPage } from './views/moondreamVlm';
 import { getMoondreamAnalyzeLogPage, type MoondreamAnalyzeLogRow } from './views/moondreamAnalyzeLog';
@@ -47,6 +52,178 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getJsonExplorerPage } from './views/jsonExplorer';
+import { getBinHexPage } from './views/binHex';
+import { getGhAttachPage } from './views/ghAttach';
+import {
+  validateAttachDataUrl,
+  decodeAttachDataUrlToBytes,
+  parseOwnerRepo,
+  canUploadWithPermission,
+  buildUserAttachmentUploadUrl,
+  parseUploadAssetResponse,
+  parseCreateIssueResponse,
+  parseGithubErrorMessage,
+  describeGithubApiError,
+  stripHtmlTags,
+} from './utils/ghAttach';
+import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+
+/**
+ * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
+ * レスポンスボディがJSONでない・messageが無い場合はnullを返す(呼び出し元は
+ * ステータスコードのみでエラーメッセージを組み立てる)。
+ */
+async function extractGithubErrorMessage(res: Response): Promise<string | null> {
+  const clone = res.clone();
+  try {
+    const parsed = parseGithubErrorMessage(await res.clone().json());
+    if (parsed) return parsed;
+  } catch {
+    // JSONでない場合はテキストとしてフォールバックする(下記)
+  }
+  try {
+    const raw = (await clone.text()).trim();
+    if (!raw) return null;
+    // GitHubのエラーボディがJSONでない場合(HTMLエラーページ等)、タグを除去して
+    // 読める形にし、原文が長すぎるとログ・エラーメッセージが読みにくくなるため
+    // 200文字までに切り詰める
+    const text = stripHtmlTags(raw);
+    return text ? text.slice(0, 200) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * /neko gh pr list・GET /api/gh/pr-list 共通。GitHub REST API
+ * GET /repos/{owner}/{repo}/pulls をユーザーのGitHub OAuthトークンで呼び出し、
+ * gh-wasm(Rust実装のformat_pr_list)でMarkdownテーブルへ整形する。
+ * owner/repoの検証もgh-wasm(validate_repo)側で行う(wasm/README.mdに記載の
+ * Rust/WASMとWorker/JavaScriptの責務分担を踏襲)。
+ */
+async function fetchAndFormatGhPrList(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  userSub: string,
+  repoFullNameInput: string
+): Promise<string> {
+  // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+  // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+  // 既存テストが壊れるため)
+  const { validateRepoViaWasm, formatPrListViaWasm } = await import('./utils/ghWasmServer');
+  let repoFullName: string;
+  try {
+    repoFullName = validateRepoViaWasm(repoFullNameInput);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const [owner, repo] = repoFullName.split('/');
+
+  const userSession = await getUserSession(c.env.DB, userSub);
+  const accessToken = userSession?.githubAccessToken;
+  if (!accessToken) {
+    throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
+  }
+
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      },
+    }
+  );
+  if (!res.ok) {
+    const ghMessage = await extractGithubErrorMessage(res);
+    logger.warn('gh pr-list: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
+    throw new Error(describeGithubApiError('プルリクエスト一覧の取得', res.status, ghMessage));
+  }
+  const prs: Array<Record<string, unknown>> = await res.json();
+  // GitHub REST APIの一覧取得(GET /repos/{owner}/{repo}/pulls)はmergeable_state
+  // を返さない(コンフリクト有無はPR個別取得でのみ得られる)ため、1件ずつ
+  // GET /repos/{owner}/{repo}/pulls/{number} を並列取得してmergeable_stateを
+  // 集める。個別取得が失敗しても一覧表示自体は継続させ、該当PRのみ
+  // gh-wasm側で「確認中」表示にフォールバックさせる(rule 8: 失敗はwarnログへ記録)。
+  const mergeableStateEntries = await Promise.all(
+    prs
+      .filter((pr): pr is Record<string, unknown> & { number: number } => typeof pr.number === 'number')
+      .map(async (pr): Promise<[number, string | null]> => {
+        try {
+          const detailRes = await fetch(
+            `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pr.number}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+              },
+            }
+          );
+          if (!detailRes.ok) {
+            logger.warn('gh pr-list: mergeable_state fetch failed', { repoFullName, userSub, number: pr.number, status: detailRes.status });
+            return [pr.number, null];
+          }
+          const detail = await detailRes.json<{ mergeable_state?: string | null }>();
+          return [pr.number, detail.mergeable_state ?? null];
+        } catch (err) {
+          logger.warn('gh pr-list: mergeable_state fetch threw', { repoFullName, userSub, number: pr.number, error: err instanceof Error ? err.message : String(err) });
+          return [pr.number, null];
+        }
+      })
+  );
+  const mergeableStates = new Map<number, string | null>(mergeableStateEntries);
+  const json = JSON.stringify(mergePrMergeableStates(prs, mergeableStates));
+  // 設定ページの「スラッシュコマンドからのプルリク応答で作成者を伏せる」
+  // トグル(Cookie: neko_pr_hide_author)。Cookie未設定(初回訪問等)の場合は
+  // デフォルトON(伏せる)として扱う(設定ページ側の初期表示デフォルトと合わせる)。
+  const hideAuthorCookie = getCookieValue(c.req.header('Cookie'), 'neko_pr_hide_author');
+  const maskAuthor = resolveHideAuthorFromCookie(hideAuthorCookie);
+  return formatPrListViaWasm(repoFullName, json, maskAuthor);
+}
+
+/**
+ * `/neko mlb` 用に、MLB Stats APIから指定日(YYYY-MM-DD)の試合予定を取得し、
+ * 開始時刻・対戦カード・両チーム先発投手だけの軽量な形に整形する。
+ * /mlb ページの/api/mlb-scheduleと同じhydrateパラメータ(team,venue,probablePitcher)を
+ * 使い、先発投手が未発表の試合はnullのまま返す(呼び出し側でMarkdown整形時に
+ * 「未定」でフォールバックする)。
+ */
+async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbTodayGame[]> {
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}&hydrate=team,venue,probablePitcher`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) {
+    throw new Error(`MLBスケジュールの取得に失敗しました(status ${res.status})`);
+  }
+  const data = await res.json<{ dates?: Array<{ games?: unknown[] }> }>();
+  const rawGames = data.dates?.[0]?.games ?? [];
+  const games: MlbTodayGame[] = [];
+  for (const raw of rawGames) {
+    const g = raw as {
+      gameDate?: string;
+      teams?: {
+        home?: { team?: { id?: number; abbreviation?: string; name?: string }; probablePitcher?: { fullName?: string } };
+        away?: { team?: { id?: number; abbreviation?: string; name?: string }; probablePitcher?: { fullName?: string } };
+      };
+    };
+    const ht = g.teams?.home?.team;
+    const at = g.teams?.away?.team;
+    if (!ht?.id || !at?.id) continue;
+    games.push({
+      gameDate: g.gameDate ?? '',
+      awayTeamId: at.id,
+      homeTeamId: ht.id,
+      awayAbbr: at.abbreviation || (at.name ?? '').slice(0, 3).toUpperCase(),
+      homeAbbr: ht.abbreviation || (ht.name ?? '').slice(0, 3).toUpperCase(),
+      awayPitcher: g.teams?.away?.probablePitcher?.fullName ?? null,
+      homePitcher: g.teams?.home?.probablePitcher?.fullName ?? null,
+    });
+  }
+  return games;
+}
+
+import { getKimiCodePage } from './views/kimiCode';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -61,12 +238,20 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
+import { getSqlcWasmPage } from './views/sqlcWasm';
+import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTableClassification } from './views/d1QueryCatalog';
+import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
+import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
+import { getWineSearchPage } from './views/wineSearch';
+import { WINE_VECTOR_SEED, type WineSeedRow } from './data/wineVectors';
+import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadata';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
@@ -106,10 +291,10 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
-import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
+import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
 import {
   MOONDREAM_MODEL,
   MOONDREAM_DEFAULT_PROMPT,
@@ -131,7 +316,26 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
-import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
+import {
+  isValidEcPublicKeyJwk,
+  generateChallengeValue,
+  computeChallengeExpiresAt,
+  validateChallengeRow,
+  verifyChallengeSignature,
+  resolvePublicKeyExpiryDays,
+  computePublicKeyExpiresAt,
+} from './utils/publicKeyAuth';
+import {
+  buildPublicKeySecurityAlertText,
+  recordPublicKeySecurityEvent,
+  type PublicKeySecurityEventType,
+} from './utils/publicKeySecurity';
+import {
+  LOGIN_METHOD_GITHUB_OAUTH,
+  LOGIN_METHOD_PUBLIC_KEY,
+  type LoginMethod,
+} from './utils/loginHistory';
+import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
@@ -210,6 +414,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_subqueries', migration: '0045', description: 'AIチャットサブクエリマスタ', syncPolicy: 'manual' },
   { name: 'aichat_share_subquery_links', migration: '0046', description: 'AIチャット共有質問×サブクエリリンク', syncPolicy: 'auto' },
   { name: 'aichat_model_colors', migration: '0048', description: 'AIチャットモデルカラー設定', syncPolicy: 'manual' },
+  { name: 'd1_query_catalog', migration: '0129', description: 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', syncPolicy: 'manual' },
+  { name: 'user_preferences', migration: '0131', description: 'ユーザー設定(キー単位)。個別Cookie乱立の解消先。USER_PREFERENCE_KEYSに許可リストあり', syncPolicy: 'manual' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -260,12 +466,21 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
   { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
   { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
-  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
+  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録。indent_level(0120)で/workflowページの処理段階を階層(インデント)表示する', syncPolicy: 'manual' },
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
   { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
   { name: 'countdown_events', migration: '0115', description: '/countdownページでカレンダーの日付タップから登録する、ユーザーごとの予定日時(ラベル・目標日時)一覧。ログイン中の画面カウントダウン表示・次の予定日時取得APIの元データ', syncPolicy: 'auto' },
+  { name: 'kimi_gemma_reviews', migration: '0117', description: '/kimi-codeページでkimi-k2.7-codeに生成させたコードをgemma-4-26b-a4b-itに問い合わせたレビュー結果。AIチャット左サイドパネルの検索対象(target=kimi-gemma)に含まれる。gemma_input_tokens/gemma_output_tokens/gemma_total_tokens(0119)にレビュー呼び出し自体のトークン数を記録する', syncPolicy: 'auto' },
+  { name: 'kimi_code_generate_log', migration: '0118', description: '/kimi-codeページでkimi-k2.7-code(従量課金モデル)にコード生成を依頼した1リクエストごとのトークン数(input/output/total)ログ。POST /api/kimi-code/generateの呼び出しのたびに記録し、/api/kimi-code/token-usageで集計する', syncPolicy: 'auto' },
+  { name: 'user_public_keys', migration: '0121', description: '/public-keysページで登録するチャレンジ署名ログイン用の公開鍵(ECDSA P-256, JWK形式)。秘密鍵はブラウザ側のみで保持しサーバーには送らない。失効(revoked_at)・最終使用(last_used_at)を個別に管理する', syncPolicy: 'auto' },
+  { name: 'public_key_challenges', migration: '0122', description: 'チャレンジ署名ログインで発行したワンタイムチャレンジ文字列。有効期限(expires_at)・使用済み(used_at)でリプレイ再利用を防ぐ', syncPolicy: 'auto' },
+  { name: 'login_history', migration: '0124', description: 'ログインのたびに記録するログ(GitHub OAuth / 公開鍵チャレンジ署名のどちらでログインしたか)。user_sessions.last_login_method(0123)は直近1回分のみだが、こちらは全履歴を保持する', syncPolicy: 'auto' },
+  { name: 'wine_embeddings', migration: '0125', description: '/wine-searchページのワイン銘柄名をplamo-embedding-1bでベクタ化したキャッシュ(全ユーザー共通データ、テナント分離なし)', syncPolicy: 'manual' },
+  { name: 'wine_details', migration: '0125', description: '/wine-searchページで表示するワインのペアリング特性データ(seeds/wine_initial_vectors_v83.csvが元データ)。wine_embeddings.idと1:1', syncPolicy: 'manual' },
+  { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
+  { name: 'public_key_security_events', migration: '0128', description: '公開鍵チャレンジ署名ログインの異常検知ログ。対象鍵が見つからない(userId/keyId不一致・失効・期限切れ)場合はkey_not_found、署名が登録済み公開鍵と一致しない(=秘密鍵が違う)場合はsignature_mismatchとして記録し、同時にSlack通知する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1629,6 +1844,164 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_waypoint_sets_dedup ON he
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_countdown_events_user_target ON countdown_events(user_id, target_at);`,
+  '0117': `CREATE TABLE IF NOT EXISTS kimi_gemma_reviews (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kimi_prompt TEXT NOT NULL,
+  kimi_code TEXT NOT NULL,
+  gemma_prompt TEXT NOT NULL,
+  gemma_response TEXT NOT NULL,
+  gemma_model TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_gemma_reviews_user_created ON kimi_gemma_reviews(user_id, created_at);`,
+  '0118': `CREATE TABLE IF NOT EXISTS kimi_code_generate_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_code_generate_log_user_created ON kimi_code_generate_log(user_id, created_at);`,
+  '0119': `ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_input_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_output_tokens INTEGER;
+ALTER TABLE kimi_gemma_reviews ADD COLUMN gemma_total_tokens INTEGER;`,
+  '0120': `ALTER TABLE workflow_steps ADD COLUMN indent_level INTEGER DEFAULT 0;`,
+  '0121': `CREATE TABLE IF NOT EXISTS user_public_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  public_key_jwk TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_public_keys_user_id ON user_public_keys(user_id);`,
+  '0122': `CREATE TABLE IF NOT EXISTS public_key_challenges (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_public_key_challenges_user_id ON public_key_challenges(user_id);`,
+  '0123': `ALTER TABLE user_sessions ADD COLUMN last_login_method TEXT DEFAULT 'github_oauth';`,
+  '0124': `CREATE TABLE IF NOT EXISTS login_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  method TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user_id ON login_history(user_id);`,
+  '0125': `CREATE TABLE IF NOT EXISTS wine_embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  wine_name TEXT NOT NULL UNIQUE,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS wine_details (
+  wine_id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  pairing_count INTEGER NOT NULL DEFAULT 0,
+  source_linked_count INTEGER NOT NULL DEFAULT 0,
+  source_rate REAL NOT NULL DEFAULT 0,
+  reliability REAL NOT NULL DEFAULT 0,
+  fat REAL NOT NULL DEFAULT 0,
+  sweet REAL NOT NULL DEFAULT 0,
+  acid REAL NOT NULL DEFAULT 0,
+  salt REAL NOT NULL DEFAULT 0,
+  spice REAL NOT NULL DEFAULT 0,
+  umami REAL NOT NULL DEFAULT 0,
+  bitter REAL NOT NULL DEFAULT 0,
+  richness REAL NOT NULL DEFAULT 0,
+  raw REAL NOT NULL DEFAULT 0,
+  fried REAL NOT NULL DEFAULT 0,
+  grilled_smoked REAL NOT NULL DEFAULT 0,
+  creamy_butter REAL NOT NULL DEFAULT 0,
+  tomato REAL NOT NULL DEFAULT 0,
+  herbal_green REAL NOT NULL DEFAULT 0,
+  seafood REAL NOT NULL DEFAULT 0,
+  shellfish REAL NOT NULL DEFAULT 0,
+  white_fish REAL NOT NULL DEFAULT 0,
+  oily_fish REAL NOT NULL DEFAULT 0,
+  sushi REAL NOT NULL DEFAULT 0,
+  red_meat REAL NOT NULL DEFAULT 0,
+  poultry REAL NOT NULL DEFAULT 0,
+  pork REAL NOT NULL DEFAULT 0,
+  lamb REAL NOT NULL DEFAULT 0,
+  dairy REAL NOT NULL DEFAULT 0,
+  mushroom_truffle REAL NOT NULL DEFAULT 0,
+  vegetable REAL NOT NULL DEFAULT 0,
+  dessert REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0126': `CREATE TABLE IF NOT EXISTS wine_metadata (
+  id INTEGER PRIMARY KEY REFERENCES wine_embeddings(id),
+  wine_name TEXT NOT NULL,
+  katakana_name TEXT,
+  country TEXT,
+  production_area TEXT,
+  wine_type TEXT,
+  grape_or_style TEXT,
+  characteristics TEXT,
+  pairing_foods TEXT,
+  pairing_food_count INTEGER,
+  pairing_reasons TEXT,
+  food_reason_pairs TEXT,
+  source_urls TEXT,
+  source_url_count INTEGER,
+  source_linked_count INTEGER,
+  source_rate REAL,
+  metadata_research_url TEXT,
+  metadata_status TEXT,
+  metadata_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0127': `ALTER TABLE user_public_keys ADD COLUMN expires_at TEXT;`,
+  '0128': `CREATE TABLE IF NOT EXISTS public_key_security_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  detail TEXT,
+  ip TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_public_key_security_events_user_id ON public_key_security_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_public_key_security_events_created_at ON public_key_security_events(created_at);`,
+  '0129': `CREATE TABLE IF NOT EXISTS d1_query_catalog (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query_name TEXT NOT NULL,
+  command TEXT NOT NULL,
+  command_confirmed INTEGER NOT NULL DEFAULT 0,
+  table_name TEXT,
+  source_file TEXT NOT NULL DEFAULT 'src/index.ts',
+  source_line INTEGER NOT NULL,
+  sql_text TEXT NOT NULL,
+  migration_file TEXT,
+  last_commit_hash TEXT,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(source_file, source_line)
+);
+CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
+CREATE INDEX IF NOT EXISTS idx_d1_query_catalog_query_name ON d1_query_catalog(query_name);`,
+  '0130': `ALTER TABLE d1_query_catalog ADD COLUMN last_commit_at TEXT;`,
+  '0131': `CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id TEXT NOT NULL,
+  pref_key TEXT NOT NULL,
+  pref_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, pref_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_updated_at ON user_preferences(updated_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1768,6 +2141,15 @@ export interface ColumnKeyInfo {
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
+  user_public_keys: { id: 'pk', user_id: 'fk+idx' },
+  public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
+  login_history: { id: 'pk', user_id: 'fk+idx' },
+  public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
+  d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
+  user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
+  wine_embeddings: { id: 'pk', wine_name: 'uk' },
+  wine_details: { wine_id: 'pk+fk' },
+  wine_metadata: { id: 'pk+fk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -1864,6 +2246,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_master: { id: 'pk', moved_to: 'fk' },
   heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
   countdown_events: { id: 'pk', user_id: 'idx' },
+  kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
+  kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1907,6 +2291,8 @@ export function getFilterableColumns(tableName: string): string[] {
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
+  user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth', public_key_security_events: 'auth',
+  wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -1964,6 +2350,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_moondream_analyses: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
+  d1_query_catalog: 'd1-query-catalog',
+  user_preferences: 'auth',
   ts_repository:          'ts-catalog',
   ts_function_catalog:    'ts-catalog',
   ts_function_callers:    'ts-catalog',
@@ -1981,6 +2369,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_master: 'system',
   heritage_journey_waypoint_sets: 'system',
   countdown_events: 'system',
+  kimi_gemma_reviews: 'ai',
+  kimi_code_generate_log: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2028,6 +2418,8 @@ export const GROUP_LABELS: Record<string, string> = {
   config: 'Config / Settings',
   search: 'Search',
   'ts-catalog': 'TS Function Catalog',
+  'd1-query-catalog': 'D1 Query Catalog',
+  system: 'System / Utility',
   undefined: 'Undefined',
 };
 
@@ -2039,6 +2431,8 @@ export const GROUP_COLORS: Record<string, string> = {
   config: '#a371f7',
   search: '#58a6ff',
   'ts-catalog': '#e879f9',
+  'd1-query-catalog': '#f0883e',
+  system: '#39c5cf',
   undefined: '#8b949e',
 };
 
@@ -2076,6 +2470,13 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   workspaces: { team_id: 'teams' },
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
+  user_public_keys: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions' },
+  login_history: { user_id: 'user_sessions' },
+  public_key_security_events: { user_id: 'user_sessions' },
+  user_preferences: { user_id: 'user_sessions' },
+  wine_details: { wine_id: 'wine_embeddings' },
+  wine_metadata: { id: 'wine_embeddings' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
@@ -2088,6 +2489,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_hit_details: { search_history_id: 'commit_search_history' },
   commit_search_keyword_labels: { user_id: 'user_sessions' },
   countdown_events: { user_id: 'user_sessions' },
+  kimi_gemma_reviews: { user_id: 'user_sessions' },
+  kimi_code_generate_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -2183,6 +2586,20 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
 };
 
 /**
+ * user_preferences(キー単位のユーザー設定テーブル)の許可リスト。
+ * SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md参照。
+ *
+ * 個別Cookieの乱立を解消するため、新規設定はここへキーを追加したうえで
+ * POST /api/preferences/:key経由でD1へ書き込む。許可リストに無いキーへの
+ * 書き込みはAPI側で拒否する(ゴミの新規発生を防ぐ)。設定を廃止するときは
+ * ここからキーを外し、`DELETE FROM user_preferences WHERE pref_key = '<キー>'`
+ * をmigrationとして提示する。
+ */
+export const USER_PREFERENCE_KEYS: Record<string, { description: string; values: string[] | 'free' }> = {
+  d1_query_catalog_sort: { description: '/d1-query-catalogの帯の並び替え順', values: ['name', 'count'] },
+};
+
+/**
  * 異名FKの参照先カラム名オーバーライド。
  *
  * キー: `${fromTable}.${fromCol}` / 値: 参照先テーブルの実カラム名。
@@ -2229,10 +2646,33 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   // origin_webhook_log_id → resend_webhook_log.id
   'email_suppression_list.origin_webhook_log_id': 'id',
 
-  // request_id 系 → ai_summary_log.id
-  'ai_summary_reviews.summary_request_id': 'id',
-  'commit_agent_log.request_id': 'id',
-  'ai_summary_link_access_log.request_id': 'id',
+  // AI要約の関連ログは ai_summary_log.request_id (UNIQUE) を参照
+  'ai_summary_reviews.summary_request_id': 'request_id',
+
+  // ID名が異なる参照先 → 各マスターの id (PK)
+  'wine_details.wine_id': 'id',
+  'ai_chat_shares.image_id': 'id',
+  'aichat_search_log.share_id': 'id',
+  'aichat_search_history.share_id': 'id',
+  'aichat_search_impressions.share_id': 'id',
+  'aichat_share_subquery_links.subquery_id': 'id',
+  'aichat_keyword_category_map.category_id': 'id',
+  'aichat_keyword_category_suggestions.suggested_category_id': 'id',
+  'aichat_answer_category_scores.share_id': 'id',
+  'aichat_answer_category_scores.category_id': 'id',
+  'aichat_answer_vectors.share_id': 'id',
+  'aichat_answer_keyword_vectors.share_id': 'id',
+  'aichat_moondream_analyses.share_id': 'id',
+  'aichat_moondream_analyses.image_id': 'id',
+  'heritage_question_view_log.question_master_id': 'id',
+  'ts_function_catalog.repo_id': 'id',
+  'ts_function_callers.repo_id': 'id',
+  'ts_function_callers.callee_id': 'id',
+  'ts_commit_log.repo_id': 'id',
+  'ts_commit_function_map.repo_id': 'id',
+  'ts_function_impact.repo_id': 'id',
+  'ts_commit_quality.repo_id': 'id',
+  'api_search_keyword_sections.keyword_id': 'id',
 
   // search_history_id → commit_search_history.id
   'commit_search_repo_stats.search_history_id': 'id',
@@ -2608,6 +3048,24 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
     return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN;
   } catch {
     return false;
+  }
+}
+
+/**
+ * c.executionCtx?.waitUntil(...) は、ExecutionContextが存在しない実行環境
+ * (Hono app.request()を直接呼ぶテスト・ローカルツール等)では`c.executionCtx`
+ * というgetter自体が例外を投げるため、オプショナルチェイニング(?.)では
+ * 保護できず、リクエスト全体が想定外の500になってしまう(webhookハンドラの
+ * テストで実際に再現した)。本番のCloudflare Workersランタイムでは通常
+ * ExecutionContextは必ず渡されるため表面化しにくいが、waitUntil呼び出し側で
+ * try/catchして安全に無視できるようにしておく。
+ */
+function safeWaitUntil(c: Context<{ Bindings: Bindings; Variables: Variables }>, promise: Promise<unknown>): void {
+  try {
+    c.executionCtx.waitUntil(promise);
+  } catch {
+    // ExecutionContext未提供の環境(テスト等)。バックグラウンド処理を
+    // スキップするだけで、レスポンス自体には影響させない。
   }
 }
 
@@ -3304,6 +3762,31 @@ async function updateUserSession(
   }
 }
 
+/**
+ * ログイン方式(GitHub OAuth / 公開鍵チャレンジ署名)を記録する。
+ * user_sessions.last_login_method(直近1回分、画面表示用)と login_history
+ * (全履歴、監査用)の両方に書き込む。ログイン自体を失敗させたくないため、
+ * 失敗してもログに残すだけでログイン処理は続行する(finalizeGithubLogin/
+ * finalizePasskeyLoginの成否には影響させない)。
+ */
+async function recordLoginMethod(db: D1Database | undefined, userId: string, method: LoginMethod): Promise<void> {
+  if (!db) return;
+  const now = new Date().toISOString();
+  try {
+    await db.prepare('UPDATE user_sessions SET last_login_method = ? WHERE user_id = ?')
+      .bind(method, userId).run();
+    await db.prepare(
+      'INSERT INTO login_history (id, user_id, method, created_at) VALUES (?, ?, ?, ?)'
+    ).bind(crypto.randomUUID(), userId, method, now).run();
+  } catch (error) {
+    logger.error('Failed to record login method', {
+      userId,
+      method,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
 // D1データベースからユーザーセッション情報を取得
 async function getUserSession(db: D1Database | undefined, userId: string): Promise<{
   timezone: string;
@@ -3316,6 +3799,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   toastDuration: number | null;
   idleTimeoutSeconds: number | null;
   heritageTourCountryFilter: string | null;
+  lastLoginMethod: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -3323,7 +3807,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter, last_login_method FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -3335,6 +3819,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toast_duration: number | null;
       idle_timeout_seconds: number | null;
       heritage_tour_country_filter: string | null;
+      last_login_method: string | null;
     }>();
 
     if (!result) {
@@ -3352,6 +3837,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       toastDuration: result.toast_duration ?? null,
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
       heritageTourCountryFilter: result.heritage_tour_country_filter ?? null,
+      lastLoginMethod: result.last_login_method ?? null,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : '';
@@ -3383,6 +3869,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
           toastDuration: fallback.toast_duration ?? null,
           idleTimeoutSeconds: null,
           heritageTourCountryFilter: null,
+          lastLoginMethod: null,
         };
       } catch (fallbackError) {
         logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
@@ -3421,6 +3908,8 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     await ensureDefaultWorkspace(c.env.DB, params.githubLogin);
   }
 
+  await recordLoginMethod(c.env.DB, params.githubLogin, LOGIN_METHOD_GITHUB_OAUTH);
+
   const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
@@ -3452,6 +3941,99 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
     idleTimeoutSeconds,
     sessionDuration: params.sessionDuration,
     returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_GITHUB_OAUTH,
+  });
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
+/**
+ * 公開鍵チャレンジ署名の異常(対象鍵が見つからない・署名が一致しない)を検知した際に、
+ * D1(public_key_security_events)へ記録しSlackへ通知する。秘密鍵が別環境に
+ * 持ち出されて悪用された場合に、いつ・どのユーザー宛の・どの鍵で何が起きたかを
+ * 追跡できるようにする(CLAUDE.mdルール8: catchで握りつぶす場合の記録・通知義務)。
+ * DB記録に失敗しても検知自体(呼び出し元のエラーレスポンス)は継続する。
+ */
+async function flagPublicKeySecurityEvent(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  params: { userId: string; keyId: string; eventType: PublicKeySecurityEventType; detail: string }
+): Promise<void> {
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+  const createdAt = new Date().toISOString();
+  const eventParams = { ...params, ip };
+
+  const db = c.env.DB;
+  if (db) {
+    try {
+      await recordPublicKeySecurityEvent(db, eventParams, crypto.randomUUID(), createdAt);
+    } catch (error) {
+      logger.error('Failed to record public key security event', {
+        userId: params.userId,
+        keyId: params.keyId,
+        eventType: params.eventType,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    postSlackMessage({
+      token: slackToken,
+      channel: slackChannel,
+      text: buildPublicKeySecurityAlertText(eventParams, createdAt),
+    }).catch(() => {});
+  }
+}
+
+// チャレンジ署名ログイン(公開鍵によるパスキー的ログイン)の確定処理。
+// GitHub OAuthを経由しないため、以前のGitHubログインで作られたuser_sessions行
+// (timezone/session_duration/github_access_token等)を引き継ぎ、last_login_at等
+// だけを更新する(github_access_tokenを上書き消去しないようにgetUserSessionの
+// 値をそのままupdateUserSessionへ渡す)。
+async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: Variables }>, params: {
+  userId: string;
+  jwtSecret: string;
+  returnToPath: string;
+}): Promise<Response> {
+  const existing = await getUserSession(c.env.DB, params.userId);
+  const timezone = existing?.timezone ?? DEFAULT_TIMEZONE;
+  const sessionDuration = existing?.sessionDuration ?? '1h';
+
+  await updateUserSession(
+    c.env.DB,
+    params.userId,
+    timezone,
+    sessionDuration,
+    existing?.githubAccessToken ?? undefined,
+    existing?.githubGrantedScopes ?? undefined
+  );
+
+  await recordLoginMethod(c.env.DB, params.userId, LOGIN_METHOD_PUBLIC_KEY);
+
+  const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
+
+  const token = await createJWT(
+    { sub: params.userId },
+    params.jwtSecret,
+    sessionDurationSeconds
+  );
+
+  logger.info('Public key (passkey) authentication successful', { userId: params.userId });
+  logger.recordMetric(c.env.ANALYTICS, 'auth_public_key_success', {
+    userId: params.userId,
+    timestamp: Date.now(),
+  });
+
+  const redirectHeaders = buildAuthRedirectHeaders({
+    token,
+    sessionDurationSeconds,
+    idleTimeoutSeconds,
+    sessionDuration,
+    returnToPath: params.returnToPath,
+    loginMethod: LOGIN_METHOD_PUBLIC_KEY,
   });
 
   return new Response(null, { status: 302, headers: redirectHeaders });
@@ -3660,6 +4242,126 @@ app.get('/', async (c) => {
 
   const returnTo = validateReturnTo(c.req.query('return_to'));
   return c.html(getLoginPage(returnTo));
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ発行。未ログイン状態から呼ばれるため
+ * 認証ミドルウェアなし。userId+keyIdの組み合わせで有効な(失効していない)
+ * 公開鍵が登録されている場合のみチャレンジを発行する。
+ */
+app.post('/auth/public-key/challenge', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    if (!userId || !keyId) {
+      return c.json({ error: 'userId, keyIdは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, userId, now.toISOString()).first<{ id: string }>();
+    if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ発行時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか)',
+      });
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
+    }
+
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, userId, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue passkey login challenge', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵(パスキー的ログイン)のチャレンジ署名検証。成功時はGitHub OAuthを経由せず
+ * セッションJWTを発行してログイン確定する(finalizePasskeyLogin)。
+ */
+app.post('/auth/public-key/verify', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return c.json({ error: 'サーバー設定エラー' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ userId?: string; keyId?: string; challengeId?: string; signature?: string }>();
+    const userId = (body.userId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const challengeId = (body.challengeId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!userId || !keyId || !challengeId || !signature) {
+      return c.json({ error: 'userId, keyId, challengeId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, userId, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, userId, now.toISOString()).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ検証時に対象鍵が見つからない(userId/keyId不一致・失効・期限切れのいずれか)',
+      });
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      logger.warn('Passkey login signature verification failed', { userId, keyId });
+      await flagPublicKeySecurityEvent(c, {
+        userId, keyId, eventType: 'signature_mismatch',
+        detail: '登録済み公開鍵に対し秘密鍵が一致しない署名を受信(パスキーログイン)',
+      });
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    return await finalizePasskeyLogin(c, { userId, jwtSecret, returnToPath: '/welcome' });
+  } catch (error) {
+    logger.error('Failed to verify passkey login', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ログインの検証に失敗しました' }, 500);
+  }
 });
 
 /**
@@ -4200,6 +4902,14 @@ app.get('/welcome', authMiddleware, async (c) => {
     c.header('Set-Cookie', `show_welcome_message=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   }
 
+  // login_method Cookie(ログイン直後の1回のみ有効)を読み取り、今回のログインが
+  // どちらの方式だったかをウェルカムメッセージに反映する。永続的な表示は
+  // userSession.lastLoginMethod(user_sessions.last_login_method)側で行う
+  const loginMethodCookie = getCookieValue(cookieHeader, 'login_method');
+  if (loginMethodCookie) {
+    c.header('Set-Cookie', `login_method=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
+
   // リポジトリ総数を取得
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   let repoCount: number | null = null;
@@ -4221,6 +4931,8 @@ app.get('/welcome', authMiddleware, async (c) => {
     email: user.email,
     lastLoginAt: formattedLastLogin,
     showWelcomeMessage,
+    loginMethod: showWelcomeMessage ? loginMethodCookie : null,
+    lastLoginMethod: userSession?.lastLoginMethod ?? null,
     repoCount,
     expiresAt,
     expiresAtTimestamp: user.exp,
@@ -4317,6 +5029,33 @@ type AichatRequestBody = {
   source?: string; image?: string; preferMoondream?: boolean;
 };
 
+async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
+  const rows = await db.prepare(
+    `SELECT query_name, command, command_confirmed, source_file, source_line, sql_text,
+            migration_file, last_commit_hash, last_commit_at
+     FROM d1_query_catalog
+     WHERE table_name = ?
+     ORDER BY command_confirmed DESC, query_name, source_file, source_line
+     LIMIT 200`
+  ).bind(tableName).all<{
+    query_name: string; command: string; command_confirmed: number; source_file: string;
+    source_line: number; sql_text: string; migration_file: string | null;
+    last_commit_hash: string | null; last_commit_at: string | null;
+  }>();
+  return (rows.results ?? []).map((row) => ({
+    queryName: row.query_name,
+    command: row.command,
+    commandConfirmed: row.command_confirmed,
+    sourceFile: row.source_file,
+    sourceLine: row.source_line,
+    sqlText: row.sql_text,
+    migrationFile: row.migration_file,
+    lastCommitHash: row.last_commit_hash,
+    lastCommitAt: row.last_commit_at,
+  }));
+}
+
+// 接続元IPにはクライアント指定可能なX-Forwarded-ForでなくCloudflareヘッダーだけを使う。
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   let body: AichatRequestBody;
@@ -4340,8 +5079,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
-    // Cloudflareがエッジで設定するヘッダーだけを使用し、クライアントが任意に
-    // 追加できるX-Forwarded-Forを接続元IPとして誤表示しない。
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
       if (!c.env.DB) return null;
@@ -4357,6 +5094,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).all<UserSessionLoginRow>();
       return rows.results ?? [];
     },
+    sqlImpactLookup: c.env.DB ? (tableName) => fetchSqlImpactCatalog(c.env.DB!, tableName) : undefined,
     searchShares: async (keyword) => {
       if (!c.env.DB) return { hitCount: 0, results: [] };
       const db = c.env.DB as unknown as D1Like;
@@ -4486,6 +5224,18 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub, new Date().toISOString()).all<{ label: string; target_at: string }>();
       return (rows.results ?? []).map((r) => ({ label: r.label, targetAt: r.target_at }));
     },
+    ghPrList: async (repoFullName) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      return fetchAndFormatGhPrList(c, user.sub, repoFullName);
+    },
+    fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
   });
   if (slashCommand.handled) {
     return jsonUtf8({
@@ -4514,7 +5264,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const requestedModel = preferMoondream ? MOONDREAM_MODEL : (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-  const { primaryModel, fallbackModel } = resolveAichatModelsForRequest({
+  const { primaryModel, fallbackModel, secondFallbackModel } = resolveAichatModelsForRequest({
     requestedModel,
     hasImage: !!image,
     allowedModels: AICHAT_ALLOWED_MODELS,
@@ -4527,10 +5277,15 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-    const textMessages = buildAiMessages(message, systemPromptMode);
-    const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
-    const baseParams = { messages, max_tokens: maxTokens };
-    const runParams = getModelRunParams(model, baseParams);
+    let runParams: unknown;
+    if (model === AICHAT_MOONDREAM3_MODEL && image) {
+      runParams = buildMoondream3RunParams(image, message);
+    } else {
+      const textMessages = buildAiMessages(message, systemPromptMode);
+      const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
+      const baseParams = { messages, max_tokens: maxTokens };
+      runParams = getModelRunParams(model, baseParams);
+    }
     const result = await c.env.AI!.run(
       model as Parameters<typeof c.env.AI.run>[0],
       runParams as Parameters<typeof c.env.AI.run>[1]
@@ -4594,34 +5349,40 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
-  try {
-    const { text: response, usage } = await runAi(primaryModel);
-    const saved = await autoSave(response, primaryModel, usage);
-    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
-  } catch (primaryErr) {
-    logger.warn('AI chat primary model failed, trying fallback', {
-      model: primaryModel,
-      fallback: fallbackModel,
-      user: user.sub,
-      error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
-    });
-    if (primaryModel === fallbackModel) {
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
-    }
+  const candidates = [primaryModel, fallbackModel, secondFallbackModel].filter(
+    (m, i, arr): m is string => !!m && arr.indexOf(m) === i
+  );
+  let lastErr: unknown = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const model = candidates[i];
     try {
-      const { text: response, usage } = await runAi(fallbackModel);
-      const saved = await autoSave(response, fallbackModel, usage);
-      const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
-    } catch (fallbackErr) {
-      logger.warn('AI chat fallback model also failed', {
-        model: fallbackModel,
-        user: user.sub,
-        error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
+      const { text: response, usage } = await runAi(model);
+      const saved = await autoSave(response, model, usage);
+      const isFallback = i > 0;
+      return jsonUtf8({
+        response,
+        usedModel: model,
+        systemPromptMode,
+        ...(isFallback
+          ? { fallbackUsed: true, primaryError: lastErr instanceof Error ? lastErr.message : String(lastErr) }
+          : {}),
+        ...usage,
+        ...saved,
       });
-      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+    } catch (err) {
+      logger.warn(
+        i === 0 ? 'AI chat primary model failed, trying fallback' : 'AI chat fallback model failed, trying next',
+        {
+          model,
+          next: candidates[i + 1],
+          user: user.sub,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }
+      );
+      lastErr = err;
     }
   }
+  return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
 });
 
 /**
@@ -4783,11 +5544,105 @@ export async function searchAichatMoondreamAnalyses(
   return { results: rows.results ?? [] };
 }
 
+/**
+ * /answer-graph・AIチャット左サイドパネルの検索対象ドロップダウンで
+ * 「kimi-gemma」を選んだ場合用。/kimi-codeページでkimi-k2.7-codeが生成した
+ * コードをgemma-4-26b-a4b-itにレビューさせた結果(kimi_gemma_reviews)を
+ * キーワード検索する。ai_chat_sharesの行を持たない独立したデータのため、
+ * questionにはkimi_prompt(生成指示)、answerにはgemma_response(レビュー結果)を
+ * 割り当てて返す。
+ */
+export async function searchKimiGemmaReviews(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; question: string; answer: string; model: string; created_at: string;
+  review_note: { label: string; text: string };
+}> }> {
+  const normalized = q.replace(/[・･]/g, '・');
+  const rows = await db
+    .prepare(
+      // answerには質問(kimi_prompt)に対する本来の回答であるkimi_code(生成コード)を
+      // 割り当てる。gemma_response(生成コードへの外部レビュー)をanswerに
+      // 割り当てると、通常の質問/回答バブルの並びでは「回答=別モデルによる
+      // レビュー文」になってしまい、実際に生成されたコードそのものがどの画面
+      // にも表示されなくなる(=質問と回答の対応関係が崩れる)ため、レビューは
+      // review_noteとして別フィールドに分離する。
+      `SELECT id, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model, created_at,
+              gemma_model, gemma_response
+       FROM kimi_gemma_reviews
+       WHERE user_id = ?
+         AND (
+           INSTR(REPLACE(kimi_prompt, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(kimi_code, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(gemma_response, '･', '・'), ?) > 0
+         )
+       ORDER BY created_at DESC LIMIT 30`
+    )
+    .bind(userId, normalized, normalized, normalized)
+    .all<{ id: string; question: string; answer: string; model: string; created_at: string; gemma_model: string; gemma_response: string }>();
+  const results = (rows.results ?? []).map((r) => {
+    const { gemma_model, gemma_response, ...rest } = r;
+    return { ...rest, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
+  });
+  return { results };
+}
+
+/**
+ * /kimi-codeページ用のトークン利用量集計。kimi-k2.7-code(従量課金モデル)は
+ * コード生成の時点(kimi_code_generate_log)で、gemma-4-26b-a4b-itはレビュー
+ * 呼び出しの時点(kimi_gemma_reviews.gemma_*_tokens)でそれぞれ記録している
+ * ため、2つのテーブルをUNION ALLしてperiod(月 or 日)・モデル別に合算する。
+ * トークン数が記録されていない行(NULL。呼び出し失敗時やこの機能追加前の
+ * 既存データ)は合算対象から除外する。
+ */
+export async function getKimiCodeTokenUsage(
+  db: D1Like,
+  userId: string,
+  since: string,
+  granularity: 'day' | 'month' = 'month',
+): Promise<{ rows: Array<{
+  period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number;
+}> }> {
+  const periodFormat = granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
+  const rows = await db
+    .prepare(
+      `SELECT period, model,
+              SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(total_tokens) AS total_tokens,
+              COUNT(*) AS request_count
+       FROM (
+         SELECT strftime('${periodFormat}', created_at) AS period, model,
+                input_tokens, output_tokens, total_tokens
+         FROM kimi_code_generate_log
+         WHERE user_id = ? AND created_at >= ? AND input_tokens IS NOT NULL
+         UNION ALL
+         SELECT strftime('${periodFormat}', created_at) AS period, gemma_model AS model,
+                gemma_input_tokens AS input_tokens, gemma_output_tokens AS output_tokens, gemma_total_tokens AS total_tokens
+         FROM kimi_gemma_reviews
+         WHERE user_id = ? AND created_at >= ? AND gemma_input_tokens IS NOT NULL
+       )
+       GROUP BY period, model
+       ORDER BY period ASC, model ASC`
+    )
+    .bind(userId, since, userId, since)
+    .all<{ period: string; model: string; input_tokens: number; output_tokens: number; total_tokens: number; request_count: number }>();
+  return { rows: rows.results ?? [] };
+}
+
 export interface AichatShareDetail {
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
   input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
   image_data_url: string | null;
+  /**
+   * kimi-gemma専用: answer(kimi-k2.7-codeが生成したコードそのもの)に対して、
+   * 別モデル(gemma-4-26b-a4b-it)がレビューした結果。question→answerの
+   * 1問1答とは別の「回答への外部レビュー」という副次的な関係のため、
+   * answerへ文字列結合せず専用フィールドとして分離する(応答バブルとは
+   * 別の注釈カードとして描画することを想定)。target='kimi-gemma'以外はnull。
+   */
+  review_note: { label: string; text: string } | null;
 }
 
 /**
@@ -4811,6 +5666,27 @@ export async function getAichatShareDetail(
   id: string,
   target: string,
 ): Promise<AichatShareDetail | null> {
+  if (target === 'kimi-gemma') {
+    // 質問(kimi_prompt)→回答(kimi_code)は通常のコード生成のQ&Aとして
+    // そのまま表示し、gemma_response(生成コードに対する外部レビュー)は
+    // 文字列結合でanswerに混ぜ込まず、review_noteという別フィールドで返す。
+    // 「回答自体」と「回答に対する別モデルの注釈」を画面側でも別要素として
+    // 描画できるようにするため(1問1答の型に無理に押し込めない)。
+    const row = await db
+      .prepare(
+        `SELECT id, id AS user_hash, kimi_prompt AS question, kimi_code AS answer, 'kimi-k2.7-code' AS model,
+                gemma_model, gemma_response,
+                created_at, 0 AS access_count, NULL AS question_hash,
+                NULL AS input_tokens, NULL AS output_tokens, NULL AS total_tokens, NULL AS image_data_url
+         FROM kimi_gemma_reviews
+         WHERE id = ? AND user_id = ?`
+      )
+      .bind(id, userId)
+      .first<AichatShareDetail & { gemma_model: string; gemma_response: string }>();
+    if (!row) return null;
+    const { gemma_model, gemma_response, ...detail } = row;
+    return { ...detail, review_note: { label: 'Gemma(' + gemma_model + ')によるレビュー', text: gemma_response } };
+  }
   if (target === 'moondream3.1') {
     const row = await db
       .prepare(
@@ -4824,7 +5700,7 @@ export async function getAichatShareDetail(
       )
       .bind(id, userId)
       .first<AichatShareDetail>();
-    return row ?? null;
+    return row ? { ...row, review_note: null } : null;
   }
   const row = await db
     .prepare(
@@ -4837,7 +5713,7 @@ export async function getAichatShareDetail(
     )
     .bind(id, userId)
     .first<AichatShareDetail>();
-  return row ?? null;
+  return row ? { ...row, review_note: null } : null;
 }
 
 /** /api/aichat/image-branches が返す1件分の型。llama-4はquestion/answer、moondream3.1はanalysis_textのみ埋める */
@@ -5250,8 +6126,14 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   // (加えてEXISTS句でmoondream分析結果もヒット判定には含む)を検索する。
   const target = (c.req.query('target') ?? '').trim();
   const db = c.env.DB as unknown as D1Like;
-  const { results } = target === 'moondream3.1'
+  // 検索対象ごとに戻り値の付随フィールド(user_hash/image_data_url/review_note等)が
+  // 異なるため、enrichSearchResultsWithKeywordCounts等の共通後処理へ渡す前に
+  // idを持つ緩い共通型へ揃える(TSがunion配列をそのままジェネリック推論できないため)。
+  type AichatSearchResultItem = { id: string; [key: string]: unknown };
+  const { results }: { results: AichatSearchResultItem[] } = target === 'moondream3.1'
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
+    : target === 'kimi-gemma'
+    ? await searchKimiGemmaReviews(db, user.sub, q)
     : await searchAiChatShares(db, user.sub, q);
   const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(db, user.sub, results);
   const enriched = await enrichSearchResultsWithVectorizedFlag(db, user.sub, withKeywordCounts);
@@ -6829,8 +7711,26 @@ export function floatsToBlob(vec: number[]): ArrayBuffer {
   return new Float32Array(vec).buffer;
 }
 
-export function blobToFloats(blob: ArrayBuffer): number[] {
-  return Array.from(new Float32Array(blob));
+/**
+ * D1のBLOB列は実行環境によってArrayBuffer・Uint8Array(TypedArray)・
+ * 素のnumber[](JSON経由のシリアライズ等)のいずれかで返ってくる可能性が
+ * ある。いずれの場合も「バイト列を要素配列としてコピーする」誤ったAPI
+ * オーバーロードを踏まないよう、必ずバイト列(Uint8Array)へ正規化して
+ * からArrayBufferとして再解釈する。
+ */
+export function blobToFloats(blob: ArrayBuffer | Uint8Array | number[]): number[] {
+  let bytes: Uint8Array;
+  if (blob instanceof ArrayBuffer) {
+    bytes = new Uint8Array(blob);
+  } else if (ArrayBuffer.isView(blob)) {
+    bytes = new Uint8Array(blob.buffer, blob.byteOffset, blob.byteLength);
+  } else if (Array.isArray(blob)) {
+    bytes = Uint8Array.from(blob);
+  } else {
+    bytes = new Uint8Array(blob as ArrayBufferLike);
+  }
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return Array.from(new Float32Array(buffer));
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -9420,7 +10320,7 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 });
 
 // ログイン中の画面カウントダウン表示のために、現在時刻より未来の予定のうち
-// 最も近いものだけを1件返す。findNextCountdownEvent()（純粋関数）で選定する。
+// すべてを近い順で返す。従来クライアントとの互換性のため、最も近い1件をeventにも返す。
 // 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
 // computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
 // (単発登録ではnullのまま=フィールド自体を含めない)。
@@ -9432,17 +10332,20 @@ app.get('/api/countdown/next', authMiddleware, async (c) => {
       'SELECT id, label, target_at, group_id FROM countdown_events WHERE user_id = ?'
     ).bind(user.sub).all<{ id: number; label: string; target_at: string; group_id: string | null }>();
     const results = rows.results ?? [];
-    const next = findNextCountdownEvent(results, new Date().toISOString());
-    if (!next) return jsonUtf8({ event: null });
-    const groupPosition = computeCountdownGroupPosition(results, next.id);
-    return jsonUtf8({
-      event: {
-        id: next.id,
-        label: next.label,
-        targetAt: next.target_at,
+    const upcoming = findUpcomingCountdownEvents(results, new Date().toISOString());
+    const events = upcoming.map((item) => {
+      const groupPosition = computeCountdownGroupPosition(results, item.id);
+      return {
+        id: item.id,
+        label: item.label,
+        targetAt: item.target_at,
         groupIndex: groupPosition ? groupPosition.index : null,
         groupTotal: groupPosition ? groupPosition.total : null,
-      },
+      };
+    });
+    return jsonUtf8({
+      event: events[0] ?? null,
+      events,
     });
   } catch (err) {
     logger.error('countdown next lookup failed', { error: err instanceof Error ? err.message : 'Unknown error' });
@@ -9922,10 +10825,157 @@ app.get('/factor-wasm', authMiddleware, async (c) => {
   return c.html(getFactorWasmPage(user.sub));
 });
 
+app.get('/sqlc-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getSqlcWasmPage(user.sub));
+});
+
+app.get('/d1-query-catalog', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // SQL詳細ダイアログでsqlc WASMを遅延実行するため、このページだけ許可する。
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  const db = c.env.DB;
+  let rows: D1QueryCatalogRow[] = [];
+  const columnCounts: Record<string, number> = {};
+  if (db) {
+    try {
+      const result = await db.prepare(
+        `SELECT query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash, last_commit_at
+         FROM d1_query_catalog
+         ORDER BY table_name, query_name`
+      ).all<D1QueryCatalogRow>();
+      rows = result.results ?? [];
+      const tableNames = [...new Set(rows.map(row => row.table_name).filter((name): name is string => Boolean(name)))];
+      await Promise.all(tableNames.map(async (tableName) => {
+        try {
+          const escapedTableName = tableName.replace(/"/g, '""');
+          const info = await db.prepare(`PRAGMA table_info("${escapedTableName}")`).all<{ name: string }>();
+          columnCounts[tableName] = info.results?.length ?? 0;
+        } catch {
+          columnCounts[tableName] = 0;
+        }
+      }));
+    } catch (error) {
+      logger.warn('d1-query-catalog: fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
+    }
+  }
+  let initialSort: 'name' | 'count' = 'count';
+  if (db) {
+    try {
+      const pref = await db.prepare(
+        `SELECT pref_value FROM user_preferences WHERE user_id = ? AND pref_key = 'd1_query_catalog_sort'`
+      ).bind(user.sub).first<{ pref_value: string }>();
+      if (pref?.pref_value === 'name' || pref?.pref_value === 'count') {
+        initialSort = pref.pref_value;
+      } else {
+        // 移行互換: user_preferencesに値が無い場合、旧d1_query_catalog_sort Cookieが
+        // 残っていればその値を一度だけD1へ取り込む(SPEC.20260907.user-preferences.md 4章5番)。
+        const sortCookie = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_sort');
+        if (sortCookie === 'name' || sortCookie === 'count') {
+          initialSort = sortCookie;
+          await db.prepare(
+            `INSERT INTO user_preferences (user_id, pref_key, pref_value, updated_at)
+             VALUES (?, 'd1_query_catalog_sort', ?, datetime('now'))
+             ON CONFLICT(user_id, pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at = excluded.updated_at`
+          ).bind(user.sub, sortCookie).run();
+        }
+      }
+    } catch (error) {
+      logger.warn('d1-query-catalog: preference fetch failed', { error: error instanceof Error ? error.message : 'Unknown' });
+    }
+  }
+  const singleTableSelection = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_single_table') !== 'off';
+  const expandCategoryTables = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_expand_category_tables') === 'on';
+  const fkTargets = new Set(Object.values(COLUMN_FK_TARGETS).flatMap(columns => Object.values(columns)));
+  const tableClassifications: Record<string, D1QueryCatalogTableClassification> = Object.fromEntries(
+    [...new Set(rows.map(row => row.table_name).filter((name): name is string => Boolean(name)))].map(tableName => {
+      const group = TABLE_GROUP_MAP[tableName] ?? 'undefined';
+      const isSource = Object.keys(COLUMN_FK_TARGETS[tableName] ?? {}).length > 0;
+      const isTarget = fkTargets.has(tableName);
+      return [tableName, {
+        group,
+        groupLabel: GROUP_LABELS[group] ?? group,
+        color: GROUP_COLORS[group] ?? GROUP_COLORS.undefined,
+        fkRole: isSource && isTarget ? 'both' : isSource ? 'source' : isTarget ? 'target' : 'none',
+      }];
+    }),
+  );
+  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications, expandCategoryTables));
+});
+
+/**
+ * ブラウザに現在保存されているCookie/localStorageの値を、
+ * どのページの設定なのか・D1(user_preferences)への移行先がすでにあるか
+ * (パージ可能/復元可能)で一覧表示するページ。走査自体はクライアントJSで行う。
+ */
+app.get('/legacy-storage-inventory', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getLegacyStorageInventoryPage(user.sub));
+});
+
+/**
+ * イコールアース図法(Equal Earth projection)の白地図ページ。
+ * 主要都市のメニューを選択すると、その座標を中心に地図がスクロールする。
+ */
+app.get('/equal-earth-map', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getEqualEarthMapPage(user.sub));
+});
+
+app.get('/ruby-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
+  // このページはRubyバイナリ本体(ruby+stdlib.wasm)をjsDelivr CDNから、
+  // bare specifierを解決済みURLへ書き換えてくれるesm.sh経由でJSグルー
+  // コード(@ruby/wasm-wasi)を取得するため、script-src/connect-srcに
+  // 両ドメインを追加する
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getRubyWasmPage(user.sub));
+});
+
 app.get('/wasm-modules', authMiddleware, async (c) => {
   const user = c.get('user');
   const viewMode = resolveWasmModulesViewMode(c.req.header('Cookie'));
   return c.html(getWasmModulesPage(user.sub, viewMode));
+});
+
+/**
+ * gh-wasm(Rust実装)でGitHubのプルリクエスト一覧をMarkdownテーブルへ整形して返す。
+ * /neko gh pr list サブコマンドと同じロジック(fetchAndFormatGhPrList)を使う。
+ */
+app.get('/api/gh/pr-list', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const repo = (c.req.query('repo') ?? '').trim();
+  if (!repo) {
+    return jsonUtf8({ error: 'repo(owner/repo形式)は必須です' }, 400);
+  }
+  if (c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+    ).bind('gh').first<WasmModuleStartupRow>().catch(() => null);
+    if (!isWasmModuleEnabled(row)) {
+      return jsonUtf8({ error: 'ghモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)' }, 503);
+    }
+  }
+  try {
+    const markdown = await fetchAndFormatGhPrList(c, user.sub, repo);
+    return jsonUtf8({ markdown });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
+  }
 });
 
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
@@ -10048,6 +11098,602 @@ app.get('/cheese-search', authMiddleware, async (c) => {
   return c.html(getCheeseSearchPage(user.sub));
 });
 
+/**
+ * ワイン銘柄名(wine_embeddings.wine_name)の埋め込みキャッシュを読み書きする。
+ * aichat_keyword_embeddingsのgetOrComputeKeywordEmbeddingと同じ方針だが、
+ * ワインは全ユーザー共通データのためuser_idによるテナント分離を持たない。
+ * 同一モデルでキャッシュ済みならAIを呼ばずそのベクトルを返す。
+ */
+export async function getOrComputeWineEmbedding(
+  db: D1Database,
+  ai: Ai,
+  wineName: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<number[]> {
+  const row = await db.prepare(
+    `SELECT vector, model FROM wine_embeddings WHERE wine_name = ?`
+  ).bind(wineName).first<{ vector: ArrayBuffer; model: string }>();
+  if (row && row.model === model) return blobToFloats(row.vector);
+  const vector = await embedTextWithModel(ai, model, wineName);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO wine_embeddings (wine_name, model, dim, vector, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(wine_name) DO UPDATE SET
+       model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
+  ).bind(wineName, model, vector.length, floatsToBlob(vector), now, now).run();
+  return vector;
+}
+
+export interface WineDetailFields {
+  pairing_count: number;
+  source_linked_count: number;
+  source_rate: number;
+  reliability: number;
+  fat: number;
+  sweet: number;
+  acid: number;
+  salt: number;
+  spice: number;
+  umami: number;
+  bitter: number;
+  richness: number;
+  raw: number;
+  fried: number;
+  grilled_smoked: number;
+  creamy_butter: number;
+  tomato: number;
+  herbal_green: number;
+  seafood: number;
+  shellfish: number;
+  white_fish: number;
+  oily_fish: number;
+  sushi: number;
+  red_meat: number;
+  poultry: number;
+  pork: number;
+  lamb: number;
+  dairy: number;
+  mushroom_truffle: number;
+  vegetable: number;
+  dessert: number;
+}
+
+export const WINE_DETAIL_COLUMNS: (keyof WineDetailFields)[] = [
+  'pairing_count', 'source_linked_count', 'source_rate', 'reliability',
+  'fat', 'sweet', 'acid', 'salt', 'spice', 'umami', 'bitter', 'richness',
+  'raw', 'fried', 'grilled_smoked', 'creamy_butter', 'tomato', 'herbal_green',
+  'seafood', 'shellfish', 'white_fish', 'oily_fish', 'sushi', 'red_meat',
+  'poultry', 'pork', 'lamb', 'dairy', 'mushroom_truffle', 'vegetable', 'dessert',
+];
+
+export interface WineSearchCandidate {
+  id: number;
+  wineName: string;
+  vector: number[];
+  details: WineDetailFields | null;
+  pairingFoods: string | null;
+}
+
+export interface WineSearchResult {
+  id: number;
+  wineName: string;
+  similarity: number;
+  details: WineDetailFields | null;
+  pairingFoods: string | null;
+}
+
+/**
+ * ワイン検索の候補一覧をクエリベクトルとのコサイン類似度降順で並べ、
+ * 上位limit件を返す(rankSimilarKeywordsと同じ方針)。
+ * クエリベクトルが空(埋め込み失敗時)の場合は空配列を返す。
+ */
+export function rankWines(
+  queryVector: number[],
+  candidates: WineSearchCandidate[],
+  limit = 30,
+): WineSearchResult[] {
+  if (queryVector.length === 0) return [];
+  return candidates
+    .map((c) => ({ id: c.id, wineName: c.wineName, similarity: cosineSimilarity(queryVector, c.vector), details: c.details, pairingFoods: c.pairingFoods }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, Math.max(0, limit));
+}
+
+export const WINE_SEARCH_ALLOWED_LIMITS = [20, 30, 50, 100] as const;
+export const WINE_SEARCH_DEFAULT_LIMIT = 30;
+export const WINE_SEARCH_DEFAULT_HIT_THRESHOLD = 0.5;
+
+/**
+ * 「表示件数(limit)」とは独立に、類似度が閾値以上の候補が全体で何件
+ * あるかを数える(=ヒット件数)。表示件数を絞っても実際の一致件数を
+ * ユーザーが把握できるようにするための集計で、上位limit件のスコアには
+ * 依存しない。
+ */
+export function countWineHits(
+  queryVector: number[],
+  candidates: WineSearchCandidate[],
+  threshold: number,
+): number {
+  if (queryVector.length === 0) return 0;
+  return candidates.filter((c) => cosineSimilarity(queryVector, c.vector) >= threshold).length;
+}
+
+/**
+ * wine_metadata.pairing_foodsは「牡蠣 / 魚介 / 白身魚」のように区切り文字
+ * (半角/全角スラッシュ)で複数の料理を1つの文字列にまとめて保持している。
+ * バッジ集計のために個別の料理名へ分割する。前後の空白・空要素は除去する。
+ */
+export function parsePairingFoods(pairingFoods: string | null | undefined): string[] {
+  if (!pairingFoods) return [];
+  return pairingFoods
+    .split(/[/／]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+const FOOD_EMOJI_RULES: [RegExp, string][] = [
+  [/寿司|すし|鮨/, '🍣'],
+  [/牡蠣|貝|海老|エビ|蟹|カニ|ロブスター|甲殻類|シーフード|魚介|海鮮/, '🦐'],
+  [/魚|サーモン|鮭/, '🐟'],
+  [/鶏|チキン|唐揚げ|焼き鳥/, '🍗'],
+  [/牛肉|ステーキ|ローストビーフ|赤身肉|ラグー|ボロネーゼ/, '🥩'],
+  [/ラム|羊/, '🐑'],
+  [/豚|ベーコン|生ハム|シャルキュトリ/, '🥓'],
+  [/ジビエ|鹿|鴨/, '🦌'],
+  [/チーズ/, '🧀'],
+  [/パスタ|ピザ/, '🍝'],
+  [/リゾット/, '🍚'],
+  [/サラダ|野菜/, '🥗'],
+  [/キノコ|茸/, '🍄'],
+  [/デザート|チョコレート|菓子|タルト|フルーツ/, '🍰'],
+  [/スパイス|辛/, '🌶️'],
+  [/キャビア/, '🐟'],
+];
+
+/**
+ * 料理名から見た目に分かりやすい絵文字を推定する。既知のキーワードに
+ * 一致しなければ汎用の食器アイコンにフォールバックする(完璧な分類は
+ * 目的ではなく、ひと目で識別しやすくすることが目的)。
+ */
+export function pickFoodEmoji(food: string): string {
+  for (const [pattern, emoji] of FOOD_EMOJI_RULES) {
+    if (pattern.test(food)) return emoji;
+  }
+  return '🍽️';
+}
+
+export interface WineFoodBadge {
+  food: string;
+  emoji: string;
+  count: number;
+}
+
+/**
+ * 検索結果(表示されているresults)全体でwine_metadata.pairing_foodsを
+ * 集計し、出現回数の多い順に並べたバッジ一覧を返す。同数の場合は
+ * 出現順(=元のresultsの並び順、つまり類似度順)を保つ安定ソートとする。
+ */
+export function aggregateFoodBadges(results: { pairingFoods: string | null }[]): WineFoodBadge[] {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    for (const food of parsePairingFoods(r.pairingFoods)) {
+      counts.set(food, (counts.get(food) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([food, count]) => ({ food, emoji: pickFoodEmoji(food), count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export interface WineBulkRegisterError {
+  wine: string;
+  error: string;
+}
+
+export interface WineBulkRegisterResult {
+  totalSeed: number;
+  alreadyRegistered: number;
+  attempted: number;
+  succeeded: number;
+  succeededWines: string[];
+  errors: WineBulkRegisterError[];
+  remaining: number;
+}
+
+/**
+ * seeds/wine_initial_vectors_v83.csv由来のシード(WINE_VECTOR_SEED)から、
+ * まだwine_embeddingsに登録されていないワイン名だけを埋め込み計算し、
+ * wine_embeddings/wine_detailsへ保存する(POST /api/wine/bulk-register)。
+ * この環境にはCLOUDFLARE_API_TOKENが無くWorkers AI呼び出しができないため、
+ * 実際の実行はデプロイ後にユーザーがこのエンドポイントを叩く前提。
+ *
+ * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する。
+ * 失敗はerrorsに記録して呼び出し元(APIレスポンス)へそのまま返す
+ * (CLAUDE.mdルール8: 記録・通知の義務)。
+ *
+ * limitを指定すると、未登録分のうち先頭limit件だけを処理して残り件数を
+ * remainingとして返す。クライアント側はこれをポーリング的に繰り返し呼び出す
+ * ことで「何件目/残り何件」の進捗表示ができる(1リクエストで616件全部
+ * 処理すると進捗が見えないため)。limit省略時は従来通り全件処理する。
+ */
+export async function bulkRegisterWines(
+  db: D1Database,
+  ai: Ai,
+  seeds: WineSeedRow[],
+  limit?: number,
+): Promise<WineBulkRegisterResult> {
+  const existingRows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
+  const existingSet = new Set((existingRows.results ?? []).map((r) => r.wine_name));
+  const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
+  const toRegister = (typeof limit === 'number' && limit > 0) ? notRegistered.slice(0, limit) : notRegistered;
+  let succeeded = 0;
+  const succeededWines: string[] = [];
+  const errors: WineBulkRegisterError[] = [];
+
+  for (const w of toRegister) {
+    try {
+      const vector = await getOrComputeWineEmbedding(db, ai, w.wine);
+      if (vector.length === 0) {
+        errors.push({ wine: w.wine, error: '埋め込みが空でした(AI呼び出し失敗の可能性があります)' });
+        continue;
+      }
+      const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(w.wine).first<{ id: number }>();
+      if (!idRow) {
+        errors.push({ wine: w.wine, error: '埋め込み保存後にIDが取得できませんでした' });
+        continue;
+      }
+      const now = new Date().toISOString();
+      const cols = ['wine_id', ...WINE_DETAIL_COLUMNS, 'created_at', 'updated_at'];
+      const placeholders = cols.map(() => '?').join(', ');
+      const updateSet = WINE_DETAIL_COLUMNS.map((c) => `${c} = excluded.${c}`).join(', ') + ', updated_at = excluded.updated_at';
+      await db.prepare(
+        `INSERT INTO wine_details (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT(wine_id) DO UPDATE SET ${updateSet}`
+      ).bind(idRow.id, ...WINE_DETAIL_COLUMNS.map((c) => w[c]), now, now).run();
+      succeeded++;
+      succeededWines.push(w.wine);
+    } catch (e) {
+      errors.push({ wine: w.wine, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return {
+    totalSeed: seeds.length,
+    alreadyRegistered: existingSet.size,
+    attempted: toRegister.length,
+    succeeded,
+    succeededWines,
+    errors,
+    remaining: notRegistered.length - toRegister.length,
+  };
+}
+
+function rowToWineDetail(row: Record<string, unknown> | null): WineDetailFields | null {
+  if (!row) return null;
+  const hasAny = WINE_DETAIL_COLUMNS.some((c) => row[c] !== null && row[c] !== undefined);
+  if (!hasAny) return null;
+  const out = {} as WineDetailFields;
+  for (const c of WINE_DETAIL_COLUMNS) {
+    out[c] = typeof row[c] === 'number' ? row[c] as number : Number(row[c] ?? 0);
+  }
+  return out;
+}
+
+export const WINE_METADATA_COLUMNS: (keyof WineMetadataSeedRow)[] = [
+  'katakana_name', 'country', 'production_area', 'wine_type', 'grape_or_style',
+  'characteristics', 'pairing_foods', 'pairing_food_count', 'pairing_reasons',
+  'food_reason_pairs', 'source_urls', 'source_url_count', 'source_linked_count',
+  'source_rate', 'metadata_research_url', 'metadata_status', 'metadata_note',
+];
+
+export interface WineDetailByIdResult {
+  id: number;
+  wineName: string;
+  model: string;
+  dim: number;
+  details: WineDetailFields | null;
+  metadata: Partial<Record<keyof WineMetadataSeedRow, unknown>> | null;
+}
+
+function rowToWineMetadata(row: Record<string, unknown> | null): Partial<Record<keyof WineMetadataSeedRow, unknown>> | null {
+  if (!row) return null;
+  const hasAny = WINE_METADATA_COLUMNS.some((c) => row[`meta_${c}`] !== null && row[`meta_${c}`] !== undefined);
+  if (!hasAny) return null;
+  const out: Partial<Record<keyof WineMetadataSeedRow, unknown>> = {};
+  for (const c of WINE_METADATA_COLUMNS) {
+    out[c] = row[`meta_${c}`];
+  }
+  return out;
+}
+
+/**
+ * wine_embeddings.id(連番インデックス)を主キーに、銘柄名・モデル・
+ * 次元数・全特性値(wine_detailsとの1:1 JOIN)・個別詳細(wine_metadataとの
+ * 1:1 JOIN、産地・品種・特徴・ペアリング料理等)をまとめて1件返す。
+ * 一覧(POST /api/wine/search)ではマスクされうる特性値も、個別詳細
+ * (GET /api/wine/:id)では常にすべて返す。該当行が無ければnullを返し、
+ * 例外は投げない(呼び出し元がHTTP 404に変換する)。
+ */
+export async function getWineDetailById(db: D1Database, id: number): Promise<WineDetailByIdResult | null> {
+  const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const metaCols = WINE_METADATA_COLUMNS.map((c) => `m.${c} AS meta_${c}`).join(', ');
+  const row = await db.prepare(
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.model AS model, e.dim AS dim, ${cols}, ${metaCols}
+     FROM wine_embeddings e
+     LEFT JOIN wine_details d ON d.wine_id = e.id
+     LEFT JOIN wine_metadata m ON m.id = e.id
+     WHERE e.id = ?`
+  ).bind(id).first<Record<string, unknown>>();
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    wineName: String(row.wine_name),
+    model: String(row.model),
+    dim: Number(row.dim),
+    details: rowToWineDetail(row),
+    metadata: rowToWineMetadata(row),
+  };
+}
+
+export interface WineByFoodResultRow {
+  id: number;
+  wineName: string;
+  pairingFoods: string | null;
+  country: string | null;
+  wineType: string | null;
+  characteristics: string | null;
+}
+
+/**
+ * 「合う料理」バッジをタップした時に、検索キーワードとタップした料理の
+ * 両方に一致する銘柄をwine_metadataから抽出する。料理はpairing_foods列
+ * (「牡蠣 / 魚介 / 白身魚」形式)への部分一致、検索キーワードはwine_name・
+ * grape_or_style・characteristics・wine_type・country・production_areaの
+ * いずれかへの部分一致とする(新規追加分は銘柄名に品種名を含まないことが
+ * 多く、wine_name単独の一致だけでは検索キーワードとの関連性を拾えない
+ * ため)。キーワードが空の場合は料理の一致のみで絞り込む。
+ */
+export async function searchWineByFoodAndKeyword(
+  db: D1Database,
+  food: string,
+  keyword: string,
+): Promise<WineByFoodResultRow[]> {
+  const foodPattern = `%${food}%`;
+  const conditions = ['m.pairing_foods LIKE ?'];
+  const params: string[] = [foodPattern];
+  const trimmedKeyword = keyword.trim();
+  if (trimmedKeyword) {
+    const keywordPattern = `%${trimmedKeyword}%`;
+    conditions.push(`(
+      m.wine_name LIKE ? OR m.grape_or_style LIKE ? OR m.characteristics LIKE ? OR
+      m.wine_type LIKE ? OR m.country LIKE ? OR m.production_area LIKE ?
+    )`);
+    params.push(keywordPattern, keywordPattern, keywordPattern, keywordPattern, keywordPattern, keywordPattern);
+  }
+  const rows = await db.prepare(
+    `SELECT m.id AS id, m.wine_name AS wine_name, m.pairing_foods AS pairing_foods,
+            m.country AS country, m.wine_type AS wine_type, m.characteristics AS characteristics
+     FROM wine_metadata m
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY m.wine_name`
+  ).bind(...params).all<Record<string, unknown>>();
+  return (rows.results ?? []).map((r) => ({
+    id: Number(r.id),
+    wineName: String(r.wine_name),
+    pairingFoods: typeof r.pairing_foods === 'string' ? r.pairing_foods : null,
+    country: typeof r.country === 'string' ? r.country : null,
+    wineType: typeof r.wine_type === 'string' ? r.wine_type : null,
+    characteristics: typeof r.characteristics === 'string' ? r.characteristics : null,
+  }));
+}
+
+app.get('/api/wine/by-food', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const food = (c.req.query('food') ?? '').trim();
+  if (!food) return jsonUtf8({ error: '料理名(food)を指定してください' }, 400);
+  const keyword = c.req.query('q') ?? '';
+  const results = await searchWineByFoodAndKeyword(c.env.DB, food, keyword);
+  return jsonUtf8({ results, total: results.length });
+});
+
+app.get('/wine-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWineSearchPage(user.sub));
+});
+
+app.post('/api/wine/search', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ results: [], total: 0, error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const raw = typeof (body as Record<string, unknown>).q === 'string' ? (body as Record<string, unknown>).q as string : '';
+  const q = raw.trim().slice(0, 500);
+  if (!q) return jsonUtf8({ results: [], total: 0, error: '検索文字列を入力してください' }, 400);
+
+  let queryVector: number[];
+  try {
+    queryVector = await embedTextWithModel(c.env.AI, PLAMO_EMBEDDING_MODEL, q);
+  } catch (e) {
+    return jsonUtf8({ results: [], total: 0, error: '埋め込み計算に失敗しました: ' + (e instanceof Error ? e.message : String(e)) }, 502);
+  }
+  if (queryVector.length === 0) {
+    return jsonUtf8({ results: [], total: 0, error: '埋め込み計算に失敗しました(空のベクトルが返されました)' }, 502);
+  }
+
+  const cols = WINE_DETAIL_COLUMNS.map((c) => `d.${c} AS ${c}`).join(', ');
+  const rows = await c.env.DB.prepare(
+    `SELECT e.id AS id, e.wine_name AS wine_name, e.vector AS vector, m.pairing_foods AS pairing_foods, ${cols}
+     FROM wine_embeddings e
+     LEFT JOIN wine_details d ON d.wine_id = e.id
+     LEFT JOIN wine_metadata m ON m.id = e.id`
+  ).all<Record<string, unknown>>();
+  const candidates: WineSearchCandidate[] = (rows.results ?? []).map((r) => ({
+    id: Number(r.id),
+    wineName: String(r.wine_name),
+    vector: blobToFloats(r.vector as ArrayBuffer),
+    details: rowToWineDetail(r),
+    pairingFoods: typeof r.pairing_foods === 'string' ? r.pairing_foods : null,
+  }));
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (WINE_SEARCH_ALLOWED_LIMITS as readonly number[]).includes(rawLimit as number)
+    ? (rawLimit as number)
+    : WINE_SEARCH_DEFAULT_LIMIT;
+  const rawThreshold = (body as Record<string, unknown>).threshold;
+  const threshold = (typeof rawThreshold === 'number' && rawThreshold >= 0 && rawThreshold <= 1)
+    ? rawThreshold
+    : WINE_SEARCH_DEFAULT_HIT_THRESHOLD;
+  const results = rankWines(queryVector, candidates, limit);
+  const hitCount = countWineHits(queryVector, candidates, threshold);
+  const foodBadges = aggregateFoodBadges(results);
+  const debugRequested = (body as Record<string, unknown>).debug === true;
+  if (!debugRequested) {
+    return jsonUtf8({ results, total: candidates.length, hitCount, threshold, limit, foodBadges });
+  }
+  const candidateDims = Array.from(new Set(candidates.map((c) => c.vector.length))).sort((a, b) => a - b);
+  const rawSample = rows.results && rows.results[0] ? (rows.results[0] as Record<string, unknown>).vector : undefined;
+  const debugRawVectorType = Array.isArray(rawSample)
+    ? 'Array(length=' + rawSample.length + ')'
+    : (rawSample instanceof ArrayBuffer)
+      ? 'ArrayBuffer(byteLength=' + rawSample.byteLength + ')'
+      : (rawSample && typeof rawSample === 'object')
+        ? (rawSample.constructor ? rawSample.constructor.name : typeof rawSample) + '(byteLength=' + (rawSample as ArrayBufferView).byteLength + ')'
+        : typeof rawSample;
+  return jsonUtf8({
+    results,
+    total: candidates.length,
+    hitCount,
+    threshold,
+    limit,
+    foodBadges,
+    debugQueryDim: queryVector.length,
+    debugCandidateDims: candidateDims,
+    debugRawVectorType,
+  });
+});
+
+export interface WineSeedConsistencyResult {
+  seedTotal: number;
+  embeddedTotal: number;
+  matches: boolean;
+  missingCount: number;
+  missingSample: string[];
+}
+
+/**
+ * 「オリジナルのシード件数(WINE_VECTOR_SEED.length)」と「実際に
+ * wine_embeddingsへ埋め込みが入っている件数」を突き合わせる。
+ * 一括登録が途中で失敗・中断した場合や、シード側だけ後から追加された
+ * 場合に、検索対象から漏れているワインが無いかを確認できるようにする
+ * (CLAUDE.mdルール12: 推測せずデータで裏を取る)。
+ * missingSampleは差分の原因調査用に、未登録の銘柄名を先頭5件だけ返す。
+ */
+export async function checkWineSeedConsistency(
+  db: D1Database,
+  seeds: WineSeedRow[],
+): Promise<WineSeedConsistencyResult> {
+  const rows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
+  const embeddedSet = new Set((rows.results ?? []).map((r) => r.wine_name));
+  const missing = seeds.filter((s) => !embeddedSet.has(s.wine)).map((s) => s.wine);
+  return {
+    seedTotal: seeds.length,
+    embeddedTotal: embeddedSet.size,
+    matches: seeds.length === embeddedSet.size && missing.length === 0,
+    missingCount: missing.length,
+    missingSample: missing.slice(0, 5),
+  };
+}
+
+// 根本原因: GET /api/wine/:id (動的パラメータ)より前にGET /api/wine/consistency-check
+// (固定パス)を登録しないと、`/api/wine/consistency-check`へのリクエストが
+// `/api/wine/:id`(id="consistency-check")にマッチしてしまい、数値チェックで
+// 弾かれて「不正なIDです」が返っていた。固定パスのルートは必ず動的パラメータの
+// ルートより先に登録すること。
+app.get('/api/wine/consistency-check', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const result = await checkWineSeedConsistency(c.env.DB, WINE_VECTOR_SEED);
+  return jsonUtf8(result);
+});
+
+app.get('/api/wine/:id', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '不正なIDです' }, 400);
+  const detail = await getWineDetailById(c.env.DB, id);
+  if (!detail) return jsonUtf8({ error: '指定されたワインが見つかりません' }, 404);
+  return jsonUtf8(detail);
+});
+
+export interface WineMetadataBulkRegisterError {
+  wine: string;
+  error: string;
+}
+
+export interface WineMetadataBulkRegisterResult {
+  totalSeed: number;
+  succeeded: number;
+  skipped: number;
+  errors: WineMetadataBulkRegisterError[];
+}
+
+/**
+ * wine_616_individual_metadata_researched_v2.csv由来のシード(WINE_METADATA_SEED)から
+ * wine_metadataへ一括登録する(POST /api/wine/bulk-register-metadata)。
+ * AI呼び出しは不要(数値・文字列データの投入のみ)。wine_nameでwine_embeddingsと
+ * 突き合わせてidを解決するため、対応する埋め込みが未登録の銘柄はエラーではなく
+ * skippedとして扱う(過去に発覚したVALUES句サブクエリでのゴミ行混入バグ
+ * (#1631)と同じ問題を避けるため、必ずSELECTで実在するidを取得してから使う)。
+ * 1件ごとにtry/catchし、失敗した銘柄があっても他の銘柄の登録は継続する
+ * (CLAUDE.mdルール8: 記録・通知の義務)。
+ */
+export async function bulkRegisterWineMetadata(
+  db: D1Database,
+  seeds: WineMetadataSeedRow[],
+): Promise<WineMetadataBulkRegisterResult> {
+  let succeeded = 0;
+  let skipped = 0;
+  const errors: WineMetadataBulkRegisterError[] = [];
+
+  for (const row of seeds) {
+    try {
+      const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(row.wine_name).first<{ id: number }>();
+      if (!idRow) {
+        skipped++;
+        continue;
+      }
+      const now = new Date().toISOString();
+      const cols = ['id', 'wine_name', ...WINE_METADATA_COLUMNS, 'created_at', 'updated_at'];
+      const placeholders = cols.map(() => '?').join(', ');
+      const updateSet = ['wine_name', ...WINE_METADATA_COLUMNS].map((c) => `${c} = excluded.${c}`).join(', ') + ', updated_at = excluded.updated_at';
+      await db.prepare(
+        `INSERT INTO wine_metadata (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT(id) DO UPDATE SET ${updateSet}`
+      ).bind(idRow.id, row.wine_name, ...WINE_METADATA_COLUMNS.map((c) => row[c]), now, now).run();
+      succeeded++;
+    } catch (e) {
+      errors.push({ wine: row.wine_name, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return { totalSeed: seeds.length, succeeded, skipped, errors };
+}
+
+app.post('/api/wine/bulk-register-metadata', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const result = await bulkRegisterWineMetadata(c.env.DB, WINE_METADATA_SEED);
+  return jsonUtf8(result);
+});
+
+app.post('/api/wine/bulk-register', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const rawLimit = (body as Record<string, unknown>).limit;
+  const limit = (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0) ? Math.floor(rawLimit) : undefined;
+  const result = await bulkRegisterWines(c.env.DB, c.env.AI, WINE_VECTOR_SEED, limit);
+  return jsonUtf8(result);
+});
+
 async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]> {
   const rows = await db.prepare(
     'SELECT workflow_no, title, page_path, summary FROM workflow_registry ORDER BY workflow_no ASC'
@@ -10057,7 +11703,7 @@ async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]>
 
 async function loadWorkflowSteps(db: D1Database, workflowNo: string): Promise<WorkflowStep[]> {
   const rows = await db.prepare(
-    'SELECT step_order, stage_title, api_method, api_path, note FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
+    'SELECT step_order, stage_title, api_method, api_path, note, indent_level FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
   ).bind(workflowNo).all<WorkflowStep>();
   return rows.results ?? [];
 }
@@ -10302,6 +11948,11 @@ app.get('/webgl-cube', authMiddleware, async (c) => {
   return c.html(getWebGLCubePage(user.sub));
 });
 
+app.get('/megaminx', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getMegaminxPage(user.sub));
+});
+
 app.get('/webgl-solar', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSolarPage(user.sub));
@@ -10456,14 +12107,14 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     if (!analysis) {
       const resultKeys = typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object';
       logger.warn('[moondream-analyze] 空の応答', { resultKeys });
-      c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+      safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
         userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
         promptLength, imageBytes: imageByteLength,
         errorMessage: `空の応答(resultKeys=${resultKeys})`, imageDataUrl: image, promptText,
       }));
       return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
     }
-    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+    safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'ok', model: MOONDREAM_MODEL,
       promptLength, imageBytes: imageByteLength,
       imageDataUrl: image, promptText, analysisText: analysis,
@@ -10472,7 +12123,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     logger.error('[moondream-analyze] 呼び出し失敗', { error: errorMessage });
-    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+    safeWaitUntil(c, recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
       promptLength, imageBytes: imageByteLength,
       errorMessage, imageDataUrl: image, promptText,
@@ -10630,6 +12281,352 @@ app.get('/base64', authMiddleware, async (c) => {
   return c.html(getBase64Page(user.sub));
 });
 
+app.get('/json-explorer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getJsonExplorerPage(user.sub));
+});
+
+app.get('/bin-hex', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getBinHexPage(user.sub));
+});
+
+app.get('/gh-attach', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま。
+  // sha256-wasm/factor-wasmと同じ理由・同じ対応)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGhAttachPage(user.sub));
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、画像アップロードAPI。
+ * cli/cli internal/attachments/client.go の postAsset 相当の処理をWorker側で行う。
+ * 実ファイルI/O(os.Open)・net/httpはブラウザWASMでは使えないため、この部分だけは
+ * WASM化せずWorker(サーバー)側のTypeScriptで実装している。
+ */
+app.post('/api/gh-attach/upload', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; filename?: string; dataUrl?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const filename = (body.filename ?? '').trim();
+  const dataUrl = (body.dataUrl ?? '').trim();
+  if (!owner || !repo || !filename || !dataUrl) {
+    return jsonUtf8({ error: 'owner, repo, filename, dataUrl は必須です' }, 400);
+  }
+
+  const validation = validateAttachDataUrl(dataUrl);
+  if (!validation.ok) {
+    return jsonUtf8({ error: validation.reason }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+
+  const ghHeaders = {
+    // go-gh(cli/cliが実際に使うHTTPクライアント)は Authorization: token <TOKEN>
+    // を使っており、Bearerではない。特にgithub.com側のuser-attachments/assets
+    // (Webアプリのレガシーエンドポイント)はBearerを認識せず未認証扱いとなり、
+    // Railsの汎用エラーページ(422 "Oh no")を返すことが実際に確認できた。
+    'Authorization': `token ${accessToken}`,
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+
+  let repoInfo: { id?: number; permissions?: { push?: boolean } };
+  try {
+    const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const repoRes = await fetch(repoUrl, {
+      headers: ghHeaders,
+    });
+    if (!repoRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(repoRes);
+      logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, status: repoRes.status, ghMessage, url: repoUrl });
+      return jsonUtf8({ error: describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage) }, 502);
+    }
+    repoInfo = await repoRes.json();
+  } catch (err) {
+    logger.warn('gh-attach: repo lookup failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'リポジトリ情報の取得に失敗しました' }, 502);
+  }
+
+  if (!repoInfo.id) {
+    return jsonUtf8({ error: 'リポジトリIDを取得できませんでした' }, 502);
+  }
+  if (!canUploadWithPermission(repoInfo.permissions?.push)) {
+    return jsonUtf8({ error: 'このリポジトリへの書き込み権限がありません' }, 403);
+  }
+
+  // uploads.github.com/user-attachments/assets はGitHub Appのトークン(ghu_)では
+  // 動作しないことが実際に確認できた(権限・インストール範囲を正しく設定しても404)。
+  // cli/cli本家はclassic OAuth App/PAT前提でこのエンドポイントを使っており、
+  // GitHub Appのuser-to-serverトークンでの動作は想定されていないと考えられる。
+  // そのため、アップロードだけはこのユーザーのOAuthセッションではなく、
+  // 管理者が別途用意したclassic PAT(GH_ATTACH_UPLOAD_TOKEN)を使う。
+  const uploadToken = c.env.GH_ATTACH_UPLOAD_TOKEN;
+  if (!uploadToken) {
+    return jsonUtf8({
+      error: 'アップロード機能が未設定です。管理者が GH_ATTACH_UPLOAD_TOKEN(repoスコープ付きのclassic PAT)を設定する必要があります。',
+    }, 503);
+  }
+
+  const bytes = decodeAttachDataUrlToBytes(validation.base64);
+  const uploadUrl = buildUserAttachmentUploadUrl({ name: filename, contentType: validation.mime, repositoryId: repoInfo.id });
+
+  try {
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${uploadToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes.slice().buffer,
+    });
+    if (!uploadRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(uploadRes);
+      logger.warn('gh-attach: upload failed', { owner, repo, filename, user: user.sub, status: uploadRes.status, ghMessage });
+      return jsonUtf8({ error: describeGithubApiError('アップロード', uploadRes.status, ghMessage, true) }, 502);
+    }
+    const parsed = parseUploadAssetResponse(await uploadRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url });
+  } catch (err) {
+    logger.warn('gh-attach: upload request failed', { owner, repo, filename, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'アップロード中にエラーが発生しました' }, 502);
+  }
+});
+
+/**
+ * gh issue create --attach のブラウザ移植(/gh-attachページ)向け、Issue作成API。
+ * 本文Markdownの組み立て(参照書き換え・未参照分の追記)はブラウザ側のWASM
+ * (wasm/gh-attach-wasm)で完了済みのものを受け取り、そのままIssue作成に使う。
+ */
+app.post('/api/gh-attach/create-issue', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { owner?: string; repo?: string; title?: string; body?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const owner = (body.owner ?? '').trim();
+  const repo = (body.repo ?? '').trim();
+  const title = (body.title ?? '').trim();
+  const issueBody = body.body ?? '';
+  if (!owner || !repo || !title) {
+    return jsonUtf8({ error: 'owner, repo, title は必須です' }, 400);
+  }
+  if (!parseOwnerRepo(`${owner}/${repo}`)) {
+    return jsonUtf8({ error: 'owner/repoの形式が不正です' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが見つかりません。再ログインしてください' }, 401);
+  }
+
+  try {
+    const issueRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
+      method: 'POST',
+      headers: {
+        // gh-attach: uploadと同じ理由でtokenスキームに統一する(上記コメント参照)
+        'Authorization': `token ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title, body: issueBody }),
+    });
+    if (!issueRes.ok) {
+      const ghMessage = await extractGithubErrorMessage(issueRes);
+      logger.warn('gh-attach: create issue failed', { owner, repo, user: user.sub, status: issueRes.status, ghMessage });
+      return jsonUtf8({ error: describeGithubApiError('Issue作成', issueRes.status, ghMessage) }, 502);
+    }
+    const parsed = parseCreateIssueResponse(await issueRes.json());
+    if ('error' in parsed) {
+      return jsonUtf8({ error: parsed.error }, 502);
+    }
+    return jsonUtf8({ url: parsed.url, number: parsed.number });
+  } catch (err) {
+    logger.warn('gh-attach: create issue request failed', { owner, repo, user: user.sub, error: err instanceof Error ? err.message : 'Unknown' });
+    return jsonUtf8({ error: 'Issue作成中にエラーが発生しました' }, 502);
+  }
+});
+
+export const KIMI_CODE_MODEL = '@cf/moonshotai/kimi-k2.7-code';
+export const GEMMA_CODE_REVIEW_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/**
+ * kimi-k2.7-codeやgemma-4-26b-a4b-itのようなチャット補完形式のモデルは、
+ * 単純なチャットモデルが使う .response ではなく choices[0].message.content で
+ * テキストを返すことがある。両方の形式に対応して本文テキストを取り出す純粋関数。
+ */
+export function extractChatCompletionText(result: unknown): string {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  if (typeof resultObj.response === 'string' && resultObj.response) return resultObj.response;
+  const choices = Array.isArray(resultObj.choices) ? resultObj.choices as unknown[] : [];
+  const first = choices[0];
+  if (first && typeof first === 'object') {
+    const message = (first as Record<string, unknown>).message;
+    if (message && typeof message === 'object') {
+      const content = (message as Record<string, unknown>).content;
+      if (typeof content === 'string') return content;
+    }
+  }
+  return '';
+}
+
+/** /api/kimi-code/gemma-review用。gemma-4-26b-a4b-itにコードレビューを依頼するプロンプトを組み立てる純粋関数 */
+export function buildGemmaCodeReviewPrompt(code: string): string {
+  return '次のコードをレビューしてください。バグ・改善点・注意すべき点を日本語で簡潔に指摘してください。\n\n```\n' + code + '\n```';
+}
+
+/** Ai.run()の結果からusage(トークン数)を取り出す。resultObjが取れていない場合は全てnullを返す */
+export function extractAiRunUsage(result: unknown): { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null } {
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  const usageObj = (typeof resultObj['usage'] === 'object' && resultObj['usage'] !== null)
+    ? resultObj['usage'] as Record<string, unknown>
+    : {};
+  return extractAiUsage(usageObj);
+}
+
+app.get('/kimi-code', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getKimiCodePage(user.sub));
+});
+
+/**
+ * kimi-k2.7-codeへのプロンプト送信 API。account ID/APIトークンは使わず、
+ * Worker既存のAIバインディング(env.AI)経由で呼び出す(認証情報の管理コスト
+ * ゼロ・クライアント側への漏洩リスクもゼロにするため)。
+ */
+app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
+  const prompt = (body?.prompt ?? '').trim().slice(0, 8000);
+  if (!prompt) return jsonUtf8({ error: 'prompt は必須です' }, 400);
+  const systemPrompt = (body?.systemPrompt ?? '').trim().slice(0, 2000);
+  const messages: { role: string; content: string }[] = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  try {
+    const result = await c.env.AI.run(
+      KIMI_CODE_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const code = extractChatCompletionText(result);
+    if (!code) {
+      logger.warn('[kimi-code] 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
+    }
+    const usage = extractAiRunUsage(result);
+    // kimi-k2.7-codeは従量課金モデルのため、リクエストごとのトークン数を
+    // kimi_code_generate_logへ記録する(この後Gemmaレビューに進むかどうかに
+    // 関わらず、生成した時点で必ず1件残す。/api/kimi-code/token-usageで集計)。
+    if (c.env.DB) {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO kimi_code_generate_log (user_id, model, input_tokens, output_tokens, total_tokens)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, KIMI_CODE_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+        .run();
+    }
+    return jsonUtf8({ code, model: KIMI_CODE_MODEL, ...usage });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
+ * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
+ * パネルの検索(target=kimi-gemma)から後で読み出せる。
+ */
+app.post('/api/kimi-code/gemma-review', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ kimiPrompt?: string; code?: string }>().catch(() => null);
+  const kimiPrompt = (body?.kimiPrompt ?? '').trim().slice(0, 8000);
+  const code = (body?.code ?? '').trim().slice(0, 20000);
+  if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
+
+  const gemmaPrompt = buildGemmaCodeReviewPrompt(code);
+  try {
+    const result = await c.env.AI.run(
+      GEMMA_CODE_REVIEW_MODEL as Parameters<typeof c.env.AI.run>[0],
+      { messages: [{ role: 'user', content: gemmaPrompt }] } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const raw = extractChatCompletionText(result);
+    const review = stripThinkTags(raw || '');
+    if (!review) {
+      logger.warn('[kimi-code] gemmaレビュー: 空の応答', { userId: user.sub });
+      return jsonUtf8({ error: 'レビュー結果を取得できませんでした(空の応答)' }, 502);
+    }
+    const usage = extractAiRunUsage(result);
+    const id = crypto.randomUUID();
+    await c.env.DB
+      .prepare(
+        `INSERT INTO kimi_gemma_reviews (id, user_id, kimi_prompt, kimi_code, gemma_prompt, gemma_response, gemma_model, gemma_input_tokens, gemma_output_tokens, gemma_total_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, user.sub, kimiPrompt, code, gemmaPrompt, review, GEMMA_CODE_REVIEW_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+      .run();
+    return jsonUtf8({ id, review, model: GEMMA_CODE_REVIEW_MODEL, ...usage });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] gemmaレビュー呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'Gemmaレビューでサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /kimi-codeページ用。kimi-k2.7-code(コード生成)・gemma-4-26b-a4b-it(レビュー)
+ * それぞれのトークン利用量を月or日・モデル別に集計する。
+ */
+app.get('/api/kimi-code/token-usage', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const granularity = c.req.query('granularity') === 'day' ? 'day' : 'month';
+  let since: string;
+  if (granularity === 'day') {
+    const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '30', 10), 1), 90);
+    since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else {
+    const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
+    since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  }
+  try {
+    const { rows } = await getKimiCodeTokenUsage(c.env.DB as unknown as D1Like, user.sub, since, granularity);
+    return jsonUtf8({ rows, granularity });
+  } catch {
+    return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
+  }
+});
+
 app.post('/api/uuid/save', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
@@ -10740,7 +12737,7 @@ app.get('/api/mlb-schedule', authMiddleware, async (c) => {
   } else {
     const d = date || new Date().toISOString().slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return c.json({error: 'invalid date'}, 400);
-    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=team,venue,lineups,linescore`;
+    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=team,venue,lineups,linescore,probablePitcher`;
   }
   try {
     const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
@@ -10969,6 +12966,8 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_apis_sidebar_accordion',
     'user_apis_desc_mode',
     'user_apis_nav_flash',
+    'd1_query_catalog_single_table',
+    'd1_query_catalog_expand_category_tables',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -10983,6 +12982,8 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
+  const d1QueryCatalogSingleTable = cookieVals['d1_query_catalog_single_table'] === 'off' ? 'off' : 'on';
+  const d1QueryCatalogExpandCategoryTables = cookieVals['d1_query_catalog_expand_category_tables'] === 'on' ? 'on' : 'off';
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
@@ -11055,6 +13056,8 @@ app.get('/settings', authMiddleware, async (c) => {
     apisSidebarAccordion,
     apisDescMode,
     apisNavFlash,
+    d1QueryCatalogSingleTable,
+    d1QueryCatalogExpandCategoryTables,
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
@@ -11081,6 +13084,15 @@ app.get('/auth-flow', authMiddleware, (c) => c.html(getAuthFlowPage()));
 app.get('/api-keys', authMiddleware, (c) => {
   const user = c.get('user');
   return c.html(getApiKeysPage({ name: user.name, username: user.sub }));
+});
+
+/**
+ * 🔐公開鍵登録ページ（認証が必要）
+ * チャレンジ署名によるログイン確認用の公開鍵(ECDSA P-256)を登録・失効・照合テストする。
+ */
+app.get('/public-keys', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.html(getPublicKeysPage({ name: user.name, username: user.sub }));
 });
 
 /**
@@ -11120,28 +13132,28 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
  * D1 データベース一覧と各テーブルの行数を返す
  */
 app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です', configured: false }, 200);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です', configured: false }, 200);
   }
   try {
-    const databases = await listD1Databases(token, accountId);
-    return jsonUtf8({ configured: true, databases });
+    const names = await listD1TableNames(c.env.DB);
+    return jsonUtf8({
+      configured: true,
+      databases: [
+        { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
+      ],
+    });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
   }
 });
 
 app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
-  const token = c.env.CLOUDFLARE_API_TOKEN;
-  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です' }, 503);
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DB未設定です' }, 503);
   }
-  const dbId = c.req.param('dbId');
   try {
-    const tables = await getD1Tables(token, accountId, dbId);
+    const tables = await loadCfDashboardTables(c.env.DB);
     return jsonUtf8({ tables });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
@@ -11220,6 +13232,7 @@ app.get('/status', authMiddleware, async (c) => {
     },
     tables: [],
     tableGroupMap: TABLE_GROUP_MAP,
+    tablePageMap: TABLE_PAGE_MAP,
     unclassifiedAutoDetectedTables: [],
     groupLabels: GROUP_LABELS,
     groupColors: GROUP_COLORS,
@@ -12210,6 +14223,62 @@ app.get('/function-changelog', authMiddleware, async (c) => {
 });
 
 /**
+ * 関数呼び出しグラフ(D1連動版)。
+ * リポジトリ直下の call-graph.html は手作業でノード・エッジをハードコードした
+ * 静的スナップショットで、コードの変更に追従しない。このルートは
+ * ts_function_catalog(関数定義一覧)とts_function_callers(呼び出し元マッピング)
+ * から都度ノード・エッジを組み立てて表示する(buildCallGraphData参照)。
+ */
+app.get('/call-graph', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  try {
+    const repoIdParam = c.req.query('repo');
+    const selectedRepoId = repoIdParam ? parseInt(repoIdParam, 10) : null;
+
+    const reposResult = await db.prepare(
+      `SELECT id, full_name FROM ts_repository ORDER BY id`
+    ).all<{ id: number; full_name: string }>();
+    const repos = reposResult.results ?? [];
+
+    let nodes: CallGraphNode[] = [];
+    let edges: CallGraphEdge[] = [];
+
+    if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
+      const [catalogResult, callerResult] = await Promise.all([
+        db.prepare(`
+          SELECT f.id, f.file_path, f.function_name, COALESCE(f.purpose,'') AS purpose,
+            f.is_exported, f.is_async, f.start_line, f.end_line,
+            COUNT(c.id) AS caller_count
+          FROM ts_function_catalog f
+          LEFT JOIN ts_function_callers c ON c.callee_id = f.id
+          WHERE f.repo_id = ? AND f.is_deleted = 0
+          GROUP BY f.id
+        `).bind(selectedRepoId).all<CallGraphCatalogRow>(),
+        db.prepare(
+          `SELECT callee_id, caller_file, caller_line FROM ts_function_callers WHERE repo_id = ?`
+        ).bind(selectedRepoId).all<CallGraphCallerRow>(),
+      ]);
+      const built = buildCallGraphData(catalogResult.results ?? [], callerResult.results ?? []);
+      nodes = built.nodes;
+      edges = built.edges;
+    }
+
+    const html = getCallGraphPage(user.sub, repos, selectedRepoId, nodes, edges);
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (error) {
+    logger.warn('Failed to render call-graph', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render call-graph', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
  * 関数ファイル変更履歴 API
  * GET /api/function-file-history?repo_id=X&function_name=Y&file_path=Z
  * ts_commit_function_map JOIN ts_commit_log からその関数のファイルに触れたコミット一覧を返す。
@@ -12860,7 +14929,7 @@ app.post('/webhook/github', async (c) => {
       reason: verification.reason,
       path: c.req.path,
     });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -12877,7 +14946,7 @@ app.post('/webhook/github', async (c) => {
   const action = typeof payload?.action === 'string' ? payload.action : 'unknown';
 
   logger.info('GitHub webhook received', { eventType, action, deliveryId });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
 
   // installation イベントを処理
   if (eventType === 'installation' || eventType === 'installation_repositories') {
@@ -15019,7 +17088,7 @@ app.post('/slack/interactions', async (c) => {
   }
 
   if (result.aiReplyTask) {
-    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, result.aiReplyTask));
+    safeWaitUntil(c, dispatchSlackAiReply(c.env, result.aiReplyTask));
   }
 
   return c.text('', 200);
@@ -15057,7 +17126,7 @@ app.post('/slack/event', async (c) => {
   // 設定済みなら event.user が自App自身のときだけ除外し、他Bot経由のメンションは処理する。
   const isSelfMention = selfUserId ? mentionEvent?.user === selfUserId : Boolean(mentionEvent?.bot_id);
   if (mentionEvent && mentionEvent.type === 'app_mention' && !isSelfMention && mentionEvent.channel) {
-    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, {
+    safeWaitUntil(c, dispatchSlackAiReply(c.env, {
       text: mentionEvent.text ?? '',
       channel: mentionEvent.channel,
       threadTs: mentionEvent.thread_ts ?? mentionEvent.ts ?? '',
@@ -15134,7 +17203,7 @@ app.post('/webhook/cf-auth', async (c) => {
   const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-auth webhook', { reason: verification.reason });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -15145,18 +17214,22 @@ app.post('/webhook/cf-auth', async (c) => {
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
-  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+  // GitHubリポジトリのwebhook(push等)はイベント種別をJSON本文ではなく
+  // X-GitHub-Eventヘッダーで送るため、そちらを優先する(/webhook/githubの
+  // GitHub App webhookと同じ扱い)。本文にevent文字列を含む独自送信元(ログイン
+  // 通知等)はそちらをフォールバックとして使う。
+  const event = c.req.header('X-GitHub-Event') ?? (typeof payload.event === 'string' ? payload.event : 'unknown');
   const usernameFromPayload = extractCfAuthUsername(payload);
   const user = usernameFromPayload ?? 'unknown';
   const action = typeof payload.action === 'string' ? payload.action : '';
 
   logger.info('cf-auth webhook received', { event, user, action });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
 
   // ユーザー名が特定できない場合はアクセス権限を判定できないためNG
   if (!usernameFromPayload) {
     logger.warn('cf-auth webhook payload missing username', { event, action });
-    c.executionCtx?.waitUntil(
+    safeWaitUntil(c, 
       logCfAuthAccessResult(c.env.DB, user, event, action, 'NG', 'username not found in payload')
     );
     return c.json({ result: 'NG', reason: 'username not found in payload' }, 400);
@@ -15166,7 +17239,7 @@ app.post('/webhook/cf-auth', async (c) => {
   const hasAccess = userSession !== null;
 
   logger.info('cf-auth access check result', { user: usernameFromPayload, hasAccess });
-  c.executionCtx?.waitUntil(
+  safeWaitUntil(c, 
     logCfAuthAccessResult(
       c.env.DB,
       usernameFromPayload,
@@ -15202,6 +17275,50 @@ app.post('/webhook/cf-auth', async (c) => {
 });
 
 /**
+ * Cloudflare CASB等からのStandard Webhooks形式(webhook-id/webhook-timestamp/webhook-signature
+ * ヘッダー)で署名されたwebhook受信エンドポイント。verifyResendWebhookSignatureは
+ * Svix/Standard Webhooksと同一のHMAC-SHA256アルゴリズムのため共通利用する。
+ * 検証結果とペイロードをwebhook_logへ記録する。
+ */
+app.post('/webhook/cf-wh1', async (c) => {
+  const webhookSecret = c.env.CF_WH1_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('CF_WH1_WEBHOOK_SECRET is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+
+  const verification = await verifyResendWebhookSignature(rawBody, {
+    id: c.req.header('webhook-id'),
+    timestamp: c.req.header('webhook-timestamp'),
+    signature: c.req.header('webhook-signature'),
+  }, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected cf-wh1 webhook', { reason: verification.reason });
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    safeWaitUntil(c, 
+      logWebhookEvent(c.env.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload')
+    );
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+
+  logger.info('cf-wh1 webhook received', { event });
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
+
+  return c.json({ result: 'OK' });
+});
+
+/**
  * Resend webhookのペイロード検証・重複排除・通知・ログ記録を行う共通処理。
  * sourceIdがnull（/webhook/resend からの呼び出し）の場合はresend_webhook_sourcesに依存しない
  * 単一アカウント運用として扱い、resend_webhook_log.source_idはNULLで記録される。
@@ -15229,7 +17346,7 @@ async function handleResendWebhookCore(
       path: c.req.path,
       method: c.req.method,
     });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -15269,7 +17386,7 @@ async function handleResendWebhookCore(
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
@@ -15649,6 +17766,222 @@ app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
 });
 
 /**
+ * 登録済み公開鍵の一覧取得
+ */
+app.get('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keys: [] });
+  }
+  try {
+    const rows = await db.prepare(
+      'SELECT id, label, created_at, last_used_at, revoked_at, expires_at FROM user_public_keys WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(user.sub).all<{
+      id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null; expires_at: string | null;
+    }>();
+    return c.json({ keys: rows.results ?? [] });
+  } catch (error) {
+    logger.error('Failed to fetch public keys', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の登録。秘密鍵はブラウザ側で生成されサーバーには一切送られない。
+ * 秘密鍵成分(d)を含むJWKが誤って送られた場合はisValidEcPublicKeyJwkで拒否する。
+ */
+app.post('/api/public-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ label?: string; publicKeyJwk?: unknown; expiresInDays?: number | string | null }>();
+    const label = (body.label ?? '').trim();
+    if (!label) {
+      return c.json({ error: 'ラベルは必須です' }, 400);
+    }
+    if (!isValidEcPublicKeyJwk(body.publicKeyJwk)) {
+      return c.json({ error: '公開鍵の形式が不正です(ECDSA P-256の公開鍵JWKが必要です)' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const publicKeyJwkJson = JSON.stringify(body.publicKeyJwk);
+    const expiryDays = resolvePublicKeyExpiryDays(body.expiresInDays ?? null);
+    const expiresAt = computePublicKeyExpiresAt(expiryDays, now);
+
+    await db.prepare(
+      'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString(), expiresAt).run();
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt });
+    return c.json({
+      key: { id, label, createdAt: now.toISOString(), expiresAt },
+    }, 201);
+  } catch (error) {
+    logger.error('Failed to register public key', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の登録に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 公開鍵の失効。自分が登録した鍵のみ失効できる(user_idで絞り込み)。
+ */
+app.post('/api/public-keys/:id/revoke', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const result = await db.prepare(
+      'UPDATE user_public_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(new Date().toISOString(), keyId, user.sub).run();
+
+    if (!result.meta || result.meta.changes === 0) {
+      return c.json({ error: '対象の公開鍵が見つからないか、既に失効しています' }, 404);
+    }
+
+    logger.info('Revoked public key', { userId: user.sub, keyId });
+    return c.json({ message: '公開鍵を失効しました' });
+  } catch (error) {
+    logger.error('Failed to revoke public key', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '公開鍵の失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ発行。指定した公開鍵(自分が登録した有効な鍵のみ)に対して、
+ * ワンタイムのランダム文字列を発行しD1に保存する(リプレイ防止のため使用済み管理する)。
+ */
+app.post('/api/public-keys/challenge', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ keyId?: string }>();
+    const keyId = (body.keyId ?? '').trim();
+    if (!keyId) {
+      return c.json({ error: 'keyIdは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const keyRow = await db.prepare(
+      'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, user.sub, now.toISOString()).first<{ id: string }>();
+    if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ発行時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか)',
+      });
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
+    }
+
+    const challengeId = crypto.randomUUID();
+    const challenge = generateChallengeValue();
+    const expiresAt = computeChallengeExpiresAt(now);
+
+    await db.prepare(
+      'INSERT INTO public_key_challenges (id, user_id, key_id, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(challengeId, user.sub, keyId, challenge, now.toISOString(), expiresAt).run();
+
+    return c.json({ challengeId, challenge, expiresAt });
+  } catch (error) {
+    logger.error('Failed to issue public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * チャレンジ署名の検証。チャレンジの有効期限・二重使用・ユーザー一致を確認したうえで、
+ * 登録済み公開鍵に対する署名をECDSAで検証する。成功時は鍵のlast_used_atを更新する。
+ */
+app.post('/api/public-keys/verify', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ challengeId?: string; keyId?: string; signature?: string }>();
+    const challengeId = (body.challengeId ?? '').trim();
+    const keyId = (body.keyId ?? '').trim();
+    const signature = (body.signature ?? '').trim();
+    if (!challengeId || !keyId || !signature) {
+      return c.json({ error: 'challengeId, keyId, signatureは必須です' }, 400);
+    }
+
+    const now = new Date();
+    const challengeRow = await db.prepare(
+      'SELECT user_id, key_id, challenge, expires_at, used_at FROM public_key_challenges WHERE id = ?'
+    ).bind(challengeId).first<{ user_id: string; key_id: string; challenge: string; expires_at: string; used_at: string | null }>();
+
+    const validation = validateChallengeRow(challengeRow ?? null, user.sub, now);
+    if (!validation.valid) {
+      return c.json({ error: 'チャレンジが無効です', reason: validation.reason }, 400);
+    }
+    if (challengeRow!.key_id !== keyId) {
+      return c.json({ error: 'チャレンジが無効です', reason: 'key_mismatch' }, 400);
+    }
+
+    const keyRow = await db.prepare(
+      'SELECT public_key_jwk FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+    ).bind(keyId, user.sub, now.toISOString()).first<{ public_key_jwk: string }>();
+    if (!keyRow) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'key_not_found',
+        detail: 'チャレンジ検証時に対象鍵が見つからない(keyId不一致・失効・期限切れのいずれか)',
+      });
+      return c.json({ error: '対象の公開鍵が見つからないか、失効・期限切れです' }, 404);
+    }
+
+    const verified = await verifyChallengeSignature(keyRow.public_key_jwk, challengeRow!.challenge, signature);
+
+    await db.prepare('UPDATE public_key_challenges SET used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), challengeId).run();
+
+    if (!verified) {
+      await flagPublicKeySecurityEvent(c, {
+        userId: user.sub, keyId, eventType: 'signature_mismatch',
+        detail: '登録済み公開鍵に対し秘密鍵が一致しない署名を受信(照合テスト)',
+      });
+      return c.json({ error: '署名の検証に失敗しました(秘密鍵が一致しません)' }, 401);
+    }
+
+    await db.prepare('UPDATE user_public_keys SET last_used_at = ? WHERE id = ?')
+      .bind(now.toISOString(), keyId).run();
+
+    logger.info('Verified public key challenge', { userId: user.sub, keyId });
+    return c.json({ verified: true });
+  } catch (error) {
+    logger.error('Failed to verify public key challenge', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'チャレンジの検証に失敗しました' }, 500);
+  }
+});
+
+/**
  * プロフィール更新（表示名をD1データベースに保存）
  */
 app.put('/api/profile', authMiddleware, async (c) => {
@@ -15790,6 +18123,79 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'テーマの変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * user_preferences(キー単位のユーザー設定テーブル)への汎用書き込みエンドポイント。
+ * SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md参照。
+ * 個別Cookie乱立を解消するため、新規設定はここへ集約する。
+ * USER_PREFERENCE_KEYSに無いキー・許可されていない値は拒否する。
+ */
+app.post('/api/preferences/:key', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const key = c.req.param('key');
+  const def = USER_PREFERENCE_KEYS[key];
+  if (!def) {
+    return c.json({ error: `未知の設定キーです: ${key}` }, 400);
+  }
+  try {
+    const { value } = await c.req.json();
+    if (typeof value !== 'string' || value === '') {
+      return c.json({ error: '値が不正です' }, 400);
+    }
+    if (def.values !== 'free' && !def.values.includes(value)) {
+      return c.json({ error: `不正な値です: ${value}` }, 400);
+    }
+    const db = c.env.DB;
+    if (!db) {
+      return c.json({ error: 'DB not available' }, 500);
+    }
+    await db.prepare(
+      `INSERT INTO user_preferences (user_id, pref_key, pref_value, updated_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at = excluded.updated_at`
+    ).bind(user.sub, key, value).run();
+    return c.json({ message: '設定を保存しました', key, value }, 200);
+  } catch (error) {
+    logger.error('User preference update error', {
+      userId: user?.sub,
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '設定の保存に失敗しました' }, 500);
+  }
+});
+
+/**
+ * user_preferencesの読み取り専用エンドポイント。
+ * /legacy-storage-inventory ページが、Cookie/localStorageの値をD1へ
+ * 復元(Restore)してよいか(=D1に未だ値が無いか)を判定するために使う。
+ * USER_PREFERENCE_KEYSに無いキーは400で拒否する(POST側と同じ許可リスト)。
+ */
+app.get('/api/preferences/:key', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const key = c.req.param('key');
+  const def = USER_PREFERENCE_KEYS[key];
+  if (!def) {
+    return c.json({ error: `未知の設定キーです: ${key}` }, 400);
+  }
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'DB not available' }, 500);
+  }
+  try {
+    const row = await db.prepare(
+      `SELECT pref_value, updated_at FROM user_preferences WHERE user_id = ? AND pref_key = ?`
+    ).bind(user.sub, key).first<{ pref_value: string; updated_at: string }>();
+    return c.json({ key, value: row?.pref_value ?? null, updatedAt: row?.updated_at ?? null }, 200);
+  } catch (error) {
+    logger.error('User preference fetch error', {
+      userId: user?.sub,
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '設定の取得に失敗しました' }, 500);
   }
 });
 
@@ -16118,6 +18524,32 @@ app.post('/api/settings/answer-graph-hide-empty-rows', authMiddleware, async (c)
     return c.json({ message: 'answer-graphの空行非表示設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'answer-graphの空行非表示設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/d1-query-catalog-single-table', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `d1_query_catalog_single_table=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'D1クエリカタログのテーブル選択設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'D1クエリカタログのテーブル選択設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/d1-query-catalog-expand-category-tables', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `d1_query_catalog_expand_category_tables=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'クエリーマネージャのFK分類テーブル自動展開設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'クエリーマネージャのFK分類テーブル自動展開設定の変更に失敗しました' }, 500);
   }
 });
 

@@ -111,12 +111,17 @@ describe('appendBubble: ユーザーバブルへの添付画像表示', () => {
     expect(src, 'appendBubble が生成HTMLから見つからない').toBeTruthy();
     document.body.innerHTML = '<div id="chatLog"></div>';
     const fn = new Function(
-      'chatLog', 'buildAssistantBubble',
+      'chatLog', 'buildAssistantBubble', 'parseMd',
       `${src}\nreturn appendBubble;`
     );
     const chatLog = document.getElementById('chatLog')!;
     const buildAssistantBubble = () => document.createElement('div');
-    const appendBubble = fn(chatLog, buildAssistantBubble);
+    // ユーザーバブルはparseMd(text)経由でMarkdown描画するようになった
+    // (実際のMarkdown変換結果はsrc/aichat-user-bubble-markdown-20260903.test.tsで
+    // E2E検証済み)。ここではappendBubble自体の配線(画像・テキストの有無に応じた
+    // DOM構築)だけを検証したいので、素通しのスタブを渡す。
+    const parseMd = (text: string) => text;
+    const appendBubble = fn(chatLog, buildAssistantBubble, parseMd);
     return { appendBubble, chatLog };
   }
 

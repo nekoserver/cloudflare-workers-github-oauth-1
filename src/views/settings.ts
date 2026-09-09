@@ -34,6 +34,8 @@ export function getSettingsPage(user: {
   aichatPreferMoondream?: string;
   heritageTourCountryFilter?: string;
   wasmModulesViewMode?: string;
+  d1QueryCatalogSingleTable?: string;
+  d1QueryCatalogExpandCategoryTables?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -69,6 +71,8 @@ export function getSettingsPage(user: {
   const currentAichatPreferMoondream = user.aichatPreferMoondream === 'off' ? 'off' : 'on';
   const currentHeritageTourCountryFilter = user.heritageTourCountryFilter === 'off' ? 'off' : 'on';
   const currentWasmModulesViewMode = user.wasmModulesViewMode === 'panel' ? 'panel' : 'list';
+  const currentD1QueryCatalogSingleTable = user.d1QueryCatalogSingleTable === 'off' ? 'off' : 'on';
+  const currentD1QueryCatalogExpandCategoryTables = user.d1QueryCatalogExpandCategoryTables === 'on' ? 'on' : 'off';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -620,6 +624,26 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">スラッシュコマンドからのプルリク応答で作成者を伏せる（/neko gh pr list）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="nekoPrHideAuthorLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="nekoPrHideAuthorCheckbox" onchange="onNekoPrHideAuthorChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">MLBページ「本日の先発投手」モーダルでリーグ/地区を選んだ時、対象外の試合を非表示にせずグレーアウト表示にする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="mlbPitcherFilterGrayoutLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="mlbPitcherFilterGrayoutCheckbox" onchange="onMlbPitcherFilterGrayoutChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">AIチャット画面の左サイドバーを余白タップでも閉じられるようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="aichatSidebarTapCloseLabel">ON</span>
@@ -684,6 +708,26 @@ export function getSettingsPage(user: {
                 <option value="@cf/pfnet/plamo-embedding-1b" ${currentAichatAutoVectorizeModel === '@cf/pfnet/plamo-embedding-1b' ? 'selected' : ''}>plamo-embedding-1b（デフォルト）</option>
                 <option value="@cf/google/embeddinggemma-300m" ${currentAichatAutoVectorizeModel === '@cf/google/embeddinggemma-300m' ? 'selected' : ''}>embeddinggemma-300m</option>
               </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">D1クエリカタログ: テーブル選択の対象を常に1つに限定する（デフォルト）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="d1QueryCatalogSingleTableLabel">${currentD1QueryCatalogSingleTable === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="d1QueryCatalogSingleTableCheckbox" onchange="onD1QueryCatalogSingleTableChange()" ${currentD1QueryCatalogSingleTable === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">クエリーマネージャ: FK分類カテゴリの選択時に該当テーブルをすべて自動で開く</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="d1QueryCatalogExpandCategoryTablesLabel">${currentD1QueryCatalogExpandCategoryTables === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="d1QueryCatalogExpandCategoryTablesCheckbox" onchange="onD1QueryCatalogExpandCategoryTablesChange()" ${currentD1QueryCatalogExpandCategoryTables === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="info-item">
@@ -1116,6 +1160,91 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'aichat_show_lang_mode=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // Cookieへ書き込む前に残り容量を見積もる。ブラウザのCookie上限は仕様上
+    // 明示されておらず実装依存だが、多くの主要ブラウザで「1オリジンあたり
+    // document.cookie全体でおよそ4000バイト前後」が実用上の下限として広く
+    // 知られているため、保守的にこれを基準値として使う。書き込み後の想定
+    // document.cookie長がこの基準値を超える場合はCookie書き込みをやめ、
+    // localStorageへフォールバックする(呼び出し元が本関数の戻り値で分岐する)。
+    var COOKIE_CAPACITY_BUDGET_BYTES = 4000;
+    function hasCookieCapacityFor(name, value) {
+      try {
+        var newEntryLength = (name + '=' + encodeURIComponent(value)).length;
+        var currentLength = document.cookie ? document.cookie.length : 0;
+        return (currentLength + newEntryLength) < COOKIE_CAPACITY_BUDGET_BYTES;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Cookieへ書き込めない(容量不足、またはプライベートブラウジング等で
+    // 例外が出る)場合はlocalStorageへフォールバックする。サーバー側からは
+    // localStorageを読めないため、この場合サーバーが生成する応答(/neko gh
+    // pr list等)には設定が反映されない制約が残るが、少なくとも設定自体は
+    // 失われずクライアント側には保持される。
+    function writeSettingCookieWithFallback(name, value, maxAgeSeconds) {
+      if (hasCookieCapacityFor(name, value)) {
+        try {
+          document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; Secure; SameSite=Lax; Max-Age=' + maxAgeSeconds;
+          return;
+        } catch (e) {
+          // Cookie書き込みが例外で失敗した場合もlocalStorageへフォールバックする
+        }
+      }
+      try {
+        window.localStorage.setItem(name, value);
+      } catch (e) {
+        // localStorageも使えない場合は静かに諦める(設定変更自体はUI上には反映済み)
+      }
+    }
+
+    function readSettingCookieOrLocalStorage(name, fallbackValue) {
+      var re = new RegExp('(^|;)\\\\s*' + name + '=([^;]*)');
+      var m = document.cookie.match(re);
+      if (m) return decodeURIComponent(m[2]);
+      try {
+        var stored = window.localStorage.getItem(name);
+        if (stored !== null) return stored;
+      } catch (e) {
+        // localStorageが使えない場合はfallbackValueを使う
+      }
+      return fallbackValue;
+    }
+
+    (function() {
+      var val = readSettingCookieOrLocalStorage('neko_pr_hide_author', 'on');
+      var cb = document.getElementById('nekoPrHideAuthorCheckbox');
+      var label = document.getElementById('nekoPrHideAuthorLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onNekoPrHideAuthorChange() {
+      var cb = document.getElementById('nekoPrHideAuthorCheckbox');
+      var label = document.getElementById('nekoPrHideAuthorLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      writeSettingCookieWithFallback('neko_pr_hide_author', enabled ? 'on' : 'off', 31536000);
+    }
+
+    (function() {
+      // 既定はグレーアウト('gray')。Cookie/localStorageに'hide'が
+      // 保存されている場合のみ従来の非表示挙動に戻す。
+      var val = readSettingCookieOrLocalStorage('mlb_pitcher_filter_mode', 'gray');
+      var cb = document.getElementById('mlbPitcherFilterGrayoutCheckbox');
+      var label = document.getElementById('mlbPitcherFilterGrayoutLabel');
+      if (cb) cb.checked = (val !== 'hide');
+      if (label) label.textContent = (val !== 'hide') ? 'ON' : 'OFF';
+    })();
+
+    function onMlbPitcherFilterGrayoutChange() {
+      var cb = document.getElementById('mlbPitcherFilterGrayoutCheckbox');
+      var label = document.getElementById('mlbPitcherFilterGrayoutLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      writeSettingCookieWithFallback('mlb_pitcher_filter_mode', enabled ? 'gray' : 'hide', 31536000);
     }
 
     (function() {
@@ -1631,6 +1760,42 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('answer-graphの空行非表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onD1QueryCatalogSingleTableChange() {
+      var cb = document.getElementById('d1QueryCatalogSingleTableCheckbox');
+      var label = document.getElementById('d1QueryCatalogSingleTableLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/d1-query-catalog-single-table', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode: mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('D1クエリカタログのテーブル選択設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onD1QueryCatalogExpandCategoryTablesChange() {
+      var cb = document.getElementById('d1QueryCatalogExpandCategoryTablesCheckbox');
+      var label = document.getElementById('d1QueryCatalogExpandCategoryTablesLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/d1-query-catalog-expand-category-tables', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode: mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('クエリーマネージャのFK分類テーブル自動展開設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }

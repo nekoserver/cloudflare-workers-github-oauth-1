@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeCountdownGroupPosition,
+  filterCountdownEventsByDate,
   findNextCountdownEvent,
+  findUpcomingCountdownEvents,
   formatCountdownRemaining,
   isValidCountdownLabel,
   isValidCountdownTargetAt,
@@ -80,6 +82,19 @@ describe('findNextCountdownEvent', () => {
   });
 });
 
+describe('findUpcomingCountdownEvents', () => {
+  it('不正・過去データを除き、未来の全タイマーを日時順（同時刻はid順）で返す', () => {
+    const rows: CountdownEventRow[] = [
+      { id: 4, label: '同時刻B', target_at: '2026-09-02T00:00:00.000Z' },
+      { id: 1, label: '過去', target_at: '2026-08-01T00:00:00.000Z' },
+      { id: 3, label: '同時刻A', target_at: '2026-09-02T00:00:00.000Z' },
+      { id: 2, label: '最初', target_at: '2026-09-01T00:00:00.000Z' },
+      { id: 5, label: '不正', target_at: 'invalid' },
+    ];
+    expect(findUpcomingCountdownEvents(rows, '2026-08-28T00:00:00.000Z').map((row) => row.id)).toEqual([2, 3, 4]);
+  });
+});
+
 describe('formatCountdownRemaining', () => {
   it('日・時・分・秒を含む形式に整形する', () => {
     // 1日2時間3分4秒 = 93784秒
@@ -142,5 +157,32 @@ describe('computeCountdownGroupPosition', () => {
   it('対象idがrowsに存在しない場合はnullを返す', () => {
     const rows: CountdownGroupRow[] = [{ id: 1, group_id: 'g1' }];
     expect(computeCountdownGroupPosition(rows, 999)).toBeNull();
+  });
+});
+
+describe('filterCountdownEventsByDate', () => {
+  const events = [
+    { id: 1, label: '9/1の予定A', target_at: '2026-09-01T09:00:00' },
+    { id: 2, label: '9/1の予定B', target_at: '2026-09-01T18:30:00' },
+    { id: 3, label: '9/2の予定', target_at: '2026-09-02T09:00:00' },
+  ];
+
+  it('dateStrがnullなら絞り込まず全件を返す', () => {
+    expect(filterCountdownEventsByDate(events, null)).toEqual(events);
+  });
+
+  it('指定した日付(ローカル日付)に一致するイベントだけを返す', () => {
+    const result = filterCountdownEventsByDate(events, '2026-09-01');
+    expect(result.map((e) => e.id)).toEqual([1, 2]);
+  });
+
+  it('該当する予定が無い日付なら空配列を返す', () => {
+    expect(filterCountdownEventsByDate(events, '2026-09-05')).toEqual([]);
+  });
+
+  it('target_atがパース不能な行は一致しないものとして除外する(異常データで全体を壊さない)', () => {
+    const broken = [...events, { id: 4, label: '壊れた行', target_at: 'not-a-date' }];
+    const result = filterCountdownEventsByDate(broken, '2026-09-01');
+    expect(result.map((e) => e.id)).toEqual([1, 2]);
   });
 });

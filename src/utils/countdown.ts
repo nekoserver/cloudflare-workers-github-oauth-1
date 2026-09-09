@@ -38,16 +38,21 @@ export function isValidCountdownLabel(value: unknown): boolean {
  * 全体を壊さないため）。該当が無ければnullを返す。
  */
 export function findNextCountdownEvent(rows: CountdownEventRow[], nowIso: string): CountdownEventRow | null {
+  return findUpcomingCountdownEvents(rows, nowIso)[0] ?? null;
+}
+
+/**
+ * 現在時刻より未来のイベントを、目標日時が近い順ですべて返す。
+ * 同時刻の場合はid順にして、APIを再取得しても表示順が揺れないようにする。
+ * パース不能な日時は、ほかの正常なタイマーの表示を妨げないよう除外する。
+ */
+export function findUpcomingCountdownEvents(rows: CountdownEventRow[], nowIso: string): CountdownEventRow[] {
   const now = new Date(nowIso).getTime();
-  let best: { row: CountdownEventRow; at: number } | null = null;
-  for (const row of rows) {
-    const at = new Date(row.target_at).getTime();
-    if (Number.isNaN(at) || at <= now) continue;
-    if (!best || at < best.at) {
-      best = { row, at };
-    }
-  }
-  return best ? best.row : null;
+  return rows
+    .map((row) => ({ row, at: new Date(row.target_at).getTime() }))
+    .filter(({ at }) => !Number.isNaN(at) && at > now)
+    .sort((a, b) => a.at - b.at || a.row.id - b.row.id)
+    .map(({ row }) => row);
 }
 
 /**
@@ -81,4 +86,27 @@ export function computeCountdownGroupPosition(
   if (groupRows.length <= 1) return null;
   const index = groupRows.findIndex((r) => r.id === targetId) + 1;
   return { index, total: groupRows.length };
+}
+
+/** Dateオブジェクトのローカル日付を'YYYY-MM-DD'形式にする(/countdownページのカレンダーと同じ書式)。 */
+function toLocalDateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * カレンダーで選択された日付(dateStr、'YYYY-MM-DD'形式のローカル日付)で
+ * イベント一覧を絞り込む。dateStrがnullなら絞り込まず全件を返す
+ * (「すべて表示」状態)。target_atがパース不能な行は一致しないものとして除外する。
+ */
+export function filterCountdownEventsByDate<T extends { target_at: string }>(
+  events: T[],
+  dateStr: string | null
+): T[] {
+  if (!dateStr) return events;
+  return events.filter((ev) => {
+    const at = new Date(ev.target_at);
+    if (Number.isNaN(at.getTime())) return false;
+    return toLocalDateKey(at) === dateStr;
+  });
 }

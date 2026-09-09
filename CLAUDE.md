@@ -91,6 +91,7 @@
 ## PWA UI ルール
 
 - **画面右上のリンクは撤去する** — PWA版アプリ（`display: standalone` で起動されるページ）の画面右上には外部リンク・ナビゲーションリンクを一切配置しない。PWAとして表示した場合、ブラウザのアドレスバーがないため右上リンクはデッドリンクになりやすく、UXを損なう。新しいページ・コンポーネントを追加するときも同じルールを守ること。
+- **ページ最上部のナビゲーション帯は高さ `44px` で固定表示する** — 他ページの中で最も上下幅が狭い帯に合わせ、`position: sticky; top: 0` を指定して、ページをスクロールしても画面から消えないようにする。帯内のアバターやボタンは `44px` を超えない寸法にすること。
 
 ---
 
@@ -274,6 +275,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`](NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md)
 - PWA(ホーム画面追加・standalone表示・アドレスバー表示不具合):
   [`NOTICE.cloudflare-workers-github-oauth-1.pwa.md`](NOTICE.cloudflare-workers-github-oauth-1.pwa.md)
+- gitのshallow clone(コミット履歴を根拠にした調査が壊れる・`git fetch --unshallow`での対処):
+  [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 
 ---
 

@@ -595,6 +595,10 @@ const APIS = [
       res:{enabled:true} },
     { method:'POST', path:'/api/settings/slack-notify', desc:'Slack通知ON/OFF設定', body:[{n:'enabled',req:true,s:true}],
       res:{ok:true,enabled:true} },
+    { method:'GET',  path:'/api/preferences/:key', desc:'ユーザー設定値をキー単位で取得(D1のuser_preferences。USER_PREFERENCE_KEYSの許可リストに無いキーは400)', path_params:['key'], pp:{key:'d1_query_catalog_sort'},
+      res:{key:'d1_query_catalog_sort',value:'count',updatedAt:'2026-06-15 00:00:00'} },
+    { method:'POST', path:'/api/preferences/:key', desc:'ユーザー設定値をキー単位で保存(UPSERT)。個別Cookie乱立の解消先', path_params:['key'], pp:{key:'d1_query_catalog_sort'}, body:[{n:'value',req:true,s:'count'}],
+      res:{message:'設定を保存しました',key:'d1_query_catalog_sort',value:'count'} },
   ]},
   { group: 'APIキー管理', endpoints: [
     { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)',
@@ -723,6 +727,14 @@ const APIS = [
       res:{analysis:'猫が写っています',usedModel:'@cf/moondream/moondream3.1-9B-A2B'} },
     { method:'DELETE', path:'/api/moondream-analyze-log/:id', desc:'Moondream分析呼び出しログを1件削除', path_params:['id'], pp:{id:'1'},
       res:{ok:true} },
+    { method:'GET', path:'/api/gh/pr-list', desc:'gh-wasm(Rust実装)でリポジトリのプルリクエスト一覧をMarkdownテーブルへ整形して取得(/neko gh pr listと同じロジック)', query:[{n:'repo',req:true,s:'nekoserver/cloudflare-workers-github-oauth-1'}],
+      res:{markdown:'## nekoserver/cloudflare-workers-github-oauth-1 のプルリクエスト一覧\\n| # | タイトル | 作成者 | 状態 | URL |\\n|---|---|---|---|---|\\n| 1600 | ... | nekoserver | open | https://github.com/... |'} },
+  ]},
+  { group: 'GitHub Issue添付 (/gh-attach, WASM)', endpoints: [
+    { method:'POST', path:'/api/gh-attach/upload', desc:'画像をGitHubへアップロード(gh issue create --attachのWASM移植、実アップロードは専用のclassic PAT=GH_ATTACH_UPLOAD_TOKEN経由)', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'filename',req:true,s:'login.png'},{n:'dataUrl',req:true,s:'data:image/png;base64,iVBORw0KGgo...'}],
+      res:{url:'https://github.com/user-attachments/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'} },
+    { method:'POST', path:'/api/gh-attach/create-issue', desc:'画像添付済みMarkdown本文でGitHub Issueを作成', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'title',req:true,s:'ログイン画面のバグ'},{n:'body',s:'![ログイン画面](https://github.com/user-attachments/assets/xxxxxxxx)'}],
+      res:{url:'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/issues/123',number:123} },
   ]},
   { group: 'その他', endpoints: [
     { method:'GET', path:'/api', desc:'API 情報・ルート一覧',

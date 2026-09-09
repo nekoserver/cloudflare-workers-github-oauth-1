@@ -22,7 +22,7 @@ describe('POST /slack/interactions', () => {
 
   it('aiReplyTaskが返ってきた場合はwaitUntilでdispatchSlackAiReplyへ渡す（3秒ACK制限をブロックしない）', () => {
     expect(interactionsBlock).toContain('if (result.aiReplyTask) {');
-    expect(interactionsBlock).toContain('c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, result.aiReplyTask));');
+    expect(interactionsBlock).toContain('safeWaitUntil(c, dispatchSlackAiReply(c.env, result.aiReplyTask));');
   });
 
   it('それ以外は本文なしで200を返す', () => {

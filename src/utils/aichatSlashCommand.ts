@@ -1,8 +1,16 @@
+import { MLB_DIVISIONS } from './mlbDivisions';
+
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 function getJstDateParts(now: Date): { year: number; month: number; day: number } {
   const jst = new Date(now.getTime() + JST_OFFSET_MS);
   return { year: jst.getUTCFullYear(), month: jst.getUTCMonth() + 1, day: jst.getUTCDate() };
+}
+
+/** JST(UTC+9)における「今日」をYYYY-MM-DD形式で返す。/neko mlb のMLBスケジュール取得日に使う。 */
+export function getJstDateYmdHyphen(now: Date): string {
+  const { year, month, day } = getJstDateParts(now);
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 export function formatJstDateTime(now: Date): string {
@@ -145,7 +153,10 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko factor -a <日数> | 今日から指定日数後までのYYYYMMDD日付のうち、WASM(Rust実装)で素数と判定された日を一覧表示します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
+    '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
+    '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
+    '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -431,9 +442,69 @@ export type AichatSlashCommandDeps = {
   isPrimeViaWasm?: (n: number) => Promise<boolean>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
+  ghPrList?: (repoFullName: string) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
+  fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
+  sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
 };
+
+export type SqlImpactCatalogRow = {
+  queryName: string;
+  command: string;
+  commandConfirmed: number;
+  sourceFile: string;
+  sourceLine: number;
+  sqlText: string;
+  migrationFile: string | null;
+  lastCommitHash: string | null;
+  lastCommitAt: string | null;
+};
+
+function sqlImpactOperation(row: SqlImpactCatalogRow): 'read' | 'write' {
+  return /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(row.sqlText) ? 'read' : 'write';
+}
+
+/** D1クエリカタログの完全一致結果を、チャット向けの短い変更影響レポートへ整形する。 */
+export function formatSqlImpactReport(tableName: string, rows: SqlImpactCatalogRow[]): string {
+  const catalogUrl = `/d1-query-catalog?table=${encodeURIComponent(tableName)}`;
+  if (rows.length === 0) {
+    return `## ${tableName} 変更影響\n関連SQLは登録されていません。\n\n詳細: ${catalogUrl}`;
+  }
+  const readCount = rows.filter((row) => sqlImpactOperation(row) === 'read').length;
+  const writeCount = rows.length - readCount;
+  const migrations = new Set(rows.map((row) => row.migrationFile).filter(Boolean));
+  const unconfirmedCount = rows.filter((row) => row.commandConfirmed !== 1).length;
+  const warnings: string[] = [];
+  if (writeCount > 0) warnings.push(`- \`DELETE\`、\`UPDATE\`、\`INSERT\`などの書き込みクエリが${writeCount}件あります。`);
+  if (unconfirmedCount > 0) warnings.push(`- ${unconfirmedCount}件のクエリでsqlcコマンド種別が推測状態です。`);
+  const topRows = rows.slice(0, 8).map((row) => {
+    const source = `${row.sourceFile}:${row.sourceLine}`.replace(/\|/g, '\\|');
+    const commit = row.lastCommitHash
+      ? `${row.lastCommitHash.slice(0, 7)}${row.lastCommitAt ? ` (${row.lastCommitAt})` : ''}`
+      : '未登録';
+    return `| ${row.queryName.replace(/\|/g, '\\|')} | :${row.command} | ${sqlImpactOperation(row) === 'read' ? '読み取り' : '書き込み'} | ${source} | ${commit} |`;
+  });
+  if (rows.length > topRows.length) warnings.push(`- 上位${topRows.length}件のみ表示しています。全件は詳細リンクで確認してください。`);
+  return [
+    `## ${tableName} 変更影響`,
+    '',
+    '| 項目 | 件数 |',
+    '|---|---:|',
+    `| 関連SQL | ${rows.length} |`,
+    `| 読み取り処理 | ${readCount} |`,
+    `| 書き込み処理 | ${writeCount} |`,
+    `| 関連migration | ${migrations.size} |`,
+    '',
+    '### 関連SQL(上位)',
+    '| クエリ名 | コマンド | 区分 | ソース | 最終変更 |',
+    '|---|---|---|---|---|',
+    ...topRows,
+    ...(warnings.length ? ['', '### 要確認', ...warnings] : []),
+    '',
+    `詳細: ${catalogUrl}`,
+  ].join('\n');
+}
 
 export type CountdownListItem = {
   label: string;
@@ -462,6 +533,95 @@ export function formatCountdownListResult(events: CountdownListItem[]): string {
     '## 次の予定一覧',
     '| 日時 | 予定 |',
     '|---|---|',
+    ...rows,
+  ].join('\n');
+}
+
+export type MlbTodayGame = {
+  gameDate: string;
+  awayTeamId: number;
+  homeTeamId: number;
+  awayAbbr: string;
+  homeAbbr: string;
+  awayPitcher: string | null;
+  homePitcher: string | null;
+};
+
+export type MlbDivisionFilter = 'all' | 'AL' | 'NL' | 'AL-EAST' | 'AL-CENTRAL' | 'AL-WEST' | 'NL-EAST' | 'NL-CENTRAL' | 'NL-WEST';
+
+const MLB_DIVISION_FILTER_INDEX: Record<string, number> = {
+  'AL-EAST': 0,
+  'AL-CENTRAL': 1,
+  'AL-WEST': 2,
+  'NL-EAST': 3,
+  'NL-CENTRAL': 4,
+  'NL-WEST': 5,
+};
+
+/**
+ * `/neko mlb [AL|NL] [EAST|CENTRAL|WEST]` の引数を解釈する。
+ * 引数なしは「すべて」、league単独はAL/NL全体、league+地区名は該当地区のみ。
+ * 形式が不正な場合はnullを返す(呼び出し側で書式エラーを表示する)。
+ */
+export function parseMlbFilterArgs(args: string[]): { filter: MlbDivisionFilter; label: string } | null {
+  if (args.length === 0) return { filter: 'all', label: 'すべて' };
+  const a0 = args[0].toUpperCase();
+  if (args.length === 1 && (a0 === 'AL' || a0 === 'NL')) {
+    return { filter: a0, label: a0 };
+  }
+  if (args.length >= 2) {
+    const a1 = args[1].toUpperCase();
+    if ((a0 === 'AL' || a0 === 'NL') && (a1 === 'EAST' || a1 === 'CENTRAL' || a1 === 'WEST')) {
+      return { filter: `${a0}-${a1}` as MlbDivisionFilter, label: `${a0} ${a1}` };
+    }
+  }
+  return null;
+}
+
+/** フィルターに該当するMLB team.idの一覧を返す。'all'の場合はnull(絞り込みなし)。 */
+export function mlbFilterTeamIds(filter: MlbDivisionFilter): number[] | null {
+  if (filter === 'all') return null;
+  if (filter === 'AL') return [0, 1, 2].flatMap((i) => MLB_DIVISIONS[i].teams);
+  if (filter === 'NL') return [3, 4, 5].flatMap((i) => MLB_DIVISIONS[i].teams);
+  const idx = MLB_DIVISION_FILTER_INDEX[filter];
+  return idx !== undefined ? MLB_DIVISIONS[idx].teams : null;
+}
+
+/** away/homeいずれかのチームがフィルターに該当する試合のみに絞り込む。 */
+export function filterMlbGamesByDivision(games: MlbTodayGame[], filter: MlbDivisionFilter): MlbTodayGame[] {
+  const ids = mlbFilterTeamIds(filter);
+  if (!ids) return games;
+  return games.filter((g) => ids.includes(g.awayTeamId) || ids.includes(g.homeTeamId));
+}
+
+function formatMlbGameTimeCell(gameDateIso: string): string {
+  const d = new Date(gameDateIso);
+  if (Number.isNaN(d.getTime())) return gameDateIso || '(時刻不明)';
+  const et = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+  const jst = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+  return `${et} ET / ${jst} JST`;
+}
+
+/**
+ * `/neko mlb` の結果を、開始時刻昇順のMarkdownテーブルで表示する。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
+ * 先発投手が未発表の場合は「未定」でフォールバックし、空文字にしない。
+ */
+export function formatMlbTodayScheduleResult(games: MlbTodayGame[], filterLabel: string): string {
+  const title = `## MLB 本日の試合予定(${filterLabel})`;
+  if (games.length === 0) {
+    return `${title}\n該当する試合はありません`;
+  }
+  const sorted = games.slice().sort((a, b) => (a.gameDate < b.gameDate ? -1 : a.gameDate > b.gameDate ? 1 : 0));
+  const rows = sorted.map((g) => {
+    const away = g.awayPitcher ?? '未定';
+    const home = g.homePitcher ?? '未定';
+    return `| ${formatMlbGameTimeCell(g.gameDate)} | ${g.awayAbbr} @ ${g.homeAbbr} | ${away} | ${home} |`;
+  });
+  return [
+    title,
+    '| 開始時刻 | 対戦カード | アウェイ先発 | ホーム先発 |',
+    '|---|---|---|---|',
     ...rows,
   ].join('\n');
 }
@@ -582,6 +742,31 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'limit') {
     return { handled: true, response: formatAiToolLimitInfo(now) };
+  }
+
+  if (subcommand === 'sql') {
+    const action = (parts[2] ?? '').toLowerCase();
+    if (action !== 'impact') {
+      return { handled: true, response: '❌ 書式が正しくありません: /neko sql impact <テーブル名>' };
+    }
+    const tableName = (parts[3] ?? '').trim();
+    if (!tableName) {
+      return { handled: true, response: '❌ テーブル名を指定してください: /neko sql impact <テーブル名>' };
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(tableName) || parts.length !== 4) {
+      return { handled: true, response: '❌ テーブル名が不正です。英数字とアンダースコアで指定してください' };
+    }
+    if (!deps.sqlImpactLookup) {
+      return { handled: true, response: '❌ /neko sql impact は現在利用できません(DB未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.sqlImpactLookup(tableName), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return { handled: true, response: `❌ /neko sql impact がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko sql impact でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatSqlImpactReport(tableName, outcome.value) };
   }
 
   if (subcommand === 'uuidgen4' || subcommand === 'uuidgen7') {
@@ -824,6 +1009,54 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'gh') {
+    const args = parts.slice(2);
+    if (args[0] !== 'pr' || args[1] !== 'list') {
+      return {
+        handled: true,
+        response: '❌ 対応しているコマンドは /neko gh pr list <owner/repo> のみです',
+      };
+    }
+    const repoArg = args[2];
+    if (!repoArg) {
+      return { handled: true, response: '❌ リポジトリを指定してください: /neko gh pr list <owner/repo>' };
+    }
+    if (!deps.ghPrList) {
+      return { handled: true, response: '❌ /neko gh pr list は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const result = await deps.ghPrList(repoArg);
+      return { handled: true, response: result };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko gh pr list の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  if (subcommand === 'mlb') {
+    const parsed = parseMlbFilterArgs(parts.slice(2));
+    if (!parsed) {
+      return { handled: true, response: '❌ 書式が正しくありません: /neko mlb [AL|NL] [EAST|CENTRAL|WEST]' };
+    }
+    if (!deps.fetchMlbTodaySchedule) {
+      return { handled: true, response: '❌ /neko mlb は現在利用できません(MLBスケジュールAPI未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.fetchMlbTodaySchedule(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko mlb がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko mlb でエラーが発生しました: ${outcome.message}` };
+    }
+    const filtered = filterMlbGamesByDivision(outcome.value, parsed.filter);
+    return { handled: true, response: formatMlbTodayScheduleResult(filtered, parsed.label) };
+  }
+
   if (subcommand === 'tokens') {
     if (!deps.hourlyTokenUsage) {
       return { handled: true, response: formatHourlyTokenUsage([]) };
@@ -866,6 +1099,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko tlist, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko help\n詳細は /neko help を実行してください`,
   };
 }

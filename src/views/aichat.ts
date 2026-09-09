@@ -560,11 +560,16 @@ export function getAiChatPage(user: {
       background: rgba(15, 23, 42, 0.48); backdrop-filter: blur(4px);
     }
     .history-modal-backdrop.open { display: flex; }
+    .history-modal-backdrop.fullscreen { padding: 0; }
     .history-modal {
       width: min(720px, 100%); max-height: min(86vh, 760px);
       background: var(--bg-primary, #f8fafc); border: 1px solid var(--border-color);
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.28);
       display: flex; flex-direction: column; overflow: hidden;
+    }
+    .history-modal.fullscreen {
+      width: 100%; height: 100%; max-height: 100%;
+      border-radius: 0; border: none;
     }
     .history-modal-head {
       flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -609,6 +614,11 @@ export function getAiChatPage(user: {
       background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
     }
     .history-modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .history-modal-fullscreen-btn {
+      width: 30px; height: 30px; border: none; border-radius: 8px;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1;
+    }
+    .history-modal-fullscreen-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .history-modal-chat {
       flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 20px;
       display: flex; flex-direction: column; gap: 14px;
@@ -621,6 +631,17 @@ export function getAiChatPage(user: {
     .history-modal .chat-bubble.assistant {
       align-self: flex-end;
       border-bottom-left-radius: 12px; border-bottom-right-radius: 3px;
+    }
+    /* kimi-gemma専用: 回答バブル(生成コード)に対する外部レビューの注釈カード。
+       「回答そのもの」と混同されないよう、通常の吹き出しとは別要素・別配色で
+       表示する(質問→回答→回答へのレビュー、という2段構造を視覚的に示す)。 */
+    .review-note-card {
+      align-self: flex-end; max-width: 88%; margin-top: -6px;
+      background: var(--bg-secondary); border: 1px dashed var(--border-color); border-radius: 8px;
+      padding: 8px 12px; font-size: 12px;
+    }
+    .review-note-card .review-note-label {
+      font-weight: 700; font-size: 11px; color: var(--accent-color, #667eea); margin-bottom: 4px;
     }
     .history-modal-foot {
       flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
@@ -652,10 +673,33 @@ export function getAiChatPage(user: {
     .preview-area img { max-width: 100%; }
     .preview-area input[type="checkbox"] { margin-right: 4px; }
 
+    /* ======= 送信結果トースト ======= */
+    /* フォールバックせず指定中のモデルで処理されたか、フォールバックして
+       別モデルに切り替わったかを、送信直後に画面上部のトーストで明示する
+       (回答バブルの表示だけでは、フォールバックの結果なのか単なる表示上の
+       色/ラベルの取り違えなのか利用者が判断できないため)。 */
+    .aichat-send-toast-container {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 10000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none; align-items: center;
+    }
+    .aichat-send-toast {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); pointer-events: auto;
+      animation: aichatSendToastIn 0.2s ease-out; transition: opacity 0.3s ease-out;
+      white-space: nowrap;
+    }
+    .aichat-send-toast.aichat-send-toast-ok { background: #c6f6d5; color: #22543d; }
+    .aichat-send-toast.aichat-send-toast-fade { opacity: 0; }
+    @keyframes aichatSendToastIn {
+      from { transform: translateY(-12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
-      max-width: 640px; width: 100%; margin: 0 auto;
+      max-width: 80%; width: 100%; margin: 0 auto;
       padding: 12px 16px 0; overflow: hidden; min-height: 0;
     }
     .chat-log {
@@ -668,6 +712,24 @@ export function getAiChatPage(user: {
     .chat-bubble.user {
       align-self: flex-end; background: var(--accent-color, #667eea); color: #fff; border-bottom-right-radius: 3px;
     }
+    /* ユーザー入力もMarkdownとして描画する(parseMd経由)ため、アクセントカラーの
+       背景でも読めるよう .preview-area の既定色(var(--text-primary)等)を上書きする */
+    .chat-bubble.user.preview-area h1, .chat-bubble.user.preview-area h2, .chat-bubble.user.preview-area h3,
+    .chat-bubble.user.preview-area h4, .chat-bubble.user.preview-area h5, .chat-bubble.user.preview-area h6 {
+      color: #fff; border-bottom-color: rgba(255,255,255,0.35);
+    }
+    .chat-bubble.user.preview-area blockquote {
+      background: rgba(255,255,255,0.12); border-left-color: rgba(255,255,255,0.6); color: #fff;
+    }
+    .chat-bubble.user.preview-area code, .chat-bubble.user.preview-area pre {
+      background: rgba(255,255,255,0.16); color: #fff;
+    }
+    .chat-bubble.user.preview-area th, .chat-bubble.user.preview-area td {
+      border-color: rgba(255,255,255,0.35);
+    }
+    .chat-bubble.user.preview-area th { background: rgba(255,255,255,0.14); color: #fff; }
+    .chat-bubble.user.preview-area a { color: #fff; text-decoration: underline; }
+    .chat-bubble.user.preview-area hr { border-top-color: rgba(255,255,255,0.35); }
     .chat-bubble.assistant {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-bottom-left-radius: 3px;
       position: relative; padding-bottom: 28px;
@@ -705,8 +767,38 @@ export function getAiChatPage(user: {
     .chat-bubble.thinking {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
+    /* ======= /neko gh pr list の応答バブル ======= */
+    /* 右端の余白をゼロにし、表(No./タイトル/作成者/状態)を目一杯まで広げる */
+    .chat-bubble.assistant.gh-pr-list-bubble { padding-right: 0; }
+    .gh-pr-list-bubble table { width: 100%; }
+    .gh-pr-list-bubble td a { text-decoration: none; }
+    .gh-pr-state-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+    }
+    .gh-pr-state-badge.gh-pr-state-open { background: #dafbe1; color: #1a7f37; }
+    .gh-pr-state-badge.gh-pr-state-draft { background: #f6f8fa; color: #656d76; border: 1px solid #d0d7de; }
+    .gh-pr-state-badge.gh-pr-state-closed { background: #ffebe9; color: #cf222e; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-open { background: rgba(63,185,80,0.18); color: #3fb950; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-draft { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-state-closed { background: rgba(248,81,73,0.18); color: #f85149; }
+    /* コンフリクト列: 状態列とは別配色(あり=ピンク/なし=薄緑/確認中=グレー) */
+    .gh-pr-state-badge.gh-pr-conflict-yes { background: #ffd7e6; color: #9e1f5c; }
+    .gh-pr-state-badge.gh-pr-conflict-no { background: #d4f5d4; color: #1a7f37; }
+    .gh-pr-state-badge.gh-pr-conflict-unknown { background: #f6f8fa; color: #656d76; border: 1px solid #d0d7de; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-yes { background: rgba(255,143,193,0.18); color: #ff8fc1; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-no { background: rgba(63,185,80,0.18); color: #3fb950; }
+    [data-theme="dark"] .gh-pr-state-badge.gh-pr-conflict-unknown { background: rgba(139,148,158,0.18); color: #8b949e; border-color: #30363d; }
+    /* 見出し(h2)を「タイトル中央寄せ + Draft/Openバッジを右端」の1行に配置する */
+    .gh-pr-list-heading { display: flex; align-items: center; }
+    .gh-pr-list-heading-title { flex: 1; text-align: center; }
+    .gh-pr-list-heading-badges { display: flex; align-items: center; gap: 6px; }
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
+    /* /neko系ローカルコマンド(clog等の表・テーブル表示)はchat-bubble-wrapで
+       包まれず基本の.chat-bubble(max-width:85%)のまま描画されるため、
+       AIモデル応答(100%)と揃うようassistant.preview-are全体を100%にする */
+    .chat-bubble.assistant.preview-area { max-width: 100%; }
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .bubble-label-fallback { color: var(--color-error, #cf222e); }
     .bubble-fallback-notice { font-size: 12px; color: var(--color-error, #cf222e); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-color); opacity: 0.85; }
@@ -764,13 +856,24 @@ export function getAiChatPage(user: {
     }
     .moondream-analysis {
       margin-top: 10px; background: var(--card-bg); border: 1px solid var(--border-color);
-      border-radius: 6px; padding: 8px 10px;
+      border-radius: 6px; padding: 8px 10px; width: 100%; max-width: 100%; min-width: 0;
     }
     .moondream-analysis-label { font-size: 11px; font-weight: 600; color: var(--accent-color); margin-bottom: 4px; }
-    .moondream-analysis-body { font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.6; }
+    .moondream-analysis-body {
+      min-width: 0; max-width: 100%; font-size: 12px; color: var(--text-secondary);
+      white-space: normal; line-height: 1.6; overflow-wrap: anywhere; word-break: break-word;
+    }
+    /* Moondreamは列数の多い表や長いコード/URLを返すことがある。文章は折り返し、
+       折り返すと読みにくい表とコードだけをパネル内で横スクロール可能にする。 */
+    .moondream-analysis-body table {
+      display: block; width: max-content; min-width: 100%; max-width: 100%; overflow-x: auto;
+    }
+    .moondream-analysis-body th, .moondream-analysis-body td { overflow-wrap: normal; word-break: normal; }
+    .moondream-analysis-body pre { max-width: 100%; overflow-x: auto; }
   </style>
 </head>
 <body>
+  <div class="aichat-send-toast-container" id="aichatSendToastContainer"></div>
   <!-- ナビバー -->
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
@@ -819,7 +922,7 @@ export function getAiChatPage(user: {
     <div class="sidebar" id="sidebar">
       <div class="sidebar-head">
         <div class="sidebar-search-wrap">
-          <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索..." autocomplete="off">
+          <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索...(llama-4)" autocomplete="off">
           <button class="sidebar-search-clear" id="sidebarClear" tabindex="-1">✕</button>
         </div>
       </div>
@@ -827,7 +930,7 @@ export function getAiChatPage(user: {
         <div class="sidebar-status" id="sidebarStatus" style="flex:1;font-size:10px;color:var(--text-muted);"></div>
         <button class="canvas-search-btn" id="canvasSearchBtn" title="質問・回答・キーワードをキャンバス表示" style="display:none;">⁂</button>
         <button class="sidebar-log-btn" id="searchLogRecordBtn" title="検索ログをモーダルに書き出す" style="display:none;">📋</button>
-        <button class="sidebar-search-target-btn" id="sidebarSearchTargetBtn" title="検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替">🖼️</button>
+        <button class="sidebar-search-target-btn" id="sidebarSearchTargetBtn" title="検索対象: llama-4(質問・回答)。クリックで切替(moondream3.1→kimi-gemma→llama-4)">🖼️</button>
         <div class="sidebar-mode-toggle" id="sidebarModeToggle" style="display:none;">
           <button class="sidebar-mode-btn" id="sidebarModeNew">新着</button>
           <button class="sidebar-mode-btn" id="sidebarModeKw">キーワード</button>
@@ -939,6 +1042,10 @@ export function getAiChatPage(user: {
       <div class="results-panel-col">
         <div class="results-col-label">回答</div>
         <div class="results-col-text preview-area" id="resultsPanelA"></div>
+      </div>
+      <div class="results-panel-col" id="resultsPanelReviewCol" style="display:none;">
+        <div class="results-col-label" id="resultsPanelReviewLabel"></div>
+        <div class="results-col-text preview-area" id="resultsPanelReview"></div>
       </div>
     </div>
     <div class="results-panel-footer">
@@ -1295,6 +1402,7 @@ export function getAiChatPage(user: {
           <input class="history-modal-search-input" id="historyModalSearchInput" type="search" placeholder="キーワードで検索..." autocomplete="off">
           <button class="history-modal-search-btn" id="historyModalSearchBtn">🔍 検索</button>
         </div>
+        <button class="history-modal-fullscreen-btn" id="historyModalFullscreenBtn" aria-label="全画面表示切り替え" title="全画面表示切り替え">⬜︎</button>
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
@@ -2002,13 +2110,23 @@ export function getAiChatPage(user: {
       sidebarSearch.focus();
     });
 
+    var SIDEBAR_SEARCH_TARGET_CYCLE = ['llama-4', 'moondream3.1', 'kimi-gemma'];
+    // アイコン+ツールチップだけでは「kimi-gemma対象も選べる」ことに気づけず、
+    // llama-4のまま検索して0件になる問い合わせが実際にあったため、検索欄の
+    // placeholderに現在の検索対象名を常時表示する(ホバー不要で視認できるようにする)。
+    var SIDEBAR_SEARCH_TARGET_LABEL = {
+      'llama-4': ['🖼️', '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替', '履歴を検索...(llama-4)'],
+      'moondream3.1': ['🩻', '検索対象: moondream3.1(画像分析)。クリックでkimi-gemma(kimi-codeのGemmaレビュー)に切替', '履歴を検索...(moondream3.1)'],
+      'kimi-gemma': ['🌙', '検索対象: kimi-gemma(kimi-codeのGemmaレビュー)。クリックでllama-4(質問・回答)に切替', '履歴を検索...(kimi-gemma)'],
+    };
     sidebarSearchTargetBtn.addEventListener('click', function() {
-      sidebarSearchTarget = sidebarSearchTarget === 'moondream3.1' ? 'llama-4' : 'moondream3.1';
-      var isMoondream = sidebarSearchTarget === 'moondream3.1';
-      sidebarSearchTargetBtn.classList.toggle('active', isMoondream);
-      sidebarSearchTargetBtn.title = isMoondream
-        ? '検索対象: moondream3.1(画像分析)。クリックでllama-4(質問・回答)に切替'
-        : '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替';
+      var idx = SIDEBAR_SEARCH_TARGET_CYCLE.indexOf(sidebarSearchTarget);
+      sidebarSearchTarget = SIDEBAR_SEARCH_TARGET_CYCLE[(idx + 1) % SIDEBAR_SEARCH_TARGET_CYCLE.length];
+      var label = SIDEBAR_SEARCH_TARGET_LABEL[sidebarSearchTarget];
+      sidebarSearchTargetBtn.textContent = label[0];
+      sidebarSearchTargetBtn.title = label[1];
+      sidebarSearch.placeholder = label[2];
+      sidebarSearchTargetBtn.classList.toggle('active', sidebarSearchTarget !== 'llama-4');
       var q = sidebarSearch.value.trim();
       if (q && currentMode === 'search') doSearch(q);
     });
@@ -2638,6 +2756,9 @@ export function getAiChatPage(user: {
     var resultsPanel = document.getElementById('resultsPanel');
     var resultsPanelQ = document.getElementById('resultsPanelQ');
     var resultsPanelA = document.getElementById('resultsPanelA');
+    var resultsPanelReviewCol = document.getElementById('resultsPanelReviewCol');
+    var resultsPanelReviewLabel = document.getElementById('resultsPanelReviewLabel');
+    var resultsPanelReview = document.getElementById('resultsPanelReview');
     var resultsPanelMeta = document.getElementById('resultsPanelMeta');
     var resultsPanelShareLink = document.getElementById('resultsPanelShareLink');
     var resultsPanelClose = document.getElementById('resultsPanelClose');
@@ -2649,6 +2770,8 @@ export function getAiChatPage(user: {
     var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
+    var historyModalFullscreenBtn = document.getElementById('historyModalFullscreenBtn');
+    var historyModal = document.querySelector('.history-modal');
     var historyModalCurrentId = null;
 
     var historyModalSwipeItems = [];
@@ -2790,6 +2913,8 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.remove('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'true');
       historyModalBackdrop.style.zIndex = '';
+      historyModalBackdrop.classList.remove('fullscreen');
+      historyModal.classList.remove('fullscreen');
     }
 
     function clearHistorySelection() {
@@ -2821,7 +2946,7 @@ export function getAiChatPage(user: {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(truncateForHistoryPreview(text));
       } else {
-        el.className = 'chat-bubble user';
+        el.className = 'chat-bubble user preview-area';
         if (imageDataUrl) {
           var bubbleImg = document.createElement('img');
           bubbleImg.className = 'chat-bubble-image';
@@ -2830,11 +2955,28 @@ export function getAiChatPage(user: {
         }
         if (text) {
           var textEl = document.createElement('div');
-          textEl.textContent = text;
+          textEl.innerHTML = parseMd(truncateForHistoryPreview(text));
           el.appendChild(textEl);
         }
       }
       historyModalChat.appendChild(el);
+    }
+
+    // kimi-gemma専用: 回答(生成コード)バブルの下に、外部レビュー結果を
+    // 別要素の注釈カードとして追加する。r.review_noteが無ければ何もしない。
+    function appendReviewNoteCard(reviewNote) {
+      if (!reviewNote || !reviewNote.text) return;
+      var card = document.createElement('div');
+      card.className = 'review-note-card';
+      var label = document.createElement('div');
+      label.className = 'review-note-label';
+      label.textContent = '🔍 ' + reviewNote.label;
+      var body = document.createElement('div');
+      body.className = 'preview-area';
+      body.innerHTML = parseMd(truncateForHistoryPreview(reviewNote.text));
+      card.appendChild(label);
+      card.appendChild(body);
+      historyModalChat.appendChild(card);
     }
 
     // ===== キーワードハイライト(画像添付会話プレビュー等と共通) =====
@@ -2962,6 +3104,14 @@ export function getAiChatPage(user: {
       }
       resultsPanelQ.appendChild(document.createTextNode(r.question));
       resultsPanelA.innerHTML = parseMd(truncateForHistoryPreview(r.answer));
+      if (r.review_note && r.review_note.text) {
+        resultsPanelReviewLabel.textContent = '🔍 ' + r.review_note.label;
+        resultsPanelReview.innerHTML = parseMd(truncateForHistoryPreview(r.review_note.text));
+        resultsPanelReviewCol.style.display = '';
+      } else {
+        resultsPanelReviewCol.style.display = 'none';
+        resultsPanelReview.innerHTML = '';
+      }
       if (keyword) {
         applyKeywordHighlight(resultsPanelQ, keyword);
         applyKeywordHighlight(resultsPanelA, keyword);
@@ -3047,6 +3197,7 @@ export function getAiChatPage(user: {
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user', r.image_data_url);
       appendHistoryModalBubble(r.answer, 'assistant');
+      appendReviewNoteCard(r.review_note);
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       updateHighlightToggleBtn();
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
@@ -3274,6 +3425,34 @@ export function getAiChatPage(user: {
       return max + 100;
     }
 
+    /**
+     * 送信直後、指定中のモデルでフォールバックせず処理されたか、
+     * フォールバックして別モデルに切り替わったかをトーストで明示する。
+     * ok=trueなら薄緑色で「送信完了」、falseならフォールバック後の
+     * 実際に使われたモデルの色(MODEL_COLORS)を背景にして
+     * 「送信失敗 フォールバックし継続」を表示する。
+     * モデル色が取得できない場合は無彩色(グレー)にフォールバックする。
+     */
+    function showAichatSendToast(ok, fallbackModelColor) {
+      var container = document.getElementById('aichatSendToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      if (ok) {
+        toast.className = 'aichat-send-toast aichat-send-toast-ok';
+        toast.textContent = '送信完了';
+      } else {
+        toast.className = 'aichat-send-toast';
+        toast.style.background = fallbackModelColor || '#718096';
+        toast.style.color = '#fff';
+        toast.textContent = '送信失敗 フォールバックし継続';
+      }
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('aichat-send-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 4000);
+    }
+
     function openQuestionHashModal(hash) {
       if (!hash) return;
       var overlay = document.createElement('div');
@@ -3413,6 +3592,8 @@ export function getAiChatPage(user: {
         if (selectOverlay.parentNode) document.body.removeChild(selectOverlay);
         historyModalBackdrop.classList.remove('open');
         historyModalBackdrop.setAttribute('aria-hidden', 'true');
+        historyModalBackdrop.classList.remove('fullscreen');
+        historyModal.classList.remove('fullscreen');
         openReAskResponseModal(selectedModel, question);
       });
       var noBtn = document.createElement('button');
@@ -3461,8 +3642,8 @@ export function getAiChatPage(user: {
       header.appendChild(closeBtn);
       box.appendChild(header);
       var qBubble = document.createElement('div');
-      qBubble.className = 'chat-bubble user';
-      qBubble.textContent = question;
+      qBubble.className = 'chat-bubble user preview-area';
+      qBubble.innerHTML = parseMd(question);
       box.appendChild(qBubble);
       var loading = document.createElement('div');
       loading.textContent = '応答を取得中…';
@@ -4124,6 +4305,10 @@ export function getAiChatPage(user: {
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
       clearHistorySelection();
+    });
+    historyModalFullscreenBtn.addEventListener('click', function() {
+      var isFullscreen = historyModal.classList.toggle('fullscreen');
+      historyModalBackdrop.classList.toggle('fullscreen', isFullscreen);
     });
     historyModalBackdrop.addEventListener('click', function(e) {
       if (e.target === historyModalBackdrop) {
@@ -6408,6 +6593,70 @@ export function getAiChatPage(user: {
     // 見出しの行末へ「登録」ボタンを追加し、押すとカウントダウンページと同じ
     // 登録機能一式(openCountdownQuickAddModal、src/utils/countdownQuickAdd.ts)を
     // 呼び出してその場で予定登録できるようにする。
+    /**
+     * /neko gh pr list の応答バブル向け。gh-wasm(Rust)が返すMarkdownテーブルの
+     * 見出し(「## Pulls 一覧(Draft : ◯/Open : △)」)を含む場合のみ適用する。
+     * No./作成者/コンフリクト列の中央寄せ・6桁ゼロ埋めはRust側(format_pr_list)で
+     * Markdownの列揃え記法とゼロ埋めとして既に出力済みなので、ここでは
+     * markdownRenderer.tsのparseMd()がHTMLをエスケープする都合上Markdown単体
+     * では表現できない「状態(open/draft)列をGitHub準拠の色バッジに置き換える」
+     * 処理と、応答バブル右端の余白ゼロ化(CSSクラス付与)のみを担う。
+     */
+    function styleGhPrListBubble(el, text) {
+      var body = String(text);
+      if (body.indexOf('Pulls 一覧') === -1) return;
+      el.classList.add('gh-pr-list-bubble');
+      var heading = el.querySelector('h2');
+      if (heading) {
+        var headingMatch = /Draft\\s*:\\s*(\\d+)\\s*\\/\\s*Open\\s*:\\s*(\\d+)/.exec(heading.textContent || '');
+        if (headingMatch) {
+          heading.textContent = '';
+          heading.classList.add('gh-pr-list-heading');
+          var titleSpan = document.createElement('span');
+          titleSpan.className = 'gh-pr-list-heading-title';
+          titleSpan.textContent = 'Pulls 一覧';
+          heading.appendChild(titleSpan);
+          var badgesWrap = document.createElement('span');
+          badgesWrap.className = 'gh-pr-list-heading-badges';
+          var draftBadge = document.createElement('span');
+          draftBadge.className = 'gh-pr-state-badge gh-pr-state-draft';
+          draftBadge.textContent = 'Draft : ' + headingMatch[1];
+          badgesWrap.appendChild(draftBadge);
+          var openBadge = document.createElement('span');
+          openBadge.className = 'gh-pr-state-badge gh-pr-state-open';
+          openBadge.textContent = 'Open : ' + headingMatch[2];
+          badgesWrap.appendChild(openBadge);
+          heading.appendChild(badgesWrap);
+        }
+      }
+      var table = el.querySelector('table');
+      if (!table) return;
+      var rows = table.querySelectorAll('tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        var cells = rows[i].querySelectorAll('td');
+        var stateCell = cells[3];
+        if (!stateCell) continue;
+        var raw = stateCell.textContent.trim().toLowerCase();
+        var cls = raw === 'draft' ? 'gh-pr-state-draft' : (raw === 'closed' ? 'gh-pr-state-closed' : 'gh-pr-state-open');
+        var label = raw === 'draft' ? 'Draft' : (raw === 'closed' ? 'Closed' : 'Open');
+        stateCell.textContent = '';
+        var badge = document.createElement('span');
+        badge.className = 'gh-pr-state-badge ' + cls;
+        badge.textContent = label;
+        stateCell.appendChild(badge);
+
+        var conflictCell = cells[4];
+        if (!conflictCell) continue;
+        var conflictRaw = conflictCell.textContent.trim();
+        var conflictCls = conflictRaw === 'あり' ? 'gh-pr-conflict-yes' : (conflictRaw === '確認中' ? 'gh-pr-conflict-unknown' : 'gh-pr-conflict-no');
+        conflictCell.textContent = '';
+        var conflictBadge = document.createElement('span');
+        conflictBadge.className = 'gh-pr-state-badge ' + conflictCls;
+        conflictBadge.textContent = conflictRaw;
+        conflictCell.appendChild(conflictBadge);
+      }
+    }
+
     function addTlistRegisterButton(el, text) {
       var body = String(text);
       if (body.indexOf('## 次の予定一覧') !== 0) return;
@@ -6432,6 +6681,7 @@ export function getAiChatPage(user: {
       el.innerHTML = parseMd(text);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
+      if (isLocalCommand) styleGhPrListBubble(el, text);
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
@@ -6499,7 +6749,11 @@ export function getAiChatPage(user: {
         }
       } else {
         el = document.createElement('div');
-        el.className = 'chat-bubble ' + role;
+        // ユーザー入力はMarkdownとして描画する(parseMdは内部でesc()により
+        // HTMLエスケープしてからMarkdown記法を適用するため、そのままinnerHTMLに
+        // 渡してもXSSにならない。'考え中...'等のthinking/errorバブルは
+        // システム生成の定型文なのでMarkdown解釈せずtextContentのままにする)。
+        el.className = 'chat-bubble ' + role + (role === 'user' ? ' preview-area' : '');
         if (imageDataUrl) {
           var bubbleImg = document.createElement('img');
           bubbleImg.className = 'chat-bubble-image';
@@ -6508,7 +6762,11 @@ export function getAiChatPage(user: {
         }
         if (text) {
           var textEl = document.createElement('div');
-          textEl.textContent = text;
+          if (role === 'user') {
+            textEl.innerHTML = parseMd(text);
+          } else {
+            textEl.textContent = text;
+          }
           el.appendChild(textEl);
         }
       }
@@ -6683,8 +6941,9 @@ export function getAiChatPage(user: {
       label.className = 'moondream-analysis-label';
       label.textContent = '🖼️ 画像分析(Moondream)';
       var body = document.createElement('div');
-      body.className = 'moondream-analysis-body';
-      body.textContent = analysisText;
+      body.className = 'moondream-analysis-body preview-area';
+      // AIチャット本体と同じ、安全な共有Markdownパーサーで画像分析も描画する。
+      body.innerHTML = parseMd(analysisText);
       panel.appendChild(label);
       panel.appendChild(body);
       bubbleEl.appendChild(panel);
@@ -6760,6 +7019,9 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
+            if (!isLocalCommand) {
+              showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
+            }
             assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();

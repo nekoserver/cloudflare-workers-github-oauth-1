@@ -8,7 +8,7 @@
  * これにより、この関数さえ呼べば他の任意のページにも同じウィジェットを
  * そのまま追加できる。
  *
- * 依存API: GET /api/countdown/next（ログイン中ユーザーの直近の未来予定を返す）。
+ * 依存API: GET /api/countdown/next（ログイン中ユーザーの未来予定を近い順で返す）。
  * 認証はページ側のCookie/JWTに乗るため、このモジュール自体は認証情報を持たない。
  */
 
@@ -42,6 +42,8 @@ export function getCountdownWidgetCSS(): string {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
       padding: 14px 18px;
       min-width: 200px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
       z-index: 500;
       display: none;
       cursor: grab;
@@ -50,6 +52,7 @@ export function getCountdownWidgetCSS(): string {
     }
     #countdownWidget.visible { display: block; }
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
+    .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     #countdownToast {
@@ -77,8 +80,7 @@ export function getCountdownWidgetCSS(): string {
 export function getCountdownWidgetHTML(): string {
   return `
   <div id="countdownWidget">
-    <div class="widget-label" id="widgetLabel"></div>
-    <div class="widget-clock" id="widgetClock">--:--:--</div>
+    <div id="countdownWidgetTimers"></div>
   </div>
   <div id="countdownToast"></div>
   `;
@@ -94,11 +96,10 @@ export function getCountdownWidgetScript(): string {
   return `
     (function() {
       var widget = document.getElementById('countdownWidget');
-      var widgetLabel = document.getElementById('widgetLabel');
-      var widgetClock = document.getElementById('widgetClock');
+      var timersEl = document.getElementById('countdownWidgetTimers');
       var toastEl = document.getElementById('countdownToast');
-      if (!widget || !widgetLabel || !widgetClock) return;
-      var nextEvent = null; // { id, label, targetAt, groupIndex, groupTotal }
+      if (!widget || !timersEl) return;
+      var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
       var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
       var toastHideTimer = null;
 
@@ -214,28 +215,52 @@ export function getCountdownWidgetScript(): string {
         showCountdownToast(completedEvent);
       }
 
+      function renderTimers() {
+        timersEl.innerHTML = '';
+        upcomingEvents.forEach(function(event) {
+          var timer = document.createElement('div');
+          timer.className = 'countdown-widget-timer';
+          timer.setAttribute('data-event-id', String(event.id));
+          var label = document.createElement('div');
+          label.className = 'widget-label';
+          label.textContent = event.label;
+          var clock = document.createElement('div');
+          clock.className = 'widget-clock';
+          timer.appendChild(label);
+          timer.appendChild(clock);
+          timersEl.appendChild(timer);
+        });
+      }
+
       function tickWidget() {
-        if (!nextEvent) {
+        if (!upcomingEvents.length) {
           widget.classList.remove('visible');
           return;
         }
-        var remaining = new Date(nextEvent.targetAt).getTime() - Date.now();
-        if (remaining <= 0) {
-          var completed = nextEvent;
-          nextEvent = null;
-          widget.classList.remove('visible');
-          onTimerCompleted(completed);
+        var completed = upcomingEvents.filter(function(event) {
+          return new Date(event.targetAt).getTime() <= Date.now();
+        });
+        if (completed.length) {
+          upcomingEvents = upcomingEvents.filter(function(event) {
+            return new Date(event.targetAt).getTime() > Date.now();
+          });
+          completed.forEach(onTimerCompleted);
+          renderTimers();
           fetchNextEvent();
-          return;
         }
-        widget.classList.add('visible');
-        widgetLabel.textContent = nextEvent.label;
-        widgetClock.textContent = formatRemaining(remaining);
+        widget.classList.toggle('visible', upcomingEvents.length > 0);
+        upcomingEvents.forEach(function(event) {
+          var timer = timersEl.querySelector('[data-event-id="' + event.id + '"]');
+          var clock = timer && timer.querySelector('.widget-clock');
+          if (clock) clock.textContent = formatRemaining(new Date(event.targetAt).getTime() - Date.now());
+        });
       }
 
       function fetchNextEvent() {
         fetch('/api/countdown/next').then(function(res) { return res.json(); }).then(function(data) {
-          nextEvent = data.event || null;
+          // events未対応の旧APIでも直近1件は引き続き表示できる。
+          upcomingEvents = Array.isArray(data.events) ? data.events : (data.event ? [data.event] : []);
+          renderTimers();
           tickWidget();
         }).catch(function() {});
       }

@@ -65,6 +65,7 @@ canvas:active { cursor:grabbing; }
 .team-badge.has-game { opacity:1; border-color:rgba(255,255,255,0.2); cursor:pointer; }
 .team-badge.has-game:hover { border-color:#58a6ff; }
 .team-badge.active { border-color:#58a6ff !important; box-shadow:0 0 0 1px rgba(88,166,255,0.4); }
+.abbr-badge { display:inline-block; font-size:9px; font-weight:700; font-family:monospace; padding:1px 5px; border-radius:4px; color:#fff; letter-spacing:0.5px; }
 #drawer-overlay { position:fixed; inset:0; z-index:68; background:rgba(0,0,0,.55); display:none; }
 #drawer-overlay.open { display:block; }
 #left-drawer { position:fixed; top:0; left:0; bottom:0; width:320px; max-width:92vw; z-index:69; background:#0d1117; border-right:2px solid #30363d; transform:translateX(-100%); transition:transform .3s ease; display:flex; flex-direction:column; }
@@ -94,7 +95,36 @@ canvas:active { cursor:grabbing; }
 .cal-flag-btn:hover { border-color:#58a6ff; }
 .cal-flag-btn.active { border-color:#ffd700; background:rgba(255,215,0,0.12); }
 #game-list { flex:1; }
-.game-date-hdr { padding:7px 12px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:.5px; text-transform:uppercase; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; }
+.game-date-hdr { padding:7px 12px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:.5px; text-transform:uppercase; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; display:flex; align-items:center; justify-content:space-between; }
+.game-hdr-clock { cursor:pointer; font-size:14px; text-transform:none; letter-spacing:normal; padding:2px 4px; border-radius:4px; }
+.game-hdr-clock:hover { background:#21262d; }
+.tpm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; }
+.tpm-overlay.open { display:block; }
+.tpm-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:480px; max-width:92vw; max-height:80vh; background:#0d1117; border:1px solid #30363d; border-radius:10px; display:none; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+.tpm-modal.open { display:flex; }
+.tpm-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #30363d; font-size:13px; font-weight:700; color:#e6edf3; flex-shrink:0; }
+.tpm-close { background:none; border:none; color:#8b949e; font-size:14px; cursor:pointer; padding:2px 6px; }
+.tpm-close:hover { color:#e6edf3; }
+.tpm-content { display:flex; flex:1; min-height:0; }
+.tpm-filter { width:96px; flex-shrink:0; border-right:1px solid #30363d; overflow-y:auto; padding:6px 0; }
+.tpm-filter-item { padding:6px 10px; font-size:11px; color:#8b949e; cursor:pointer; white-space:nowrap; }
+.tpm-filter-item:hover { background:#161b22; }
+.tpm-filter-item.tpm-filter-top { font-weight:700; color:#e6edf3; margin-top:6px; }
+.tpm-filter-item.tpm-filter-top:first-child { margin-top:0; }
+.tpm-filter-item.tpm-filter-sub { padding-left:20px; font-size:10px; }
+.tpm-filter-item.active { color:#58a6ff; background:rgba(88,166,255,0.1); }
+.tpm-body { flex:1; min-width:0; overflow-y:auto; padding:6px 0; }
+.tpm-row { padding:8px 14px; border-bottom:1px solid #21262d; }
+.tpm-dim { opacity:0.32; }
+.abbr-badge-dim { opacity:0.4; filter:grayscale(0.7); }
+.tpm-time { font-family:monospace; font-size:10px; color:#58a6ff; margin-bottom:4px; }
+.in-progress-badge { display:inline-block; margin-right:5px; padding:1px 5px; border:1px solid rgba(63,185,80,.55); border-radius:999px; background:rgba(63,185,80,.16); color:#3fb950; font-family:system-ui,sans-serif; font-size:9px; font-weight:700; line-height:1.35; vertical-align:1px; }
+.tpm-live { color:#3fb950; font-weight:700; }
+.tpm-final { color:#555d68; }
+.tpm-matchup { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.tpm-pitcher { font-size:11px; color:#c9d1d9; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tpm-pitcher:last-child { text-align:right; }
+.tpm-card { font-size:12px; font-weight:700; color:#e6edf3; white-space:nowrap; flex-shrink:0; }
 .game-card { padding:8px 12px; border-bottom:1px solid #21262d; cursor:pointer; border-left:2px solid transparent; }
 .game-card:hover { background:#21262d; }
 .game-card:active { background:#21262d; }
@@ -134,6 +164,9 @@ canvas:active { cursor:grabbing; }
 .jp-next-date { color:#f0883e; font-size:10px; }
 .jp-next-none { color:#484f58; font-size:10px; }
 .jp-loading { color:#484f58; font-style:italic; font-size:11px; padding:12px; text-align:center; }
+@keyframes jp-today-start-flash { 0%,100% { background:transparent; } 50% { background:rgba(255,215,0,.72); } }
+.jp-starts-today.jp-start-flash { animation:jp-today-start-flash .6s ease-in-out 3; }
+@media(prefers-reduced-motion:reduce){ .jp-starts-today.jp-start-flash { animation:none; background:rgba(255,215,0,.42); } }
 </style>
 </head>
 <body>
@@ -207,6 +240,28 @@ void main(){
   <div id="cal-wrap"></div>
   <div class="drw-scroll">
     <div id="game-list"><div class="drw-msg">&#35501;&#12415;&#36796;&#12415;&#20013;...</div></div>
+  </div>
+</div>
+
+<div id="todayPitchersOverlay" class="tpm-overlay"></div>
+<div id="todayPitchersModal" class="tpm-modal">
+  <div class="tpm-hdr">
+    <span>&#9918;&#65039; 本日の先発投手&#9200;</span>
+    <button class="tpm-close" id="todayPitchersClose">&#10005;</button>
+  </div>
+  <div class="tpm-content">
+    <div id="todayPitchersFilter" class="tpm-filter">
+      <div class="tpm-filter-item tpm-filter-top active" data-filter="all">すべて</div>
+      <div class="tpm-filter-item tpm-filter-top" data-filter="AL">AL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-EAST">EAST</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-CENTRAL">CENTRAL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="AL-WEST">WEST</div>
+      <div class="tpm-filter-item tpm-filter-top" data-filter="NL">NL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-EAST">EAST</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-CENTRAL">CENTRAL</div>
+      <div class="tpm-filter-item tpm-filter-sub" data-filter="NL-WEST">WEST</div>
+    </div>
+    <div id="todayPitchersBody" class="tpm-body"></div>
   </div>
 </div>
 
@@ -729,27 +784,22 @@ void main(){
       document.getElementById('game-list').innerHTML=asHtml+'<div class="drw-msg">'+label+' の試合はありません</div>';
       return;
     }
-    var html=asHtml+'<div class="game-date-hdr">'+label+' ('+games.length+'試合)</div>';
+    var isTodayHdr=(dateStr===toDateStr(new Date()));
+    var html=asHtml+'<div class="game-date-hdr">'+label+' ('+games.length+'試合)'+(isTodayHdr?'<span class="game-hdr-clock" id="todayGamesClockBtn" title="本日の対戦カードと先発投手を表示">&#9918;&#65039;</span>':'')+'</div>';
     var nowMs=Date.now();
     for(var i=0;i<games.length;i++){
       var g=games[i], sd=MLB_STADIUMS[g.homeId];
       var state=(g.status&&g.status.abstractGameState)||'Preview';
-      var isLive=state==='Live', isFinal=state==='Final';
+      var isFinal=state==='Final';
       var venue=sd?sd.name:(g.venue||'');
       var city=sd?sd.city:'';
       var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
-      var endMs=startMs+3.5*3600000;
-      var isLiveNow=isLive||(startMs>0&&nowMs>=startMs&&nowMs<=endMs&&!isFinal);
+      var isLiveNow=isGameInProgress(g,nowMs);
       var isUpNext=!isLiveNow&&!isFinal&&startMs>0&&nowMs<startMs&&(startMs-nowMs)<=1800000;
       var cardCls='game-card'+(isLiveNow?' live-now':isUpNext?' up-next':'');
       var timeHtml='';
-      if(isLive){
-        var liveScoreCard='';
-        if(g.awayScore!=null&&g.homeScore!=null){
-          var innTxtC=g.inning?(((g.inningHalf||'').charAt(0)==='B'?'B':'T')+g.inning):'';
-          liveScoreCard='<span style="font-family:monospace;font-weight:700;color:#fff"> '+g.awayScore+'-'+g.homeScore+'</span>'+(innTxtC?' <span style="font-size:10px;color:#8b949e">'+innTxtC+'</span>':'');
-        }
-        timeHtml='<span class="game-live">&#9679; LIVE'+liveScoreCard+'</span>';
+      if(isLiveNow){
+        timeHtml='<span class="game-time"><span class="in-progress-badge">&#35430;&#21512;&#20013;</span>'+fmtTime(g.gameDate,'Asia/Tokyo','JST')+'</span>';
       }
       else if(isFinal){
         var finalScoreCard='';
@@ -763,9 +813,9 @@ void main(){
       }
       html+='<div class="'+cardCls+'" data-hid="'+g.homeId+'">';
       html+='<div class="game-matchup">';
-      html+='<span class="game-away">'+g.awayAbbr+' '+g.awayName+'</span>';
+      html+='<span class="game-away">'+abbrBadge(g.awayTeamId,g.awayAbbr)+' '+g.awayName+'</span>';
       html+='<span class="game-vs"> @ </span>';
-      html+='<span class="game-home">'+(sd?sd.abbr:'')+' '+g.homeName+'</span>';
+      html+='<span class="game-home">'+abbrBadge(g.homeId,sd?sd.abbr:'')+' '+g.homeName+'</span>';
       html+='</div>';
       html+='<div class="game-meta">';
       html+='<div class="game-venue">&#127967; '+venue+(city?' &mdash; '+city:'')+'</div>';
@@ -777,6 +827,156 @@ void main(){
     document.querySelectorAll('.game-card').forEach(function(card){
       card.addEventListener('click',function(){showStadiumTooltip(parseInt(this.dataset.hid,10));});
     });
+    var clockBtn=document.getElementById('todayGamesClockBtn');
+    if(clockBtn){
+      clockBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        showTodayPitchersModal(games);
+      });
+    }
+  }
+
+  function abbrBadge(teamId,abbrText,dim){
+    var sd=MLB_STADIUMS[teamId];
+    var bg=sd?sd.color:'#333';
+    return '<span class="abbr-badge'+(dim?' abbr-badge-dim':'')+'" style="background:'+bg+'">'+abbrText+'</span>';
+  }
+
+  /** MLB API の状態更新が遅れていても、予定時刻から試合中表示へ切り替える。 */
+  function isGameInProgress(g,nowMs){
+    var state=(g.status&&g.status.abstractGameState)||'Preview';
+    if(state==='Live')return true;
+    if(state==='Final')return false;
+    var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
+    var currentMs=nowMs===undefined?Date.now():nowMs;
+    return startMs>0&&currentMs>=startMs&&currentMs<=startMs+3.5*3600000;
+  }
+
+  function getNextZ(){
+    var maxZ=0;
+    document.querySelectorAll('*').forEach(function(el){
+      var pos=window.getComputedStyle(el).position;
+      if(pos==='fixed'||pos==='absolute'||pos==='sticky'){
+        var z=parseInt(window.getComputedStyle(el).zIndex,10);
+        if(!isNaN(z)&&z>maxZ)maxZ=z;
+      }
+    });
+    return maxZ+100;
+  }
+
+  var todayPitcherGamesAll=[];
+  var todayPitcherFilter='all';
+  var PITCHER_FILTER_DIVIDX={'AL-EAST':0,'AL-CENTRAL':1,'AL-WEST':2,'NL-EAST':3,'NL-CENTRAL':4,'NL-WEST':5};
+  var PITCHER_FILTER_VALUES=['all','AL','NL','AL-EAST','AL-CENTRAL','AL-WEST','NL-EAST','NL-CENTRAL','NL-WEST'];
+
+  function getCookieValueClient(name){
+    var m=document.cookie.match('(^|;\\s*)'+name+'=([^;]*)');
+    return m?decodeURIComponent(m[2]):null;
+  }
+  function setCookieValueClient(name,value){
+    try{document.cookie=name+'='+encodeURIComponent(value)+'; Path=/; Secure; SameSite=Lax; Max-Age=31536000';}catch(e){}
+  }
+
+  /** 設定ページの「対象外の試合をグレーアウト」トグル。既定はON(グレーアウト)、'hide'なら従来通り非表示にする。 */
+  function pitcherFilterGrayoutEnabled(){
+    return getCookieValueClient('mlb_pitcher_filter_mode')!=='hide';
+  }
+
+  /** 最後に選択したリーグ/地区フィルターをCookieから復元する(未保存・不正値は'all')。 */
+  function loadSavedPitcherFilter(){
+    var v=getCookieValueClient('mlb_pitcher_filter');
+    return v&&PITCHER_FILTER_VALUES.indexOf(v)>=0?v:'all';
+  }
+
+  function pitcherFilterTeamIds(filter){
+    if(filter==='all')return null;
+    if(filter==='AL')return DIVISIONS[0].teams.concat(DIVISIONS[1].teams,DIVISIONS[2].teams);
+    if(filter==='NL')return DIVISIONS[3].teams.concat(DIVISIONS[4].teams,DIVISIONS[5].teams);
+    var di=PITCHER_FILTER_DIVIDX[filter];
+    return di!==undefined?DIVISIONS[di].teams:null;
+  }
+
+  function setActivePitcherFilterMenuItem(filter){
+    document.querySelectorAll('#todayPitchersFilter .tpm-filter-item').forEach(function(el){
+      el.classList.toggle('active',el.dataset.filter===filter);
+    });
+  }
+
+  /** 試合開始前は開始時刻(ET/JST)、試合中は「試合中」バッジとJST、終了後は最終スコアを返す。 */
+  function pitcherModalTimeOrScoreHtml(g){
+    var state=(g.status&&g.status.abstractGameState)||'Preview';
+    var isInProgress=isGameInProgress(g);
+    if(isInProgress){
+      return '<span class="tpm-live"><span class="in-progress-badge">&#35430;&#21512;&#20013;</span>'+fmtTime(g.gameDate,'Asia/Tokyo','JST')+'</span>';
+    }
+    if(state==='Final'){
+      var finalTxt=(g.awayScore!=null&&g.homeScore!=null)?(' '+g.awayScore+'-'+g.homeScore):'';
+      return '<span class="tpm-final">&#32199;&#20102;'+finalTxt+'</span>';
+    }
+    return fmtTime(g.gameDate,'America/New_York','ET')+' / '+fmtTime(g.gameDate,'Asia/Tokyo','JST');
+  }
+
+  function renderTodayPitchersBody(){
+    var body=document.getElementById('todayPitchersBody');
+    var teamIds=pitcherFilterTeamIds(todayPitcherFilter);
+    var grayout=teamIds&&pitcherFilterGrayoutEnabled();
+    // グレーアウト設定がONの場合は一覧を絞り込まず、フィルター対象外の
+    // チーム(away/homeどちらか、あるいは両方)の略称・先発投手名だけを
+    // チーム単位でグレーアウトする(試合行ごと・一括では除去しない)。
+    // 従来通りの「非表示」を選んでいる場合のみ、ここで試合単位で絞り込む
+    // (away/homeどちらもフィルター対象外の試合のみを一覧から取り除く)。
+    var list=(teamIds&&!grayout)?todayPitcherGamesAll.filter(function(g){return teamIds.indexOf(g.awayTeamId)>=0||teamIds.indexOf(g.homeId)>=0;}):todayPitcherGamesAll;
+    var sorted=list.slice().sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
+    var html='';
+    for(var i=0;i<sorted.length;i++){
+      var g=sorted[i];
+      var awayP=g.awayPitcher||'未定';
+      var homeP=g.homePitcher||'未定';
+      var timeStr=pitcherModalTimeOrScoreHtml(g);
+      var isAwayDim=!!(grayout&&teamIds&&teamIds.indexOf(g.awayTeamId)<0);
+      var isHomeDim=!!(grayout&&teamIds&&teamIds.indexOf(g.homeId)<0);
+      html+='<div class="tpm-row">';
+      html+='<div class="tpm-time">'+timeStr+'</div>';
+      html+='<div class="tpm-matchup">';
+      html+='<span class="tpm-pitcher'+(isAwayDim?' tpm-dim':'')+'">'+awayP+'</span>';
+      html+='<span class="tpm-card">'+abbrBadge(g.awayTeamId,g.awayAbbr,isAwayDim)+' @ '+abbrBadge(g.homeId,MLB_STADIUMS[g.homeId]?MLB_STADIUMS[g.homeId].abbr:'',isHomeDim)+'</span>';
+      html+='<span class="tpm-pitcher'+(isHomeDim?' tpm-dim':'')+'">'+homeP+'</span>';
+      html+='</div>';
+      html+='</div>';
+    }
+    if(!sorted.length)html='<div class="drw-msg">該当する試合はありません</div>';
+    body.innerHTML=html;
+  }
+
+  function showTodayPitchersModal(games){
+    var overlay=document.getElementById('todayPitchersOverlay');
+    var modal=document.getElementById('todayPitchersModal');
+    todayPitcherGamesAll=games;
+    todayPitcherFilter=loadSavedPitcherFilter();
+    setActivePitcherFilterMenuItem(todayPitcherFilter);
+    renderTodayPitchersBody();
+    var nextZ=getNextZ();
+    overlay.style.zIndex=String(nextZ);
+    modal.style.zIndex=String(nextZ+1);
+    overlay.classList.add('open');
+    modal.classList.add('open');
+  }
+
+  var pitcherFilterMenu=document.getElementById('todayPitchersFilter');
+  if(pitcherFilterMenu){
+    pitcherFilterMenu.addEventListener('click',function(e){
+      var item=e.target.closest?e.target.closest('.tpm-filter-item'):null;
+      if(!item)return;
+      todayPitcherFilter=item.dataset.filter;
+      setCookieValueClient('mlb_pitcher_filter',todayPitcherFilter);
+      setActivePitcherFilterMenuItem(todayPitcherFilter);
+      renderTodayPitchersBody();
+    });
+  }
+
+  function closeTodayPitchersModal(){
+    document.getElementById('todayPitchersOverlay').classList.remove('open');
+    document.getElementById('todayPitchersModal').classList.remove('open');
   }
 
   function extractScore(g){
@@ -801,6 +1001,7 @@ void main(){
       if(!ht||!at)continue;
       var hsd=MLB_STADIUMS[ht.id], asd=MLB_STADIUMS[at.id];
       var sc=extractScore(g);
+      var homePP=g.teams.home.probablePitcher, awayPP=g.teams.away.probablePitcher;
       list.push({
         homeId:ht.id, homeName:ht.name||'', homeAbbr:hsd?hsd.abbr:'',
         awayTeamId:at.id, awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
@@ -808,7 +1009,8 @@ void main(){
         venue:g.venue?g.venue.name:'',
         gamePk:g.gamePk||null, lineups:null,
         awayScore:sc.awayScore, homeScore:sc.homeScore,
-        inning:sc.inning, inningHalf:sc.inningHalf, outs:sc.outs
+        inning:sc.inning, inningHalf:sc.inningHalf, outs:sc.outs,
+        homePitcher:homePP?homePP.fullName:null, awayPitcher:awayPP?awayPP.fullName:null
       });
     }
     list.sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
@@ -829,10 +1031,8 @@ void main(){
   var livePoller=null;
   function startLivePolling(dateStr){
     if(livePoller)clearInterval(livePoller);
+    if(dateStr!==toDateStr(new Date())){livePoller=null;return;}
     livePoller=setInterval(function(){
-      var hasLive=false;
-      for(var i=0;i<todayGames.length;i++){if((todayGames[i].status&&todayGames[i].status.abstractGameState)==='Live'){hasLive=true;break;}}
-      if(!hasLive){clearInterval(livePoller);livePoller=null;return;}
       fetch('/api/mlb-schedule?date='+dateStr)
         .then(function(r){return r.json();})
         .then(function(data){
@@ -853,6 +1053,16 @@ void main(){
           }
           buildGameList(todayGames,dateStr);
           if(activeHomeId>=0)tooltip.innerHTML=buildTooltipHtml(activeHomeId);
+          // 先発投手モーダルを開いたまま試合が進行している場合、モーダル内の
+          // 開始時刻/試合中表示も最新化する(todayPitcherGamesAllはtodayGamesと
+          // 同じオブジェクト参照を保持しているため、再描画だけで反映できる)。
+          var pitchersModalEl=document.getElementById('todayPitchersModal');
+          if(pitchersModalEl&&pitchersModalEl.classList.contains('open'))renderTodayPitchersBody();
+          var hasUnfinished=false;
+          for(var k=0;k<todayGames.length;k++){
+            if((todayGames[k].status&&todayGames[k].status.abstractGameState)!=='Final'){hasUnfinished=true;break;}
+          }
+          if(!hasUnfinished){clearInterval(livePoller);livePoller=null;}
         })
         .catch(function(){});
     },30000);
@@ -880,11 +1090,13 @@ void main(){
 
   var drawer=document.getElementById('left-drawer');
   var drawerOverlay=document.getElementById('drawer-overlay');
-  function openDrawer(){drawer.classList.add('open');drawerOverlay.classList.add('open');}
+  function openDrawer(){drawer.classList.add('open');drawerOverlay.classList.add('open');switchTab('games');}
   function closeDrawer(){drawer.classList.remove('open');drawerOverlay.classList.remove('open');}
   document.getElementById('btnGames').addEventListener('click',openDrawer);
   document.getElementById('drwClose').addEventListener('click',closeDrawer);
   drawerOverlay.addEventListener('click',closeDrawer);
+  document.getElementById('todayPitchersClose').addEventListener('click',closeTodayPitchersModal);
+  document.getElementById('todayPitchersOverlay').addEventListener('click',closeTodayPitchersModal);
   canvas.addEventListener('click',function(){hideTooltip();});
 
   function frame(now2){
@@ -1005,6 +1217,24 @@ void main(){
     return '<span class="jp-next-date">'+label+'</span>';
   }
 
+  function isPitcherScheduledToday(playerId){
+    var next=jpNextCache['ns'+playerId];
+    return !!next&&next.date===toDateStr(new Date());
+  }
+
+  var jpFlashTimer=null;
+  function scheduleJPTodayStartFlash(){
+    if(jpFlashTimer)clearTimeout(jpFlashTimer);
+    jpFlashTimer=setTimeout(function(){
+      if(activeTab!=='jp')return;
+      document.querySelectorAll('.jp-starts-today').forEach(function(row){
+        row.classList.remove('jp-start-flash');
+        void row.offsetWidth;
+        row.classList.add('jp-start-flash');
+      });
+    },3000);
+  }
+
   function renderJPView(){
     var pitchers=JP_PLAYERS.filter(function(p){return p.type==='P'||p.type==='2W';});
     var hitters=JP_PLAYERS.filter(function(p){return p.type==='H'||p.type==='2W';});
@@ -1027,7 +1257,7 @@ void main(){
       var whip=ps?fmtWHIP(st.whip):'-';
       var so=st.strikeOuts!==undefined?st.strikeOuts:'-';
       var statCls=ps?'jp-stat':'jp-stat-na';
-      html+='<tr>';
+      html+='<tr class="jp-pitcher-row'+(isPitcherScheduledToday(p.id)?' jp-starts-today':'')+'" data-player-id="'+p.id+'">';
       html+='<td><div class="jp-name">'+p.name+'<span class="jp-num">#'+p.num+'</span></div>';
       html+='<span class="jp-team-tag" style="background:'+color+'">'+p.team+'</span> <span class="jp-pos">'+p.pos+'</span></td>';
       html+='<td>'+buildJPTodayCell(p.teamId,p.id)+'</td>';
@@ -1158,6 +1388,7 @@ void main(){
       tabJP.className='drw-tab active';
       renderJPView();
       fetchAllJPStats();
+      scheduleJPTodayStartFlash();
     }
   }
 

@@ -36,6 +36,13 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #                       # 未設定時はbot_id付きイベントを一律除外する（安全側デフォルト）。
 #                       # 確認方法: curl -X POST https://slack.com/api/auth.test \
 #                       #   -H "Authorization: Bearer $SLACK_OAUTH_TOKEN" のuser_idフィールド
+#   GH_ATTACH_UPLOAD_TOKEN  # /gh-attach（gh issue create --attachのWASM移植）が
+#     使うアップロード専用のGitHub PAT（classic、repo スコープ必須）。
+#     uploads.github.com/user-attachments/assets はGitHub Appのトークン（ghu_）
+#     では動作しない（実際に404が再現し検証済み。CLAUDE.md下部SPECファイル参照）ため、
+#     このアプリのGitHub App由来のOAuthトークンとは別に、classic PATを用意する必要がある。
+#     未設定の場合、/gh-attachのアップロードはエラーになる（リポジトリ情報取得・
+#     Issue作成自体はユーザーのGitHub Appトークンのままで動作する）。
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
 #   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/meta/llama-3.3-70b-instruct-fp8-fast）
 #     注意: gemma-4-26b-a4b-it はsystem messageが存在すると enable_thinking:false を無視して

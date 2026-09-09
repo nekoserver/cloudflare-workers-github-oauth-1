@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mergeFkTargetsFromDb, COLUMN_FK_TARGETS } from './index';
+import {
+  mergeFkTargetsFromDb,
+  resolveLogicalFkTargetCol,
+  COLUMN_FK_TARGETS,
+} from './index';
 
 describe('mergeFkTargetsFromDb', () => {
   const base = {
@@ -53,5 +57,26 @@ describe('mergeFkTargetsFromDb', () => {
     expect(result['commit_search_hit_details']?.search_history_id).toBe('commit_search_history');
     expect(result['ai_summary_reviews']?.summary_request_id).toBe('ai_summary_log');
     expect(result['email_send_log']?.source_id).toBe('resend_webhook_sources');
+  });
+});
+
+describe('resolveLogicalFkTargetCol', () => {
+  it.each([
+    ['ai_summary_reviews', 'summary_request_id', 'request_id'],
+    ['commit_agent_log', 'request_id', 'request_id'],
+    ['ai_summary_link_access_log', 'request_id', 'request_id'],
+    ['wine_details', 'wine_id', 'id'],
+    ['aichat_search_history', 'share_id', 'id'],
+    ['aichat_keyword_category_map', 'category_id', 'id'],
+    ['heritage_question_view_log', 'question_master_id', 'id'],
+    ['ts_function_catalog', 'repo_id', 'id'],
+    ['ts_function_callers', 'callee_id', 'id'],
+    ['api_search_keyword_sections', 'keyword_id', 'id'],
+  ])('%s.%s の参照先カラムを %s に解決する', (table, column, expected) => {
+    expect(resolveLogicalFkTargetCol(table, column)).toBe(expected);
+  });
+
+  it('同名カラムはオーバーライドなしでそのまま返す', () => {
+    expect(resolveLogicalFkTargetCol('user_preferences', 'user_id')).toBe('user_id');
   });
 });

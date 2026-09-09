@@ -12,7 +12,13 @@ import {
   formatLsWasmResult,
   formatCountdownListResult,
   interpretAichatSlashCommand,
+  getJstDateYmdHyphen,
+  parseMlbFilterArgs,
+  mlbFilterTeamIds,
+  filterMlbGamesByDivision,
+  formatMlbTodayScheduleResult,
   type CommitAgentLogRow,
+  type MlbTodayGame,
 } from './aichatSlashCommand';
 
 describe('formatJstDateTime', () => {
@@ -222,6 +228,8 @@ describe('interpretAichatSlashCommand', () => {
   it('/neko help は全サブコマンドのヘルプを返す', async () => {
     const result = await interpretAichatSlashCommand('/neko help', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: formatAichatSlashCommandHelp() });
+    expect((result as { response: string }).response).toContain('| /neko mlb |');
+    expect((result as { response: string }).response).not.toContain('/neko mlb [AL\\|NL] [EAST\\|CENTRAL\\|WEST]');
   });
 
   it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', async () => {
@@ -489,5 +497,170 @@ describe('formatCountdownListResult', () => {
   it('0件の場合は登録案内を表示する', () => {
     const result = formatCountdownListResult([]);
     expect(result).toBe('## 次の予定一覧\n登録されている予定はありません(/countdownページから登録できます)');
+  });
+});
+
+describe('getJstDateYmdHyphen', () => {
+  it('UTC時刻をJST(UTC+9)のYYYY-MM-DD形式に変換する(日付が繰り上がる場合を含む)', () => {
+    expect(getJstDateYmdHyphen(new Date('2026-07-05T01:02:03Z'))).toBe('2026-07-05');
+    // UTC 23:00 は JST では翌日16:00になる(日付繰り上がりの故障シナリオ)
+    expect(getJstDateYmdHyphen(new Date('2026-07-04T23:00:00Z'))).toBe('2026-07-05');
+  });
+});
+
+describe('parseMlbFilterArgs', () => {
+  it('引数なしは「すべて」を返す', () => {
+    expect(parseMlbFilterArgs([])).toEqual({ filter: 'all', label: 'すべて' });
+  });
+
+  it('AL/NL単独(大文字小文字を区別しない)はリーグ全体を返す', () => {
+    expect(parseMlbFilterArgs(['AL'])).toEqual({ filter: 'AL', label: 'AL' });
+    expect(parseMlbFilterArgs(['nl'])).toEqual({ filter: 'NL', label: 'NL' });
+  });
+
+  it('league+地区名(大文字小文字を区別しない)は該当地区を返す', () => {
+    expect(parseMlbFilterArgs(['AL', 'EAST'])).toEqual({ filter: 'AL-EAST', label: 'AL EAST' });
+    expect(parseMlbFilterArgs(['nl', 'central'])).toEqual({ filter: 'NL-CENTRAL', label: 'NL CENTRAL' });
+    expect(parseMlbFilterArgs(['al', 'west'])).toEqual({ filter: 'AL-WEST', label: 'AL WEST' });
+  });
+
+  it('不正な書式はnullを返す(呼び出し側で書式エラーを表示させる)', () => {
+    expect(parseMlbFilterArgs(['NPB'])).toBeNull();
+    expect(parseMlbFilterArgs(['AL', 'NORTH'])).toBeNull();
+    expect(parseMlbFilterArgs(['EAST', 'AL'])).toBeNull();
+  });
+});
+
+describe('mlbFilterTeamIds / filterMlbGamesByDivision', () => {
+  const gameOf = (awayTeamId: number, homeTeamId: number): MlbTodayGame => ({
+    gameDate: '2026-07-05T23:00:00Z',
+    awayTeamId,
+    homeTeamId,
+    awayAbbr: 'AAA',
+    homeAbbr: 'BBB',
+    awayPitcher: null,
+    homePitcher: null,
+  });
+
+  it("'all'はnull(絞り込みなし)を返す", () => {
+    expect(mlbFilterTeamIds('all')).toBeNull();
+  });
+
+  it("'AL'/'NL'はそれぞれ3地区15球団分のteamIdを合算して返す(重複なし)", () => {
+    const al = mlbFilterTeamIds('AL')!;
+    const nl = mlbFilterTeamIds('NL')!;
+    expect(al).toHaveLength(15);
+    expect(nl).toHaveLength(15);
+    expect(new Set(al).size).toBe(15);
+    // AL/NLで球団IDが重複しない(全30球団が過不足なく分かれている)
+    expect(al.some((id) => nl.includes(id))).toBe(false);
+  });
+
+  it('地区フィルター(例: AL-WEST)はaway/homeどちらかがその地区の試合のみに絞り込む', () => {
+    const alWestIds = mlbFilterTeamIds('AL-WEST')!;
+    expect(alWestIds).toContain(108); // LAA
+    const games = [
+      gameOf(108, 147), // AL-WEST(away) vs AL-EAST(home) → 含まれる
+      gameOf(147, 121), // AL-EAST(away) vs NL-EAST(home)、AL-WESTを含まない → 含まれない
+      gameOf(147, 108), // AL-EAST(away) vs AL-WEST(home) → 含まれる
+    ];
+    const filtered = filterMlbGamesByDivision(games, 'AL-WEST');
+    expect(filtered).toHaveLength(2);
+    expect(filtered).toContain(games[0]);
+    expect(filtered).toContain(games[2]);
+  });
+});
+
+describe('formatMlbTodayScheduleResult', () => {
+  it('開始時刻昇順のMarkdownテーブルで、対戦カードの両脇に先発投手名を表示する', () => {
+    const games: MlbTodayGame[] = [
+      {
+        gameDate: '2026-07-05T23:10:00Z',
+        awayTeamId: 147,
+        homeTeamId: 111,
+        awayAbbr: 'NYY',
+        homeAbbr: 'BOS',
+        awayPitcher: 'Gerrit Cole',
+        homePitcher: 'Tanner Houck',
+      },
+      {
+        gameDate: '2026-07-05T17:05:00Z',
+        awayTeamId: 121,
+        homeTeamId: 143,
+        awayAbbr: 'NYM',
+        homeAbbr: 'PHI',
+        awayPitcher: null,
+        homePitcher: 'Zack Wheeler',
+      },
+    ];
+    const result = formatMlbTodayScheduleResult(games, 'すべて');
+    expect(result).toContain('## MLB 本日の試合予定(すべて)');
+    expect(result).toContain('| 開始時刻 | 対戦カード | アウェイ先発 | ホーム先発 |');
+    const lines = result.split('\n');
+    const nymLine = lines.find((l) => l.includes('NYM @ PHI'));
+    const nyyLine = lines.find((l) => l.includes('NYY @ BOS'));
+    expect(nymLine).toBeTruthy();
+    expect(nyyLine).toBeTruthy();
+    // 開始時刻の早い(17:05Z)NYM戦が、遅い(23:10Z)NYY戦より先に表示される
+    expect(lines.indexOf(nymLine as string)).toBeLessThan(lines.indexOf(nyyLine as string));
+    expect(nymLine).toContain('未定');
+    expect(nyyLine).toContain('Gerrit Cole');
+    expect(nyyLine).toContain('Tanner Houck');
+  });
+
+  it('試合が0件の場合はその旨を表示する', () => {
+    const result = formatMlbTodayScheduleResult([], 'AL WEST');
+    expect(result).toBe('## MLB 本日の試合予定(AL WEST)\n該当する試合はありません');
+  });
+});
+
+describe('/neko mlb', () => {
+  const now = new Date('2026-07-05T10:00:00Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+  const sampleGame: MlbTodayGame = {
+    gameDate: '2026-07-05T23:10:00Z',
+    awayTeamId: 147,
+    homeTeamId: 111,
+    awayAbbr: 'NYY',
+    homeAbbr: 'BOS',
+    awayPitcher: 'Gerrit Cole',
+    homePitcher: 'Tanner Houck',
+  };
+
+  it('引数なしはfetchMlbTodayScheduleの全試合をそのまま表示する', async () => {
+    const fetchMlbTodaySchedule = vi.fn().mockResolvedValue([sampleGame]);
+    const result = await interpretAichatSlashCommand('/neko mlb', now, { ...unusedDeps, fetchMlbTodaySchedule });
+    expect(fetchMlbTodaySchedule).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ handled: true, response: formatMlbTodayScheduleResult([sampleGame], 'すべて') });
+  });
+
+  it('/neko mlb AL EAST は該当地区の試合のみに絞り込んで表示する', async () => {
+    const otherLeagueGame: MlbTodayGame = { ...sampleGame, awayTeamId: 119, homeTeamId: 137 }; // NL West同士
+    const fetchMlbTodaySchedule = vi.fn().mockResolvedValue([sampleGame, otherLeagueGame]);
+    const result = await interpretAichatSlashCommand('/neko mlb AL EAST', now, { ...unusedDeps, fetchMlbTodaySchedule });
+    expect(result).toEqual({
+      handled: true,
+      response: formatMlbTodayScheduleResult(filterMlbGamesByDivision([sampleGame, otherLeagueGame], 'AL-EAST'), 'AL EAST'),
+    });
+    expect((result as { response: string }).response).toContain('NYY @ BOS');
+    expect((result as { response: string }).response).not.toContain('該当する試合はありません');
+  });
+
+  it('不正な書式はエラーメッセージを返す(fetchMlbTodayScheduleを呼ばない)', async () => {
+    const fetchMlbTodaySchedule = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko mlb NPB', now, { ...unusedDeps, fetchMlbTodaySchedule });
+    expect(fetchMlbTodaySchedule).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: '❌ 書式が正しくありません: /neko mlb [AL|NL] [EAST|CENTRAL|WEST]' });
+  });
+
+  it('fetchMlbTodaySchedule未設定時はエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko mlb', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko mlb は現在利用できません(MLBスケジュールAPI未設定)' });
+  });
+
+  it('fetchMlbTodayScheduleが例外を投げた場合はエラーメッセージを返す(握りつぶさない)', async () => {
+    const fetchMlbTodaySchedule = vi.fn().mockRejectedValue(new Error('upstream error'));
+    const result = await interpretAichatSlashCommand('/neko mlb', now, { ...unusedDeps, fetchMlbTodaySchedule });
+    expect(result).toEqual({ handled: true, response: '❌ /neko mlb でエラーが発生しました: upstream error' });
   });
 });

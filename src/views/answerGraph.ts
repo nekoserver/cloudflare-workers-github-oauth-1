@@ -236,6 +236,17 @@ input[type=search]:focus { border-color:var(--accent); }
   border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.28);
   display:flex; flex-direction:column; overflow:hidden;
 }
+/* ヘッダー・本文・フッター(ボタン列)をまとめて1つのスクロール領域にする。
+   以前はanswer-modal-bodyだけがoverflow-y:autoで、フッターのボタン列は
+   flex-shrink:0で外に固定していたため、ボタンが多く並んで折り返す等で
+   ヘッダー+フッターの必要高さがモーダルのmax-height(86vh/760px)を超えると
+   本文が0まで縮んでもなお収まりきらず、overflow:hiddenで下側(フッターの
+   ボタン)がスクロールする手段もないまま見切れていた。answer-modal-scroll
+   側でスクロールできるようにし、ボタンまで確実にたどり着けるようにする。 */
+.answer-modal-scroll {
+  flex:1; min-height:0; overflow-y:auto;
+  display:flex; flex-direction:column;
+}
 .answer-modal-head {
   flex-shrink:0; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
   padding:10px 16px; background:var(--card); border-bottom:1px solid var(--border);
@@ -251,7 +262,7 @@ input[type=search]:focus { border-color:var(--accent); }
 }
 .answer-modal-head button:hover { background:var(--btn-hover); color:var(--fg); }
 .answer-modal-body {
-  flex:1; min-height:0; overflow-y:auto; padding:18px 18px 20px;
+  flex-shrink:0; padding:18px 18px 20px;
   display:flex; flex-direction:column; gap:14px;
 }
 .highlights-hidden .kw-highlight { background:transparent; color:inherit; }
@@ -489,27 +500,29 @@ input[type=search]:focus { border-color:var(--accent); }
 <div class="seed-loading-spinner" id="seedLoadingSpinner" role="status" aria-label="読み込み中"></div>
 <div class="answer-modal-backdrop" id="answerModalBackdrop" aria-hidden="true">
   <div class="answer-modal" role="dialog" aria-modal="true" aria-labelledby="answerModalTitle">
-    <div class="answer-modal-head">
-      <div class="answer-modal-head-left">
-        <div class="answer-modal-question-row">
-          <span class="answer-modal-title" id="answerModalTitle">質問文</span>
-          <span class="answer-modal-date"><span id="answerModalDate"></span><span id="answerModalTime"></span></span>
+    <div class="answer-modal-scroll">
+      <div class="answer-modal-head">
+        <div class="answer-modal-head-left">
+          <div class="answer-modal-question-row">
+            <span class="answer-modal-title" id="answerModalTitle">質問文</span>
+            <span class="answer-modal-date"><span id="answerModalDate"></span><span id="answerModalTime"></span></span>
+          </div>
+          <div class="answer-modal-question" id="answerModalQuestion"></div>
         </div>
-        <div class="answer-modal-question" id="answerModalQuestion"></div>
+        <button type="button" id="answerModalClose" aria-label="閉じる">✕</button>
       </div>
-      <button type="button" id="answerModalClose" aria-label="閉じる">✕</button>
-    </div>
-    <div class="answer-modal-body" id="answerModalBody"></div>
-    <div class="answer-modal-foot">
-      <button type="button" class="answer-modal-highlight-btn" id="answerModalHighlightToggleBtn" title="キーワードハイライトなし">🔑</button>
-      <button type="button" class="answer-modal-vectorize-btn" id="answerModalVectorizeBtn" style="display:none;">この回答文をベクタ化する</button>
-      <span class="answer-modal-vectorized-badge" id="answerModalVectorizedBadge" style="display:none;">ベクタ化済み</span>
-      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordListBtn" style="display:none;">キーワード一覧</button>
-      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordRecheckBtn" style="display:none;" title="この回答文からベクタ化済みの全キーワードについて未登録のものが無いか再チェックし、あれば一括登録する">再チェック</button>
-      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordExtractBtn" style="display:none;">キーワード抽出</button>
-      <span id="answerModalMeta"></span>
-      <span id="answerModalTokens"></span>
-      <a class="answer-modal-link" id="answerModalShareLink" href="#" target="_blank" rel="noopener noreferrer">🔗 共有ページを開く</a>
+      <div class="answer-modal-body" id="answerModalBody"></div>
+      <div class="answer-modal-foot">
+        <button type="button" class="answer-modal-highlight-btn" id="answerModalHighlightToggleBtn" title="キーワードハイライトなし">🔑</button>
+        <button type="button" class="answer-modal-vectorize-btn" id="answerModalVectorizeBtn" style="display:none;">この回答文をベクタ化する</button>
+        <span class="answer-modal-vectorized-badge" id="answerModalVectorizedBadge" style="display:none;">ベクタ化済み</span>
+        <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordListBtn" style="display:none;">キーワード一覧</button>
+        <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordRecheckBtn" style="display:none;" title="この回答文からベクタ化済みの全キーワードについて未登録のものが無いか再チェックし、あれば一括登録する">再チェック</button>
+        <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordExtractBtn" style="display:none;">キーワード抽出</button>
+        <span id="answerModalMeta"></span>
+        <span id="answerModalTokens"></span>
+        <a class="answer-modal-link" id="answerModalShareLink" href="#" target="_blank" rel="noopener noreferrer">🔗 共有ページを開く</a>
+      </div>
     </div>
   </div>
 </div>

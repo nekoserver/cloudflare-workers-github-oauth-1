@@ -14,6 +14,7 @@ export type WorkflowStep = {
   api_method: string | null;
   api_path: string | null;
   note: string | null;
+  indent_level?: number | null;
 };
 
 export type WorkflowHierarchyLink = {
@@ -92,7 +93,9 @@ function renderSteps(steps: WorkflowStep[]): string {
       ? `<div class="wf-api-call"><span class="wf-method" style="background:${color}22;color:${color}">${escapeHtml(s.api_method)}</span><code class="wf-path">${escapeHtml(s.api_path)}</code></div>`
       : `<div class="wf-api-call wf-no-api">API問い合わせなし</div>`;
     const note = s.note ? `<div class="wf-note">${escapeHtml(s.note)}</div>` : '';
-    return `<li class="wf-step">
+    const indentLevel = s.indent_level ?? 0;
+    const indentStyle = indentLevel > 0 ? ` style="margin-left:${indentLevel * 24}px"` : '';
+    return `<li class="wf-step"${indentStyle}>
       <div class="wf-step-marker">${s.step_order}</div>
       <div class="wf-step-body">
         <div class="wf-step-title">${escapeHtml(s.stage_title)}</div>
@@ -307,7 +310,9 @@ export function getWorkflowPage(
             ? '<div class="wf-api-call"><span class="wf-method" style="background:' + color + '22;color:' + color + '">' + escHtml(s.api_method) + '</span><code class="wf-path">' + escHtml(s.api_path) + '</code></div>'
             : '<div class="wf-api-call wf-no-api">API問い合わせなし</div>';
           var note = s.note ? '<div class="wf-note">' + escHtml(s.note) + '</div>' : '';
-          return '<li class="wf-step"><div class="wf-step-marker">' + s.step_order + '</div><div class="wf-step-body"><div class="wf-step-title">' + escHtml(s.stage_title) + '</div>' + apiLine + note + '</div></li>';
+          var indentLevel = s.indent_level || 0;
+          var indentAttr = indentLevel > 0 ? ' style="margin-left:' + (indentLevel * 24) + 'px"' : '';
+          return '<li class="wf-step"' + indentAttr + '><div class="wf-step-marker">' + s.step_order + '</div><div class="wf-step-body"><div class="wf-step-title">' + escHtml(s.stage_title) + '</div>' + apiLine + note + '</div></li>';
         }).join('');
         return '<ol class="wf-timeline">' + items + '</ol>';
       }

@@ -89,6 +89,10 @@ describe('AICHAT_MODEL_MAX_TOKENS', () => {
   it('未設定モデルは undefined を返す（呼び出し元でフォールバック）', () => {
     expect(AICHAT_MODEL_MAX_TOKENS['@cf/meta/llama-3.3-70b-instruct-fp8-fast']).toBeUndefined();
   });
+
+  it('qwen3.8-27b は 4096 トークンを返す（Cloudflare Workers AIのモデルページに合わせて明示設定）', () => {
+    expect(AICHAT_MODEL_MAX_TOKENS['@cf/qwen/qwen3.8-27b']).toBe(4096);
+  });
 });
 
 describe('AICHAT_MODEL_EXTRA_PARAMS', () => {

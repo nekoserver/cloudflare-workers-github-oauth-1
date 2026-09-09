@@ -239,6 +239,7 @@ export function getMarkdownPreviewPage(): string {
     <div class="editor-card">
       <div class="toolbar">
         <div class="tab-group">
+          <button class="tab-btn" data-tab="text2md" onclick="switchTab('text2md')">Text→.md</button>
           <button class="tab-btn active" data-tab="edit" onclick="switchTab('edit')">Edit</button>
           <button class="tab-btn" data-tab="preview" onclick="switchTab('preview')">Preview</button>
           <button class="tab-btn" data-tab="split" onclick="switchTab('split')">Split</button>
@@ -255,6 +256,18 @@ export function getMarkdownPreviewPage(): string {
 
       <div class="panel-container" id="panelContainer">
         <div class="drop-overlay" id="dropOverlay">.md ファイルをドロップ</div>
+
+        <!-- Text to Markdown code block panel -->
+        <div class="panel" id="panelText2md" style="display:none">
+          <div style="display:flex; height:500px;">
+            <div style="flex:1; overflow:auto; border-right:1px solid var(--border-color);">
+              <textarea class="editor-textarea" id="text2mdInput" spellcheck="false" placeholder="ここにプレーンテキストを入力..." style="min-height:100%; height:100%;"></textarea>
+            </div>
+            <div style="flex:1; overflow:auto;">
+              <textarea class="editor-textarea" id="text2mdOutput" readonly style="min-height:100%; height:100%; background:var(--bg-secondary);" placeholder="ここにMarkdownコードブロックが出力されます"></textarea>
+            </div>
+          </div>
+        </div>
 
         <!-- Edit panel -->
         <div class="panel active" id="panelEdit" style="height:100%">
@@ -347,8 +360,45 @@ function greet(name) {
         splitPanel.style.display = 'none';
         splitPanel.classList.remove('active');
       }
+      var text2mdPanel = document.getElementById('panelText2md');
+      if (tab === 'text2md') {
+        text2mdPanel.style.display = 'block';
+        text2mdPanel.classList.add('active');
+        updateText2md();
+      } else {
+        text2mdPanel.style.display = 'none';
+        text2mdPanel.classList.remove('active');
+      }
       if (tab === 'preview') updatePreview();
     }
+
+    // 左のテキストエリアに入力したプレーンテキストを、Markdownとして
+    // 誤解釈されないコードブロックに変換して右の出力窓へ表示する。
+    // フェンス(バッククォート)の本数は、入力テキスト中に含まれる最長の
+    // 連続バッククォート数+1本(最低3本)にして、テキスト内容とフェンスが
+    // 衝突しないようにする(src/utils/textToMarkdown.tsのwrapAsMarkdownCodeBlockと同じロジック)。
+    function wrapAsMarkdownCodeBlockClient(text) {
+      var longestRun = 0;
+      var current = 0;
+      for (var i = 0; i < text.length; i++) {
+        if (text[i] === '\\u0060') {
+          current++;
+          if (current > longestRun) longestRun = current;
+        } else {
+          current = 0;
+        }
+      }
+      var fenceLength = Math.max(3, longestRun + 1);
+      var fence = '\\u0060'.repeat(fenceLength);
+      return fence + '\\n' + text + '\\n' + fence;
+    }
+
+    function updateText2md() {
+      var input = document.getElementById('text2mdInput').value;
+      document.getElementById('text2mdOutput').value = wrapAsMarkdownCodeBlockClient(input);
+    }
+
+    document.getElementById('text2mdInput').addEventListener('input', updateText2md);
 
     function updatePreview() {
       var md = editor.value;
@@ -461,6 +511,7 @@ function greet(name) {
     }
     editor.addEventListener('keydown', function(e) { handleTab(editor, e); });
     editorSplit.addEventListener('keydown', function(e) { handleTab(editorSplit, e); });
+    document.getElementById('text2mdInput').addEventListener('keydown', function(e) { handleTab(document.getElementById('text2mdInput'), e); });
 
     // Init
     updateStatus();
