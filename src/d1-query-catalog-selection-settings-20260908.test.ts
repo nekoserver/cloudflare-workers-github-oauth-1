@@ -9,6 +9,31 @@ const row = (table_name: string, query_name: string): D1QueryCatalogRow => ({
 });
 
 describe('D1クエリカタログのテーブル選択設定', () => {
+  it('左サイドパネルに分類カテゴリを該当テーブル数の多い順で表示し、右側の表をカテゴリで絞り込める', () => {
+    const html = getD1QueryCatalogPage('u', [
+      row('auth_sessions', 'A'),
+      row('auth_users', 'B'),
+      row('ai_logs', 'C'),
+      row('unclassified', 'D'),
+    ], 'count', {}, true, {
+      auth_sessions: { group: 'auth', groupLabel: '認証', color: '#388bfd', fkRole: 'source' },
+      auth_users: { group: 'auth', groupLabel: '認証', color: '#388bfd', fkRole: 'target' },
+      ai_logs: { group: 'ai', groupLabel: 'AI', color: '#a371f7', fkRole: 'both' },
+    });
+
+    const sidePanel = html.match(/<aside class="category-filter-sidebar"[\s\S]*?<\/aside>/)?.[0] ?? '';
+    expect(sidePanel).toContain('外部キー分類カテゴリ');
+    expect(sidePanel).toContain('data-group="auth"');
+    expect(sidePanel).toContain('<span class="category-filter-count">2</span><span class="category-filter-name">認証</span>');
+    expect(sidePanel.indexOf('data-group="auth"')).toBeLessThan(sidePanel.indexOf('data-group="ai"'));
+    expect(sidePanel).not.toContain('data-group="undefined"');
+    expect(html).toContain('class="catalog-main"');
+    expect(html).toContain('class="table-group-badge" data-group="auth"');
+    expect(html).toContain("var selectedGroup = selectedCategoryBadge ? selectedCategoryBadge.getAttribute('data-group') : null;");
+    expect(html).toContain("var groupMatches = selectedGroup === null || (groupBadge && groupBadge.getAttribute('data-group') === selectedGroup);");
+    expect(html).toContain('var visible = groupMatches && tableMatches && verbMatches;');
+  });
+
   it('横断検索とテーブル名選択を最上段のツールバーに並べ、説明見出しを表示しない', () => {
     const html = getD1QueryCatalogPage('u', [row('a', 'A')]);
     const toolbar = html.match(/<div class="catalog-filter-toolbar">([\s\S]*?)<\/div>\s*<div class="filter-panel"/)?.[1] ?? '';
@@ -61,7 +86,7 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toContain('style="--source-color:#388bfd;');
     expect(html).toContain('data-group="auth" data-fk-role="source"');
     expect(html).toContain('style="--table-color:#388bfd"');
-    expect(html).toContain('<span class="table-group-badge">Auth / Session</span>');
+    expect(html).toContain('<span class="table-group-badge" data-group="auth">Auth / Session</span>');
     expect(html).toContain('<span class="table-fk-badge table-fk-source">FK 参照元</span>');
     expect(html).toContain('.band-name {');
     expect(html).toContain('color: var(--table-color, var(--text-primary))');
