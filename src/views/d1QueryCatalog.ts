@@ -409,6 +409,13 @@ export function getD1QueryCatalogPage(
       filter: grayscale(1);
       opacity: 0.68;
     }
+    .table-badge-list .table-filter-badge.category-mismatch {
+      --source-color: color-mix(in srgb, var(--text-muted) 42%, var(--card-bg));
+      --badge-middle: color-mix(in srgb, var(--text-muted) 24%, var(--card-bg));
+      --badge-foreground: var(--text-muted);
+      filter: grayscale(1);
+      opacity: 0.68;
+    }
     .table-badge-count {
       width: 29px; height: 29px; border: 2px solid var(--source-color); border-radius: 50%;
       display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
@@ -926,6 +933,7 @@ export function getD1QueryCatalogPage(
 
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');
+    var categoryFilterSidebar = document.querySelector('.category-filter-sidebar');
     function setTablePanelExpanded(expanded) {
       tablePanelToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       tablePanelToggle.setAttribute('aria-pressed', expanded ? 'true' : 'false');
@@ -936,7 +944,7 @@ export function getD1QueryCatalogPage(
       setTablePanelExpanded(!expanded);
     });
     document.addEventListener('click', function(event) {
-      if (tablePanel.hidden || tablePanel.contains(event.target) || tablePanelToggle.contains(event.target)) return;
+      if (tablePanel.hidden || tablePanel.contains(event.target) || tablePanelToggle.contains(event.target) || categoryFilterSidebar.contains(event.target)) return;
       setTablePanelExpanded(false);
     });
 
@@ -1011,6 +1019,9 @@ export function getD1QueryCatalogPage(
       var selectedGroup = selectedCategoryBadge ? selectedCategoryBadge.getAttribute('data-group') : null;
       var selectedTables = tableBadges.filter(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; })
         .map(function(badge) { return badge.getAttribute('data-table'); });
+      tableBadges.forEach(function(badge) {
+        badge.classList.toggle('category-mismatch', selectedGroup !== null && badge.getAttribute('data-group') !== selectedGroup);
+      });
       tableBadgeList.classList.toggle('has-selection', selectedTables.length > 0);
       var selectedBadge = tableBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });
       var selectedTable = selectedBadge ? selectedBadge.getAttribute('data-table') : null;
