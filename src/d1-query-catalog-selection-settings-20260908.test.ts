@@ -108,6 +108,17 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toMatch(/\.table-filter-badge\[aria-pressed="true"\][^}]+\.table-column-count\s*\{\s*background:\s*var\(--source-color\)/);
   });
 
+  it('テーブル選択パネルを開いたままFK分類外のテーブルバッジをグレーアウトする', () => {
+    const html = getD1QueryCatalogPage('u', [row('auth_table', 'A'), row('ai_table', 'B')], 'count', {}, true, {
+      auth_table: { group: 'auth', groupLabel: '認証', color: '#388bfd', fkRole: 'source' },
+      ai_table: { group: 'ai', groupLabel: 'AI', color: '#a371f7', fkRole: 'target' },
+    });
+
+    expect(html).toContain("badge.classList.toggle('category-mismatch', selectedGroup !== null && badge.getAttribute('data-group') !== selectedGroup)");
+    expect(html).toMatch(/\.table-badge-list \.table-filter-badge\.category-mismatch\s*\{[^}]*filter:\s*grayscale\(1\);[^}]*opacity:\s*0\.68;/);
+    expect(html).toContain('categoryFilterSidebar.contains(event.target)');
+  });
+
   it('パネル外の無関係な場所をクリックするとテーブル選択パネルを閉じる', () => {
     const html = getD1QueryCatalogPage('u', [row('a', 'A')]);
 
