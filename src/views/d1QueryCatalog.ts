@@ -470,6 +470,12 @@ export function getD1QueryCatalogPage(
     .sql-detail-status { font-size: 13px; color: var(--text-muted); }
     .sql-detail-status.ready { color: var(--success-color); }
     .sql-detail-status.error { color: var(--danger-color); }
+    .sql-detail-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .sql-detail-tool { border: 1px solid var(--accent-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font: 12px/1.4 'Monaco', 'Courier New', monospace; }
+    .sql-detail-tool:hover, .sql-detail-tool:focus-visible { background: var(--accent-color); color: white; }
+    .sql-detail-tool:disabled { cursor: wait; opacity: 0.7; }
+    .sql-dialect-result { margin-top: 10px; }
+    .sql-dialect-result-title { margin: 12px 0 6px; color: var(--text-muted); font-size: 12px; }
     .sql-detail-action, .sql-detail-close { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-family: inherit; }
     .sql-detail-action:hover, .sql-detail-close:hover { border-color: var(--accent-color); }
     @media (max-width: 600px) {
@@ -568,10 +574,20 @@ export function getD1QueryCatalogPage(
         <pre class="sql-detail-code" id="sqlDetailSql"></pre>
       </div>
       <div class="sql-detail-section">
-        <div class="sql-detail-section-title">sqlcアノテーション検証</div>
-        <p class="sql-detail-help"><code>-- name: QueryName :command</code> の形式、クエリ名、コマンド種別をブラウザ内のWASMで検証し、SQL本文を抽出します。SQL構文・D1スキーマとの整合性やコード生成は検証対象外です。</p>
-        <div class="sql-detail-status" id="sqlDetailWasmStatus" aria-live="polite">SQLを選択すると検証します。</div>
+        <div class="sql-detail-section-title">sqlc parse・方言比較</div>
+        <p class="sql-detail-help">SQLite(D1)の解析出力を表示するか、同じクエリをPostgreSQLで使う場合のプレースホルダーと代表的な方言差をモーダル内で確認できます。ブラウザ版は軽量検査であり、DBへの問い合わせ、スキーマ照合、完全なsqlc構文解析は行いません。</p>
+        <div class="sql-detail-tools">
+          <button type="button" class="sql-detail-tool" id="parseD1SqlButton">sqlc parse --dialect SQLite(D1) ▶</button>
+          <button type="button" class="sql-detail-tool" id="comparePostgresButton">PostgreSQLとの差分を調べる</button>
+        </div>
+        <div class="sql-detail-status" id="sqlDetailWasmStatus" aria-live="polite">実行する検査を選択してください。</div>
         <pre class="sql-detail-code" id="sqlDetailResult" hidden></pre>
+        <div class="sql-dialect-result" id="postgresComparison" hidden>
+          <div class="sql-dialect-result-title">PostgreSQL向けクエリ候補</div>
+          <pre class="sql-detail-code" id="postgresSql"></pre>
+          <div class="sql-dialect-result-title">検出した差分・確認事項</div>
+          <ul class="sql-detail-help" id="postgresDifferences"></ul>
+        </div>
       </div>
     </div>
     <div class="sql-detail-footer">
@@ -598,6 +614,8 @@ export function getD1QueryCatalogPage(
     var sqlDetailDialog = document.getElementById('sqlDetailDialog');
     var sqlDetailWasmStatus = document.getElementById('sqlDetailWasmStatus');
     var sqlDetailResult = document.getElementById('sqlDetailResult');
+    var parseD1SqlButton = document.getElementById('parseD1SqlButton');
+    var postgresComparison = document.getElementById('postgresComparison');
     var currentSql = '';
     var currentSqlcInput = '';
     var lastSqlDetailTrigger = null;
@@ -645,7 +663,64 @@ export function getD1QueryCatalogPage(
       return el ? (el.textContent || '') : '';
     }
 
-    async function openSqlDetail(button) {
+    async function runD1Parse() {
+      var requestId = ++sqlDetailRequestId;
+      var sqlcInput = currentSqlcInput;
+      parseD1SqlButton.disabled = true;
+      sqlDetailResult.hidden = true;
+      sqlDetailWasmStatus.textContent = 'sqlc/WASMを読み込み、SQLite(D1)として軽量検査しています…';
+      sqlDetailWasmStatus.className = 'sql-detail-status';
+      try {
+        await ensureSqlcWasm();
+        if (requestId !== sqlDetailRequestId) return;
+        var markdown = globalThis.sqlcParseQueryAnnotations(sqlcInput);
+        sqlDetailResult.textContent = markdown;
+        sqlDetailResult.hidden = false;
+        sqlDetailWasmStatus.textContent = markdown.indexOf('エラー:') === -1 ? 'SQLite(D1)軽量検査完了: アノテーションエラーはありません。' : 'SQLite(D1)軽量検査完了: エラーがあります。';
+        sqlDetailWasmStatus.className = markdown.indexOf('エラー:') === -1 ? 'sql-detail-status ready' : 'sql-detail-status error';
+      } catch (error) {
+        if (requestId !== sqlDetailRequestId) return;
+        sqlDetailWasmStatus.textContent = 'sqlc/WASMの読み込みまたは検査に失敗しました: ' + (error && error.message ? error.message : String(error));
+        sqlDetailWasmStatus.className = 'sql-detail-status error';
+      } finally {
+        if (requestId === sqlDetailRequestId) parseD1SqlButton.disabled = false;
+      }
+    }
+
+    function postgresCandidate(sql) {
+      var parameterIndex = 0;
+      return sql.replace(/\\?(\\d+)?/g, function(_match, explicitIndex) {
+        if (explicitIndex) return '$' + explicitIndex;
+        parameterIndex += 1;
+        return '$' + parameterIndex;
+      });
+    }
+
+    function compareWithPostgres() {
+      var differences = [];
+      var candidate = postgresCandidate(currentSql);
+      if (/\\?(?:\\d+)?/.test(currentSql)) differences.push('バインド変数を SQLite の ? / ?NNN から PostgreSQL の $1, $2, … 形式へ変換しました。');
+      if (/\\bINSERT\\s+OR\\s+(?:IGNORE|REPLACE)\\b/i.test(currentSql)) differences.push('INSERT OR IGNORE / REPLACE はPostgreSQLでそのまま使えません。ON CONFLICT句へ書き換え、競合キーを確認してください。');
+      if (/\\b(?:datetime|date|strftime)\\s*\\(/i.test(currentSql)) differences.push('SQLiteの日付関数を検出しました。PostgreSQLのCURRENT_TIMESTAMP、date_trunc、to_char等への置換を確認してください。');
+      if (/\\bgroup_concat\\s*\\(/i.test(currentSql)) differences.push('group_concatはPostgreSQLでは通常string_aggへ置き換えます。区切り文字とORDER BYを確認してください。');
+      if (/\\bjson_(?:extract|array_length|each)\\s*\\(/i.test(currentSql)) differences.push('SQLite JSON関数を検出しました。PostgreSQLのjsonb演算子・jsonb_*関数との戻り型の違いを確認してください。');
+      if (/\\bAUTOINCREMENT\\b/i.test(currentSql)) differences.push('AUTOINCREMENTはPostgreSQLではIDENTITY列またはsequenceを使用します。');
+      if (/\\bCOLLATE\\s+NOCASE\\b/i.test(currentSql)) differences.push('COLLATE NOCASEはPostgreSQLに同名の照合順序がありません。citext、ILIKE、適切なcollationを検討してください。');
+      if (!differences.length) differences.push('この軽量比較で既知の表層差は検出されませんでした。型、関数、RETURNING、NULL順序、大小文字、スキーマは実際のPostgreSQLで別途検証してください。');
+      document.getElementById('postgresSql').textContent = candidate;
+      var list = document.getElementById('postgresDifferences');
+      list.replaceChildren();
+      differences.forEach(function(message) {
+        var item = document.createElement('li');
+        item.textContent = message;
+        list.appendChild(item);
+      });
+      postgresComparison.hidden = false;
+      sqlDetailWasmStatus.textContent = 'PostgreSQLとの差分候補を表示しました（軽量な表層比較）。';
+      sqlDetailWasmStatus.className = 'sql-detail-status ready';
+    }
+
+    function openSqlDetail(button) {
       var row = button.closest('tr');
       if (!row) return;
       lastSqlDetailTrigger = button;
@@ -653,8 +728,7 @@ export function getD1QueryCatalogPage(
       var queryName = rowText(row, '.query-detail-name');
       var command = rowText(row, '.query-detail-command');
       currentSqlcInput = '-- name: ' + queryName + ' :' + command + '\\n' + currentSql;
-      var sqlcInput = currentSqlcInput;
-      var requestId = ++sqlDetailRequestId;
+      ++sqlDetailRequestId;
       document.getElementById('sqlDetailName').textContent = queryName;
       document.getElementById('sqlDetailCommand').textContent = ':' + command + ' (' + rowText(row, '.query-detail-confirmed') + ')';
       document.getElementById('sqlDetailTable').textContent = rowText(row, '.query-detail-table');
@@ -665,29 +739,22 @@ export function getD1QueryCatalogPage(
       document.getElementById('sqlDetailSql').innerHTML = highlightedSql ? highlightedSql.innerHTML : '';
       sqlDetailResult.hidden = true;
       sqlDetailResult.textContent = '';
-      sqlDetailWasmStatus.textContent = 'sqlc/WASMを読み込み、アノテーションを検証しています…';
+      postgresComparison.hidden = true;
+      document.getElementById('postgresSql').textContent = '';
+      document.getElementById('postgresDifferences').replaceChildren();
+      parseD1SqlButton.disabled = false;
+      sqlDetailWasmStatus.textContent = '実行する検査を選択してください。';
       sqlDetailWasmStatus.className = 'sql-detail-status';
       sqlDetailDialog.style.zIndex = String(getNextZ());
       if (!sqlDetailDialog.open) sqlDetailDialog.showModal();
-      try {
-        await ensureSqlcWasm();
-        if (requestId !== sqlDetailRequestId) return;
-        var markdown = globalThis.sqlcParseQueryAnnotations(sqlcInput);
-        sqlDetailResult.textContent = markdown;
-        sqlDetailResult.hidden = false;
-        sqlDetailWasmStatus.textContent = markdown.indexOf('エラー:') === -1 ? '検証完了: アノテーションエラーはありません。' : '検証完了: エラーがあります。';
-        sqlDetailWasmStatus.className = markdown.indexOf('エラー:') === -1 ? 'sql-detail-status ready' : 'sql-detail-status error';
-      } catch (error) {
-        if (requestId !== sqlDetailRequestId) return;
-        sqlDetailWasmStatus.textContent = 'sqlc/WASMの読み込みまたは検証に失敗しました: ' + (error && error.message ? error.message : String(error));
-        sqlDetailWasmStatus.className = 'sql-detail-status error';
-      }
     }
 
     document.querySelectorAll('.sql-detail-button').forEach(function(button) {
       button.addEventListener('click', function() { openSqlDetail(button); });
     });
     document.getElementById('closeSqlDetailButton').addEventListener('click', function() { sqlDetailDialog.close(); });
+    parseD1SqlButton.addEventListener('click', runD1Parse);
+    document.getElementById('comparePostgresButton').addEventListener('click', compareWithPostgres);
     sqlDetailDialog.addEventListener('close', function() {
       if (lastSqlDetailTrigger) lastSqlDetailTrigger.focus();
     });

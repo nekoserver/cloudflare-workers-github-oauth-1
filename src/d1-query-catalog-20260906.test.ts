@@ -407,7 +407,28 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('id="copySqlButton"');
     expect(html).toContain('id="copySqlcButton"');
     expect(html).toContain('id="closeSqlDetailButton"');
-    expect(html).toContain('SQL構文・D1スキーマとの整合性やコード生成は検証対象外です。');
+    expect(html).toContain('DBへの問い合わせ、スキーマ照合、完全なsqlc構文解析は行いません。');
+  });
+
+  it('詳細モーダルからSQLite(D1)検査を明示的に実行できる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('id="parseD1SqlButton"');
+    expect(html).toContain('sqlc parse --dialect SQLite(D1) ▶');
+    expect(html).toContain("parseD1SqlButton.addEventListener('click', runD1Parse)");
+    expect(html).toContain('実行する検査を選択してください。');
+    expect(html).not.toContain("openSqlDetail(button) {\n      await ensureSqlcWasm()");
+  });
+
+  it('詳細モーダル内でPostgreSQL向けクエリ候補と方言差を調べられる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('id="comparePostgresButton"');
+    expect(html).toContain('id="postgresSql"');
+    expect(html).toContain('id="postgresDifferences"');
+    expect(html).toContain('function postgresCandidate(sql)');
+    expect(html).toContain("return '$' + parameterIndex");
+    expect(html).toContain('INSERT OR IGNORE / REPLACE はPostgreSQLでそのまま使えません。');
+    expect(html).toContain('group_concatはPostgreSQLでは通常string_aggへ置き換えます。');
+    expect(html).toContain('PostgreSQLとの差分候補を表示しました');
   });
 
   it('SQL詳細はsqlc WASMを遅延ロードし、初期化Promiseを再利用する', () => {
