@@ -53,6 +53,27 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toMatch(/\.table-badge-list\s*\{[^}]*row-gap:\s*1px/);
   });
 
+  it('未選択バッジは同じ中間色で揃え、選択時は選択色で塗りつぶして他をグレーアウトする', () => {
+    const html = getD1QueryCatalogPage('u', [row('a', 'A'), row('b', 'B')]);
+
+    expect(html).toContain('--badge-middle: color-mix(in srgb, var(--source-color) 48%, var(--card-bg))');
+    expect(html).toMatch(/\.table-badge-count\s*\{[^}]*background:\s*var\(--badge-middle\)/);
+    expect(html).toMatch(/\.table-badge-name\s*\{[^}]*background:\s*var\(--badge-middle\)/);
+    expect(html).toMatch(/\.table-column-count\s*\{[^}]*background:\s*var\(--badge-middle\)/);
+    expect(html).toContain('.table-badge-list.has-selection .table-filter-badge:not([aria-pressed="true"])');
+    expect(html).toContain("tableBadgeList.classList.toggle('has-selection', selectedTables.length > 0)");
+    expect(html).toMatch(/\.table-filter-badge\[aria-pressed="true"\][^}]+\.table-column-count\s*\{\s*background:\s*var\(--source-color\)/);
+  });
+
+  it('パネル外の無関係な場所をクリックするとテーブル選択パネルを閉じる', () => {
+    const html = getD1QueryCatalogPage('u', [row('a', 'A')]);
+
+    expect(html).toContain("document.addEventListener('click', function(event)");
+    expect(html).toContain('tablePanel.contains(event.target)');
+    expect(html).toContain('tablePanelToggle.contains(event.target)');
+    expect(html).toContain('setTablePanelExpanded(false)');
+  });
+
   it('表内SQLのキーワード・文字列・数値・パラメータを安全にハイライトする', () => {
     const sqlRow = { ...row('items', 'Highlighted'), sql_text: "PRAGMA table_info('items'); SELECT * FROM items WHERE id = ?1 AND n = 42" };
     const html = getD1QueryCatalogPage('u', [sqlRow]);
