@@ -25,6 +25,10 @@ export type Bindings = {
   NOTIFY_WORKER_URL?: string;
   /** NOTIFY_TARGET=worker のときのAuthorizationヘッダに使う共有シークレット（任意） */
   NOTIFY_WORKER_SECRET?: string;
+  /** /neko hellodw が起動確認のpingを送るdynamicneko(Cloudflare Dynamic Worker Loader使用)のベースURL */
+  DYNAMICNEKO_URL?: string;
+  /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
+  DYNAMICNEKO_PING_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;

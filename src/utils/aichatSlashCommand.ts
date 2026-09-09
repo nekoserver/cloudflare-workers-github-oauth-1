@@ -157,6 +157,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
+    '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -200,6 +201,18 @@ export function formatDigHelp(): string {
  */
 export function formatDigResult(result: string): string {
   return ['## dig (WASM)', '```', result, '```'].join('\n');
+}
+
+/**
+ * `/neko hellodw` の結果を表示する。dynamicneko側は"world"以外の文字列を
+ * 返すこともある(異常系: LOADER.load()自体が失敗した場合の502等)ため、
+ * 期待通り"world"が返ったかどうかで見出しを分ける。
+ */
+export function formatDynamicWorkerPingResult(reply: string): string {
+  if (reply === 'world') {
+    return '## ダイナミックWorker起動確認 (dynamicneko)\n✅ hello → world (LOADER.load()経由で使い捨てisolateが正常に応答しました)';
+  }
+  return `## ダイナミックWorker起動確認 (dynamicneko)\n⚠️ 想定外の応答: ${reply}`;
 }
 
 export type CommitAgentLogRow = {
@@ -447,6 +460,7 @@ export type AichatSlashCommandDeps = {
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
+  pingDynamicWorker?: () => Promise<string>;
 };
 
 export type SqlImpactCatalogRow = {
@@ -1093,12 +1107,29 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'hellodw') {
+    if (!deps.pingDynamicWorker) {
+      return { handled: true, response: '❌ /neko hellodw は現在利用できません(ダイナミックWorker連携未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.pingDynamicWorker(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko hellodw がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko hellodw でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatDynamicWorkerPingResult(outcome.value) };
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko help\n詳細は /neko help を実行してください`,
   };
 }

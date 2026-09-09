@@ -43,6 +43,10 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #     このアプリのGitHub App由来のOAuthトークンとは別に、classic PATを用意する必要がある。
 #     未設定の場合、/gh-attachのアップロードはエラーになる（リポジトリ情報取得・
 #     Issue作成自体はユーザーのGitHub Appトークンのままで動作する）。
+#   DYNAMICNEKO_URL          # /neko hellodw が起動確認のpingを送るdynamicneko(Cloudflare
+#                             # Dynamic Worker Loader使用)のベースURL(例: https://dynamicneko.<account>.workers.dev)
+#   DYNAMICNEKO_PING_SECRET  # dynamicneko側 GET /api/ping のAuthorizationヘッダに使う
+#                             # 共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
 #   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/meta/llama-3.3-70b-instruct-fp8-fast）
 #     注意: gemma-4-26b-a4b-it はsystem messageが存在すると enable_thinking:false を無視して
