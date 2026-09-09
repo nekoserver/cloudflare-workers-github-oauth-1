@@ -364,7 +364,7 @@ export function getD1QueryCatalogPage(
       padding: 12px 16px 16px;
     }
     .catalog-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
-    .category-filter-sidebar { position: sticky; top: 56px; min-width: 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); }
+    .category-filter-sidebar { position: sticky; top: 56px; min-width: 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); overflow: hidden; }
     .category-filter-title { margin-bottom: 9px; color: var(--text-secondary); font-size: 12px; font-weight: 700; text-align: center; }
     .category-filter-list { display: flex; flex-direction: column; gap: 6px; }
     .category-filter-badge { display: flex; align-items: center; width: 100%; min-width: 0; padding: 0; border: 1px solid var(--category-color); border-radius: 999px; background: color-mix(in srgb, var(--category-color) 12%, var(--card-bg)); color: var(--text-primary); cursor: pointer; font-family: inherit; text-align: left; }
@@ -373,7 +373,8 @@ export function getD1QueryCatalogPage(
     .category-filter-count { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border-right: 1px solid var(--category-color); border-radius: 50%; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
     .category-filter-name { min-width: 0; padding: 5px 8px; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .category-filter-empty { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
-    .category-chart { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+    .category-chart { max-height: 1000px; margin-bottom: 14px; padding-bottom: 12px; overflow: hidden; border-bottom: 1px solid var(--border-color); opacity: 1; transform: translateY(0); transition: max-height 0.28s ease, margin 0.28s ease, padding 0.28s ease, border-color 0.28s ease, opacity 0.2s ease, transform 0.28s ease; touch-action: pan-y; }
+    .category-filter-sidebar.chart-collapsed .category-chart { max-height: 0; margin-bottom: 0; padding-bottom: 0; border-color: transparent; opacity: 0; transform: translateY(-18px); pointer-events: none; }
     .category-chart-pie { position: relative; width: min(150px, 100%); aspect-ratio: 1; margin: 0 auto 10px; border-radius: 50%; background: var(--category-chart-gradient, var(--border-color)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 12%, transparent); }
     .category-chart-pie::after { content: ''; position: absolute; inset: 27%; border-radius: 50%; background: var(--bg-secondary); }
     .category-chart-total { position: absolute; z-index: 1; inset: 27%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-primary); font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -644,7 +645,7 @@ export function getD1QueryCatalogPage(
       <div class="catalog-layout">
         <aside class="category-filter-sidebar" aria-label="FK分類による絞り込み">
           <figure class="category-chart" aria-labelledby="categoryChartTitle">
-            <figcaption class="category-filter-title" id="categoryChartTitle">FK分類カテゴリ別 SQL件数</figcaption>
+            <figcaption class="category-filter-title" id="categoryChartTitle">内訳</figcaption>
             ${rows.length > 0 ? `<div class="category-chart-pie" role="img" aria-label="全${rows.length}件。${escapeHtml(queryCategoryAriaLabel)}" style="--category-chart-gradient:conic-gradient(${queryCategoryGradient})"><span class="category-chart-total">${rows.length}<small>SQL</small></span></div>
             <ul class="category-chart-legend">${queryCategoryLegendHtml}</ul>` : '<div class="category-filter-empty">集計対象のSQLがありません</div>'}
           </figure>
@@ -986,6 +987,18 @@ export function getD1QueryCatalogPage(
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');
     var categoryFilterSidebar = document.querySelector('.category-filter-sidebar');
+    var categoryChart = categoryFilterSidebar.querySelector('.category-chart');
+    var categoryChartTouchStartY = null;
+    categoryChart.addEventListener('touchstart', function(event) {
+      categoryChartTouchStartY = event.touches.length === 1 ? event.touches[0].clientY : null;
+    }, { passive: true });
+    categoryChart.addEventListener('touchend', function(event) {
+      if (categoryChartTouchStartY === null || event.changedTouches.length !== 1) return;
+      var swipeDistance = event.changedTouches[0].clientY - categoryChartTouchStartY;
+      categoryChartTouchStartY = null;
+      if (Math.abs(swipeDistance) >= 48) categoryFilterSidebar.classList.add('chart-collapsed');
+    }, { passive: true });
+    categoryChart.addEventListener('touchcancel', function() { categoryChartTouchStartY = null; }, { passive: true });
     function setTablePanelExpanded(expanded) {
       tablePanelToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       tablePanelToggle.setAttribute('aria-pressed', expanded ? 'true' : 'false');

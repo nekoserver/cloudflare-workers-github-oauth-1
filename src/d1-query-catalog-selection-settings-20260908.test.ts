@@ -20,12 +20,21 @@ describe('D1クエリカタログのテーブル選択設定', () => {
       ai_logs: { group: 'ai', groupLabel: 'AI', color: '#a371f7', fkRole: 'both' },
     });
 
-    expect(html).toContain('id="categoryChartTitle">FK分類カテゴリ別 SQL件数</figcaption>');
+    expect(html).toContain('id="categoryChartTitle">内訳</figcaption>');
     expect(html).toContain('class="category-chart-pie" role="img"');
     expect(html).toContain('aria-label="全4件。認証 2件、AI 1件、未分類 1件"');
     expect(html).toContain('--category-chart-gradient:conic-gradient(#388bfd 0.00% 50.00%, #a371f7 50.00% 75.00%, #8b949e 75.00% 100.00%)');
     expect(html).toMatch(/<li><span class="category-chart-swatch"[^<]*<\/span><span class="category-chart-label">認証<\/span><strong>2件<\/strong><span class="category-chart-percent">50\.0%<\/span>/);
     expect(html).toContain('<span class="category-chart-label">未分類</span><strong>1件</strong><span class="category-chart-percent">25.0%</span>');
+  });
+
+  it('内訳を縦にスワイプすると内訳を畳み、下のFK分類をせり上げる', () => {
+    const html = getD1QueryCatalogPage('u', [row('auth_sessions', 'A')]);
+
+    expect(html).toContain("categoryChart.addEventListener('touchstart'");
+    expect(html).toContain("categoryChart.addEventListener('touchend'");
+    expect(html).toContain("if (Math.abs(swipeDistance) >= 48) categoryFilterSidebar.classList.add('chart-collapsed');");
+    expect(html).toMatch(/\.category-filter-sidebar\.chart-collapsed \.category-chart\s*\{[^}]*max-height:\s*0;[^}]*transform:\s*translateY\(-18px\)/s);
   });
 
   it('SQLがない場合は円グラフの代わりに空状態を表示する', () => {
