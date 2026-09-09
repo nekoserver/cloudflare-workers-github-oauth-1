@@ -291,7 +291,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5026,6 +5026,33 @@ type AichatRequestBody = {
   source?: string; image?: string; preferMoondream?: boolean;
 };
 
+async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
+  const rows = await db.prepare(
+    `SELECT query_name, command, command_confirmed, source_file, source_line, sql_text,
+            migration_file, last_commit_hash, last_commit_at
+     FROM d1_query_catalog
+     WHERE table_name = ?
+     ORDER BY command_confirmed DESC, query_name, source_file, source_line
+     LIMIT 200`
+  ).bind(tableName).all<{
+    query_name: string; command: string; command_confirmed: number; source_file: string;
+    source_line: number; sql_text: string; migration_file: string | null;
+    last_commit_hash: string | null; last_commit_at: string | null;
+  }>();
+  return (rows.results ?? []).map((row) => ({
+    queryName: row.query_name,
+    command: row.command,
+    commandConfirmed: row.command_confirmed,
+    sourceFile: row.source_file,
+    sourceLine: row.source_line,
+    sqlText: row.sql_text,
+    migrationFile: row.migration_file,
+    lastCommitHash: row.last_commit_hash,
+    lastCommitAt: row.last_commit_at,
+  }));
+}
+
+// 接続元IPにはクライアント指定可能なX-Forwarded-ForでなくCloudflareヘッダーだけを使う。
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   let body: AichatRequestBody;
@@ -5049,8 +5076,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
-    // Cloudflareがエッジで設定するヘッダーだけを使用し、クライアントが任意に
-    // 追加できるX-Forwarded-Forを接続元IPとして誤表示しない。
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
       if (!c.env.DB) return null;
@@ -5066,6 +5091,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).all<UserSessionLoginRow>();
       return rows.results ?? [];
     },
+    sqlImpactLookup: c.env.DB ? (tableName) => fetchSqlImpactCatalog(c.env.DB!, tableName) : undefined,
     searchShares: async (keyword) => {
       if (!c.env.DB) return { hitCount: 0, results: [] };
       const db = c.env.DB as unknown as D1Like;

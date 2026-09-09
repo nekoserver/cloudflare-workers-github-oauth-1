@@ -155,6 +155,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
+    '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb [AL\\|NL] [EAST\\|CENTRAL\\|WEST] | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
@@ -445,7 +446,65 @@ export type AichatSlashCommandDeps = {
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
+  sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
 };
+
+export type SqlImpactCatalogRow = {
+  queryName: string;
+  command: string;
+  commandConfirmed: number;
+  sourceFile: string;
+  sourceLine: number;
+  sqlText: string;
+  migrationFile: string | null;
+  lastCommitHash: string | null;
+  lastCommitAt: string | null;
+};
+
+function sqlImpactOperation(row: SqlImpactCatalogRow): 'read' | 'write' {
+  return /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(row.sqlText) ? 'read' : 'write';
+}
+
+/** D1クエリカタログの完全一致結果を、チャット向けの短い変更影響レポートへ整形する。 */
+export function formatSqlImpactReport(tableName: string, rows: SqlImpactCatalogRow[]): string {
+  const catalogUrl = `/d1-query-catalog?table=${encodeURIComponent(tableName)}`;
+  if (rows.length === 0) {
+    return `## ${tableName} 変更影響\n関連SQLは登録されていません。\n\n詳細: ${catalogUrl}`;
+  }
+  const readCount = rows.filter((row) => sqlImpactOperation(row) === 'read').length;
+  const writeCount = rows.length - readCount;
+  const migrations = new Set(rows.map((row) => row.migrationFile).filter(Boolean));
+  const unconfirmedCount = rows.filter((row) => row.commandConfirmed !== 1).length;
+  const warnings: string[] = [];
+  if (writeCount > 0) warnings.push(`- \`DELETE\`、\`UPDATE\`、\`INSERT\`などの書き込みクエリが${writeCount}件あります。`);
+  if (unconfirmedCount > 0) warnings.push(`- ${unconfirmedCount}件のクエリでsqlcコマンド種別が推測状態です。`);
+  const topRows = rows.slice(0, 8).map((row) => {
+    const source = `${row.sourceFile}:${row.sourceLine}`.replace(/\|/g, '\\|');
+    const commit = row.lastCommitHash
+      ? `${row.lastCommitHash.slice(0, 7)}${row.lastCommitAt ? ` (${row.lastCommitAt})` : ''}`
+      : '未登録';
+    return `| ${row.queryName.replace(/\|/g, '\\|')} | :${row.command} | ${sqlImpactOperation(row) === 'read' ? '読み取り' : '書き込み'} | ${source} | ${commit} |`;
+  });
+  if (rows.length > topRows.length) warnings.push(`- 上位${topRows.length}件のみ表示しています。全件は詳細リンクで確認してください。`);
+  return [
+    `## ${tableName} 変更影響`,
+    '',
+    '| 項目 | 件数 |',
+    '|---|---:|',
+    `| 関連SQL | ${rows.length} |`,
+    `| 読み取り処理 | ${readCount} |`,
+    `| 書き込み処理 | ${writeCount} |`,
+    `| 関連migration | ${migrations.size} |`,
+    '',
+    '### 関連SQL(上位)',
+    '| クエリ名 | コマンド | 区分 | ソース | 最終変更 |',
+    '|---|---|---|---|---|',
+    ...topRows,
+    ...(warnings.length ? ['', '### 要確認', ...warnings] : []),
+    '',
+    `詳細: ${catalogUrl}`,
+  ].join('\n');
+}
 
 export type CountdownListItem = {
   label: string;
@@ -683,6 +742,31 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'limit') {
     return { handled: true, response: formatAiToolLimitInfo(now) };
+  }
+
+  if (subcommand === 'sql') {
+    const action = (parts[2] ?? '').toLowerCase();
+    if (action !== 'impact') {
+      return { handled: true, response: '❌ 書式が正しくありません: /neko sql impact <テーブル名>' };
+    }
+    const tableName = (parts[3] ?? '').trim();
+    if (!tableName) {
+      return { handled: true, response: '❌ テーブル名を指定してください: /neko sql impact <テーブル名>' };
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(tableName) || parts.length !== 4) {
+      return { handled: true, response: '❌ テーブル名が不正です。英数字とアンダースコアで指定してください' };
+    }
+    if (!deps.sqlImpactLookup) {
+      return { handled: true, response: '❌ /neko sql impact は現在利用できません(DB未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.sqlImpactLookup(tableName), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return { handled: true, response: `❌ /neko sql impact がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko sql impact でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatSqlImpactReport(tableName, outcome.value) };
   }
 
   if (subcommand === 'uuidgen4' || subcommand === 'uuidgen7') {
