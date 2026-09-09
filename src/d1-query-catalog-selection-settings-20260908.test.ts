@@ -53,6 +53,20 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(html).toMatch(/\.table-badge-list\s*\{[^}]*row-gap:\s*1px/);
   });
 
+  it('statusと共通のテーブル分類色とFK役割をバッジ・帯へ反映する', () => {
+    const html = getD1QueryCatalogPage('u', [row('user_preferences', 'A')], 'count', {}, true, {
+      user_preferences: { group: 'auth', groupLabel: 'Auth / Session', color: '#388bfd', fkRole: 'source' },
+    });
+
+    expect(html).toContain('style="--source-color:#388bfd;');
+    expect(html).toContain('data-group="auth" data-fk-role="source"');
+    expect(html).toContain('style="--table-color:#388bfd"');
+    expect(html).toContain('<span class="table-group-badge">Auth / Session</span>');
+    expect(html).toContain('<span class="table-fk-badge table-fk-source">FK 参照元</span>');
+    expect(html).toContain('.band-name {');
+    expect(html).toContain('color: var(--table-color, var(--text-primary))');
+  });
+
   it('未選択バッジは同じ中間色で揃え、選択時は選択色で塗りつぶして他をグレーアウトする', () => {
     const html = getD1QueryCatalogPage('u', [row('a', 'A'), row('b', 'B')]);
 
