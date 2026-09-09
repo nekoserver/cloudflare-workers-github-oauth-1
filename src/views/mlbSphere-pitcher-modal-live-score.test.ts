@@ -3,32 +3,36 @@ import { getMLBSpherePage } from './mlbSphere';
 
 // 対象: /mlb ページの先発投手モーダル(#todayPitchersModal)内、各試合行の
 // 左側の時刻表示(.tpm-time)。試合開始前は開始時刻(ET/JST)を表示するが、
-// 試合開始後(status.abstractGameState==='Live')は現時点の最新スコアと
-// イニングを、終了後('Final')は最終スコアを表示するように切り替える。
+// 試合開始後はPT/ETを取り除き、JSTの行頭に緑色の「試合中」バッジを
+// 表示する。終了後('Final')は最終スコアに切り替える。
 // また、モーダルを開いたまま試合が進行した場合、30秒ごとのライブ
 // ポーリングでモーダル内の表示も自動更新される。
 //
 // 故障シナリオ:
 //   (1) 試合開始後もモーダルには常に開始時刻だけが表示され続ける
-//   (2) LIVE中にスコアが取得できていても表示に反映されない
-//   (3) 終了後もLIVE表示のまま、または開始時刻表示のままになる
+//   (2) LIVE中にもPT/ETが残る、またはJSTが消える
+//   (3) 終了後も試合中表示のまま、または開始時刻表示のままになる
 //   (4) モーダルを開いたまま試合が進行しても、ポーリングでモーダル内の
 //       表示が更新されない(一覧側だけ更新されモーダルが取り残される)
 //   (5) ポーリングが常にモーダルを再描画してしまい、モーダルを閉じている
 //       ときにも無駄な描画が走る(閉じているかの判定漏れ)
 
-describe('/mlb ページ: 先発投手モーダルの開始時刻からライブスコアへの切り替え', () => {
+describe('/mlb ページ: 試合開始後の先発投手モーダル時刻表示', () => {
   const html = getMLBSpherePage('tester');
   const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
 
-  it('pitcherModalTimeOrScoreHtml()はLive状態のときLIVEスコア(イニング付き)を返す', () => {
+  it('pitcherModalTimeOrScoreHtml()はLive状態のとき「試合中」バッジとJSTだけを返す', () => {
     const idx = scriptSrc.indexOf('function pitcherModalTimeOrScoreHtml');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = scriptSrc.slice(idx, idx + 700);
+    const fnBody = scriptSrc.slice(idx, idx + 900);
     expect(fnBody).toContain("state==='Live'");
     expect(fnBody).toContain('tpm-live');
-    expect(fnBody).toContain("g.awayScore+'-'+g.homeScore");
-    expect(fnBody).toContain("(innTxt?' '+innTxt:'')");
+    expect(fnBody).toContain('in-progress-badge');
+    expect(fnBody).toContain('&#35430;&#21512;&#20013;');
+    expect(fnBody).toContain("fmtTime(g.gameDate,'Asia/Tokyo','JST')");
+    const liveBranch = fnBody.slice(fnBody.indexOf('if(isInProgress)'), fnBody.indexOf("if(state==='Final')"));
+    expect(liveBranch).not.toContain("'ET'");
+    expect(liveBranch).not.toContain("'PT'");
   });
 
   it('pitcherModalTimeOrScoreHtml()はFinal状態のとき最終スコアを返す', () => {
@@ -61,8 +65,21 @@ describe('/mlb ページ: 先発投手モーダルの開始時刻からライブ
     expect(fnBody).toContain('renderTodayPitchersBody()');
   });
 
-  it('tpm-live・tpm-finalはCSSで色分けされている', () => {
+  it('「試合中」バッジは緑色のバッジとしてスタイルされている', () => {
+    expect(html).toContain('.in-progress-badge {');
+    expect(html).toContain('color:#3fb950');
     expect(html).toContain('.tpm-live {');
     expect(html).toContain('.tpm-final {');
+  });
+
+  it('左サイドパネルも試合開始後は「試合中」バッジとJSTだけを表示する', () => {
+    const idx = scriptSrc.indexOf('function buildGameList');
+    const fnBody = scriptSrc.slice(idx, idx + 4200);
+    const liveBranch = fnBody.slice(fnBody.indexOf('if(isLiveNow)'), fnBody.indexOf('else if(isFinal)'));
+    expect(liveBranch).toContain('in-progress-badge');
+    expect(liveBranch).toContain('&#35430;&#21512;&#20013;');
+    expect(liveBranch).toContain("fmtTime(g.gameDate,'Asia/Tokyo','JST')");
+    expect(liveBranch).not.toContain("'ET'");
+    expect(liveBranch).not.toContain("'PT'");
   });
 });
