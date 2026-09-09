@@ -272,19 +272,22 @@ import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 
 /**
- * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO_URL/
- * DYNAMICNEKO_PING_SECRETが両方揃っていない場合はundefinedを返し、
+ * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
+ * Binding)/DYNAMICNEKO_PING_SECRETが両方揃っていない場合はundefinedを返し、
  * interpretAichatSlashCommand側で「現在利用できません」表示にフォールバックする。
+ * 公開URLへの通常fetch()ではなくService Bindingを使う理由はdynamicWorkerPing.ts
+ * のコメント参照(*.workers.dev同士の直接fetch()はCloudflareにHTTP 404
+ * error code: 1042で拒否される)。
  * (AIチャット送信ハンドラ本体にインラインで書くと、index.tsのテストが
  * そのハンドラの開始位置からの固定文字数ウィンドウでbody.model等の
  * 後続コードを探索しているため、それを押し出してしまう。ここに切り出すことで
  * ハンドラ本体の分量を増やさない)
  */
 function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
-  if (!env.DYNAMICNEKO_URL || !env.DYNAMICNEKO_PING_SECRET) return undefined;
-  const url = env.DYNAMICNEKO_URL;
+  if (!env.DYNAMICNEKO || !env.DYNAMICNEKO_PING_SECRET) return undefined;
+  const fetcher = env.DYNAMICNEKO;
   const secret = env.DYNAMICNEKO_PING_SECRET;
-  return () => pingDynamicWorker(url, secret);
+  return () => pingDynamicWorker(fetcher, secret);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
