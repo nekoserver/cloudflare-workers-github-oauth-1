@@ -366,6 +366,10 @@ export function getD1QueryCatalogPage(
     .catalog-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
     .category-filter-sidebar { position: sticky; top: 56px; min-width: 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); overflow: hidden; }
     .category-filter-title { margin-bottom: 9px; color: var(--text-secondary); font-size: 12px; font-weight: 700; text-align: center; }
+    .category-filter-heading { display: flex; align-items: center; margin-bottom: 9px; }
+    .category-filter-heading .category-filter-title { flex: 1; margin: 0; padding-left: 28px; }
+    .category-section-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; line-height: 1; }
+    .category-section-toggle:hover, .category-section-toggle:focus-visible { outline: none; background: var(--border-color); color: var(--text-primary); }
     .category-filter-list { display: flex; flex-direction: column; gap: 6px; }
     .category-filter-badge { display: flex; align-items: center; width: 100%; min-width: 0; padding: 0; border: 1px solid var(--category-color); border-radius: 999px; background: color-mix(in srgb, var(--category-color) 12%, var(--card-bg)); color: var(--text-primary); cursor: pointer; font-family: inherit; text-align: left; }
     .category-filter-badge:hover, .category-filter-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--category-color) 35%, transparent); }
@@ -644,12 +648,15 @@ export function getD1QueryCatalogPage(
     <div class="card">
       <div class="catalog-layout">
         <aside class="category-filter-sidebar" aria-label="FK分類による絞り込み">
-          <figure class="category-chart" aria-labelledby="categoryChartTitle">
+          <figure class="category-chart" id="categoryChart" aria-labelledby="categoryChartTitle">
             <figcaption class="category-filter-title" id="categoryChartTitle">内訳</figcaption>
             ${rows.length > 0 ? `<div class="category-chart-pie" role="img" aria-label="全${rows.length}件。${escapeHtml(queryCategoryAriaLabel)}" style="--category-chart-gradient:conic-gradient(${queryCategoryGradient})"><span class="category-chart-total">${rows.length}<small>SQL</small></span></div>
             <ul class="category-chart-legend">${queryCategoryLegendHtml}</ul>` : '<div class="category-filter-empty">集計対象のSQLがありません</div>'}
           </figure>
-          <div class="category-filter-title">FK分類</div>
+          <div class="category-filter-heading">
+            <div class="category-filter-title">FK分類</div>
+            <button type="button" class="category-section-toggle" id="categorySectionToggle" aria-controls="categoryChart" aria-expanded="true" aria-label="FK分類を上へ移動">▲</button>
+          </div>
           <div class="category-filter-list">
             ${categoryBadgesHtml || '<div class="category-filter-empty">分類カテゴリがありません</div>'}
           </div>
@@ -988,6 +995,16 @@ export function getD1QueryCatalogPage(
     var tablePanel = document.getElementById('tablePanel');
     var categoryFilterSidebar = document.querySelector('.category-filter-sidebar');
     var categoryChart = categoryFilterSidebar.querySelector('.category-chart');
+    var categorySectionToggle = document.getElementById('categorySectionToggle');
+    function setCategoryChartCollapsed(collapsed) {
+      categoryFilterSidebar.classList.toggle('chart-collapsed', collapsed);
+      categorySectionToggle.textContent = collapsed ? '▼' : '▲';
+      categorySectionToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      categorySectionToggle.setAttribute('aria-label', collapsed ? 'FK分類を下へ移動' : 'FK分類を上へ移動');
+    }
+    categorySectionToggle.addEventListener('click', function() {
+      setCategoryChartCollapsed(!categoryFilterSidebar.classList.contains('chart-collapsed'));
+    });
     var categoryChartTouchStartY = null;
     categoryChart.addEventListener('touchstart', function(event) {
       categoryChartTouchStartY = event.touches.length === 1 ? event.touches[0].clientY : null;
@@ -996,7 +1013,7 @@ export function getD1QueryCatalogPage(
       if (categoryChartTouchStartY === null || event.changedTouches.length !== 1) return;
       var swipeDistance = event.changedTouches[0].clientY - categoryChartTouchStartY;
       categoryChartTouchStartY = null;
-      if (Math.abs(swipeDistance) >= 48) categoryFilterSidebar.classList.add('chart-collapsed');
+      if (Math.abs(swipeDistance) >= 48) setCategoryChartCollapsed(true);
     }, { passive: true });
     categoryChart.addEventListener('touchcancel', function() { categoryChartTouchStartY = null; }, { passive: true });
     function setTablePanelExpanded(expanded) {
