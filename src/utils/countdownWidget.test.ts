@@ -33,11 +33,10 @@ describe('getCountdownWidgetCSS', () => {
 });
 
 describe('getCountdownWidgetHTML', () => {
-  it('ウィジェットのマークアップ(id=countdownWidget/widgetLabel/widgetClock)を含む', () => {
+  it('全タイマーを積み上げるコンテナを含む', () => {
     const html = getCountdownWidgetHTML();
     expect(html).toContain('id="countdownWidget"');
-    expect(html).toContain('id="widgetLabel"');
-    expect(html).toContain('id="widgetClock"');
+    expect(html).toContain('id="countdownWidgetTimers"');
   });
 
   it('トースト表示用の要素(id=countdownToast)を含む', () => {
@@ -57,7 +56,7 @@ describe('getCountdownWidgetScript', () => {
   it('要素が存在しないページに埋め込んでも例外を投げずに何もしない(早期return)', () => {
     // @vitest-environment jsdom 前提: このファイル単体ではjsdomを使わないため
     // 文字列としてのガード節の存在だけを確認する
-    expect(getCountdownWidgetScript()).toContain('if (!widget || !widgetLabel || !widgetClock) return;');
+    expect(getCountdownWidgetScript()).toContain('if (!widget || !timersEl) return;');
   });
 
   it('ドラッグ&ドロップ用のpointerイベント配線とlocalStorageへの位置保存を含む', () => {
@@ -97,6 +96,26 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
+
+  it('APIが返した未来のタイマーを省略せずすべて積み上げて表示する', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    (window as any).fetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({
+        events: [
+          { id: 1, label: '最初', targetAt: '2098-01-01T00:00:00.000Z' },
+          { id: 2, label: '次', targetAt: '2099-01-01T00:00:00.000Z' },
+        ],
+      }),
+    });
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+
+    const timers = window.document.querySelectorAll('.countdown-widget-timer');
+    expect(timers).toHaveLength(2);
+    expect(Array.from(timers).map((timer) => timer.querySelector('.widget-label')?.textContent)).toEqual(['最初', '次']);
+    expect(Array.from(timers).every((timer) => Boolean(timer.querySelector('.widget-clock')?.textContent))).toBe(true);
+  });
 
   it('残り時間が0以下になった瞬間、単発予定はトーストに「#id ok」を表示する', async () => {
     const window = setupDom() as unknown as Window & typeof globalThis;

@@ -3,6 +3,7 @@ import {
   computeCountdownGroupPosition,
   filterCountdownEventsByDate,
   findNextCountdownEvent,
+  findUpcomingCountdownEvents,
   formatCountdownRemaining,
   isValidCountdownLabel,
   isValidCountdownTargetAt,
@@ -78,6 +79,19 @@ describe('findNextCountdownEvent', () => {
       { id: 2, label: '正常な行', target_at: '2026-08-28T13:00:00.000Z' },
     ];
     expect(findNextCountdownEvent(rows, now)?.id).toBe(2);
+  });
+});
+
+describe('findUpcomingCountdownEvents', () => {
+  it('不正・過去データを除き、未来の全タイマーを日時順（同時刻はid順）で返す', () => {
+    const rows: CountdownEventRow[] = [
+      { id: 4, label: '同時刻B', target_at: '2026-09-02T00:00:00.000Z' },
+      { id: 1, label: '過去', target_at: '2026-08-01T00:00:00.000Z' },
+      { id: 3, label: '同時刻A', target_at: '2026-09-02T00:00:00.000Z' },
+      { id: 2, label: '最初', target_at: '2026-09-01T00:00:00.000Z' },
+      { id: 5, label: '不正', target_at: 'invalid' },
+    ];
+    expect(findUpcomingCountdownEvents(rows, '2026-08-28T00:00:00.000Z').map((row) => row.id)).toEqual([2, 3, 4]);
   });
 });
 

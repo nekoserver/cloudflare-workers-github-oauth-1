@@ -38,16 +38,21 @@ export function isValidCountdownLabel(value: unknown): boolean {
  * 全体を壊さないため）。該当が無ければnullを返す。
  */
 export function findNextCountdownEvent(rows: CountdownEventRow[], nowIso: string): CountdownEventRow | null {
+  return findUpcomingCountdownEvents(rows, nowIso)[0] ?? null;
+}
+
+/**
+ * 現在時刻より未来のイベントを、目標日時が近い順ですべて返す。
+ * 同時刻の場合はid順にして、APIを再取得しても表示順が揺れないようにする。
+ * パース不能な日時は、ほかの正常なタイマーの表示を妨げないよう除外する。
+ */
+export function findUpcomingCountdownEvents(rows: CountdownEventRow[], nowIso: string): CountdownEventRow[] {
   const now = new Date(nowIso).getTime();
-  let best: { row: CountdownEventRow; at: number } | null = null;
-  for (const row of rows) {
-    const at = new Date(row.target_at).getTime();
-    if (Number.isNaN(at) || at <= now) continue;
-    if (!best || at < best.at) {
-      best = { row, at };
-    }
-  }
-  return best ? best.row : null;
+  return rows
+    .map((row) => ({ row, at: new Date(row.target_at).getTime() }))
+    .filter(({ at }) => !Number.isNaN(at) && at > now)
+    .sort((a, b) => a.at - b.at || a.row.id - b.row.id)
+    .map(({ row }) => row);
 }
 
 /**

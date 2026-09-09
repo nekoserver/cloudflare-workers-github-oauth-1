@@ -245,7 +245,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findNextCountdownEvent, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -10320,7 +10320,7 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 });
 
 // ログイン中の画面カウントダウン表示のために、現在時刻より未来の予定のうち
-// 最も近いものだけを1件返す。findNextCountdownEvent()（純粋関数）で選定する。
+// すべてを近い順で返す。従来クライアントとの互換性のため、最も近い1件をeventにも返す。
 // 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
 // computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
 // (単発登録ではnullのまま=フィールド自体を含めない)。
@@ -10332,17 +10332,20 @@ app.get('/api/countdown/next', authMiddleware, async (c) => {
       'SELECT id, label, target_at, group_id FROM countdown_events WHERE user_id = ?'
     ).bind(user.sub).all<{ id: number; label: string; target_at: string; group_id: string | null }>();
     const results = rows.results ?? [];
-    const next = findNextCountdownEvent(results, new Date().toISOString());
-    if (!next) return jsonUtf8({ event: null });
-    const groupPosition = computeCountdownGroupPosition(results, next.id);
-    return jsonUtf8({
-      event: {
-        id: next.id,
-        label: next.label,
-        targetAt: next.target_at,
+    const upcoming = findUpcomingCountdownEvents(results, new Date().toISOString());
+    const events = upcoming.map((item) => {
+      const groupPosition = computeCountdownGroupPosition(results, item.id);
+      return {
+        id: item.id,
+        label: item.label,
+        targetAt: item.target_at,
         groupIndex: groupPosition ? groupPosition.index : null,
         groupTotal: groupPosition ? groupPosition.total : null,
-      },
+      };
+    });
+    return jsonUtf8({
+      event: events[0] ?? null,
+      events,
     });
   } catch (err) {
     logger.error('countdown next lookup failed', { error: err instanceof Error ? err.message : 'Unknown error' });
