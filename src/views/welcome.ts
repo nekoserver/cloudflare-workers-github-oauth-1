@@ -62,14 +62,20 @@ export function getWelcomePage(user: {
     }
 
     .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 10px var(--navbar-shadow);
-      padding: 16px 32px;
+      padding: 0 20px;
+      height: 44px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
+
+    @media (display-mode: standalone) { .pwa-hide { display: none !important; } }
 
     .navbar-brand {
       font-size: 20px;
@@ -97,8 +103,8 @@ export function getWelcomePage(user: {
     }
 
     .user-icon {
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex;
@@ -315,7 +321,7 @@ export function getWelcomePage(user: {
     </div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name">${displayName}</span>
+      <span class="user-name pwa-hide">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
           ${initials}
