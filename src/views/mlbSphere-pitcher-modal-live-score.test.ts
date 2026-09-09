@@ -25,7 +25,7 @@ describe('/mlb ページ: 試合開始後の先発投手モーダル時刻表示
     const idx = scriptSrc.indexOf('function pitcherModalTimeOrScoreHtml');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = scriptSrc.slice(idx, idx + 900);
-    expect(fnBody).toContain("state==='Live'");
+    expect(fnBody).toContain('isGameInProgress(g)');
     expect(fnBody).toContain('tpm-live');
     expect(fnBody).toContain('in-progress-badge');
     expect(fnBody).toContain('&#35430;&#21512;&#20013;');
@@ -63,6 +63,15 @@ describe('/mlb ページ: 試合開始後の先発投手モーダル時刻表示
     expect(fnBody).toContain("getElementById('todayPitchersModal')");
     expect(fnBody).toContain("pitchersModalEl.classList.contains('open')");
     expect(fnBody).toContain('renderTodayPitchersBody()');
+  });
+
+  it('APIがPreviewのままでもポーリングを止めず、試合開始後の状態を取得できる', () => {
+    const idx = scriptSrc.indexOf('function startLivePolling');
+    const fnBody = scriptSrc.slice(idx, idx + 2300);
+    const fetchIdx = fnBody.indexOf("fetch('/api/mlb-schedule?date='+dateStr)");
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(fnBody.slice(0, fetchIdx)).not.toContain('if(!hasLive)');
+    expect(fnBody).toContain("abstractGameState)!=='Final'");
   });
 
   it('「試合中」バッジは緑色のバッジとしてスタイルされている', () => {
