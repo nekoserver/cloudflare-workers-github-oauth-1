@@ -25,8 +25,13 @@ export type Bindings = {
   NOTIFY_WORKER_URL?: string;
   /** NOTIFY_TARGET=worker のときのAuthorizationヘッダに使う共有シークレット（任意） */
   NOTIFY_WORKER_SECRET?: string;
-  /** /neko hellodw が起動確認のpingを送るdynamicneko(Cloudflare Dynamic Worker Loader使用)のベースURL */
-  DYNAMICNEKO_URL?: string;
+  /**
+   * /neko hellodw が起動確認のpingを送るdynamicneko(Cloudflare Dynamic Worker
+   * Loader使用)へのService Binding。公開URLへの通常fetch()は*.workers.dev同士
+   * だとCloudflareにHTTP 404 error code: 1042で拒否されるため、wrangler.tomlの
+   * [[services]]でdynamicnekoをbindingすること(URLではなくFetcher)。
+   */
+  DYNAMICNEKO?: Fetcher;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
