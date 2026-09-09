@@ -124,6 +124,27 @@ function tableCounts(rows: D1QueryCatalogRow[]): { table: string; count: number;
     .sort((a, b) => b.count - a.count);
 }
 
+function categoryCounts(
+  rows: D1QueryCatalogRow[],
+  classifications: Record<string, D1QueryCatalogTableClassification>,
+): { group: string; label: string; count: number; color: string }[] {
+  const counts = new Map<string, { label: string; tables: Set<string>; color: string }>();
+  for (const table of new Set(rows.map(row => row.table_name ?? '(不明)'))) {
+    const classification = classifications[table];
+    if (!classification) continue;
+    const entry = counts.get(classification.group) ?? {
+      label: classification.groupLabel,
+      tables: new Set<string>(),
+      color: classification.color,
+    };
+    entry.tables.add(table);
+    counts.set(classification.group, entry);
+  }
+  return [...counts.entries()]
+    .map(([group, entry]) => ({ group, label: entry.label, count: entry.tables.size, color: entry.color }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
 function renderRow(row: D1QueryCatalogRow): string {
   const badge = row.command_confirmed
     ? '<span class="badge badge-confirmed">確定</span>'
@@ -152,7 +173,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
   const rowsHtml = rows.map(renderRow).join('\n');
   const color = classification?.color ?? '#8b949e';
   const groupBadge = classification
-    ? `<span class="table-group-badge">${escapeHtml(classification.groupLabel)}</span>`
+    ? `<span class="table-group-badge" data-group="${escapeHtml(classification.group)}">${escapeHtml(classification.groupLabel)}</span>`
     : '';
   const fkLabel = classification?.fkRole === 'both' ? 'FK 参照元・先'
     : classification?.fkRole === 'source' ? 'FK 参照元'
@@ -222,6 +243,9 @@ export function getD1QueryCatalogPage(
         : '';
       return `<button type="button" class="table-filter-badge" style="--source-color:${escapeHtml(tableColor)};--origin-source-color:${sourceColor(sourceFile)}" data-table="${safeTable}" data-source-file="${safeSourceFile}" data-group="${escapeHtml(classification?.group ?? 'undefined')}" data-fk-role="${escapeHtml(classification?.fkRole ?? 'none')}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false" title="呼び出し元: ${safeSourceFile}${classificationTitle}"><span class="table-badge-count">${count}</span><span class="table-badge-name">${safeTable}</span><span class="table-column-count" aria-label="${columnCount}カラム">${columnCount}</span></button>`;
     })
+    .join('\n');
+  const categoryBadgesHtml = categoryCounts(rows, tableClassifications)
+    .map(({ group, label, count, color }) => `<button type="button" class="category-filter-badge" style="--category-color:${escapeHtml(color)}" data-group="${escapeHtml(group)}" aria-pressed="false"><span class="category-filter-count">${count}</span><span class="category-filter-name">${escapeHtml(label)}</span></button>`)
     .join('\n');
   const groupedTables = groupByTable(rows);
   if (initialSort === 'count') {
@@ -303,6 +327,17 @@ export function getD1QueryCatalogPage(
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       padding: 12px 16px 16px;
     }
+    .catalog-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .category-filter-sidebar { position: sticky; top: 56px; min-width: 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); }
+    .category-filter-title { margin-bottom: 9px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+    .category-filter-list { display: flex; flex-direction: column; gap: 6px; }
+    .category-filter-badge { display: flex; align-items: center; width: 100%; min-width: 0; padding: 0; border: 1px solid var(--category-color); border-radius: 999px; background: color-mix(in srgb, var(--category-color) 12%, var(--card-bg)); color: var(--text-primary); cursor: pointer; font-family: inherit; text-align: left; }
+    .category-filter-badge:hover, .category-filter-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--category-color) 35%, transparent); }
+    .category-filter-badge[aria-pressed="true"] { background: var(--category-color); color: white; }
+    .category-filter-count { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border-right: 1px solid var(--category-color); border-radius: 50%; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .category-filter-name { min-width: 0; padding: 5px 8px; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .category-filter-empty { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    .catalog-main { min-width: 0; }
     .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .catalog-filter-toolbar { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; margin-bottom: 8px; }
@@ -512,6 +547,10 @@ export function getD1QueryCatalogPage(
     .sql-detail-action, .sql-detail-close { border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-family: inherit; }
     .sql-detail-action:hover, .sql-detail-close:hover { border-color: var(--accent-color); }
     @media (max-width: 600px) {
+      .catalog-layout { grid-template-columns: 1fr; gap: 10px; }
+      .category-filter-sidebar { position: static; }
+      .category-filter-list { flex-flow: row wrap; }
+      .category-filter-badge { width: auto; max-width: 100%; }
       .catalog-filter-toolbar { flex-wrap: wrap; gap: 4px 8px; }
       .verb-filter-control { flex-basis: calc(100% - 8px); }
       .panel-toggle { margin-top: 0; }
@@ -548,6 +587,14 @@ export function getD1QueryCatalogPage(
 
   <div class="container">
     <div class="card">
+      <div class="catalog-layout">
+        <aside class="category-filter-sidebar" aria-label="外部キー分類カテゴリによる絞り込み">
+          <div class="category-filter-title">外部キー分類カテゴリ</div>
+          <div class="category-filter-list">
+            ${categoryBadgesHtml || '<div class="category-filter-empty">分類カテゴリがありません</div>'}
+          </div>
+        </aside>
+        <main class="catalog-main">
       <div class="catalog-filter-toolbar">
         <div class="verb-filter-control">
           <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
@@ -585,6 +632,8 @@ export function getD1QueryCatalogPage(
         ${bandsHtml}
       </div>
       ${rows.length === 0 ? '<div class="empty-state">データがありません。migrations/0129_create_d1_query_catalog.sql適用後、カタログデータのINSERTを実行してください。</div>' : ''}
+        </main>
+      </div>
     </div>
   </div>
 
@@ -895,6 +944,16 @@ export function getD1QueryCatalogPage(
     var tableBadges = Array.prototype.slice.call(tablePanel.querySelectorAll('.table-filter-badge'));
     var tableBadgeList = tablePanel.querySelector('.table-badge-list');
     var verbFilter = document.getElementById('verbFilter');
+    var categoryBadges = Array.prototype.slice.call(document.querySelectorAll('.category-filter-badge'));
+
+    categoryBadges.forEach(function(badge) {
+      badge.addEventListener('click', function() {
+        var wasPressed = badge.getAttribute('aria-pressed') === 'true';
+        categoryBadges.forEach(function(other) { other.setAttribute('aria-pressed', 'false'); });
+        badge.setAttribute('aria-pressed', wasPressed ? 'false' : 'true');
+        applyFilters();
+      });
+    });
 
     var tableSelectionMode = '${tableSelectionMode}';
     // 既定は単一選択。設定ページで複数選択へ変更されている場合だけ、
@@ -949,6 +1008,8 @@ export function getD1QueryCatalogPage(
     });
 
     function applyFilters() {
+      var selectedCategoryBadge = categoryBadges.find(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; });
+      var selectedGroup = selectedCategoryBadge ? selectedCategoryBadge.getAttribute('data-group') : null;
       var selectedTables = tableBadges.filter(function(badge) { return badge.getAttribute('aria-pressed') === 'true'; })
         .map(function(badge) { return badge.getAttribute('data-table'); });
       tableBadgeList.classList.toggle('has-selection', selectedTables.length > 0);
@@ -956,10 +1017,12 @@ export function getD1QueryCatalogPage(
       var selectedTable = selectedBadge ? selectedBadge.getAttribute('data-table') : null;
       var selectedVerbs = Array.prototype.filter.call(verbFilter.options, function(o) { return o.selected; })
         .map(function(o) { return o.value; });
-      var filtersActive = selectedTables.length > 0 || selectedVerbs.length > 0;
+      var filtersActive = selectedGroup !== null || selectedTables.length > 0 || selectedVerbs.length > 0;
 
       document.querySelectorAll('.table-band').forEach(function(band) {
         var table = band.getAttribute('data-table') || '';
+        var groupBadge = band.querySelector('.table-group-badge');
+        var groupMatches = selectedGroup === null || (groupBadge && groupBadge.getAttribute('data-group') === selectedGroup);
         var tableMatches = (selectedTable === null || selectedTable === table);
         if (tableSelectionMode === 'multiple') {
           tableMatches = selectedTables.length === 0 || selectedTables.indexOf(table) !== -1;
@@ -968,7 +1031,7 @@ export function getD1QueryCatalogPage(
         band.querySelectorAll('tbody tr').forEach(function(row) {
           var verb = row.getAttribute('data-verb') || '';
           var verbMatches = (selectedVerbs.length === 0 || selectedVerbs.indexOf(verb) !== -1);
-          var visible = tableMatches && verbMatches;
+          var visible = groupMatches && tableMatches && verbMatches;
           row.style.display = visible ? '' : 'none';
           if (visible) anyRowVisible = true;
         });
