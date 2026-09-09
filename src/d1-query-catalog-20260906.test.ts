@@ -308,12 +308,12 @@ describe('GET /d1-query-catalog', () => {
     expect(html.slice(html.indexOf("document.getElementById('tableFilterClear')"))).toContain('applyFilters();');
   });
 
-  it('テーブルバッジの余白と文字を小さくし、件数・カラム数を白文字で表示する', () => {
+  it('テーブルバッジの余白と文字を小さくし、件数・カラム数に分類色由来の文字色を使う', () => {
     const html = getD1QueryCatalogPage('tester', []);
     expect(html).toMatch(/\.table-filter-badge\s*\{[^}]*padding:\s*1px;[^}]*font-size:\s*11px;/);
-    expect(html).toMatch(/\.table-badge-count\s*\{[^}]*padding:\s*1px;[^}]*color:\s*white;/);
+    expect(html).toMatch(/\.table-badge-count\s*\{[^}]*padding:\s*1px;[^}]*color:\s*var\(--badge-foreground\)/);
     expect(html).toMatch(/\.table-badge-name\s*\{[^}]*padding:\s*1px;/);
-    expect(html).toMatch(/\.table-column-count\s*\{[^}]*padding:\s*1px 4px;[^}]*color:\s*white;[^}]*font:\s*8px/);
+    expect(html).toMatch(/\.table-column-count\s*\{[^}]*padding:\s*1px 4px;[^}]*color:\s*var\(--badge-foreground\);[^}]*font:\s*8px/);
   });
 
   it('選択パネルはトグル直下で横幅いっぱいになり、バッジを左詰めで折り返す', () => {

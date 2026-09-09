@@ -16,6 +16,13 @@ export type D1QueryCatalogRow = {
   last_commit_at: string | null;
 };
 
+export type D1QueryCatalogTableClassification = {
+  group: string;
+  groupLabel: string;
+  color: string;
+  fkRole: 'none' | 'source' | 'target' | 'both';
+};
+
 function commitLink(hash: string): string {
   const short = escapeHtml(hash.slice(0, 7));
   const url = `https://github.com/${OWNER_REPO}/commit/${escapeHtml(hash)}`;
@@ -141,12 +148,22 @@ function renderRow(row: D1QueryCatalogRow): string {
 // renderTableBand: 1テーブル分のクエリ一覧を「帯(見出しバー)+その下のミニ表」として
 // 描画する。行ごとに繰り返していたテーブル名を帯へ集約し、テーブル単位で
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
-function renderTableBand(table: string, rows: D1QueryCatalogRow[]): string {
+function renderTableBand(table: string, rows: D1QueryCatalogRow[], classification?: D1QueryCatalogTableClassification): string {
   const rowsHtml = rows.map(renderRow).join('\n');
+  const color = classification?.color ?? '#8b949e';
+  const groupBadge = classification
+    ? `<span class="table-group-badge">${escapeHtml(classification.groupLabel)}</span>`
+    : '';
+  const fkLabel = classification?.fkRole === 'both' ? 'FK 参照元・先'
+    : classification?.fkRole === 'source' ? 'FK 参照元'
+      : classification?.fkRole === 'target' ? 'FK 参照先' : '';
+  const fkBadge = fkLabel ? `<span class="table-fk-badge table-fk-${classification!.fkRole}">${fkLabel}</span>` : '';
+  const headerStyle = classification ? ` style="--table-color:${escapeHtml(color)}"` : '';
   return `<section class="table-band" data-table="${escapeHtml(table)}" data-count="${rows.length}">
-    <button type="button" class="band-header" aria-expanded="false">
+    <button type="button" class="band-header" aria-expanded="false"${headerStyle}>
       <span class="band-count">${rows.length}件</span>
       <span class="band-name">${escapeHtml(table)}</span>
+      ${groupBadge}${fkBadge}
       <span class="band-toggle-arrow">▾</span>
     </button>
     <div class="table-wrap" hidden>
@@ -186,6 +203,7 @@ export function getD1QueryCatalogPage(
   initialSort: 'name' | 'count' = 'count',
   columnCounts: Record<string, number> = {},
   singleTableSelection = true,
+  tableClassifications: Record<string, D1QueryCatalogTableClassification> = {},
 ): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
@@ -197,7 +215,12 @@ export function getD1QueryCatalogPage(
       const safeTable = escapeHtml(table);
       const safeSourceFile = escapeHtml(sourceFile);
       const columnCount = columnCounts[table] ?? 0;
-      return `<button type="button" class="table-filter-badge" style="--source-color:${sourceColor(sourceFile)}" data-table="${safeTable}" data-source-file="${safeSourceFile}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false" title="呼び出し元: ${safeSourceFile}"><span class="table-badge-count">${count}</span><span class="table-badge-name">${safeTable}</span><span class="table-column-count" aria-label="${columnCount}カラム">${columnCount}</span></button>`;
+      const classification = tableClassifications[table];
+      const tableColor = classification?.color ?? sourceColor(sourceFile);
+      const classificationTitle = classification
+        ? ` / 分類: ${escapeHtml(classification.groupLabel)} / FK: ${classification.fkRole}`
+        : '';
+      return `<button type="button" class="table-filter-badge" style="--source-color:${escapeHtml(tableColor)};--origin-source-color:${sourceColor(sourceFile)}" data-table="${safeTable}" data-source-file="${safeSourceFile}" data-group="${escapeHtml(classification?.group ?? 'undefined')}" data-fk-role="${escapeHtml(classification?.fkRole ?? 'none')}" data-occurrence-count="${count}" data-column-count="${columnCount}" aria-pressed="false" title="呼び出し元: ${safeSourceFile}${classificationTitle}"><span class="table-badge-count">${count}</span><span class="table-badge-name">${safeTable}</span><span class="table-column-count" aria-label="${columnCount}カラム">${columnCount}</span></button>`;
     })
     .join('\n');
   const groupedTables = groupByTable(rows);
@@ -205,7 +228,7 @@ export function getD1QueryCatalogPage(
     groupedTables.sort((a, b) => b[1].length - a[1].length);
   }
   const bandsHtml = groupedTables
-    .map(([table, tableRows]) => renderTableBand(table, tableRows))
+    .map(([table, tableRows]) => renderTableBand(table, tableRows, tableClassifications[table]))
     .join('\n');
   const nameSortPressed = initialSort === 'name' ? 'true' : 'false';
   const countSortPressed = initialSort === 'count' ? 'true' : 'false';
@@ -409,7 +432,14 @@ export function getD1QueryCatalogPage(
     }
     .band-header:hover { background: var(--border-color); }
     .band-header[aria-expanded="true"] { border-radius: 8px 8px 0 0; }
-    .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--text-primary); font-size: 14px; }
+    .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
+    .table-group-badge, .table-fk-badge {
+      border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
+    }
+    .table-group-badge { color: var(--table-color); border: 1px solid var(--table-color); background: color-mix(in srgb, var(--table-color) 12%, transparent); }
+    .table-fk-badge { color: light-dark(#9a4d00, #ffb86b); border: 1px solid #ed8936; background: light-dark(#fff3e6, #382515); }
+    .table-fk-target { border-style: dashed; }
+    .table-fk-both { box-shadow: inset 0 -2px 0 #ed8936; }
     .band-count {
       font-size: 12px;
       color: var(--text-muted);

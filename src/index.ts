@@ -241,7 +241,7 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
-import { getD1QueryCatalogPage, type D1QueryCatalogRow } from './views/d1QueryCatalog';
+import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTableClassification } from './views/d1QueryCatalog';
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
@@ -2419,6 +2419,7 @@ export const GROUP_LABELS: Record<string, string> = {
   search: 'Search',
   'ts-catalog': 'TS Function Catalog',
   'd1-query-catalog': 'D1 Query Catalog',
+  system: 'System / Utility',
   undefined: 'Undefined',
 };
 
@@ -2430,6 +2431,8 @@ export const GROUP_COLORS: Record<string, string> = {
   config: '#a371f7',
   search: '#58a6ff',
   'ts-catalog': '#e879f9',
+  'd1-query-catalog': '#f0883e',
+  system: '#39c5cf',
   undefined: '#8b949e',
 };
 
@@ -10888,7 +10891,21 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
     }
   }
   const singleTableSelection = getCookieValue(c.req.header('Cookie'), 'd1_query_catalog_single_table') !== 'off';
-  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection));
+  const fkTargets = new Set(Object.values(COLUMN_FK_TARGETS).flatMap(columns => Object.values(columns)));
+  const tableClassifications: Record<string, D1QueryCatalogTableClassification> = Object.fromEntries(
+    [...new Set(rows.map(row => row.table_name).filter((name): name is string => Boolean(name)))].map(tableName => {
+      const group = TABLE_GROUP_MAP[tableName] ?? 'undefined';
+      const isSource = Object.keys(COLUMN_FK_TARGETS[tableName] ?? {}).length > 0;
+      const isTarget = fkTargets.has(tableName);
+      return [tableName, {
+        group,
+        groupLabel: GROUP_LABELS[group] ?? group,
+        color: GROUP_COLORS[group] ?? GROUP_COLORS.undefined,
+        fkRole: isSource && isTarget ? 'both' : isSource ? 'source' : isTarget ? 'target' : 'none',
+      }];
+    }),
+  );
+  return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications));
 });
 
 /**
