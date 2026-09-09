@@ -75,7 +75,7 @@ describe('GET /d1-query-catalog', () => {
     );
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('D1クエリカタログ');
+    expect(html).toContain('クエリーマネージャ');
   });
 
   it('最上部の帯は最小の44px高でスクロール時も固定表示される', () => {

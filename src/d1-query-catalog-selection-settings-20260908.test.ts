@@ -22,7 +22,8 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     });
 
     const sidePanel = html.match(/<aside class="category-filter-sidebar"[\s\S]*?<\/aside>/)?.[0] ?? '';
-    expect(sidePanel).toContain('外部キー分類カテゴリ');
+    expect(sidePanel).toContain('<div class="category-filter-title">FK分類</div>');
+    expect(html).toMatch(/\.category-filter-title\s*\{[^}]*text-align:\s*center/);
     expect(sidePanel).toContain('data-group="auth"');
     expect(sidePanel).toContain('<span class="category-filter-count">2</span><span class="category-filter-name">認証</span>');
     expect(sidePanel.indexOf('data-group="auth"')).toBeLessThan(sidePanel.indexOf('data-group="ai"'));
@@ -41,6 +42,9 @@ describe('D1クエリカタログのテーブル選択設定', () => {
     expect(toolbar).toContain('id="verbFilter"');
     expect(toolbar).toContain('id="tablePanelToggle"');
     expect(toolbar.indexOf('id="verbFilter"')).toBeLessThan(toolbar.indexOf('id="tablePanelToggle"'));
+    expect(toolbar).not.toContain('発行SQLで横断検索');
+    expect(html).toMatch(/\.panel-toggle\s*\{[^}]*padding:\s*6px 12px;[^}]*margin-top:\s*0;/s);
+    expect(html).toContain('<span>クエリーマネージャ</span>');
     expect(html).not.toContain('<div class="title">D1クエリカタログ</div>');
     expect(html).not.toContain('db.prepare()</code> 呼び出しから合成した sqlc 風アノテーション一覧');
   });

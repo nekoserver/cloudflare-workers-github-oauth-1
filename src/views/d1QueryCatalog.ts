@@ -263,7 +263,7 @@ export function getD1QueryCatalogPage(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>D1クエリカタログ - Cloudflare Workers GitHub OAuth</title>
+  <title>クエリーマネージャ - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
@@ -329,7 +329,7 @@ export function getD1QueryCatalogPage(
     }
     .catalog-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
     .category-filter-sidebar { position: sticky; top: 56px; min-width: 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); }
-    .category-filter-title { margin-bottom: 9px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+    .category-filter-title { margin-bottom: 9px; color: var(--text-secondary); font-size: 12px; font-weight: 700; text-align: center; }
     .category-filter-list { display: flex; flex-direction: column; gap: 6px; }
     .category-filter-badge { display: flex; align-items: center; width: 100%; min-width: 0; padding: 0; border: 1px solid var(--category-color); border-radius: 999px; background: color-mix(in srgb, var(--category-color) 12%, var(--card-bg)); color: var(--text-primary); cursor: pointer; font-family: inherit; text-align: left; }
     .category-filter-badge:hover, .category-filter-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--category-color) 35%, transparent); }
@@ -347,7 +347,7 @@ export function getD1QueryCatalogPage(
       align-items: center;
       gap: 6px;
       width: auto;
-      padding: 10px 12px;
+      padding: 6px 12px;
       border: 1px solid var(--border-color);
       border-radius: 8px;
       background: var(--bg-secondary);
@@ -355,7 +355,7 @@ export function getD1QueryCatalogPage(
       font-size: 14px;
       font-family: inherit;
       cursor: pointer;
-      margin-top: 20px;
+      margin-top: 0;
       text-align: left;
     }
     .panel-toggle:hover { border-color: var(--accent-color); }
@@ -563,7 +563,7 @@ export function getD1QueryCatalogPage(
   <nav class="navbar">
     <div class="navbar-brand">
       <span>🗂️</span>
-      <span>D1クエリカタログ</span>
+      <span>クエリーマネージャ</span>
     </div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
@@ -588,8 +588,8 @@ export function getD1QueryCatalogPage(
   <div class="container">
     <div class="card">
       <div class="catalog-layout">
-        <aside class="category-filter-sidebar" aria-label="外部キー分類カテゴリによる絞り込み">
-          <div class="category-filter-title">外部キー分類カテゴリ</div>
+        <aside class="category-filter-sidebar" aria-label="FK分類による絞り込み">
+          <div class="category-filter-title">FK分類</div>
           <div class="category-filter-list">
             ${categoryBadgesHtml || '<div class="category-filter-empty">分類カテゴリがありません</div>'}
           </div>
@@ -597,7 +597,6 @@ export function getD1QueryCatalogPage(
         <main class="catalog-main">
       <div class="catalog-filter-toolbar">
         <div class="verb-filter-control">
-          <div class="filter-label">発行SQLで横断検索(出現回数の多い順、複数選択可)</div>
           <select id="verbFilter" multiple size="6">
             ${verbOptionsHtml}
           </select>
