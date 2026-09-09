@@ -14,6 +14,8 @@ import { getAiChatPage } from './views/aichat';
 //   (4) 分析結果表示用のCSSクラスがtemplate literal内で固定色になっている
 //       (CLAUDE.CSS.mdルール: 固定色禁止・CSS変数を使う)
 //   (5) 機能追加によりscriptタグに構文エラーが混入する
+//   (6) MoondreamのMarkdownがプレーンテキストのまま表示される、または
+//       幅の広い表・コード・長いURLが分析パネルから見切れる
 
 const minimalUser = {
   username: 'testuser',
@@ -53,6 +55,23 @@ describe('/aichat ページ: 画像添付時のMoondream分析結果表示', () 
     expect(html).toContain('function appendMoondreamAnalysis(bubbleEl, analysisText)');
     expect(html).toContain("panel.className = 'moondream-analysis'");
     expect(html).toContain('bubbleEl.appendChild(panel)');
+  });
+
+  it('Moondream分析結果をAI回答と同じparseMdでMarkdown描画する', () => {
+    expect(html).toContain("body.className = 'moondream-analysis-body preview-area'");
+    expect(html).toContain('body.innerHTML = parseMd(analysisText)');
+    expect(html).not.toContain('body.textContent = analysisText');
+  });
+
+  it('長文を折り返し、表とコードはパネル内で横スクロールできる', () => {
+    const bodyCss = html.match(/\.moondream-analysis-body \{[^}]*\}/)?.[0] ?? '';
+    const tableCss = html.match(/\.moondream-analysis-body table \{[^}]*\}/)?.[0] ?? '';
+    const preCss = html.match(/\.moondream-analysis-body pre \{[^}]*\}/)?.[0] ?? '';
+    expect(bodyCss).toContain('overflow-wrap: anywhere');
+    expect(bodyCss).toContain('max-width: 100%');
+    expect(tableCss).toContain('overflow-x: auto');
+    expect(tableCss).toContain('max-width: 100%');
+    expect(preCss).toContain('overflow-x: auto');
   });
 
   it('分析結果パネルのCSSは固定色でなくCSS変数(var(--...))を使う', () => {
