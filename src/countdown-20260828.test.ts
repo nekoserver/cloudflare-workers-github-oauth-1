@@ -166,14 +166,28 @@ describe('GET /api/countdown/next', () => {
     expect(body.event?.label).toBe('近い未来');
   });
 
+  it('未来の予定をeventsに近い順ですべて返し、積み上げ表示から漏らさない', async () => {
+    const { db } = createMockDb([
+      { id: 1, user_id: 'test-user', label: '遠い未来', target_at: '2099-01-01T00:00:00.000Z' },
+      { id: 2, user_id: 'test-user', label: '過去', target_at: '2020-01-01T00:00:00.000Z' },
+      { id: 3, user_id: 'test-user', label: '近い未来', target_at: '2098-01-01T00:00:00.000Z' },
+    ]);
+    const authHeader = await makeAuthHeader('test-user');
+    const res = await app.request('/api/countdown/next', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const body = (await res.json()) as { event: { label: string }; events: { label: string }[] };
+    expect(body.events.map((event) => event.label)).toEqual(['近い未来', '遠い未来']);
+    expect(body.event).toEqual(body.events[0]);
+  });
+
   it('未来の予定が無ければnullを返す', async () => {
     const { db } = createMockDb([
       { id: 1, user_id: 'test-user', label: '過去の予定', target_at: '2020-01-01T00:00:00.000Z' },
     ]);
     const authHeader = await makeAuthHeader('test-user');
     const res = await app.request('/api/countdown/next', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
-    const body = (await res.json()) as { event: null };
+    const body = (await res.json()) as { event: null; events: unknown[] };
     expect(body.event).toBeNull();
+    expect(body.events).toEqual([]);
   });
 
   it('単発登録(group_idなし)の場合はgroupIndex/groupTotalがnullになる', async () => {
