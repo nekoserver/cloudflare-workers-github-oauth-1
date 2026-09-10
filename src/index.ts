@@ -311,6 +311,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
+import { isDynamicnekoAichatAllowed } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
@@ -502,6 +503,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'wine_details', migration: '0125', description: '/wine-searchページで表示するワインのペアリング特性データ(seeds/wine_initial_vectors_v83.csvが元データ)。wine_embeddings.idと1:1', syncPolicy: 'manual' },
   { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
   { name: 'public_key_security_events', migration: '0128', description: '公開鍵チャレンジ署名ログインの異常検知ログ。対象鍵が見つからない(userId/keyId不一致・失効・期限切れ)場合はkey_not_found、署名が登録済み公開鍵と一致しない(=秘密鍵が違う)場合はsignature_mismatchとして記録し、同時にSlack通知する', syncPolicy: 'auto' },
+  { name: 'dynamicneko_aichat_allowed_users', migration: '0133', description: 'dynamicnekoのAI問い合わせウィジェットの利用を許可するメールアドレス一覧', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2035,6 +2037,12 @@ CREATE INDEX IF NOT EXISTS idx_user_preferences_updated_at ON user_preferences(u
 );
 CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_received_at ON alt_notify_ingest_log(received_at);
 CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_linked_request_id ON alt_notify_ingest_log(linked_request_id);`,
+  '0133': `CREATE TABLE IF NOT EXISTS dynamicneko_aichat_allowed_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2180,6 +2188,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
   d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
   alt_notify_ingest_log: { id: 'pk', received_at: 'idx', linked_request_id: 'idx' },
+  dynamicneko_aichat_allowed_users: { id: 'pk', email: 'uk' },
   user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
   wine_embeddings: { id: 'pk', wine_name: 'uk' },
   wine_details: { wine_id: 'pk+fk' },
@@ -2354,6 +2363,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   webhook_log: 'system',
   cf_auth_access_log: 'system',
   alt_notify_ingest_log: 'system',
+  dynamicneko_aichat_allowed_users: 'ai',
   uuid_history: 'system',
   heritage_cities: 'system',
   heritage_city_fetched: 'system',
@@ -12655,6 +12665,85 @@ app.post('/api/kimi-code/generate-external', async (c) => {
   const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
   const outcome = await runKimiCodeGeneration(c.env, 'dynamicneko-service', body?.prompt ?? '', body?.systemPrompt ?? '');
   return kimiCodeOutcomeToResponse(outcome);
+});
+
+/**
+ * dynamicnekoのAI問い合わせウィジェットが、質問を送信する前に許可ユーザーか
+ * どうかを確認するAPI。Bearer secret(AICHAT_EXTERNAL_SECRET)で認証した上、
+ * D1のdynamicneko_aichat_allowed_usersに登録されたメールアドレスかどうかを
+ * 判定する。フェイルクローズ(DB未設定・クエリ失敗時もallowed:falseを返す。
+ * ルール8: 記録はlogger.error、通知はレスポンスのerrorフィールド)。
+ * dynamicneko側はこのAPIの結果でUIをグレーアウトするが、実際の問い合わせ本体
+ * (/api/aichat/query-external)側でも同じ判定を必ず再検証する。
+ */
+app.post('/api/aichat/permission-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ allowed: false, error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  try {
+    const allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+    return jsonUtf8({ allowed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-aichat] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ allowed: false, error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoのAI問い合わせウィジェットからのAI問い合わせ本体。Bearer secret
+ * (AICHAT_EXTERNAL_SECRET)で認証した上、さらにdynamicneko_aichat_allowed_users
+ * に登録されたメールアドレスかどうかをサーバー側で必ず再検証する(クライアント側
+ * のグレーアウト表示はUXのためだけであり、ここでの検証を省略しない。未許可なら
+ * AIバインディングを呼ぶ前に403で弾き、無駄なAI課金を発生させない)。
+ */
+app.post('/api/aichat/query-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; question?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const question = (body?.question ?? '').trim().slice(0, 4000);
+  if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-aichat] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-aichat] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI問い合わせを許可されていません' }, 403);
+  }
+
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  try {
+    const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
+    const model = configuredModel || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+    const result = await c.env.AI.run(
+      model as Parameters<typeof c.env.AI.run>[0],
+      { messages: [{ role: 'user', content: question }] } as Parameters<typeof c.env.AI.run>[1]
+    );
+    const answer = stripThinkTags(extractChatCompletionText(result) || '');
+    if (!answer) return jsonUtf8({ error: 'AI応答を取得できませんでした(空の応答)' }, 502);
+    return jsonUtf8({ answer });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-aichat] AI問い合わせ失敗', { email, error: message });
+    return jsonUtf8({ error: 'AI問い合わせでサーバーエラーが発生しました: ' + message }, 500);
+  }
 });
 
 /**
