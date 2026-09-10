@@ -259,7 +259,7 @@ describe('日次統計グラフ: API経由モデル別円グラフ', () => {
 });
 
 // ===========================================================
-// 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ)
+// 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー)
 // ===========================================================
 describe('日次統計グラフ: リクエスト元別円グラフ', () => {
   it('sourceTotals をレスポンスから取得する', () => {
@@ -270,7 +270,7 @@ describe('日次統計グラフ: リクエスト元別円グラフ', () => {
     expect(fn).toContain('sourceTotals');
   });
 
-  it('Slack・AIチャット入力窓・回答伝播ページの3ラベルが左パネルに出力される', () => {
+  it('Slack・AIチャット入力窓・回答伝播ページ・ダイナミックワーカーの4ラベルが左パネルに出力される', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
@@ -278,6 +278,21 @@ describe('日次統計グラフ: リクエスト元別円グラフ', () => {
     expect(fn).toContain('Slack');
     expect(fn).toContain('AIチャット入力窓');
     expect(fn).toContain('回答伝播ページ');
+    expect(fn).toContain('ダイナミックワーカー');
+  });
+
+  it('ダイナミックワーカーには他の3種類と異なる色が割り当てられる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 20000);
+    const colorsIdx = fn.indexOf('SOURCE_COLORS');
+    expect(colorsIdx).toBeGreaterThan(-1);
+    const colorsLine = fn.slice(colorsIdx, colorsIdx + 200);
+    expect(colorsLine).toContain('dynamicneko');
+    expect(colorsLine).not.toContain("dynamicneko: '#611f69'");
+    expect(colorsLine).not.toContain("dynamicneko: '#0ea5e9'");
+    expect(colorsLine).not.toContain("dynamicneko: '#f59e0b'");
   });
 
   it('リクエスト元別 というラベルが左パネルに出力される', () => {

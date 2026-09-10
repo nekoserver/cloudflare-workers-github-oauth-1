@@ -6330,11 +6330,11 @@ export function getAiChatPage(user: {
             leftHtml += apiPieSvg + apiRatioHtml + '</div>';
           }
 
-          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ) =====
-          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ' };
-          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b' };
+          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー) =====
+          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ', dynamicneko: 'ダイナミックワーカー' };
+          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b', dynamicneko: '#10b981' };
           var sourceTotals = d.sourceTotals || {};
-          var sourceKeys = ['slack', 'textbox', 'api'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
+          var sourceKeys = ['slack', 'textbox', 'api', 'dynamicneko'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
           var sourceTotal = sourceKeys.reduce(function(s, k) { return s + (sourceTotals[k] || 0); }, 0);
 
           if (sourceTotal > 0) {

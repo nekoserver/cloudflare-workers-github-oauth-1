@@ -2,13 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { buildAichatSourceTotals, AICHAT_SOURCE_LABELS } from './aichatSourceStats';
 
 describe('buildAichatSourceTotals', () => {
-  it('slack/textbox/apiそれぞれの件数を集計する', () => {
+  it('slack/textbox/api/dynamicnekoそれぞれの件数を集計する', () => {
     const totals = buildAichatSourceTotals([
       { source: 'slack', q_count: 3 },
       { source: 'textbox', q_count: 5 },
       { source: 'api', q_count: 2 },
+      { source: 'dynamicneko', q_count: 4 },
     ]);
-    expect(totals).toEqual({ slack: 3, textbox: 5, api: 2 });
+    expect(totals).toEqual({ slack: 3, textbox: 5, api: 2, dynamicneko: 4 });
+  });
+
+  it('dynamicneko由来のリクエストはapiとは別に集計される(既存のapi集計を汚染しない)', () => {
+    const totals = buildAichatSourceTotals([
+      { source: 'api', q_count: 2 },
+      { source: 'dynamicneko', q_count: 7 },
+    ]);
+    expect(totals.api).toBe(2);
+    expect(totals.dynamicneko).toBe(7);
   });
 
   it('同じsourceが複数行に分かれていても合算する', () => {
@@ -34,12 +44,13 @@ describe('buildAichatSourceTotals', () => {
   });
 
   it('空配列の場合は全て0を返す', () => {
-    expect(buildAichatSourceTotals([])).toEqual({ slack: 0, textbox: 0, api: 0 });
+    expect(buildAichatSourceTotals([])).toEqual({ slack: 0, textbox: 0, api: 0, dynamicneko: 0 });
   });
 
-  it('AICHAT_SOURCE_LABELSに3種類の日本語ラベルが定義されている', () => {
+  it('AICHAT_SOURCE_LABELSに4種類の日本語ラベルが定義されている', () => {
     expect(AICHAT_SOURCE_LABELS.slack).toBe('Slack');
     expect(AICHAT_SOURCE_LABELS.textbox).toBe('AIチャット入力窓');
     expect(AICHAT_SOURCE_LABELS.api).toBe('回答伝播ページ');
+    expect(AICHAT_SOURCE_LABELS.dynamicneko).toBe('ダイナミックワーカー');
   });
 });
