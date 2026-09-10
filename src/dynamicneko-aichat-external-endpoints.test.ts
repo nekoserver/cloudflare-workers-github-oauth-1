@@ -134,4 +134,37 @@ describe('POST /api/aichat/query-external', () => {
     expect(res.status).toBe(503);
     expect(aiRun).not.toHaveBeenCalled();
   });
+
+  it('modelを指定しない場合はデフォルト(Gemma-4)でAI.run()を呼ぶ', async () => {
+    const db = createMockDb(['ok@example.com']);
+    const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
+    await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: 'hi' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    expect(aiRun.mock.calls[0][0]).toBe('@cf/google/gemma-4-26b-a4b-it');
+  });
+
+  it('許可リストにあるmodel(Qwen3.8)を指定した場合はそのモデルでAI.run()を呼ぶ', async () => {
+    const db = createMockDb(['ok@example.com']);
+    const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
+    await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: 'hi', model: '@cf/qwen/qwen3.8-27b' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    expect(aiRun.mock.calls[0][0]).toBe('@cf/qwen/qwen3.8-27b');
+  });
+
+  it('許可リストに無いmodel(改ざん)を指定した場合はデフォルト(Gemma-4)へフォールバックする', async () => {
+    const db = createMockDb(['ok@example.com']);
+    const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
+    await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: 'hi', model: '@cf/meta/llama-3.1-8b-instruct' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    expect(aiRun.mock.calls[0][0]).toBe('@cf/google/gemma-4-26b-a4b-it');
+  });
 });

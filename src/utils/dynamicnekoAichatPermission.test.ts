@@ -13,7 +13,12 @@
  *   (3) 未登録メールアドレスが誤ってtrueと判定される
  */
 import { describe, it, expect, vi } from 'vitest';
-import { isDynamicnekoAichatAllowed, normalizeAllowlistEmail } from './dynamicnekoAichatPermission';
+import {
+  isDynamicnekoAichatAllowed,
+  normalizeAllowlistEmail,
+  resolveDynamicnekoAichatModel,
+  DYNAMICNEKO_AICHAT_DEFAULT_MODEL,
+} from './dynamicnekoAichatPermission';
 
 function createMockDb(matchingEmail: string | null) {
   const first = vi.fn().mockImplementation(() => {
@@ -49,5 +54,23 @@ describe('isDynamicnekoAichatAllowed', () => {
     const allowed = await isDynamicnekoAichatAllowed(db, '   ');
     expect(allowed).toBe(false);
     expect(db.bind).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveDynamicnekoAichatModel', () => {
+  it('未指定(undefined/null/空文字)はデフォルト(Gemma-4)を返す', () => {
+    expect(resolveDynamicnekoAichatModel(undefined)).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
+    expect(resolveDynamicnekoAichatModel(null)).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
+    expect(resolveDynamicnekoAichatModel('')).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
+    expect(resolveDynamicnekoAichatModel('   ')).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
+  });
+
+  it('許可リストにあるQwen3.8を指定した場合はそのまま返す', () => {
+    expect(resolveDynamicnekoAichatModel('@cf/qwen/qwen3.8-27b')).toBe('@cf/qwen/qwen3.8-27b');
+  });
+
+  it('許可リストに無いモデルID(改ざん・タイポ)はデフォルトへフォールバックする', () => {
+    expect(resolveDynamicnekoAichatModel('@cf/meta/llama-3.3-70b-instruct-fp8-fast')).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
+    expect(resolveDynamicnekoAichatModel('not-a-real-model')).toBe(DYNAMICNEKO_AICHAT_DEFAULT_MODEL);
   });
 });
