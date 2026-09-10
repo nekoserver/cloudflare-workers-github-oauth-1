@@ -22,3 +22,22 @@ export async function isDynamicnekoAichatAllowed(db: D1Database, email: string):
     .first();
   return row !== null && row !== undefined;
 }
+
+/** dynamicnekoのAIモデル選択ドロップダウンのデフォルト値 */
+export const DYNAMICNEKO_AICHAT_DEFAULT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/** dynamicnekoのAIモデル選択ドロップダウンで選択可能なモデルID一覧(デフォルトを含む) */
+export const DYNAMICNEKO_AICHAT_ALLOWED_MODELS: readonly string[] = [
+  DYNAMICNEKO_AICHAT_DEFAULT_MODEL,
+  '@cf/qwen/qwen3.8-27b',
+];
+
+/**
+ * dynamicnekoから指定されたモデルIDを、実際にAI.run()へ渡すモデルIDへ解決する。
+ * 許可リストに無い値(未指定・改ざん・タイポ等)は常にデフォルト(Gemma-4)へ
+ * フォールバックする(不明なモデルIDをそのままAI.run()へ渡してエラーにしない)。
+ */
+export function resolveDynamicnekoAichatModel(requestedModel: string | undefined | null): string {
+  const trimmed = (requestedModel ?? '').trim();
+  return DYNAMICNEKO_AICHAT_ALLOWED_MODELS.includes(trimmed) ? trimmed : DYNAMICNEKO_AICHAT_DEFAULT_MODEL;
+}

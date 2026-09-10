@@ -311,7 +311,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { isDynamicnekoAichatAllowed } from './utils/dynamicnekoAichatPermission';
+import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
@@ -12710,10 +12710,11 @@ app.post('/api/aichat/query-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string; question?: string }>().catch(() => null);
+  const body = await c.req.json<{ email?: string; question?: string; model?: string }>().catch(() => null);
   const email = body?.email ?? '';
   const question = (body?.question ?? '').trim().slice(0, 4000);
   if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
+  const model = resolveDynamicnekoAichatModel(body?.model);
 
   let allowed = false;
   try {
@@ -12730,8 +12731,6 @@ app.post('/api/aichat/query-external', async (c) => {
 
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
   try {
-    const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
-    const model = configuredModel || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
     const result = await c.env.AI.run(
       model as Parameters<typeof c.env.AI.run>[0],
       { messages: [{ role: 'user', content: question }] } as Parameters<typeof c.env.AI.run>[1]
