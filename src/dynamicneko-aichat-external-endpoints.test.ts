@@ -124,6 +124,47 @@ describe('POST /api/aichat/query-external', () => {
     expect(body.answer).toBe('こんにちは');
   });
 
+  it('デフォルトモデル(Gemma-4)はmax_tokensとenable_thinking:falseを付けてAI.run()を呼ぶ(既知のthinking mode暴走対策)', async () => {
+    const db = createMockDb(['ok@example.com']);
+    const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
+    await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: 'hi' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    const [calledModel, calledParams] = aiRun.mock.calls[0] as [string, { max_tokens?: number; chat_template_kwargs?: { enable_thinking?: boolean } }];
+    expect(calledModel).toBe('@cf/google/gemma-4-26b-a4b-it');
+    expect(calledParams.max_tokens).toBe(65536);
+    expect(calledParams.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
+
+  it('AI.run()がタイムアウト時間内に応答しない場合はハングせず502エラーで返る(スピナーが回り続けるバグの再現テスト)', async () => {
+    const db = createMockDb(['ok@example.com']);
+    const aiRun = vi.fn().mockImplementation(() => new Promise(() => { /* 永久に解決しない */ }));
+    const resPromise = app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: 'hi' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    vi.useFakeTimers();
+    try {
+      const settled = resPromise.then((res) => ({ settled: true, res }));
+      await vi.advanceTimersByTimeAsync(30000);
+      const result = await Promise.race([
+        settled,
+        Promise.resolve({ settled: false as const }),
+      ]);
+      expect(result.settled).toBe(true);
+      if (result.settled) {
+        expect(result.res.status).toBe(500);
+        const body = await result.res.json() as { error: string };
+        expect(body.error).toContain('タイムアウト');
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('DB未設定時はフェイルクローズで503を返す(AIバインディングは呼ばれない)', async () => {
     const aiRun = vi.fn();
     const res = await app.request(

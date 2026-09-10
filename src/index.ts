@@ -12732,9 +12732,24 @@ app.post('/api/aichat/query-external', async (c) => {
 
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
   try {
-    const result = await c.env.AI.run(
-      model as Parameters<typeof c.env.AI.run>[0],
-      { messages: [{ role: 'user', content: question }] } as Parameters<typeof c.env.AI.run>[1]
+    // 既知の制限(AICHAT_MODEL_EXTRA_PARAMS参照): gemma-4-26b-a4b-itはsystem
+    // messageが無くてもmax_tokens未指定のままthinking modeへ入ると、Cloudflare側の
+    // 内部タイムアウト(エラーコード3046)が出るまで非常に長く応答が返らず、呼び出し元
+    // (dynamicneko)の読み込みインジケータが回り続けたまま止まって見える。他のAI
+    // チャットエンドポイントと同じくgetModelRunParams/AICHAT_MODEL_MAX_TOKENSで
+    // 明示的なmax_tokensとthinking mode無効化を渡し、withTimeoutでこちらから
+    // 先に見切りをつけて早くエラーを返すことで、Cloudflare側の内部タイムアウトより
+    // 先にクライアント側へ結果を返す。
+    const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+    const baseParams = { messages: [{ role: 'user', content: question }], max_tokens: maxTokens };
+    const runParams = getModelRunParams(model, baseParams);
+    const result = await withTimeout(
+      c.env.AI.run(
+        model as Parameters<typeof c.env.AI.run>[0],
+        runParams as Parameters<typeof c.env.AI.run>[1]
+      ),
+      PREREQUISITE_TERMS_TIMEOUT_MS,
+      'AI応答がタイムアウトしました'
     );
     const answer = stripThinkTags(extractChatCompletionText(result) || '');
     if (!answer) return jsonUtf8({ error: 'AI応答を取得できませんでした(空の応答)' }, 502);
