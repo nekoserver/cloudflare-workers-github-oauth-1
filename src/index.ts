@@ -12710,8 +12710,9 @@ app.post('/api/aichat/query-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string; question?: string; model?: string }>().catch(() => null);
+  const body = await c.req.json<{ email?: string; question?: string; model?: string; login?: string }>().catch(() => null);
   const email = body?.email ?? '';
+  const login = body?.login ?? '';
   const question = (body?.question ?? '').trim().slice(0, 4000);
   if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
   const model = resolveDynamicnekoAichatModel(body?.model);
@@ -12737,6 +12738,7 @@ app.post('/api/aichat/query-external', async (c) => {
     );
     const answer = stripThinkTags(extractChatCompletionText(result) || '');
     if (!answer) return jsonUtf8({ error: 'AI応答を取得できませんでした(空の応答)' }, 502);
+    await saveDynamicnekoAiShare(c.env.DB, login, { question, answer, model });
     return jsonUtf8({ answer });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -17196,6 +17198,58 @@ export async function saveSlackAiShare(
     logger.warn('Slack AI reply save failed', {
       error: err instanceof Error ? err.message : 'Unknown error',
       teamId,
+    });
+  }
+}
+
+/**
+ * dynamicnekoのAI問い合わせウィジェット(/api/aichat/query-external)から得られた
+ * AI応答を、AIチャットページ(/aichat)左サイドパネルから参照できるよう
+ * ai_chat_sharesへ保存する。dynamicneko側のGitHubログインsession.loginは
+ * 本体WorkerのGitHub OAuthログインと同じ値(user_sessions.user_id)になる前提の
+ * ため、それをそのままuser_idとして使う。対応するuser_sessionsの行が
+ * 見つからない場合(dynamicnekoでログインしているGitHubアカウントで本体Worker側に
+ * 一度もログインしたことが無い等)は保存をスキップする(記録はlogger.warn、
+ * dynamicneko側への応答自体には影響させない付随機能のため、ここでは例外を投げない)。
+ */
+export async function saveDynamicnekoAiShare(
+  db: D1Database,
+  login: string,
+  params: { question: string; answer: string; model: string },
+): Promise<void> {
+  if (!login) {
+    logger.warn('[dynamicneko-aichat] 共有保存スキップ: loginが空');
+    return;
+  }
+  try {
+    const owner = await db.prepare(
+      'SELECT user_id FROM user_sessions WHERE user_id = ?'
+    ).bind(login).first<{ user_id: string }>();
+    if (!owner) {
+      logger.warn('[dynamicneko-aichat] 共有保存スキップ: 対応するuser_sessionsが見つからない', { login });
+      return;
+    }
+
+    const usernameBytes = new TextEncoder().encode(login);
+    const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+    const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    const tokenBytes = new Uint8Array(8);
+    crypto.getRandomValues(tokenBytes);
+    const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const now = new Date().toISOString();
+    const conversationHash = await computeConversationHash(login, params.question, params.answer, params.model, now);
+    const questionHash = await computeQuestionHash(login, params.question);
+    await db.prepare(
+      'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      shareId, login, userHash, params.question, params.answer, params.model, now,
+      conversationHash, questionHash, 'dynamicneko',
+    ).run();
+  } catch (err) {
+    logger.warn('[dynamicneko-aichat] 共有保存失敗', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      login,
     });
   }
 }
