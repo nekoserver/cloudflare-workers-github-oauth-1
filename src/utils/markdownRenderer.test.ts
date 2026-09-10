@@ -126,6 +126,29 @@ describe('getMarkdownParserScript', () => {
     const html = parseMd('**<b>bold</b> text**');
     expect(html).toContain('<strong>&lt;b&gt;bold&lt;/b&gt; text</strong>');
   });
+
+  // 対象: AI応答が途中で途切れ、テーブルの区切り行(|---|---|)が来る前に
+  // 文章が終わった場合の parseMd の挙動。テーブル判定・段落フォールバック
+  // のどちらにも当てはまらない「|」始まりの行がループのインデックスを
+  // 一切進めないまま continue し、無限ループで固まっていたバグの再現テスト。
+  it('未完成のテーブル行(区切り行が来る前に入力が終わる)でも無限ループにならない', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('説明文\n| a | b |');
+    expect(html).toContain('a');
+    expect(html).toContain('b');
+  });
+
+  it('テーブル区切り行が不正な形式でもハングせず処理を終える', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('| a | b |\nこれは区切り行ではない\n| 1 | 2 |');
+    expect(html).toContain('a');
+  });
+
+  it('「|」始まりの行が文末で単独で残ってもハングせず処理を終える', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('|');
+    expect(typeof html).toBe('string');
+  });
 });
 
 describe('getMarkdownPreviewCSS', () => {

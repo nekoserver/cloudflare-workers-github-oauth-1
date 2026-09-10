@@ -108,7 +108,12 @@ export function getMarkdownParserScript(): string {
         while (i < lines.length && lines[i].trim() !== '' && !/^#{1,6}\\s/.test(lines[i]) && !/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(lines[i]) && !/^>\\s?/.test(lines[i]) && !/^\\|/.test(lines[i]) && !/^\\x00CB/.test(lines[i])) {
           pLines.push(lines[i]); i++;
         }
-        if (pLines.length) html += '<p>' + inline(pLines.join('\\n')) + '</p>';
+        if (pLines.length) {
+          html += '<p>' + inline(pLines.join('\\n')) + '</p>';
+        } else if (i < lines.length) {
+          html += '<p>' + inline(lines[i]) + '</p>';
+          i++;
+        }
       }
 
       html = html.replace(/\\x00IC(\\d+)\\x00/g, function(_, idx) { return inlineCodes[parseInt(idx)]; });
