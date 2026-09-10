@@ -12549,6 +12549,81 @@ app.get('/kimi-code', authMiddleware, async (c) => {
   return c.html(getKimiCodePage(user.sub));
 });
 
+type KimiCodeGenerateOutcome =
+  | { status: 'ok'; code: string; model: string; usage: ReturnType<typeof extractAiRunUsage> }
+  | { status: 'empty_prompt' }
+  | { status: 'no_ai_binding' }
+  | { status: 'empty_response' }
+  | { status: 'error'; message: string };
+
+/**
+ * kimi-k2.7-codeへのプロンプト送信の実処理。/api/kimi-code/generate(ログイン
+ * セッション必須)と/api/kimi-code/generate-external(dynamicnekoからのService
+ * Binding呼び出し、Bearer secret認証)の両方から共通で呼ぶ(CLAUDE.mdルール15:
+ * ロジックはハンドラから切り出してテストする)。DB記録はkimi_code_generate_logへ
+ * 呼び出し元を問わず同じ形で残す(userIdには外部呼び出しでは'dynamicneko-service'
+ * のような固定値を渡す想定)。
+ */
+async function runKimiCodeGeneration(
+  env: { AI?: Ai; DB?: D1Database },
+  userId: string,
+  prompt: string,
+  systemPrompt: string
+): Promise<KimiCodeGenerateOutcome> {
+  if (!env.AI) return { status: 'no_ai_binding' };
+  const trimmedPrompt = prompt.trim().slice(0, 8000);
+  if (!trimmedPrompt) return { status: 'empty_prompt' };
+  const trimmedSystemPrompt = systemPrompt.trim().slice(0, 2000);
+  const messages: { role: string; content: string }[] = [];
+  if (trimmedSystemPrompt) messages.push({ role: 'system', content: trimmedSystemPrompt });
+  messages.push({ role: 'user', content: trimmedPrompt });
+
+  try {
+    const result = await env.AI.run(
+      KIMI_CODE_MODEL as Parameters<typeof env.AI.run>[0],
+      { messages } as Parameters<typeof env.AI.run>[1]
+    );
+    const code = extractChatCompletionText(result);
+    if (!code) {
+      logger.warn('[kimi-code] 空の応答', { userId });
+      return { status: 'empty_response' };
+    }
+    const usage = extractAiRunUsage(result);
+    // kimi-k2.7-codeは従量課金モデルのため、リクエストごとのトークン数を
+    // kimi_code_generate_logへ記録する(この後Gemmaレビューに進むかどうかに
+    // 関わらず、生成した時点で必ず1件残す。/api/kimi-code/token-usageで集計)。
+    if (env.DB) {
+      await env.DB
+        .prepare(
+          `INSERT INTO kimi_code_generate_log (user_id, model, input_tokens, output_tokens, total_tokens)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(userId, KIMI_CODE_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
+        .run();
+    }
+    return { status: 'ok', code, model: KIMI_CODE_MODEL, usage };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] 呼び出し失敗', { userId, error: message });
+    return { status: 'error', message };
+  }
+}
+
+function kimiCodeOutcomeToResponse(outcome: KimiCodeGenerateOutcome) {
+  switch (outcome.status) {
+    case 'no_ai_binding':
+      return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+    case 'empty_prompt':
+      return jsonUtf8({ error: 'prompt は必須です' }, 400);
+    case 'empty_response':
+      return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
+    case 'error':
+      return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + outcome.message }, 500);
+    case 'ok':
+      return jsonUtf8({ code: outcome.code, model: outcome.model, ...outcome.usage });
+  }
+}
+
 /**
  * kimi-k2.7-codeへのプロンプト送信 API。account ID/APIトークンは使わず、
  * Worker既存のAIバインディング(env.AI)経由で呼び出す(認証情報の管理コスト
@@ -12556,44 +12631,30 @@ app.get('/kimi-code', authMiddleware, async (c) => {
  */
 app.post('/api/kimi-code/generate', authMiddleware, async (c) => {
   const user = c.get('user');
-  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
   const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
-  const prompt = (body?.prompt ?? '').trim().slice(0, 8000);
-  if (!prompt) return jsonUtf8({ error: 'prompt は必須です' }, 400);
-  const systemPrompt = (body?.systemPrompt ?? '').trim().slice(0, 2000);
-  const messages: { role: string; content: string }[] = [];
-  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-  messages.push({ role: 'user', content: prompt });
+  const outcome = await runKimiCodeGeneration(c.env, user.sub, body?.prompt ?? '', body?.systemPrompt ?? '');
+  return kimiCodeOutcomeToResponse(outcome);
+});
 
-  try {
-    const result = await c.env.AI.run(
-      KIMI_CODE_MODEL as Parameters<typeof c.env.AI.run>[0],
-      { messages } as Parameters<typeof c.env.AI.run>[1]
-    );
-    const code = extractChatCompletionText(result);
-    if (!code) {
-      logger.warn('[kimi-code] 空の応答', { userId: user.sub });
-      return jsonUtf8({ error: '生成結果を取得できませんでした(空の応答)' }, 502);
-    }
-    const usage = extractAiRunUsage(result);
-    // kimi-k2.7-codeは従量課金モデルのため、リクエストごとのトークン数を
-    // kimi_code_generate_logへ記録する(この後Gemmaレビューに進むかどうかに
-    // 関わらず、生成した時点で必ず1件残す。/api/kimi-code/token-usageで集計)。
-    if (c.env.DB) {
-      await c.env.DB
-        .prepare(
-          `INSERT INTO kimi_code_generate_log (user_id, model, input_tokens, output_tokens, total_tokens)
-           VALUES (?, ?, ?, ?, ?)`
-        )
-        .bind(user.sub, KIMI_CODE_MODEL, usage.input_tokens, usage.output_tokens, usage.total_tokens)
-        .run();
-    }
-    return jsonUtf8({ code, model: KIMI_CODE_MODEL, ...usage });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[kimi-code] 呼び出し失敗', { userId: user.sub, error: message });
-    return jsonUtf8({ error: 'コード生成でサーバーエラーが発生しました: ' + message }, 500);
+/**
+ * /api/kimi-code/generateと同じ処理を、GitHubログインセッションではなく
+ * Bearer secret(KIMI_CODE_EXTERNAL_SECRET)で認証するAPI。dynamicneko
+ * (Cloudflare Dynamic Worker Loader使用)のNew SnippetウィジェットがService
+ * Binding経由で呼ぶ。dynamicneko側はユーザーの本体Workerログインセッションを
+ * 持たないため、既存のauthMiddlewareでは呼べない(常に401になる)。
+ * 環境変数名は呼び出し元(dynamicneko)と同じKIMI_CODE_EXTERNAL_SECRETに揃えて
+ * ある(NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md 9-2節:
+ * 変数名の食い違いで401になった事故を、今回は同名にすることで避ける)。
+ */
+app.post('/api/kimi-code/generate-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.KIMI_CODE_EXTERNAL_SECRET ? `Bearer ${c.env.KIMI_CODE_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
   }
+  const body = await c.req.json<{ prompt?: string; systemPrompt?: string }>().catch(() => null);
+  const outcome = await runKimiCodeGeneration(c.env, 'dynamicneko-service', body?.prompt ?? '', body?.systemPrompt ?? '');
+  return kimiCodeOutcomeToResponse(outcome);
 });
 
 /**

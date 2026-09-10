@@ -34,6 +34,8 @@ export type Bindings = {
   DYNAMICNEKO?: Fetcher;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
+  /** dynamicnekoのNew SnippetウィジェットがPOST /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
+  KIMI_CODE_EXTERNAL_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
