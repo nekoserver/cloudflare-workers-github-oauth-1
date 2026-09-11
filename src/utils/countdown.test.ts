@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  computeCfAuthDeadlineTargetAt,
+  CF_AUTH_DEADLINE_LABEL,
+  CF_AUTH_SESSION_TTL_MS,
   computeCountdownGroupPosition,
   filterCountdownEventsByDate,
   findNextCountdownEvent,
@@ -10,6 +13,19 @@ import {
   type CountdownEventRow,
   type CountdownGroupRow,
 } from './countdown';
+
+describe('computeCfAuthDeadlineTargetAt', () => {
+  it('ログイン日時からcf-authのセッション有効期限(7日)ぶん先の日時をISO形式で返す', () => {
+    const loginAt = new Date('2026-09-11T09:48:00.000Z');
+    const result = computeCfAuthDeadlineTargetAt(loginAt);
+    expect(result).toBe('2026-09-18T09:48:00.000Z');
+    expect(CF_AUTH_SESSION_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('固定ラベルは「cf-auth 期限」', () => {
+    expect(CF_AUTH_DEADLINE_LABEL).toBe('cf-auth 期限');
+  });
+});
 
 describe('isValidCountdownTargetAt', () => {
   it('ISO 8601形式の日時文字列を有効とする', () => {

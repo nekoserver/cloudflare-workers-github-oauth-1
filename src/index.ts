@@ -248,7 +248,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -3229,6 +3229,41 @@ async function logCfAuthAccessResult(
     ).run();
   } catch (e) {
     logger.error('Failed to log cf-auth access result', { username, error: e instanceof Error ? e.message : 'Unknown' });
+  }
+}
+
+/**
+ * cf-authへのログイン通知(hasAccess=OKの/webhook/cf-auth)を受けるたびに、
+ * /countdownの「cf-auth 期限」カウントダウンをそのユーザーのcountdown_events
+ * へ自動登録・更新する。同じuser_id+ラベルの既存行があれば期限日時だけ
+ * 上書きし(毎ログインで行が増え続けないようにする)、無ければ新規作成する。
+ * 失敗しても呼び出し元(/webhook/cf-auth)のレスポンス自体は失敗させず、
+ * 成功/失敗を戻り値で返して呼び出し元がSlack通知に含められるようにする
+ * (CLAUDE.mdルール8: 記録はログ、通知は呼び出し元のSlackメッセージに含める)。
+ */
+async function upsertCfAuthDeadlineCountdown(
+  db: D1Database | undefined,
+  userId: string,
+  loginAt: Date
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!db) return { ok: false, error: 'DB未設定です' };
+  const targetAt = computeCfAuthDeadlineTargetAt(loginAt);
+  try {
+    const existing = await db.prepare(
+      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1'
+    ).bind(userId, CF_AUTH_DEADLINE_LABEL).first<{ id: number }>();
+    if (existing) {
+      await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?').bind(targetAt, existing.id).run();
+    } else {
+      await db.prepare(
+        'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)'
+      ).bind(userId, CF_AUTH_DEADLINE_LABEL, targetAt).run();
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('cf-auth期限カウントダウンの自動登録に失敗', { userId, error: message });
+    return { ok: false, error: message };
   }
 }
 
@@ -17792,6 +17827,12 @@ app.post('/webhook/cf-auth', async (c) => {
     )
   );
 
+  // アクセス許可済みユーザーのログインのたびに、/countdownの「cf-auth 期限」
+  // カウントダウンをcf-authのセッション有効期限に合わせて自動更新する。
+  const countdownResult = hasAccess
+    ? await upsertCfAuthDeadlineCountdown(c.env.DB, usernameFromPayload, new Date())
+    : null;
+
   const cfAuthNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
   if (isNotifyConfigured(cfAuthNotifyConfig)) {
     const lines = [
@@ -17799,6 +17840,9 @@ app.post('/webhook/cf-auth', async (c) => {
       `ユーザー: ${user}`,
       `アクセス権限判定: ${hasAccess ? 'OK' : 'NG'}`,
     ];
+    if (countdownResult) {
+      lines.push(`カウントダウン(${CF_AUTH_DEADLINE_LABEL})登録: ${countdownResult.ok ? 'OK' : 'NG(' + countdownResult.error + ')'}`);
+    }
     const extra = Object.entries(payload)
       .filter(([k]) => !['event', 'action', 'user', 'username', 'login', 'email'].includes(k))
       .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
