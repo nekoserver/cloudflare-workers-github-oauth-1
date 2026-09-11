@@ -239,7 +239,7 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
-import { getRubyWasmPage } from './views/rubyWasm';
+import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTableClassification } from './views/d1QueryCatalog';
@@ -505,7 +505,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
   { name: 'public_key_security_events', migration: '0128', description: '公開鍵チャレンジ署名ログインの異常検知ログ。対象鍵が見つからない(userId/keyId不一致・失効・期限切れ)場合はkey_not_found、署名が登録済み公開鍵と一致しない(=秘密鍵が違う)場合はsignature_mismatchとして記録し、同時にSlack通知する', syncPolicy: 'auto' },
   { name: 'dynamicneko_aichat_allowed_users', migration: '0133', description: 'dynamicnekoのAI問い合わせウィジェットの利用を許可するメールアドレス一覧', syncPolicy: 'manual' },
-  { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる', syncPolicy: 'auto' },
+  { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる。ruby_version(0135)は保存時点で読み込んでいたRuby/WASMのビルドライン', syncPolicy: 'auto' },
+  { name: 'ruby_wasm_snippet_verifications', migration: '0135', description: '/ruby-wasmページでスニペットを実行して「動作確認」した結果の履歴。同じスニペットを複数のRubyビルドライン(ruby_version)で検証した記録をそれぞれ残せる', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2054,6 +2055,15 @@ CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_linked_request_id ON alt_no
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippets_user_created ON ruby_wasm_snippets(user_id, created_at);`,
+  '0135': `ALTER TABLE ruby_wasm_snippets ADD COLUMN ruby_version TEXT NOT NULL DEFAULT '3.4';
+CREATE TABLE IF NOT EXISTS ruby_wasm_snippet_verifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  snippet_id TEXT NOT NULL REFERENCES ruby_wasm_snippets(id),
+  ruby_version TEXT NOT NULL,
+  verified INTEGER NOT NULL,
+  verified_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippet_verifications_snippet ON ruby_wasm_snippet_verifications(snippet_id, verified_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2303,6 +2313,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
   kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
+  ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2429,6 +2440,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   kimi_gemma_reviews: 'ai',
   kimi_code_generate_log: 'ai',
   ruby_wasm_snippets: 'ai',
+  ruby_wasm_snippet_verifications: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2550,6 +2562,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   kimi_gemma_reviews: { user_id: 'user_sessions' },
   kimi_code_generate_log: { user_id: 'user_sessions' },
   ruby_wasm_snippets: { user_id: 'user_sessions' },
+  ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -12848,12 +12861,17 @@ app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   }
   const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
   const id = crypto.randomUUID();
+  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"3.4")を
+  // 記録する。将来対応バージョンが増えた場合、このスニペットがどのバージョン向けに
+  // 生成されたコードかを区別できるようにするため(動作確認履歴側でもこの値を
+  // デフォルトのバージョンとして使う)。
+  const rubyVersion = getRubyWasmVersionInfo().rubyBuildLine;
   try {
     await c.env.DB
-      .prepare(`INSERT INTO ruby_wasm_snippets (id, user_id, title, code, source) VALUES (?, ?, ?, ?, ?)`)
-      .bind(id, user.sub, title, code, 'kimi-code')
+      .prepare(`INSERT INTO ruby_wasm_snippets (id, user_id, title, code, source, ruby_version) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(id, user.sub, title, code, 'kimi-code', rubyVersion)
       .run();
-    return jsonUtf8({ id, title });
+    return jsonUtf8({ id, title, rubyVersion });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[ruby-wasm] スニペット保存失敗', { userId: user.sub, error: message });
@@ -12866,9 +12884,9 @@ app.get('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ snippets: [] });
   const { results } = await c.env.DB
-    .prepare(`SELECT id, title, created_at FROM ruby_wasm_snippets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`)
+    .prepare(`SELECT id, title, ruby_version, created_at FROM ruby_wasm_snippets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`)
     .bind(user.sub)
-    .all<{ id: string; title: string; created_at: string }>();
+    .all<{ id: string; title: string; ruby_version: string; created_at: string }>();
   return jsonUtf8({ snippets: results ?? [] });
 });
 
@@ -12878,11 +12896,63 @@ app.get('/api/ruby-wasm/snippets/:id', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = c.req.param('id');
   const row = await c.env.DB
-    .prepare(`SELECT id, title, code, created_at FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
+    .prepare(`SELECT id, title, code, ruby_version, created_at FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
     .bind(id, user.sub)
-    .first<{ id: string; title: string; code: string; created_at: string }>();
+    .first<{ id: string; title: string; code: string; ruby_version: string; created_at: string }>();
   if (!row) return jsonUtf8({ error: 'スニペットが見つかりません' }, 404);
   return jsonUtf8(row);
+});
+
+/**
+ * /ruby-wasmページで実際にコードを実行した後、「このRubyビルドラインで動いた/
+ * 動かなかった」を記録するAPI。同じスニペットを複数バージョンで検証した履歴を
+ * 残せるよう、上書きではなく毎回1行追加する(ruby_wasm_snippet_verifications)。
+ * 他ユーザーのスニペットに対しては(所有者確認により)記録できない。
+ */
+app.post('/api/ruby-wasm/snippets/:id/verifications', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  const owned = await c.env.DB
+    .prepare(`SELECT id FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: string }>();
+  if (!owned) return jsonUtf8({ error: 'スニペットが見つかりません' }, 404);
+
+  const body = await c.req.json<{ verified?: boolean; rubyVersion?: string }>().catch(() => null);
+  if (typeof body?.verified !== 'boolean') {
+    return jsonUtf8({ error: 'verified(boolean) は必須です' }, 400);
+  }
+  const rubyVersion = (body.rubyVersion ?? '').trim().slice(0, 20) || getRubyWasmVersionInfo().rubyBuildLine;
+  try {
+    await c.env.DB
+      .prepare(`INSERT INTO ruby_wasm_snippet_verifications (snippet_id, ruby_version, verified) VALUES (?, ?, ?)`)
+      .bind(id, rubyVersion, body.verified ? 1 : 0)
+      .run();
+    return jsonUtf8({ ok: true, rubyVersion, verified: body.verified });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[ruby-wasm] 動作確認記録失敗', { userId: user.sub, snippetId: id, error: message });
+    return jsonUtf8({ error: '動作確認結果の記録に失敗しました: ' + message }, 500);
+  }
+});
+
+/** 指定スニペットの動作確認履歴を新しい順で返す。他ユーザーのスニペットに対しては(所有者確認により)取得できない。 */
+app.get('/api/ruby-wasm/snippets/:id/verifications', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ verifications: [] });
+  const id = c.req.param('id');
+  const owned = await c.env.DB
+    .prepare(`SELECT id FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: string }>();
+  if (!owned) return jsonUtf8({ error: 'スニペットが見つかりません' }, 404);
+
+  const { results } = await c.env.DB
+    .prepare(`SELECT ruby_version, verified, verified_at FROM ruby_wasm_snippet_verifications WHERE snippet_id = ? ORDER BY verified_at DESC LIMIT 50`)
+    .bind(id)
+    .all<{ ruby_version: string; verified: number; verified_at: string }>();
+  return jsonUtf8({ verifications: results ?? [] });
 });
 
 /**

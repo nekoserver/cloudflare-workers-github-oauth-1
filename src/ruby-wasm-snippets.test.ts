@@ -56,7 +56,15 @@ function setupDb(): DatabaseSync {
       title TEXT NOT NULL,
       code TEXT NOT NULL,
       source TEXT NOT NULL DEFAULT 'kimi-code',
+      ruby_version TEXT NOT NULL DEFAULT '3.4',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE ruby_wasm_snippet_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      snippet_id TEXT NOT NULL REFERENCES ruby_wasm_snippets(id),
+      ruby_version TEXT NOT NULL,
+      verified INTEGER NOT NULL,
+      verified_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE user_sessions (
       user_id TEXT PRIMARY KEY,
@@ -118,11 +126,25 @@ describe('POST /api/ruby-wasm/snippets', () => {
     expect(typeof data.id).toBe('string');
     expect(data.title).toBe('def greet(name)');
 
-    const row = db.prepare('SELECT user_id, code, source FROM ruby_wasm_snippets WHERE id = ?').get(data.id) as
-      { user_id: string; code: string; source: string };
+    const row = db.prepare('SELECT user_id, code, source, ruby_version FROM ruby_wasm_snippets WHERE id = ?').get(data.id) as
+      { user_id: string; code: string; source: string; ruby_version: string };
     expect(row.user_id).toBe('user1');
     expect(row.code).toBe(RUBY_CODE);
     expect(row.source).toBe('kimi-code');
+    expect(row.ruby_version).toMatch(/^\d+\.\d+$/);
+  });
+
+  it('保存時点のRuby/WASMビルドラインをruby_versionとして記録し、応答にも含める', async () => {
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: RUBY_CODE }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    const data = await res.json() as { rubyVersion: string };
+    expect(data.rubyVersion).toMatch(/^\d+\.\d+$/);
   });
 
   it('タイトルを指定すればそれを使う', async () => {
@@ -228,6 +250,127 @@ describe('GET /api/ruby-wasm/snippets/:id', () => {
 
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /api/ruby-wasm/snippets/:id/verifications', () => {
+  it('verified:trueを送るとRuby版動作確認を1件記録する', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verified: true }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { ok: boolean; rubyVersion: string; verified: boolean };
+    expect(data.ok).toBe(true);
+    expect(data.verified).toBe(true);
+    expect(data.rubyVersion).toMatch(/^\d+\.\d+$/);
+
+    const row = db.prepare('SELECT snippet_id, verified, ruby_version FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?').get('s1') as
+      { snippet_id: string; verified: number; ruby_version: string };
+    expect(row.snippet_id).toBe('s1');
+    expect(row.verified).toBe(1);
+  });
+
+  it('同じスニペットに複数回記録すると履歴が複数件積み上がる(上書きしない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+    const auth = await makeAuthHeader('user1');
+
+    await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verified: true, rubyVersion: '3.4' }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verified: false, rubyVersion: '3.5' }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    const count = (db.prepare('SELECT COUNT(*) as c FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?').get('s1') as { c: number }).c;
+    expect(count).toBe(2);
+  });
+
+  it('verifiedが未指定の場合は400を返す', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('他ユーザーのスニペットには記録できない(404)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'other-user', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verified: true }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(404);
+    const count = (db.prepare('SELECT COUNT(*) as c FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?').get('s1') as { c: number }).c;
+    expect(count).toBe(0);
+  });
+});
+
+describe('GET /api/ruby-wasm/snippets/:id/verifications', () => {
+  it('動作確認履歴を新しい順で返す', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippet_verifications (snippet_id, ruby_version, verified, verified_at) VALUES (?, ?, ?, ?)`
+    ).run('s1', '3.4', 1, '2026-01-01 00:00:00');
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippet_verifications (snippet_id, ruby_version, verified, verified_at) VALUES (?, ?, ?, ?)`
+    ).run('s1', '3.5', 0, '2026-01-02 00:00:00');
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1/verifications', {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { verifications: { ruby_version: string; verified: number }[] };
+    expect(data.verifications.map((v) => v.ruby_version)).toEqual(['3.5', '3.4']);
+  });
+
+  it('他ユーザーのスニペットの履歴は取得できない(404)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'other-user', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1/verifications', {
       headers: { Authorization: auth },
     }, { JWT_SECRET, DB: wrapD1(db) });
 
