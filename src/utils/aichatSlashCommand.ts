@@ -1,4 +1,5 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
+import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -158,6 +159,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
+    '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -355,6 +357,27 @@ export function formatVectorizedAnswerCount(count: number, totalCount: number): 
  */
 export function formatSha256WasmResult(input: string, hex: string): string {
   return ['## SHA-256 (WASM)', `入力: ${input}`, `ハッシュ: ${hex}`].join('\n');
+}
+
+/**
+ * `/neko rubyver` の結果を表示する。/ruby-wasmページが読み込む
+ * @ruby/{X.Y}-wasm-wasiのビルドライン・パッケージバージョンは静的な定数
+ * (rubyWasm.tsのRUBY_WASM_BINARY_URL)から取れるが、実際のCRubyパッチ
+ * バージョン(例: 3.4.2の"2"の部分)はwasmバイナリ内部にしか無く、
+ * ブラウザでWASMを実際に実行しない限り(=Worker側では)取得できない。
+ * そのため「取得できない」ことを隠さず明記する(推測で埋めない)。
+ */
+export function formatRubyWasmVersionResult(info: RubyWasmVersionInfo): string {
+  return [
+    '## Ruby (WASM) バージョン',
+    '| 項目 | 値 |',
+    '|---|---|',
+    `| Rubyビルドライン | ${info.rubyBuildLine} |`,
+    `| @ruby/wasm-wasi パッケージ | ${info.wasmWasiPackageVersion} |`,
+    '',
+    `詳細な正確なパッチバージョン(例: ${info.rubyBuildLine}.x)はWASMバイナリ内部にのみ保持されており、` +
+      'ブラウザで実際にRubyを実行する /ruby-wasm ページ以外(このスラッシュコマンドを含む)からは取得できません。',
+  ].join('\n');
 }
 
 /**
@@ -1124,12 +1147,23 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatDynamicWorkerPingResult(outcome.value) };
   }
 
+  if (subcommand === 'rubyver') {
+    try {
+      return { handled: true, response: formatRubyWasmVersionResult(getRubyWasmVersionInfo()) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko rubyver の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko help\n詳細は /neko help を実行してください`,
   };
 }

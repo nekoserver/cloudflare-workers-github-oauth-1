@@ -19,6 +19,36 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 const RUBY_WASM_JS_URL = 'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
 const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
 
+export type RubyWasmVersionInfo = {
+  /** @ruby/{X.Y}-wasm-wasi のビルドライン(パッケージのメジャー.マイナー)。
+   *  実際のCRubyパッチバージョン(例: 3.4.2)はwasmバイナリ内部にしか無く、
+   *  Worker側からは(ブラウザでWASMを実行しない限り)取得できないため、
+   *  ここではパッケージ名に埋め込まれたビルドラインのみを返す。 */
+  rubyBuildLine: string;
+  /** @ruby/wasm-wasi (jsグルーコード)およびruby+stdlib.wasmパッケージのバージョン。 */
+  wasmWasiPackageVersion: string;
+};
+
+/**
+ * `@ruby/{X.Y}-wasm-wasi@{version}/dist/ruby+stdlib.wasm` 形式のURLから
+ * ビルドライン・パッケージバージョンを取り出す純粋関数。
+ * `/neko rubyver` スラッシュコマンドが表示する内容の元データになる。
+ */
+export function parseRubyWasmVersionInfo(binaryUrl: string): RubyWasmVersionInfo | null {
+  const match = binaryUrl.match(/@ruby\/(\d+(?:\.\d+)*)-wasm-wasi@([^/]+)\//);
+  if (!match) return null;
+  return { rubyBuildLine: match[1], wasmWasiPackageVersion: match[2] };
+}
+
+/** このリポジトリの/ruby-wasmページが実際に読み込んでいるRuby/WASMのバージョン情報。 */
+export function getRubyWasmVersionInfo(): RubyWasmVersionInfo {
+  const info = parseRubyWasmVersionInfo(RUBY_WASM_BINARY_URL);
+  if (!info) {
+    throw new Error(`RUBY_WASM_BINARY_URLの形式が想定と異なります: ${RUBY_WASM_BINARY_URL}`);
+  }
+  return info;
+}
+
 export function getRubyWasmPage(username: string): string {
   const safeUsername = escapeHtml(username);
 
