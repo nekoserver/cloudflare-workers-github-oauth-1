@@ -14,25 +14,22 @@ import { getAiChatPage } from './views/aichat';
 //   (2) 通常のAI応答やAI生成テーブルにも誤ってボタンが付いてしまう
 //   (3) ボタンを押してもモーダルが開かない、またはモーダル経由の登録が
 //       /api/countdownへのPOSTに繋がらない
-//   (4) メール登録・ログインが許可されていない(hasCfAuthAccess()がNG)人にも
-//       ボタンが表示され、権限の無い人に機能の存在を教えてしまう
 
 const minimalUser = {
   username: 'testuser',
   aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   modelColors: { '@cf/meta/llama-3.3-70b-instruct-fp8-fast': '#4f46e5' },
-  countdownRegisterAllowed: true,
 };
 
 const EMPTY_TLIST_RESPONSE = '## 次の予定一覧\n登録されている予定はありません(/countdownページから登録できます)';
 const NON_EMPTY_TLIST_RESPONSE = '## 次の予定一覧\n| 日時 | 予定 |\n|---|---|\n| 2026/09/01 09:00 | 会議 |';
 
-function buildPage(user: Record<string, unknown> = minimalUser): string {
-  return getAiChatPage(user as Parameters<typeof getAiChatPage>[0]);
+function buildPage(): string {
+  return getAiChatPage(minimalUser);
 }
 
-async function setupChatSubmitTest(apiResponse: Record<string, unknown>, message: string, user: Record<string, unknown> = minimalUser) {
-  const html = buildPage(user);
+async function setupChatSubmitTest(apiResponse: Record<string, unknown>, message: string) {
+  const html = buildPage();
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
   const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
   proto.getContext = () => ({
@@ -119,18 +116,5 @@ describe('AIチャット(DOM実動作): /neko tlist 応答バブルの「登録�
     expect(countdownCall).toBeTruthy();
     const body = JSON.parse((countdownCall![1] as RequestInit).body as string);
     expect(body.events[0].label).toBe('打ち合わせ');
-  });
-
-  it('メール登録・ログインが許可されていない(countdownRegisterAllowed=false)場合は次の予定が0件でもボタンを表示しない', async () => {
-    await setupChatSubmitTest(
-      { response: EMPTY_TLIST_RESPONSE, usedModel: 'local/neko', nekoResults: null },
-      '/neko tlist',
-      { ...minimalUser, countdownRegisterAllowed: false }
-    );
-
-    const heading = document.querySelector('.chat-bubble.assistant h2') as HTMLElement;
-    expect(heading).toBeTruthy();
-    expect(heading.textContent).toContain('次の予定一覧');
-    expect(heading.querySelector('.tlist-register-btn')).toBeNull();
   });
 });

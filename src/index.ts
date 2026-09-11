@@ -5113,7 +5113,6 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
-  const countdownRegisterAllowed = await hasCfAuthAccess(c.env.DB, user.sub);
   return c.html(getAiChatPage({
     name: user.name,
     username: user.sub,
@@ -5122,7 +5121,6 @@ app.get('/aichat', authMiddleware, async (c) => {
     fallbackModel,
     modelColors,
     aichatPreferMoondream: resolveAichatPreferMoondream(c.req.header('Cookie')),
-    countdownRegisterAllowed,
   }));
 });
 
