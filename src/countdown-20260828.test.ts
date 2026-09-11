@@ -26,14 +26,15 @@ async function makeAuthHeader(sub = 'test-user') {
 type Row = { id: number; user_id: string; label: string; target_at: string; group_id?: string | null };
 type StoredRow = Required<Row>;
 
-function createMockDb(initialRows: Row[] = []) {
+function createMockDb(initialRows: Row[] = [], options: { hasUserSession?: boolean } = {}) {
+  const hasUserSession = options.hasUserSession ?? true;
   const rows: StoredRow[] = initialRows.map((r) => ({ group_id: null, ...r }));
   let nextId = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : 1;
 
   function makeStatement(sql: string, params: unknown[]) {
     return {
       first: async () => {
-        if (sql.includes('user_sessions')) return { revoked_at: null };
+        if (sql.includes('user_sessions')) return hasUserSession ? { revoked_at: null } : null;
         return null;
       },
       all: async () => {
@@ -135,6 +136,24 @@ describe('POST /api/countdown', () => {
       { JWT_SECRET, DB: db }
     );
     expect(res.status).toBe(400);
+    expect(rows.length).toBe(0);
+  });
+
+  it('user_sessionsに登録が無いユーザー(cf-authのhasAccess判定と同じ基準でNG)は403で拒否し登録しない', async () => {
+    const { db, rows } = createMockDb([], { hasUserSession: false });
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/api/countdown',
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: '会議', targetAt: '2026-09-01T10:00:00.000Z' }),
+      },
+      { JWT_SECRET, DB: db }
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('この機能を利用する権限がありません');
     expect(rows.length).toBe(0);
   });
 });
@@ -309,9 +328,37 @@ describe('GET /countdown', () => {
     expect(html).toContain('id="countdownWidget"');
   });
 
+  it('user_sessionsに登録があるユーザーには登録ボタン(pickerSaveBtn)を表示する', async () => {
+    const { db } = createMockDb([], { hasUserSession: true });
+    const authHeader = await makeAuthHeader();
+    const res = await app.request('/countdown', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).toContain('id="pickerSaveBtn"');
+    expect(html).not.toContain('この機能を利用する権限がありません');
+  });
+
+  it('user_sessionsに登録が無いユーザー(cf-authのhasAccess判定と同じ基準でNG)には登録ボタンを表示せず、権限が無い旨のメッセージを表示する', async () => {
+    const { db } = createMockDb([], { hasUserSession: false });
+    const authHeader = await makeAuthHeader();
+    const res = await app.request('/countdown', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
+    const html = await res.text();
+    expect(html).not.toContain('id="pickerSaveBtn"');
+    expect(html).not.toContain('id="pickerAddRowBtn"');
+    expect(html).toContain('この機能を利用する権限がありません');
+  });
+
   it('script タグ内のJSに構文エラーがない', async () => {
     const { getCountdownPage } = await import('./views/countdown');
-    const html = getCountdownPage('tester');
+    const html = getCountdownPage('tester', true);
+    const scriptRe = /<script type="module">([\s\S]*?)<\/script>/;
+    const m = html.match(scriptRe);
+    expect(m).not.toBeNull();
+    expect(() => new Function(m![1])).not.toThrow();
+  });
+
+  it('hasAccess=falseの場合もscript タグ内のJSに構文エラーがない(登録ボタン非表示時の分岐)', async () => {
+    const { getCountdownPage } = await import('./views/countdown');
+    const html = getCountdownPage('tester', false);
     const scriptRe = /<script type="module">([\s\S]*?)<\/script>/;
     const m = html.match(scriptRe);
     expect(m).not.toBeNull();

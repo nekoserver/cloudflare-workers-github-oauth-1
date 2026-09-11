@@ -14,7 +14,7 @@ import { getCountdownPage } from './views/countdown';
 //   (3) 別の日付を開いたときに前回の追加行が残ってしまう
 
 function buildPage(): string {
-  return getCountdownPage('testuser');
+  return getCountdownPage('testuser', true);
 }
 
 async function setupPickerTest() {

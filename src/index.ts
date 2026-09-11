@@ -10390,7 +10390,8 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getCountdownPage(user.sub));
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  return c.html(getCountdownPage(user.sub, userSession !== null));
 });
 
 app.get('/api/countdown', authMiddleware, async (c) => {
@@ -10482,6 +10483,13 @@ export function parseCountdownRegistrationRequest(
 app.post('/api/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  // クライアント側でボタンを隠していても、直接APIを叩かれれば登録できて
+  // しまうため、cf-auth webhookのhasAccess判定(user_sessionsに登録が
+  // あるか)と同じ基準をサーバー側でも必ず再検証する。
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (userSession === null) {
+    return jsonUtf8({ error: 'この機能を利用する権限がありません' }, 403);
+  }
   let body: unknown;
   try {
     body = await c.req.json();
