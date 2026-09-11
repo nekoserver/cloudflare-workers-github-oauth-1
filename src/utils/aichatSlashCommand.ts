@@ -150,6 +150,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
+    '| /neko kana <全角カナ> | 全角カタカナを半角カナに変換します(カタカナ以外の文字はそのまま残ります) |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko factor -a <日数> | 今日から指定日数後までのYYYYMMDD日付のうち、WASM(Rust実装)で素数と判定された日を一覧表示します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
@@ -357,6 +358,51 @@ export function formatVectorizedAnswerCount(count: number, totalCount: number): 
  */
 export function formatSha256WasmResult(input: string, hex: string): string {
   return ['## SHA-256 (WASM)', `入力: ${input}`, `ハッシュ: ${hex}`].join('\n');
+}
+
+/**
+ * 全角カタカナ(濁点・半濁点付き含む)を半角カナ(JIS X 0201)に変換するテーブル。
+ * ヶ・ヵ等、半角カナに対応する文字が存在しないものは変換対象に含めない
+ * (変換せずそのまま残す)。
+ */
+const ZENKAKU_KATAKANA_TO_HANKAKU: Record<string, string> = {
+  ガ: 'ｶﾞ', ギ: 'ｷﾞ', グ: 'ｸﾞ', ゲ: 'ｹﾞ', ゴ: 'ｺﾞ',
+  ザ: 'ｻﾞ', ジ: 'ｼﾞ', ズ: 'ｽﾞ', ゼ: 'ｾﾞ', ゾ: 'ｿﾞ',
+  ダ: 'ﾀﾞ', ヂ: 'ﾁﾞ', ヅ: 'ﾂﾞ', デ: 'ﾃﾞ', ド: 'ﾄﾞ',
+  バ: 'ﾊﾞ', ビ: 'ﾋﾞ', ブ: 'ﾌﾞ', ベ: 'ﾍﾞ', ボ: 'ﾎﾞ',
+  パ: 'ﾊﾟ', ピ: 'ﾋﾟ', プ: 'ﾌﾟ', ペ: 'ﾍﾟ', ポ: 'ﾎﾟ',
+  ヴ: 'ｳﾞ',
+  ア: 'ｱ', イ: 'ｲ', ウ: 'ｳ', エ: 'ｴ', オ: 'ｵ',
+  カ: 'ｶ', キ: 'ｷ', ク: 'ｸ', ケ: 'ｹ', コ: 'ｺ',
+  サ: 'ｻ', シ: 'ｼ', ス: 'ｽ', セ: 'ｾ', ソ: 'ｿ',
+  タ: 'ﾀ', チ: 'ﾁ', ツ: 'ﾂ', テ: 'ﾃ', ト: 'ﾄ',
+  ナ: 'ﾅ', ニ: 'ﾆ', ヌ: 'ﾇ', ネ: 'ﾈ', ノ: 'ﾉ',
+  ハ: 'ﾊ', ヒ: 'ﾋ', フ: 'ﾌ', ヘ: 'ﾍ', ホ: 'ﾎ',
+  マ: 'ﾏ', ミ: 'ﾐ', ム: 'ﾑ', メ: 'ﾒ', モ: 'ﾓ',
+  ヤ: 'ﾔ', ユ: 'ﾕ', ヨ: 'ﾖ',
+  ラ: 'ﾗ', リ: 'ﾘ', ル: 'ﾙ', レ: 'ﾚ', ロ: 'ﾛ',
+  ワ: 'ﾜ', ヲ: 'ｦ', ン: 'ﾝ',
+  ァ: 'ｧ', ィ: 'ｨ', ゥ: 'ｩ', ェ: 'ｪ', ォ: 'ｫ',
+  ッ: 'ｯ', ャ: 'ｬ', ュ: 'ｭ', ョ: 'ｮ',
+  ー: 'ｰ',
+  '。': '｡', '「': '｢', '」': '｣', '、': '､', '・': '･',
+};
+
+/**
+ * 全角カタカナを半角カナ(JIS X 0201)に変換する。カタカナ以外の文字
+ * (ひらがな・漢字・英数字・半角文字等)はそのまま残す(変換対象外)。
+ */
+export function convertZenkakuKatakanaToHankaku(input: string): string {
+  let result = '';
+  for (const ch of input) {
+    result += ZENKAKU_KATAKANA_TO_HANKAKU[ch] ?? ch;
+  }
+  return result;
+}
+
+/** `/neko kana <全角カナ>` の変換結果を表示する。 */
+export function formatKanaConvertResult(input: string, converted: string): string {
+  return ['## 半角カナ変換', `入力: ${input}`, `変換結果: ${converted}`].join('\n');
 }
 
 /**
@@ -927,6 +973,14 @@ export async function interpretAichatSlashCommand(
         response: `❌ /neko 256 の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
+  }
+
+  if (subcommand === 'kana') {
+    const target = parts.slice(2).join(' ').trim();
+    if (!target) {
+      return { handled: true, response: '❌ 変換する文字列を指定してください: /neko kana <全角カナ>' };
+    }
+    return { handled: true, response: formatKanaConvertResult(target, convertZenkakuKatakanaToHankaku(target)) };
   }
 
   if (subcommand === 'factor') {
