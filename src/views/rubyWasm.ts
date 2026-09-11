@@ -206,27 +206,20 @@ export function getRubyWasmPage(username: string): string {
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
     .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
-    /* プレースホルダー行(読み込み中・0件・エラー)。swipe-rowでは無いので
+    /* プレースホルダー行(読み込み中・0件・エラー)。swipe行ではないので
        通常通りpaddingを持たせる。 */
-    .modal-snippet-list > li:not(.swipe-row) { padding: 10px 12px; color: var(--text-muted); }
-    .modal-snippet-list li.swipe-row { position: relative; overflow: hidden; }
-    .swipe-content {
-      position: relative; z-index: 1;
-      background: var(--card-bg); color: var(--text-primary);
-      padding: 10px 12px; cursor: pointer;
-      touch-action: pan-y; will-change: transform;
-    }
-    .swipe-content:hover { background: var(--bg-secondary); }
-    .swipe-content.selected { background: var(--bg-secondary); font-weight: 600; }
-    /* 削除エリアは行末(右端)に隠れており、左スワイプでswipe-contentが
-       左へずれることで現れる(固定幅・赤背景)。 */
-    .swipe-delete {
-      position: absolute; top: 0; right: 0; bottom: 0; width: 84px; z-index: 0;
-      background: #dc2626; color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-    }
+    .modal-snippet-list > li:not(.snippet-swipe-row) { padding: 10px 12px; color: var(--text-muted); }
     .modal-snippet-meta { font-size: 11px; color: var(--text-muted); }
+    .modal-snippet-list li.snippet-swipe-row { position: relative; overflow: hidden; padding: 0; touch-action: pan-y; }
+    .snippet-swipe-content { position: relative; z-index: 1; padding: 10px 12px; background: var(--card-bg); transition: transform 0.2s ease; }
+    .snippet-swipe-row.selected .snippet-swipe-content, .snippet-swipe-content:hover { background: var(--bg-secondary); }
+    .snippet-delete-btn { position: absolute; inset: 0 0 0 auto; width: 72px; border: none; background: var(--danger-color); color: #fff; font-weight: 700; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+    .snippet-swipe-row.swipe-open .snippet-delete-btn { opacity: 1; pointer-events: auto; }
+    .delete-confirm-box { width: min(380px, 92vw); text-align: center; }
+    .delete-confirm-box p { margin: 0 0 18px; color: var(--text-secondary); overflow-wrap: anywhere; }
+    .delete-confirm-actions { display: flex; justify-content: center; gap: 10px; }
+    .delete-confirm-actions button { border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+    .delete-confirm-ok { border: none; background: var(--danger-color); color: #fff; }
     #modalCodeTextarea { min-height: 140px; }
     #modalResultValue {
       font-family: 'Monaco', 'Courier New', monospace;
@@ -302,6 +295,17 @@ export function getRubyWasmPage(username: string): string {
     <div class="modal-box">
       <h2>実行結果 <button type="button" class="modal-close" id="resultModalCloseBtn">✕</button></h2>
       <div id="modalResultValue"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="deleteConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+    <div class="modal-box delete-confirm-box">
+      <h2 id="deleteConfirmTitle">スニペットを削除しますか？</h2>
+      <p id="deleteConfirmMessage"></p>
+      <div class="delete-confirm-actions">
+        <button type="button" class="delete-confirm-ok" id="deleteConfirmOkBtn">削除</button>
+        <button type="button" class="btn-secondary" id="deleteConfirmCancelBtn">キャンセル</button>
+      </div>
     </div>
   </div>
 
@@ -444,6 +448,11 @@ export function getRubyWasmPage(username: string): string {
     var resultModalOverlay = document.getElementById('resultModalOverlay');
     var resultModalCloseBtn = document.getElementById('resultModalCloseBtn');
     var modalResultValue = document.getElementById('modalResultValue');
+    var deleteConfirmOverlay = document.getElementById('deleteConfirmOverlay');
+    var deleteConfirmMessage = document.getElementById('deleteConfirmMessage');
+    var deleteConfirmOkBtn = document.getElementById('deleteConfirmOkBtn');
+    var deleteConfirmCancelBtn = document.getElementById('deleteConfirmCancelBtn');
+    var openSwipeRow = null;
 
     import('${RUBY_WASM_JS_URL}').then(function(mod) {
       return fetch('${RUBY_WASM_BINARY_URL}').then(function(res) {
@@ -471,106 +480,81 @@ export function getRubyWasmPage(username: string): string {
       overlay.classList.remove('open');
     }
 
-    // 一覧の行を左スワイプすると、行末(右端)から幅SWIPE_REVEAL_PXぶんの
-    // 赤色の削除エリアが現れる(iOS等でおなじみのスワイプ削除UI)。
-    // Pointer Eventsで実装しており、マウスでもタッチでも同じロジックで動く。
-    var SWIPE_REVEAL_PX = 84;
-    // 同時に開いていられるのは1行だけにする(複数行が開きっぱなしで
-    // 画面が煩雑になるのを防ぐ)。
-    var openSwipeContent = null;
-
-    function closeOpenSwipe() {
-      if (openSwipeContent) {
-        openSwipeContent.style.transform = 'translateX(0px)';
-        openSwipeContent.dataset.swipeX = '0';
-        openSwipeContent = null;
-      }
+    // 呼び出し側にはモーダル操作を漏らさず、ユーザーの承認結果だけを返す。
+    function requestDeleteConfirmation(title) {
+      deleteConfirmMessage.textContent = '「' + title + '」を削除すると元に戻せません。';
+      openModal(deleteConfirmOverlay);
+      return new Promise(function(resolve) {
+        var settled = false;
+        function finish(approved) {
+          if (settled) return;
+          settled = true;
+          closeModal(deleteConfirmOverlay);
+          deleteConfirmOkBtn.removeEventListener('click', approve);
+          deleteConfirmCancelBtn.removeEventListener('click', cancel);
+          deleteConfirmOverlay.removeEventListener('click', backdrop);
+          resolve(approved);
+        }
+        function approve() { finish(true); }
+        function cancel() { finish(false); }
+        function backdrop(e) { if (e.target === deleteConfirmOverlay) finish(false); }
+        deleteConfirmOkBtn.addEventListener('click', approve);
+        deleteConfirmCancelBtn.addEventListener('click', cancel);
+        deleteConfirmOverlay.addEventListener('click', backdrop);
+        deleteConfirmCancelBtn.focus();
+      });
     }
 
-    /**
-     * content(前景のテキスト部分)へのポインタ操作でswipe-deleteを
-     * 開閉する。横方向へのドラッグと判定した場合のみtransformを動かし、
-     * 縦スクロールの邪魔をしない(touch-action:pan-yと合わせて機能する)。
-     * ドラッグではない単純なタップは、行が開いていれば閉じるだけ、
-     * 閉じていればonTap()(スニペットの読み込み)を呼ぶ。
-     */
-    function attachSwipeToDelete(content, onTap) {
-      var startX = 0, startY = 0, startTranslate = 0, dragging = false, moved = false;
-
-      content.addEventListener('pointerdown', function(e) {
-        if (openSwipeContent && openSwipeContent !== content) closeOpenSwipe();
-        startX = e.clientX;
-        startY = e.clientY;
-        startTranslate = parseFloat(content.dataset.swipeX || '0');
-        dragging = true;
-        moved = false;
-        content.setPointerCapture(e.pointerId);
-      });
-
-      content.addEventListener('pointermove', function(e) {
+    // 任意の行・前面コンテンツ・アクションボタンに再利用できるスワイプ検知。
+    function setupSwipeReveal(row, content, actionButton) {
+      var startX = 0;
+      var dragging = false;
+      var moved = false;
+      var buttonWidth = 72;
+      function close() {
+        content.style.transform = 'translateX(0)';
+        row.classList.remove('swipe-open');
+        if (openSwipeRow === row) openSwipeRow = null;
+      }
+      function start(x) { startX = x; dragging = true; moved = false; }
+      function move(x) {
         if (!dragging) return;
-        var dx = e.clientX - startX;
-        var dy = e.clientY - startY;
-        if (!moved) {
-          if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
-          moved = true;
-        }
-        var next = Math.min(0, Math.max(-SWIPE_REVEAL_PX, startTranslate + dx));
-        content.style.transform = 'translateX(' + next + 'px)';
-        content.dataset.swipeX = String(next);
-      });
-
-      function endDrag() {
+        var dx = x - startX;
+        if (Math.abs(dx) < 4) return;
+        moved = true;
+        var base = row.classList.contains('swipe-open') ? -buttonWidth : 0;
+        content.style.transition = 'none';
+        content.style.transform = 'translateX(' + Math.max(-buttonWidth, Math.min(0, base + dx)) + 'px)';
+      }
+      function end(x) {
         if (!dragging) return;
         dragging = false;
-        if (!moved) {
-          // ドラッグではなく単純なタップだった場合。
-          if (startTranslate <= -SWIPE_REVEAL_PX / 2) {
-            closeOpenSwipe();
-          } else {
-            onTap();
-          }
-          return;
+        content.style.transition = 'transform 0.2s ease';
+        if (!moved) return;
+        var dx = x - startX;
+        var shouldOpen = row.classList.contains('swipe-open') ? dx < buttonWidth / 2 : -dx > 50;
+        if (!shouldOpen) { close(); return; }
+        if (openSwipeRow && openSwipeRow !== row) {
+          openSwipeRow.classList.remove('swipe-open');
+          var previous = openSwipeRow.querySelector('.snippet-swipe-content');
+          if (previous) previous.style.transform = 'translateX(0)';
         }
-        var x = parseFloat(content.dataset.swipeX || '0');
-        if (x < -SWIPE_REVEAL_PX / 2) {
-          content.style.transform = 'translateX(-' + SWIPE_REVEAL_PX + 'px)';
-          content.dataset.swipeX = String(-SWIPE_REVEAL_PX);
-          openSwipeContent = content;
-        } else {
-          content.style.transform = 'translateX(0px)';
-          content.dataset.swipeX = '0';
-          if (openSwipeContent === content) openSwipeContent = null;
-        }
+        content.style.transform = 'translateX(-' + buttonWidth + 'px)';
+        row.classList.add('swipe-open');
+        openSwipeRow = row;
       }
-      content.addEventListener('pointerup', endDrag);
-      content.addEventListener('pointercancel', endDrag);
-    }
-
-    function deleteSnippetRow(id, li) {
-      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id), {
-        method: 'DELETE',
-        credentials: 'same-origin'
-      })
-        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
-        .then(function(res) {
-          if (res.status !== 200) {
-            modalNote.textContent = '❌ 削除に失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
-            return;
-          }
-          if (openSwipeContent && li.contains(openSwipeContent)) openSwipeContent = null;
-          li.remove();
-          if (modalSnippetList.children.length === 0) {
-            modalSnippetList.innerHTML = '<li>保存済みスニペットはありません</li>';
-          }
-        })
-        .catch(function(err) {
-          modalNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
-        });
+      row.addEventListener('touchstart', function(e) { start(e.touches[0].clientX); }, { passive: true });
+      row.addEventListener('touchmove', function(e) { move(e.touches[0].clientX); }, { passive: true });
+      row.addEventListener('touchend', function(e) { end(e.changedTouches[0].clientX); });
+      content.addEventListener('mousedown', function(e) { if (e.button === 0) start(e.clientX); });
+      content.addEventListener('mousemove', function(e) { if (dragging) move(e.clientX); });
+      content.addEventListener('mouseup', function(e) { end(e.clientX); });
+      content.addEventListener('mouseleave', function(e) { if (dragging) end(e.clientX); });
+      actionButton.addEventListener('click', function(e) { e.stopPropagation(); });
     }
 
     function loadModalSnippetList() {
-      openSwipeContent = null;
+      openSwipeRow = null;
       modalSnippetList.innerHTML = '<li>読み込み中…</li>';
       fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
@@ -583,11 +567,15 @@ export function getRubyWasmPage(username: string): string {
           }
           snippets.forEach(function(s) {
             var li = document.createElement('li');
-            li.className = 'swipe-row';
-
+            var row = li;
+            li.className = 'snippet-swipe-row';
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'snippet-delete-btn';
+            deleteBtn.textContent = '削除';
+            deleteBtn.setAttribute('aria-label', s.title + 'を削除');
             var content = document.createElement('div');
-            content.className = 'swipe-content';
-            content.dataset.swipeX = '0';
+            content.className = 'snippet-swipe-content';
             var titleSpan = document.createElement('div');
             titleSpan.textContent = s.title;
             var metaSpan = document.createElement('div');
@@ -595,21 +583,11 @@ export function getRubyWasmPage(username: string): string {
             metaSpan.textContent = 'Ruby ' + s.ruby_version + ' ・ ' + s.created_at;
             content.appendChild(titleSpan);
             content.appendChild(metaSpan);
-
-            var deleteArea = document.createElement('div');
-            deleteArea.className = 'swipe-delete';
-            deleteArea.textContent = '🗑 削除';
-            deleteArea.addEventListener('click', function() {
-              deleteSnippetRow(s.id, li);
-            });
-
+            li.appendChild(deleteBtn);
             li.appendChild(content);
-            li.appendChild(deleteArea);
-            modalSnippetList.appendChild(li);
-
-            attachSwipeToDelete(content, function() {
-              Array.prototype.forEach.call(modalSnippetList.querySelectorAll('.swipe-content'), function(el) { el.classList.remove('selected'); });
-              content.classList.add('selected');
+            content.addEventListener('click', function() {
+              Array.prototype.forEach.call(modalSnippetList.children, function(el) { el.classList.remove('selected'); });
+              li.classList.add('selected');
               modalNote.textContent = '読み込み中…';
               fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(s.id), { credentials: 'same-origin' })
                 .then(function(r) { return r.json().then(function(dd) { return { status: r.status, data: dd }; }); })
@@ -627,6 +605,31 @@ export function getRubyWasmPage(username: string): string {
                   modalNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
                 });
             });
+            setupSwipeReveal(li, content, deleteBtn);
+            deleteBtn.addEventListener('click', function() {
+              requestDeleteConfirmation(s.title).then(function(approved) {
+                if (!approved) return;
+                deleteBtn.disabled = true;
+                modalNote.textContent = '削除中…';
+                fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(s.id), {
+                  method: 'DELETE', credentials: 'same-origin'
+                }).then(function(r) {
+                  return r.json().then(function(dd) { return { status: r.status, data: dd }; });
+                }).then(function(res) {
+                  if (res.status !== 200 || !res.data || res.data.ok !== true) {
+                    throw new Error(res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+                  }
+                  row.remove();
+                  modalCodeTextarea.value = '';
+                  modalNote.textContent = '✅ 「' + s.title + '」を削除しました';
+                  if (!modalSnippetList.children.length) modalSnippetList.innerHTML = '<li>保存済みスニペットはありません</li>';
+                }).catch(function(err) {
+                  deleteBtn.disabled = false;
+                  modalNote.textContent = '❌ 削除に失敗しました: ' + ((err && err.message) || '不明');
+                });
+              });
+            });
+            modalSnippetList.appendChild(li);
           });
         })
         .catch(function() {

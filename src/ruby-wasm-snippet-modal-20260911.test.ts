@@ -100,14 +100,11 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     expect(html).not.toContain('id="snippetReloadBtn"');
   });
 
-  it('モーダル内のテキスト(タイトル・一覧項目)にテーマの文字色が明示指定されている(固定色任せで黒地に黒文字等にならないようにするため)', () => {
+  it('モーダル内のテキスト(タイトル)にテーマの文字色が明示指定されている(固定色任せで黒地に黒文字等にならないようにするため)', () => {
     const html = getRubyWasmPage('tester');
     expect(html).toContain('.modal-box {');
     const modalBoxRule = html.slice(html.indexOf('.modal-box {'), html.indexOf('.modal-box {') + 300);
     expect(modalBoxRule).toContain('color: var(--text-primary)');
-    expect(html).toContain('.swipe-content {');
-    const swipeContentRule = html.slice(html.indexOf('.swipe-content {'), html.indexOf('.swipe-content {') + 200);
-    expect(swipeContentRule).toContain('color: var(--text-primary)');
   });
 
   it('保存ボタンは実行成功時のみ有効化し、保存成功後は重複登録防止のため無効化したままにする', () => {
@@ -127,45 +124,7 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     expect(saveBlock).toContain('if (!saveSucceeded) saveBtn.disabled = false;');
   });
 
-  it('一覧モーダルの各行はswipe-content(前景)とswipe-delete(赤色の削除エリア)を持つ構造になっている', () => {
-    const html = getRubyWasmPage('tester');
-    expect(html).toContain("li.className = 'swipe-row';");
-    expect(html).toContain("content.className = 'swipe-content';");
-    expect(html).toContain("deleteArea.className = 'swipe-delete';");
-    expect(html).toContain('.swipe-delete {');
-    const swipeDeleteRule = html.slice(html.indexOf('.swipe-delete {'), html.indexOf('.swipe-delete {') + 260);
-    expect(swipeDeleteRule).toContain('right: 0');
-    expect(swipeDeleteRule).toContain('background: #dc2626');
-  });
-
-  it('削除エリアをクリックするとDELETE /api/ruby-wasm/snippets/:idを呼び、成功したら行をDOMから取り除く', () => {
-    const html = getRubyWasmPage('tester');
-    expect(html).toContain('function deleteSnippetRow(id, li)');
-    const idx = html.indexOf('function deleteSnippetRow(id, li)');
-    const block = html.slice(idx, idx + 700);
-    expect(block).toContain("method: 'DELETE'");
-    expect(block).toContain("fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id)");
-    expect(block).toContain('li.remove();');
-    expect(html).toContain('deleteArea.addEventListener(\'click\', function() {\n              deleteSnippetRow(s.id, li);\n            });');
-  });
-
-  it('左へのドラッグでswipe-contentのtransformを動かし、ドラッグ量に応じて開閉をスナップする(Pointer Events、固定幅SWIPE_REVEAL_PXを使用)', () => {
-    const html = getRubyWasmPage('tester');
-    expect(html).toContain('var SWIPE_REVEAL_PX = 84;');
-    expect(html).toContain('function attachSwipeToDelete(content, onTap)');
-    expect(html).toContain("content.addEventListener('pointerdown'");
-    expect(html).toContain("content.addEventListener('pointermove'");
-    expect(html).toContain("content.addEventListener('pointerup', endDrag);");
-    expect(html).toContain("content.style.transform = 'translateX(-' + SWIPE_REVEAL_PX + 'px)';");
-  });
-
-  it('タップ(ドラッグでない操作)は、開いている行なら閉じるだけ、閉じている行ならonTap(スニペット読み込み)を呼ぶ', () => {
-    const html = getRubyWasmPage('tester');
-    const idx = html.indexOf('function endDrag()');
-    expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 500);
-    expect(block).toContain('if (!moved) {');
-    expect(block).toContain('closeOpenSwipe();');
-    expect(block).toContain('onTap();');
-  });
+  // 一覧モーダルの行のスワイプ削除UI(swipe-to-delete)自体の構造・挙動は
+  // ./ruby-wasm-snippet-swipe-delete-20260911.test.ts で検証する
+  // (確認モーダル付きの実装に一本化されたため、こちらでは重複させない)。
 });
