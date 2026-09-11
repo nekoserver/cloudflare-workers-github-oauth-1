@@ -62,6 +62,16 @@ describe('/kimi-code ページ', () => {
     const html = buildPage();
     expect(html).toContain('従量課金');
   });
+
+  it('生成結果を安全なMarkdown HTMLとして描画し、生Markdownは後続操作用に保持する', () => {
+    const html = buildPage();
+    expect(html).toContain('function parseMd(src)');
+    expect(html).toContain('id="kimiOutput" class="preview-area"');
+    expect(html).toContain('outputEl.innerHTML = parseMd(d.code)');
+    expect(html).toContain('var latestOutput =');
+    expect(html).toContain('navigator.clipboard.writeText(latestOutput)');
+    expect(html).toContain('var code = latestOutput');
+  });
 });
 
 describe('POST /api/kimi-code/generate', () => {
