@@ -110,3 +110,20 @@ export function filterCountdownEventsByDate<T extends { target_at: string }>(
     return toLocalDateKey(at) === dateStr;
   });
 }
+
+/** cf-authのセッション有効期限(nekoserver/cf-authのsrc/session.tsのSESSION_TTL)。
+ *  この値が変わったら合わせて更新すること。 */
+export const CF_AUTH_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** /countdownで自動登録するcf-authの期限カウントダウンの固定ラベル。 */
+export const CF_AUTH_DEADLINE_LABEL = 'cf-auth 期限';
+
+/**
+ * cf-authへのログイン日時(loginAt)から、cf-auth側のセッション有効期限
+ * (CF_AUTH_SESSION_TTL_MS)ぶん先の日時をISO 8601形式で返す。
+ * /webhook/cf-authのログイン通知を受けるたびに、countdown_eventsへ
+ * 「cf-auth 期限」ラベルで自動登録・更新するために使う。
+ */
+export function computeCfAuthDeadlineTargetAt(loginAt: Date): string {
+  return new Date(loginAt.getTime() + CF_AUTH_SESSION_TTL_MS).toISOString();
+}

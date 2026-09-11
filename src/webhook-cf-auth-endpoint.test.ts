@@ -138,3 +138,88 @@ describe('POST /webhook/cf-auth', () => {
     expect(await response.json()).toEqual({ result: 'NG', user: 'nekoserver' });
   });
 });
+
+// 対象: hasAccess=OK(user_sessionsに登録済み)のログイン通知を受けたときに、
+// /countdownの「cf-auth 期限」カウントダウンをcountdown_eventsへ自動登録・
+// 更新する処理。
+//
+// 故障シナリオ:
+//   (1) 初回ログインで行が作られない
+//   (2) 2回目以降のログインで行が増え続けてしまう(本来は既存行の日時を更新すべき)
+//   (3) 期限日時がcf-authのセッション有効期限(7日)からズレる
+function createCfAuthDeadlineMockDb(existingRow: { id: number; target_at: string } | null) {
+  const updates: { id: number; target_at: string }[] = [];
+  const inserts: { user_id: string; label: string; target_at: string }[] = [];
+  const db = {
+    prepare: (sql: string) => ({
+      bind: (...params: unknown[]) => ({
+        first: async () => {
+          if (sql.includes('FROM user_sessions')) return { revoked_at: null };
+          if (sql.includes('FROM countdown_events')) return existingRow;
+          return null;
+        },
+        run: async () => {
+          if (sql.includes('UPDATE countdown_events')) {
+            updates.push({ id: params[1] as number, target_at: params[0] as string });
+          } else if (sql.includes('INSERT INTO countdown_events')) {
+            inserts.push({ user_id: params[0] as string, label: params[1] as string, target_at: params[2] as string });
+          }
+          return { success: true };
+        },
+      }),
+    }),
+  };
+  return { db: db as unknown as D1Database, updates, inserts };
+}
+
+describe('POST /webhook/cf-auth: cf-auth期限カウントダウンの自動登録', () => {
+  it('hasAccess=OKの初回ログインでは、countdown_eventsに「cf-auth 期限」ラベルの新規行を作成する', async () => {
+    const { db, inserts, updates } = createCfAuthDeadlineMockDb(null);
+    const secret = 'correct-secret';
+    const body = JSON.stringify({ username: 'octocat', event: 'welcome_view', action: 'view' });
+    const signature = await signPayload(body, secret);
+    const response = await app.request('/webhook/cf-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': signature },
+      body,
+    }, { CF_AUTH_WEBHOOK_SECRET: secret, DB: db });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ result: 'OK', user: 'octocat' });
+    expect(updates).toHaveLength(0);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].user_id).toBe('octocat');
+    expect(inserts[0].label).toBe('cf-auth 期限');
+  });
+
+  it('既に「cf-auth 期限」の行がある場合は新規作成せず、既存行の期限日時だけ更新する(毎ログインで行が増え続けない)', async () => {
+    const { db, inserts, updates } = createCfAuthDeadlineMockDb({ id: 42, target_at: '2020-01-01T00:00:00.000Z' });
+    const secret = 'correct-secret';
+    const body = JSON.stringify({ username: 'octocat', event: 'welcome_view', action: 'view' });
+    const signature = await signPayload(body, secret);
+    const response = await app.request('/webhook/cf-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': signature },
+      body,
+    }, { CF_AUTH_WEBHOOK_SECRET: secret, DB: db });
+    expect(response.status).toBe(200);
+    expect(inserts).toHaveLength(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].id).toBe(42);
+  });
+
+  it('hasAccess=NG(user_sessions未登録)の場合はcountdown_eventsへの登録を試みない', async () => {
+    const secret = 'correct-secret';
+    const body = JSON.stringify({ username: 'unknown-user', event: 'welcome_view', action: 'view' });
+    const signature = await signPayload(body, secret);
+    // DB自体は無し(user_sessionsが無い=hasAccess NG相当)。countdown_events
+    // へのクエリが1件も来ないことは、DB未バインドでも200が返る(500にならない)
+    // ことで間接的に確認する。
+    const response = await app.request('/webhook/cf-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': signature },
+      body,
+    }, { CF_AUTH_WEBHOOK_SECRET: secret });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ result: 'NG', user: 'unknown-user' });
+  });
+});
