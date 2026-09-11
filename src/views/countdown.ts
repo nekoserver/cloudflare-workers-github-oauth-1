@@ -402,7 +402,7 @@ export function getCountdownPage(username: string, hasAccess: boolean): string {
       var labelInput = document.createElement('input');
       labelInput.type = 'text';
       labelInput.className = 'picker-row-label';
-      labelInput.placeholder = '予定の名前(例: cf-auth ログイン)';
+      labelInput.placeholder = '予定の名前(例: cf-auth 期限まで)';
       labelInput.maxLength = 100;
 
       var removeBtn = document.createElement('button');
