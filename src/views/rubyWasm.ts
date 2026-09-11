@@ -170,6 +170,20 @@ export function getRubyWasmPage(username: string): string {
     }
     .result-value.error { color: #991b1b; }
     .theme-toggle-inline { display: flex; align-items: center; }
+    .snippet-picker { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .snippet-picker select {
+      flex: 1; min-width: 200px;
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 8px 10px; font-size: 13px;
+    }
+    .snippet-picker button {
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 8px 14px; font-size: 13px; cursor: pointer;
+    }
+    .snippet-picker button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .snippet-note { font-size: 11px; color: var(--text-muted); margin: -6px 0 14px; }
   </style>
 </head>
 <body>
@@ -204,6 +218,12 @@ export function getRubyWasmPage(username: string): string {
       <div class="subtitle">CRubyの公式WASM(WASI)ビルドをブラウザ上のWebAssemblyで実行します。</div>
       <div class="notice">初回読み込みはRuby本体(約30MB、jsDelivr CDN配信)を取得するため数秒〜数十秒かかります。</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
+      <div class="snippet-picker">
+        <select id="snippetSelect"><option value="">保存済みコードを読み込む…</option></select>
+        <button type="button" id="snippetLoadBtn" disabled>読み込む</button>
+        <button type="button" id="snippetReloadBtn">🔄</button>
+      </div>
+      <div class="snippet-note" id="snippetNote">/kimi-code ページの「コードを保管」ボタンで保存したRubyコードをここから呼び出せます</div>
       <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
       <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
       <div class="result-block" id="resultBlock" style="display:none;">
@@ -234,6 +254,71 @@ export function getRubyWasmPage(username: string): string {
     var resultBlock = document.getElementById('resultBlock');
     var resultValue = document.getElementById('resultValue');
     var rubyVM = null;
+
+    var snippetSelect = document.getElementById('snippetSelect');
+    var snippetLoadBtn = document.getElementById('snippetLoadBtn');
+    var snippetReloadBtn = document.getElementById('snippetReloadBtn');
+    var snippetNote = document.getElementById('snippetNote');
+    var snippetNoteDefault = snippetNote.textContent;
+
+    function loadSnippetList() {
+      snippetSelect.innerHTML = '<option value="">読み込み中…</option>';
+      snippetSelect.disabled = true;
+      snippetLoadBtn.disabled = true;
+      fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var snippets = (d && d.snippets) || [];
+          snippetSelect.innerHTML = '';
+          var placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = snippets.length === 0
+            ? '保存済みコードはありません'
+            : '保存済みコードを読み込む…';
+          snippetSelect.appendChild(placeholder);
+          snippets.forEach(function(s) {
+            var opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.title + '(' + s.created_at + ')';
+            snippetSelect.appendChild(opt);
+          });
+          snippetSelect.disabled = false;
+        })
+        .catch(function() {
+          snippetSelect.innerHTML = '<option value="">一覧の取得に失敗しました</option>';
+        });
+    }
+
+    snippetSelect.addEventListener('change', function() {
+      snippetLoadBtn.disabled = !snippetSelect.value;
+    });
+
+    snippetLoadBtn.addEventListener('click', function() {
+      var id = snippetSelect.value;
+      if (!id) return;
+      snippetNote.textContent = '読み込み中…';
+      snippetLoadBtn.disabled = true;
+      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id), { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (res.status === 200 && res.data && typeof res.data.code === 'string') {
+            inputCode.value = res.data.code;
+            snippetNote.textContent = '✅ 「' + res.data.title + '」を読み込みました';
+          } else {
+            snippetNote.textContent = '❌ 読み込みに失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+          }
+        })
+        .catch(function(err) {
+          snippetNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+        })
+        .then(function() {
+          snippetLoadBtn.disabled = !snippetSelect.value;
+          setTimeout(function() { snippetNote.textContent = snippetNoteDefault; }, 4000);
+        });
+    });
+
+    snippetReloadBtn.addEventListener('click', loadSnippetList);
+    loadSnippetList();
 
     import('${RUBY_WASM_JS_URL}').then(function(mod) {
       return fetch('${RUBY_WASM_BINARY_URL}').then(function(res) {
