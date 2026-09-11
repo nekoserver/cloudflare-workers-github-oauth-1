@@ -7,7 +7,7 @@ import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript
  * ログイン中は画面右下に常時表示するカウントダウンウィジェットで残り時間を確認できる。
  * 実データはD1のcountdown_eventsテーブル(migration 0115)。
  */
-export function getCountdownPage(username: string): string {
+export function getCountdownPage(username: string, hasAccess: boolean): string {
   const safeUsername = escapeHtml(username);
 
   return `<!DOCTYPE html>
@@ -262,8 +262,8 @@ export function getCountdownPage(username: string): string {
       <div class="picker-panel" id="pickerPanel">
         <div class="picker-date-label" id="pickerDateLabel"></div>
         <div id="pickerRows"></div>
-        <button type="button" class="picker-add-row-btn" id="pickerAddRowBtn">+ この日にもう1件追加</button>
-        <button type="button" class="save-btn" id="pickerSaveBtn">この日時で登録する</button>
+        ${hasAccess ? `<button type="button" class="picker-add-row-btn" id="pickerAddRowBtn">+ この日にもう1件追加</button>
+        <button type="button" class="save-btn" id="pickerSaveBtn">この日時で登録する</button>` : `<div class="picker-error" style="display:block;">この機能を利用する権限がありません(メール登録・ログインが許可されているユーザーのみ利用できます)</div>`}
         <div class="picker-error" id="pickerError"></div>
       </div>
     </div>
@@ -402,7 +402,7 @@ export function getCountdownPage(username: string): string {
       var labelInput = document.createElement('input');
       labelInput.type = 'text';
       labelInput.className = 'picker-row-label';
-      labelInput.placeholder = '予定の名前(例: 会議)';
+      labelInput.placeholder = '予定の名前(例: cf-auth ログイン)';
       labelInput.maxLength = 100;
 
       var removeBtn = document.createElement('button');
@@ -424,15 +424,17 @@ export function getCountdownPage(username: string): string {
       return row;
     }
 
-    pickerAddRowBtn.addEventListener('click', function() { addPickerRow(); });
+    if (pickerAddRowBtn) pickerAddRowBtn.addEventListener('click', function() { addPickerRow(); });
 
     function openPicker(dateStr) {
       selectedDateStr = dateStr;
       var parts = dateStr.split('-');
       pickerDateLabel.textContent = parts[0] + '年' + Number(parts[1]) + '月' + Number(parts[2]) + '日の予定を登録';
-      pickerRows.innerHTML = '';
-      addPickerRow();
-      pickerError.style.display = 'none';
+      if (pickerSaveBtn) {
+        pickerRows.innerHTML = '';
+        addPickerRow();
+        pickerError.style.display = 'none';
+      }
       pickerPanel.classList.add('open');
     }
 
@@ -472,7 +474,7 @@ export function getCountdownPage(username: string): string {
       return items;
     }
 
-    pickerSaveBtn.addEventListener('click', function() {
+    if (pickerSaveBtn) pickerSaveBtn.addEventListener('click', function() {
       if (!selectedDateStr) return;
       pickerError.style.display = 'none';
       var events = collectPickerEvents();
