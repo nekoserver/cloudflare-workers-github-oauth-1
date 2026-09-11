@@ -1,3 +1,5 @@
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+
 function escKimi(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -26,6 +28,11 @@ export function getKimiCodePage(username: string): string {
   --danger-bg:   light-dark(#fff0ee, #2d0e0a);
   --warn:        light-dark(#9a6700, #d29922);
   --warn-bg:     light-dark(#fff8c5, #2b2111);
+  --text-primary: var(--text-strong);
+  --border-color: var(--border);
+  --accent-color: var(--accent);
+  --bg-secondary: var(--bg);
+  --code-bg: light-dark(#f6f8fa, #0d1117);
 }
 * { box-sizing: border-box; }
 body {
@@ -71,11 +78,10 @@ textarea:focus { border-color: var(--accent); }
   background: var(--danger-bg); color: var(--danger); font-size: 12px; white-space: pre-wrap;
 }
 .error-msg.show { display: block; }
-#kimiOutput {
-  white-space: pre-wrap; word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12.5px; min-height: 40px;
-}
+#kimiOutput { word-break: break-word; font-size: 12.5px; min-height: 40px; }
+#kimiOutput > :last-child { margin-bottom: 0; }
+#kimiOutput img { max-width: 100%; height: auto; }
+${getMarkdownPreviewCSS()}
 .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
 .token-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 .usage-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
@@ -111,7 +117,7 @@ textarea:focus { border-color: var(--accent); }
     <button class="btn sm" id="kimiSaveRubyBtn" style="float:right;margin-left:6px;">💎 コードを保管</button>
     <button class="btn sm copy-btn" id="kimiCopyBtn" style="float:right;">コピー</button>
   </div>
-  <div id="kimiOutput"></div>
+  <div id="kimiOutput" class="preview-area"></div>
   <div class="token-note" id="kimiTokenNote"></div>
   <div class="token-note" id="kimiSaveRubyNote"></div>
   <div class="token-note" id="kimiSaveMarkdownNote"></div>
@@ -141,6 +147,7 @@ textarea:focus { border-color: var(--accent); }
 </div>
 
 <script>
+${getMarkdownParserScript()}
 (function() {
   var systemPromptEl = document.getElementById('kimiSystemPrompt');
   var promptEl = document.getElementById('kimiPrompt');
@@ -150,6 +157,9 @@ textarea:focus { border-color: var(--accent); }
   var tokenNoteEl = document.getElementById('kimiTokenNote');
   var errorEl = document.getElementById('kimiErrorMsg');
   var copyBtn = document.getElementById('kimiCopyBtn');
+  // 描画後のDOMからMarkdownを復元するとフェンス等が失われるため、APIの
+  // 生レスポンスはコピー・レビュー・保存用として別に保持する。
+  var latestOutput = '';
 
   function formatTokenNote(usage) {
     if (usage.input_tokens == null && usage.output_tokens == null) return '';
@@ -174,7 +184,8 @@ textarea:focus { border-color: var(--accent); }
       return;
     }
     clearError();
-    outputEl.textContent = '';
+    latestOutput = '';
+    outputEl.innerHTML = '';
     generateBtn.disabled = true;
     statusEl.textContent = '生成中...';
     fetch('/api/kimi-code/generate', {
@@ -195,7 +206,8 @@ textarea:focus { border-color: var(--accent); }
           showError('生成に失敗しました: HTTP ' + res.status + ' / ' + String(res.text).slice(0, 200));
           return;
         }
-        outputEl.textContent = d.code;
+        latestOutput = d.code;
+        outputEl.innerHTML = parseMd(d.code);
         tokenNoteEl.textContent = formatTokenNote(d);
         gemmaToolbar.style.display = 'flex';
         gemmaPanel.style.display = 'none';
@@ -231,7 +243,7 @@ textarea:focus { border-color: var(--accent); }
   }
 
   gemmaBtn.addEventListener('click', function() {
-    var code = outputEl.textContent || '';
+    var code = latestOutput;
     if (!code.trim()) {
       showGemmaError('先にコードを生成してください');
       return;
@@ -313,7 +325,7 @@ textarea:focus { border-color: var(--accent); }
   loadUsage();
 
   copyBtn.addEventListener('click', function() {
-    navigator.clipboard.writeText(outputEl.textContent || '').then(function() {
+    navigator.clipboard.writeText(latestOutput).then(function() {
       var orig = copyBtn.textContent;
       copyBtn.textContent = 'コピー済';
       copyBtn.classList.add('copied');
@@ -325,7 +337,7 @@ textarea:focus { border-color: var(--accent); }
   var saveRubyNoteEl = document.getElementById('kimiSaveRubyNote');
 
   saveRubyBtn.addEventListener('click', function() {
-    var code = outputEl.textContent || '';
+    var code = latestOutput;
     if (!code.trim()) {
       saveRubyNoteEl.textContent = '❌ 先にコードを生成してください';
       return;
@@ -360,7 +372,7 @@ textarea:focus { border-color: var(--accent); }
   var saveMarkdownNoteEl = document.getElementById('kimiSaveMarkdownNote');
 
   saveMarkdownBtn.addEventListener('click', function() {
-    var code = outputEl.textContent || '';
+    var code = latestOutput;
     if (!code.trim()) {
       saveMarkdownNoteEl.textContent = '❌ 先にコードを生成してください';
       return;
