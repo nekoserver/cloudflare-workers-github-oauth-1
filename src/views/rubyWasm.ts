@@ -184,6 +184,12 @@ export function getRubyWasmPage(username: string): string {
     }
     .snippet-picker button:disabled { opacity: 0.5; cursor: not-allowed; }
     .snippet-note { font-size: 11px; color: var(--text-muted); margin: -6px 0 14px; }
+    .verify-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
+    .verify-row button {
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 5px 10px; font-size: 12px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -229,6 +235,12 @@ export function getRubyWasmPage(username: string): string {
       <div class="result-block" id="resultBlock" style="display:none;">
         <div class="result-label">実行結果</div>
         <div class="result-value" id="resultValue"></div>
+        <div class="verify-row" id="verifyRow" style="display:none;">
+          <span>保存済みコードの動作確認を記録:</span>
+          <button type="button" id="verifyOkBtn">👍 動いた</button>
+          <button type="button" id="verifyNgBtn">👎 動かなかった</button>
+          <span id="verifyNote"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -260,6 +272,17 @@ export function getRubyWasmPage(username: string): string {
     var snippetReloadBtn = document.getElementById('snippetReloadBtn');
     var snippetNote = document.getElementById('snippetNote');
     var snippetNoteDefault = snippetNote.textContent;
+    var verifyRow = document.getElementById('verifyRow');
+    var verifyOkBtn = document.getElementById('verifyOkBtn');
+    var verifyNgBtn = document.getElementById('verifyNgBtn');
+    var verifyNote = document.getElementById('verifyNote');
+    // 読み込んだ保存済みスニペットのid。コードを手動編集したら、実行結果が
+    // もう「保存されたコードそのもの」の動作確認ではなくなるためクリアする。
+    var loadedSnippetId = null;
+    inputCode.addEventListener('input', function() {
+      loadedSnippetId = null;
+      verifyRow.style.display = 'none';
+    });
 
     function loadSnippetList() {
       snippetSelect.innerHTML = '<option value="">読み込み中…</option>';
@@ -303,6 +326,8 @@ export function getRubyWasmPage(username: string): string {
         .then(function(res) {
           if (res.status === 200 && res.data && typeof res.data.code === 'string') {
             inputCode.value = res.data.code;
+            loadedSnippetId = res.data.id;
+            verifyRow.style.display = 'none';
             snippetNote.textContent = '✅ 「' + res.data.title + '」を読み込みました';
           } else {
             snippetNote.textContent = '❌ 読み込みに失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
@@ -359,7 +384,44 @@ export function getRubyWasmPage(username: string): string {
         resultValue.classList.add('error');
         resultValue.textContent = err && err.message ? err.message : String(err);
       }
+      if (loadedSnippetId) {
+        verifyNote.textContent = '';
+        verifyRow.style.display = 'flex';
+      } else {
+        verifyRow.style.display = 'none';
+      }
     });
+
+    function recordVerification(verified) {
+      if (!loadedSnippetId) return;
+      verifyOkBtn.disabled = true;
+      verifyNgBtn.disabled = true;
+      verifyNote.textContent = '記録中...';
+      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(loadedSnippetId) + '/verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ verified: verified })
+      })
+        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (res.status === 200) {
+            verifyNote.textContent = '✅ Ruby ' + res.data.rubyVersion + ' 系で' + (verified ? '動作した' : '動作しなかった') + '記録を保存しました';
+          } else {
+            verifyNote.textContent = '❌ ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+          }
+        })
+        .catch(function(err) {
+          verifyNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+        })
+        .then(function() {
+          verifyOkBtn.disabled = false;
+          verifyNgBtn.disabled = false;
+        });
+    }
+
+    verifyOkBtn.addEventListener('click', function() { recordVerification(true); });
+    verifyNgBtn.addEventListener('click', function() { recordVerification(false); });
   </script>
 </body>
 </html>`;
