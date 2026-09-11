@@ -14,7 +14,7 @@ import { getCountdownPage } from './views/countdown';
 //       いずれの挙動になるかが検証されていない
 
 function buildPage(): string {
-  return getCountdownPage('testuser', true);
+  return getCountdownPage('testuser');
 }
 
 async function setupPageTest(events: { id: number; label: string; target_at: string }[]) {
