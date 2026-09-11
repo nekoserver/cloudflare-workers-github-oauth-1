@@ -374,7 +374,11 @@ export function getRubyWasmPage(username: string): string {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ code: code })
+        // 保存ボタンはrunRubyCode()が成功した場合にのみ表示される(runBtnの
+        // クリックハンドラ参照)。実際にRubyとして実行できたことを
+        // サーバー側へ伝え、構文ヒューリスティックによる誤判定で保存を
+        // 拒否されないようにする。
+        body: JSON.stringify({ code: code, executedSuccessfully: true })
       })
         .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
         .then(function(res) {
