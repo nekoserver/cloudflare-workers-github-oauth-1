@@ -22,7 +22,7 @@ async function makeAuthHeader(sub: string) {
 }
 
 function wrapD1(db: DatabaseSync) {
-  return {
+  const d1 = {
     prepare(sql: string) {
       const stmt = db.prepare(sql);
       const makeChain = (args: unknown[]) => ({
@@ -44,7 +44,11 @@ function wrapD1(db: DatabaseSync) {
       });
       return makeChain([]);
     },
+    async batch(statements: Array<{ run(): Promise<unknown> }>) {
+      return Promise.all(statements.map((statement) => statement.run()));
+    },
   };
+  return d1;
 }
 
 function setupDb(): DatabaseSync {
@@ -284,6 +288,35 @@ describe('GET /api/ruby-wasm/snippets/:id', () => {
     }, { JWT_SECRET, DB: wrapD1(db) });
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /api/ruby-wasm/snippets/:id', () => {
+  it('所有するスニペットと紐づく動作確認履歴をDBから削除する', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`).run('s1', 'user1', 'sample', RUBY_CODE);
+    db.prepare(`INSERT INTO ruby_wasm_snippet_verifications (snippet_id, ruby_version, verified) VALUES (?, ?, ?)`).run('s1', '3.4', 1);
+
+    const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE', headers: { Authorization: await makeAuthHeader('user1') },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(db.prepare(`SELECT id FROM ruby_wasm_snippets WHERE id = ?`).get('s1')).toBeUndefined();
+    expect(db.prepare(`SELECT id FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?`).get('s1')).toBeUndefined();
+  });
+
+  it('他ユーザーのスニペットは削除せず404を返す', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`).run('s1', 'other-user', 'sample', RUBY_CODE);
+
+    const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE', headers: { Authorization: await makeAuthHeader('user1') },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(404);
+    expect(db.prepare(`SELECT id FROM ruby_wasm_snippets WHERE id = ?`).get('s1')).toBeTruthy();
   });
 });
 
