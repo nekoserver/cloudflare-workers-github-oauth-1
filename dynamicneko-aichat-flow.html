@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>dynamicneko AI問い合わせフロー</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --muted: #57606a;
+    --accent: #0969da;
+    --accent-bg: #ddf4ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-bg: #0c2d4e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13.5px;
+    margin: 0;
+    padding: 24px 20px 60px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  p.lede {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 20px;
+    max-width: 90ch;
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--accent-bg);
+    color: var(--accent);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+  a { color: var(--accent); }
+  .tbl-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    min-width: 900px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.step {
+    font-weight: 700;
+    text-align: center;
+    color: var(--accent);
+    width: 32px;
+  }
+  td.date { white-space: nowrap; color: var(--muted); }
+  td.commit code { white-space: nowrap; }
+  footer {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>dynamicnekoから本体WorkerへのAI問い合わせ・応答フロー</h1>
+  <p class="lede">
+    別デプロイのWorkerである <code>dynamicneko</code> の「AIに問い合わせ」ウィジェットから、
+    本体WorkerのWorkers AIを呼び出して応答を返すまでの経緯。2026-09-10の1日で積み上がった
+    5コミットを時系列で示す。詳細は
+    <a href="SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md">SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md</a>
+    を参照。
+  </p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>日付</th>
+          <th>コミット</th>
+          <th>やったこと(変更)</th>
+          <th>結果、何がどうなったか</th>
+          <th>何ができるようになったか</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="step">①</td>
+          <td class="date">2026-09-10</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5b3cb94"><code>5b3cb94</code></a></td>
+          <td>許可メールアドレスのみに制限するAPIを追加</td>
+          <td><code>POST /api/aichat/permission-external</code>(事前許可確認)と<code>POST /api/aichat/query-external</code>(AI問い合わせ本体)を新設。認証は<code>AICHAT_EXTERNAL_SECRET</code>によるBearer secret。<code>isDynamicnekoAichatAllowed</code>はD1の<code>dynamicneko_aichat_allowed_users</code>を参照し、DB未設定・クエリ失敗時はフェイルクローズ</td>
+          <td>dynamicnekoの「AIに問い合わせ」ウィジェットから、許可されたメールアドレスのユーザーだけが本体WorkerのWorkers AIを呼び出せるようになった。サーバー側でも呼び出し直前に必ず再検証する二重チェック構成</td>
+        </tr>
+        <tr>
+          <td class="step">②</td>
+          <td class="date">2026-09-10</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b1c6895"><code>b1c6895</code></a></td>
+          <td>モデル選択(Gemma-4/Qwen-3.8)を追加</td>
+          <td><code>query-external</code>が<code>model</code>パラメータを受け付け、<code>resolveDynamicnekoAichatModel</code>が許可リストと照合。未指定・リスト外の値は常にデフォルト(Gemma-4)にフォールバック</td>
+          <td>dynamicneko側で問い合わせごとにAIモデルを選べるようになった。改ざんされた値をそのまま<code>AI.run()</code>へ渡さない安全性も確保</td>
+        </tr>
+        <tr>
+          <td class="step">③</td>
+          <td class="date">2026-09-10</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d706e1f"><code>d706e1f</code></a></td>
+          <td>Gemma-4のthinking mode暴走ハングを修正</td>
+          <td>②で選べるようになったGemma-4が回避策なしで呼ばれCloudflare内部タイムアウト(エラーコード3046)までハングしていた不具合を発見。<code>getModelRunParams</code>パターンを適用し<code>withTimeout(20秒)</code>を追加、ハング再現の回帰テストを追加</td>
+          <td>読み込みインジケータが回ったまま止まって見える不具合が解消され、失敗時は20秒以内に明確なエラーが返るようになった</td>
+        </tr>
+        <tr>
+          <td class="step">④</td>
+          <td class="date">2026-09-10</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ba91efa"><code>ba91efa</code></a></td>
+          <td>AIチャット左サイドパネルで読み出せるように</td>
+          <td><code>query-external</code>成功時に<code>saveDynamicnekoAiShare</code>が<code>ai_chat_shares</code>(<code>source='dynamicneko'</code>)へ保存。dynamicneko側のGitHubログインIDを本体Workerの<code>user_sessions.user_id</code>とみなして紐付け、対応セッションが無ければ保存だけスキップ</td>
+          <td>dynamicnekoでの問い合わせ結果が本体Workerの<code>/aichat</code>左サイドパネルからも遡って読み返せるようになった</td>
+        </tr>
+        <tr>
+          <td class="step">⑤</td>
+          <td class="date">2026-09-10</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a69197c"><code>a69197c</code></a></td>
+          <td>リクエスト元別円グラフで別集計するよう修正</td>
+          <td><code>source='dynamicneko'</code>のレコードが<code>normalizeAichatSource</code>のフォールバックで円グラフ上「回答伝播ページ(api)」に紛れ込んでいたバグを修正。専用の<code>dynamicneko</code>区分(色<code>#10b981</code>)を追加</td>
+          <td>「日ごとキーワード数・質問数」モーダルの円グラフで、dynamicneko経由の問い合わせだけを独立した区分として正確に集計・可視化できるようになった</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    出典: コミットログ(<code>origin/main</code>、2026-09-10) — 詳細は
+    <a href="SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md">SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md</a>
+  </footer>
+</div>
+</body>
+</html>
