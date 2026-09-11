@@ -133,9 +133,28 @@ export type GenerateSummaryParams = {
   designSpec?: string;
 };
 
+// CLAUDE.mdルール32: エラー種別は文字列prefixではなく判別可能な型で表現する。
+// AI_ERROR_PREFIXESが表示用文字列との対応を1箇所にまとめる唯一の正とする。
+export type AiErrorCode = 'NO_BINDING' | 'EMPTY_RESPONSE' | 'UNEXPECTED_FORMAT' | 'ERROR';
+
+export const AI_ERROR_PREFIXES: Record<AiErrorCode, string> = {
+  NO_BINDING: '[AI_NO_BINDING]',
+  EMPTY_RESPONSE: '[AI_EMPTY_RESPONSE]',
+  UNEXPECTED_FORMAT: '[AI_UNEXPECTED_FORMAT]',
+  ERROR: '[AI_ERROR]',
+};
+
+export function formatAiError(errorCode: AiErrorCode, detail: string): string {
+  return `${AI_ERROR_PREFIXES[errorCode]} ${detail}`;
+}
+
+export type AiGenerationResult =
+  | { ok: true; summary: string }
+  | { ok: false; errorCode: AiErrorCode; detail: string };
+
 export async function generateAiSummary(
   params: GenerateSummaryParams
-): Promise<string> {
+): Promise<AiGenerationResult> {
   const { ai, model, title, description, trimmedDiff, designSpec } = params;
 
   const userParts: string[] = [];
@@ -172,12 +191,20 @@ export async function generateAiSummary(
   if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
     const raw = (aiRes as { response: string }).response;
     if (raw) {
-      return raw;
+      return { ok: true, summary: raw };
     }
-    return `[AI_EMPTY_RESPONSE] keys=${Object.keys(aiRes).join(',')} response=${JSON.stringify(raw)}`;
+    return {
+      ok: false,
+      errorCode: 'EMPTY_RESPONSE',
+      detail: `keys=${Object.keys(aiRes).join(',')} response=${JSON.stringify(raw)}`,
+    };
   }
 
-  return `[AI_UNEXPECTED_FORMAT] type=${typeof aiRes} value=${JSON.stringify(aiRes).slice(0, 500)}`;
+  return {
+    ok: false,
+    errorCode: 'UNEXPECTED_FORMAT',
+    detail: `type=${typeof aiRes} value=${JSON.stringify(aiRes).slice(0, 500)}`,
+  };
 }
 
 export type SummaryDiagnosis = {
@@ -186,6 +213,8 @@ export type SummaryDiagnosis = {
   comment: string;
 };
 
+// 表示用に永続化された文字列（D1保存済みのsummaryカラム等）を後から分類する。
+// prefixの対応はAI_ERROR_PREFIXES(唯一の正)から導出し、個別にハードコードしない。
 export function classifySummaryResult(summary: string | null): SummaryDiagnosis {
   if (summary === null || summary === undefined) {
     return { rating: 'bad', hasSummary: false, comment: '要約が生成されなかった（AIバインディング未設定の可能性）' };
@@ -193,14 +222,11 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
   if (summary === '') {
     return { rating: 'bad', hasSummary: false, comment: '要約が空で返された' };
   }
-  if (summary.startsWith('[AI_ERROR]')) {
-    return { rating: 'bad', hasSummary: false, comment: `AI_ERROR: ${summary}` };
-  }
-  if (summary.startsWith('[AI_EMPTY_RESPONSE]')) {
-    return { rating: 'bad', hasSummary: false, comment: `AI_EMPTY_RESPONSE: ${summary}` };
-  }
-  if (summary.startsWith('[AI_UNEXPECTED_FORMAT]')) {
-    return { rating: 'bad', hasSummary: false, comment: `AI_UNEXPECTED_FORMAT: ${summary}` };
+
+  for (const [code, prefix] of Object.entries(AI_ERROR_PREFIXES) as [AiErrorCode, string][]) {
+    if (summary.startsWith(prefix)) {
+      return { rating: 'bad', hasSummary: false, comment: `${code}: ${summary}` };
+    }
   }
 
   return { rating: 'good', hasSummary: true, comment: summary };
@@ -221,7 +247,18 @@ export type SummaryPipelineResult = {
   success: boolean;
   usedModel: string;
   fallbackUsed: boolean;
+  // 失敗時のみ設定。判定は文字列prefixではなくこのerrorCodeを見ること(CLAUDE.mdルール32)。
+  errorCode?: AiErrorCode;
+  // フォールバックも失敗した場合に、握りつぶされがちな一次エラーの内容を保持する。
+  primaryError?: { errorCode: AiErrorCode; detail: string };
 };
+
+function toGenerationOutcome(
+  error: unknown
+): { errorCode: AiErrorCode; detail: string } {
+  const msg = error instanceof Error ? error.message : 'Unknown error';
+  return { errorCode: 'ERROR', detail: msg };
+}
 
 export async function runSummaryPipeline(
   params: RunSummaryPipelineParams
@@ -231,35 +268,61 @@ export async function runSummaryPipeline(
   const canFallback = fallbackModel && fallbackModel !== model;
 
   if (!ai) {
-    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false, usedModel: model, fallbackUsed: false };
+    return {
+      summary: formatAiError('NO_BINDING', 'Workers AI binding is not available'),
+      success: false,
+      usedModel: model,
+      fallbackUsed: false,
+      errorCode: 'NO_BINDING',
+    };
   }
 
-  let primaryFailed = false;
-  let primaryErrorSummary = '';
+  let primaryError: { errorCode: AiErrorCode; detail: string } | undefined;
   try {
-    const summary = await generateAiSummary({ ai, model, ...genParams });
-    if (!summary.startsWith('[AI_')) {
-      return { summary, success: true, usedModel: model, fallbackUsed: false };
+    const result = await generateAiSummary({ ai, model, ...genParams });
+    if (result.ok) {
+      return { summary: result.summary, success: true, usedModel: model, fallbackUsed: false };
     }
-    primaryFailed = true;
-    primaryErrorSummary = summary;
+    primaryError = { errorCode: result.errorCode, detail: result.detail };
   } catch (error) {
-    primaryFailed = true;
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    primaryErrorSummary = `[AI_ERROR] ${msg}`;
+    primaryError = toGenerationOutcome(error);
   }
 
-  if (primaryFailed && canFallback) {
+  if (canFallback) {
     try {
-      const summary = await generateAiSummary({ ai, model: fallbackModel, ...genParams });
-      return { summary, success: !summary.startsWith('[AI_'), usedModel: fallbackModel, fallbackUsed: true };
+      const result = await generateAiSummary({ ai, model: fallbackModel, ...genParams });
+      if (result.ok) {
+        return { summary: result.summary, success: true, usedModel: fallbackModel, fallbackUsed: true };
+      }
+      return {
+        summary: formatAiError(result.errorCode, `${result.detail} (primary failed: ${formatAiError(primaryError.errorCode, primaryError.detail)})`),
+        success: false,
+        usedModel: fallbackModel,
+        fallbackUsed: true,
+        errorCode: result.errorCode,
+        primaryError,
+      };
     } catch (fallbackError) {
-      const msg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
-      return { summary: `[AI_ERROR] fallback also failed: ${msg}`, success: false, usedModel: fallbackModel, fallbackUsed: true };
+      const { detail: fallbackDetail } = toGenerationOutcome(fallbackError);
+      return {
+        summary: formatAiError('ERROR', `fallback also failed: ${fallbackDetail} (primary: ${formatAiError(primaryError.errorCode, primaryError.detail)})`),
+        success: false,
+        usedModel: fallbackModel,
+        fallbackUsed: true,
+        errorCode: 'ERROR',
+        primaryError,
+      };
     }
   }
 
-  return { summary: primaryErrorSummary, success: false, usedModel: model, fallbackUsed: false };
+  return {
+    summary: formatAiError(primaryError.errorCode, primaryError.detail),
+    success: false,
+    usedModel: model,
+    fallbackUsed: false,
+    errorCode: primaryError.errorCode,
+    primaryError,
+  };
 }
 
 export type ExtractedSummary = {

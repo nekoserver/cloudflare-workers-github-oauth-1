@@ -131,11 +131,12 @@ describe('generateAiSummary', () => {
     return { run: vi.fn().mockResolvedValue(response) };
   }
 
-  it('正常なレスポンスからsummaryを返す', async () => {
+  it('正常なレスポンスからok:trueとsummaryを返す', async () => {
     const ai = makeAi({ response: '概要: ログイン機能を追加' });
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toBe('概要: ログイン機能を追加');
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.summary).toBe('概要: ログイン機能を追加');
   });
 
   it('英語で書かれたPRは日本語へ翻訳してから要約するよう指示する', async () => {
@@ -172,41 +173,46 @@ describe('generateAiSummary', () => {
     expect(userContent).toContain('説明:\nImplements GitHub OAuth login');
   });
 
-  it('responseがnullの場合、AI_EMPTY_RESPONSEを返す', async () => {
+  it('responseがnullの場合、errorCode=EMPTY_RESPONSEを返す', async () => {
     const ai = makeAi({ response: null });
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
-    expect(result).toContain('response=null');
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errorCode).toBe('EMPTY_RESPONSE');
+    expect(!result.ok && result.detail).toContain('response=null');
   });
 
-  it('responseが空文字の場合、AI_EMPTY_RESPONSEを返す', async () => {
+  it('responseが空文字の場合、errorCode=EMPTY_RESPONSEを返す', async () => {
     const ai = makeAi({ response: '' });
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errorCode).toBe('EMPTY_RESPONSE');
   });
 
-  it('responseフィールドがないオブジェクトの場合、AI_UNEXPECTED_FORMATを返す', async () => {
+  it('responseフィールドがないオブジェクトの場合、errorCode=UNEXPECTED_FORMATを返す', async () => {
     const ai = makeAi({ result: 'something' });
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
-    expect(result).toContain('"result":"something"');
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errorCode).toBe('UNEXPECTED_FORMAT');
+    expect(!result.ok && result.detail).toContain('"result":"something"');
   });
 
-  it('nullが返された場合、AI_UNEXPECTED_FORMATを返す', async () => {
+  it('nullが返された場合、errorCode=UNEXPECTED_FORMATを返す', async () => {
     const ai = makeAi(null);
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errorCode).toBe('UNEXPECTED_FORMAT');
   });
 
-  it('文字列が返された場合、AI_UNEXPECTED_FORMATを返す', async () => {
+  it('文字列が返された場合、errorCode=UNEXPECTED_FORMATを返す', async () => {
     const ai = makeAi('plain string response');
     const result = await generateAiSummary({ ...baseParams, ai });
 
-    expect(result).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errorCode).toBe('UNEXPECTED_FORMAT');
   });
 
   it('designSpecが指定された場合、プロンプトに初期設計チェックリストが含まれる', async () => {
@@ -872,6 +878,13 @@ describe('classifySummaryResult', () => {
     expect(result.hasSummary).toBe(false);
     expect(result.comment).toContain('生成されなかった');
   });
+
+  it('[AI_NO_BINDING]はrating=bad、hasSummary=falseを返す（以前は分類されずgoodと誤判定されていた回帰）', () => {
+    const result = classifySummaryResult('[AI_NO_BINDING] Workers AI binding is not available');
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('NO_BINDING');
+  });
 });
 
 // ---- runSummaryPipeline ----
@@ -884,16 +897,18 @@ describe('runSummaryPipeline', () => {
     trimmedDiff: '',
   };
 
-  it('AIバインディングがnullの場合、AI_NO_BINDINGを返しsuccess=false', async () => {
+  it('AIバインディングがnullの場合、errorCode=NO_BINDINGを返しsuccess=false', async () => {
     const result = await runSummaryPipeline({ ...baseParams, ai: null });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('NO_BINDING');
     expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
     expect(result.usedModel).toBe(baseParams.model);
   });
 
-  it('AIバインディングがundefinedの場合、AI_NO_BINDINGを返しsuccess=false', async () => {
+  it('AIバインディングがundefinedの場合、errorCode=NO_BINDINGを返しsuccess=false', async () => {
     const result = await runSummaryPipeline({ ...baseParams, ai: undefined });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('NO_BINDING');
     expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
     expect(result.usedModel).toBe(baseParams.model);
   });
@@ -906,10 +921,11 @@ describe('runSummaryPipeline', () => {
     expect(result.usedModel).toBe(baseParams.model);
   });
 
-  it('AI呼び出しが例外をthrowした場合、AI_ERRORを返しsuccess=false', async () => {
+  it('AI呼び出しが例外をthrowした場合、errorCode=ERRORを返しsuccess=false', async () => {
     const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('Model overloaded')) };
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('ERROR');
     expect(result.summary).toBe('[AI_ERROR] Model overloaded');
     expect(result.usedModel).toBe(baseParams.model);
   });
@@ -921,24 +937,27 @@ describe('runSummaryPipeline', () => {
     expect(result.summary.length).toBeGreaterThan('[AI_ERROR] '.length);
   });
 
-  it('AIがnullレスポンスを返した場合、AI_UNEXPECTED_FORMATを返しsuccess=false', async () => {
+  it('AIがnullレスポンスを返した場合、errorCode=UNEXPECTED_FORMATを返しsuccess=false', async () => {
     const ai: AiBinding = { run: vi.fn().mockResolvedValue(null) };
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('UNEXPECTED_FORMAT');
     expect(result.summary).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
   });
 
-  it('AIがresponse=nullを返した場合、AI_EMPTY_RESPONSEを返しsuccess=false', async () => {
+  it('AIがresponse=nullを返した場合、errorCode=EMPTY_RESPONSEを返しsuccess=false', async () => {
     const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: null }) };
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('EMPTY_RESPONSE');
     expect(result.summary).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
   });
 
-  it('AIがresponse=""を返した場合、AI_EMPTY_RESPONSEを返しsuccess=false', async () => {
+  it('AIがresponse=""を返した場合、errorCode=EMPTY_RESPONSEを返しsuccess=false', async () => {
     const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: '' }) };
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('EMPTY_RESPONSE');
     expect(result.summary).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
   });
 
@@ -1013,6 +1032,7 @@ describe('runSummaryPipeline', () => {
     const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('GPU timeout')) };
     const result = await runSummaryPipeline({ ...baseParams, ai, fallbackModel: baseParams.model });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('ERROR');
     expect(result.summary).toContain('[AI_ERROR]');
     expect(result.usedModel).toBe(baseParams.model);
     expect(result.fallbackUsed).toBe(false);
@@ -1023,16 +1043,51 @@ describe('runSummaryPipeline', () => {
     const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('Service unavailable')) };
     const result = await runSummaryPipeline({ ...fallbackParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('ERROR');
     expect(result.summary).toContain('fallback also failed');
     expect(result.usedModel).toBe(stableModel);
     expect(result.fallbackUsed).toBe(true);
     expect(ai.run).toHaveBeenCalledTimes(2);
   });
 
+  it('両方失敗した場合でも一次エラーの内容がprimaryErrorとして保持される（レビューで指摘した握りつぶしの修正）', async () => {
+    let callCount = 0;
+    const ai: AiBinding = {
+      run: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) throw new Error('primary GPU overloaded');
+        throw new Error('fallback also down');
+      }),
+    };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(false);
+    // 以前は fallback の失敗理由しか summary に残らず、primary の失敗理由が完全に消えていた
+    expect(result.primaryError).toEqual({ errorCode: 'ERROR', detail: 'primary GPU overloaded' });
+    expect(result.summary).toContain('primary GPU overloaded');
+    expect(result.summary).toContain('fallback also down');
+  });
+
+  it('primaryが[AI_]系エラー、fallbackも失敗した場合もprimaryErrorが保持される', async () => {
+    let callCount = 0;
+    const ai: AiBinding = {
+      run: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ response: '' }); // primary: EMPTY_RESPONSE
+        return Promise.reject(new Error('fallback network error'));
+      }),
+    };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.primaryError?.errorCode).toBe('EMPTY_RESPONSE');
+    expect(result.errorCode).toBe('ERROR');
+    expect(result.summary).toContain('EMPTY_RESPONSE');
+  });
+
   it('fallbackModel未指定で失敗した場合、再試行しない', async () => {
     const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('fail')) };
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('ERROR');
     expect(result.summary).toContain('[AI_ERROR]');
     expect(result.usedModel).toBe(baseParams.model);
     expect(result.fallbackUsed).toBe(false);
