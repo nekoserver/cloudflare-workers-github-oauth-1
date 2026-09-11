@@ -173,26 +173,50 @@ export function getRubyWasmPage(username: string): string {
     }
     .result-value.error { color: #991b1b; }
     .theme-toggle-inline { display: flex; align-items: center; }
-    .snippet-picker { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-    .snippet-picker select {
-      flex: 1; min-width: 200px;
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .btn-secondary {
       background: var(--bg-secondary); color: var(--text-primary);
-      border: 1px solid var(--border-color); border-radius: 6px;
-      padding: 8px 10px; font-size: 13px;
+      border: 1px solid var(--border-color); border-radius: 8px;
+      padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
     }
-    .snippet-picker button {
-      background: var(--bg-secondary); color: var(--text-primary);
-      border: 1px solid var(--border-color); border-radius: 6px;
-      padding: 8px 14px; font-size: 13px; cursor: pointer;
+    .btn-secondary:hover { opacity: 0.85; }
+    .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .save-btn { background: #16a34a; color: #fff; border: none; }
+    .save-btn:hover { background: #15803d; }
+    .save-note { font-size: 11px; color: var(--text-muted); margin-top: -10px; margin-bottom: 14px; }
+    /* モーダルのz-indexは固定値を書かず、常にgetNextZ()で算出した値を
+       JSからstyle.zIndexへ設定する(CLAUDE.mdルール26)。ここではCSS上の
+       初期値だけ与えておき、実際の値は開く直前にJSで上書きする。 */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      align-items: center; justify-content: center;
     }
-    .snippet-picker button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .snippet-note { font-size: 11px; color: var(--text-muted); margin: -6px 0 14px; }
-    .verify-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
-    .verify-row button {
-      background: var(--bg-secondary); color: var(--text-primary);
-      border: 1px solid var(--border-color); border-radius: 6px;
-      padding: 5px 10px; font-size: 12px; cursor: pointer;
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--card-bg); border-radius: 12px; padding: 24px;
+      width: min(560px, 92vw); max-height: 84vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
     }
+    .modal-box h2 {
+      font-size: 16px; margin: 0 0 14px; color: var(--text-primary);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
+    .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+    .modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+    .modal-snippet-list li:last-child { border-bottom: none; }
+    .modal-snippet-list li:hover { background: var(--bg-secondary); }
+    .modal-snippet-list li.selected { background: var(--bg-secondary); font-weight: 600; }
+    .modal-snippet-meta { font-size: 11px; color: var(--text-muted); }
+    #modalCodeTextarea { min-height: 140px; }
+    #modalResultValue {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px; white-space: pre-wrap; word-break: break-all;
+      background: var(--bg-secondary); color: var(--text-secondary);
+      padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);
+    }
+    #modalResultValue.error { color: #991b1b; }
   </style>
 </head>
 <body>
@@ -227,24 +251,39 @@ export function getRubyWasmPage(username: string): string {
       <div class="subtitle">CRubyの公式WASM(WASI)ビルドをブラウザ上のWebAssemblyで実行します。</div>
       <div class="notice">初回読み込みはRuby本体(約30MB、jsDelivr CDN配信)を取得するため数秒〜数十秒かかります。</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
-      <div class="snippet-picker">
-        <select id="snippetSelect"><option value="">保存済みコードを読み込む…</option></select>
-        <button type="button" id="snippetLoadBtn" disabled>読み込む</button>
-        <button type="button" id="snippetReloadBtn">🔄</button>
+      <div class="toolbar">
+        <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
       </div>
-      <div class="snippet-note" id="snippetNote">/kimi-code ページの「コードを保管」ボタンで保存したRubyコードをここから呼び出せます</div>
       <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
-      <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
+      <div class="toolbar">
+        <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
+        <button type="button" class="btn-secondary" id="clearBtn">🧹 クリア</button>
+        <button type="button" class="btn-secondary save-btn" id="saveBtn" style="display:none;">💾 保存</button>
+      </div>
+      <div class="save-note" id="saveNote"></div>
       <div class="result-block" id="resultBlock" style="display:none;">
         <div class="result-label">実行結果</div>
         <div class="result-value" id="resultValue"></div>
-        <div class="verify-row" id="verifyRow" style="display:none;">
-          <span>保存済みコードの動作確認を記録:</span>
-          <button type="button" id="verifyOkBtn">👍 動いた</button>
-          <button type="button" id="verifyNgBtn">👎 動かなかった</button>
-          <span id="verifyNote"></span>
-        </div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="listModalOverlay">
+    <div class="modal-box">
+      <h2>📚 保存済みスニペット一覧 <button type="button" class="modal-close" id="listModalCloseBtn">✕</button></h2>
+      <ul class="modal-snippet-list" id="modalSnippetList"><li>読み込み中…</li></ul>
+      <textarea id="modalCodeTextarea" placeholder="一覧から選ぶとここにコードが読み込まれます(編集可能)"></textarea>
+      <div class="toolbar" style="margin-top:10px;margin-bottom:0;">
+        <button type="button" class="run-btn" id="modalRunBtn" disabled>▶ 実行</button>
+      </div>
+      <div class="save-note" id="modalNote"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="resultModalOverlay">
+    <div class="modal-box">
+      <h2>実行結果 <button type="button" class="modal-close" id="resultModalCloseBtn">✕</button></h2>
+      <div id="modalResultValue"></div>
     </div>
   </div>
 
@@ -265,88 +304,116 @@ export function getRubyWasmPage(username: string): string {
 
     var wasmStatus = document.getElementById('wasmStatus');
     var runBtn = document.getElementById('runBtn');
+    var clearBtn = document.getElementById('clearBtn');
+    var saveBtn = document.getElementById('saveBtn');
+    var saveNote = document.getElementById('saveNote');
     var inputCode = document.getElementById('inputCode');
     var resultBlock = document.getElementById('resultBlock');
     var resultValue = document.getElementById('resultValue');
     var rubyVM = null;
 
-    var snippetSelect = document.getElementById('snippetSelect');
-    var snippetLoadBtn = document.getElementById('snippetLoadBtn');
-    var snippetReloadBtn = document.getElementById('snippetReloadBtn');
-    var snippetNote = document.getElementById('snippetNote');
-    var snippetNoteDefault = snippetNote.textContent;
-    var verifyRow = document.getElementById('verifyRow');
-    var verifyOkBtn = document.getElementById('verifyOkBtn');
-    var verifyNgBtn = document.getElementById('verifyNgBtn');
-    var verifyNote = document.getElementById('verifyNote');
-    // 読み込んだ保存済みスニペットのid。コードを手動編集したら、実行結果が
-    // もう「保存されたコードそのもの」の動作確認ではなくなるためクリアする。
-    var loadedSnippetId = null;
-    inputCode.addEventListener('input', function() {
-      loadedSnippetId = null;
-      verifyRow.style.display = 'none';
-    });
-
-    function loadSnippetList() {
-      snippetSelect.innerHTML = '<option value="">読み込み中…</option>';
-      snippetSelect.disabled = true;
-      snippetLoadBtn.disabled = true;
-      fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          var snippets = (d && d.snippets) || [];
-          snippetSelect.innerHTML = '';
-          var placeholder = document.createElement('option');
-          placeholder.value = '';
-          placeholder.textContent = snippets.length === 0
-            ? '保存済みコードはありません'
-            : '保存済みコードを読み込む…';
-          snippetSelect.appendChild(placeholder);
-          snippets.forEach(function(s) {
-            var opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.title + '(' + s.created_at + ')';
-            snippetSelect.appendChild(opt);
-          });
-          snippetSelect.disabled = false;
-        })
-        .catch(function() {
-          snippetSelect.innerHTML = '<option value="">一覧の取得に失敗しました</option>';
-        });
+    // 複数のモーダル・オーバーレイが同時に開いた際、後から開いた方が必ず
+    // 手前に来るようz-indexを動的に算出する(固定値は書かない。CLAUDE.mdルール26)。
+    function getNextZ() {
+      var els = document.querySelectorAll('[style*="z-index"]');
+      var max = 100;
+      for (var i = 0; i < els.length; i++) {
+        var z = parseInt(els[i].style.zIndex, 10);
+        if (!isNaN(z) && z > max) max = z;
+      }
+      return max + 100;
     }
 
-    snippetSelect.addEventListener('change', function() {
-      snippetLoadBtn.disabled = !snippetSelect.value;
+    // メインの実行エリア・モーダル双方の「実行」から共通で使う、Rubyコード
+    // 実行ロジック。stdoutをキャプチャしてtoStringで文字列化する。
+    function runRubyCode(code) {
+      if (!rubyVM) return { ok: false, output: 'WASMモジュールを読み込み中です。しばらく待ってから再度お試しください' };
+      try {
+        var wrapped =
+          "require 'stringio'\\n" +
+          "__out = StringIO.new\\n" +
+          "__orig_stdout = $stdout\\n" +
+          "$stdout = __out\\n" +
+          "begin\\n" +
+          code + "\\n" +
+          "ensure\\n" +
+          "  $stdout = __orig_stdout\\n" +
+          "end\\n" +
+          "__out.string";
+        var output = rubyVM.eval(wrapped).toString();
+        return { ok: true, output: output.length > 0 ? output : '(出力なし)' };
+      } catch (err) {
+        return { ok: false, output: err && err.message ? err.message : String(err) };
+      }
+    }
+
+    clearBtn.addEventListener('click', function() {
+      inputCode.value = '';
+      resultBlock.style.display = 'none';
+      saveBtn.style.display = 'none';
+      saveNote.textContent = '';
     });
 
-    snippetLoadBtn.addEventListener('click', function() {
-      var id = snippetSelect.value;
-      if (!id) return;
-      snippetNote.textContent = '読み込み中…';
-      snippetLoadBtn.disabled = true;
-      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id), { credentials: 'same-origin' })
+    runBtn.addEventListener('click', function() {
+      if (!rubyVM) return;
+      resultBlock.style.display = 'block';
+      saveNote.textContent = '';
+      var result = runRubyCode(inputCode.value);
+      resultValue.classList.toggle('error', !result.ok);
+      resultValue.textContent = result.output;
+      // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。
+      saveBtn.style.display = result.ok ? 'inline-block' : 'none';
+    });
+
+    saveBtn.addEventListener('click', function() {
+      var code = inputCode.value;
+      if (!code.trim()) return;
+      saveBtn.disabled = true;
+      saveNote.textContent = '保存中...';
+      fetch('/api/ruby-wasm/snippets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ code: code })
+      })
         .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
         .then(function(res) {
-          if (res.status === 200 && res.data && typeof res.data.code === 'string') {
-            inputCode.value = res.data.code;
-            loadedSnippetId = res.data.id;
-            verifyRow.style.display = 'none';
-            snippetNote.textContent = '✅ 「' + res.data.title + '」を読み込みました';
-          } else {
-            snippetNote.textContent = '❌ 読み込みに失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+          if (res.status !== 200 || !res.data || !res.data.id) {
+            saveNote.textContent = '❌ 保存に失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+            return;
           }
+          // 保存直前にこのコードは正常実行を確認済みなので、保存と同時に
+          // 「動作確認済み」も記録する(手動での👍/👎操作を挟まない)。
+          return fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(res.data.id) + '/verifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ verified: true })
+          }).then(function() {
+            saveNote.textContent = '✅ 「' + res.data.title + '」として保存し、動作確認済みとして記録しました';
+          });
         })
         .catch(function(err) {
-          snippetNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+          saveNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
         })
         .then(function() {
-          snippetLoadBtn.disabled = !snippetSelect.value;
-          setTimeout(function() { snippetNote.textContent = snippetNoteDefault; }, 4000);
+          saveBtn.disabled = false;
         });
     });
 
-    snippetReloadBtn.addEventListener('click', loadSnippetList);
-    loadSnippetList();
+    // ---- 保存済みスニペット一覧モーダル ----
+    var openListBtn = document.getElementById('openListBtn');
+    var listModalOverlay = document.getElementById('listModalOverlay');
+    var listModalCloseBtn = document.getElementById('listModalCloseBtn');
+    var modalSnippetList = document.getElementById('modalSnippetList');
+    var modalCodeTextarea = document.getElementById('modalCodeTextarea');
+    var modalRunBtn = document.getElementById('modalRunBtn');
+    var modalNote = document.getElementById('modalNote');
+
+    // ---- 実行結果モーダル(一覧モーダルよりさらに上のレイヤー) ----
+    var resultModalOverlay = document.getElementById('resultModalOverlay');
+    var resultModalCloseBtn = document.getElementById('resultModalCloseBtn');
+    var modalResultValue = document.getElementById('modalResultValue');
 
     import('${RUBY_WASM_JS_URL}').then(function(mod) {
       return fetch('${RUBY_WASM_BINARY_URL}').then(function(res) {
@@ -359,72 +426,97 @@ export function getRubyWasmPage(username: string): string {
         wasmStatus.textContent = 'WASMモジュール読み込み完了';
         wasmStatus.className = 'wasm-status ready';
         runBtn.disabled = false;
+        modalRunBtn.disabled = false;
       });
     }).catch(function(err) {
       wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
       wasmStatus.className = 'wasm-status error';
     });
 
-    runBtn.addEventListener('click', function() {
-      if (!rubyVM) return;
-      resultBlock.style.display = 'block';
-      resultValue.classList.remove('error');
-      try {
-        var wrapped =
-          "require 'stringio'\\n" +
-          "__out = StringIO.new\\n" +
-          "__orig_stdout = $stdout\\n" +
-          "$stdout = __out\\n" +
-          "begin\\n" +
-          inputCode.value + "\\n" +
-          "ensure\\n" +
-          "  $stdout = __orig_stdout\\n" +
-          "end\\n" +
-          "__out.string";
-        var output = rubyVM.eval(wrapped).toString();
-        resultValue.textContent = output.length > 0 ? output : '(出力なし)';
-      } catch (err) {
-        resultValue.classList.add('error');
-        resultValue.textContent = err && err.message ? err.message : String(err);
-      }
-      if (loadedSnippetId) {
-        verifyNote.textContent = '';
-        verifyRow.style.display = 'flex';
-      } else {
-        verifyRow.style.display = 'none';
-      }
-    });
+    function openModal(overlay) {
+      overlay.style.zIndex = String(getNextZ());
+      overlay.classList.add('open');
+    }
+    function closeModal(overlay) {
+      overlay.classList.remove('open');
+    }
 
-    function recordVerification(verified) {
-      if (!loadedSnippetId) return;
-      verifyOkBtn.disabled = true;
-      verifyNgBtn.disabled = true;
-      verifyNote.textContent = '記録中...';
-      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(loadedSnippetId) + '/verifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ verified: verified })
-      })
-        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
-        .then(function(res) {
-          if (res.status === 200) {
-            verifyNote.textContent = '✅ Ruby ' + res.data.rubyVersion + ' 系で' + (verified ? '動作した' : '動作しなかった') + '記録を保存しました';
-          } else {
-            verifyNote.textContent = '❌ ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+    function loadModalSnippetList() {
+      modalSnippetList.innerHTML = '<li>読み込み中…</li>';
+      fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var snippets = (d && d.snippets) || [];
+          modalSnippetList.innerHTML = '';
+          if (snippets.length === 0) {
+            modalSnippetList.innerHTML = '<li>保存済みスニペットはありません</li>';
+            return;
           }
+          snippets.forEach(function(s) {
+            var li = document.createElement('li');
+            var titleSpan = document.createElement('div');
+            titleSpan.textContent = s.title;
+            var metaSpan = document.createElement('div');
+            metaSpan.className = 'modal-snippet-meta';
+            metaSpan.textContent = 'Ruby ' + s.ruby_version + ' ・ ' + s.created_at;
+            li.appendChild(titleSpan);
+            li.appendChild(metaSpan);
+            li.addEventListener('click', function() {
+              Array.prototype.forEach.call(modalSnippetList.children, function(el) { el.classList.remove('selected'); });
+              li.classList.add('selected');
+              modalNote.textContent = '読み込み中…';
+              fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(s.id), { credentials: 'same-origin' })
+                .then(function(r) { return r.json().then(function(dd) { return { status: r.status, data: dd }; }); })
+                .then(function(res) {
+                  if (res.status === 200 && res.data && typeof res.data.code === 'string') {
+                    // 選択したスニペットのコードで、リスト下のコード入力
+                    // エリアを上書きする(編集可能な状態のまま)。
+                    modalCodeTextarea.value = res.data.code;
+                    modalNote.textContent = '「' + res.data.title + '」を読み込みました。編集してから実行することもできます';
+                  } else {
+                    modalNote.textContent = '❌ 読み込みに失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+                  }
+                })
+                .catch(function(err) {
+                  modalNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+                });
+            });
+            modalSnippetList.appendChild(li);
+          });
         })
-        .catch(function(err) {
-          verifyNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
-        })
-        .then(function() {
-          verifyOkBtn.disabled = false;
-          verifyNgBtn.disabled = false;
+        .catch(function() {
+          modalSnippetList.innerHTML = '<li>一覧の取得に失敗しました</li>';
         });
     }
 
-    verifyOkBtn.addEventListener('click', function() { recordVerification(true); });
-    verifyNgBtn.addEventListener('click', function() { recordVerification(false); });
+    openListBtn.addEventListener('click', function() {
+      loadModalSnippetList();
+      modalCodeTextarea.value = '';
+      modalNote.textContent = '';
+      openModal(listModalOverlay);
+    });
+    listModalCloseBtn.addEventListener('click', function() { closeModal(listModalOverlay); });
+    listModalOverlay.addEventListener('click', function(e) {
+      if (e.target === listModalOverlay) closeModal(listModalOverlay);
+    });
+
+    modalRunBtn.addEventListener('click', function() {
+      var code = modalCodeTextarea.value;
+      if (!code.trim()) {
+        modalNote.textContent = '❌ コードを入力してください';
+        return;
+      }
+      var result = runRubyCode(code);
+      modalResultValue.classList.toggle('error', !result.ok);
+      modalResultValue.textContent = result.output;
+      // 実行結果は、一覧モーダルよりさらに上のレイヤーのモーダルに表示する。
+      openModal(resultModalOverlay);
+    });
+
+    resultModalCloseBtn.addEventListener('click', function() { closeModal(resultModalOverlay); });
+    resultModalOverlay.addEventListener('click', function(e) {
+      if (e.target === resultModalOverlay) closeModal(resultModalOverlay);
+    });
   </script>
 </body>
 </html>`;

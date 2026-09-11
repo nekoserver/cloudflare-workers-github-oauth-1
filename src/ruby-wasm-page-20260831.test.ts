@@ -52,9 +52,15 @@ describe('Ruby WASMページ', () => {
   });
 
   it('Rubyコード実行時の例外を結果欄に表示する(try/catchで握りつぶさない)', () => {
+    // runRubyCode()はメインの実行エリア・モーダル双方から共通で使う実行
+    // ロジック(2026-09-11のクリア/保存/スニペット一覧モーダル追加に伴う
+    // リファクタで、resultValueへの直接反映からok/output形式の返り値に
+    // 変更された)。resultValue側はresult.okに応じてclassList.toggleで
+    // エラー表示を切り替える。
     const html = getRubyWasmPage('tester');
-    expect(html).toContain('} catch (err) {');
-    expect(html).toContain("resultValue.classList.add('error')");
+    expect(html).toContain('function runRubyCode(code)');
+    expect(html).toContain("return { ok: false, output: err && err.message ? err.message : String(err) };");
+    expect(html).toContain("resultValue.classList.toggle('error', !result.ok)");
   });
 
   it('ユーザー名はエスケープされる', () => {
