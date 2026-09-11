@@ -27,6 +27,10 @@ export function getAiChatPage(user: {
   availableModels?: Array<{value: string; label: string}>;
   modelColors?: Record<string, string>;
   aichatPreferMoondream?: boolean;
+  /** メール登録・ログインが許可されている人だけに/neko tlistの「登録」ボタンを
+   *  見せるためのフラグ(hasCfAuthAccess()の結果)。権限が無い人にまで
+   *  カウントダウン登録機能の存在を見せない(不要な情報を与えない)ため。 */
+  countdownRegisterAllowed?: boolean;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -6661,6 +6665,9 @@ export function getAiChatPage(user: {
       var body = String(text);
       if (body.indexOf('## 次の予定一覧') !== 0) return;
       if (body.indexOf('登録されている予定はありません') === -1) return;
+      // メール登録・ログインが許可されている人だけにボタンを見せる。
+      // 権限が無い人には登録ボタンごと出さず、この機能の存在自体を教えない。
+      if (!COUNTDOWN_REGISTER_ALLOWED) return;
       var heading = el.querySelector('h2');
       if (!heading || typeof window.openCountdownQuickAddModal !== 'function') return;
       var btn = document.createElement('button');
@@ -6848,6 +6855,7 @@ export function getAiChatPage(user: {
 
     var MODEL_COLORS = ${modelColorsJson};
     var MODEL_LIST = ${modelListJson};
+    var COUNTDOWN_REGISTER_ALLOWED = ${user.countdownRegisterAllowed ? 'true' : 'false'};
     // テキストプロンプトに添付画像がある場合、選択中のモデルより優先して
     // moondream(/api/moondream-analyzeと同じ内部モデル)へ問い合わせるかどうか。
     // /settingsページのトグルで変更され、Cookie(aichat_prefer_moondream)に
