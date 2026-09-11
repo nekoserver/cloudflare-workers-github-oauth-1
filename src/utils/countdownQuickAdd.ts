@@ -251,7 +251,8 @@ export function getCountdownQuickAddModalScript(): string {
         var labelInput = document.createElement('input');
         labelInput.type = 'text';
         labelInput.className = 'qa-row-label';
-        labelInput.placeholder = '予定の名前(例: 会議)';
+        labelInput.placeholder = '予定の名前';
+        labelInput.value = 'cf-auth 期限まで';
         labelInput.maxLength = 100;
 
         var removeBtn = document.createElement('button');

@@ -81,7 +81,7 @@ describe('window.openCountdownQuickAddModal: 実DOMでの登録フロー(単発)
     vi.restoreAllMocks();
   });
 
-  it('モーダルを開いた直後は1行だけ、今日の日付・09:00・空ラベルで初期化される', () => {
+  it('モーダルを開いた直後は1行だけ、今日の日付・09:00・既定ラベル「cf-auth 期限まで」で初期化される', () => {
     (window as any).openCountdownQuickAddModal();
     const doc = window.document;
     expect(doc.getElementById('countdownQuickAddOverlay')!.className).toContain('open');
@@ -89,13 +89,15 @@ describe('window.openCountdownQuickAddModal: 実DOMでの登録フロー(単発)
     expect(rows.length).toBe(1);
     const { time, label } = rowInputs(window, 0);
     expect(time.value).toBe('09:00');
-    expect(label.value).toBe('');
+    expect(label.value).toBe('cf-auth 期限まで');
   });
 
-  it('ラベル未入力で保存を押すとエラー表示になり、fetchは呼ばれない', () => {
+  it('ラベルを空にして保存を押すとエラー表示になり、fetchは呼ばれない', () => {
     const fetchMock = vi.fn();
     (window as any).fetch = fetchMock;
     (window as any).openCountdownQuickAddModal();
+    const { label } = rowInputs(window, 0);
+    label.value = '';
     window.document.getElementById('countdownQaSaveBtn')!.dispatchEvent(new window.Event('click'));
     const errorEl = window.document.getElementById('countdownQaError') as any;
     expect(errorEl.style.display).toBe('block');
@@ -230,7 +232,9 @@ describe('window.openCountdownQuickAddModal: 一括登録(複数行)', () => {
     const row0 = rowInputs(window, 0);
     row0.label.value = '会議A';
     row0.date.value = '2026-09-01';
-    // 2行目はラベル未入力のまま
+    // 2行目はラベル未入力のまま(デフォルト値「cf-auth 期限まで」が入っているため、
+    // 未入力状態を明示的に作るには空文字にクリアする)
+    rowInputs(window, 1).label.value = '';
 
     window.document.getElementById('countdownQaSaveBtn')!.dispatchEvent(new window.Event('click'));
 
