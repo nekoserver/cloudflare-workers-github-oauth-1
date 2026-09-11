@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>/neko スラッシュコマンド実装言語一覧</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --muted: #57606a;
+    --accent: #0969da;
+    --accent-bg: #ddf4ff;
+
+    --ts: #3178c6;
+    --ts-bg: #e6f0fb;
+    --wasm: #a4501f;
+    --wasm-bg: #fbeee3;
+    --sql: #1a7f37;
+    --sql-bg: #dafbe1;
+    --api: #6639ba;
+    --api-bg: #f2e9ff;
+    --binding: #9a6700;
+    --binding-bg: #fff8c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-bg: #0c2d4e;
+
+      --ts: #79b8ff;
+      --ts-bg: #10243d;
+      --wasm: #f0a875;
+      --wasm-bg: #3a2417;
+      --sql: #3fb950;
+      --sql-bg: #10281a;
+      --api: #b98cff;
+      --api-bg: #241a3d;
+      --binding: #d4a72c;
+      --binding-bg: #2d2200;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13.5px;
+    margin: 0;
+    padding: 24px 20px 60px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  p.lede { color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 90ch; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--accent-bg);
+    color: var(--accent);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .filters .filters-label {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .chip {
+    appearance: none;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .chip[data-tag="TypeScript"] .dot { background: var(--ts); }
+  .chip[data-tag="WASM"] .dot { background: var(--wasm); }
+  .chip[data-tag="SQL"] .dot { background: var(--sql); }
+  .chip[data-tag="API"] .dot { background: var(--api); }
+  .chip[data-tag="Binding"] .dot { background: var(--binding); }
+
+  .chip[aria-pressed="true"][data-tag="TypeScript"] { background: var(--ts-bg); border-color: var(--ts); color: var(--ts); }
+  .chip[aria-pressed="true"][data-tag="WASM"] { background: var(--wasm-bg); border-color: var(--wasm); color: var(--wasm); }
+  .chip[aria-pressed="true"][data-tag="SQL"] { background: var(--sql-bg); border-color: var(--sql); color: var(--sql); }
+  .chip[aria-pressed="true"][data-tag="API"] { background: var(--api-bg); border-color: var(--api); color: var(--api); }
+  .chip[aria-pressed="true"][data-tag="Binding"] { background: var(--binding-bg); border-color: var(--binding); color: var(--binding); }
+
+  .chip:hover { border-color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #clearFilters {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 6px;
+    text-decoration: underline;
+  }
+  #clearFilters:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+
+  .tbl-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); min-width: 760px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr[hidden] { display: none; }
+  td.cmd code { white-space: nowrap; font-weight: 600; }
+  td.tags { white-space: nowrap; }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin: 1px 3px 1px 0;
+  }
+  .tag.TypeScript { background: var(--ts-bg); color: var(--ts); }
+  .tag.WASM { background: var(--wasm-bg); color: var(--wasm); }
+  .tag.SQL { background: var(--sql-bg); color: var(--sql); }
+  .tag.API { background: var(--api-bg); color: var(--api); }
+  .tag.Binding { background: var(--binding-bg); color: var(--binding); }
+
+  #emptyState {
+    padding: 30px 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  footer { margin-top: 20px; font-size: 12px; color: var(--muted); }
+  #resultCount { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>/neko スラッシュコマンド 実装言語一覧</h1>
+  <p class="lede">
+    AIチャットページの各<code>/neko</code>サブコマンドが主に何で実装されているかを一覧化し、
+    実装言語・実行環境(TypeScript / WASM / SQL / API / Binding)で絞り込める表。
+    タグはチップをクリックしてON/OFFでき、複数選択時はいずれかに一致する行を表示する(OR条件)。
+  </p>
+
+  <div class="filters" role="group" aria-label="実装言語フィルタ">
+    <span class="filters-label">実装言語で絞り込み:</span>
+    <button type="button" class="chip" data-tag="TypeScript" aria-pressed="false"><span class="dot"></span>TypeScript</button>
+    <button type="button" class="chip" data-tag="WASM" aria-pressed="false"><span class="dot"></span>WASM (Rust)</button>
+    <button type="button" class="chip" data-tag="SQL" aria-pressed="false"><span class="dot"></span>SQL (D1)</button>
+    <button type="button" class="chip" data-tag="API" aria-pressed="false"><span class="dot"></span>API (外部通信)</button>
+    <button type="button" class="chip" data-tag="Binding" aria-pressed="false"><span class="dot"></span>Binding (別Worker)</button>
+    <button type="button" id="clearFilters" disabled>フィルタ解除</button>
+  </div>
+
+  <p id="resultCount"></p>
+
+  <div class="tbl-wrap">
+    <table id="cmdTable">
+      <thead>
+        <tr>
+          <th>コマンド</th>
+          <th>主な実装言語</th>
+          <th>補足</th>
+        </tr>
+      </thead>
+      <tbody id="cmdBody">
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko</code>(引数なし)・<code>help</code></td><td class="tags"></td><td>ヘルプ文字列を組み立てるだけの純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko hms</code></td><td class="tags"></td><td>現在時刻(JST)を返す純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko epoch</code></td><td class="tags"></td><td>現在のエポックタイムを返す純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko cal</code></td><td class="tags"></td><td>当月カレンダーを組み立てる純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko limit</code></td><td class="tags"></td><td>静的な案内文を返す純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko ip</code></td><td class="tags"></td><td>Cloudflareが渡す接続元IPをそのまま表示</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko kana</code></td><td class="tags"></td><td>全角カタカナ→半角カナの変換テーブルによる純粋関数</td></tr>
+        <tr data-tags="TypeScript"><td class="cmd"><code>/neko rubyver</code></td><td class="tags"></td><td>静的なビルドライン情報を返すのみ(Rubyの実行自体はブラウザ側/ruby-wasm)</td></tr>
+        <tr data-tags="WASM"><td class="cmd"><code>/neko 256</code></td><td class="tags"></td><td><code>sha256.wasm</code>(Rust/wasm-bindgen)をWorkers上でinitSync実行</td></tr>
+        <tr data-tags="WASM"><td class="cmd"><code>/neko factor</code></td><td class="tags"></td><td><code>factor.wasm</code>(Rust)で素因数分解</td></tr>
+        <tr data-tags="WASM"><td class="cmd"><code>/neko factor -a</code></td><td class="tags"></td><td><code>factor.wasm</code>の素数判定(is_prime)を日付候補分ループ呼び出し</td></tr>
+        <tr data-tags="TypeScript,WASM"><td class="cmd"><code>/neko fymd</code></td><td class="tags"></td><td>日付候補の生成はTypeScript、素数判定はRust(WASM)</td></tr>
+        <tr data-tags="WASM,API"><td class="cmd"><code>/neko dig</code></td><td class="tags"></td><td>DNSクエリの組み立て/応答パースはRust(WASM)、DoHへのHTTPS通信はTypeScriptのfetch</td></tr>
+        <tr data-tags="WASM"><td class="cmd"><code>/neko ls</code></td><td class="tags"></td><td><code>ls.wasm</code>(Rust)でWASMモジュール一覧を整形</td></tr>
+        <tr data-tags="WASM,API"><td class="cmd"><code>/neko gh pr list</code></td><td class="tags"></td><td>リポジトリ名検証・Markdown整形は<code>gh.wasm</code>(Rust)、GitHub APIへの通信はTypeScript</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko clog</code></td><td class="tags"></td><td>D1から直近のコミットエージェントログを取得</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sessions</code></td><td class="tags"></td><td>D1からユーザーセッションのログイン時刻を取得</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sql impact</code></td><td class="tags"></td><td>D1のクエリカタログテーブルを参照</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko tlist</code></td><td class="tags"></td><td>D1のcountdown_eventsから次の予定一覧を取得</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko tokens</code></td><td class="tags"></td><td>D1から過去24時間のトークン使用量を集計</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko tcheck</code></td><td class="tags"></td><td>D1でAPIトークンの有効性を確認</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko search</code></td><td class="tags"></td><td>D1に対するキーワード検索</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko s</code></td><td class="tags"></td><td>D1に対する複数キーワード検索</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko vcount</code></td><td class="tags"></td><td>D1からベクタ化済み回答文の件数を集計</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko uuidgen4</code></td><td class="tags"></td><td>UUIDv4を生成しD1に保存</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko uuidgen7</code></td><td class="tags"></td><td>UUIDv7を生成しD1に保存</td></tr>
+        <tr data-tags="TypeScript,API"><td class="cmd"><code>/neko mlb</code></td><td class="tags"></td><td>MLB Stats APIへHTTPS fetchして試合情報を整形</td></tr>
+        <tr data-tags="TypeScript,Binding"><td class="cmd"><code>/neko hellodw</code></td><td class="tags"></td><td>別デプロイのdynamicneko WorkerへService Binding経由で呼び出し</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p id="emptyState" hidden>選択した条件に一致するコマンドはありません。</p>
+
+  <footer>
+    出典: <code>src/utils/aichatSlashCommand.ts</code> / <code>src/index.ts</code> の実装を直接確認して分類。
+    「TypeScript」タグは各コマンドの入出力組み立て・分岐処理を指し、WASM/SQL/APIと併記される場合はそれらが計算・データ取得の実体を担う。
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var TAG_ORDER = ['TypeScript', 'WASM', 'SQL', 'API', 'Binding'];
+    var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#cmdBody tr'));
+    var clearBtn = document.getElementById('clearFilters');
+    var emptyState = document.getElementById('emptyState');
+    var resultCount = document.getElementById('resultCount');
+
+    // 各行のタグバッジを描画し、data-tags属性を配列として持たせる
+    rows.forEach(function (row) {
+      var tags = row.getAttribute('data-tags').split(',');
+      row._tags = tags;
+      var cell = row.querySelector('td.tags');
+      tags.forEach(function (tag) {
+        var span = document.createElement('span');
+        span.className = 'tag ' + tag;
+        span.textContent = tag;
+        cell.appendChild(span);
+      });
+    });
+
+    function activeTags() {
+      return chips.filter(function (c) { return c.getAttribute('aria-pressed') === 'true'; })
+        .map(function (c) { return c.getAttribute('data-tag'); });
+    }
+
+    function applyFilter() {
+      var active = activeTags();
+      clearBtn.disabled = active.length === 0;
+      var visibleCount = 0;
+      rows.forEach(function (row) {
+        var show = active.length === 0 || row._tags.some(function (t) { return active.indexOf(t) !== -1; });
+        row.hidden = !show;
+        if (show) visibleCount++;
+      });
+      emptyState.hidden = visibleCount !== 0;
+      resultCount.textContent = active.length === 0
+        ? '全' + rows.length + '件表示中'
+        : visibleCount + '件 / 全' + rows.length + '件を表示中';
+    }
+
+    chips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var pressed = chip.getAttribute('aria-pressed') === 'true';
+        chip.setAttribute('aria-pressed', String(!pressed));
+        applyFilter();
+      });
+    });
+
+    clearBtn.addEventListener('click', function () {
+      chips.forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
+      applyFilter();
+    });
+
+    applyFilter();
+  })();
+</script>
+</body>
+</html>
