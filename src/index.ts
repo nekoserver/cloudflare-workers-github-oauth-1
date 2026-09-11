@@ -224,7 +224,9 @@ async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbToday
 }
 
 import { getKimiCodePage } from './views/kimiCode';
+import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
+import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -507,6 +509,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'dynamicneko_aichat_allowed_users', migration: '0133', description: 'dynamicnekoのAI問い合わせウィジェットの利用を許可するメールアドレス一覧', syncPolicy: 'manual' },
   { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる。ruby_version(0135)は保存時点で読み込んでいたRuby/WASMのビルドライン', syncPolicy: 'auto' },
   { name: 'ruby_wasm_snippet_verifications', migration: '0135', description: '/ruby-wasmページでスニペットを実行して「動作確認」した結果の履歴。同じスニペットを複数のRubyビルドライン(ruby_version)で検証した記録をそれぞれ残せる', syncPolicy: 'auto' },
+  { name: 'kimi_code_markdown_snippets', migration: '0136', description: '/kimi-codeページの「📝 Markdownとして保存」ボタンで、生成されたコード(言語問わず)をMarkdown化して保存したもの。/kimi-code/markdown/:idで閲覧でき、Rubyコードブロックはその場でWASM実行できる', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2064,6 +2067,15 @@ CREATE TABLE IF NOT EXISTS ruby_wasm_snippet_verifications (
   verified_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippet_verifications_snippet ON ruby_wasm_snippet_verifications(snippet_id, verified_at);`,
+  '0136': `CREATE TABLE IF NOT EXISTS kimi_code_markdown_snippets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  markdown TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_code_markdown_snippets_user_created ON kimi_code_markdown_snippets(user_id, created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2314,6 +2326,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
+  kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2441,6 +2454,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   kimi_code_generate_log: 'ai',
   ruby_wasm_snippets: 'ai',
   ruby_wasm_snippet_verifications: 'ai',
+  kimi_code_markdown_snippets: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2563,6 +2577,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   kimi_code_generate_log: { user_id: 'user_sessions' },
   ruby_wasm_snippets: { user_id: 'user_sessions' },
   ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
+  kimi_code_markdown_snippets: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -12953,6 +12968,64 @@ app.get('/api/ruby-wasm/snippets/:id/verifications', authMiddleware, async (c) =
     .bind(id)
     .all<{ ruby_version: string; verified: number; verified_at: string }>();
   return jsonUtf8({ verifications: results ?? [] });
+});
+
+/**
+ * /kimi-codeページの「📝 Markdownとして保存」ボタンから呼ばれる。
+ * ruby_wasm_snippets(POST /api/ruby-wasm/snippets)と違い、Rubyかどうかの
+ * 判定ゲートは設けず、言語を問わず常に保存できる(ユーザーからの明示的な
+ * 要望)。生成結果は wrapCodeAsMarkdown() でMarkdown化して保存し、
+ * /kimi-code/markdown/:id で閲覧できる(Rubyコードブロックはその場で
+ * WASM実行可能)。
+ */
+app.post('/api/kimi-code/markdown-snippets', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ code?: string; prompt?: string; title?: string }>().catch(() => null);
+  const code = (body?.code ?? '').trim().slice(0, 20000);
+  if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
+  const prompt = (body?.prompt ?? '').trim().slice(0, 8000);
+  const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
+  const markdown = wrapCodeAsMarkdown(code);
+  const id = crypto.randomUUID();
+  try {
+    await c.env.DB
+      .prepare(`INSERT INTO kimi_code_markdown_snippets (id, user_id, title, prompt, markdown) VALUES (?, ?, ?, ?, ?)`)
+      .bind(id, user.sub, title, prompt, markdown)
+      .run();
+    return jsonUtf8({ id, title });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[kimi-code] Markdown保存失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'Markdownの保存に失敗しました: ' + message }, 500);
+  }
+});
+
+/** /kimi-code/markdown。保存したMarkdown一覧ページ。 */
+app.get('/kimi-code/markdown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const rows = c.env.DB
+    ? (
+        await c.env.DB
+          .prepare(`SELECT id, title, created_at FROM kimi_code_markdown_snippets WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`)
+          .bind(user.sub)
+          .all<{ id: string; title: string; created_at: string }>()
+      ).results ?? []
+    : [];
+  return c.html(getKimiCodeMarkdownListPage(user.sub, rows));
+});
+
+/** /kimi-code/markdown/:id。保存したMarkdownの詳細ページ(Rubyコードブロックはその場でWASM実行できる)。他ユーザーのものは(user_id一致条件により)閲覧できない。 */
+app.get('/kimi-code/markdown/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return c.text('DB未設定です', 503);
+  const id = c.req.param('id');
+  const row = await c.env.DB
+    .prepare(`SELECT title, prompt, markdown FROM kimi_code_markdown_snippets WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ title: string; prompt: string; markdown: string }>();
+  if (!row) return c.text('見つかりません', 404);
+  return c.html(getKimiCodeMarkdownDetailPage(user.sub, row.title, row.prompt, row.markdown));
 });
 
 /**

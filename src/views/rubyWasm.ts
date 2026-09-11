@@ -16,8 +16,11 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 // サブパスに付けても効かず生ファイルがそのまま返ってくることを実機で確認した
 // (2026-08-31、修正後も同じエラーが再現)。そのためesm.sh
 // (bare specifierを解決済みURLへ自動的に書き換えてくれるCDN)に切り替える。
-const RUBY_WASM_JS_URL = 'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
-const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
+// export: /kimi-code/markdown/:id(src/views/kimiCodeMarkdown.ts)でもRuby/WASMを
+// 実行するため、同じCDN URL(バージョン固定)をここから再利用しバージョンの
+// 食い違いを防ぐ。
+export const RUBY_WASM_JS_URL = 'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
+export const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
 
 export type RubyWasmVersionInfo = {
   /** @ruby/{X.Y}-wasm-wasi のビルドライン(パッケージのメジャー.マイナー)。
