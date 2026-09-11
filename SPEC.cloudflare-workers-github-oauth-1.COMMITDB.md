@@ -2,13 +2,15 @@
 
 ## repo_commit_index 追記ルール
 
-**対象**: D1 テーブル `repo_commit_index`（DB: `workers-github-oauth-1`, UUID: `abbe590b-f7ff-4b98-b61c-17c8cb18c8cf`）— PR がマージされるたびに、新規コミットをこのテーブルに追記してコミットインデックスを最新状態に保つ。**本体リポジトリと `nekoserver/cf-auth` の複数リポジトリを `repo_name` で区別して同居させる**（2026-09-11 に `nekoserver/cf-auth` の過去分69件を追加し、複数リポジトリ対応にした）。
+**対象**: D1 テーブル `repo_commit_index`（DB: `workers-github-oauth-1`, UUID: `abbe590b-f7ff-4b98-b61c-17c8cb18c8cf`）— PR がマージされるたびに、新規コミットをこのテーブルに追記してコミットインデックスを最新状態に保つ。**本体リポジトリ・`nekoserver/dynamicneko`・`nekoserver/cf-auth` の複数リポジトリを `repo_name` で区別して同居させる**（2026-09-11 に `nekoserver/cf-auth`（69件）・`nekoserver/dynamicneko`（120件）の過去分を追加し、複数リポジトリ対応にした）。
 
 ---
 
 ## 背景
 
-`repo_commit_index` は複数リポジトリの全コミットをコミットハッシュをキーとして記録する D1 テーブル。コミットと PR 番号・コミットメッセージの対応関係を整合性が保たれた状態でクエリ可能にするために設置された（マイグレーション `0034_create_repo_commit_index.sql`）。当初は本体リポジトリ専用だったが、2026-09-11 に `nekoserver/cf-auth` の過去コミットも同じテーブルへ追加し、`repo_name` で複数リポジトリを区別する運用にした。
+`repo_commit_index` は複数リポジトリの全コミットをコミットハッシュをキーとして記録する D1 テーブル。コミットと PR 番号・コミットメッセージの対応関係を整合性が保たれた状態でクエリ可能にするために設置された（マイグレーション `0034_create_repo_commit_index.sql`）。当初は本体リポジトリ専用だったが、2026-09-11 に `nekoserver/cf-auth`・`nekoserver/dynamicneko` の過去コミットも同じテーブルへ追加し、`repo_name` で複数リポジトリを区別する運用にした。
+
+`nekoserver/dynamicneko`と`nekoserver/cf-auth`は別の実在リポジトリである（前者はAIチャット等の実験用Worker、後者はcf-authログインを扱う別Worker）。この2つを混同しないこと — 2026-09-11のセッションでは、ユーザーが「dynamicneko」のコミットログ確認を依頼したのに対し、NOTICEファイル中の「`nekoserver/dynamicneko`の`cf-auth`」という表記を「dynamicneko = cf-authの通称」と誤読し、cf-authのコミットだけを投入してしまう取り違えが一度発生した（両方とも実在するため、結果的に両方投入すること自体は無駄にならなかった）。
 
 ### テーブルスキーマ
 
@@ -18,14 +20,15 @@
 | `seq_num` | INTEGER NOT NULL | リポジトリ内通し番号（`repo_name` ごとに oldest=1） |
 | `github_pr_number` | INTEGER | マージコミットの PR 番号（非マージは NULL） |
 | `commit_message` | TEXT NOT NULL | コミットメッセージ全文 |
-| `repo_name` | TEXT NOT NULL | 対象リポジトリ。必ず `owner/repo` 形式で統一する（`nekoserver/cloudflare-workers-github-oauth-1` または `nekoserver/cf-auth`）。オーナー名なしの表記（例: `cloudflare-workers-github-oauth-1` 単体）は使わないこと — 2026-09-11 にこの表記揺れで本体分の2件が別`repo_name`として分裂しているのを発見・修正した |
+| `repo_name` | TEXT NOT NULL | 対象リポジトリ。必ず `owner/repo` 形式で統一する（下記「対象リポジトリ一覧」のいずれか）。オーナー名なしの表記（例: `cloudflare-workers-github-oauth-1` 単体）は使わないこと — 2026-09-11 にこの表記揺れで本体分の2件が別`repo_name`として分裂しているのを発見・修正した |
 
 ### 対象リポジトリ一覧
 
 | `repo_name` | ローカルクローン | 備考 |
 |---|---|---|
 | `nekoserver/cloudflare-workers-github-oauth-1` | このリポジトリ自身 | 本体Worker |
-| `nekoserver/cf-auth` | 別途 `add_repo` でセッションに追加してクローン | Altワーカー（cf-auth） |
+| `nekoserver/dynamicneko` | 別途 `add_repo` でセッションに追加してクローン | AIチャット等の実験用Worker（cf-authとは別リポジトリ） |
+| `nekoserver/cf-auth` | 別途 `add_repo` でセッションに追加してクローン | cf-authログインを扱う別Worker |
 
 ---
 
@@ -41,7 +44,7 @@
 
 ## 実施手順
 
-以下の `<REPO>` は対象リポジトリの `repo_name`（`nekoserver/cloudflare-workers-github-oauth-1` または `nekoserver/cf-auth`）に、`<CLONE_DIR>` はそのリポジトリのローカルクローンのディレクトリに読み替える。`nekoserver/cf-auth` を対象にする場合、セッションにクローンが無ければ先に `add_repo` で追加する。
+以下の `<REPO>` は対象リポジトリの `repo_name`（上記「対象リポジトリ一覧」のいずれか）に、`<CLONE_DIR>` はそのリポジトリのローカルクローンのディレクトリに読み替える。`nekoserver/dynamicneko` または `nekoserver/cf-auth` を対象にする場合、セッションにクローンが無ければ先に `add_repo` で追加する（名前が似ているので取り違えないこと）。
 
 ### Step 1: D1 の現在の最大 seq_num を確認する
 
