@@ -4006,6 +4006,18 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   }
 }
 
+/**
+ * 「メール登録・ログインが許可されている人」かどうかの共通判定。
+ * user_sessionsにそのuser_idの行が存在するか(getUserSession() !== null)を
+ * 基準とする。cf-auth webhookのアクセス判定と、/countdownの登録UI表示・
+ * 登録APIのサーバー側再検証で同じ基準を使うために共通化した(元々は
+ * 3箇所でgetUserSession()呼び出し+nullチェックが重複していた)。
+ */
+async function hasCfAuthAccess(db: D1Database | undefined, userId: string): Promise<boolean> {
+  const userSession = await getUserSession(db, userId);
+  return userSession !== null;
+}
+
 // ログイン確定処理（D1保存・JWT発行・Cookieセット）。
 // 即時ログイン(/auth/github/callback)とメール確認後ログイン(/auth/email-confirm)の
 // 両方から共通利用する。
@@ -10425,8 +10437,8 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
-  const userSession = await getUserSession(c.env.DB, user.sub);
-  return c.html(getCountdownPage(user.sub, userSession !== null));
+  const hasAccess = await hasCfAuthAccess(c.env.DB, user.sub);
+  return c.html(getCountdownPage(user.sub, hasAccess));
 });
 
 app.get('/api/countdown', authMiddleware, async (c) => {
@@ -10519,10 +10531,9 @@ app.post('/api/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   // クライアント側でボタンを隠していても、直接APIを叩かれれば登録できて
-  // しまうため、cf-auth webhookのhasAccess判定(user_sessionsに登録が
-  // あるか)と同じ基準をサーバー側でも必ず再検証する。
-  const userSession = await getUserSession(c.env.DB, user.sub);
-  if (userSession === null) {
+  // しまうため、cf-auth webhookのhasAccess判定と同じ基準をサーバー側でも
+  // 必ず再検証する。
+  if (!(await hasCfAuthAccess(c.env.DB, user.sub))) {
     return jsonUtf8({ error: 'この機能を利用する権限がありません' }, 403);
   }
   let body: unknown;
@@ -17812,8 +17823,7 @@ app.post('/webhook/cf-auth', async (c) => {
     return c.json({ result: 'NG', reason: 'username not found in payload' }, 400);
   }
 
-  const userSession = await getUserSession(c.env.DB, usernameFromPayload);
-  const hasAccess = userSession !== null;
+  const hasAccess = await hasCfAuthAccess(c.env.DB, usernameFromPayload);
 
   logger.info('cf-auth access check result', { user: usernameFromPayload, hasAccess });
   safeWaitUntil(c, 
