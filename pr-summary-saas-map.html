@@ -1,0 +1,400 @@
+<title>PR要約パイプライン構成図</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap');
+
+  :root {
+    --bg: #f5f3ee;
+    --surface: #ffffff;
+    --surface-2: #ece9e0;
+    --ink: #1d2220;
+    --muted: #5f6a63;
+    --line: #d9d4c6;
+    --line-strong: #b8b2a0;
+    --accent: #c65a2e;
+    --accent-ink: #ffffff;
+    --accent2: #2c6b5e;
+    --accent2-soft: #e4efe9;
+    --accent-soft: #f6e3d5;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181a;
+      --surface: #1b2022;
+      --surface-2: #20262a;
+      --ink: #edf0ec;
+      --muted: #9aa39c;
+      --line: #333c39;
+      --line-strong: #465049;
+      --accent: #f0805a;
+      --accent-ink: #171a16;
+      --accent2: #55b79e;
+      --accent2-soft: #1e2c28;
+      --accent-soft: #2c221c;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14181a;
+    --surface: #1b2022;
+    --surface-2: #20262a;
+    --ink: #edf0ec;
+    --muted: #9aa39c;
+    --line: #333c39;
+    --line-strong: #465049;
+    --accent: #f0805a;
+    --accent-ink: #171a16;
+    --accent2: #55b79e;
+    --accent2-soft: #1e2c28;
+    --accent-soft: #2c221c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans JP', -apple-system, 'Hiragino Kaku Gothic ProN', sans-serif;
+    padding: 40px 20px 72px;
+    line-height: 1.6;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(24px, 4vw, 34px);
+    font-weight: 700;
+    margin: 10px 0 6px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .lede {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 62ch;
+    margin: 0 0 8px;
+  }
+
+  .lede code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.92em;
+    background: var(--surface-2);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+
+  header { padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 32px; }
+
+  .diagram-shell {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px clamp(8px, 3vw, 28px) 8px;
+    margin-bottom: 36px;
+  }
+
+  figure { margin: 0; }
+  figcaption {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    padding: 10px 8px 16px;
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+  }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: 'IBM Plex Sans JP', sans-serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .node-worker rect { fill: var(--ink); }
+  .node-worker text { fill: var(--bg); }
+  .node-worker .sub { fill: var(--bg); opacity: 0.72; }
+
+  .node-saas rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.3; }
+  .node-saas .title { fill: var(--ink); font-weight: 700; }
+  .node-saas .sub { fill: var(--muted); }
+
+  .edge { stroke: var(--line-strong); stroke-width: 1.6; fill: none; }
+  .edge-accent { stroke: var(--accent); stroke-width: 2; }
+  .edge-accent2 { stroke: var(--accent2); stroke-width: 2; }
+  .edge-label { fill: var(--muted); font-size: 11px; }
+  .edge-label-strong { fill: var(--ink); font-size: 11px; font-weight: 600; }
+
+  section.roles h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px 20px;
+  }
+
+  .card .kicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.github { background: var(--ink); }
+  .dot.ai { background: var(--accent); }
+  .dot.d1 { background: var(--accent); }
+  .dot.slack { background: var(--accent2); }
+
+  .card .name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 14.5px;
+  }
+
+  .card .role {
+    font-size: 14px;
+    margin: 0 0 12px;
+    color: var(--ink);
+  }
+
+  .card .status {
+    font-size: 12.5px;
+    color: var(--muted);
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+    margin: 0;
+  }
+
+  .card .status b { color: var(--accent2); font-weight: 600; }
+
+  table.timeline {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  table.timeline th, table.timeline td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  table.timeline th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+
+  table.timeline tr:last-child td { border-bottom: none; }
+  table.timeline td.saas { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; }
+  .tbl-wrap { overflow-x: auto; margin-bottom: 8px; }
+
+  footer {
+    margin-top: 40px;
+    font-size: 12.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  @media (max-width: 520px) {
+    body { padding: 28px 14px 56px; }
+    table.timeline th, table.timeline td { padding: 8px 10px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SaaS integration map</div>
+    <h1>PR要約パイプラインが各SaaSに持たせている役割</h1>
+    <p class="lede">
+      <code>POST /webhook/github</code> を起点に、GitHub・Cloudflare Workers AI・Cloudflare D1・Slack の4つに
+      役割を分担させている。「何をやらせたか」と「今も維持している役割」を1枚の図にまとめた。
+    </p>
+  </header>
+
+  <div class="diagram-shell">
+    <figure>
+      <svg viewBox="0 0 960 560" role="img" aria-label="中心のWorkerがGitHub・Cloudflare Workers AI・Cloudflare D1・Slackの4つのSaaSと役割分担しているデータフロー図">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+
+        <!-- edges (drawn first, under nodes) -->
+        <g class="edge" style="color:var(--line-strong)">
+          <path d="M 210,120 C 320,170 360,220 420,255" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent" style="color:var(--accent)">
+          <path d="M 560,255 C 640,210 690,170 760,130" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent" style="color:var(--accent)">
+          <path d="M 560,305 C 640,350 690,390 760,430" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent2" style="color:var(--accent2)">
+          <path d="M 420,305 C 320,350 270,390 200,430" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent2" style="color:var(--accent2)">
+          <path d="M 205,455 C 300,410 350,370 415,330" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge" style="color:var(--line-strong)">
+          <path d="M 760,455 C 660,410 610,370 565,335" marker-end="url(#arrow)"></path>
+        </g>
+
+        <!-- edge labels -->
+        <text class="edge-label mono" x="255" y="175" text-anchor="middle">pull_request イベント</text>
+        <text class="edge-label mono" x="255" y="189" text-anchor="middle">HMAC-SHA256 署名検証</text>
+
+        <text class="edge-label-strong mono" x="705" y="165" text-anchor="middle">diff / title → AI.run()</text>
+        <text class="edge-label mono" x="705" y="179" text-anchor="middle">llama-3.1-8b-instruct</text>
+
+        <text class="edge-label-strong mono" x="705" y="395" text-anchor="middle">ai_summary_log</text>
+        <text class="edge-label mono" x="705" y="409" text-anchor="middle">ai_summary_reviews へ INSERT</text>
+
+        <text class="edge-label-strong mono" x="255" y="395" text-anchor="middle">chat.postMessage</text>
+        <text class="edge-label mono" x="255" y="409" text-anchor="middle">Block Kit + 詳細ボタン</text>
+
+        <text class="edge-label-strong mono" x="255" y="365" text-anchor="middle" transform="rotate(-38 255 365)" style="display:none"></text>
+        <text class="edge-label mono" x="290" y="365" text-anchor="middle">block_actions → モーダル要求</text>
+
+        <text class="edge-label mono" x="660" y="365" text-anchor="middle">SELECT で1件取得</text>
+
+        <!-- GitHub node -->
+        <g class="node-saas">
+          <rect x="40" y="60" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="60" y="90" font-size="14">GitHub</text>
+          <text class="sub" x="60" y="112" font-size="11.5">GitHub App / Webhook</text>
+        </g>
+
+        <!-- Workers AI node -->
+        <g class="node-saas">
+          <rect x="760" y="60" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="780" y="90" font-size="14">Workers AI</text>
+          <text class="sub" x="780" y="112" font-size="11.5">要約生成モデル</text>
+        </g>
+
+        <!-- D1 node -->
+        <g class="node-saas">
+          <rect x="760" y="430" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="780" y="460" font-size="14">Cloudflare D1</text>
+          <text class="sub" x="780" y="482" font-size="11.5">要約ログ・評価の保管</text>
+        </g>
+
+        <!-- Slack node -->
+        <g class="node-saas">
+          <rect x="20" y="430" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="40" y="460" font-size="14">Slack</text>
+          <text class="sub" x="40" y="482" font-size="11.5">通知 + インタラクション</text>
+        </g>
+
+        <!-- Worker (center) -->
+        <g class="node-worker">
+          <rect x="400" y="248" width="180" height="70" rx="10"></rect>
+          <text class="title mono" x="490" y="278" font-size="14" text-anchor="middle" font-weight="700">Worker</text>
+          <text class="sub mono" x="490" y="298" font-size="11" text-anchor="middle">src/index.ts</text>
+        </g>
+      </svg>
+      <figcaption>
+        中心の Worker が4つのSaaSそれぞれに異なる役割(受信/生成/保管/通知)を割り振り、Slackのボタン操作でD1へ再照会するループまで持つ
+      </figcaption>
+    </figure>
+  </div>
+
+  <section class="roles">
+    <h2>各SaaSの役割と現状</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="kicker"><span class="dot github"></span><span class="name">GitHub</span></div>
+        <p class="role">PRの作成・更新(<span class="mono">opened</span> / <span class="mono">synchronize</span>)をWebhookで通知させる「発火源」。HMAC署名でなりすましを防ぐ窓口も兼ねる。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">/webhook/github</span> 1本で全リポジトリのイベントを受け続けている</p>
+      </div>
+      <div class="card">
+        <div class="kicker"><span class="dot ai"></span><span class="name">Cloudflare Workers AI</span></div>
+        <p class="role">diffとPR本文を渡すと日本語要約を返す「生成エンジン」。<span class="mono">[AI]</span>バインディングでWorkerに直結し、外部APIキー管理が不要。</p>
+        <p class="status">現状: <b>維持</b> — モデル名は<span class="mono">AI_MODEL</span>で上書き可能、未設定時はデフォルトにフォールバック</p>
+      </div>
+      <div class="card">
+        <div class="kicker"><span class="dot d1"></span><span class="name">Cloudflare D1</span></div>
+        <p class="role">要約結果・失敗理由・自動診断・人手フィードバックをすべて記録する「台帳」。cf-authの<span class="mono">/wspace</span>が読み取り専用で参照する共有DBでもある。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">ai_summary_log</span> / <span class="mono">ai_summary_reviews</span> の2テーブルに一本化</p>
+      </div>
+      <div class="card">
+        <div class="kicker"><span class="dot slack"></span><span class="name">Slack</span></div>
+        <p class="role">要約をBlock Kitで通知し、「詳細を見る」ボタンからモーダルでD1の全情報を見せる「表示面」。外部URL遷移を経由しないループを持つ。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">POST /slack/interactions</span> が署名検証してモーダルを都度組み立てる</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="roles">
+    <h2>役割が固まるまでの主な変化</h2>
+    <div class="tbl-wrap">
+      <table class="timeline">
+        <thead>
+          <tr><th>SaaS</th><th>やったこと</th><th>今の役割への効き目</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="saas">GitHub</td>
+            <td>App Webhook基盤を先に構築し、後から<span class="mono">pull_request</span>分岐を同じ窓口に追加</td>
+            <td>「イベント種別が増えても受信口は1つ」という設計が今も踏襲されている</td>
+          </tr>
+          <tr>
+            <td class="saas">Workers AI</td>
+            <td>diffが空だと要約自体がスキップされNULLになる不具合を修正</td>
+            <td>diff取得に失敗してもタイトル・本文からのフォールバック生成が今の標準動作</td>
+          </tr>
+          <tr>
+            <td class="saas">Cloudflare D1</td>
+            <td>ログテーブルを2段階で拡張(基本ログ→resolved/tags/reviews)</td>
+            <td>失敗時の自動診断(<span class="mono">auto-diagnosis</span>)が常時記録される状態を維持</td>
+          </tr>
+          <tr>
+            <td class="saas">Slack</td>
+            <td>plain textからBlock Kit化し、外部URL遷移をモーダルに置き換え</td>
+            <td>Slackを離れずに要約全文を確認できる体験が定着</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    出典: <span class="mono">NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md</span> — コミット履歴(2026-03-16〜2026-03-24分)を基に構成
+  </footer>
+</div>
