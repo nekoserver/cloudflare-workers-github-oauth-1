@@ -10437,8 +10437,7 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
-  const hasAccess = await hasCfAuthAccess(c.env.DB, user.sub);
-  return c.html(getCountdownPage(user.sub, hasAccess));
+  return c.html(getCountdownPage(user.sub));
 });
 
 app.get('/api/countdown', authMiddleware, async (c) => {
@@ -10527,15 +10526,17 @@ export function parseCountdownRegistrationRequest(
   return { items, error: null };
 }
 
+// このエンドポイントは/countdownのカレンダーだけでなく、/welcome(ログイン
+// 直後の画面)の「セッション有効期限をカウントダウンに登録」ボタンからも
+// 呼ばれる汎用API。hasCfAuthAccess()(cf-auth webhookのアクセス許可判定)
+// はcf-auth経由のログイン通知向けの基準であり、このアプリへ直接ログイン
+// 済みの全ユーザーが使える機能をそれで縛るのは誤りだった(過去に一度
+// ここへ追加してしまい、/welcomeの既存機能を壊す回帰を起こした)。
+// このAPI自体はauthMiddlewareの認証のみとし、cf-authのアクセス判定は
+// 表示側(/countdownの登録ボタン表示・/aichatの登録ボタン表示)にのみ使う。
 app.post('/api/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  // クライアント側でボタンを隠していても、直接APIを叩かれれば登録できて
-  // しまうため、cf-auth webhookのhasAccess判定と同じ基準をサーバー側でも
-  // 必ず再検証する。
-  if (!(await hasCfAuthAccess(c.env.DB, user.sub))) {
-    return jsonUtf8({ error: 'この機能を利用する権限がありません' }, 403);
-  }
   let body: unknown;
   try {
     body = await c.req.json();
