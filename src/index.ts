@@ -224,6 +224,7 @@ async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbToday
 }
 
 import { getKimiCodePage } from './views/kimiCode';
+import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -504,6 +505,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'wine_metadata', migration: '0126', description: '/wine-searchのワイン個別詳細(産地・品種・特徴・ペアリング料理・出典URL等)。wine_616_individual_metadata_researched_v2.csvが元データ。wine_embeddings.idと1:1', syncPolicy: 'manual' },
   { name: 'public_key_security_events', migration: '0128', description: '公開鍵チャレンジ署名ログインの異常検知ログ。対象鍵が見つからない(userId/keyId不一致・失効・期限切れ)場合はkey_not_found、署名が登録済み公開鍵と一致しない(=秘密鍵が違う)場合はsignature_mismatchとして記録し、同時にSlack通知する', syncPolicy: 'auto' },
   { name: 'dynamicneko_aichat_allowed_users', migration: '0133', description: 'dynamicnekoのAI問い合わせウィジェットの利用を許可するメールアドレス一覧', syncPolicy: 'manual' },
+  { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2043,6 +2045,15 @@ CREATE INDEX IF NOT EXISTS idx_alt_notify_ingest_log_linked_request_id ON alt_no
   note TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`,
+  '0134': `CREATE TABLE IF NOT EXISTS ruby_wasm_snippets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  code TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'kimi-code',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippets_user_created ON ruby_wasm_snippets(user_id, created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2291,6 +2302,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   countdown_events: { id: 'pk', user_id: 'idx' },
   kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
   kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
+  ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2416,6 +2428,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   countdown_events: 'system',
   kimi_gemma_reviews: 'ai',
   kimi_code_generate_log: 'ai',
+  ruby_wasm_snippets: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2536,6 +2549,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   countdown_events: { user_id: 'user_sessions' },
   kimi_gemma_reviews: { user_id: 'user_sessions' },
   kimi_code_generate_log: { user_id: 'user_sessions' },
+  ruby_wasm_snippets: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -12803,6 +12817,72 @@ app.post('/api/kimi-code/gemma-review', authMiddleware, async (c) => {
     logger.error('[kimi-code] gemmaレビュー呼び出し失敗', { userId: user.sub, error: message });
     return jsonUtf8({ error: 'Gemmaレビューでサーバーエラーが発生しました: ' + message }, 500);
   }
+});
+
+/** ruby_wasm_snippets保存時、titleが指定されなかった場合に使う自動生成タイトル。コード先頭の空でない行を40文字まで切り詰める。 */
+export function deriveRubySnippetTitle(code: string): string {
+  const firstLine = code
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0) ?? '';
+  return firstLine.slice(0, 40) || '無題のRubyコード';
+}
+
+/**
+ * /kimi-codeページの「コードを保管」ボタンから呼ばれる。kimi-codeには言語選択
+ * UIが無いため、保存してよいRubyコードかどうかはlooksLikeRubyCode()による
+ * サーバー側判定を必ず経由する(クライアント側の判断は信頼しない)。Ruby以外
+ * と判定した場合は422で理由を返し、握りつぶさずユーザーに伝える。
+ */
+app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ code?: string; title?: string }>().catch(() => null);
+  const code = (body?.code ?? '').trim().slice(0, 20000);
+  if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
+  if (!looksLikeRubyCode(code)) {
+    return jsonUtf8(
+      { error: 'Rubyコードと判定できなかったため保存できません(生成されたコードの構文パターンから自動判定しています)' },
+      422
+    );
+  }
+  const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
+  const id = crypto.randomUUID();
+  try {
+    await c.env.DB
+      .prepare(`INSERT INTO ruby_wasm_snippets (id, user_id, title, code, source) VALUES (?, ?, ?, ?, ?)`)
+      .bind(id, user.sub, title, code, 'kimi-code')
+      .run();
+    return jsonUtf8({ id, title });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[ruby-wasm] スニペット保存失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'スニペットの保存に失敗しました: ' + message }, 500);
+  }
+});
+
+/** /ruby-wasmページの保存済みスニペット選択欄用。コード本文は含めず一覧表示に必要な列だけ返す。 */
+app.get('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ snippets: [] });
+  const { results } = await c.env.DB
+    .prepare(`SELECT id, title, created_at FROM ruby_wasm_snippets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`)
+    .bind(user.sub)
+    .all<{ id: string; title: string; created_at: string }>();
+  return jsonUtf8({ snippets: results ?? [] });
+});
+
+/** /ruby-wasmページで選択したスニペットのコード本文を取得する。他ユーザーのスニペットは(user_idの一致条件により)取得できない。 */
+app.get('/api/ruby-wasm/snippets/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  const row = await c.env.DB
+    .prepare(`SELECT id, title, code, created_at FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: string; title: string; code: string; created_at: string }>();
+  if (!row) return jsonUtf8({ error: 'スニペットが見つかりません' }, 404);
+  return jsonUtf8(row);
 });
 
 /**

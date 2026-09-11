@@ -107,10 +107,12 @@ textarea:focus { border-color: var(--accent); }
 <div class="panel">
   <div class="panel-label">
     生成結果
+    <button class="btn sm" id="kimiSaveRubyBtn" style="float:right;margin-left:6px;">💎 コードを保管</button>
     <button class="btn sm copy-btn" id="kimiCopyBtn" style="float:right;">コピー</button>
   </div>
   <div id="kimiOutput"></div>
   <div class="token-note" id="kimiTokenNote"></div>
+  <div class="token-note" id="kimiSaveRubyNote"></div>
   <div class="error-msg" id="kimiErrorMsg"></div>
 </div>
 
@@ -315,6 +317,41 @@ textarea:focus { border-color: var(--accent); }
       copyBtn.classList.add('copied');
       setTimeout(function() { copyBtn.textContent = orig; copyBtn.classList.remove('copied'); }, 1200);
     });
+  });
+
+  var saveRubyBtn = document.getElementById('kimiSaveRubyBtn');
+  var saveRubyNoteEl = document.getElementById('kimiSaveRubyNote');
+
+  saveRubyBtn.addEventListener('click', function() {
+    var code = outputEl.textContent || '';
+    if (!code.trim()) {
+      saveRubyNoteEl.textContent = '❌ 先にコードを生成してください';
+      return;
+    }
+    saveRubyNoteEl.textContent = '保管中...';
+    saveRubyBtn.disabled = true;
+    fetch('/api/ruby-wasm/snippets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ code: code })
+    })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (res.status === 200 && res.data && res.data.id) {
+          saveRubyNoteEl.textContent = '✅ Rubyコードとして保管しました(「' + res.data.title + '」。/ruby-wasm ページから呼び出せます)';
+        } else if (res.status === 422) {
+          saveRubyNoteEl.textContent = '⚠️ ' + (res.data && res.data.error ? res.data.error : 'Rubyコードと判定できなかったため保管できませんでした');
+        } else {
+          saveRubyNoteEl.textContent = '❌ 保管に失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+        }
+      })
+      .catch(function(err) {
+        saveRubyNoteEl.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+      })
+      .then(function() {
+        saveRubyBtn.disabled = false;
+      });
   });
 })();
 </script>
