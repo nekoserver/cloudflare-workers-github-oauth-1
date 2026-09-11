@@ -43,6 +43,7 @@
 | メソッド | パス | 認証 | 説明 | 最終コミット |
 |---|---|---|---|---|
 | POST | `/webhook/github` | HMAC-SHA256 署名検証 | GitHub App installation イベント受信 → D1保存 + Slack通知 | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) 2026-03-16 |
+| POST | `/webhook/cf-auth` | HMAC-SHA256 署名検証 | cf-auth のログイン等のイベント受信 → ユーザー判定 + Slack通知 | `src/index.ts` |
 | POST | `/webhook/resend` | Svix 署名検証 | Resend メール配信イベント受信 → Slack通知 + プロキシ転送 | [`d2b2898`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d2b2898) 2026-03-13 |
 
 ### デバッグ用
@@ -55,6 +56,14 @@
 ---
 
 ## Webhook
+
+### cf-auth Webhook
+
+| メソッド | パス | 認証 | 定義箇所 |
+|---|---|---|---|
+| POST | `/webhook/cf-auth` | `CF_AUTH_WEBHOOK_SECRET` による HMAC-SHA256 署名検証（`X-Hub-Signature-256`） | `src/index.ts` |
+
+`Authorization` ヘッダーはこのエンドポイントの認証には使用しない。送信側は、送信時の JSON 文字列そのもの（UTF-8）を `CF_AUTH_WEBHOOK_SECRET` を鍵として HMAC-SHA256 で署名し、16進小文字の署名を `X-Hub-Signature-256: sha256=<hex>` 形式で付与する。署名計算後に JSON の再整形・改行追加・文字コード変換が行われると、受信した生の本文との署名照合に失敗する。
 
 ### GitHub App Webhook
 

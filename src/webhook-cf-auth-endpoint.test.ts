@@ -50,6 +50,22 @@ describe('POST /webhook/cf-auth', () => {
     expect(await response.json()).toEqual({ error: 'Unauthorized webhook' });
   });
 
+  it.each([
+    ['Bearer付き', 'Bearer correct-secret'],
+    ['シークレットのみ', 'correct-secret'],
+  ])('Authorizationが%sでもX-Hub-Signature-256の代わりにはならない', async (_label, authorization) => {
+    const response = await app.request('/webhook/cf-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authorization,
+      },
+      body: JSON.stringify({ username: 'octocat' }),
+    }, { CF_AUTH_WEBHOOK_SECRET: 'correct-secret' });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized webhook' });
+  });
+
   it('CF_AUTH_WEBHOOK_SECRET設定済みでも、署名が不正な値なら401', async () => {
     const response = await app.request('/webhook/cf-auth', {
       method: 'POST',
