@@ -15,6 +15,8 @@
     --accent2: #2c6b5e;
     --accent2-soft: #e4efe9;
     --accent-soft: #f6e3d5;
+    --cf-fill: #f3ede1;
+    --cf-line: #c9a063;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -31,6 +33,8 @@
       --accent2: #55b79e;
       --accent2-soft: #1e2c28;
       --accent-soft: #2c221c;
+      --cf-fill: #241f16;
+      --cf-line: #a37c3f;
     }
   }
 
@@ -47,6 +51,8 @@
     --accent2: #55b79e;
     --accent2-soft: #1e2c28;
     --accent-soft: #2c221c;
+    --cf-fill: #241f16;
+    --cf-line: #a37c3f;
   }
 
   * { box-sizing: border-box; }
@@ -59,7 +65,7 @@
     line-height: 1.6;
   }
 
-  .wrap { max-width: 980px; margin: 0 auto; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
 
   .eyebrow {
     font-family: 'IBM Plex Mono', monospace;
@@ -82,7 +88,7 @@
   .lede {
     color: var(--muted);
     font-size: 15px;
-    max-width: 62ch;
+    max-width: 66ch;
     margin: 0 0 8px;
   }
 
@@ -123,13 +129,24 @@
   .node-worker text { fill: var(--bg); }
   .node-worker .sub { fill: var(--bg); opacity: 0.72; }
 
+  .node-worker2 rect { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 4 3; }
+  .node-worker2 .title { fill: var(--ink); font-weight: 700; }
+  .node-worker2 .sub { fill: var(--muted); }
+
   .node-saas rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.3; }
   .node-saas .title { fill: var(--ink); font-weight: 700; }
   .node-saas .sub { fill: var(--muted); }
 
+  .cf-group-fill { fill: var(--cf-fill); stroke: var(--cf-line); stroke-width: 1.6; stroke-dasharray: 6 4; }
+  .cf-group-label { fill: var(--cf-line); font-weight: 700; letter-spacing: 0.06em; }
+
+  .saas-ring { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 5 4; }
+  .saas-ring-label { fill: var(--muted); font-weight: 600; letter-spacing: 0.05em; }
+
   .edge { stroke: var(--line-strong); stroke-width: 1.6; fill: none; }
   .edge-accent { stroke: var(--accent); stroke-width: 2; }
   .edge-accent2 { stroke: var(--accent2); stroke-width: 2; }
+  .edge-worker { stroke: var(--ink); stroke-width: 1.6; opacity: 0.55; }
   .edge-label { fill: var(--muted); font-size: 11px; }
   .edge-label-strong { fill: var(--ink); font-size: 11px; font-weight: 600; }
 
@@ -157,6 +174,8 @@
     padding: 18px 20px 20px;
   }
 
+  .card.grouped { border-color: var(--cf-line); }
+
   .card .kicker {
     display: flex;
     align-items: center;
@@ -168,12 +187,25 @@
   .dot.github { background: var(--ink); }
   .dot.ai { background: var(--accent); }
   .dot.d1 { background: var(--accent); }
+  .dot.worker { background: var(--cf-line); }
   .dot.slack { background: var(--accent2); }
 
   .card .name {
     font-family: 'IBM Plex Mono', monospace;
     font-weight: 600;
     font-size: 14.5px;
+  }
+
+  .card .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--cf-line);
+    border: 1px solid var(--cf-line);
+    border-radius: 999px;
+    padding: 1px 8px;
+    margin-left: auto;
   }
 
   .card .role {
@@ -242,121 +274,162 @@
     <div class="eyebrow">SaaS integration map</div>
     <h1>PR要約パイプラインが各SaaSに持たせている役割</h1>
     <p class="lede">
-      <code>POST /webhook/github</code> を起点に、GitHub・Cloudflare Workers AI・Cloudflare D1・Slack の4つに
-      役割を分担させている。「何をやらせたか」と「今も維持している役割」を1枚の図にまとめた。
+      Cloudflareの3コンポーネント(本体Worker・D1・Workers AI)は1つの基盤としてまとめて囲み、
+      GitHubとSlackはそれぞれ独立した外部SaaSとして輪で囲んだ。本体Workerはさらに
+      <span class="mono">dynamicneko</span>・<span class="mono">cf-auth</span>という
+      別々のWorkerとも接続している。
     </p>
   </header>
 
   <div class="diagram-shell">
     <figure>
-      <svg viewBox="0 0 960 560" role="img" aria-label="中心のWorkerがGitHub・Cloudflare Workers AI・Cloudflare D1・Slackの4つのSaaSと役割分担しているデータフロー図">
+      <svg viewBox="0 0 1000 640" role="img" aria-label="Cloudflare上の本体Worker・D1・Workers AIを1つの枠で囲み、GitHubとSlackはそれぞれ単独の輪で囲む。本体Workerはさらにdynamicnekoワーカーとcf-authワーカー(Slack代替の通常ワーカー)にも接続し、Workers AIにはコミットごとの要約生成を一任している">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
           </marker>
         </defs>
 
-        <!-- edges (drawn first, under nodes) -->
+        <!-- Cloudflare grouping -->
+        <rect class="cf-group-fill" x="330" y="30" width="420" height="290" rx="20"></rect>
+        <text class="cf-group-label mono" x="350" y="58" font-size="12.5">CLOUDFLARE WORKERS 基盤</text>
+
+        <!-- GitHub ring -->
+        <circle class="saas-ring" cx="120" cy="175" r="100"></circle>
+        <text class="saas-ring-label mono" x="120" y="88" text-anchor="middle" font-size="11">外部 SaaS</text>
+
+        <!-- Slack ring -->
+        <circle class="saas-ring" cx="880" cy="175" r="100"></circle>
+        <text class="saas-ring-label mono" x="880" y="88" text-anchor="middle" font-size="11">外部 SaaS</text>
+
+        <!-- edges -->
         <g class="edge" style="color:var(--line-strong)">
-          <path d="M 210,120 C 320,170 360,220 420,255" marker-end="url(#arrow)"></path>
+          <path d="M 200,175 C 280,175 300,175 335,175" marker-end="url(#arrow)"></path>
         </g>
         <g class="edge edge-accent" style="color:var(--accent)">
-          <path d="M 560,255 C 640,210 690,170 760,130" marker-end="url(#arrow)"></path>
-        </g>
-        <g class="edge edge-accent" style="color:var(--accent)">
-          <path d="M 560,305 C 640,350 690,390 760,430" marker-end="url(#arrow)"></path>
-        </g>
-        <g class="edge edge-accent2" style="color:var(--accent2)">
-          <path d="M 420,305 C 320,350 270,390 200,430" marker-end="url(#arrow)"></path>
-        </g>
-        <g class="edge edge-accent2" style="color:var(--accent2)">
-          <path d="M 205,455 C 300,410 350,370 415,330" marker-end="url(#arrow)"></path>
+          <path d="M 465,140 C 465,120 465,115 465,100" marker-end="url(#arrow)"></path>
         </g>
         <g class="edge" style="color:var(--line-strong)">
-          <path d="M 760,455 C 660,410 610,370 565,335" marker-end="url(#arrow)"></path>
+          <path d="M 615,140 C 615,120 615,115 615,100" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent2" style="color:var(--accent2)">
+          <path d="M 745,175 C 800,175 800,175 780,175" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge edge-accent2" style="color:var(--accent2)">
+          <path d="M 780,195 C 800,195 800,195 745,205" marker-end="url(#arrow)"></path>
+        </g>
+
+        <!-- worker-to-worker edges (below group) -->
+        <g class="edge-worker" style="color:var(--ink)">
+          <path d="M 490,320 C 420,380 320,420 235,455" marker-end="url(#arrow)"></path>
+        </g>
+        <g class="edge-worker" style="color:var(--ink)">
+          <path d="M 590,320 C 660,380 740,420 815,455" marker-end="url(#arrow)"></path>
         </g>
 
         <!-- edge labels -->
-        <text class="edge-label mono" x="255" y="175" text-anchor="middle">pull_request イベント</text>
-        <text class="edge-label mono" x="255" y="189" text-anchor="middle">HMAC-SHA256 署名検証</text>
+        <text class="edge-label mono" x="270" y="163" text-anchor="middle">pull_request</text>
+        <text class="edge-label mono" x="270" y="177" text-anchor="middle">HMAC署名検証</text>
 
-        <text class="edge-label-strong mono" x="705" y="165" text-anchor="middle">diff / title → AI.run()</text>
-        <text class="edge-label mono" x="705" y="179" text-anchor="middle">llama-3.1-8b-instruct</text>
+        <text class="edge-label-strong mono" x="465" y="118" text-anchor="middle" transform="rotate(-90 465 118)">コミットごとに</text>
+        <text class="edge-label mono" x="480" y="118" text-anchor="middle" transform="rotate(-90 480 118)">要約を一任</text>
 
-        <text class="edge-label-strong mono" x="705" y="395" text-anchor="middle">ai_summary_log</text>
-        <text class="edge-label mono" x="705" y="409" text-anchor="middle">ai_summary_reviews へ INSERT</text>
+        <text class="edge-label mono" x="630" y="118" text-anchor="middle" transform="rotate(-90 630 118)">要約ログ保存</text>
 
-        <text class="edge-label-strong mono" x="255" y="395" text-anchor="middle">chat.postMessage</text>
-        <text class="edge-label mono" x="255" y="409" text-anchor="middle">Block Kit + 詳細ボタン</text>
+        <text class="edge-label-strong mono" x="805" y="163" text-anchor="middle">Block Kit通知</text>
+        <text class="edge-label mono" x="805" y="215" text-anchor="middle">ボタン→モーダル</text>
 
-        <text class="edge-label-strong mono" x="255" y="365" text-anchor="middle" transform="rotate(-38 255 365)" style="display:none"></text>
-        <text class="edge-label mono" x="290" y="365" text-anchor="middle">block_actions → モーダル要求</text>
-
-        <text class="edge-label mono" x="660" y="365" text-anchor="middle">SELECT で1件取得</text>
+        <text class="edge-label mono" x="345" y="405" text-anchor="middle" transform="rotate(-31 345 405)">別Worker</text>
+        <text class="edge-label mono" x="700" y="405" text-anchor="middle" transform="rotate(31 700 405)">Slack代替/通常ワーカー</text>
 
         <!-- GitHub node -->
         <g class="node-saas">
-          <rect x="40" y="60" width="180" height="72" rx="10"></rect>
-          <text class="title mono" x="60" y="90" font-size="14">GitHub</text>
-          <text class="sub" x="60" y="112" font-size="11.5">GitHub App / Webhook</text>
-        </g>
-
-        <!-- Workers AI node -->
-        <g class="node-saas">
-          <rect x="760" y="60" width="180" height="72" rx="10"></rect>
-          <text class="title mono" x="780" y="90" font-size="14">Workers AI</text>
-          <text class="sub" x="780" y="112" font-size="11.5">要約生成モデル</text>
-        </g>
-
-        <!-- D1 node -->
-        <g class="node-saas">
-          <rect x="760" y="430" width="180" height="72" rx="10"></rect>
-          <text class="title mono" x="780" y="460" font-size="14">Cloudflare D1</text>
-          <text class="sub" x="780" y="482" font-size="11.5">要約ログ・評価の保管</text>
+          <rect x="30" y="139" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="50" y="169" font-size="14">GitHub</text>
+          <text class="sub" x="50" y="191" font-size="11.5">GitHub App / Webhook</text>
         </g>
 
         <!-- Slack node -->
         <g class="node-saas">
-          <rect x="20" y="430" width="180" height="72" rx="10"></rect>
-          <text class="title mono" x="40" y="460" font-size="14">Slack</text>
-          <text class="sub" x="40" y="482" font-size="11.5">通知 + インタラクション</text>
+          <rect x="790" y="139" width="180" height="72" rx="10"></rect>
+          <text class="title mono" x="810" y="169" font-size="14">Slack</text>
+          <text class="sub" x="810" y="191" font-size="11.5">通知 + インタラクション</text>
         </g>
 
-        <!-- Worker (center) -->
+        <!-- Workers AI node (inside cf group) -->
+        <g class="node-saas">
+          <rect x="380" y="80" width="170" height="60" rx="9"></rect>
+          <text class="title mono" x="398" y="106" font-size="13">Workers AI</text>
+          <text class="sub" x="398" y="126" font-size="11">要約生成モデル</text>
+        </g>
+
+        <!-- D1 node (inside cf group) -->
+        <g class="node-saas">
+          <rect x="550" y="80" width="170" height="60" rx="9"></rect>
+          <text class="title mono" x="568" y="106" font-size="13">Cloudflare D1</text>
+          <text class="sub" x="568" y="126" font-size="11">要約ログ・評価の保管</text>
+        </g>
+
+        <!-- main Worker (inside cf group) -->
         <g class="node-worker">
-          <rect x="400" y="248" width="180" height="70" rx="10"></rect>
-          <text class="title mono" x="490" y="278" font-size="14" text-anchor="middle" font-weight="700">Worker</text>
-          <text class="sub mono" x="490" y="298" font-size="11" text-anchor="middle">src/index.ts</text>
+          <rect x="450" y="200" width="200" height="70" rx="10"></rect>
+          <text class="title mono" x="550" y="230" font-size="14" text-anchor="middle" font-weight="700">本体 Worker</text>
+          <text class="sub mono" x="550" y="250" font-size="11" text-anchor="middle">cloudflare-workers-github-oauth-1</text>
+        </g>
+
+        <!-- dynamicneko worker (outside, below-left) -->
+        <g class="node-worker2">
+          <rect x="60" y="460" width="200" height="66" rx="10"></rect>
+          <text class="title mono" x="80" y="488" font-size="13">dynamicneko</text>
+          <text class="sub" x="80" y="508" font-size="11">実験用Worker(別リポジトリ)</text>
+        </g>
+
+        <!-- cf-auth worker (outside, below-right) -->
+        <g class="node-worker2">
+          <rect x="740" y="460" width="200" height="66" rx="10"></rect>
+          <text class="title mono" x="760" y="488" font-size="13">cf-auth</text>
+          <text class="sub" x="760" y="508" font-size="11">ログイン専用/Slack代替の通常ワーカー</text>
         </g>
       </svg>
       <figcaption>
-        中心の Worker が4つのSaaSそれぞれに異なる役割(受信/生成/保管/通知)を割り振り、Slackのボタン操作でD1へ再照会するループまで持つ
+        破線の大枠=Cloudflare基盤(本体Worker・D1・Workers AIをひとまとめ)、実線の輪=独立した外部SaaS(GitHub・Slack)。
+        本体Workerは下の2つの独立Worker(dynamicneko・cf-auth)とも結びつき、Workers AIにはコミット(PR)ごとの要約生成をまるごと任せている。
       </figcaption>
     </figure>
   </div>
 
   <section class="roles">
-    <h2>各SaaSの役割と現状</h2>
+    <h2>各コンポーネントの役割と現状</h2>
     <div class="cards">
       <div class="card">
-        <div class="kicker"><span class="dot github"></span><span class="name">GitHub</span></div>
-        <p class="role">PRの作成・更新(<span class="mono">opened</span> / <span class="mono">synchronize</span>)をWebhookで通知させる「発火源」。HMAC署名でなりすましを防ぐ窓口も兼ねる。</p>
+        <div class="kicker"><span class="dot github"></span><span class="name">GitHub</span><span class="tag">外部SaaS</span></div>
+        <p class="role">PRの作成・更新をWebhookで通知させる「発火源」。HMAC署名でなりすましを防ぐ窓口も兼ねる。</p>
         <p class="status">現状: <b>維持</b> — <span class="mono">/webhook/github</span> 1本で全リポジトリのイベントを受け続けている</p>
       </div>
       <div class="card">
-        <div class="kicker"><span class="dot ai"></span><span class="name">Cloudflare Workers AI</span></div>
-        <p class="role">diffとPR本文を渡すと日本語要約を返す「生成エンジン」。<span class="mono">[AI]</span>バインディングでWorkerに直結し、外部APIキー管理が不要。</p>
-        <p class="status">現状: <b>維持</b> — モデル名は<span class="mono">AI_MODEL</span>で上書き可能、未設定時はデフォルトにフォールバック</p>
+        <div class="kicker"><span class="dot slack"></span><span class="name">Slack</span><span class="tag">外部SaaS</span></div>
+        <p class="role">要約をBlock Kitで通知し、「詳細を見る」ボタンからモーダルでD1の全情報を見せる「表示面」。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">POST /slack/interactions</span> が署名検証してモーダルを都度組み立てる</p>
       </div>
-      <div class="card">
-        <div class="kicker"><span class="dot d1"></span><span class="name">Cloudflare D1</span></div>
-        <p class="role">要約結果・失敗理由・自動診断・人手フィードバックをすべて記録する「台帳」。cf-authの<span class="mono">/wspace</span>が読み取り専用で参照する共有DBでもある。</p>
+      <div class="card grouped">
+        <div class="kicker"><span class="dot ai"></span><span class="name">Workers AI</span><span class="tag">Cloudflare</span></div>
+        <p class="role">diffとPR本文を渡すとコミット(PR)ごとに日本語要約を返す「生成エンジン」。要約生成そのものを丸ごと一任している。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">AI_MODEL</span>で切替可能、未設定時はデフォルトにフォールバック</p>
+      </div>
+      <div class="card grouped">
+        <div class="kicker"><span class="dot d1"></span><span class="name">Cloudflare D1</span><span class="tag">Cloudflare</span></div>
+        <p class="role">要約結果・失敗理由・自動診断・人手フィードバックをすべて記録する「台帳」。cf-authが読み取り専用で参照する共有DB。</p>
         <p class="status">現状: <b>維持</b> — <span class="mono">ai_summary_log</span> / <span class="mono">ai_summary_reviews</span> の2テーブルに一本化</p>
       </div>
+      <div class="card grouped">
+        <div class="kicker"><span class="dot worker"></span><span class="name">本体 Worker</span><span class="tag">Cloudflare</span></div>
+        <p class="role">GitHub/Slackとの通信を一手に引き受け、Workers AI・D1を呼び出す「中枢」。同じCloudflare基盤内でD1・Workers AIと同居する。</p>
+        <p class="status">現状: <b>維持</b> — <span class="mono">src/index.ts</span> の<span class="mono">/webhook/github</span>ハンドラが全処理を統括</p>
+      </div>
       <div class="card">
-        <div class="kicker"><span class="dot slack"></span><span class="name">Slack</span></div>
-        <p class="role">要約をBlock Kitで通知し、「詳細を見る」ボタンからモーダルでD1の全情報を見せる「表示面」。外部URL遷移を経由しないループを持つ。</p>
-        <p class="status">現状: <b>維持</b> — <span class="mono">POST /slack/interactions</span> が署名検証してモーダルを都度組み立てる</p>
+        <div class="kicker"><span class="dot worker"></span><span class="name">dynamicneko / cf-auth</span></div>
+        <p class="role">本体Workerとは別デプロイの2つのWorker。dynamicnekoは実験用アプリ、cf-authはログイン専用でSlack通知の代替経路(内部webhook)としても機能する。</p>
+        <p class="status">現状: <b>維持</b> — それぞれ別リポジトリ、共有D1のみ読み書きで疎結合</p>
       </div>
     </div>
   </section>
@@ -366,7 +439,7 @@
     <div class="tbl-wrap">
       <table class="timeline">
         <thead>
-          <tr><th>SaaS</th><th>やったこと</th><th>今の役割への効き目</th></tr>
+          <tr><th>対象</th><th>やったこと</th><th>今の役割への効き目</th></tr>
         </thead>
         <tbody>
           <tr>
@@ -377,7 +450,7 @@
           <tr>
             <td class="saas">Workers AI</td>
             <td>diffが空だと要約自体がスキップされNULLになる不具合を修正</td>
-            <td>diff取得に失敗してもタイトル・本文からのフォールバック生成が今の標準動作</td>
+            <td>diff取得に失敗してもタイトル・本文からのフォールバック生成が今の標準動作。コミット単位の要約はAIに一任したまま</td>
           </tr>
           <tr>
             <td class="saas">Cloudflare D1</td>
@@ -389,12 +462,17 @@
             <td>plain textからBlock Kit化し、外部URL遷移をモーダルに置き換え</td>
             <td>Slackを離れずに要約全文を確認できる体験が定着</td>
           </tr>
+          <tr>
+            <td class="saas">dynamicneko / cf-auth</td>
+            <td>別Workerとして分離し、共有D1経由でのみ本体Workerと連携させた</td>
+            <td>本体Workerを止めずに実験的機能(dynamicneko)や認証専用処理(cf-auth)を独立運用できる</td>
+          </tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <footer>
-    出典: <span class="mono">NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md</span> — コミット履歴(2026-03-16〜2026-03-24分)を基に構成
+    出典: <span class="mono">NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md</span> / <span class="mono">NOTICE.cloudflare-workers-github-oauth-1.new-repo-setup.md</span>
   </footer>
 </div>
