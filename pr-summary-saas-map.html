@@ -275,15 +275,17 @@
     <h1>PR要約パイプラインが各SaaSに持たせている役割</h1>
     <p class="lede">
       Cloudflareの3コンポーネント(本体Worker・D1・Workers AI)は1つの基盤としてまとめて囲み、
-      GitHubとSlackはそれぞれ独立した外部SaaSとして輪で囲んだ。本体Workerはさらに
-      <span class="mono">dynamicneko</span>・<span class="mono">cf-auth</span>という
-      別々のWorkerとも接続している。
+      GitHubとSlackはそれぞれ独立した外部SaaSとして輪で囲んだ。<span class="mono">dynamicneko</span>・
+      <span class="mono">cf-auth</span>が本体Workerへ直接通信することはなく、毎ビルドで実際にGitHubへ
+      pushするだけ。本体Workerが受け取るのはGitHub発のWebhookのみで、そこからビルド通知をSlackへ、
+      コミットログの要約をWorkers AI→D1へと振り分ける。D1の要約テーブル更新を受けて、
+      cf-authがその要約を読み出して表示する。
     </p>
   </header>
 
   <div class="diagram-shell">
     <figure>
-      <svg viewBox="0 0 1000 640" role="img" aria-label="Cloudflare上の本体Worker・D1・Workers AIを1つの枠で囲み、GitHubとSlackはそれぞれ単独の輪で囲む。本体Workerはさらにdynamicnekoワーカーとcf-authワーカー(Slack代替の通常ワーカー)にも接続し、Workers AIにはコミットごとの要約生成を一任している">
+      <svg viewBox="0 0 1000 640" role="img" aria-label="Cloudflare上の本体Worker・D1・Workers AIを1つの枠で囲み、GitHubとSlackはそれぞれ単独の輪で囲む。dynamicnekoとcf-authはビルドのたびにGitHubへ実際にpushし、そのGitHubからのWebhookだけが本体Workerに届く(サブワーカーから本体Workerへの直接通信はない)。本体Workerはビルド通知をSlackへ送り、コミットログの要約をWorkers AIからD1へ格納する。D1の要約テーブル更新をcf-authが読み出して表示する">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
@@ -319,17 +321,22 @@
           <path d="M 780,195 C 800,195 800,195 745,205" marker-end="url(#arrow)"></path>
         </g>
 
-        <!-- worker-to-worker edges (below group) -->
+        <!-- dynamicneko / cf-auth: build triggers a real push to GitHub, GitHub then webhooks the main Worker -->
         <g class="edge-worker" style="color:var(--ink)">
-          <path d="M 490,320 C 420,380 320,420 235,455" marker-end="url(#arrow)"></path>
+          <path d="M 160,460 C 60,400 30,320 90,213" marker-end="url(#arrow)"></path>
         </g>
         <g class="edge-worker" style="color:var(--ink)">
-          <path d="M 590,320 C 660,380 740,420 815,455" marker-end="url(#arrow)"></path>
+          <path d="M 840,460 C 700,560 350,560 200,468 C 130,420 90,320 100,213" marker-end="url(#arrow)"></path>
+        </g>
+
+        <!-- D1 -> cf-auth: summary table update read back and displayed -->
+        <g class="edge edge-accent2" style="color:var(--accent2)">
+          <path d="M 655,140 C 760,250 810,350 838,458" marker-end="url(#arrow)" stroke-dasharray="5 4"></path>
         </g>
 
         <!-- edge labels -->
-        <text class="edge-label mono" x="270" y="163" text-anchor="middle">pull_request</text>
-        <text class="edge-label mono" x="270" y="177" text-anchor="middle">HMAC署名検証</text>
+        <text class="edge-label mono" x="270" y="163" text-anchor="middle">push / pull_request</text>
+        <text class="edge-label mono" x="270" y="177" text-anchor="middle">HMAC署名検証(全リポジトリ共通)</text>
 
         <text class="edge-label-strong mono" x="465" y="118" text-anchor="middle" transform="rotate(-90 465 118)">コミットごとに</text>
         <text class="edge-label mono" x="480" y="118" text-anchor="middle" transform="rotate(-90 480 118)">要約を一任</text>
@@ -339,14 +346,18 @@
         <text class="edge-label-strong mono" x="805" y="163" text-anchor="middle">Block Kit通知</text>
         <text class="edge-label mono" x="805" y="215" text-anchor="middle">ボタン→モーダル</text>
 
-        <text class="edge-label mono" x="345" y="405" text-anchor="middle" transform="rotate(-31 345 405)">別Worker</text>
-        <text class="edge-label mono" x="700" y="405" text-anchor="middle" transform="rotate(31 700 405)">Slack代替/通常ワーカー</text>
+        <text class="edge-label mono" x="55" y="330" text-anchor="middle" transform="rotate(-72 55 330)">ビルド毎に</text>
+        <text class="edge-label mono" x="42" y="350" text-anchor="middle" transform="rotate(-72 42 350)">git push(実体はGitHub)</text>
+        <text class="edge-label mono" x="330" y="545" text-anchor="middle">cf-auth側もビルド毎にgit push</text>
+        <text class="edge-label mono" x="330" y="560" text-anchor="middle">(直接Workerには送らない)</text>
+        <text class="edge-label-strong mono" x="775" y="300" text-anchor="middle" transform="rotate(58 775 300)">要約テーブル更新</text>
+        <text class="edge-label mono" x="800" y="360" text-anchor="middle" transform="rotate(58 800 360)">を読み出して表示</text>
 
         <!-- GitHub node -->
         <g class="node-saas">
           <rect x="30" y="139" width="180" height="72" rx="10"></rect>
           <text class="title mono" x="50" y="169" font-size="14">GitHub</text>
-          <text class="sub" x="50" y="191" font-size="11.5">GitHub App / Webhook</text>
+          <text class="sub" x="50" y="191" font-size="11.5">本体/dynamicneko/cf-auth 3リポジトリ</text>
         </g>
 
         <!-- Slack node -->
@@ -381,19 +392,21 @@
         <g class="node-worker2">
           <rect x="60" y="460" width="200" height="66" rx="10"></rect>
           <text class="title mono" x="80" y="488" font-size="13">dynamicneko</text>
-          <text class="sub" x="80" y="508" font-size="11">実験用Worker(別リポジトリ)</text>
+          <text class="sub" x="80" y="508" font-size="11">実験用Worker・毎ビルドでGitHubへpush</text>
         </g>
 
         <!-- cf-auth worker (outside, below-right) -->
         <g class="node-worker2">
           <rect x="740" y="460" width="200" height="66" rx="10"></rect>
           <text class="title mono" x="760" y="488" font-size="13">cf-auth</text>
-          <text class="sub" x="760" y="508" font-size="11">ログイン専用/Slack代替の通常ワーカー</text>
+          <text class="sub" x="760" y="508" font-size="11">毎ビルドでGitHubへpush/要約を読み出し表示</text>
         </g>
       </svg>
       <figcaption>
         破線の大枠=Cloudflare基盤(本体Worker・D1・Workers AIをひとまとめ)、実線の輪=独立した外部SaaS(GitHub・Slack)。
-        本体Workerは下の2つの独立Worker(dynamicneko・cf-auth)とも結びつき、Workers AIにはコミット(PR)ごとの要約生成をまるごと任せている。
+        dynamicneko・cf-authは毎ビルドでGitHubへpushするだけで、本体Workerへ直接は通信しない。
+        本体WorkerはGitHub発のWebhookだけを受け、ビルド通知をSlackへ、コミットログの要約はWorkers AI経由でD1へ格納する。
+        D1の要約テーブル更新をcf-authが読み出して表示する。
       </figcaption>
     </figure>
   </div>
@@ -413,23 +426,23 @@
       </div>
       <div class="card grouped">
         <div class="kicker"><span class="dot ai"></span><span class="name">Workers AI</span><span class="tag">Cloudflare</span></div>
-        <p class="role">diffとPR本文を渡すとコミット(PR)ごとに日本語要約を返す「生成エンジン」。要約生成そのものを丸ごと一任している。</p>
+        <p class="role">本体Workerが受け取ったコミットログを渡すと日本語要約を返す「生成エンジン」。コミットごとの要約生成そのものを丸ごと一任している。</p>
         <p class="status">現状: <b>維持</b> — <span class="mono">AI_MODEL</span>で切替可能、未設定時はデフォルトにフォールバック</p>
       </div>
       <div class="card grouped">
         <div class="kicker"><span class="dot d1"></span><span class="name">Cloudflare D1</span><span class="tag">Cloudflare</span></div>
-        <p class="role">要約結果・失敗理由・自動診断・人手フィードバックをすべて記録する「台帳」。cf-authが読み取り専用で参照する共有DB。</p>
+        <p class="role">要約結果・失敗理由・自動診断・人手フィードバックをすべて記録する「台帳」。更新されるたびにcf-authが読み取り専用で参照しに来る共有DB。</p>
         <p class="status">現状: <b>維持</b> — <span class="mono">ai_summary_log</span> / <span class="mono">ai_summary_reviews</span> の2テーブルに一本化</p>
       </div>
       <div class="card grouped">
         <div class="kicker"><span class="dot worker"></span><span class="name">本体 Worker</span><span class="tag">Cloudflare</span></div>
-        <p class="role">GitHub/Slackとの通信を一手に引き受け、Workers AI・D1を呼び出す「中枢」。同じCloudflare基盤内でD1・Workers AIと同居する。</p>
+        <p class="role">GitHub/Slackとの通信を一手に引き受ける「中枢」。dynamicneko・cf-authの毎ビルドwebhookも受け、Slackへのビルド通知とWorkers AIによるコミットログ要約→D1格納を担う。</p>
         <p class="status">現状: <b>維持</b> — <span class="mono">src/index.ts</span> の<span class="mono">/webhook/github</span>ハンドラが全処理を統括</p>
       </div>
       <div class="card">
         <div class="kicker"><span class="dot worker"></span><span class="name">dynamicneko / cf-auth</span></div>
-        <p class="role">本体Workerとは別デプロイの2つのWorker。dynamicnekoは実験用アプリ、cf-authはログイン専用でSlack通知の代替経路(内部webhook)としても機能する。</p>
-        <p class="status">現状: <b>維持</b> — それぞれ別リポジトリ、共有D1のみ読み書きで疎結合</p>
+        <p class="role">本体Workerとは別デプロイの2つのWorker。本体Workerへの直接通信は持たず、毎ビルドで自分のGitHubリポジトリへpushするだけ。そのpushをGitHubがWebhookとして本体Workerへ中継し、Slackへのビルド通知とWorkers AIによる要約→D1格納につながる。</p>
+        <p class="status">現状: <b>維持</b> — cf-authはさらにD1の要約テーブル更新を読み出して自ページに表示する</p>
       </div>
     </div>
   </section>
@@ -464,8 +477,13 @@
           </tr>
           <tr>
             <td class="saas">dynamicneko / cf-auth</td>
-            <td>別Workerとして分離し、共有D1経由でのみ本体Workerと連携させた</td>
-            <td>本体Workerを止めずに実験的機能(dynamicneko)や認証専用処理(cf-auth)を独立運用できる</td>
+            <td>別Workerとして分離。本体Workerへの直接通信は持たせず、毎ビルドで自分のGitHubリポジトリへpushする形に統一</td>
+            <td>本体Workerを止めずに実験的機能(dynamicneko)や認証専用処理(cf-auth)を独立運用しつつ、GitHub発のWebhook1系統だけでビルド通知とコミット要約を一元化できる</td>
+          </tr>
+          <tr>
+            <td class="saas">cf-auth → D1</td>
+            <td>要約テーブル(<span class="mono">ai_summary_log</span>)の更新を読み取り専用で参照する経路を追加</td>
+            <td>cf-auth側にコード変更なしで、D1更新のたびに最新のコミット要約を表示できる</td>
           </tr>
         </tbody>
       </table>
