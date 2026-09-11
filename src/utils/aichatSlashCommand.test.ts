@@ -6,6 +6,8 @@ import {
   formatCommitAgentLogEntry,
   formatAichatSlashCommandHelp,
   formatSha256WasmResult,
+  convertZenkakuKatakanaToHankaku,
+  formatKanaConvertResult,
   formatFactorWasmResult,
   formatDigHelp,
   formatDigResult,
@@ -131,6 +133,7 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko clog');
     expect(result).toContain('/neko limit');
     expect(result).toContain('/neko 256');
+    expect(result).toContain('/neko kana');
     expect(result).toContain('/neko factor');
     expect(result).toContain('/neko dig');
     expect(result).toContain('/neko help');
@@ -272,6 +275,21 @@ describe('interpretAichatSlashCommand', () => {
     expect(result).toEqual({ handled: true, response: '❌ /neko 256 の実行中にエラーが発生しました: wasm init failed' });
   });
 
+  it('/neko kana <全角カナ> は半角カナへの変換結果を表示する（WASM等の外部依存なし）', async () => {
+    const result = await interpretAichatSlashCommand('/neko kana カタカナ', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: formatKanaConvertResult('カタカナ', 'ｶﾀｶﾅ') });
+  });
+
+  it('/neko kana は空白を含む引数を1つの文字列として結合してから変換する', async () => {
+    const result = await interpretAichatSlashCommand('/neko kana キャベツ トマト', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: formatKanaConvertResult('キャベツ トマト', 'ｷｬﾍﾞﾂ ﾄﾏﾄ') });
+  });
+
+  it('/neko kana で変換対象の文字列未指定の場合はエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko kana', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ 変換する文字列を指定してください: /neko kana <全角カナ>' });
+  });
+
   it('/neko factor <数値> は factorViaWasm の結果を表示する', async () => {
     const factorViaWasm = vi.fn().mockResolvedValue('12: 2 2 3');
     const result = await interpretAichatSlashCommand('/neko factor 12', now, { ...unusedDeps, factorViaWasm });
@@ -327,6 +345,50 @@ describe('formatSha256WasmResult', () => {
   it('入力文字列とハッシュ値をMarkdownで表示する', () => {
     const result = formatSha256WasmResult('hello', 'abc123');
     expect(result).toBe('## SHA-256 (WASM)\n入力: hello\nハッシュ: abc123');
+  });
+});
+
+describe('convertZenkakuKatakanaToHankaku', () => {
+  it('清音の全角カタカナを半角カナに変換する', () => {
+    expect(convertZenkakuKatakanaToHankaku('カタカナ')).toBe('ｶﾀｶﾅ');
+  });
+
+  it('濁点付きの全角カタカナは半角カナ+濁点(2文字)に変換する', () => {
+    expect(convertZenkakuKatakanaToHankaku('ガギグゲゴ')).toBe('ｶﾞｷﾞｸﾞｹﾞｺﾞ');
+    expect(convertZenkakuKatakanaToHankaku('ヴ')).toBe('ｳﾞ');
+  });
+
+  it('半濁点付きの全角カタカナは半角カナ+半濁点(2文字)に変換する', () => {
+    expect(convertZenkakuKatakanaToHankaku('パピプペポ')).toBe('ﾊﾟﾋﾟﾌﾟﾍﾟﾎﾟ');
+  });
+
+  it('拗音・促音・長音符も変換する', () => {
+    expect(convertZenkakuKatakanaToHankaku('キャベツ')).toBe('ｷｬﾍﾞﾂ');
+    expect(convertZenkakuKatakanaToHankaku('ッ')).toBe('ｯ');
+    expect(convertZenkakuKatakanaToHankaku('コーヒー')).toBe('ｺｰﾋｰ');
+  });
+
+  it('全角の句読点・カギ括弧・中黒も半角に変換する', () => {
+    expect(convertZenkakuKatakanaToHankaku('「ネコ」、猫。')).toBe('｢ﾈｺ｣､猫｡');
+  });
+
+  it('カタカナ以外の文字(ひらがな・漢字・英数字)はそのまま残す', () => {
+    expect(convertZenkakuKatakanaToHankaku('ひらがなKanji123ｶﾀｶﾅ')).toBe('ひらがなKanji123ｶﾀｶﾅ');
+  });
+
+  it('半角カナに対応する文字が存在しないヶ・ヵはそのまま残す', () => {
+    expect(convertZenkakuKatakanaToHankaku('1ヶ月・3ヵ国')).toBe('1ヶ月･3ヵ国');
+  });
+
+  it('空文字列を渡すと空文字列を返す', () => {
+    expect(convertZenkakuKatakanaToHankaku('')).toBe('');
+  });
+});
+
+describe('formatKanaConvertResult', () => {
+  it('入力と変換結果をMarkdownで表示する', () => {
+    const result = formatKanaConvertResult('カタカナ', 'ｶﾀｶﾅ');
+    expect(result).toBe('## 半角カナ変換\n入力: カタカナ\n変換結果: ｶﾀｶﾅ');
   });
 });
 
