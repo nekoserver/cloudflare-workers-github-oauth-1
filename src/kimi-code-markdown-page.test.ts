@@ -106,4 +106,31 @@ describe('getKimiCodeMarkdownDetailPage', () => {
     const html = getKimiCodeMarkdownDetailPage('tester', 't', 'p', markdown);
     expect(html).toContain('var runnableCount = 0;');
   });
+
+  it('地の文はエスケープされた生テキストではなく、共有パーサ(parseMd)で描画するためJSONペイロードとして埋め込まれる', () => {
+    const markdown = '# 見出し\n\n**強調**したい文章です。\n\n- 項目1\n- 項目2\n\n```ruby\nputs 1\n```';
+    const html = getKimiCodeMarkdownDetailPage('tester', 't', 'p', markdown);
+    // 生の"# 見出し"や"**強調**"がエスケープ済み平文として直接HTML化されているのではなく、
+    // JSONペイロードとして埋め込まれ、クライアント側でparseMd()により変換される。
+    expect(html).toContain('data-md-text="0"');
+    const scriptMatch = html.match(/<script type="application\/json" data-md-text-source="0">([\s\S]*?)<\/script>/);
+    expect(scriptMatch).not.toBeNull();
+    const payload = JSON.parse(scriptMatch![1]);
+    expect(payload.markdown).toContain('# 見出し');
+    expect(payload.markdown).toContain('**強調**');
+    // 共有パーサ(getMarkdownParserScript())本体が埋め込まれ、parseMd()が呼び出される
+    expect(html).toContain('function parseMd(');
+    expect(html).toContain("var payload = JSON.parse(el.textContent);");
+    expect(html).toContain('target.innerHTML = parseMd(payload.markdown);');
+  });
+
+  it('地の文にバッククォートや</script>が含まれてもJSONペイロードが壊れない', () => {
+    const markdown = '`inline code` と </script> を含む文章。';
+    const html = getKimiCodeMarkdownDetailPage('tester', 't', 'p', markdown);
+    const scriptMatch = html.match(/<script type="application\/json" data-md-text-source="0">([\s\S]*?)<\/script>/);
+    expect(scriptMatch).not.toBeNull();
+    const payload = JSON.parse(scriptMatch![1]);
+    expect(payload.markdown).toContain('`inline code`');
+    expect(payload.markdown).toContain('</script>');
+  });
 });
