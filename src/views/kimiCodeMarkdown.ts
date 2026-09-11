@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/html';
 import { splitMarkdownCodeBlocks, isRunnableRubyCodeBlock, type MarkdownCodeBlockSegment } from '../utils/markdownCodeBlocks';
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
 import { RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL } from './rubyWasm';
 
 const SHARED_STYLE = `
@@ -15,6 +16,12 @@ const SHARED_STYLE = `
   --accent-fg:   light-dark(#ffffff, #0d1117);
   --input-bg:    light-dark(#ffffff, #0d1117);
   --danger:      light-dark(#cf222e, #f85149);
+  --text-primary: var(--text);
+  --text-muted:  light-dark(#636c76, #8b949e);
+  --border-color: var(--border);
+  --accent-color: var(--accent);
+  --code-bg:     var(--bg);
+  --bg-secondary: var(--bg);
 }
 * { box-sizing: border-box; }
 body {
@@ -39,7 +46,23 @@ a { color: var(--accent); }
 }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.sm { font-size: 11px; padding: 4px 10px; font-weight: normal; background: var(--panel); color: var(--text); border-color: var(--border); }
+${getMarkdownPreviewCSS()}
 `;
+
+/**
+ * Markdownのテキスト部分(コードブロック以外)を描画する領域。パース処理は
+ * クライアント側で共有パーサ(parseMd, getMarkdownParserScript())を使って
+ * 行うため、ここでは生のMarkdownを`<script type="application/json">`に
+ * JSON.stringifyして埋め込むだけにする(escapeHtmlした文字列をそのまま
+ * innerHTMLに入れると見出しや強調等が解釈されないため)。
+ */
+function renderTextBlock(content: string, index: number): string {
+  const jsonPayload = JSON.stringify({ markdown: content }).replace(/<\//g, '<\\/');
+  return `<div class="panel">
+  <div class="preview-area" data-md-text="${index}"></div>
+  <script type="application/json" data-md-text-source="${index}">${jsonPayload}</script>
+</div>`;
+}
 
 function listItemLabel(title: string, createdAt: string): string {
   return `${escapeHtml(title)} <span style="color:var(--text-muted);font-weight:normal;">(${escapeHtml(createdAt)})</span>`;
@@ -111,12 +134,13 @@ export function getKimiCodeMarkdownDetailPage(
   const safeUser = escapeHtml(username);
   const segments = splitMarkdownCodeBlocks(markdown);
   let runnableCount = 0;
+  let textCount = 0;
   const bodyHtml = segments
     .map((segment) => {
       if (segment.type === 'text') {
         const trimmed = segment.content.trim();
         if (!trimmed) return '';
-        return `<div class="panel" style="white-space:pre-wrap;">${escapeHtml(segment.content)}</div>`;
+        return renderTextBlock(segment.content, textCount++);
       }
       if (isRunnableRubyCodeBlock(segment)) {
         return renderRunnableRubyBlock(segment, runnableCount++);
@@ -141,6 +165,16 @@ export function getKimiCodeMarkdownDetailPage(
   <div style="white-space:pre-wrap;">${escapeHtml(prompt)}</div>
 </div>
 ${bodyHtml}
+<script>
+  ${getMarkdownParserScript()}
+  document.querySelectorAll('[data-md-text-source]').forEach(function(el) {
+    var index = el.getAttribute('data-md-text-source');
+    var target = document.querySelector('[data-md-text="' + index + '"]');
+    if (!target) return;
+    var payload = JSON.parse(el.textContent);
+    target.innerHTML = parseMd(payload.markdown);
+  });
+</script>
 <script type="module">
 (function() {
   var runnableCount = ${runnableCount};

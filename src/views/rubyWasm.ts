@@ -204,10 +204,11 @@ export function getRubyWasmPage(username: string): string {
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-    .modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }
+    .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
-    .modal-snippet-list li:hover { background: var(--bg-secondary); }
-    .modal-snippet-list li.selected { background: var(--bg-secondary); font-weight: 600; }
+    /* プレースホルダー行(読み込み中・0件・エラー)。swipe行ではないので
+       通常通りpaddingを持たせる。 */
+    .modal-snippet-list > li:not(.snippet-swipe-row) { padding: 10px 12px; color: var(--text-muted); }
     .modal-snippet-meta { font-size: 11px; color: var(--text-muted); }
     .modal-snippet-list li.snippet-swipe-row { position: relative; overflow: hidden; padding: 0; touch-action: pan-y; }
     .snippet-swipe-content { position: relative; z-index: 1; padding: 10px 12px; background: var(--card-bg); transition: transform 0.2s ease; }
@@ -382,13 +383,17 @@ export function getRubyWasmPage(username: string): string {
       var result = runRubyCode(inputCode.value);
       resultValue.classList.toggle('error', !result.ok);
       resultValue.textContent = result.output;
-      // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。
+      // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。新しく
+      // 実行し直した分は前回保存済みとは別物なので、以前の保存成功で
+      // 無効化されたままになっていても、ここで必ず有効化し直す。
       saveBtn.style.display = result.ok ? 'inline-block' : 'none';
+      if (result.ok) saveBtn.disabled = false;
     });
 
     saveBtn.addEventListener('click', function() {
       var code = inputCode.value;
       if (!code.trim()) return;
+      var saveSucceeded = false;
       saveBtn.disabled = true;
       saveNote.textContent = '保存中...';
       fetch('/api/ruby-wasm/snippets', {
@@ -415,6 +420,7 @@ export function getRubyWasmPage(username: string): string {
             credentials: 'same-origin',
             body: JSON.stringify({ verified: true })
           }).then(function() {
+            saveSucceeded = true;
             saveNote.textContent = '✅ 「' + res.data.title + '」として保存し、動作確認済みとして記録しました';
           });
         })
@@ -422,7 +428,10 @@ export function getRubyWasmPage(username: string): string {
           saveNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
         })
         .then(function() {
-          saveBtn.disabled = false;
+          // 保存に成功した場合は、同じコードを誤って重複登録してしまわない
+          // よう保存ボタンを無効化(グレーアウト)したままにする。失敗時
+          // のみ再度押せるよう有効化する。
+          if (!saveSucceeded) saveBtn.disabled = false;
         });
     });
 
@@ -545,6 +554,7 @@ export function getRubyWasmPage(username: string): string {
     }
 
     function loadModalSnippetList() {
+      openSwipeRow = null;
       modalSnippetList.innerHTML = '<li>読み込み中…</li>';
       fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })

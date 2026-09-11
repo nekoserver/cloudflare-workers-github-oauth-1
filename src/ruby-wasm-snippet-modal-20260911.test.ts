@@ -100,11 +100,31 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     expect(html).not.toContain('id="snippetReloadBtn"');
   });
 
-  it('モーダル内のテキスト(タイトル・一覧項目)にテーマの文字色が明示指定されている(固定色任せで黒地に黒文字等にならないようにするため)', () => {
+  it('モーダル内のテキスト(タイトル)にテーマの文字色が明示指定されている(固定色任せで黒地に黒文字等にならないようにするため)', () => {
     const html = getRubyWasmPage('tester');
     expect(html).toContain('.modal-box {');
     const modalBoxRule = html.slice(html.indexOf('.modal-box {'), html.indexOf('.modal-box {') + 300);
     expect(modalBoxRule).toContain('color: var(--text-primary)');
-    expect(html).toContain('.modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }');
   });
+
+  it('保存ボタンは実行成功時のみ有効化し、保存成功後は重複登録防止のため無効化したままにする', () => {
+    const html = getRubyWasmPage('tester');
+    // 実行成功時、保存ボタンを表示しつつ有効化する。
+    const runIdx = html.indexOf("runBtn.addEventListener('click'");
+    const runBlock = html.slice(runIdx, runIdx + 700);
+    expect(runBlock).toContain("saveBtn.style.display = result.ok ? 'inline-block' : 'none';");
+    expect(runBlock).toContain('if (result.ok) saveBtn.disabled = false;');
+
+    // 保存成功時はsaveSucceededをtrueにし、失敗時のみ再有効化する
+    // (成功時はdisabled=trueのまま、グレーアウトし続ける)。
+    const saveIdx = html.indexOf("saveBtn.addEventListener('click'");
+    const saveBlock = html.slice(saveIdx, saveIdx + 2000);
+    expect(saveBlock).toContain('var saveSucceeded = false;');
+    expect(saveBlock).toContain('saveSucceeded = true;');
+    expect(saveBlock).toContain('if (!saveSucceeded) saveBtn.disabled = false;');
+  });
+
+  // 一覧モーダルの行のスワイプ削除UI(swipe-to-delete)自体の構造・挙動は
+  // ./ruby-wasm-snippet-swipe-delete-20260911.test.ts で検証する
+  // (確認モーダル付きの実装に一本化されたため、こちらでは重複させない)。
 });
