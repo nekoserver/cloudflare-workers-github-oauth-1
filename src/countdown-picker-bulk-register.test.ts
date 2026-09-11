@@ -59,6 +59,13 @@ describe('/countdownページ(DOM実動作): カレンダーpickerの一括登�
     expect(document.querySelectorAll('#pickerRows .picker-row').length).toBe(2);
   });
 
+  it('予定の名前欄は手入力の手間を省くため「cf-auth 期限まで」がデフォルト値として入力済みになっている', async () => {
+    await setupPickerTest();
+    openFirstAvailableDay();
+    const labelInput = document.querySelector('#pickerRows .picker-row-label') as HTMLInputElement;
+    expect(labelInput.value).toBe('cf-auth 期限まで');
+  });
+
   it('2件入力して保存すると、events配列2件をまとめてPOST /api/countdownへ送る', async () => {
     const fetchMock = await setupPickerTest();
     openFirstAvailableDay();
@@ -87,7 +94,9 @@ describe('/countdownページ(DOM実動作): カレンダーpickerの一括登�
 
     const rows = document.querySelectorAll('#pickerRows .picker-row');
     (rows[0].querySelector('.picker-row-label') as HTMLInputElement).value = '会議A';
-    // 2行目はラベル未入力のまま
+    // 2行目はラベル未入力のまま(デフォルト値「cf-auth 期限まで」が入っているため、
+    // 未入力状態を明示的に作るには空文字にクリアする)
+    (rows[1].querySelector('.picker-row-label') as HTMLInputElement).value = '';
 
     document.getElementById('pickerSaveBtn')!.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
 
