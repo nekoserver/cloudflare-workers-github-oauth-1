@@ -35,10 +35,18 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     const html = getRubyWasmPage('tester');
     const idx = html.indexOf("saveBtn.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 1200);
+    const block = html.slice(idx, idx + 1600);
     expect(block).toContain("fetch('/api/ruby-wasm/snippets'");
     expect(block).toContain('/verifications');
     expect(block).toContain('JSON.stringify({ verified: true })');
+  });
+
+  it('保存リクエストにexecutedSuccessfully:trueを含める(サーバー側の構文ヒューリスティックによる誤判定で保存を拒否されないようにするため)', () => {
+    const html = getRubyWasmPage('tester');
+    const idx = html.indexOf("saveBtn.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 1200);
+    expect(block).toContain('JSON.stringify({ code: code, executedSuccessfully: true })');
   });
 
   it('モーダルのz-indexは固定値を書かず、getNextZ()で毎回算出してから設定する(CLAUDE.mdルール26)', () => {

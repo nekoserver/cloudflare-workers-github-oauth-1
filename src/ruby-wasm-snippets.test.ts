@@ -176,6 +176,36 @@ describe('POST /api/ruby-wasm/snippets', () => {
     expect(count).toBe(0);
   });
 
+  it('executedSuccessfully:trueの場合、構文ヒューリスティックでRubyと判定できないコードでも保存できる(実行成功の方が確実な証拠のため)', async () => {
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    // "1+1"のような短いコードはlooksLikeRubyCode()のシグナルが少なく
+    // 単独では通常Rubyと判定されない(が、/ruby-wasmで実際に実行できた
+    // ことをexecutedSuccessfully:trueで伝えれば保存できるべき)。
+    const shortCode = '1 + 1';
+    const res = await app.request('/api/ruby-wasm/snippets', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: shortCode, executedSuccessfully: true }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(200);
+    const count = (db.prepare('SELECT COUNT(*) as c FROM ruby_wasm_snippets').get() as { c: number }).c;
+    expect(count).toBe(1);
+  });
+
+  it('executedSuccessfullyが無い場合(kimi-codeからの保存)は引き続きRuby判定ゲートがかかる', async () => {
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: TS_CODE, executedSuccessfully: false }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(422);
+  });
+
   it('codeが空の場合は400を返す', async () => {
     const db = setupDb();
     const auth = await makeAuthHeader('user1');

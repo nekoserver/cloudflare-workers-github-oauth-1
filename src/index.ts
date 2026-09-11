@@ -12857,18 +12857,26 @@ export function deriveRubySnippetTitle(code: string): string {
 }
 
 /**
- * /kimi-codeページの「コードを保管」ボタンから呼ばれる。kimi-codeには言語選択
- * UIが無いため、保存してよいRubyコードかどうかはlooksLikeRubyCode()による
- * サーバー側判定を必ず経由する(クライアント側の判断は信頼しない)。Ruby以外
- * と判定した場合は422で理由を返し、握りつぶさずユーザーに伝える。
+ * /kimi-codeページの「コードを保管」ボタンと、/ruby-wasmページの「保存」
+ * ボタンの両方から呼ばれる。
+ * kimi-codeには言語選択UIが無く、保存してよいRubyコードかどうかは
+ * looksLikeRubyCode()によるサーバー側の構文ヒューリスティック判定に頼る
+ * しかない(クライアント側の判断は信頼しない)。一方/ruby-wasmでは、保存
+ * ボタンはRuby(WASM)での実行に成功した場合にのみ表示される
+ * (src/views/rubyWasm.tsのrunRubyCode()参照)。実際にRubyとして正しく
+ * 実行できたことは、構文パターンだけを見るヒューリスティックより確実な
+ * 証拠であるため、body.executedSuccessfullyがtrueの場合はlooksLikeRubyCode()
+ * のゲートを通さない(でないと、実行に成功した短いRubyコード(例: "1+1"の
+ * ようにヒューリスティックのシグナルが少ないもの)が「Rubyと判定できな
+ * かった」という誤った理由で保存できなくなってしまう)。
  */
 app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ code?: string; title?: string }>().catch(() => null);
+  const body = await c.req.json<{ code?: string; title?: string; executedSuccessfully?: boolean }>().catch(() => null);
   const code = (body?.code ?? '').trim().slice(0, 20000);
   if (!code) return jsonUtf8({ error: 'code は必須です' }, 400);
-  if (!looksLikeRubyCode(code)) {
+  if (!body?.executedSuccessfully && !looksLikeRubyCode(code)) {
     return jsonUtf8(
       { error: 'Rubyコードと判定できなかったため保存できません(生成されたコードの構文パターンから自動判定しています)' },
       422
