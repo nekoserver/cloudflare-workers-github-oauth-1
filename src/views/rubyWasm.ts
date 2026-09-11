@@ -204,10 +204,28 @@ export function getRubyWasmPage(username: string): string {
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-    .modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }
+    .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
-    .modal-snippet-list li:hover { background: var(--bg-secondary); }
-    .modal-snippet-list li.selected { background: var(--bg-secondary); font-weight: 600; }
+    /* プレースホルダー行(読み込み中・0件・エラー)。swipe-rowでは無いので
+       通常通りpaddingを持たせる。 */
+    .modal-snippet-list > li:not(.swipe-row) { padding: 10px 12px; color: var(--text-muted); }
+    .modal-snippet-list li.swipe-row { position: relative; overflow: hidden; }
+    .swipe-content {
+      position: relative; z-index: 1;
+      background: var(--card-bg); color: var(--text-primary);
+      padding: 10px 12px; cursor: pointer;
+      touch-action: pan-y; will-change: transform;
+    }
+    .swipe-content:hover { background: var(--bg-secondary); }
+    .swipe-content.selected { background: var(--bg-secondary); font-weight: 600; }
+    /* 削除エリアは行末(右端)に隠れており、左スワイプでswipe-contentが
+       左へずれることで現れる(固定幅・赤背景)。 */
+    .swipe-delete {
+      position: absolute; top: 0; right: 0; bottom: 0; width: 84px; z-index: 0;
+      background: #dc2626; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
     .modal-snippet-meta { font-size: 11px; color: var(--text-muted); }
     #modalCodeTextarea { min-height: 140px; }
     #modalResultValue {
@@ -361,13 +379,17 @@ export function getRubyWasmPage(username: string): string {
       var result = runRubyCode(inputCode.value);
       resultValue.classList.toggle('error', !result.ok);
       resultValue.textContent = result.output;
-      // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。
+      // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。新しく
+      // 実行し直した分は前回保存済みとは別物なので、以前の保存成功で
+      // 無効化されたままになっていても、ここで必ず有効化し直す。
       saveBtn.style.display = result.ok ? 'inline-block' : 'none';
+      if (result.ok) saveBtn.disabled = false;
     });
 
     saveBtn.addEventListener('click', function() {
       var code = inputCode.value;
       if (!code.trim()) return;
+      var saveSucceeded = false;
       saveBtn.disabled = true;
       saveNote.textContent = '保存中...';
       fetch('/api/ruby-wasm/snippets', {
@@ -394,6 +416,7 @@ export function getRubyWasmPage(username: string): string {
             credentials: 'same-origin',
             body: JSON.stringify({ verified: true })
           }).then(function() {
+            saveSucceeded = true;
             saveNote.textContent = '✅ 「' + res.data.title + '」として保存し、動作確認済みとして記録しました';
           });
         })
@@ -401,7 +424,10 @@ export function getRubyWasmPage(username: string): string {
           saveNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
         })
         .then(function() {
-          saveBtn.disabled = false;
+          // 保存に成功した場合は、同じコードを誤って重複登録してしまわない
+          // よう保存ボタンを無効化(グレーアウト)したままにする。失敗時
+          // のみ再度押せるよう有効化する。
+          if (!saveSucceeded) saveBtn.disabled = false;
         });
     });
 
@@ -445,7 +471,106 @@ export function getRubyWasmPage(username: string): string {
       overlay.classList.remove('open');
     }
 
+    // 一覧の行を左スワイプすると、行末(右端)から幅SWIPE_REVEAL_PXぶんの
+    // 赤色の削除エリアが現れる(iOS等でおなじみのスワイプ削除UI)。
+    // Pointer Eventsで実装しており、マウスでもタッチでも同じロジックで動く。
+    var SWIPE_REVEAL_PX = 84;
+    // 同時に開いていられるのは1行だけにする(複数行が開きっぱなしで
+    // 画面が煩雑になるのを防ぐ)。
+    var openSwipeContent = null;
+
+    function closeOpenSwipe() {
+      if (openSwipeContent) {
+        openSwipeContent.style.transform = 'translateX(0px)';
+        openSwipeContent.dataset.swipeX = '0';
+        openSwipeContent = null;
+      }
+    }
+
+    /**
+     * content(前景のテキスト部分)へのポインタ操作でswipe-deleteを
+     * 開閉する。横方向へのドラッグと判定した場合のみtransformを動かし、
+     * 縦スクロールの邪魔をしない(touch-action:pan-yと合わせて機能する)。
+     * ドラッグではない単純なタップは、行が開いていれば閉じるだけ、
+     * 閉じていればonTap()(スニペットの読み込み)を呼ぶ。
+     */
+    function attachSwipeToDelete(content, onTap) {
+      var startX = 0, startY = 0, startTranslate = 0, dragging = false, moved = false;
+
+      content.addEventListener('pointerdown', function(e) {
+        if (openSwipeContent && openSwipeContent !== content) closeOpenSwipe();
+        startX = e.clientX;
+        startY = e.clientY;
+        startTranslate = parseFloat(content.dataset.swipeX || '0');
+        dragging = true;
+        moved = false;
+        content.setPointerCapture(e.pointerId);
+      });
+
+      content.addEventListener('pointermove', function(e) {
+        if (!dragging) return;
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        if (!moved) {
+          if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
+          moved = true;
+        }
+        var next = Math.min(0, Math.max(-SWIPE_REVEAL_PX, startTranslate + dx));
+        content.style.transform = 'translateX(' + next + 'px)';
+        content.dataset.swipeX = String(next);
+      });
+
+      function endDrag() {
+        if (!dragging) return;
+        dragging = false;
+        if (!moved) {
+          // ドラッグではなく単純なタップだった場合。
+          if (startTranslate <= -SWIPE_REVEAL_PX / 2) {
+            closeOpenSwipe();
+          } else {
+            onTap();
+          }
+          return;
+        }
+        var x = parseFloat(content.dataset.swipeX || '0');
+        if (x < -SWIPE_REVEAL_PX / 2) {
+          content.style.transform = 'translateX(-' + SWIPE_REVEAL_PX + 'px)';
+          content.dataset.swipeX = String(-SWIPE_REVEAL_PX);
+          openSwipeContent = content;
+        } else {
+          content.style.transform = 'translateX(0px)';
+          content.dataset.swipeX = '0';
+          if (openSwipeContent === content) openSwipeContent = null;
+        }
+      }
+      content.addEventListener('pointerup', endDrag);
+      content.addEventListener('pointercancel', endDrag);
+    }
+
+    function deleteSnippetRow(id, li) {
+      fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      })
+        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (res.status !== 200) {
+            modalNote.textContent = '❌ 削除に失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+            return;
+          }
+          if (openSwipeContent && li.contains(openSwipeContent)) openSwipeContent = null;
+          li.remove();
+          if (modalSnippetList.children.length === 0) {
+            modalSnippetList.innerHTML = '<li>保存済みスニペットはありません</li>';
+          }
+        })
+        .catch(function(err) {
+          modalNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+        });
+    }
+
     function loadModalSnippetList() {
+      openSwipeContent = null;
       modalSnippetList.innerHTML = '<li>読み込み中…</li>';
       fetch('/api/ruby-wasm/snippets', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
@@ -458,16 +583,33 @@ export function getRubyWasmPage(username: string): string {
           }
           snippets.forEach(function(s) {
             var li = document.createElement('li');
+            li.className = 'swipe-row';
+
+            var content = document.createElement('div');
+            content.className = 'swipe-content';
+            content.dataset.swipeX = '0';
             var titleSpan = document.createElement('div');
             titleSpan.textContent = s.title;
             var metaSpan = document.createElement('div');
             metaSpan.className = 'modal-snippet-meta';
             metaSpan.textContent = 'Ruby ' + s.ruby_version + ' ・ ' + s.created_at;
-            li.appendChild(titleSpan);
-            li.appendChild(metaSpan);
-            li.addEventListener('click', function() {
-              Array.prototype.forEach.call(modalSnippetList.children, function(el) { el.classList.remove('selected'); });
-              li.classList.add('selected');
+            content.appendChild(titleSpan);
+            content.appendChild(metaSpan);
+
+            var deleteArea = document.createElement('div');
+            deleteArea.className = 'swipe-delete';
+            deleteArea.textContent = '🗑 削除';
+            deleteArea.addEventListener('click', function() {
+              deleteSnippetRow(s.id, li);
+            });
+
+            li.appendChild(content);
+            li.appendChild(deleteArea);
+            modalSnippetList.appendChild(li);
+
+            attachSwipeToDelete(content, function() {
+              Array.prototype.forEach.call(modalSnippetList.querySelectorAll('.swipe-content'), function(el) { el.classList.remove('selected'); });
+              content.classList.add('selected');
               modalNote.textContent = '読み込み中…';
               fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(s.id), { credentials: 'same-origin' })
                 .then(function(r) { return r.json().then(function(dd) { return { status: r.status, data: dd }; }); })
@@ -485,7 +627,6 @@ export function getRubyWasmPage(username: string): string {
                   modalNote.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
                 });
             });
-            modalSnippetList.appendChild(li);
           });
         })
         .catch(function() {

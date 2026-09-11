@@ -12927,6 +12927,32 @@ app.get('/api/ruby-wasm/snippets/:id', authMiddleware, async (c) => {
 });
 
 /**
+ * /ruby-wasmページの保存済みスニペット一覧モーダルで、行を左スワイプして
+ * 出現する削除エリアから呼ばれる。他ユーザーのスニペットは(user_id一致
+ * 条件により)削除できない(404)。動作確認履歴(ruby_wasm_snippet_verifications)
+ * も合わせて削除し、参照先の無い履歴行を残さない。
+ */
+app.delete('/api/ruby-wasm/snippets/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  const owned = await c.env.DB
+    .prepare(`SELECT id FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: string }>();
+  if (!owned) return jsonUtf8({ error: 'スニペットが見つかりません' }, 404);
+  try {
+    await c.env.DB.prepare(`DELETE FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?`).bind(id).run();
+    await c.env.DB.prepare(`DELETE FROM ruby_wasm_snippets WHERE id = ? AND user_id = ?`).bind(id, user.sub).run();
+    return jsonUtf8({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[ruby-wasm] スニペット削除失敗', { userId: user.sub, snippetId: id, error: message });
+    return jsonUtf8({ error: '削除に失敗しました: ' + message }, 500);
+  }
+});
+
+/**
  * /ruby-wasmページで実際にコードを実行した後、「このRubyビルドラインで動いた/
  * 動かなかった」を記録するAPI。同じスニペットを複数バージョンで検証した履歴を
  * 残せるよう、上書きではなく毎回1行追加する(ruby_wasm_snippet_verifications)。

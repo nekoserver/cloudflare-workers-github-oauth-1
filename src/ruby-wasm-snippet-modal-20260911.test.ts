@@ -105,6 +105,67 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     expect(html).toContain('.modal-box {');
     const modalBoxRule = html.slice(html.indexOf('.modal-box {'), html.indexOf('.modal-box {') + 300);
     expect(modalBoxRule).toContain('color: var(--text-primary)');
-    expect(html).toContain('.modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }');
+    expect(html).toContain('.swipe-content {');
+    const swipeContentRule = html.slice(html.indexOf('.swipe-content {'), html.indexOf('.swipe-content {') + 200);
+    expect(swipeContentRule).toContain('color: var(--text-primary)');
+  });
+
+  it('保存ボタンは実行成功時のみ有効化し、保存成功後は重複登録防止のため無効化したままにする', () => {
+    const html = getRubyWasmPage('tester');
+    // 実行成功時、保存ボタンを表示しつつ有効化する。
+    const runIdx = html.indexOf("runBtn.addEventListener('click'");
+    const runBlock = html.slice(runIdx, runIdx + 700);
+    expect(runBlock).toContain("saveBtn.style.display = result.ok ? 'inline-block' : 'none';");
+    expect(runBlock).toContain('if (result.ok) saveBtn.disabled = false;');
+
+    // 保存成功時はsaveSucceededをtrueにし、失敗時のみ再有効化する
+    // (成功時はdisabled=trueのまま、グレーアウトし続ける)。
+    const saveIdx = html.indexOf("saveBtn.addEventListener('click'");
+    const saveBlock = html.slice(saveIdx, saveIdx + 2000);
+    expect(saveBlock).toContain('var saveSucceeded = false;');
+    expect(saveBlock).toContain('saveSucceeded = true;');
+    expect(saveBlock).toContain('if (!saveSucceeded) saveBtn.disabled = false;');
+  });
+
+  it('一覧モーダルの各行はswipe-content(前景)とswipe-delete(赤色の削除エリア)を持つ構造になっている', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain("li.className = 'swipe-row';");
+    expect(html).toContain("content.className = 'swipe-content';");
+    expect(html).toContain("deleteArea.className = 'swipe-delete';");
+    expect(html).toContain('.swipe-delete {');
+    const swipeDeleteRule = html.slice(html.indexOf('.swipe-delete {'), html.indexOf('.swipe-delete {') + 260);
+    expect(swipeDeleteRule).toContain('right: 0');
+    expect(swipeDeleteRule).toContain('background: #dc2626');
+  });
+
+  it('削除エリアをクリックするとDELETE /api/ruby-wasm/snippets/:idを呼び、成功したら行をDOMから取り除く', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain('function deleteSnippetRow(id, li)');
+    const idx = html.indexOf('function deleteSnippetRow(id, li)');
+    const block = html.slice(idx, idx + 700);
+    expect(block).toContain("method: 'DELETE'");
+    expect(block).toContain("fetch('/api/ruby-wasm/snippets/' + encodeURIComponent(id)");
+    expect(block).toContain('li.remove();');
+    expect(html).toContain('deleteArea.addEventListener(\'click\', function() {\n              deleteSnippetRow(s.id, li);\n            });');
+  });
+
+  it('左へのドラッグでswipe-contentのtransformを動かし、ドラッグ量に応じて開閉をスナップする(Pointer Events、固定幅SWIPE_REVEAL_PXを使用)', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain('var SWIPE_REVEAL_PX = 84;');
+    expect(html).toContain('function attachSwipeToDelete(content, onTap)');
+    expect(html).toContain("content.addEventListener('pointerdown'");
+    expect(html).toContain("content.addEventListener('pointermove'");
+    expect(html).toContain("content.addEventListener('pointerup', endDrag);");
+    expect(html).toContain("content.style.transform = 'translateX(-' + SWIPE_REVEAL_PX + 'px)';");
+  });
+
+  it('タップ(ドラッグでない操作)は、開いている行なら閉じるだけ、閉じている行ならonTap(スニペット読み込み)を呼ぶ', () => {
+    const html = getRubyWasmPage('tester');
+    const idx = html.indexOf('function endDrag()');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 500);
+    expect(block).toContain('if (!moved) {');
+    expect(block).toContain('closeOpenSwipe();');
+    expect(block).toContain('onTap();');
   });
 });

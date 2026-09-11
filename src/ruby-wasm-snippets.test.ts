@@ -407,3 +407,81 @@ describe('GET /api/ruby-wasm/snippets/:id/verifications', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('DELETE /api/ruby-wasm/snippets/:id', () => {
+  it('自分のスニペットを削除できる', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { ok: boolean };
+    expect(data.ok).toBe(true);
+    const row = db.prepare('SELECT id FROM ruby_wasm_snippets WHERE id = ?').get('s1');
+    expect(row).toBeUndefined();
+  });
+
+  it('削除すると紐づく動作確認履歴(ruby_wasm_snippet_verifications)も削除される(孤児レコードを残さない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'user1', 'あいさつ', RUBY_CODE);
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippet_verifications (snippet_id, ruby_version, verified) VALUES (?, ?, ?)`
+    ).run('s1', '3.4', 1);
+
+    const auth = await makeAuthHeader('user1');
+    await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    const count = (db.prepare('SELECT COUNT(*) as c FROM ruby_wasm_snippet_verifications WHERE snippet_id = ?').get('s1') as { c: number }).c;
+    expect(count).toBe(0);
+  });
+
+  it('他ユーザーのスニペットは削除できない(404、実際にも削除されない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ruby_wasm_snippets (id, user_id, title, code) VALUES (?, ?, ?, ?)`
+    ).run('s1', 'other-user', 'あいさつ', RUBY_CODE);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(404);
+    const row = db.prepare('SELECT id FROM ruby_wasm_snippets WHERE id = ?').get('s1');
+    expect(row).toBeDefined();
+  });
+
+  it('存在しないidは404を返す', async () => {
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/does-not-exist', {
+      method: 'DELETE',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('DB未設定の場合は503を返す', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/ruby-wasm/snippets/s1', {
+      method: 'DELETE',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET });
+
+    expect(res.status).toBe(503);
+  });
+});
