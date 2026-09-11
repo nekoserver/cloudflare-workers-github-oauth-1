@@ -99,4 +99,12 @@ describe('/ruby-wasmページ: クリア・保存・スニペット一覧モー�
     expect(html).not.toContain('id="snippetLoadBtn"');
     expect(html).not.toContain('id="snippetReloadBtn"');
   });
+
+  it('モーダル内のテキスト(タイトル・一覧項目)にテーマの文字色が明示指定されている(固定色任せで黒地に黒文字等にならないようにするため)', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain('.modal-box {');
+    const modalBoxRule = html.slice(html.indexOf('.modal-box {'), html.indexOf('.modal-box {') + 300);
+    expect(modalBoxRule).toContain('color: var(--text-primary)');
+    expect(html).toContain('.modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }');
+  });
 });

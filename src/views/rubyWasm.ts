@@ -194,7 +194,7 @@ export function getRubyWasmPage(username: string): string {
     }
     .modal-overlay.open { display: flex; }
     .modal-box {
-      background: var(--card-bg); border-radius: 12px; padding: 24px;
+      background: var(--card-bg); color: var(--text-primary); border-radius: 12px; padding: 24px;
       width: min(560px, 92vw); max-height: 84vh; overflow-y: auto;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
     }
@@ -204,7 +204,7 @@ export function getRubyWasmPage(username: string): string {
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-    .modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+    .modal-snippet-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px; color: var(--text-primary); }
     .modal-snippet-list li:last-child { border-bottom: none; }
     .modal-snippet-list li:hover { background: var(--bg-secondary); }
     .modal-snippet-list li.selected { background: var(--bg-secondary); font-weight: 600; }
