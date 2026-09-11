@@ -86,7 +86,7 @@ textarea:focus { border-color: var(--accent); }
 </head>
 <body>
 <h1>🌙 Kimi K2.7 Code</h1>
-<p class="subtitle">@cf/moonshotai/kimi-k2.7-code にプロンプトを送ってコードを生成します <span class="user-badge">${safeUser}</span></p>
+<p class="subtitle">@cf/moonshotai/kimi-k2.7-code にプロンプトを送ってコードを生成します <span class="user-badge">${safeUser}</span> ・ <a href="/kimi-code/markdown">📚 保存したMarkdown一覧</a></p>
 <div class="cost-note">⚠️ このモデルは従量課金です(入力 $0.95/1Mトークン・出力 $4.00/1Mトークン)。多用するとコストがかかります。</div>
 
 <div class="panel">
@@ -107,12 +107,14 @@ textarea:focus { border-color: var(--accent); }
 <div class="panel">
   <div class="panel-label">
     生成結果
+    <button class="btn sm" id="kimiSaveMarkdownBtn" style="float:right;margin-left:6px;">📝 Markdownとして保存</button>
     <button class="btn sm" id="kimiSaveRubyBtn" style="float:right;margin-left:6px;">💎 コードを保管</button>
     <button class="btn sm copy-btn" id="kimiCopyBtn" style="float:right;">コピー</button>
   </div>
   <div id="kimiOutput"></div>
   <div class="token-note" id="kimiTokenNote"></div>
   <div class="token-note" id="kimiSaveRubyNote"></div>
+  <div class="token-note" id="kimiSaveMarkdownNote"></div>
   <div class="error-msg" id="kimiErrorMsg"></div>
 </div>
 
@@ -351,6 +353,48 @@ textarea:focus { border-color: var(--accent); }
       })
       .then(function() {
         saveRubyBtn.disabled = false;
+      });
+  });
+
+  var saveMarkdownBtn = document.getElementById('kimiSaveMarkdownBtn');
+  var saveMarkdownNoteEl = document.getElementById('kimiSaveMarkdownNote');
+
+  saveMarkdownBtn.addEventListener('click', function() {
+    var code = outputEl.textContent || '';
+    if (!code.trim()) {
+      saveMarkdownNoteEl.textContent = '❌ 先にコードを生成してください';
+      return;
+    }
+    saveMarkdownNoteEl.textContent = '保存中...';
+    saveMarkdownBtn.disabled = true;
+    fetch('/api/kimi-code/markdown-snippets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ code: code, prompt: promptEl.value.trim() })
+    })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        saveMarkdownNoteEl.textContent = '';
+        if (res.status === 200 && res.data && res.data.id) {
+          // innerHTMLでres.data.titleを直接埋め込むと、生成コード由来の文字列
+          // (=攻撃者が細工したプロンプトを通じて操作しうる値)にHTMLタグが
+          // 含まれた場合に反射型XSSになりうる。DOM APIで組み立て、
+          // textContentのみを使うことで必ずエスケープされるようにする。
+          saveMarkdownNoteEl.appendChild(document.createTextNode('✅ Markdownとして保存しました。'));
+          var link = document.createElement('a');
+          link.href = '/kimi-code/markdown/' + encodeURIComponent(res.data.id);
+          link.textContent = '「' + res.data.title + '」を見る';
+          saveMarkdownNoteEl.appendChild(link);
+        } else {
+          saveMarkdownNoteEl.textContent = '❌ 保存に失敗しました: ' + (res.data && res.data.error ? res.data.error : 'HTTP ' + res.status);
+        }
+      })
+      .catch(function(err) {
+        saveMarkdownNoteEl.textContent = '❌ 通信エラー: ' + ((err && err.message) || '不明');
+      })
+      .then(function() {
+        saveMarkdownBtn.disabled = false;
       });
   });
 })();
