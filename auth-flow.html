@@ -133,8 +133,13 @@
   <div class="legend-item"><div class="legend-box" style="background:var(--blue-bg);border-color:var(--blue-border)"></div>処理・参照</div>
   <div class="legend-item"><div class="legend-box" style="background:var(--ok-bg);border-color:var(--ok-border)"></div>正常終端（通過）</div>
   <div class="legend-item"><div class="legend-box" style="background:var(--ng-bg);border-color:var(--ng-border)"></div>異常終端（401）</div>
-  <div class="legend-item"><div class="legend-box" style="background:var(--purple-bg);border-color:var(--purple-border)"></div>副作用（Slack通知）</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--purple-bg);border-color:var(--purple-border)"></div>副作用（通知・既定OFF/NOTIFY_TARGETでSlack⇄外部Worker切替）</div>
 </div>
+<p style="padding:6px 20px 0;font-size:11px;color:var(--muted)">
+  通知まわりの詳細な変遷は
+  <a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/blob/main/SPEC.slack.latest.md" style="color:var(--blue)">SPEC.slack.latest.md</a>
+  を参照(2026-07-05 f5e89e0でnotifyDispatch化、2026-07-10 276f13cでD1のnotification_settingsによるON/OFF・既定OFFに変更)。
+</p>
 <div class="scroll-wrap">
 <svg id="chart" width="1200" height="3100" viewBox="0 0 1200 3100">
 <defs>
@@ -181,12 +186,13 @@
   <text x="210" y="38" text-anchor="middle" class="label-muted">JWT_SECRET で検証。期限切れ・改ざんは Invalid</text>
 </g>
 
-<!-- [WARN2] Slack通知: invalid JWT -->
-<g transform="translate(870,210)">
-  <rect x="0" y="0" width="260" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
-  <text x="130" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
-  <text x="130" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
-  <text x="130" y="49" text-anchor="middle" class="label-muted">無効なJWTトークンによる試行</text>
+<!-- [WARN2] 通知: invalid JWT (既定OFF・NOTIFY_TARGET切替) -->
+<g transform="translate(870,205)">
+  <rect x="0" y="0" width="260" height="70" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="130" y="16" text-anchor="middle" font-weight="600" fill="var(--purple)">通知（設定がONの場合のみ・既定OFF）</text>
+  <text x="130" y="32" text-anchor="middle" class="label-muted">[セキュリティ警告] 無効なJWTトークンによる試行</text>
+  <text x="130" y="47" text-anchor="middle" class="label-muted">NOTIFY_TARGET設定でSlack/外部Workerに切替可</text>
+  <text x="130" y="61" text-anchor="middle" class="label-muted">fire-and-forget</text>
 </g>
 
 <!-- [NG2] 401 invalid JWT -->
@@ -220,12 +226,13 @@
   <text x="180" y="38" text-anchor="middle" class="label-muted">NULL でなければ強制revoke済み</text>
 </g>
 
-<!-- [WARN-C2] Slack通知: revoked cookie -->
-<g transform="translate(30,648)">
-  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
-  <text x="100" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
-  <text x="100" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
-  <text x="100" y="49" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+<!-- [WARN-C2] 通知: revoked cookie (既定OFF・NOTIFY_TARGET切替) -->
+<g transform="translate(20,648)">
+  <rect x="0" y="0" width="220" height="70" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="110" y="16" text-anchor="middle" font-weight="600" fill="var(--purple)" font-size="10.5">通知（設定ONの場合のみ・既定OFF）</text>
+  <text x="110" y="32" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
+  <text x="110" y="46" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+  <text x="110" y="60" text-anchor="middle" class="label-muted">NOTIFY_TARGETでSlack/外部Worker</text>
 </g>
 
 <!-- [NG-C2] 401 revoked (cookie) -->
@@ -293,12 +300,13 @@
   <text x="180" y="38" text-anchor="middle" class="label-muted">NULL でなければ強制revoke済み</text>
 </g>
 
-<!-- [WARN-B2] Slack通知 -->
-<g transform="translate(740,648)">
-  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
-  <text x="100" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
-  <text x="100" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
-  <text x="100" y="49" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+<!-- [WARN-B2] 通知: revoked bearer (既定OFF・NOTIFY_TARGET切替) -->
+<g transform="translate(725,648)">
+  <rect x="0" y="0" width="230" height="70" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="115" y="16" text-anchor="middle" font-weight="600" fill="var(--purple)" font-size="10.5">通知（設定ONの場合のみ・既定OFF）</text>
+  <text x="115" y="32" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
+  <text x="115" y="46" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+  <text x="115" y="60" text-anchor="middle" class="label-muted">NOTIFY_TARGETでSlack/外部Worker</text>
 </g>
 
 <!-- [NG-B2] 401 revoked bearer -->
@@ -464,8 +472,8 @@
     <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
     <text x="520" y="28" text-anchor="middle">401「無効なトークンです」</text>
     <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
-    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">Slack通知あり「無効なJWTトークンによるアクセス試行」</text>
-    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">IP・パス・ソース（header/cookie）を記録</text>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">通知あり(既定OFF)「無効なJWTトークンによるアクセス試行」</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">IP・パス・ソース（header/cookie）を記録。ON時の送信先はNOTIFY_TARGET次第</text>
   </g>
 
   <!-- 行5 -->
@@ -480,8 +488,8 @@
     <text x="520" y="16" text-anchor="middle">401「セッションが</text>
     <text x="520" y="32" text-anchor="middle">無効化されました」</text>
     <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
-    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">Slack通知あり「revoke済みセッションによるアクセス試行」</text>
-    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">Cookie認証の場合は同時にCookieをすべて削除</text>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">通知あり(既定OFF)「revoke済みセッションによるアクセス試行」</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">Cookie認証の場合は同時にCookieをすべて削除。ON時の送信先はNOTIFY_TARGET次第</text>
   </g>
 
   <!-- 行6 -->
@@ -513,7 +521,7 @@
     <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
     <text x="520" y="22" text-anchor="middle">401「無効なトークンです」</text>
     <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
-    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">JWT検証段階で弾かれる。Slack通知あり</text>
+    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">JWT検証段階で弾かれる。通知あり(既定OFF、行4と同じ経路)</text>
   </g>
 
   <!-- 行8 -->
@@ -551,7 +559,7 @@
 <text x="820" y="236" class="edge-label-ng">No</text>
 
 <!-- WARN2 → NG2 -->
-<line x1="1000" y1="270" x2="1000" y2="300" class="edge" marker-end="url(#arrow)"/>
+<line x1="1000" y1="275" x2="1000" y2="300" class="edge" marker-end="url(#arrow)"/>
 
 <!-- 2 → 3 (Yes) -->
 <line x1="600" y1="270" x2="600" y2="320" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
@@ -569,11 +577,11 @@
 <line x1="260" y1="496" x2="260" y2="548" class="edge" marker-end="url(#arrow)"/>
 
 <!-- C2 → WARN-C2 (Yes) -->
-<path d="M 80 573 L 60 573 L 60 648 L 30 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
-<text x="28" y="640" class="edge-label-ng" text-anchor="end" transform="rotate(-90,28,640)">Yes</text>
+<path d="M 80 573 L 60 573 L 60 648 L 20 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
+<text x="18" y="640" class="edge-label-ng" text-anchor="end" transform="rotate(-90,18,640)">Yes</text>
 
 <!-- WARN-C2 → NG-C2 -->
-<line x1="130" y1="708" x2="130" y2="748" class="edge" marker-end="url(#arrow)"/>
+<line x1="130" y1="718" x2="130" y2="748" class="edge" marker-end="url(#arrow)"/>
 
 <!-- C2 → C3 (No) -->
 <line x1="260" y1="598" x2="260" y2="648" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
@@ -597,11 +605,11 @@
 <line x1="920" y1="496" x2="920" y2="548" class="edge" marker-end="url(#arrow)"/>
 
 <!-- B2 → WARN-B2 (Yes: revoked) -->
-<path d="M 740 573 L 720 573 L 720 648 L 740 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
+<path d="M 740 573 L 720 573 L 720 648 L 725 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
 <text x="710" y="630" class="edge-label-ng" text-anchor="end">Yes</text>
 
 <!-- WARN-B2 → NG-B2 -->
-<line x1="840" y1="708" x2="840" y2="748" class="edge" marker-end="url(#arrow)"/>
+<line x1="840" y1="718" x2="840" y2="748" class="edge" marker-end="url(#arrow)"/>
 
 <!-- B2 → idle_note (No) -->
 <line x1="1000" y1="598" x2="1000" y2="648" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
