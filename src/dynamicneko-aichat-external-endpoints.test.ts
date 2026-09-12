@@ -209,3 +209,98 @@ describe('POST /api/aichat/query-external', () => {
     expect(aiRun.mock.calls[0][0]).toBe('@cf/google/gemma-4-26b-a4b-it');
   });
 });
+
+// ===========================================================
+// POST /api/aichat/query-external: /neko aireqst (dynamicnekoから呼び出し可能)
+// ===========================================================
+// 対象: dynamicnekoのAI問い合わせウィジェットから "/neko aireqst" を送ると、
+// AIを呼ばずローカルで応答する(本体WorkerのAIチャット/neko aireqstと同じ処理)。
+// 故障シナリオ: (1) loginが渡らずuser_idスコープが特定できない
+//              (2) D1クエリ失敗時にエラーが握りつぶされる
+//              (3) 未許可メールアドレスがAI呼び出し同様にaireqstも回避できてしまう
+function createMockDbWithSourceRows(allowedEmails: string[], sourceRows: Array<{ source: string | null; q_count: number }>) {
+  const bind = vi.fn().mockImplementation((...args: unknown[]) => ({
+    first: vi.fn().mockResolvedValue(allowedEmails.includes(args[0] as string) ? { 1: 1 } : null),
+    all: vi.fn().mockResolvedValue({ results: sourceRows }),
+  }));
+  return { prepare: vi.fn().mockReturnValue({ bind }) } as unknown as D1Database;
+}
+
+describe('POST /api/aichat/query-external: /neko aireqst', () => {
+  it('AIバインディングを呼ばずanswerとsvgを返す', async () => {
+    const db = createMockDbWithSourceRows(['ok@example.com'], [
+      { source: 'textbox', q_count: 5 },
+      { source: 'slack', q_count: 2 },
+    ]);
+    const aiRun = vi.fn();
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: '/neko aireqst', login: 'nekoserver' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db, AI: { run: aiRun } }
+    );
+    expect(res.status).toBe(200);
+    expect(aiRun).not.toHaveBeenCalled();
+    const body = await res.json() as { answer: string; svg: string | null };
+    expect(body.answer).toContain('リクエスト元別統計(今月)');
+    expect(body.svg).toContain('<svg');
+  });
+
+  it('大文字小文字や前後の空白を無視して判定する', async () => {
+    const db = createMockDbWithSourceRows(['ok@example.com'], [{ source: 'textbox', q_count: 1 }]);
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: '  /NEKO AIREQST  ', login: 'nekoserver' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('loginが無い場合は400を返す', async () => {
+    const db = createMockDbWithSourceRows(['ok@example.com'], []);
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: '/neko aireqst' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('未許可メールアドレスは403で拒否される(AIバインディング未呼び出しと同じ扱い)', async () => {
+    const db = createMockDbWithSourceRows(['ok@example.com'], [{ source: 'textbox', q_count: 1 }]);
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ng@example.com', question: '/neko aireqst', login: 'nekoserver' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('D1クエリが失敗した場合は500でエラー内容を返す(握りつぶさない)', async () => {
+    const allowed = ['ok@example.com'];
+    const bind = vi.fn().mockImplementation((...args: unknown[]) => ({
+      first: vi.fn().mockResolvedValue(allowed.includes(args[0] as string) ? { 1: 1 } : null),
+      all: vi.fn().mockRejectedValue(new Error('D1 unavailable')),
+    }));
+    const db = { prepare: vi.fn().mockReturnValue({ bind }) } as unknown as D1Database;
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: '/neko aireqst', login: 'nekoserver' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('D1 unavailable');
+  });
+
+  it('全件0件の場合はsvgがnullで返る', async () => {
+    const db = createMockDbWithSourceRows(['ok@example.com'], []);
+    const res = await app.request(
+      '/api/aichat/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', question: '/neko aireqst', login: 'nekoserver' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { answer: string; svg: string | null };
+    expect(body.svg).toBeNull();
+  });
+});
