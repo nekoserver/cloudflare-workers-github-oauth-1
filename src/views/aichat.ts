@@ -743,6 +743,8 @@ export function getAiChatPage(user: {
     .bubble-copy-btn:hover { background: var(--bg-secondary); }
     .bubble-copy-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
     .neko-results-link-row { margin-top: 8px; }
+    .neko-svg-chart { margin-top: 10px; }
+    .neko-svg-chart svg { max-width: 100%; height: auto; display: block; }
     .neko-results-link { font-size: 12px; color: var(--accent-color, #667eea); text-decoration: none; }
     .neko-results-link:hover { text-decoration: underline; }
     .tlist-register-btn {
@@ -3615,7 +3617,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -6676,13 +6678,22 @@ export function getAiChatPage(user: {
       heading.appendChild(btn);
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults) {
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
       if (isLocalCommand) styleGhPrListBubble(el, text);
+      if (isLocalCommand && svg) {
+        // svgはサーバー(aichatSlashCommand.ts)側で固定パレット+数値のみから
+        // 組み立てた自前生成のマークアップで、AI応答等の非信頼入力を含まない
+        // ためparseMd()を経由させずそのままinnerHTMLする(型定義側のコメント参照)。
+        var svgWrap = document.createElement('div');
+        svgWrap.className = 'neko-svg-chart';
+        svgWrap.innerHTML = svg;
+        el.appendChild(svgWrap);
+      }
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
@@ -6732,10 +6743,10 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -7023,7 +7034,7 @@ export function getAiChatPage(user: {
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
-            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
+            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {

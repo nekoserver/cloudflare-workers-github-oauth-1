@@ -428,26 +428,100 @@ const AICHAT_SOURCE_SWATCH: Record<AichatSourceKey, string> = {
 };
 
 /**
+ * リクエスト元別円グラフ(views/aichat.ts の SOURCE_COLORS)と同じ配色。
+ * SVGはサーバー側でこの固定パレットと数値だけから組み立てる自前生成の
+ * マークアップであり、外部入力(AI応答やユーザー入力)を一切埋め込まないため、
+ * parseMd()のエスケープを経由させずクライアントでそのままinnerHTMLしてよい
+ * (CLAUDE.mdの「非信頼入力は必ずエスケープする」方針の対象は、あくまで
+ * AI生成テキスト等の非信頼入力であり、この関数の出力はそれに該当しない)。
+ */
+const AICHAT_SOURCE_HEX: Record<AichatSourceKey, string> = {
+  slack: '#611f69',
+  textbox: '#0ea5e9',
+  api: '#f59e0b',
+  dynamicneko: '#10b981',
+};
+
+type AichatSourceEntry = { key: AichatSourceKey; count: number };
+
+/** 件数0を除外し、比率の多い順(降順)に並べたエントリ一覧を返す。 */
+function sortAichatSourceEntries(totals: Record<AichatSourceKey, number>): AichatSourceEntry[] {
+  return AICHAT_SOURCE_ORDER
+    .map((key) => ({ key, count: totals[key] || 0 }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
  * `/neko aireqst` の結果を表示する。「日ごとキーワード数・質問数」モーダルの
  * リクエスト元別円グラフと同じデータ(ai_chat_sharesのsource別件数)を、
- * チャット本文で完結するMarkdownテーブル(色見本+リクエスト元+件数+割合)として表示する。
+ * 比率の多い順に並べたMarkdownテーブル(色見本+リクエスト元+件数+割合)として表示する。
  * 全件0(今月の質問が無い)場合は0除算を避け、その旨だけを表示する。
  */
 export function formatAichatSourceTotals(totals: Record<AichatSourceKey, number>): string {
-  const total = AICHAT_SOURCE_ORDER.reduce((sum, key) => sum + (totals[key] || 0), 0);
+  const entries = sortAichatSourceEntries(totals);
+  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
   if (total <= 0) {
     return ['## リクエスト元別統計(今月)', '今月はまだ質問がありません。'].join('\n');
   }
 
   const lines = ['## リクエスト元別統計(今月)', '| 色 | リクエスト元 | 件数 | 割合 |', '|---|---|---:|---:|'];
-  AICHAT_SOURCE_ORDER.forEach((key) => {
-    const count = totals[key] || 0;
-    if (count <= 0) return;
+  entries.forEach(({ key, count }) => {
     const ratio = Math.round((count / total) * 1000) / 10;
     lines.push(`| ${AICHAT_SOURCE_SWATCH[key]} | ${AICHAT_SOURCE_LABELS[key]} | ${count}件 | ${ratio.toFixed(1)}% |`);
   });
   lines.push('', `合計: ${total}件`);
   return lines.join('\n');
+}
+
+function escapeXmlText(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * `/neko aireqst` 用に、リクエスト元別統計を比率の多い順に並べたSVG円グラフを
+ * 生成する(色見本+件数+割合の凡例付き)。全件0件の場合はnullを返し、
+ * 呼び出し元は円グラフ無しのテキストのみにフォールバックする。
+ * 1種類のみの場合(100%)はパス描画が退化するため円(circle)で表現する。
+ */
+export function buildAichatSourceTotalsSvg(totals: Record<AichatSourceKey, number>): string | null {
+  const entries = sortAichatSourceEntries(totals);
+  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
+  if (total <= 0) return null;
+
+  const cx = 60, cy = 60, r = 50;
+  const slices: string[] = [];
+
+  if (entries.length === 1) {
+    slices.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${AICHAT_SOURCE_HEX[entries[0].key]}" />`);
+  } else {
+    let angle = -Math.PI / 2;
+    entries.forEach(({ key, count }) => {
+      const sliceAngle = (count / total) * 2 * Math.PI;
+      const endAngle = angle + sliceAngle;
+      const x1 = (cx + r * Math.cos(angle)).toFixed(2);
+      const y1 = (cy + r * Math.sin(angle)).toFixed(2);
+      const x2 = (cx + r * Math.cos(endAngle)).toFixed(2);
+      const y2 = (cy + r * Math.sin(endAngle)).toFixed(2);
+      const largeArc = sliceAngle > Math.PI ? 1 : 0;
+      slices.push(
+        `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${AICHAT_SOURCE_HEX[key]}" stroke="#fff" stroke-width="0.5" />`
+      );
+      angle = endAngle;
+    });
+  }
+
+  const legend = entries.map(({ key, count }, i) => {
+    const y = 10 + i * 18;
+    const ratio = Math.round((count / total) * 1000) / 10;
+    const label = escapeXmlText(`${AICHAT_SOURCE_LABELS[key]} ${count}件 (${ratio.toFixed(1)}%)`);
+    return `<rect x="132" y="${y}" width="11" height="11" rx="2" fill="${AICHAT_SOURCE_HEX[key]}" />` +
+      `<text x="149" y="${y + 10}" font-size="12" font-family="sans-serif" fill="#1f2328">${label}</text>`;
+  }).join('');
+
+  const height = Math.max(120, 20 + entries.length * 18);
+  return `<svg viewBox="0 0 340 ${height}" width="340" height="${height}" role="img" aria-label="リクエスト元別統計(今月)の円グラフ">` +
+    slices.join('') + legend + '</svg>';
 }
 
 /**
@@ -784,7 +858,10 @@ async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<Race
 }
 
 export type AichatSlashCommandResult =
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[] }
+  // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
+  // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
+  // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; svg?: string }
   | { handled: false };
 
 /**
@@ -1040,7 +1117,11 @@ export async function interpretAichatSlashCommand(
     if (outcome.status === 'error') {
       return { handled: true, response: `❌ /neko aireqst でエラーが発生しました: ${outcome.message}` };
     }
-    return { handled: true, response: formatAichatSourceTotals(outcome.value) };
+    return {
+      handled: true,
+      response: formatAichatSourceTotals(outcome.value),
+      svg: buildAichatSourceTotalsSvg(outcome.value) ?? undefined,
+    };
   }
 
   if (subcommand === 'factor') {
