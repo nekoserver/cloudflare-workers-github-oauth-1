@@ -9,6 +9,7 @@ import {
   convertZenkakuKatakanaToHankaku,
   formatKanaConvertResult,
   formatAichatSourceTotals,
+  buildAichatSourceTotalsSvg,
   formatFactorWasmResult,
   formatDigHelp,
   formatDigResult,
@@ -291,12 +292,23 @@ describe('interpretAichatSlashCommand', () => {
     expect(result).toEqual({ handled: true, response: '❌ 変換する文字列を指定してください: /neko kana <全角カナ>' });
   });
 
-  it('/neko aireqst は fetchAichatSourceTotals の結果をMarkdownテーブルで表示する', async () => {
+  it('/neko aireqst は fetchAichatSourceTotals の結果をMarkdownテーブル+SVG円グラフで表示する', async () => {
     const totals = { slack: 2, textbox: 5, api: 3, dynamicneko: 0 };
     const fetchAichatSourceTotals = vi.fn().mockResolvedValue(totals);
     const result = await interpretAichatSlashCommand('/neko aireqst', now, { ...unusedDeps, fetchAichatSourceTotals });
     expect(fetchAichatSourceTotals).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ handled: true, response: formatAichatSourceTotals(totals) });
+    expect(result).toEqual({
+      handled: true,
+      response: formatAichatSourceTotals(totals),
+      svg: buildAichatSourceTotalsSvg(totals),
+    });
+  });
+
+  it('/neko aireqst は全件0件の場合、svgを含めない', async () => {
+    const totals = { slack: 0, textbox: 0, api: 0, dynamicneko: 0 };
+    const fetchAichatSourceTotals = vi.fn().mockResolvedValue(totals);
+    const result = await interpretAichatSlashCommand('/neko aireqst', now, { ...unusedDeps, fetchAichatSourceTotals });
+    expect(result).toEqual({ handled: true, response: formatAichatSourceTotals(totals), svg: undefined });
   });
 
   it('/neko aireqst は fetchAichatSourceTotals 未設定時にエラーメッセージを返す', async () => {
@@ -430,7 +442,15 @@ describe('formatAichatSourceTotals', () => {
     expect(result).toContain('AIチャット入力窓');
   });
 
-  it('Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカーの表示順を維持する', () => {
+  it('比率の多い順(降順)に並べる', () => {
+    const result = formatAichatSourceTotals({ slack: 1, textbox: 8, api: 2, dynamicneko: 5 });
+    const order = ['AIチャット入力窓', 'ダイナミックワーカー', '回答伝播ページ', 'Slack'];
+    const positions = order.map((label) => result.indexOf(label));
+    expect(positions.every((p) => p > -1)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('件数が同じ場合はSlack→AIチャット入力窓→回答伝播ページ→ダイナミックワーカーの元の順を維持する(安定ソート)', () => {
     const result = formatAichatSourceTotals({ slack: 1, textbox: 1, api: 1, dynamicneko: 1 });
     const order = ['Slack', 'AIチャット入力窓', '回答伝播ページ', 'ダイナミックワーカー'];
     const positions = order.map((label) => result.indexOf(label));
@@ -440,6 +460,48 @@ describe('formatAichatSourceTotals', () => {
   it('全リクエスト元が0件の場合、0除算を避けその旨だけ表示する', () => {
     const result = formatAichatSourceTotals({ slack: 0, textbox: 0, api: 0, dynamicneko: 0 });
     expect(result).toBe('## リクエスト元別統計(今月)\n今月はまだ質問がありません。');
+  });
+});
+
+describe('buildAichatSourceTotalsSvg', () => {
+  it('全件0件の場合はnullを返す(円グラフを描画しない)', () => {
+    expect(buildAichatSourceTotalsSvg({ slack: 0, textbox: 0, api: 0, dynamicneko: 0 })).toBeNull();
+  });
+
+  it('<svg>要素と全リクエスト元の色見本(rect)を含む', () => {
+    const svg = buildAichatSourceTotalsSvg({ slack: 3, textbox: 6, api: 1, dynamicneko: 0 });
+    expect(svg).not.toBeNull();
+    expect(svg).toMatch(/^<svg /);
+    expect(svg).toContain('</svg>');
+    expect(svg).toContain('#611f69'); // slack
+    expect(svg).toContain('#0ea5e9'); // textbox
+    expect(svg).toContain('#f59e0b'); // api
+    expect(svg).not.toContain('#10b981'); // dynamicneko(0件なので含まれない)
+  });
+
+  it('比率の多い順(降順)に凡例のテキストが並ぶ', () => {
+    const svg = buildAichatSourceTotalsSvg({ slack: 1, textbox: 8, api: 2, dynamicneko: 5 })!;
+    const order = ['AIチャット入力窓', 'ダイナミックワーカー', '回答伝播ページ', 'Slack'];
+    const positions = order.map((label) => svg.indexOf(label));
+    expect(positions.every((p) => p > -1)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('複数種類ある場合は扇形(path)を件数分描画する', () => {
+    const svg = buildAichatSourceTotalsSvg({ slack: 3, textbox: 6, api: 1, dynamicneko: 0 })!;
+    expect(svg.match(/<path /g)?.length).toBe(3);
+  });
+
+  it('1種類のみ(100%)の場合は扇形ではなく円(circle)で描画する', () => {
+    const svg = buildAichatSourceTotalsSvg({ slack: 0, textbox: 5, api: 0, dynamicneko: 0 })!;
+    expect(svg).toContain('<circle ');
+    expect(svg).not.toContain('<path ');
+  });
+
+  it('件数・割合のテキストに件数と%表記が含まれる', () => {
+    const svg = buildAichatSourceTotalsSvg({ slack: 3, textbox: 6, api: 1, dynamicneko: 0 })!;
+    expect(svg).toContain('6件');
+    expect(svg).toContain('60.0%');
   });
 });
 

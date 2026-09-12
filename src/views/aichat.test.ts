@@ -1324,7 +1324,7 @@ describe('回答バブル コピーボタン', () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
-    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults)');
+    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg)');
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const copyBtnIdx = fn.indexOf('bubble-copy-btn');
     expect(guardIdx).toBeGreaterThan(-1);
@@ -1337,12 +1337,12 @@ describe('回答バブル コピーボタン', () => {
     const modalIdx = html.indexOf('function renderAiResultInModal(');
     expect(modalIdx).toBeGreaterThan(-1);
     const modalFn = html.slice(modalIdx, modalIdx + 700);
-    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults)');
+    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg)');
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
     const submitFn = html.slice(submitIdx, submitIdx + 3600);
-    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);");
+    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
   });
 });
 
@@ -1425,7 +1425,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
-    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);");
+    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {

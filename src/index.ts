@@ -5389,6 +5389,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       usedModel: 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
+      svg: slashCommand.svg ?? null,
     });
   }
 
