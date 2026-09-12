@@ -48,6 +48,11 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #   KIMI_CODE_EXTERNAL_SECRET  # dynamicnekoのNew SnippetウィジェットがPOST
 #                               # /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。
 #                               # dynamicneko側も同じ変数名(KIMI_CODE_EXTERNAL_SECRET)・同じ値で設定する
+#   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
+#   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
+#     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、
+#     [vars]には平文で書かないこと（CLAUDE.mdルール4）。
+#     設定手順: wrangler secret put GOOGLE_CSE_API_KEY / wrangler secret put GOOGLE_CSE_CX
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
 #   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/meta/llama-3.3-70b-instruct-fp8-fast）
 #     注意: gemma-4-26b-a4b-it はsystem messageが存在すると enable_thinking:false を無視して

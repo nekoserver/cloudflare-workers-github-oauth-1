@@ -163,6 +163,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
+    '| /neko vlink <キーワード> | Googleで「YouTube <キーワード>」を検索し、www.youtube.comのリンクのみを抽出して表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -524,6 +525,32 @@ export function buildAichatSourceTotalsSvg(totals: Record<AichatSourceKey, numbe
     slices.join('') + legend + '</svg>';
 }
 
+const YOUTUBE_LINK_PREFIX = 'https://www.youtube.com';
+
+/**
+ * `/neko vlink <キーワード>` 用。Google Custom Search JSON APIの検索結果
+ * (items[].link)から、`https://www.youtube.com` で始まるリンクのみを
+ * 抽出する(http://・youtu.be・m.youtube.com等は対象外。仕様が
+ * 「特定のURL(https://www.youtube.com)から始まるリンクのみ」のため)。
+ * linkフィールドが欠けている項目は例外にせずスキップする。
+ */
+export function extractYoutubeLinksFromSearchItems(items: Array<{ link?: string }>): string[] {
+  return items
+    .map((item) => item.link)
+    .filter((link): link is string => typeof link === 'string' && link.startsWith(YOUTUBE_LINK_PREFIX));
+}
+
+/** `/neko vlink <キーワード>` の結果を表示する。0件の場合もその旨を明示する(握りつぶさない)。 */
+export function formatVlinkResult(keyword: string, links: string[]): string {
+  if (links.length === 0) {
+    return `## YouTube動画リンク検索: 「${keyword}」\nYouTube(www.youtube.com)のリンクは見つかりませんでした`;
+  }
+  return [
+    `## YouTube動画リンク検索: 「${keyword}」`,
+    ...links.map((link) => `- ${link}`),
+  ].join('\n');
+}
+
 /**
  * `/neko rubyver` の結果を表示する。/ruby-wasmページが読み込む
  * @ruby/{X.Y}-wasm-wasiのビルドライン・パッケージバージョンは静的な定数
@@ -650,6 +677,8 @@ export type AichatSlashCommandDeps = {
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
+  /** `/neko vlink <キーワード>` 用。Googleに「YouTube <キーワード>」で検索をかけ、www.youtube.comのリンクのみを抽出して返す */
+  searchYoutubeLinks?: (keyword: string) => Promise<string[]>;
 };
 
 export type SqlImpactCatalogRow = {
@@ -1353,12 +1382,33 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'vlink') {
+    const keyword = parts.slice(2).join(' ').trim();
+    if (!keyword) {
+      return { handled: true, response: '❌ キーワードを指定してください: /neko vlink <キーワード>' };
+    }
+    if (!deps.searchYoutubeLinks) {
+      return { handled: true, response: '❌ /neko vlink は現在利用できません(Google検索API未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.searchYoutubeLinks(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko vlink がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko vlink でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatVlinkResult(keyword, outcome.value) };
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
