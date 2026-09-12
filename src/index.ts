@@ -261,6 +261,9 @@ import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
 import { getOrigamiSculpturePage } from './views/origamiSculpture';
+import { getFlyBrainMahjongPage } from './views/flyBrainMahjong';
+import { flyBrainChooseDiscard } from './flyBrainMahjongLogic';
+import { recommendDiscard } from './mahjongDiscardLogic';
 import { getTsuruNoNiwaPage } from './views/tsuruNoNiwa';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
@@ -12144,6 +12147,32 @@ app.get('/megaminx', authMiddleware, async (c) => {
 
 app.get('/origami-sculpture', authMiddleware, async (c) => {
   return c.html(getOrigamiSculpturePage());
+});
+
+app.get('/fly-brain-mahjong', authMiddleware, async (c) => {
+  return c.html(getFlyBrainMahjongPage());
+});
+
+app.post('/api/fly-brain-mahjong/solve', authMiddleware, async (c) => {
+  try {
+    const body = await c.req.json<{ hand?: string }>();
+    const hand = body.hand?.trim();
+    if (!hand) return c.json({ ok: false, error: 'hand が空です' }, 400);
+    const rec = recommendDiscard(hand);
+    const fly = flyBrainChooseDiscard(rec.candidates);
+    return c.json({
+      ok: true,
+      discard: fly.chosen.tileLabel,
+      shanten: rec.best.shanten,
+      ukeire: rec.best.ukeire,
+      handLabels: rec.handLabels,
+      candidates: rec.candidates,
+      neurons: fly.neurons,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ ok: false, error: message }, 400);
+  }
 });
 
 app.get('/tsuru-no-niwa', authMiddleware, async (c) => {
