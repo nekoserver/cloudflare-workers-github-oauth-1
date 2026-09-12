@@ -261,6 +261,7 @@ import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
 import { getOrigamiSculpturePage } from './views/origamiSculpture';
+import { getFlyBrainPage } from './views/flyBrain';
 import { getFlyBrainMahjongPage } from './views/flyBrainMahjong';
 import { flyBrainChooseDiscard } from './flyBrainMahjongLogic';
 import { recommendDiscard } from './mahjongDiscardLogic';
@@ -12148,6 +12149,10 @@ app.get('/megaminx', authMiddleware, async (c) => {
 
 app.get('/origami-sculpture', authMiddleware, async (c) => {
   return c.html(getOrigamiSculpturePage());
+});
+
+app.get('/fly-brain', authMiddleware, async (c) => {
+  return c.html(getFlyBrainPage());
 });
 
 app.get('/fly-brain-mahjong', authMiddleware, async (c) => {

@@ -190,8 +190,8 @@ table.cands tr.best { background: rgba(102,126,234,0.12); font-weight: 700; }
     </div>
   </aside>
 </div>
-${getThemeToggleScript()}
 <script>
+${getThemeToggleScript()}
 (function() {
   var PROBLEMS = ${PROBLEMS_JSON};
   var problemSelect = document.getElementById('problem-select');
