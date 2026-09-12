@@ -237,6 +237,7 @@ import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
 import { getOrigamiSculpturePage } from './views/origamiSculpture';
+import { getTsuruNoNiwaPage } from './views/tsuruNoNiwa';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
@@ -12111,6 +12112,10 @@ app.get('/megaminx', authMiddleware, async (c) => {
 
 app.get('/origami-sculpture', authMiddleware, async (c) => {
   return c.html(getOrigamiSculpturePage());
+});
+
+app.get('/tsuru-no-niwa', authMiddleware, async (c) => {
+  return c.html(getTsuruNoNiwaPage());
 });
 
 app.get('/webgl-solar', authMiddleware, async (c) => {
