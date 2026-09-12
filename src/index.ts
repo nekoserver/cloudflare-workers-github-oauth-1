@@ -236,6 +236,7 @@ import { getAirlineNetworkPage } from './views/airlineNetwork';
 import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
+import { getOrigamiSculpturePage } from './views/origamiSculpture';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
@@ -12106,6 +12107,10 @@ app.get('/webgl-cube', authMiddleware, async (c) => {
 app.get('/megaminx', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getMegaminxPage(user.sub));
+});
+
+app.get('/origami-sculpture', authMiddleware, async (c) => {
+  return c.html(getOrigamiSculpturePage());
 });
 
 app.get('/webgl-solar', authMiddleware, async (c) => {
