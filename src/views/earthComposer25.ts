@@ -1,18 +1,19 @@
 import { getThemeCSS, getThemeInitScript } from '../utils/theme';
 
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/** WebGL テクスチャ地球儀ページ（/earth-composer-2.5）。 */
+/** WebGL テクスチャ地球儀ページ（/earth-composer-2.5）。PWA(standalone)時は右上にユーザー名・アバターを置かない。 */
 export function getEarthComposer25Page(username: string): string {
-  const safeUser = esc(username);
+  void username;
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#000008">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="earth-composer-2.5">
+<link rel="manifest" href="/manifest-earth-composer-2.5.json">
 <title>earth-composer-2.5 — WebGL 地球儀</title>
 <style>
 ${getThemeCSS()}
@@ -52,7 +53,6 @@ body {
   border-radius: 10px;
   font-weight: 600;
 }
-.user-tag { font-size: 11px; color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage { position: relative; flex: 1; min-height: 0; background: var(--space-bg); overflow: hidden; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 canvas:active { cursor: grabbing; }
@@ -96,7 +96,6 @@ input[type=range] { width: 100px; accent-color: var(--accent-color); }
 }
 .btn:hover { border-color: var(--accent-color); }
 .btn.active { background: var(--badge-bg); border-color: var(--accent-color); color: var(--accent-color); }
-@media (display-mode: standalone) { .browser-only { display: none !important; } }
 </style>
 ${getThemeInitScript()}
 </head>
@@ -176,7 +175,6 @@ void main() {
 <nav class="nav">
   <h1>earth-composer-2.5</h1>
   <span class="badge">WebGL</span>
-  <span class="user-tag browser-only">${safeUser}</span>
 </nav>
 
 <div class="stage">
@@ -606,6 +604,11 @@ void main() {
   }
   requestAnimationFrame(frame);
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw-earth-composer-2.5.js', { scope: '/earth-composer-2.5' }).catch(function() {});
+}
 </script>
 </body>
 </html>`;

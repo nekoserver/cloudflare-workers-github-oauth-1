@@ -1,0 +1,19 @@
+{
+  "name": "earth-composer-2.5",
+  "short_name": "地球儀",
+  "description": "WebGL NASA Blue Marble テクスチャ地球儀",
+  "start_url": "/earth-composer-2.5",
+  "scope": "/earth-composer-2.5",
+  "display": "standalone",
+  "background_color": "#000008",
+  "theme_color": "#000008",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/earth.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
