@@ -60,6 +60,10 @@ export type Bindings = {
   AI_CHAT_MODEL?: string;
   /** 未設定時はテストメール送信機能自体を無効(デフォルトOFF)にする */
   RESEND_API_KEY?: string;
+  /** /neko vlink が使うGoogle Custom Search JSON APIのAPIキー。GOOGLE_CSE_CXとセットで設定する(未設定時は/neko vlinkを無効化) */
+  GOOGLE_CSE_API_KEY?: string;
+  /** /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cxパラメータ) */
+  GOOGLE_CSE_CX?: string;
 };
 
 /** Hono コンテキスト変数 */

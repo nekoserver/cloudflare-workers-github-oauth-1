@@ -223,6 +223,29 @@ async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbToday
   return games;
 }
 
+/**
+ * `/neko vlink <キーワード>` 用。Google Custom Search JSON APIへ
+ * 「YouTube <キーワード>」で検索をかけ、結果のうちwww.youtube.comの
+ * リンクのみを抽出する(抽出処理自体はextractYoutubeLinksFromSearchItemsに
+ * 切り出し済み。ここは実際のfetch()呼び出しのみを担う)。
+ * GOOGLE_CSE_API_KEY・GOOGLE_CSE_CXはwrangler secretで管理する(CLAUDE.mdルール4)。
+ */
+async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string): Promise<string[]> {
+  const apiKey = env.GOOGLE_CSE_API_KEY;
+  const cx = env.GOOGLE_CSE_CX;
+  if (!apiKey || !cx) {
+    throw new Error('GOOGLE_CSE_API_KEY・GOOGLE_CSE_CXが未設定です');
+  }
+  const query = `YouTube ${keyword}`;
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(apiKey)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Google Custom Search APIの呼び出しに失敗しました(status ${res.status})`);
+  }
+  const data = await res.json<{ items?: Array<{ link?: string }> }>();
+  return extractYoutubeLinksFromSearchItems(data.items ?? []);
+}
+
 import { getKimiCodePage } from './views/kimiCode';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
@@ -317,7 +340,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5373,6 +5396,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
+    searchYoutubeLinks: (c.env.GOOGLE_CSE_API_KEY && c.env.GOOGLE_CSE_CX)
+      ? (keyword) => fetchYoutubeLinksViaGoogleSearch(c.env, keyword)
+      : undefined,
     fetchAichatSourceTotals: async () => {
       if (!c.env.DB) throw new Error('DB未設定です');
       const month = new Date().toISOString().slice(0, 7);
