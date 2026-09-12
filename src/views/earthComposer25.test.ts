@@ -12,12 +12,6 @@ describe('getEarthComposer25Page', () => {
     expect(html).toContain('earthImg.src = "/earth.jpg"');
   });
 
-  it('ユーザー名をエスケープして表示する', () => {
-    const xssHtml = getEarthComposer25Page('<script>alert(1)</script>');
-    expect(xssHtml).not.toContain('<script>alert(1)</script>');
-    expect(xssHtml).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-  });
-
   it('44px 固定ナビと WebGL シェーダーを含む', () => {
     expect(html).toContain('height: 44px');
     expect(html).toContain('type="x-shader/x-vertex"');
@@ -34,6 +28,31 @@ describe('getEarthComposer25Page', () => {
       expect(() => new Function(m![1])).not.toThrow();
     }
     expect(count).toBeGreaterThan(0);
+  });
+});
+
+describe('getEarthComposer25Page: PWA(standalone)向けナビ', () => {
+  const html = getEarthComposer25Page('octocat');
+
+  it('画面右上にユーザー名・アバター要素をマークアップに含めない', () => {
+    expect(html).not.toContain('user-tag');
+    expect(html).not.toContain('user-name');
+    expect(html).not.toContain('user-menu-container');
+    expect(html).not.toContain('user-icon');
+    expect(html).not.toContain('>octocat<');
+    expect(html).not.toContain('>tester<');
+  });
+
+  it('専用 manifest へ link し、共有 manifest.json は参照しない', () => {
+    expect(html).toContain('<link rel="manifest" href="/manifest-earth-composer-2.5.json">');
+    expect(html).not.toContain('href="/manifest.json"');
+  });
+
+  it('iOS/Android PWA 向け meta タグと Service Worker 登録がある', () => {
+    expect(html).toContain('<meta name="mobile-web-app-capable" content="yes">');
+    expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
+    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="earth-composer-2.5">');
+    expect(html).toContain("navigator.serviceWorker.register('/sw-earth-composer-2.5.js'");
   });
 });
 
