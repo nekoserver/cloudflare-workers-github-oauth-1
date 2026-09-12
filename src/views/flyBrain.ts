@@ -116,8 +116,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
     </div>
   </aside>
 </div>
-${getThemeToggleScript()}
 <script>
+${getThemeToggleScript()}
 (function() {
   var canvas = document.getElementById('arena');
   var ctx = canvas.getContext('2d');
