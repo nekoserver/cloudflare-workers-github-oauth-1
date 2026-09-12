@@ -120,8 +120,8 @@ canvas.brushing { cursor: none; }
     <button class="btn" id="btn-retry" type="button">もう一度</button>
   </div>
 </div>
-${getThemeToggleScript()}
 <script>
+${getThemeToggleScript()}
 (function() {
   var canvas = document.getElementById('stage');
   var ctx = canvas.getContext('2d');
