@@ -313,6 +313,25 @@ describe('日次統計グラフ: リクエスト元別円グラフ', () => {
     const afterSource = fn.slice(sourceIdx, sourceIdx + 3000);
     expect(afterSource).toContain('<path ');
   });
+
+  it('色見本付きの凡例(リクエスト元ラベル)が円グラフの真下に配置される(横並びではない)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 21000);
+    const sourceIdx = fn.indexOf('sourceTotals');
+    expect(sourceIdx).toBeGreaterThan(-1);
+    const afterSource = fn.slice(sourceIdx, sourceIdx + 3000);
+    // sourcePieSvg(円グラフ本体)より後に sourceRatioHtml(色見本+ラベルの凡例)が続くこと
+    const svgVarIdx = afterSource.indexOf('sourcePieSvg');
+    const ratioVarIdx = afterSource.indexOf('sourceRatioHtml');
+    expect(svgVarIdx).toBeGreaterThan(-1);
+    expect(ratioVarIdx).toBeGreaterThan(svgVarIdx);
+    // 凡例側はflexの横並び(align-items:flex-start)ではなく、margin-topで下に積む構成になっていること
+    const ratioBlock = afterSource.slice(ratioVarIdx, ratioVarIdx + 200);
+    expect(ratioBlock).toContain('margin-top');
+    expect(ratioBlock).not.toContain('align-items:flex-start');
+  });
 });
 
 // ===========================================================
