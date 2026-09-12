@@ -8,6 +8,7 @@ import {
   formatSha256WasmResult,
   convertZenkakuKatakanaToHankaku,
   formatKanaConvertResult,
+  formatAichatSourceTotals,
   formatFactorWasmResult,
   formatDigHelp,
   formatDigResult,
@@ -290,6 +291,25 @@ describe('interpretAichatSlashCommand', () => {
     expect(result).toEqual({ handled: true, response: '❌ 変換する文字列を指定してください: /neko kana <全角カナ>' });
   });
 
+  it('/neko aireqst は fetchAichatSourceTotals の結果をMarkdownテーブルで表示する', async () => {
+    const totals = { slack: 2, textbox: 5, api: 3, dynamicneko: 0 };
+    const fetchAichatSourceTotals = vi.fn().mockResolvedValue(totals);
+    const result = await interpretAichatSlashCommand('/neko aireqst', now, { ...unusedDeps, fetchAichatSourceTotals });
+    expect(fetchAichatSourceTotals).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ handled: true, response: formatAichatSourceTotals(totals) });
+  });
+
+  it('/neko aireqst は fetchAichatSourceTotals 未設定時にエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko aireqst', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko aireqst は現在利用できません(DB未設定)' });
+  });
+
+  it('/neko aireqst で fetchAichatSourceTotals が例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const fetchAichatSourceTotals = vi.fn().mockRejectedValue(new Error('D1 query failed'));
+    const result = await interpretAichatSlashCommand('/neko aireqst', now, { ...unusedDeps, fetchAichatSourceTotals });
+    expect(result).toEqual({ handled: true, response: '❌ /neko aireqst でエラーが発生しました: D1 query failed' });
+  });
+
   it('/neko factor <数値> は factorViaWasm の結果を表示する', async () => {
     const factorViaWasm = vi.fn().mockResolvedValue('12: 2 2 3');
     const result = await interpretAichatSlashCommand('/neko factor 12', now, { ...unusedDeps, factorViaWasm });
@@ -389,6 +409,37 @@ describe('formatKanaConvertResult', () => {
   it('入力と変換結果をMarkdownで表示する', () => {
     const result = formatKanaConvertResult('カタカナ', 'ｶﾀｶﾅ');
     expect(result).toBe('## 半角カナ変換\n入力: カタカナ\n変換結果: ｶﾀｶﾅ');
+  });
+});
+
+describe('formatAichatSourceTotals', () => {
+  it('リクエスト元ごとの色見本・件数・割合をMarkdownテーブルで表示する', () => {
+    const result = formatAichatSourceTotals({ slack: 3, textbox: 6, api: 1, dynamicneko: 0 });
+    expect(result).toContain('## リクエスト元別統計(今月)');
+    expect(result).toContain('| 🟪 | Slack | 3件 | 30.0% |');
+    expect(result).toContain('| 🟦 | AIチャット入力窓 | 6件 | 60.0% |');
+    expect(result).toContain('| 🟧 | 回答伝播ページ | 1件 | 10.0% |');
+    expect(result).not.toContain('ダイナミックワーカー');
+    expect(result).toContain('合計: 10件');
+  });
+
+  it('件数0のリクエスト元は表の行から除外する', () => {
+    const result = formatAichatSourceTotals({ slack: 0, textbox: 1, api: 0, dynamicneko: 0 });
+    expect(result).not.toContain('Slack');
+    expect(result).not.toContain('回答伝播ページ');
+    expect(result).toContain('AIチャット入力窓');
+  });
+
+  it('Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカーの表示順を維持する', () => {
+    const result = formatAichatSourceTotals({ slack: 1, textbox: 1, api: 1, dynamicneko: 1 });
+    const order = ['Slack', 'AIチャット入力窓', '回答伝播ページ', 'ダイナミックワーカー'];
+    const positions = order.map((label) => result.indexOf(label));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('全リクエスト元が0件の場合、0除算を避けその旨だけ表示する', () => {
+    const result = formatAichatSourceTotals({ slack: 0, textbox: 0, api: 0, dynamicneko: 0 });
+    expect(result).toBe('## リクエスト元別統計(今月)\n今月はまだ質問がありません。');
   });
 });
 

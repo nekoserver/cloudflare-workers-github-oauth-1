@@ -5371,6 +5371,17 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
+    fetchAichatSourceTotals: async () => {
+      if (!c.env.DB) throw new Error('DB未設定です');
+      const month = new Date().toISOString().slice(0, 7);
+      const sourceRows = await c.env.DB.prepare(
+        `SELECT source, COUNT(*) as q_count
+         FROM ai_chat_shares
+         WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ?
+         GROUP BY source ORDER BY q_count DESC`
+      ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>();
+      return buildAichatSourceTotals(sourceRows.results ?? []);
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
