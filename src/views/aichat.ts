@@ -6339,7 +6339,6 @@ export function getAiChatPage(user: {
 
           if (sourceTotal > 0) {
             leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">リクエスト元別</div>';
-            leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
 
             var SPR = 46, SPCX = 50, SPCY = 50, SPSZ = 100;
             var sourcePieSvg = '<svg viewBox="0 0 ' + SPSZ + ' ' + SPSZ + '" width="' + SPSZ + '" height="' + SPSZ + '" style="flex-shrink:0;">';
@@ -6357,7 +6356,9 @@ export function getAiChatPage(user: {
             });
             sourcePieSvg += '</svg>';
 
-            var sourceRatioHtml = '<div style="flex:1;min-width:0;">';
+            // グラフの表記(円グラフ)の真下に、色見本とリクエスト元(Slack/AIチャット入力窓/
+            // 回答伝播ページ/ダイナミックワーカー)の凡例を並べる(グラフの横ではなく下に配置)。
+            var sourceRatioHtml = '<div style="margin-top:6px;">';
             sourceKeys.forEach(function(k) {
               var cnt = sourceTotals[k] || 0;
               if (cnt <= 0) return;
@@ -6370,7 +6371,7 @@ export function getAiChatPage(user: {
             });
             sourceRatioHtml += '</div>';
 
-            leftHtml += sourcePieSvg + sourceRatioHtml + '</div>';
+            leftHtml += '<div>' + sourcePieSvg + sourceRatioHtml + '</div>';
           }
 
           // ===== 左パネル最下段: キーワード分類状況（総数・円グラフ・カテゴリ別棒グラフ） =====
