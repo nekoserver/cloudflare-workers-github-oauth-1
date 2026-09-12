@@ -35,6 +35,7 @@ import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
+import { getEarthComposer25Page } from './views/earthComposer25';
 import { getWebGLHeritagePage } from './views/webglHeritage';
 import { getHeritageAccessPage } from './views/heritageAccess';
 import { getHeritageAreaPage } from './views/heritageArea';
@@ -9561,6 +9562,11 @@ app.get('/webgl-demo', authMiddleware, async (c) => {
 app.get('/webgl-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSpherePage(user.sub));
+});
+
+app.get('/earth-composer-2.5', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getEarthComposer25Page(user.sub));
 });
 
 app.get('/webgl-heritage', authMiddleware, async (c) => {
