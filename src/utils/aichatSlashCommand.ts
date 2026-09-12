@@ -1,5 +1,6 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
+import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -151,6 +152,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko kana <全角カナ> | 全角カタカナを半角カナに変換します(カタカナ以外の文字はそのまま残ります) |',
+    '| /neko aireqst | 今月のリクエスト元別(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー)の件数・割合を表示します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko factor -a <日数> | 今日から指定日数後までのYYYYMMDD日付のうち、WASM(Rust実装)で素数と判定された日を一覧表示します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
@@ -406,6 +408,49 @@ export function formatKanaConvertResult(input: string, converted: string): strin
 }
 
 /**
+ * 「日ごとキーワード数・質問数」モーダルのリクエスト元別円グラフ(views/aichat.ts の
+ * SOURCE_COLORS)と同じ表示順(Slack→AIチャット入力窓→回答伝播ページ→
+ * ダイナミックワーカー)を維持する。
+ */
+const AICHAT_SOURCE_ORDER: AichatSourceKey[] = ['slack', 'textbox', 'api', 'dynamicneko'];
+
+/**
+ * リクエスト元別円グラフと同じ配色(SOURCE_COLORS)に対応する絵文字の色見本。
+ * チャット本文はプレーンテキスト/Markdownのみで実際のHEXカラーは表示できないため、
+ * 近似の色の絵文字で代替する(slack=紫#611f69→🟪、textbox=水色#0ea5e9→🟦、
+ * api=橙#f59e0b→🟧、dynamicneko=緑#10b981→🟩)。
+ */
+const AICHAT_SOURCE_SWATCH: Record<AichatSourceKey, string> = {
+  slack: '🟪',
+  textbox: '🟦',
+  api: '🟧',
+  dynamicneko: '🟩',
+};
+
+/**
+ * `/neko aireqst` の結果を表示する。「日ごとキーワード数・質問数」モーダルの
+ * リクエスト元別円グラフと同じデータ(ai_chat_sharesのsource別件数)を、
+ * チャット本文で完結するMarkdownテーブル(色見本+リクエスト元+件数+割合)として表示する。
+ * 全件0(今月の質問が無い)場合は0除算を避け、その旨だけを表示する。
+ */
+export function formatAichatSourceTotals(totals: Record<AichatSourceKey, number>): string {
+  const total = AICHAT_SOURCE_ORDER.reduce((sum, key) => sum + (totals[key] || 0), 0);
+  if (total <= 0) {
+    return ['## リクエスト元別統計(今月)', '今月はまだ質問がありません。'].join('\n');
+  }
+
+  const lines = ['## リクエスト元別統計(今月)', '| 色 | リクエスト元 | 件数 | 割合 |', '|---|---|---:|---:|'];
+  AICHAT_SOURCE_ORDER.forEach((key) => {
+    const count = totals[key] || 0;
+    if (count <= 0) return;
+    const ratio = Math.round((count / total) * 1000) / 10;
+    lines.push(`| ${AICHAT_SOURCE_SWATCH[key]} | ${AICHAT_SOURCE_LABELS[key]} | ${count}件 | ${ratio.toFixed(1)}% |`);
+  });
+  lines.push('', `合計: ${total}件`);
+  return lines.join('\n');
+}
+
+/**
  * `/neko rubyver` の結果を表示する。/ruby-wasmページが読み込む
  * @ruby/{X.Y}-wasm-wasiのビルドライン・パッケージバージョンは静的な定数
  * (rubyWasm.tsのRUBY_WASM_BINARY_URL)から取れるが、実際のCRubyパッチ
@@ -530,6 +575,7 @@ export type AichatSlashCommandDeps = {
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
+  fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
 };
 
 export type SqlImpactCatalogRow = {
@@ -981,6 +1027,20 @@ export async function interpretAichatSlashCommand(
       return { handled: true, response: '❌ 変換する文字列を指定してください: /neko kana <全角カナ>' };
     }
     return { handled: true, response: formatKanaConvertResult(target, convertZenkakuKatakanaToHankaku(target)) };
+  }
+
+  if (subcommand === 'aireqst') {
+    if (!deps.fetchAichatSourceTotals) {
+      return { handled: true, response: '❌ /neko aireqst は現在利用できません(DB未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.fetchAichatSourceTotals(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return { handled: true, response: `❌ /neko aireqst がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko aireqst でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatAichatSourceTotals(outcome.value) };
   }
 
   if (subcommand === 'factor') {
