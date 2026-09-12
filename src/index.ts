@@ -315,7 +315,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -12837,6 +12837,25 @@ app.post('/api/aichat/query-external', async (c) => {
   if (!allowed) {
     logger.warn('[dynamicneko-aichat] 未許可メールアドレスからの問い合わせを拒否', { email });
     return jsonUtf8({ error: 'このメールアドレスはAI問い合わせを許可されていません' }, 403);
+  }
+
+  // /neko aireqst のみ、AIを呼ばずローカルで応答する(他の/nekoサブコマンドは
+  // user.subベースのCookieセッション前提のD1参照が多く、dynamicneko側の
+  // Bearer secret認証とは前提が異なるため対象外。必要になれば個別に追加する)。
+  if (question.toLowerCase() === '/neko aireqst') {
+    if (!login) return jsonUtf8({ error: 'login は必須です' }, 400);
+    try {
+      const month = new Date().toISOString().slice(0, 7);
+      const sourceRows = await c.env.DB.prepare(
+        `SELECT source, COUNT(*) as q_count FROM ai_chat_shares WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ? GROUP BY source ORDER BY q_count DESC`
+      ).bind(login, `${month}%`).all<{ source: string | null; q_count: number }>();
+      const totals = buildAichatSourceTotals(sourceRows.results ?? []);
+      return jsonUtf8({ answer: formatAichatSourceTotals(totals), svg: buildAichatSourceTotalsSvg(totals) ?? null });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[dynamicneko-aichat] /neko aireqst 集計失敗', { login, error: message });
+      return jsonUtf8({ error: '統計取得でサーバーエラーが発生しました: ' + message }, 500);
+    }
   }
 
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
