@@ -264,6 +264,7 @@ import { getOrigamiSculpturePage } from './views/origamiSculpture';
 import { getFlyBrainMahjongPage } from './views/flyBrainMahjong';
 import { flyBrainChooseDiscard } from './flyBrainMahjongLogic';
 import { recommendDiscard } from './mahjongDiscardLogic';
+import { getBrushJjaemuPage } from './views/brushJjaemu';
 import { getTsuruNoNiwaPage } from './views/tsuruNoNiwa';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
@@ -12173,6 +12174,10 @@ app.post('/api/fly-brain-mahjong/solve', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ ok: false, error: message }, 400);
   }
+});
+
+app.get('/brush-jjaemu', authMiddleware, async (c) => {
+  return c.html(getBrushJjaemuPage());
 });
 
 app.get('/tsuru-no-niwa', authMiddleware, async (c) => {
