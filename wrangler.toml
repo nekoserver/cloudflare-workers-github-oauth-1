@@ -48,6 +48,10 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #   KIMI_CODE_EXTERNAL_SECRET  # dynamicnekoのNew SnippetウィジェットがPOST
 #                               # /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。
 #                               # dynamicneko側も同じ変数名(KIMI_CODE_EXTERNAL_SECRET)・同じ値で設定する
+#   CURSOR_API_KEY  # /cursor-agent が使うCursor Background Agent APIのAPIキー
+#     未設定の場合、/cursor-agentからの起動は実行前に拒否される(Cursor APIへは
+#     リクエストしない)。secretで管理し、[vars]には平文で書かないこと。
+#     設定手順: wrangler secret put CURSOR_API_KEY
 #   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
 #   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
 #     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、

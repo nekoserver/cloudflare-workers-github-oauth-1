@@ -249,6 +249,8 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 }
 
 import { getKimiCodePage } from './views/kimiCode';
+import { getCursorAgentPage } from './views/cursorAgent';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -542,6 +544,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる。ruby_version(0135)は保存時点で読み込んでいたRuby/WASMのビルドライン', syncPolicy: 'auto' },
   { name: 'ruby_wasm_snippet_verifications', migration: '0135', description: '/ruby-wasmページでスニペットを実行して「動作確認」した結果の履歴。同じスニペットを複数のRubyビルドライン(ruby_version)で検証した記録をそれぞれ残せる', syncPolicy: 'auto' },
   { name: 'kimi_code_markdown_snippets', migration: '0136', description: '/kimi-codeページの「📝 Markdownとして保存」ボタンで、生成されたコード(言語問わず)をMarkdown化して保存したもの。/kimi-code/markdown/:idで閲覧でき、Rubyコードブロックはその場でWASM実行できる', syncPolicy: 'auto' },
+  { name: 'cursor_agent_launch_log', migration: '0137', description: '/cursor-agentページからCursor Background Agent APIを起動したプロンプト・レスポンス(問答ペア)の履歴。AIチャットのai_chat_sharesと同様、後から一覧・詳細を読み出せる', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2108,6 +2111,16 @@ CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippet_verifications_snippet ON ruby_w
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_kimi_code_markdown_snippets_user_created ON kimi_code_markdown_snippets(user_id, created_at);`,
+  '0137': `CREATE TABLE IF NOT EXISTS cursor_agent_launch_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  agent_id TEXT,
+  cursor_response TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_launch_log_user_created ON cursor_agent_launch_log(user_id, created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2359,6 +2372,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
   kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
+  cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2487,6 +2501,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ruby_wasm_snippets: 'ai',
   ruby_wasm_snippet_verifications: 'ai',
   kimi_code_markdown_snippets: 'ai',
+  cursor_agent_launch_log: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2610,6 +2625,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ruby_wasm_snippets: { user_id: 'user_sessions' },
   ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
   kimi_code_markdown_snippets: { user_id: 'user_sessions' },
+  cursor_agent_launch_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -13280,6 +13296,86 @@ app.get('/api/kimi-code/token-usage', authMiddleware, async (c) => {
   } catch {
     return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
   }
+});
+
+app.get('/cursor-agent', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getCursorAgentPage(user.sub));
+});
+
+/**
+ * Cursor Background Agent API(POST https://api.cursor.com/v1/agents)を
+ * フォーム入力(プロンプト・対象リポジトリ)から起動する。
+ * CURSOR_API_KEY未設定・プロンプト1文字以下・対象リポジトリが許可リスト外の
+ * いずれか1つでも欠けていたら、Cursor APIへは一切リクエストしない
+ * (validateCursorAgentLaunchRequestに集約。CLAUDE.mdルール15)。
+ * 実行に成功した場合のみ、プロンプトと応答をcursor_agent_launch_logへ記録し、
+ * AIチャット(ai_chat_shares)同様に後からGET /api/cursor-agent/historyで
+ * 読み出せるようにする。
+ */
+app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ prompt?: string; repoFullName?: string }>().catch(() => null);
+  const prompt = body?.prompt ?? '';
+  const repoFullName = body?.repoFullName ?? '';
+
+  const validation = validateCursorAgentLaunchRequest({
+    hasApiKey: Boolean(c.env.CURSOR_API_KEY),
+    prompt,
+    repoFullName,
+    allowedRepos: CURSOR_AGENT_ALLOWED_REPOS,
+  });
+  if (!validation.ok) {
+    return jsonUtf8({ error: formatCursorAgentValidationError(validation.errorCode) }, 400);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch('https://api.cursor.com/v1/agents', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildCursorAgentRequestBody(prompt, repoFullName)),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] Cursor APIエラー応答', { userId: user.sub, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const cursorResponse: unknown = await res.json().catch(() => null);
+  const agentId = (cursorResponse && typeof cursorResponse === 'object' && 'id' in cursorResponse && typeof (cursorResponse as { id?: unknown }).id === 'string')
+    ? (cursorResponse as { id: string }).id
+    : null;
+
+  if (c.env.DB) {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response) VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(user.sub, repoFullName, prompt.trim(), agentId, JSON.stringify(cursorResponse))
+      .run();
+  }
+  return jsonUtf8({ cursorResponse });
+});
+
+/** /cursor-agent ページ用。自分がこれまでに起動したプロンプト・応答のペアを新しい順に返す。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。 */
+app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ rows: [] });
+  const { results } = await c.env.DB
+    .prepare(
+      `SELECT repo_full_name, prompt, agent_id, cursor_response, created_at FROM cursor_agent_launch_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`
+    )
+    .bind(user.sub)
+    .all<{ repo_full_name: string; prompt: string; agent_id: string | null; cursor_response: string; created_at: string }>();
+  return jsonUtf8({ rows: results ?? [] });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
