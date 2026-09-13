@@ -334,17 +334,6 @@ textarea:focus, select:focus { border-color: var(--accent); }
       pad(jst.getUTCHours()) + ':' + pad(jst.getUTCMinutes()) + ':' + pad(jst.getUTCSeconds()) + ' JST';
   }
 
-  // report_text(想定フィールド名からの抽出)が見つからない場合に「未取得」と
-  // だけ表示すると情報量がゼロで無意味なため、DBに保存済みの生JSON
-  // (raw_response)を短く整形したプレビューを代わりに表示する。生データすら
-  // 無い場合のみ「(未取得)」にフォールバックする。
-  function buildRawPreview(rawResponseJson) {
-    if (!rawResponseJson) return '(未取得)';
-    var text;
-    try { text = JSON.stringify(JSON.parse(rawResponseJson)); } catch (e) { text = rawResponseJson; }
-    return text.length > 160 ? text.slice(0, 160) + '…' : text;
-  }
-
   function deleteHistoryRow(id, btn) {
     if (!window.confirm('この履歴を削除しますか?')) return;
     btn.disabled = true;
@@ -654,10 +643,18 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdResponse.className = 'history-response';
       // agent_status・run_status・report_textはcursor_agent_status_logから
       // 個別カラムとして結合済み(JSONブロブを都度読み解く必要はない)。
-      // report_textが抽出できていない場合は「未取得」と空欄にせず、
-      // 生データ(raw_response)のプレビューを表示する(情報量ゼロの
-      // 表示は無意味、との指摘への対応)。
-      tdResponse.textContent = row.report_text || buildRawPreview(row.raw_response);
+      // レポート欄には生JSONを絶対に出さない(「JSONをそのまま出されても
+      // 意味が無い」との指摘への対応)。report_textが抽出できていない場合は、
+      // Agentがまだ終了していないのか、終了しているのに抽出できなかったのかを
+      // 区別できる人間向けの文言だけを表示する。生データを見たい場合はAgent ID
+      // タップで開くモーダル内の折りたたみ(明示的にJSONだと分かる場所)へ誘導する。
+      if (row.report_text) {
+        tdResponse.textContent = row.report_text;
+      } else if (isTerminalStatus(row.agent_status)) {
+        tdResponse.textContent = '(レポートを取得できませんでした。Agent IDから詳細を確認してください)';
+      } else {
+        tdResponse.textContent = '(まだレポートはありません)';
+      }
       var tdActions = document.createElement('td');
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'history-refresh-btn';
