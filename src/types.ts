@@ -64,6 +64,8 @@ export type Bindings = {
   GOOGLE_CSE_API_KEY?: string;
   /** /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cxパラメータ) */
   GOOGLE_CSE_CX?: string;
+  /** /cursor-agent ページが使うCursor Background Agent APIのAPIキー。未設定時は/cursor-agentからの起動を無効化する */
+  CURSOR_API_KEY?: string;
 };
 
 /** Hono コンテキスト変数 */
