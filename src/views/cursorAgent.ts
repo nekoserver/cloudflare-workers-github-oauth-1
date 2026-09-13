@@ -221,6 +221,20 @@ textarea:focus, select:focus { border-color: var(--accent); }
   var historyBodyEl = document.getElementById('agentHistoryBody');
   var historyReloadBtn = document.getElementById('agentHistoryReloadBtn');
 
+  // D1のcreated_atはdatetime('now')でUTC('YYYY-MM-DD HH:MM:SS'形式、タイムゾーン
+  // 表記なし)で保存されるため、そのまま表示するとJSTだと誤解されうる。
+  // UTCとして明示的に解釈しJST(UTC+9)に換算した上で「JST」と明記する。
+  function formatJstFromUtcString(utcString) {
+    if (!utcString) return '(不明)';
+    var isoUtc = utcString.indexOf('T') === -1 ? utcString.replace(' ', 'T') + 'Z' : utcString;
+    var d = new Date(isoUtc);
+    if (isNaN(d.getTime())) return utcString;
+    var jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    var pad = function(n) { return String(n).length < 2 ? '0' + n : String(n); };
+    return jst.getUTCFullYear() + '-' + pad(jst.getUTCMonth() + 1) + '-' + pad(jst.getUTCDate()) + ' ' +
+      pad(jst.getUTCHours()) + ':' + pad(jst.getUTCMinutes()) + ':' + pad(jst.getUTCSeconds()) + ' JST';
+  }
+
   function renderHistory(rows) {
     if (!rows || rows.length === 0) {
       historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">まだ起動履歴がありません</div>';
@@ -228,12 +242,12 @@ textarea:focus, select:focus { border-color: var(--accent); }
     }
     var table = document.createElement('table');
     table.className = 'history-table';
-    table.innerHTML = '<thead><tr><th>日時</th><th>リポジトリ</th><th>プロンプト</th><th>応答</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>プロンプト</th><th>応答</th></tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(row) {
       var tr = document.createElement('tr');
       var tdDate = document.createElement('td');
-      tdDate.textContent = row.created_at;
+      tdDate.textContent = formatJstFromUtcString(row.created_at);
       var tdRepo = document.createElement('td');
       tdRepo.textContent = row.repo_full_name;
       var tdPrompt = document.createElement('td');

@@ -104,6 +104,18 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('Cursorで進捗を見る');
     expect(html).toContain('agent.url.indexOf(\'https://\') === 0');
   });
+
+  it('履歴の日時はUTCのまま出さず、JSTに換算した上で「JST」と明記する', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    // created_atはD1のdatetime('now')でUTC保存されるため、そのまま表示すると
+    // JSTと誤解されうる。formatJstFromUtcStringでUTC→JST(+9h)に換算し、
+    // 末尾に'JST'を明記した上でテーブルヘッダーも「日時(JST)」にする
+    expect(html).toContain('formatJstFromUtcString');
+    expect(html).toContain("' JST'");
+    expect(html).toContain('日時(JST)');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
