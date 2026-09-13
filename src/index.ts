@@ -13354,15 +13354,30 @@ app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
     ? (cursorResponse as { id: string }).id
     : null;
 
+  // Agent自体は起動に成功しているため、履歴保存(D1書き込み)がここで失敗しても
+  // (例: migration 0137未実行でcursor_agent_launch_logが存在しない)、
+  // ユーザーには起動成功として返す。握りつぶす代わりにlogger.errorへ記録し、
+  // レスポンスのhistorySavedフィールドで保存できなかった事実を伝える
+  // (CLAUDE.mdルール8: 記録・通知の義務)。
+  let historySaved = false;
   if (c.env.DB) {
-    await c.env.DB
-      .prepare(
-        `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response) VALUES (?, ?, ?, ?, ?)`
-      )
-      .bind(user.sub, repoFullName, prompt.trim(), agentId, JSON.stringify(cursorResponse))
-      .run();
+    try {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response) VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, repoFullName, prompt.trim(), agentId, JSON.stringify(cursorResponse))
+        .run();
+      historySaved = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cursor-agent] 履歴のD1保存に失敗しました(migration 0137が未実行の可能性があります)', {
+        userId: user.sub,
+        error: message,
+      });
+    }
   }
-  return jsonUtf8({ cursorResponse });
+  return jsonUtf8({ cursorResponse, historySaved });
 });
 
 /** /cursor-agent ページ用。自分がこれまでに起動したプロンプト・応答のペアを新しい順に返す。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。 */

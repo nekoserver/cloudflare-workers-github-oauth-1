@@ -16,6 +16,11 @@ import { createJWT } from './utils/jwt';
 //   (4) 入力チェックを通過したのに、実際のAPI呼び出し結果をD1へ記録しない
 //   (5) 他ユーザーの起動履歴が見えてしまう
 //   (6) Cursor API呼び出し自体が失敗した場合に握りつぶし、D1に不正な記録を残す
+//   (7) cursor_agent_launch_logテーブル未作成(migration未実行)等でD1書き込みが
+//       失敗した場合、Cursor Agent自体は起動成功しているのに例外を握りつぶさず
+//       500(app.onErrorの「サーバーエラーが発生しました」)を返してしまう
+//       (起動自体は成功しているので、ログ記録の失敗だけでユーザーに失敗と
+//       見せてはいけない。ルール8: 記録・通知の義務を果たしつつ処理を続行する)
 
 const JWT_SECRET = 'test-secret';
 
@@ -152,8 +157,9 @@ describe('POST /api/cursor-agent/launch', () => {
     }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
 
     expect(res.status).toBe(200);
-    const data = await res.json() as { cursorResponse: unknown };
+    const data = await res.json() as { cursorResponse: unknown; historySaved: boolean };
     expect(data.cursorResponse).toEqual(cursorApiResponse);
+    expect(data.historySaved).toBe(true);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -188,6 +194,29 @@ describe('POST /api/cursor-agent/launch', () => {
 
     const row = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_launch_log').get() as { c: number };
     expect(row.c).toBe(0);
+  });
+
+  it('D1への記録が失敗して(cursor_agent_launch_log未作成等)も、Agent起動自体は成功として返す(500にしない)', async () => {
+    const cursorApiResponse = { id: 'bc_999', status: 'CREATING' };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(cursorApiResponse), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    // migration未実行を模した状況: cursor_agent_launch_logテーブルを作らないDB
+    const db = new DatabaseSync(':memory:');
+    db.exec(`CREATE TABLE user_sessions (user_id TEXT PRIMARY KEY, revoked_at TEXT, last_activity_at TEXT);`);
+    db.prepare(`INSERT INTO user_sessions (user_id, revoked_at) VALUES (?, NULL)`).run('user1');
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/launch', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'READMEを直して', repoFullName: ALLOWED_REPO }),
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { cursorResponse: unknown; historySaved: boolean };
+    expect(data.cursorResponse).toEqual(cursorApiResponse);
+    expect(data.historySaved).toBe(false);
   });
 });
 
