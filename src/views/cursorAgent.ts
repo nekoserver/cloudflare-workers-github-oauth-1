@@ -30,6 +30,14 @@ export function getCursorAgentPage(username: string): string {
   --input-bg:    light-dark(#ffffff, #0d1117);
   --danger:      light-dark(#cf222e, #f85149);
   --danger-bg:   light-dark(#fff0ee, #2d0e0a);
+  /* サーバステータスバッジの配色。意味的に色が固定されている表示
+     (CLAUDE.CSS.mdの例外規定: running=緑・遅延/その他=黄・通信障害=赤)。 */
+  --status-green:    light-dark(#1a7f37, #3fb950);
+  --status-green-bg: light-dark(#dafbe1, #0d2818);
+  --status-yellow:    light-dark(#9a6700, #d29922);
+  --status-yellow-bg: light-dark(#fff8c5, #2b2111);
+  --status-red:    light-dark(#cf222e, #f85149);
+  --status-red-bg: light-dark(#fff0ee, #2d0e0a);
 }
 * { box-sizing: border-box; }
 body {
@@ -89,6 +97,35 @@ textarea:focus, select:focus { border-color: var(--accent); }
   outline: none;
 }
 #agentHistorySearch:focus { border-color: var(--accent); }
+.status-badge {
+  display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px;
+  border-radius: 10px; line-height: 1.6; margin-right: 4px;
+}
+.status-badge.green { color: var(--status-green); background: var(--status-green-bg); }
+.status-badge.yellow { color: var(--status-yellow); background: var(--status-yellow-bg); }
+.status-badge.red { color: var(--status-red); background: var(--status-red-bg); }
+.agent-id-link {
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  color: var(--accent); text-decoration: none; font: inherit;
+}
+.agent-id-link:hover { text-decoration: none; }
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 18px 20px; max-width: 560px; width: 100%; max-height: 80vh; overflow-y: auto;
+}
+.modal-box h2 { margin: 0 0 10px; font-size: 15px; color: var(--text-strong); }
+.modal-close-btn {
+  float: right; background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-size: 12px; padding: 3px 9px; cursor: pointer;
+}
+.timeline-list { margin: 10px 0 0; padding-left: 18px; font-size: 12px; }
+.timeline-list li { margin-bottom: 10px; }
+.timeline-report { white-space: pre-wrap; color: var(--text-muted); margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -124,6 +161,14 @@ textarea:focus, select:focus { border-color: var(--accent); }
   <input type="search" id="agentHistorySearch" placeholder="リポジトリ・Agent ID・プロンプト・応答を検索..." style="margin-bottom:8px;">
   <div id="agentHistoryBody">
     <div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="agentDetailModalOverlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close-btn" id="agentDetailModalCloseBtn">閉じる</button>
+    <h2 id="agentDetailModalTitle">Agent詳細</h2>
+    <div id="agentDetailModalBody">読み込み中...</div>
   </div>
 </div>
 
@@ -306,6 +351,11 @@ textarea:focus, select:focus { border-color: var(--accent); }
       .then(function(res) {
         if (res.status !== 200) {
           window.alert('最新状態の取得に失敗しました: ' + ((res.data && res.data.error) || ('HTTP ' + res.status)));
+          var failedRow = allHistoryRows.filter(function(r) { return r.id === id; })[0];
+          if (failedRow && res.status === 502) {
+            failedRow.commError = true;
+            renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+          }
           return;
         }
         // cursor_agent_status_logへ新しい行が追記されただけなので、一覧全体を
@@ -321,39 +371,147 @@ textarea:focus, select:focus { border-color: var(--accent); }
       });
   }
 
-  function showTimeline(id, container) {
-    container.textContent = '読み込み中...';
-    fetch('/api/cursor-agent/history/' + encodeURIComponent(id) + '/timeline', { credentials: 'same-origin' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var rows = d.rows || [];
-        container.innerHTML = '';
-        if (rows.length === 0) {
-          container.textContent = '状態取得の履歴がありません';
-          return;
-        }
-        var list = document.createElement('ol');
-        list.style.margin = '0';
-        list.style.paddingLeft = '18px';
-        rows.forEach(function(row) {
-          var li = document.createElement('li');
-          li.style.marginBottom = '4px';
-          var line = formatJstFromUtcString(row.fetched_at) + ' — Agent: ' + (row.agent_status || '(不明)') +
-            (row.run_status ? ' / Run: ' + row.run_status : '');
-          li.appendChild(document.createTextNode(line));
-          if (row.report_text) {
-            var reportDiv = document.createElement('div');
-            reportDiv.style.whiteSpace = 'pre-wrap';
-            reportDiv.style.color = 'var(--text-muted)';
-            reportDiv.style.marginTop = '2px';
-            reportDiv.textContent = row.report_text;
-            li.appendChild(reportDiv);
+  // これ以上状態が変わらない終了状態。この状態に達した後は毎回モーダルを
+  // 開くたびにCursor APIへ問い合わせ直しても結果が変わらないため、DBの
+  // 記録だけを読んで表示し、無駄なAPI呼び出し(レート制限の消費)を避ける。
+  // 未終了(RUNNING等)・未取得(null)の場合のみ、モーダルを開いたタイミングで
+  // 自動的に最新状態を取得し直してDBへ追記する(=「どのタイミングで
+  // チェックして書き込むべきか」への回答: 終了が確定するまでは開くたびに
+  // 追記、確定後は読むだけにする)。
+  var TERMINAL_AGENT_STATUSES = ['FINISHED', 'COMPLETED', 'ERROR', 'FAILED', 'CANCELLED'];
+
+  function isTerminalStatus(status) {
+    return TERMINAL_AGENT_STATUSES.indexOf((status || '').toUpperCase()) !== -1;
+  }
+
+  // ステータスバッジの色分け: 通信自体に失敗した場合は赤(通信障害)。
+  // Agentが実行中なら緑。それ以外(未取得・完了・その他の状態)は黄色
+  // (応答遅延=まだ確定的な最新情報ではない、の意味も含める)。
+  function classifyStatusBadge(row) {
+    if (row.commError) return { color: 'red', label: '通信障害' };
+    var s = (row.agent_status || '').toUpperCase();
+    if (s === 'RUNNING' || s === 'ACTIVE') return { color: 'green', label: row.agent_status };
+    return { color: 'yellow', label: row.agent_status || '未取得' };
+  }
+
+  function buildStatusBadge(row) {
+    var info = classifyStatusBadge(row);
+    var badge = document.createElement('span');
+    badge.className = 'status-badge ' + info.color;
+    badge.textContent = info.label;
+    return badge;
+  }
+
+  // モーダル・オーバーレイに複数のポップアップが重なっても、後から開いた
+  // ものが必ず前面に来るよう、既存のposition:fixed要素の最大z-indexを
+  // 走査してそれより大きい値を返す(CLAUDE.mdルール26)。
+  function getNextZ() {
+    var max = 1000;
+    var all = document.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var z = parseInt(window.getComputedStyle(all[i]).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    }
+    return max + 10;
+  }
+
+  var modalOverlay = document.getElementById('agentDetailModalOverlay');
+  var modalTitle = document.getElementById('agentDetailModalTitle');
+  var modalBody = document.getElementById('agentDetailModalBody');
+  var modalCloseBtn = document.getElementById('agentDetailModalCloseBtn');
+
+  function closeAgentModal() {
+    modalOverlay.hidden = true;
+  }
+  modalCloseBtn.addEventListener('click', closeAgentModal);
+  modalOverlay.addEventListener('click', function(ev) {
+    if (ev.target === modalOverlay) closeAgentModal();
+  });
+
+  function renderTimelineInto(container, rows) {
+    container.innerHTML = '';
+    if (!rows || rows.length === 0) {
+      container.appendChild(document.createTextNode('状態取得の履歴がありません'));
+      return;
+    }
+    var list = document.createElement('ol');
+    list.className = 'timeline-list';
+    rows.forEach(function(row) {
+      var li = document.createElement('li');
+      var badge = buildStatusBadge({ agent_status: row.agent_status });
+      li.appendChild(badge);
+      var line = formatJstFromUtcString(row.fetched_at) +
+        (row.run_status ? ' / Run: ' + row.run_status : '');
+      li.appendChild(document.createTextNode(line));
+      if (row.report_text) {
+        var reportDiv = document.createElement('div');
+        reportDiv.className = 'timeline-report';
+        reportDiv.textContent = row.report_text;
+        li.appendChild(reportDiv);
+      }
+      list.appendChild(li);
+    });
+    container.appendChild(list);
+  }
+
+  /**
+   * Agent IDをタップした時の処理。DBに書き込まれた記録(cursor_agent_status_log)を
+   * このアプリ内の最上位レイヤーのモーダルへ読み出して表示する(外部の
+   * Cursorアプリへ直接遷移させない)。既に終了状態(FINISHED等)と分かって
+   * いれば読み出すだけ、そうでなければモーダルを開いたタイミングで
+   * 最新状態を1回取得し直してからDBへ追記し、その結果を表示する。
+   */
+  function openAgentModal(row) {
+    modalTitle.textContent = 'Agent: ' + (row.agent_id || '(未記録)');
+    modalBody.innerHTML = '読み込み中...';
+    modalOverlay.style.zIndex = String(getNextZ());
+    modalOverlay.hidden = false;
+
+    function loadTimelineAndRender() {
+      return fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/timeline', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var rows = d.rows || [];
+          renderTimelineInto(modalBody, rows);
+          if (rows.length > 0) {
+            var latest = rows[rows.length - 1];
+            row.agent_status = latest.agent_status;
+            row.run_status = latest.run_status;
+            row.report_text = latest.report_text;
           }
-          list.appendChild(li);
+          if (typeof row.agent_url === 'string' && row.agent_url.indexOf('https://') === 0) {
+            var link = document.createElement('a');
+            link.href = row.agent_url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.style.display = 'block';
+            link.style.marginTop = '10px';
+            link.style.fontSize = '11px';
+            link.textContent = 'Cursorで直接開く →';
+            modalBody.appendChild(link);
+          }
         });
-        container.appendChild(list);
+    }
+
+    if (isTerminalStatus(row.agent_status)) {
+      loadTimelineAndRender().catch(function() { modalBody.textContent = '読み込みに失敗しました'; });
+      return;
+    }
+
+    // 未終了・未取得の場合のみ、モーダルを開いたタイミングで最新状態を
+    // 取得し直す(=書き込みのタイミング)。取得自体に失敗しても、
+    // DBに既にある記録は表示できるようにする(失敗を隠さない: 通信障害
+    // バッジを立てた上で、既存の記録は失わせない)。
+    fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/refresh', { method: 'POST', credentials: 'same-origin' })
+      .then(function(r) { row.commError = r.status === 502; return loadTimelineAndRender(); })
+      .catch(function() {
+        row.commError = true;
+        return loadTimelineAndRender();
       })
-      .catch(function() { container.textContent = '読み込みに失敗しました'; });
+      .then(function() {
+        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+      })
+      .catch(function() { modalBody.textContent = '読み込みに失敗しました'; });
   }
 
   function renderHistory(rows) {
@@ -374,20 +532,21 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdRepo.textContent = row.repo_full_name;
       var tdAgentId = document.createElement('td');
       if (row.agent_id) {
-        var agentLink = document.createElement('a');
-        agentLink.href = 'https://cursor.com/agents/' + encodeURIComponent(row.agent_id);
-        agentLink.target = '_blank';
-        agentLink.rel = 'noopener noreferrer';
-        agentLink.textContent = row.agent_id;
-        tdAgentId.appendChild(agentLink);
+        // タップすると外部のCursorアプリへは飛ばさず、DBに書き込まれた
+        // 記録(cursor_agent_status_log)をこのアプリ内の最上位レイヤーの
+        // モーダルへ読み出して表示する。下線は付けない(リンクに見せない)。
+        var agentIdBtn = document.createElement('button');
+        agentIdBtn.type = 'button';
+        agentIdBtn.className = 'agent-id-link';
+        agentIdBtn.textContent = row.agent_id;
+        agentIdBtn.addEventListener('click', function() { openAgentModal(row); });
+        tdAgentId.appendChild(agentIdBtn);
       } else {
         tdAgentId.textContent = '(未記録)';
       }
       var tdStatus = document.createElement('td');
-      var statusParts = [];
-      if (row.agent_status) statusParts.push('Agent: ' + row.agent_status);
-      if (row.run_status) statusParts.push('Run: ' + row.run_status);
-      tdStatus.textContent = statusParts.length > 0 ? statusParts.join(' / ') : '(未取得)';
+      tdStatus.appendChild(buildStatusBadge(row));
+      if (row.run_status) tdStatus.appendChild(document.createTextNode('Run: ' + row.run_status));
       var tdPrompt = document.createElement('td');
       tdPrompt.className = 'history-prompt';
       tdPrompt.textContent = row.prompt;
@@ -403,16 +562,11 @@ textarea:focus, select:focus { border-color: var(--accent); }
       refreshBtn.textContent = '最新状態を取得';
       refreshBtn.style.marginRight = '6px';
       refreshBtn.addEventListener('click', function() { refreshHistoryRow(row.id, refreshBtn); });
-      var timelineBtn = document.createElement('button');
-      timelineBtn.className = 'history-refresh-btn';
-      timelineBtn.textContent = '連鎖を見る';
-      timelineBtn.style.marginRight = '6px';
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'history-delete-btn';
       deleteBtn.textContent = '削除';
       deleteBtn.addEventListener('click', function() { deleteHistoryRow(row.id, deleteBtn); });
       tdActions.appendChild(refreshBtn);
-      tdActions.appendChild(timelineBtn);
       tdActions.appendChild(deleteBtn);
       tr.appendChild(tdDate);
       tr.appendChild(tdRepo);
@@ -422,20 +576,6 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tr.appendChild(tdResponse);
       tr.appendChild(tdActions);
       tbody.appendChild(tr);
-
-      // 「連鎖を見る」を押すと、1件の起動に対する状態取得の履歴
-      // (cursor_agent_status_log全件)を直下の行に展開表示する。
-      var timelineRow = document.createElement('tr');
-      timelineRow.hidden = true;
-      var timelineCell = document.createElement('td');
-      timelineCell.colSpan = 7;
-      timelineCell.style.fontSize = '11px';
-      timelineRow.appendChild(timelineCell);
-      timelineBtn.addEventListener('click', function() {
-        timelineRow.hidden = !timelineRow.hidden;
-        if (!timelineRow.hidden) showTimeline(row.id, timelineCell);
-      });
-      tbody.appendChild(timelineRow);
     });
     table.appendChild(tbody);
     historyBodyEl.innerHTML = '';
