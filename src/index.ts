@@ -13425,6 +13425,7 @@ type CursorAgentHistoryRow = {
   agent_status: string | null;
   run_status: string | null;
   report_text: string | null;
+  raw_response: string | null;
   last_status_at: string | null;
 };
 
@@ -13441,7 +13442,7 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   const { results } = await c.env.DB
     .prepare(
       `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
-              s.agent_status, s.run_status, s.report_text, s.fetched_at as last_status_at
+              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
        FROM cursor_agent_launch_log l
        LEFT JOIN cursor_agent_status_log s ON s.id = (
          SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1

@@ -238,6 +238,22 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('row.raw_response');
     expect(html).toContain('生データ(JSON)を見る');
   });
+
+  it('一覧の「レポート」欄はreport_text未抽出でも「未取得」だけで終わらせず、生データのプレビューを表示する', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('buildRawPreview');
+    expect(html).toContain('row.report_text || buildRawPreview(row.raw_response)');
+  });
+
+  it('履歴読み込み時、終了状態でない行だけ自動でCursor APIへ問い合わせ直す(モーダルを開かなくても状態が最新化されるようにするため)', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('fetchAndRenderHistory');
+    expect(html).toContain('!isTerminalStatus(row.agent_status)');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -452,6 +468,24 @@ describe('GET /api/cursor-agent/history', () => {
     expect(finished?.agent_status).toBe('FINISHED');
     expect(finished?.report_text).toBe('完了済みレポート');
     expect(running?.report_text).toBeNull();
+  });
+
+  // 対象: 「レポート:未取得」の空欄が無意味で、モーダルを開かずとも表内で
+  // 何かしら中身が確認できるようにすべき、という指摘への対応。report_textが
+  // 抽出できていなくても、最新のraw_response(生JSON)を一覧APIからも
+  // 返すようにする(フロント側でプレビュー表示するため)。
+  it('各行に最新のraw_response(生JSON)も含める(report_text未抽出でも一覧でプレビューできるようにするため)', async () => {
+    const db = setupDb();
+    insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: '実行中のもの', agentId: 'bc-2',
+      agentStatus: 'RUNNING', runStatus: 'RUNNING', reportText: null,
+      rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 01:00:00',
+    });
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    const data = await res.json() as { rows: Array<{ raw_response: string | null }> };
+    expect(JSON.parse(data.rows[0].raw_response!)).toEqual({ agent: { status: 'RUNNING' } });
   });
 
   it('status_logがまだ1件も無い起動でも例外にならず、各フィールドはnullになる(LEFT JOIN)', async () => {

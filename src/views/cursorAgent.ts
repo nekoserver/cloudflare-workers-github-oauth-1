@@ -322,6 +322,17 @@ textarea:focus, select:focus { border-color: var(--accent); }
       pad(jst.getUTCHours()) + ':' + pad(jst.getUTCMinutes()) + ':' + pad(jst.getUTCSeconds()) + ' JST';
   }
 
+  // report_text(想定フィールド名からの抽出)が見つからない場合に「未取得」と
+  // だけ表示すると情報量がゼロで無意味なため、DBに保存済みの生JSON
+  // (raw_response)を短く整形したプレビューを代わりに表示する。生データすら
+  // 無い場合のみ「(未取得)」にフォールバックする。
+  function buildRawPreview(rawResponseJson) {
+    if (!rawResponseJson) return '(未取得)';
+    var text;
+    try { text = JSON.stringify(JSON.parse(rawResponseJson)); } catch (e) { text = rawResponseJson; }
+    return text.length > 160 ? text.slice(0, 160) + '…' : text;
+  }
+
   function deleteHistoryRow(id, btn) {
     if (!window.confirm('この履歴を削除しますか?')) return;
     btn.disabled = true;
@@ -580,8 +591,10 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdResponse.className = 'history-response';
       // agent_status・run_status・report_textはcursor_agent_status_logから
       // 個別カラムとして結合済み(JSONブロブを都度読み解く必要はない)。
-      // report_textが無い(=まだAgentが完了していない)場合はその旨を明示する。
-      tdResponse.textContent = row.report_text || '(未取得)';
+      // report_textが抽出できていない場合は「未取得」と空欄にせず、
+      // 生データ(raw_response)のプレビューを表示する(情報量ゼロの
+      // 表示は無意味、との指摘への対応)。
+      tdResponse.textContent = row.report_text || buildRawPreview(row.raw_response);
       var tdActions = document.createElement('td');
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'history-refresh-btn';
@@ -623,13 +636,37 @@ textarea:focus, select:focus { border-color: var(--accent); }
     });
   }
 
-  function loadHistory() {
-    historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>';
-    fetch('/api/cursor-agent/history', { credentials: 'same-origin' })
+  function fetchAndRenderHistory(commErrorIds) {
+    return fetch('/api/cursor-agent/history', { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         allHistoryRows = d.rows || [];
+        if (commErrorIds) {
+          allHistoryRows.forEach(function(row) { if (commErrorIds[row.id]) row.commError = true; });
+        }
         renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+      });
+  }
+
+  /**
+   * 履歴を読み込む。モーダルを開かなくても異常(通信障害・応答遅延)に
+   * 気付けるよう、終了状態(FINISHED等)に達していない行だけ、読み込み直後に
+   * 自動でCursor APIへ問い合わせ直す(=チェックのタイミング: ページを開いた
+   * 時・再読み込みボタンを押した時。既に終了している行は問い合わせない)。
+   * 問い合わせに失敗した行はcommErrorを立てて赤バッジで表示する。
+   */
+  function loadHistory() {
+    historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>';
+    fetchAndRenderHistory()
+      .then(function() {
+        var pending = allHistoryRows.filter(function(row) { return row.agent_id && !isTerminalStatus(row.agent_status); });
+        if (pending.length === 0) return;
+        var commErrorIds = {};
+        return Promise.all(pending.map(function(row) {
+          return fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/refresh', { method: 'POST', credentials: 'same-origin' })
+            .then(function(r) { if (r.status !== 200) commErrorIds[row.id] = true; })
+            .catch(function() { commErrorIds[row.id] = true; });
+        })).then(function() { return fetchAndRenderHistory(commErrorIds); });
       })
       .catch(function() { historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>'; });
   }
