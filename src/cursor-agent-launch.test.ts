@@ -92,6 +92,18 @@ describe('GET /cursor-agent', () => {
     const html = await res.text();
     expect(html).toContain('Cursor Agent');
   });
+
+  it('起動結果はCursor APIの生JSONをそのまま出さず、agent名・ステータス・Cursorへのリンクを組み立てる関数を持つ', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    // renderCursorResponse: agent.name/status・run.status・agent.urlへのリンクを
+    // DOM APIで組み立てるようにし、生JSONは<details>で折りたたむ(ユーザーから
+    // 「生JSONをそのまま出されても役に立たない」との指摘を受けて改善)
+    expect(html).toContain('renderCursorResponse');
+    expect(html).toContain('Cursorで進捗を見る');
+    expect(html).toContain('agent.url.indexOf(\'https://\') === 0');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {

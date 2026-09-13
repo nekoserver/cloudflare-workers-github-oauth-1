@@ -128,6 +128,64 @@ textarea:focus, select:focus { border-color: var(--accent); }
     errorEl.classList.remove('show');
   }
 
+  // Cursor APIの生JSONをそのまま出すと読みづらいため、agent.name/status・
+  // run.status・agent.urlへのリンクだけをカード状に組み立てて表示する。
+  // 生JSONはdetails/summaryで折りたたんで併記する(agent.name等は外部API
+  // からの非信頼入力のため、innerHTMLではなくDOM API+textContentで組み立て、
+  // hrefもhttps://始まりのみ許可する)。
+  function renderCursorResponse(data) {
+    resultEl.innerHTML = '';
+    var agent = data && data.agent;
+    var run = data && data.run;
+    if (!agent) {
+      resultEl.textContent = JSON.stringify(data, null, 2);
+      return;
+    }
+    var card = document.createElement('div');
+
+    var title = document.createElement('div');
+    title.style.fontWeight = '600';
+    title.style.marginBottom = '4px';
+    title.textContent = '✅ ' + (agent.name || '(名称未設定)') + ' を起動しました';
+    card.appendChild(title);
+
+    var statusLine = document.createElement('div');
+    statusLine.style.color = 'var(--text-muted)';
+    statusLine.style.marginBottom = '6px';
+    var statusParts = [];
+    if (agent.status) statusParts.push('Agent: ' + agent.status);
+    if (run && run.status) statusParts.push('Run: ' + run.status);
+    statusLine.textContent = statusParts.join(' / ');
+    card.appendChild(statusLine);
+
+    if (typeof agent.url === 'string' && agent.url.indexOf('https://') === 0) {
+      var link = document.createElement('a');
+      link.href = agent.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Cursorで進捗を見る →';
+      card.appendChild(link);
+    }
+
+    var details = document.createElement('details');
+    details.style.marginTop = '8px';
+    var summary = document.createElement('summary');
+    summary.style.cursor = 'pointer';
+    summary.style.color = 'var(--text-muted)';
+    summary.style.fontSize = '11px';
+    summary.textContent = '生のレスポンス(JSON)を見る';
+    var pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.wordBreak = 'break-word';
+    pre.style.fontSize = '11px';
+    pre.textContent = JSON.stringify(data, null, 2);
+    details.appendChild(summary);
+    details.appendChild(pre);
+    card.appendChild(details);
+
+    resultEl.appendChild(card);
+  }
+
   launchBtn.addEventListener('click', function() {
     clearError();
     resultEl.textContent = '';
@@ -145,7 +203,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
           showError((res.data && res.data.error) || ('起動に失敗しました: HTTP ' + res.status));
           return;
         }
-        resultEl.textContent = JSON.stringify(res.data.cursorResponse, null, 2);
+        renderCursorResponse(res.data.cursorResponse);
         if (res.data.historySaved === false) {
           showError('⚠️ Agentの起動には成功しましたが、問答履歴の保存に失敗しました(D1のcursor_agent_launch_logテーブル未作成の可能性があります)');
         }
