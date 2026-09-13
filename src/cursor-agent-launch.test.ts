@@ -186,7 +186,15 @@ describe('POST /api/cursor-agent/launch', () => {
   });
 
   it('全条件を満たせばCursor APIを呼び、成功結果をD1へ保存する', async () => {
-    const cursorApiResponse = { id: 'bc_123', status: 'CREATING' };
+    // 実際のCursor APIの応答はid・statusがトップレベルではなくagent配下に
+    // ネストされている(2026-09-13にユーザーが実際の起動結果として貼った
+    // レスポンス実物で確認済み)。この形でagent_idが正しく抽出できることを保証する
+    // (トップレベルのidを見る誤った実装のままだとagent_idが常にnullのまま
+    //  保存され、履歴の「最新状態を取得」が一切機能しない不具合になっていた)。
+    const cursorApiResponse = {
+      agent: { id: 'bc-123', name: '日次報告', status: 'ACTIVE', url: 'https://cursor.com/agents/bc-123' },
+      run: { id: 'run-123', status: 'RUNNING' },
+    };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(cursorApiResponse), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
@@ -216,7 +224,7 @@ describe('POST /api/cursor-agent/launch', () => {
     expect(row.user_id).toBe('user1');
     expect(row.repo_full_name).toBe(ALLOWED_REPO);
     expect(row.prompt).toBe('READMEを直して');
-    expect(row.agent_id).toBe('bc_123');
+    expect(row.agent_id).toBe('bc-123');
     expect(JSON.parse(row.cursor_response)).toEqual(cursorApiResponse);
   });
 
@@ -240,7 +248,7 @@ describe('POST /api/cursor-agent/launch', () => {
   });
 
   it('D1への記録が失敗して(cursor_agent_launch_log未作成等)も、Agent起動自体は成功として返す(500にしない)', async () => {
-    const cursorApiResponse = { id: 'bc_999', status: 'CREATING' };
+    const cursorApiResponse = { agent: { id: 'bc-999', status: 'ACTIVE' }, run: { id: 'run-999', status: 'RUNNING' } };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(cursorApiResponse), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );

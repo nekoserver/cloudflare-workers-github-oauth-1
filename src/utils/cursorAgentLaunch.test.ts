@@ -5,6 +5,7 @@ import {
   formatCursorAgentValidationError,
   buildCursorAgentRequestBody,
   buildCursorAgentStatusUrl,
+  extractCursorAgentId,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -131,5 +132,33 @@ describe('buildCursorAgentStatusUrl', () => {
 
   it('agent_idをURLエンコードする', () => {
     expect(buildCursorAgentStatusUrl('bc/../123')).toBe('https://api.cursor.com/v1/agents/bc%2F..%2F123');
+  });
+});
+
+describe('extractCursorAgentId', () => {
+  it('実際のCursor APIレスポンス(agent.id配下にネスト)からagent_idを抽出する', () => {
+    // 2026-09-13にユーザーが実際の起動結果として貼った応答実物の形。
+    // トップレベルにはid・statusは無く、agentキーの下にネストされている。
+    const response = {
+      agent: { id: 'bc-fa8faa81-4719-404e-8f45-6ab923475169', name: '日次報告', status: 'ACTIVE' },
+      run: { id: 'run-6c1b893b-5798-444b-a8fa-6c1354fd6d0b', status: 'RUNNING' },
+    };
+    expect(extractCursorAgentId(response)).toBe('bc-fa8faa81-4719-404e-8f45-6ab923475169');
+  });
+
+  it('agentキー自体が無い場合はnullを返す(存在しないものをでっち上げない)', () => {
+    expect(extractCursorAgentId({})).toBeNull();
+    expect(extractCursorAgentId(null)).toBeNull();
+    expect(extractCursorAgentId({ run: { id: 'run-1' } })).toBeNull();
+  });
+
+  it('agent.idが文字列でない場合はnullを返す', () => {
+    expect(extractCursorAgentId({ agent: { id: 123 } })).toBeNull();
+    expect(extractCursorAgentId({ agent: {} })).toBeNull();
+    expect(extractCursorAgentId({ agent: null })).toBeNull();
+  });
+
+  it('トップレベルにidがあるだけの誤った形(旧実装が想定していた形)ではnullを返す(agent.id以外は信用しない)', () => {
+    expect(extractCursorAgentId({ id: 'bc-123', status: 'CREATING' })).toBeNull();
   });
 });

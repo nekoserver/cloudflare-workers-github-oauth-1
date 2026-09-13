@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentId, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13350,9 +13350,7 @@ app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
     return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
   }
   const cursorResponse: unknown = await res.json().catch(() => null);
-  const agentId = (cursorResponse && typeof cursorResponse === 'object' && 'id' in cursorResponse && typeof (cursorResponse as { id?: unknown }).id === 'string')
-    ? (cursorResponse as { id: string }).id
-    : null;
+  const agentId = extractCursorAgentId(cursorResponse);
 
   // Agent自体は起動に成功しているため、履歴保存(D1書き込み)がここで失敗しても
   // (例: migration 0137未実行でcursor_agent_launch_logが存在しない)、
