@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentId, extractCursorAgentSummaryText, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -545,6 +545,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ruby_wasm_snippet_verifications', migration: '0135', description: '/ruby-wasmページでスニペットを実行して「動作確認」した結果の履歴。同じスニペットを複数のRubyビルドライン(ruby_version)で検証した記録をそれぞれ残せる', syncPolicy: 'auto' },
   { name: 'kimi_code_markdown_snippets', migration: '0136', description: '/kimi-codeページの「📝 Markdownとして保存」ボタンで、生成されたコード(言語問わず)をMarkdown化して保存したもの。/kimi-code/markdown/:idで閲覧でき、Rubyコードブロックはその場でWASM実行できる', syncPolicy: 'auto' },
   { name: 'cursor_agent_launch_log', migration: '0137', description: '/cursor-agentページからCursor Background Agent APIを起動したプロンプト・レスポンス(問答ペア)の履歴。AIチャットのai_chat_sharesと同様、後から一覧・詳細を読み出せる', syncPolicy: 'auto' },
+  { name: 'cursor_agent_status_log', migration: '0138', description: 'cursor_agent_launch_log 1件(1回の起動)に対する状態取得履歴(初回起動時・以後の「最新状態を取得」のたびに追記。上書きせず連鎖として保持する。ruby_wasm_snippet_verificationsと同じ親子パターン)', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2121,6 +2122,18 @@ CREATE INDEX IF NOT EXISTS idx_kimi_code_markdown_snippets_user_created ON kimi_
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_launch_log_user_created ON cursor_agent_launch_log(user_id, created_at);`,
+  '0138': `ALTER TABLE cursor_agent_launch_log ADD COLUMN agent_name TEXT;
+ALTER TABLE cursor_agent_launch_log ADD COLUMN agent_url TEXT;
+CREATE TABLE IF NOT EXISTS cursor_agent_status_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  agent_status TEXT,
+  run_status TEXT,
+  report_text TEXT,
+  raw_response TEXT NOT NULL,
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_status_log_launch ON cursor_agent_status_log(launch_id, fetched_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2373,6 +2386,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
   kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
   cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
+  cursor_agent_status_log: { id: 'pk', launch_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2502,6 +2516,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ruby_wasm_snippet_verifications: 'ai',
   kimi_code_markdown_snippets: 'ai',
   cursor_agent_launch_log: 'ai',
+  cursor_agent_status_log: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2626,6 +2641,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
   kimi_code_markdown_snippets: { user_id: 'user_sessions' },
   cursor_agent_launch_log: { user_id: 'user_sessions' },
+  cursor_agent_status_log: { launch_id: 'cursor_agent_launch_log' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -13350,81 +13366,139 @@ app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
     return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
   }
   const cursorResponse: unknown = await res.json().catch(() => null);
-  const agentId = extractCursorAgentId(cursorResponse);
+  const fields = extractCursorAgentFields(cursorResponse);
 
   // Agent自体は起動に成功しているため、履歴保存(D1書き込み)がここで失敗しても
-  // (例: migration 0137未実行でcursor_agent_launch_logが存在しない)、
-  // ユーザーには起動成功として返す。握りつぶす代わりにlogger.errorへ記録し、
-  // レスポンスのhistorySavedフィールドで保存できなかった事実を伝える
-  // (CLAUDE.mdルール8: 記録・通知の義務)。
+  // (例: migration未実行でcursor_agent_launch_log/cursor_agent_status_logが
+  // 存在しない)、ユーザーには起動成功として返す。握りつぶす代わりに
+  // logger.errorへ記録し、レスポンスのhistorySavedフィールドで保存できなかった
+  // 事実を伝える(CLAUDE.mdルール8: 記録・通知の義務)。
+  //
+  // agent_status・run_status・report_textはJSONブロブのまま持たず個別カラムへ
+  // 切り出す。以後の状態変化はUPDATEで上書きせず、cursor_agent_status_logへ
+  // 追記する連鎖構造にする(ruby_wasm_snippets/ruby_wasm_snippet_verificationsと
+  // 同じ親子パターン。1件の起動(問い)に対して複数の状態取得(答えの更新)を
+  // 履歴として保持し、後から連鎖として読み出せるようにするため)。
   let historySaved = false;
   if (c.env.DB) {
     try {
+      const insertLaunch = await c.env.DB
+        .prepare(
+          `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, agent_name, agent_url, cursor_response) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, repoFullName, prompt.trim(), fields.id, fields.name, fields.url, JSON.stringify(cursorResponse))
+        .run();
+      const launchId = insertLaunch.meta.last_row_id;
       await c.env.DB
         .prepare(
-          `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response) VALUES (?, ?, ?, ?, ?)`
+          `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
         )
-        .bind(user.sub, repoFullName, prompt.trim(), agentId, JSON.stringify(cursorResponse))
+        .bind(launchId, fields.status, fields.runStatus, fields.reportText, JSON.stringify(cursorResponse))
         .run();
       historySaved = true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error('[cursor-agent] 履歴のD1保存に失敗しました(migration 0137が未実行の可能性があります)', {
+      logger.error('[cursor-agent] 履歴のD1保存に失敗しました(migration未実行の可能性があります)', {
         userId: user.sub,
         error: message,
       });
     }
   }
-  return jsonUtf8({ cursorResponse, historySaved, reportText: extractCursorAgentSummaryText(cursorResponse) });
+  return jsonUtf8({ cursorResponse, historySaved, reportText: fields.reportText });
 });
 
-/**
- * 保存済みのcursor_response(JSON文字列)からレポート本文を抜き出す。
- * JSON自体が壊れている場合(通常は起きないが、手動でDBを触った場合等)も
- * 一覧表示自体は継続させ、この行だけreportTextをnullにする。
- */
-function safeExtractCursorAgentSummaryText(cursorResponseJson: string): string | null {
-  try {
-    return extractCursorAgentSummaryText(JSON.parse(cursorResponseJson));
-  } catch {
-    return null;
-  }
-}
+type CursorAgentHistoryRow = {
+  id: number;
+  repo_full_name: string;
+  prompt: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agent_url: string | null;
+  created_at: string;
+  agent_status: string | null;
+  run_status: string | null;
+  report_text: string | null;
+  last_status_at: string | null;
+};
 
-/** /cursor-agent ページ用。自分がこれまでに起動したプロンプト・応答のペアを新しい順に返す。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。 */
+/**
+ * /cursor-agent ページ用。自分がこれまでに起動したプロンプトの一覧を新しい順で
+ * 返す。各行にはcursor_agent_status_logの最新1件(fetched_at最大)の状態
+ * (agent_status/run_status/report_text)を相関サブクエリで結合する
+ * (=「問答集」として、起動時点の情報と最新の答えをまとめて読み出せるようにする)。
+ * AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
+ */
 app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ rows: [] });
   const { results } = await c.env.DB
     .prepare(
-      `SELECT id, repo_full_name, prompt, agent_id, cursor_response, created_at FROM cursor_agent_launch_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`
+      `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
+              s.agent_status, s.run_status, s.report_text, s.fetched_at as last_status_at
+       FROM cursor_agent_launch_log l
+       LEFT JOIN cursor_agent_status_log s ON s.id = (
+         SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1
+       )
+       WHERE l.user_id = ?
+       ORDER BY l.created_at DESC, l.id DESC LIMIT 100`
     )
     .bind(user.sub)
-    .all<{ id: number; repo_full_name: string; prompt: string; agent_id: string | null; cursor_response: string; created_at: string }>();
-  const rows = (results ?? []).map((row) => ({ ...row, report_text: safeExtractCursorAgentSummaryText(row.cursor_response) }));
-  return jsonUtf8({ rows });
+    .all<CursorAgentHistoryRow>();
+  return jsonUtf8({ rows: results ?? [] });
 });
 
-/** /cursor-agent ページ用。自分の起動履歴を1件削除する。他ユーザーの行(user_id不一致)・存在しないidは404を返し、削除しない。 */
+/**
+ * /cursor-agent ページ用。1件の起動(問い)に対する状態取得の連鎖
+ * (cursor_agent_status_log全件)を古い順で返す。他ユーザーの起動には
+ * アクセスできない(404)。
+ */
+app.get('/api/cursor-agent/history/:id/timeline', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ rows: [] });
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  const launch = await c.env.DB
+    .prepare(`SELECT id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: number }>();
+  if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  const { results } = await c.env.DB
+    .prepare(
+      `SELECT agent_status, run_status, report_text, fetched_at FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at ASC, id ASC`
+    )
+    .bind(id)
+    .all<{ agent_status: string | null; run_status: string | null; report_text: string | null; fetched_at: string }>();
+  return jsonUtf8({ rows: results ?? [] });
+});
+
+/**
+ * /cursor-agent ページ用(暫定措置)。自分の起動履歴を1件削除する。
+ * 他ユーザーの行(user_id不一致)・存在しないidは404を返し、削除しない。
+ * cursor_agent_status_log側の関連行も合わせて削除する(FKの参照切れを防ぐ)。
+ * 設計が安定するまでの暫定対応であり、安定次第撤去する方針。
+ */
 app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
-  const result = await c.env.DB
-    .prepare(`DELETE FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+  const launch = await c.env.DB
+    .prepare(`SELECT id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
     .bind(id, user.sub)
-    .run();
-  if (!result.meta.changes) return jsonUtf8({ error: '見つかりません' }, 404);
+    .first<{ id: number }>();
+  if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  await c.env.DB.prepare(`DELETE FROM cursor_agent_status_log WHERE launch_id = ?`).bind(id).run();
+  await c.env.DB.prepare(`DELETE FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`).bind(id, user.sub).run();
   return jsonUtf8({ deleted: true });
 });
 
 /**
- * launch直後にD1へ保存されるcursor_responseは、Agentがまだ実行中(RUNNING等)の
- * 制御情報でしかなく、実際の作業結果(完了後の状態)ではない。このAPIで
- * Cursor APIのGET /v1/agents/{id}へ問い合わせ直し、D1の記録を最新状態へ
- * 更新した上で呼び出し元(ブラウザ)へそのまま返す(=結果はアプリ内部だけに
- * 溜め込まず、呼び出し元に返す)。
+ * launch直後にD1へ保存される状態は、Agentがまだ実行中(RUNNING等)の制御情報
+ * でしかなく、実際の作業結果(完了後の状態)ではない。このAPIでCursor APIの
+ * GET /v1/agents/{id}へ問い合わせ直し、結果をcursor_agent_status_logへ
+ * 追記した上で呼び出し元(ブラウザ)へそのまま返す(=結果はアプリ内部だけに
+ * 溜め込まず、呼び出し元に返す)。既存行を上書きせず追記するため、
+ * 状態変化の履歴(連鎖)がそのまま残る。
  */
 app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -13457,11 +13531,14 @@ app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
     return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
   }
   const cursorResponse: unknown = await res.json().catch(() => null);
+  const fields = extractCursorAgentFields(cursorResponse);
   await c.env.DB
-    .prepare(`UPDATE cursor_agent_launch_log SET cursor_response = ? WHERE id = ? AND user_id = ?`)
-    .bind(JSON.stringify(cursorResponse), id, user.sub)
+    .prepare(
+      `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
+    )
+    .bind(id, fields.status, fields.runStatus, fields.reportText, JSON.stringify(cursorResponse))
     .run();
-  return jsonUtf8({ cursorResponse, reportText: extractCursorAgentSummaryText(cursorResponse) });
+  return jsonUtf8({ cursorResponse, reportText: fields.reportText });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

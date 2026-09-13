@@ -147,3 +147,38 @@ export function extractCursorAgentSummaryText(cursorResponse: unknown): string |
   }
   return null;
 }
+
+export type CursorAgentFields = {
+  id: string | null;
+  name: string | null;
+  status: string | null;
+  url: string | null;
+  runStatus: string | null;
+  reportText: string | null;
+};
+
+/**
+ * cursor_agent_launch_log・cursor_agent_status_logへJSONブロブのまま記録
+ * するのではなく、意味のある項目を個別カラムへ切り出して保存するための
+ * 一括抽出関数。extractCursorAgentId・extractCursorAgentSummaryTextと
+ * 同じレスポンスに対して重複してオブジェクトを辿らずに済むよう1回でまとめる。
+ * urlはhttps://で始まるものだけを信用する(javascript:等の危険なスキームを
+ * DBに保存し、後でそのままリンク化してしまう事故を防ぐ)。
+ */
+export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
+  const agent = (cursorResponse && typeof cursorResponse === 'object')
+    ? (cursorResponse as { agent?: unknown }).agent
+    : null;
+  const run = (cursorResponse && typeof cursorResponse === 'object')
+    ? (cursorResponse as { run?: unknown }).run
+    : null;
+  const url = readNonEmptyStringField(agent, 'url');
+  return {
+    id: extractCursorAgentId(cursorResponse),
+    name: readNonEmptyStringField(agent, 'name'),
+    status: readNonEmptyStringField(agent, 'status'),
+    url: url && url.startsWith('https://') ? url : null,
+    runStatus: readNonEmptyStringField(run, 'status'),
+    reportText: extractCursorAgentSummaryText(cursorResponse),
+  };
+}

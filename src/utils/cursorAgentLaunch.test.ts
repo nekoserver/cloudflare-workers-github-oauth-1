@@ -7,6 +7,7 @@ import {
   buildCursorAgentStatusUrl,
   extractCursorAgentId,
   extractCursorAgentSummaryText,
+  extractCursorAgentFields,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -198,5 +199,45 @@ describe('extractCursorAgentSummaryText', () => {
   it('該当フィールドが空文字・非文字列の場合はでっち上げず次の候補を探す', () => {
     expect(extractCursorAgentSummaryText({ agent: { summary: '', result: '結果テキスト' } })).toBe('結果テキスト');
     expect(extractCursorAgentSummaryText({ agent: { summary: 123 } })).toBeNull();
+  });
+});
+
+// 対象: cursor_agent_launch_log・cursor_agent_status_logへJSONブロブのまま
+// 記録するのではなく、意味のある項目(id・name・status・url・run状態・
+// レポート本文)を個別カラムへ切り出して保存するための一括抽出関数。
+describe('extractCursorAgentFields', () => {
+  it('agent/run配下の各フィールドを1回でまとめて抽出する', () => {
+    const response = {
+      agent: {
+        id: 'bc-1',
+        name: '日次報告',
+        status: 'FINISHED',
+        url: 'https://cursor.com/agents/bc-1',
+        summary: '昨日のコミットは3件でした',
+      },
+      run: { status: 'COMPLETED' },
+    };
+    expect(extractCursorAgentFields(response)).toEqual({
+      id: 'bc-1',
+      name: '日次報告',
+      status: 'FINISHED',
+      url: 'https://cursor.com/agents/bc-1',
+      runStatus: 'COMPLETED',
+      reportText: '昨日のコミットは3件でした',
+    });
+  });
+
+  it('httpsで始まらないurlは信用せずnullにする', () => {
+    const result = extractCursorAgentFields({ agent: { id: 'bc-1', url: 'javascript:alert(1)' } });
+    expect(result.url).toBeNull();
+  });
+
+  it('各フィールドが欠けていてもでっち上げず、該当項目だけnullにする', () => {
+    expect(extractCursorAgentFields({})).toEqual({
+      id: null, name: null, status: null, url: null, runStatus: null, reportText: null,
+    });
+    expect(extractCursorAgentFields(null)).toEqual({
+      id: null, name: null, status: null, url: null, runStatus: null, reportText: null,
+    });
   });
 });
