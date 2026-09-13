@@ -186,14 +186,49 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('row.agent_id');
   });
 
-  it('履歴の各行に状態(agent_status/run_status)・連鎖(タイムライン)表示ボタンを持つ', async () => {
+  it('履歴の各行に状態(agent_status/run_status)を表示する', async () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
     const html = await res.text();
     expect(html).toContain('row.agent_status');
     expect(html).toContain('row.run_status');
-    expect(html).toContain('連鎖を見る');
+  });
+
+  it('Agent IDは外部リンクではなく、下線の無いボタンとしてタップ可能で、最上位レイヤーのモーダルを開く(DBの記録を読み出して表示する)', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    // 旧実装は<a href="https://cursor.com/agents/...">で外部アプリへ直接
+    // 遷移させていた。タップ時にopenAgentModal()を呼ぶボタンへ変更し、
+    // 下線を出さないagent-id-linkクラス(text-decoration: none)にする。
+    expect(html).not.toContain('href=\'https://cursor.com/agents/\'');
+    expect(html).toContain('openAgentModal');
+    expect(html).toContain('agent-id-link');
+    expect(html).toContain('text-decoration: none');
+    expect(html).toContain('agentDetailModalOverlay');
+    expect(html).toContain('/api/cursor-agent/history/');
     expect(html).toContain('/timeline');
+  });
+
+  it('モーダルを開いた時、終了状態(FINISHED等)でなければ最新状態を取得し直してからDBの記録を表示し、終了状態なら読み出すだけにする', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('isTerminalStatus');
+    expect(html).toContain('TERMINAL_AGENT_STATUSES');
+    expect(html).toContain('/refresh');
+  });
+
+  it('サーバステータスはRunning=緑、それ以外=黄、通信障害=赤のバッジで表す', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('classifyStatusBadge');
+    expect(html).toContain("'green'");
+    expect(html).toContain("'yellow'");
+    expect(html).toContain("'red'");
+    expect(html).toContain('commError');
+    expect(html).toContain('status-badge');
   });
 });
 
