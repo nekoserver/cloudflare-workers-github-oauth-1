@@ -98,3 +98,19 @@ export function buildCursorAgentRequestBody(prompt: string, repoFullName: string
 export function buildCursorAgentStatusUrl(agentId: string): string {
   return `https://api.cursor.com/v1/agents/${encodeURIComponent(agentId)}`;
 }
+
+/**
+ * Cursor APIのレスポンス(POST /v1/agents・GET /v1/agents/{id}とも共通)から
+ * agent_idを抽出する。実際のレスポンスはid・statusがトップレベルではなく
+ * `agent`キーの下にネストされている(例: `{ agent: { id, status, ... }, run: {...} }`。
+ * 2026-09-13にユーザーが実際に起動した結果で確認済み)。トップレベルの`id`は
+ * 見ない(存在しない前提を信用しない。過去にトップレベルを見る誤った実装で
+ * agent_idが常にnullのまま保存される不具合があった)。
+ */
+export function extractCursorAgentId(cursorResponse: unknown): string | null {
+  if (!cursorResponse || typeof cursorResponse !== 'object') return null;
+  const agent = (cursorResponse as { agent?: unknown }).agent;
+  if (!agent || typeof agent !== 'object') return null;
+  const id = (agent as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
+}
