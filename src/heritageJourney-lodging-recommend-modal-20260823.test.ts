@@ -27,7 +27,7 @@ describe('heritage-journeyページ: 宿泊推奨地モーダル', () => {
   });
 
   it('宿泊推奨地と巡回ルートスコープは、操作またはフォーカスされた側を最上位にする', () => {
-    expect(html).toContain('[miniPanel, lodgingModal].forEach(function(panel)');
+    expect(html).toContain('[miniPanel, lodgingModal, airportNetworkModal].forEach(function(panel)');
     expect(html).toContain("panel.addEventListener('pointerdown', function() { activateFloatingPanel(panel); })");
     expect(html).toContain("panel.addEventListener('focusin', function() { activateFloatingPanel(panel); })");
     expect(html).toContain('panel.style.zIndex = String(floatingPanelZ)');

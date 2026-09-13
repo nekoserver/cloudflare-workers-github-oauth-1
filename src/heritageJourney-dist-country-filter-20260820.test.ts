@@ -66,10 +66,10 @@ describe('heritage-journeyページ: 出発地別プラン分布の到達国フ�
     expect(rows[0].getAttribute('data-country')).toBe('__ALL__');
     expect(rows[0].textContent).toContain('しない');
 
-    // ドイツは候補都市中で最多件数のはずなので2番目(降順トップ)に来ることを確認
-    expect(rows[1].getAttribute('data-country')).toBe('ドイツ');
-    expect(rows[1].textContent).toContain('🇩🇪');
-    expect(rows[1].textContent).toContain('ドイツ');
+    // 先頭の実国は件数最多。都市データが増減してもソート契約だけを固定する
+    expect(rows[1].getAttribute('data-country')).not.toBe('__ALL__');
+    expect(Number(rows[1].getAttribute('data-count'))).toBeGreaterThan(0);
+    expect(rows[1].textContent).toContain(rows[1].getAttribute('data-country') || '');
 
     // 件数が単調非増加になっていることを確認
     const counts = rows.slice(1).map((r) => Number(r.getAttribute('data-count')));

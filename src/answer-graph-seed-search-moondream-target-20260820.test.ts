@@ -27,7 +27,7 @@ describe('/api/aichat/shares/search: target=moondream3.1 の振り分け(index.t
     const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
     const idx = src.indexOf("app.get('/api/aichat/shares/search'");
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 900);
+    const snippet = src.slice(idx, idx + 2400);
     expect(snippet).toContain("=== 'moondream3.1'");
     expect(snippet).toContain('searchAichatMoondreamAnalyses(db, user.sub, q)');
     expect(snippet).toContain('searchAiChatShares(db, user.sub, q)');

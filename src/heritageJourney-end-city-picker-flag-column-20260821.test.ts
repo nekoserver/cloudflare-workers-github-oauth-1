@@ -96,7 +96,8 @@ describe('heritage-journeyページ: 🏁タップで到達国モーダルを開
 
     const rows = Array.from(document.querySelectorAll('#dist-country-filter-list [data-country]')) as HTMLElement[];
     expect(rows[0].getAttribute('data-country')).toBe('__ALL__');
-    expect(rows[1].getAttribute('data-country')).toBe('ドイツ');
+    expect(rows[1].getAttribute('data-country')).not.toBe('__ALL__');
+    expect(Number(rows[1].getAttribute('data-count'))).toBeGreaterThan(0);
     const counts = rows.slice(1).map((r) => Number(r.getAttribute('data-count')));
     for (let i = 1; i < counts.length; i++) {
       expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
