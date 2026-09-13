@@ -86,3 +86,15 @@ export function buildCursorAgentRequestBody(prompt: string, repoFullName: string
     ],
   };
 }
+
+/**
+ * `/api/cursor-agent/launch` が受け取るのは起動直後のCursor APIレスポンス
+ * (agent.status=CREATING/RUNNING等の制御情報のみで、Agentが完了した後の
+ * 実際の作業結果ではない)。それだけをD1に保存して終わりにすると、後から
+ * 履歴を読み返しても永久に起動直後の状態しか見られない。GET /v1/agents/{id}を
+ * 呼んで最新状態(完了後はstatus=FINISHED等になり、結果を含む)を取得し直す
+ * URLを組み立てる。
+ */
+export function buildCursorAgentStatusUrl(agentId: string): string {
+  return `https://api.cursor.com/v1/agents/${encodeURIComponent(agentId)}`;
+}
