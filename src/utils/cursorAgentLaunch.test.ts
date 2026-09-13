@@ -166,16 +166,24 @@ describe('extractCursorAgentId', () => {
 });
 
 describe('extractCursorAgentSummaryText', () => {
-  // Cursor APIの完了後レスポンスの正確な形が未確認(会話ログ専用エンドポイントの
-  // 存在も未確認)なため、想定されるフィールド名を優先順位付きで探し、
-  // 最初に見つかった非空文字列を返す(見つからなければnull。存在しないものを
-  // でっち上げない)。フィールド名が確定次第、優先順位リストを更新する。
-  it('agent.summaryを最優先で返す', () => {
+  // Cursor公式ドキュメント・フォーラムの実例(2026-09-14 Web検索で確認)により、
+  // Cloud Agents APIの完了イベントは `{ runId, status: "FINISHED", text: "...",
+  // durationMs, git }` の形でrun.textにレポート本文が入ることが確認できた
+  // (forum.cursor.com "Cloud Agents API doesn't provide summary"より)。
+  // 一方agent.summaryは「computer use更新後、応答から抜け落ちることがある」
+  // という既知の不具合が報告されているため、run.textを最優先にし、
+  // agent.summaryはフォールバックとして残す。
+  it('run.textを最優先で返す(Cursor公式の完了イベント実例で確認済み)', () => {
+    const response = { agent: { summary: 'agent側の要約' }, run: { status: 'FINISHED', text: '昨日のコミットは3件でした' } };
+    expect(extractCursorAgentSummaryText(response)).toBe('昨日のコミットは3件でした');
+  });
+
+  it('run.textが無ければagent.summaryを返す(既知の不具合でrun.textが欠ける場合のフォールバック)', () => {
     const response = { agent: { summary: '昨日のコミットは3件でした', result: '別の内容' } };
     expect(extractCursorAgentSummaryText(response)).toBe('昨日のコミットは3件でした');
   });
 
-  it('agent.summaryが無ければagent.resultを返す', () => {
+  it('agent.summaryも無ければagent.resultを返す', () => {
     const response = { agent: { result: '結果テキスト' } };
     expect(extractCursorAgentSummaryText(response)).toBe('結果テキスト');
   });
@@ -185,7 +193,8 @@ describe('extractCursorAgentSummaryText', () => {
     expect(extractCursorAgentSummaryText({ agent: { report: 'レポートテキスト' } })).toBe('レポートテキスト');
   });
 
-  it('agent配下に見つからなければトップレベルのsummary・run.summaryも探す', () => {
+  it('agent配下に見つからなければトップレベルのtext・summary・run.summaryも探す', () => {
+    expect(extractCursorAgentSummaryText({ text: 'トップレベルのtext' })).toBe('トップレベルのtext');
     expect(extractCursorAgentSummaryText({ summary: 'トップレベルの要約' })).toBe('トップレベルの要約');
     expect(extractCursorAgentSummaryText({ run: { summary: 'runの要約' } })).toBe('runの要約');
   });
@@ -197,7 +206,7 @@ describe('extractCursorAgentSummaryText', () => {
   });
 
   it('該当フィールドが空文字・非文字列の場合はでっち上げず次の候補を探す', () => {
-    expect(extractCursorAgentSummaryText({ agent: { summary: '', result: '結果テキスト' } })).toBe('結果テキスト');
+    expect(extractCursorAgentSummaryText({ run: { text: '' }, agent: { summary: '', result: '結果テキスト' } })).toBe('結果テキスト');
     expect(extractCursorAgentSummaryText({ agent: { summary: 123 } })).toBeNull();
   });
 });

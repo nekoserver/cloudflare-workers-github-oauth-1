@@ -122,22 +122,28 @@ function readNonEmptyStringField(obj: unknown, field: string): string | null {
 }
 
 /**
- * Cursor APIレスポンスからAgentが実際に生成したレポート本文らしきものを
- * 抜き出す。Cursor Agents APIが完了後の応答でどのフィールド名を使うのか
- * (専用の会話ログエンドポイントが別に存在するのかも含め)未確認のため、
- * 想定されるフィールド名を優先順位付きで探索し、最初に見つかった非空文字列を
- * 返す。1つも見つからなければnull(存在しないものをでっち上げない)。
- * 正式なフィールド名・エンドポイントが確認でき次第、この探索順を更新する。
+ * Cursor APIレスポンスからAgentが実際に生成したレポート本文を抜き出す。
+ * Cursor公式ドキュメント・フォーラムの実例(2026-09-14 Web検索で確認: forum.
+ * cursor.com "Cloud Agents API doesn't provide summary")により、Cloud Agents
+ * APIの完了イベントは `{ runId, status: "FINISHED", text: "...", durationMs,
+ * git }` の形でrun.textにレポート本文が入ることが確認できたため最優先にする。
+ * agent.summaryは同フォーラムで「computer use更新後、応答から抜け落ちる
+ * ことがある」既知の不具合が報告されているため、run.textが無い場合の
+ * フォールバックとして残す(以下、agent.result/output/report・トップレベル
+ * text/summary・run.summaryの順にさらにフォールバックする)。
+ * 1つも見つからなければnull(存在しないものをでっち上げない)。
  */
 export function extractCursorAgentSummaryText(cursorResponse: unknown): string | null {
   if (!cursorResponse || typeof cursorResponse !== 'object') return null;
   const agent = (cursorResponse as { agent?: unknown }).agent;
   const run = (cursorResponse as { run?: unknown }).run;
   const candidates: Array<[unknown, string]> = [
+    [run, 'text'],
     [agent, 'summary'],
     [agent, 'result'],
     [agent, 'output'],
     [agent, 'report'],
+    [cursorResponse, 'text'],
     [cursorResponse, 'summary'],
     [run, 'summary'],
   ];
