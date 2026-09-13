@@ -80,4 +80,7 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 
 ### 関連コミット
 
-- 本PRのコミット（push後にハッシュを追記）
+- [`16892c9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/16892c9) jsdom環境でもJWT検証が通るようSubtleCryptoへTypedArrayを渡す
+- [`002ea48`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/002ea48) AIRPORT_LISTにLKCSを追加しCOUNTRY_BORDERSにアルバニアを補完する
+- [`e5b5b75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e5b5b75) 毎回落ちていたソース照合テストとマスタ契約を現行実装に合わせる
+- [`49914a0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/49914a0) /neko説明は列挙せずhelp案内に揃え、城タップテストのscrollIntoViewを補う
