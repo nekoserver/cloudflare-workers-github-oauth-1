@@ -239,12 +239,13 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('生データ(JSON)を見る');
   });
 
-  it('一覧の「レポート」欄はreport_text未抽出でも「未取得」だけで終わらせず、生データのプレビューを表示する', async () => {
+  it('一覧の「レポート」欄には生JSONを絶対に出さない。report_text未抽出時は終了状態かどうかで文言を分けた人間向けメッセージだけを表示する', async () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
     const html = await res.text();
-    expect(html).toContain('buildRawPreview');
-    expect(html).toContain('row.report_text || buildRawPreview(row.raw_response)');
+    expect(html).not.toContain('buildRawPreview');
+    expect(html).toContain('(まだレポートはありません)');
+    expect(html).toContain('(レポートを取得できませんでした。Agent IDから詳細を確認してください)');
   });
 
   it('履歴読み込み時、終了状態でない行だけ自動でCursor APIへ問い合わせ直す(モーダルを開かなくても状態が最新化されるようにするため)', async () => {
