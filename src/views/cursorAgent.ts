@@ -297,7 +297,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
       });
   }
 
-  function refreshHistoryRow(id, btn, tdResponse) {
+  function refreshHistoryRow(id, btn) {
     btn.disabled = true;
     var origText = btn.textContent;
     btn.textContent = '取得中...';
@@ -308,14 +308,9 @@ textarea:focus, select:focus { border-color: var(--accent); }
           window.alert('最新状態の取得に失敗しました: ' + ((res.data && res.data.error) || ('HTTP ' + res.status)));
           return;
         }
-        var text = JSON.stringify(res.data.cursorResponse);
-        tdResponse.textContent = res.data.reportText || text;
-        allHistoryRows.forEach(function(r) {
-          if (r.id === id) {
-            r.cursor_response = text;
-            r.report_text = res.data.reportText;
-          }
-        });
+        // cursor_agent_status_logへ新しい行が追記されただけなので、一覧全体を
+        // 読み直して最新状態(agent_status/run_status/report_text)を反映する。
+        loadHistory();
       })
       .catch(function(err) {
         window.alert('通信エラー: ' + ((err && err.message) || '不明'));
@@ -326,6 +321,41 @@ textarea:focus, select:focus { border-color: var(--accent); }
       });
   }
 
+  function showTimeline(id, container) {
+    container.textContent = '読み込み中...';
+    fetch('/api/cursor-agent/history/' + encodeURIComponent(id) + '/timeline', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var rows = d.rows || [];
+        container.innerHTML = '';
+        if (rows.length === 0) {
+          container.textContent = '状態取得の履歴がありません';
+          return;
+        }
+        var list = document.createElement('ol');
+        list.style.margin = '0';
+        list.style.paddingLeft = '18px';
+        rows.forEach(function(row) {
+          var li = document.createElement('li');
+          li.style.marginBottom = '4px';
+          var line = formatJstFromUtcString(row.fetched_at) + ' — Agent: ' + (row.agent_status || '(不明)') +
+            (row.run_status ? ' / Run: ' + row.run_status : '');
+          li.appendChild(document.createTextNode(line));
+          if (row.report_text) {
+            var reportDiv = document.createElement('div');
+            reportDiv.style.whiteSpace = 'pre-wrap';
+            reportDiv.style.color = 'var(--text-muted)';
+            reportDiv.style.marginTop = '2px';
+            reportDiv.textContent = row.report_text;
+            li.appendChild(reportDiv);
+          }
+          list.appendChild(li);
+        });
+        container.appendChild(list);
+      })
+      .catch(function() { container.textContent = '読み込みに失敗しました'; });
+  }
+
   function renderHistory(rows) {
     if (!rows || rows.length === 0) {
       historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">' +
@@ -334,7 +364,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
     }
     var table = document.createElement('table');
     table.className = 'history-table';
-    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>Agent ID</th><th>プロンプト</th><th>応答</th><th></th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>Agent ID</th><th>状態</th><th>プロンプト</th><th>レポート</th><th></th></tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(row) {
       var tr = document.createElement('tr');
@@ -353,41 +383,67 @@ textarea:focus, select:focus { border-color: var(--accent); }
       } else {
         tdAgentId.textContent = '(未記録)';
       }
+      var tdStatus = document.createElement('td');
+      var statusParts = [];
+      if (row.agent_status) statusParts.push('Agent: ' + row.agent_status);
+      if (row.run_status) statusParts.push('Run: ' + row.run_status);
+      tdStatus.textContent = statusParts.length > 0 ? statusParts.join(' / ') : '(未取得)';
       var tdPrompt = document.createElement('td');
       tdPrompt.className = 'history-prompt';
       tdPrompt.textContent = row.prompt;
       var tdResponse = document.createElement('td');
       tdResponse.className = 'history-response';
-      // report_text(Agentが実際に生成したレポート本文)が取得できていれば
-      // それを表示し、見つかっていなければ生の応答JSONにフォールバックする。
-      tdResponse.textContent = row.report_text || row.cursor_response;
+      // agent_status・run_status・report_textはcursor_agent_status_logから
+      // 個別カラムとして結合済み(JSONブロブを都度読み解く必要はない)。
+      // report_textが無い(=まだAgentが完了していない)場合はその旨を明示する。
+      tdResponse.textContent = row.report_text || '(未取得)';
       var tdActions = document.createElement('td');
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'history-refresh-btn';
       refreshBtn.textContent = '最新状態を取得';
       refreshBtn.style.marginRight = '6px';
-      refreshBtn.addEventListener('click', function() { refreshHistoryRow(row.id, refreshBtn, tdResponse); });
+      refreshBtn.addEventListener('click', function() { refreshHistoryRow(row.id, refreshBtn); });
+      var timelineBtn = document.createElement('button');
+      timelineBtn.className = 'history-refresh-btn';
+      timelineBtn.textContent = '連鎖を見る';
+      timelineBtn.style.marginRight = '6px';
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'history-delete-btn';
       deleteBtn.textContent = '削除';
       deleteBtn.addEventListener('click', function() { deleteHistoryRow(row.id, deleteBtn); });
       tdActions.appendChild(refreshBtn);
+      tdActions.appendChild(timelineBtn);
       tdActions.appendChild(deleteBtn);
       tr.appendChild(tdDate);
       tr.appendChild(tdRepo);
       tr.appendChild(tdAgentId);
+      tr.appendChild(tdStatus);
       tr.appendChild(tdPrompt);
       tr.appendChild(tdResponse);
       tr.appendChild(tdActions);
       tbody.appendChild(tr);
+
+      // 「連鎖を見る」を押すと、1件の起動に対する状態取得の履歴
+      // (cursor_agent_status_log全件)を直下の行に展開表示する。
+      var timelineRow = document.createElement('tr');
+      timelineRow.hidden = true;
+      var timelineCell = document.createElement('td');
+      timelineCell.colSpan = 7;
+      timelineCell.style.fontSize = '11px';
+      timelineRow.appendChild(timelineCell);
+      timelineBtn.addEventListener('click', function() {
+        timelineRow.hidden = !timelineRow.hidden;
+        if (!timelineRow.hidden) showTimeline(row.id, timelineCell);
+      });
+      tbody.appendChild(timelineRow);
     });
     table.appendChild(tbody);
     historyBodyEl.innerHTML = '';
     historyBodyEl.appendChild(table);
   }
 
-  // リポジトリ・Agent ID・プロンプト・応答のいずれかに検索語(大文字小文字を
-  // 区別しない)を含む行だけを残す。検索語が空の場合は全件を返す。
+  // リポジトリ・Agent ID・プロンプト・状態・レポートのいずれかに検索語
+  // (大文字小文字を区別しない)を含む行だけを残す。検索語が空の場合は全件を返す。
   function filterHistoryRows(rows, query) {
     var q = (query || '').trim().toLowerCase();
     if (!q) return rows;
@@ -395,7 +451,8 @@ textarea:focus, select:focus { border-color: var(--accent); }
       return (row.repo_full_name || '').toLowerCase().indexOf(q) !== -1 ||
         (row.agent_id || '').toLowerCase().indexOf(q) !== -1 ||
         (row.prompt || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.cursor_response || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.agent_status || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.run_status || '').toLowerCase().indexOf(q) !== -1 ||
         (row.report_text || '').toLowerCase().indexOf(q) !== -1;
     });
   }
