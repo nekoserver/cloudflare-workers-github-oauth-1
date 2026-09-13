@@ -146,6 +146,9 @@ textarea:focus, select:focus { border-color: var(--accent); }
           return;
         }
         resultEl.textContent = JSON.stringify(res.data.cursorResponse, null, 2);
+        if (res.data.historySaved === false) {
+          showError('⚠️ Agentの起動には成功しましたが、問答履歴の保存に失敗しました(D1のcursor_agent_launch_logテーブル未作成の可能性があります)');
+        }
         loadHistory();
       })
       .catch(function(err) {
