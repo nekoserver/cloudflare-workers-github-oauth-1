@@ -8,6 +8,8 @@ import {
   extractCursorAgentId,
   extractCursorAgentSummaryText,
   extractCursorAgentFields,
+  buildCursorAgentConversationUrl,
+  extractCursorAgentConversationAnswers,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -248,5 +250,69 @@ describe('extractCursorAgentFields', () => {
     expect(extractCursorAgentFields(null)).toEqual({
       id: null, name: null, status: null, url: null, runStatus: null, reportText: null,
     });
+  });
+});
+
+// 対象: GET /v0/agents/{id}/conversation。Cursorアプリ
+// (https://cursor.com/agents/{id})の会話に載っている回答文を、
+// Agent IDタップ時の最上位モーダルへ埋め込むために取得する。
+//
+// 故障シナリオ:
+//   (1) agent_idをそのままURLに埋め込み、パス区切りを含む値で別リソースへ
+//       リクエストしてしまう
+//   (2) user_messageを回答文として採用してしまう(質問を回答と誤表示)
+//   (3) 空文字・非文字列のtextを回答としてでっち上げる
+//   (4) messagesが無い・配列でない応答で例外を投げ、モーダル全体が壊れる
+describe('buildCursorAgentConversationUrl', () => {
+  it('GET /v0/agents/{id}/conversation のURLを組み立てる(アプリ画面の会話=回答文の取得先)', () => {
+    expect(buildCursorAgentConversationUrl('bc-123')).toBe(
+      'https://api.cursor.com/v0/agents/bc-123/conversation'
+    );
+  });
+
+  it('agent_idをURLエンコードする', () => {
+    expect(buildCursorAgentConversationUrl('bc/../123')).toBe(
+      'https://api.cursor.com/v0/agents/bc%2F..%2F123/conversation'
+    );
+  });
+});
+
+describe('extractCursorAgentConversationAnswers', () => {
+  it('assistant_messageのtextだけを出現順で返す(user_messageは回答ではない)', () => {
+    const payload = {
+      id: 'bc-123',
+      messages: [
+        { id: 'm1', type: 'user_message', text: 'READMEを直して' },
+        { id: 'm2', type: 'assistant_message', text: 'READMEを更新しました' },
+        { id: 'm3', type: 'assistant_message', text: 'インストール手順も追記しました' },
+      ],
+    };
+    expect(extractCursorAgentConversationAnswers(payload)).toEqual([
+      'READMEを更新しました',
+      'インストール手順も追記しました',
+    ]);
+  });
+
+  it('typeがassistantでも回答として扱う(v1系の別名)', () => {
+    const payload = { messages: [{ type: 'assistant', text: '完了しました' }] };
+    expect(extractCursorAgentConversationAnswers(payload)).toEqual(['完了しました']);
+  });
+
+  it('空文字・非文字列のtextは回答として採用しない', () => {
+    const payload = {
+      messages: [
+        { type: 'assistant_message', text: '' },
+        { type: 'assistant_message', text: 123 },
+        { type: 'assistant_message', text: '本文' },
+      ],
+    };
+    expect(extractCursorAgentConversationAnswers(payload)).toEqual(['本文']);
+  });
+
+  it('messagesが無い・配列でない・payloadが不正でも例外を投げず空配列を返す', () => {
+    expect(extractCursorAgentConversationAnswers(null)).toEqual([]);
+    expect(extractCursorAgentConversationAnswers({})).toEqual([]);
+    expect(extractCursorAgentConversationAnswers({ messages: 'nope' })).toEqual([]);
+    expect(extractCursorAgentConversationAnswers({ messages: [null, 1, {}] })).toEqual([]);
   });
 });

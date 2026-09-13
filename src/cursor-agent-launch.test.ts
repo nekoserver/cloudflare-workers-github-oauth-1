@@ -254,6 +254,34 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('fetchAndRenderHistory');
     expect(html).toContain('!isTerminalStatus(row.agent_status)');
   });
+
+  it('Agent IDタップのモーダルはアプリ先の会話APIから回答文を取得して最上位レイヤーへ埋め込む', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('/conversation');
+    expect(html).toContain('renderConversationAnswers');
+    expect(html).toContain('agentDetailAnswerBody');
+    expect(html).toContain('getNextZ()');
+    expect(html).toContain('answer.textContent');
+    expect(html).toContain('回答文');
+  });
+
+  it('script タグ内の JS に構文エラーがない', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    const scriptRe = /<script>([\s\S]*?)<\/script>/g;
+    let m;
+    let count = 0;
+    while ((m = scriptRe.exec(html)) !== null) {
+      count += 1;
+      expect(() => {
+        new Function(`(function(){\n${m![1]}\n})`);
+      }).not.toThrow();
+    }
+    expect(count).toBeGreaterThan(0);
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -730,5 +758,113 @@ describe('POST /api/cursor-agent/history/:id/refresh', () => {
 
     const latestRow = db.prepare('SELECT report_text FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY id DESC LIMIT 1').get(id) as { report_text: string | null };
     expect(latestRow.report_text).toBe('完了レポート本文');
+  });
+});
+
+// 対象: GET /api/cursor-agent/history/:id/conversation
+// Cursorアプリ(https://cursor.com/agents/{id})相当の会話を
+// GET /v0/agents/{id}/conversation から取得し、assistantの回答文だけを返す。
+//
+// 故障シナリオ:
+//   (1) 他ユーザーのlaunch_idで会話を読めてしまう
+//   (2) agent_id未記録なのにCursor APIへ空idで問い合わせる
+//   (3) CURSOR_API_KEY未設定でも会話APIを呼ぶ
+//   (4) Cursor API失敗を握りつぶし、空の回答を成功として返す
+describe('GET /api/cursor-agent/history/:id/conversation', () => {
+  it('会話APIのassistant_messageだけをanswersとして返す', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-conv-1',
+      agentUrl: 'https://cursor.com/agents/bc-conv-1',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    const conversation = {
+      id: 'bc-conv-1',
+      messages: [
+        { id: 'm1', type: 'user_message', text: 'READMEを直して' },
+        { id: 'm2', type: 'assistant_message', text: 'READMEを更新しました' },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(conversation), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[] };
+    expect(data.answers).toEqual(['READMEを更新しました']);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.cursor.com/v0/agents/bc-conv-1/conversation',
+      expect.objectContaining({ headers: expect.any(Object) })
+    );
+  });
+
+  it('他ユーザーの履歴は404で、Cursor APIを呼ばない', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'other-user', prompt: '他人', agentId: 'bc-other',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('agent_id未記録なら400で、Cursor APIを呼ばない', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: null,
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('CURSOR_API_KEY未設定なら400で、Cursor APIを呼ばない', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-1',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('Cursor API失敗は502を返し、空のanswersを成功扱いしない', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-1',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 500 })));
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(502);
+    const data = await res.json() as { error?: string; answers?: string[] };
+    expect(data.error).toBeTruthy();
+    expect(data.answers).toBeUndefined();
   });
 });
