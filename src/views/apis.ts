@@ -298,7 +298,7 @@ mark.hl-match{
 <script>
 const APIS = [
   { group: 'AI チャット', endpoints: [
-    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信（/neko hms・/neko cal・/neko clog など "/neko" で始まるサブコマンドはAIを呼ばずローカルで応答する。一覧は "/neko help" で確認可能）',
+    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信（message が "/neko" で始まるサブコマンドの場合はAIを呼ばずローカルで応答する。一覧は "/neko help" で確認可能）',
       modelSelect:${JSON.stringify(DEFAULT_AICHAT_MODELS)},
       body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:${JSON.stringify(DEFAULT_AICHAT_MODELS[0]?.value ?? '')}},{n:'systemPromptMode',s:'a'}],
       res:{response:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',usedModel:'@cf/google/gemma-4-26b-a4b-it',systemPromptMode:'a',input_tokens:20,output_tokens:80,total_tokens:100,shareId:'a1b2c3d4',userHash:'e5f6a7b8'} },

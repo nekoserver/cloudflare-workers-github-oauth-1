@@ -62,7 +62,7 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 | 1 | jsdomでJWT検証が例外になり /cheese-search /wasm-modules が401 | verifyにUint8Arrayを渡す |
 | 2 | APT_REGIONSのLKCSがAIRPORT_LISTに無く国旗が欠ける | LKCSを追加 |
 | 3 | AIRPORT_LISTの🇦🇱にCOUNTRY_BORDERS.ALが無く国境描画が例外 | ALポリゴンを追加 |
-| 4 | /apisの/api/aichat説明から /neko hms/cal/clog が消える | 説明文を復元 |
+| 4 | 古いテストが /neko hms 列挙を要求し、新しい契約(/neko help案内)と衝突する | 列挙しない契約にテストを揃える |
 | 5 | ソース照合テストが古い断片を探し続けて落ちる | 現行実装の契約に合わせて更新 |
 | 6 | aichat履歴E2Eでscript実行時にfetch未定義 | beforeParseでfetchを注入 |
 | 7 | 城タップ座標が古い2点ビュー計算のまま当たない | tourPoints全体で視点を再計算 |
@@ -75,7 +75,7 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 | `src/utils/jwt-jsdom.test.ts` | jsdom環境でのJWT往復テストを追加 |
 | `src/data/airports.ts` | LKCSを追加 |
 | `src/data/countryBorders.ts` | アルバニア(AL)の国境データを追加 |
-| `src/views/apis.ts` / `src/data/apiEndpointList.ts` | /neko hms/cal/clogを説明に明記 |
+| `src/views/apis.ts` / `src/data/apiEndpointList.ts` | /nekoは列挙せず /neko help へ案内 |
 | 複数の `*.test.ts` | ソース照合・並び順・城タップ座標の契約を現行実装に合わせる |
 
 ### 関連コミット
