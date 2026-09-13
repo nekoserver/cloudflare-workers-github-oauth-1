@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13556,6 +13556,50 @@ app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
     .bind(id, fields.status, fields.runStatus, fields.reportText, JSON.stringify(cursorResponse))
     .run();
   return jsonUtf8({ cursorResponse, reportText: fields.reportText });
+});
+
+/**
+ * /cursor-agent ページのAgent IDタップ用。Cursorアプリ
+ * (https://cursor.com/agents/{id})に表示される会話と同じ内容を
+ * GET /v0/agents/{id}/conversation から取得し、assistantの回答文だけを返す。
+ * 他ユーザーの起動・agent_id未記録・API失敗は握りつぶさない。
+ */
+app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  if (!c.env.CURSOR_API_KEY) {
+    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
+  }
+  const row = await c.env.DB
+    .prepare(`SELECT agent_id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ agent_id: string | null }>();
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+  if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため会話を取得できません' }, 400);
+
+  let res: Response;
+  try {
+    res = await fetch(buildCursorAgentConversationUrl(row.agent_id), {
+      headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 会話の取得に失敗', { userId: user.sub, agentId: row.agent_id, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] 会話取得でCursor APIエラー応答', { userId: user.sub, agentId: row.agent_id, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const conversation: unknown = await res.json().catch(() => null);
+  if (conversation === null) {
+    logger.warn('[cursor-agent] 会話取得でCursor APIの応答がJSONとして解析できませんでした', { userId: user.sub, agentId: row.agent_id });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
+  return jsonUtf8({ answers: extractCursorAgentConversationAnswers(conversation) });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

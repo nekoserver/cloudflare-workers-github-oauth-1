@@ -126,6 +126,14 @@ textarea:focus, select:focus { border-color: var(--accent); }
 .timeline-list { margin: 10px 0 0; padding-left: 18px; font-size: 12px; }
 .timeline-list li { margin-bottom: 10px; }
 .timeline-report { white-space: pre-wrap; color: var(--text-muted); margin-top: 3px; }
+.answer-section { margin-bottom: 14px; }
+.answer-section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.answer-item {
+  white-space: pre-wrap; word-break: break-word;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px; margin-bottom: 8px; background: var(--input-bg);
+}
+.answer-empty { color: var(--text-muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -168,6 +176,10 @@ textarea:focus, select:focus { border-color: var(--accent); }
   <div class="modal-box">
     <button class="modal-close-btn" id="agentDetailModalCloseBtn">閉じる</button>
     <h2 id="agentDetailModalTitle">Agent詳細</h2>
+    <div class="answer-section">
+      <div class="answer-section-label">回答文</div>
+      <div id="agentDetailAnswerBody">読み込み中...</div>
+    </div>
     <div id="agentDetailModalBody">読み込み中...</div>
   </div>
 </div>
@@ -423,12 +435,13 @@ textarea:focus, select:focus { border-color: var(--accent); }
       var z = parseInt(window.getComputedStyle(all[i]).zIndex, 10);
       if (!isNaN(z) && z > max) max = z;
     }
-    return max + 10;
+    return max + 100;
   }
 
   var modalOverlay = document.getElementById('agentDetailModalOverlay');
   var modalTitle = document.getElementById('agentDetailModalTitle');
   var modalBody = document.getElementById('agentDetailModalBody');
+  var modalAnswerBody = document.getElementById('agentDetailAnswerBody');
   var modalCloseBtn = document.getElementById('agentDetailModalCloseBtn');
 
   function closeAgentModal() {
@@ -492,17 +505,67 @@ textarea:focus, select:focus { border-color: var(--accent); }
   }
 
   /**
-   * Agent IDをタップした時の処理。DBに書き込まれた記録(cursor_agent_status_log)を
-   * このアプリ内の最上位レイヤーのモーダルへ読み出して表示する(外部の
-   * Cursorアプリへ直接遷移させない)。既に終了状態(FINISHED等)と分かって
-   * いれば読み出すだけ、そうでなければモーダルを開いたタイミングで
-   * 最新状態を1回取得し直してからDBへ追記し、その結果を表示する。
+   * Cursorアプリ(https://cursor.com/agents/{id})の会話にある回答文を
+   * 最上位レイヤーのモーダルへ埋め込む。外部遷移せず、textContentで描画する
+   * (非信頼入力をinnerHTMLに流さない)。
+   */
+  function renderConversationAnswers(answers, errorMessage) {
+    modalAnswerBody.innerHTML = '';
+    if (errorMessage) {
+      var err = document.createElement('div');
+      err.className = 'answer-empty';
+      err.textContent = errorMessage;
+      modalAnswerBody.appendChild(err);
+      return;
+    }
+    if (!answers || answers.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'answer-empty';
+      empty.textContent = '回答文はまだありません';
+      modalAnswerBody.appendChild(empty);
+      return;
+    }
+    answers.forEach(function(text) {
+      var answer = document.createElement('div');
+      answer.className = 'answer-item';
+      answer.textContent = text;
+      modalAnswerBody.appendChild(answer);
+    });
+  }
+
+  function loadConversationAnswers(row) {
+    if (!row.agent_id) {
+      renderConversationAnswers([], 'agent_idが記録されていないため回答文を取得できません');
+      return Promise.resolve();
+    }
+    return fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/conversation', { credentials: 'same-origin' })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (res.status !== 200) {
+          renderConversationAnswers([], (res.data && res.data.error) || ('回答文の取得に失敗しました: HTTP ' + res.status));
+          return;
+        }
+        renderConversationAnswers(res.data.answers || [], null);
+      })
+      .catch(function(err) {
+        renderConversationAnswers([], '通信エラー: ' + ((err && err.message) || '不明'));
+      });
+  }
+
+  /**
+   * Agent IDをタップした時の処理。外部のCursorアプリへ直接遷移させず、
+   * アプリ先(会話API)の回答文を最上位レイヤーのモーダルへ埋め込み、
+   * DBの状態記録(cursor_agent_status_log)も併せて表示する。
+   * 既に終了状態(FINISHED等)と分かっていれば状態は読み出すだけ、
+   * そうでなければモーダルを開いたタイミングで最新状態を1回取得し直す。
    */
   function openAgentModal(row) {
     modalTitle.textContent = 'Agent: ' + (row.agent_id || '(未記録)');
+    modalAnswerBody.textContent = '読み込み中...';
     modalBody.innerHTML = '読み込み中...';
     modalOverlay.style.zIndex = String(getNextZ());
     modalOverlay.hidden = false;
+    loadConversationAnswers(row);
 
     function loadTimelineAndRender() {
       return fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/timeline', { credentials: 'same-origin' })

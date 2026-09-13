@@ -171,6 +171,37 @@ export type CursorAgentFields = {
  * urlはhttps://で始まるものだけを信用する(javascript:等の危険なスキームを
  * DBに保存し、後でそのままリンク化してしまう事故を防ぐ)。
  */
+/**
+ * Cursorアプリ(https://cursor.com/agents/{id})に表示される会話と同じ内容を
+ * 取るためのURL。v1のstatus取得とは別に、回答文(assistantメッセージ)は
+ * GET /v0/agents/{id}/conversation から取得する。
+ */
+export function buildCursorAgentConversationUrl(agentId: string): string {
+  return `https://api.cursor.com/v0/agents/${encodeURIComponent(agentId)}/conversation`;
+}
+
+/**
+ * GET /v0/agents/{id}/conversation の応答から、アプリ画面に出る回答文
+ * (assistant_message / assistant)だけを出現順で抜き出す。user_messageは
+ * 質問なので採用しない。空文字・非文字列・不正なpayloadでは空配列を返し、
+ * 存在しない回答をでっち上げない。
+ */
+export function extractCursorAgentConversationAnswers(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const messages = (payload as { messages?: unknown }).messages;
+  if (!Array.isArray(messages)) return [];
+  const answers: string[] = [];
+  for (const item of messages) {
+    if (!item || typeof item !== 'object') continue;
+    const type = (item as { type?: unknown }).type;
+    const text = (item as { text?: unknown }).text;
+    const isAssistant = type === 'assistant_message' || type === 'assistant';
+    if (!isAssistant || typeof text !== 'string' || text.length === 0) continue;
+    answers.push(text);
+  }
+  return answers;
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent
