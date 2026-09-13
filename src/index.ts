@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentId, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, extractCursorAgentId, extractCursorAgentSummaryText, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13375,8 +13375,21 @@ app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
       });
     }
   }
-  return jsonUtf8({ cursorResponse, historySaved });
+  return jsonUtf8({ cursorResponse, historySaved, reportText: extractCursorAgentSummaryText(cursorResponse) });
 });
+
+/**
+ * 保存済みのcursor_response(JSON文字列)からレポート本文を抜き出す。
+ * JSON自体が壊れている場合(通常は起きないが、手動でDBを触った場合等)も
+ * 一覧表示自体は継続させ、この行だけreportTextをnullにする。
+ */
+function safeExtractCursorAgentSummaryText(cursorResponseJson: string): string | null {
+  try {
+    return extractCursorAgentSummaryText(JSON.parse(cursorResponseJson));
+  } catch {
+    return null;
+  }
+}
 
 /** /cursor-agent ページ用。自分がこれまでに起動したプロンプト・応答のペアを新しい順に返す。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。 */
 app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
@@ -13388,7 +13401,8 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
     )
     .bind(user.sub)
     .all<{ id: number; repo_full_name: string; prompt: string; agent_id: string | null; cursor_response: string; created_at: string }>();
-  return jsonUtf8({ rows: results ?? [] });
+  const rows = (results ?? []).map((row) => ({ ...row, report_text: safeExtractCursorAgentSummaryText(row.cursor_response) }));
+  return jsonUtf8({ rows });
 });
 
 /** /cursor-agent ページ用。自分の起動履歴を1件削除する。他ユーザーの行(user_id不一致)・存在しないidは404を返し、削除しない。 */
@@ -13447,7 +13461,7 @@ app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
     .prepare(`UPDATE cursor_agent_launch_log SET cursor_response = ? WHERE id = ? AND user_id = ?`)
     .bind(JSON.stringify(cursorResponse), id, user.sub)
     .run();
-  return jsonUtf8({ cursorResponse });
+  return jsonUtf8({ cursorResponse, reportText: extractCursorAgentSummaryText(cursorResponse) });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

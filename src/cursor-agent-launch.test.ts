@@ -135,6 +135,14 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('最新状態を取得');
     expect(html).toContain('/refresh');
   });
+
+  it('履歴の各行にAgent ID列を持つ(row.agent_idは取得しているのに画面に一切表示されていなかった不具合の修正)', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('Agent ID');
+    expect(html).toContain('row.agent_id');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -440,5 +448,93 @@ describe('POST /api/cursor-agent/history/:id/refresh', () => {
 
     const row = db.prepare('SELECT cursor_response FROM cursor_agent_launch_log WHERE id = ?').get(id) as { cursor_response: string };
     expect(JSON.parse(row.cursor_response)).toEqual({ agent: { status: 'RUNNING' } });
+  });
+});
+
+// 対象: 「応答内容から回答本体(レポート)を抜き出せていない」という指摘への対応。
+// POST /api/cursor-agent/launch・POST /api/cursor-agent/history/:id/refresh・
+// GET /api/cursor-agent/historyのいずれも、Cursor応答から
+// extractCursorAgentSummaryText()で抜き出したレポート本文をreportText
+// (履歴一覧ではreport_text)として返す。見つからない場合はnullを返し、
+// 存在しないものをでっち上げない。
+describe('reportText: 応答内容からレポート本文を抜き出して返す', () => {
+  it('POST /api/cursor-agent/launch: agent.summaryが含まれていればreportTextとして返す', async () => {
+    const cursorApiResponse = { agent: { id: 'bc-1', status: 'FINISHED', summary: '昨日のコミットは3件でした' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(cursorApiResponse), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/launch', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'READMEを直して', repoFullName: ALLOWED_REPO }),
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    const data = await res.json() as { reportText: string | null };
+    expect(data.reportText).toBe('昨日のコミットは3件でした');
+  });
+
+  it('POST /api/cursor-agent/launch: レポートらしきフィールドが無ければreportTextはnull(でっち上げない)', async () => {
+    const cursorApiResponse = { agent: { id: 'bc-1', status: 'RUNNING' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(cursorApiResponse), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/launch', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'READMEを直して', repoFullName: ALLOWED_REPO }),
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    const data = await res.json() as { reportText: string | null };
+    expect(data.reportText).toBeNull();
+  });
+
+  it('POST /api/cursor-agent/history/:id/refresh: 最新状態にsummaryが含まれていればreportTextとして返す', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, 'READMEを直して', 'bc-1', '{"agent":{"status":"RUNNING"}}', '2026-09-13 00:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+    const latestStatus = { agent: { id: 'bc-1', status: 'FINISHED', summary: '完了レポート本文' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(latestStatus), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, { method: 'POST', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    const data = await res.json() as { reportText: string | null };
+    expect(data.reportText).toBe('完了レポート本文');
+  });
+
+  it('GET /api/cursor-agent/history: 各行にreport_textを含める(見つかればテキスト、無ければnull)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '日次報告して', 'bc-1', JSON.stringify({ agent: { summary: '完了済みレポート' } }), '2026-09-13 00:00:00');
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '実行中のもの', 'bc-2', JSON.stringify({ agent: { status: 'RUNNING' } }), '2026-09-13 01:00:00');
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    const data = await res.json() as { rows: Array<{ prompt: string; report_text: string | null }> };
+    const finished = data.rows.find((r) => r.prompt === '日次報告して');
+    const running = data.rows.find((r) => r.prompt === '実行中のもの');
+    expect(finished?.report_text).toBe('完了済みレポート');
+    expect(running?.report_text).toBeNull();
+  });
+
+  it('GET /api/cursor-agent/history: cursor_responseが壊れたJSONでも例外にならずreport_textはnullになる', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '壊れたJSON', 'bc-1', '{not valid json', '2026-09-13 00:00:00');
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { rows: Array<{ report_text: string | null }> };
+    expect(data.rows[0].report_text).toBeNull();
   });
 });
