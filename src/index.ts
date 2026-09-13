@@ -13386,11 +13386,25 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ rows: [] });
   const { results } = await c.env.DB
     .prepare(
-      `SELECT repo_full_name, prompt, agent_id, cursor_response, created_at FROM cursor_agent_launch_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`
+      `SELECT id, repo_full_name, prompt, agent_id, cursor_response, created_at FROM cursor_agent_launch_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`
     )
     .bind(user.sub)
-    .all<{ repo_full_name: string; prompt: string; agent_id: string | null; cursor_response: string; created_at: string }>();
+    .all<{ id: number; repo_full_name: string; prompt: string; agent_id: string | null; cursor_response: string; created_at: string }>();
   return jsonUtf8({ rows: results ?? [] });
+});
+
+/** /cursor-agent ページ用。自分の起動履歴を1件削除する。他ユーザーの行(user_id不一致)・存在しないidは404を返し、削除しない。 */
+app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  const result = await c.env.DB
+    .prepare(`DELETE FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .run();
+  if (!result.meta.changes) return jsonUtf8({ error: '見つかりません' }, 404);
+  return jsonUtf8({ deleted: true });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
