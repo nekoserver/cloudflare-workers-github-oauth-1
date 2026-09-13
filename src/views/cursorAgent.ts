@@ -73,6 +73,17 @@ textarea:focus, select:focus { border-color: var(--accent); }
 .history-table th, .history-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .history-table th { color: var(--text-muted); font-weight: 600; }
 .history-prompt, .history-response { max-width: 320px; overflow-wrap: break-word; white-space: pre-wrap; }
+.history-delete-btn {
+  background: transparent; border: 1px solid var(--danger); border-radius: 6px;
+  color: var(--danger); font-size: 11px; padding: 3px 8px; cursor: pointer;
+}
+.history-delete-btn:disabled { opacity: .5; cursor: not-allowed; }
+#agentHistorySearch {
+  width: 100%; background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px;
+  outline: none;
+}
+#agentHistorySearch:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -105,6 +116,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
     問答履歴
     <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
   </div>
+  <input type="search" id="agentHistorySearch" placeholder="リポジトリ・プロンプト・応答を検索..." style="margin-bottom:8px;">
   <div id="agentHistoryBody">
     <div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>
   </div>
@@ -220,6 +232,10 @@ textarea:focus, select:focus { border-color: var(--accent); }
 
   var historyBodyEl = document.getElementById('agentHistoryBody');
   var historyReloadBtn = document.getElementById('agentHistoryReloadBtn');
+  var historySearchEl = document.getElementById('agentHistorySearch');
+  // サーバーから読み込んだ全件を保持し、検索窓の入力ではAPIを再度叩かず
+  // クライアント側でリポジトリ・プロンプト・応答の3列に対して部分一致で絞り込む。
+  var allHistoryRows = [];
 
   // D1のcreated_atはdatetime('now')でUTC('YYYY-MM-DD HH:MM:SS'形式、タイムゾーン
   // 表記なし)で保存されるため、そのまま表示するとJSTだと誤解されうる。
@@ -235,14 +251,35 @@ textarea:focus, select:focus { border-color: var(--accent); }
       pad(jst.getUTCHours()) + ':' + pad(jst.getUTCMinutes()) + ':' + pad(jst.getUTCSeconds()) + ' JST';
   }
 
+  function deleteHistoryRow(id, btn) {
+    if (!window.confirm('この履歴を削除しますか?')) return;
+    btn.disabled = true;
+    fetch('/api/cursor-agent/history/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (res.status !== 200) {
+          btn.disabled = false;
+          window.alert('削除に失敗しました: ' + ((res.data && res.data.error) || ('HTTP ' + res.status)));
+          return;
+        }
+        allHistoryRows = allHistoryRows.filter(function(r) { return r.id !== id; });
+        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        window.alert('通信エラー: ' + ((err && err.message) || '不明'));
+      });
+  }
+
   function renderHistory(rows) {
     if (!rows || rows.length === 0) {
-      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">まだ起動履歴がありません</div>';
+      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">' +
+        (allHistoryRows.length === 0 ? 'まだ起動履歴がありません' : '検索条件に一致する履歴がありません') + '</div>';
       return;
     }
     var table = document.createElement('table');
     table.className = 'history-table';
-    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>プロンプト</th><th>応答</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>プロンプト</th><th>応答</th><th></th></tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(row) {
       var tr = document.createElement('tr');
@@ -256,10 +293,17 @@ textarea:focus, select:focus { border-color: var(--accent); }
       var tdResponse = document.createElement('td');
       tdResponse.className = 'history-response';
       tdResponse.textContent = row.cursor_response;
+      var tdActions = document.createElement('td');
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'history-delete-btn';
+      deleteBtn.textContent = '削除';
+      deleteBtn.addEventListener('click', function() { deleteHistoryRow(row.id, deleteBtn); });
+      tdActions.appendChild(deleteBtn);
       tr.appendChild(tdDate);
       tr.appendChild(tdRepo);
       tr.appendChild(tdPrompt);
       tr.appendChild(tdResponse);
+      tr.appendChild(tdActions);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -267,15 +311,33 @@ textarea:focus, select:focus { border-color: var(--accent); }
     historyBodyEl.appendChild(table);
   }
 
+  // リポジトリ・プロンプト・応答のいずれかに検索語(大文字小文字を区別しない)を
+  // 含む行だけを残す。検索語が空の場合は全件を返す。
+  function filterHistoryRows(rows, query) {
+    var q = (query || '').trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(function(row) {
+      return (row.repo_full_name || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.prompt || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.cursor_response || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
   function loadHistory() {
     historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>';
     fetch('/api/cursor-agent/history', { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
-      .then(function(d) { renderHistory(d.rows || []); })
+      .then(function(d) {
+        allHistoryRows = d.rows || [];
+        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+      })
       .catch(function() { historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>'; });
   }
 
   historyReloadBtn.addEventListener('click', loadHistory);
+  historySearchEl.addEventListener('input', function() {
+    renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+  });
   loadHistory();
 })();
 </script>

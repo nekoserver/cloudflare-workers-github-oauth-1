@@ -116,6 +116,16 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain("' JST'");
     expect(html).toContain('日時(JST)');
   });
+
+  it('履歴の各行に削除ボタン、履歴パネルに検索窓を持つ', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('agentHistorySearch');
+    expect(html).toContain('deleteHistoryRow');
+    expect(html).toContain('filterHistoryRows');
+    expect(html).toContain("method: 'DELETE'");
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -270,5 +280,56 @@ describe('GET /api/cursor-agent/history', () => {
     expect(res.status).toBe(200);
     const data = await res.json() as { rows: unknown[] };
     expect(data.rows).toEqual([]);
+  });
+
+  it('各行にidを含める(削除ボタンから参照するため)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '1件目', 'bc_1', '{"id":"bc_1"}', '2026-09-13 00:00:00');
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    const data = await res.json() as { rows: Array<{ id: number }> };
+    expect(typeof data.rows[0].id).toBe('number');
+  });
+});
+
+describe('DELETE /api/cursor-agent/history/:id', () => {
+  it('自分の履歴行を削除できる', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '削除対象', 'bc_1', '{"id":"bc_1"}', '2026-09-13 00:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}`, { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+
+    const row = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_launch_log WHERE id = ?').get(id) as { c: number };
+    expect(row.c).toBe(0);
+  });
+
+  it('他ユーザーの履歴行は削除できない(404、実際には削除されない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('other-user', ALLOWED_REPO, '他人の起動', 'bc_3', '{"id":"bc_3"}', '2026-09-13 02:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}`, { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(404);
+
+    const row = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_launch_log WHERE id = ?').get(id) as { c: number };
+    expect(row.c).toBe(1);
+  });
+
+  it('存在しないidを指定した場合も404を返す', async () => {
+    const db = setupDb();
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history/999999', { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(404);
   });
 });
