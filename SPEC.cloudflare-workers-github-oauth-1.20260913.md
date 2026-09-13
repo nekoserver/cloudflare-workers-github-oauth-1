@@ -40,4 +40,4 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 
 ### 関連コミット
 
-作業ブランチ `cursor/cursor-agent-answer-modal-0a8f` に記録する。
+- [`8eb1aeb`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8eb1aeba46e2a40654d20f8aa54c1909494d96f7) cursor-agentのAgent IDタップでアプリ先の回答文を最上位モーダルへ埋め込む
