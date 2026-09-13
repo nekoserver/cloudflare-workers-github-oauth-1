@@ -449,6 +449,32 @@ textarea:focus, select:focus { border-color: var(--accent); }
         reportDiv.textContent = row.report_text;
         li.appendChild(reportDiv);
       }
+      // report_textの抽出ロジック(想定フィールド名の探索)が実際のCursor応答と
+      // 一致せず抜き出せなかった場合でも、この場で必ず内容を読めるように
+      // raw_response(DB保存済みの生JSON)を折りたたみで併記する。
+      // report_textが既にある場合も、詳細確認用に併記しておく。
+      if (row.raw_response) {
+        var details = document.createElement('details');
+        details.style.marginTop = '4px';
+        var summary = document.createElement('summary');
+        summary.style.cursor = 'pointer';
+        summary.style.color = 'var(--text-muted)';
+        summary.style.fontSize = '11px';
+        summary.textContent = row.report_text ? '生データ(JSON)を見る' : '生データ(JSON)を見る(レポート本文を自動抽出できませんでした)';
+        var pre = document.createElement('pre');
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.wordBreak = 'break-word';
+        pre.style.fontSize = '11px';
+        pre.style.margin = '4px 0 0';
+        try {
+          pre.textContent = JSON.stringify(JSON.parse(row.raw_response), null, 2);
+        } catch (e) {
+          pre.textContent = row.raw_response;
+        }
+        details.appendChild(summary);
+        details.appendChild(pre);
+        li.appendChild(details);
+      }
       list.appendChild(li);
     });
     container.appendChild(list);

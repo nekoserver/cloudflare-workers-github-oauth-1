@@ -13366,6 +13366,13 @@ app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
     return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
   }
   const cursorResponse: unknown = await res.json().catch(() => null);
+  // HTTPは成功(200)でも本文がJSONとして解析できない場合、agent_id等を
+  // 一切特定できない(通信障害と同じ扱いにする。詳細は/refreshの同種の
+  // ガードのコメント参照)。
+  if (cursorResponse === null) {
+    logger.warn('[cursor-agent] 起動応答がJSONとして解析できませんでした', { userId: user.sub });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
   const fields = extractCursorAgentFields(cursorResponse);
 
   // Agent自体は起動に成功しているため、履歴保存(D1書き込み)がここで失敗しても
@@ -13464,10 +13471,10 @@ app.get('/api/cursor-agent/history/:id/timeline', authMiddleware, async (c) => {
   if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
   const { results } = await c.env.DB
     .prepare(
-      `SELECT agent_status, run_status, report_text, fetched_at FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at ASC, id ASC`
+      `SELECT agent_status, run_status, report_text, raw_response, fetched_at FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at ASC, id ASC`
     )
     .bind(id)
-    .all<{ agent_status: string | null; run_status: string | null; report_text: string | null; fetched_at: string }>();
+    .all<{ agent_status: string | null; run_status: string | null; report_text: string | null; raw_response: string; fetched_at: string }>();
   return jsonUtf8({ rows: results ?? [] });
 });
 
@@ -13531,6 +13538,15 @@ app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
     return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
   }
   const cursorResponse: unknown = await res.json().catch(() => null);
+  // HTTPは成功(200)でも本文がJSONとして解析できない場合、cursorResponseは
+  // null(=情報量ゼロ)になる。これを「取得できた」ものとしてstatus_logへ
+  // 記録すると、agent_status等が全てnullの意味の無い行(「未取得」表示)が
+  // 連鎖に積み上がり続けてしまう(実際にこの不具合でユーザーの画面に
+  // 空の行が残った)。JSON解析失敗は通信障害として扱い、記録しない。
+  if (cursorResponse === null) {
+    logger.warn('[cursor-agent] 最新状態取得でCursor APIの応答がJSONとして解析できませんでした', { userId: user.sub, agentId: row.agent_id });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
   const fields = extractCursorAgentFields(cursorResponse);
   await c.env.DB
     .prepare(
