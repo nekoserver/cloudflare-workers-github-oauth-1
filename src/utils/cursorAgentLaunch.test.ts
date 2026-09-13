@@ -6,6 +6,7 @@ import {
   buildCursorAgentRequestBody,
   buildCursorAgentStatusUrl,
   extractCursorAgentId,
+  extractCursorAgentSummaryText,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -160,5 +161,42 @@ describe('extractCursorAgentId', () => {
 
   it('トップレベルにidがあるだけの誤った形(旧実装が想定していた形)ではnullを返す(agent.id以外は信用しない)', () => {
     expect(extractCursorAgentId({ id: 'bc-123', status: 'CREATING' })).toBeNull();
+  });
+});
+
+describe('extractCursorAgentSummaryText', () => {
+  // Cursor APIの完了後レスポンスの正確な形が未確認(会話ログ専用エンドポイントの
+  // 存在も未確認)なため、想定されるフィールド名を優先順位付きで探し、
+  // 最初に見つかった非空文字列を返す(見つからなければnull。存在しないものを
+  // でっち上げない)。フィールド名が確定次第、優先順位リストを更新する。
+  it('agent.summaryを最優先で返す', () => {
+    const response = { agent: { summary: '昨日のコミットは3件でした', result: '別の内容' } };
+    expect(extractCursorAgentSummaryText(response)).toBe('昨日のコミットは3件でした');
+  });
+
+  it('agent.summaryが無ければagent.resultを返す', () => {
+    const response = { agent: { result: '結果テキスト' } };
+    expect(extractCursorAgentSummaryText(response)).toBe('結果テキスト');
+  });
+
+  it('agent配下に無ければagent.output、それも無ければagent.reportを探す', () => {
+    expect(extractCursorAgentSummaryText({ agent: { output: '出力テキスト' } })).toBe('出力テキスト');
+    expect(extractCursorAgentSummaryText({ agent: { report: 'レポートテキスト' } })).toBe('レポートテキスト');
+  });
+
+  it('agent配下に見つからなければトップレベルのsummary・run.summaryも探す', () => {
+    expect(extractCursorAgentSummaryText({ summary: 'トップレベルの要約' })).toBe('トップレベルの要約');
+    expect(extractCursorAgentSummaryText({ run: { summary: 'runの要約' } })).toBe('runの要約');
+  });
+
+  it('該当フィールドが1つも無ければnullを返す(でっち上げない)', () => {
+    expect(extractCursorAgentSummaryText({ agent: { id: 'bc-1', status: 'RUNNING' } })).toBeNull();
+    expect(extractCursorAgentSummaryText({})).toBeNull();
+    expect(extractCursorAgentSummaryText(null)).toBeNull();
+  });
+
+  it('該当フィールドが空文字・非文字列の場合はでっち上げず次の候補を探す', () => {
+    expect(extractCursorAgentSummaryText({ agent: { summary: '', result: '結果テキスト' } })).toBe('結果テキスト');
+    expect(extractCursorAgentSummaryText({ agent: { summary: 123 } })).toBeNull();
   });
 });

@@ -114,3 +114,36 @@ export function extractCursorAgentId(cursorResponse: unknown): string | null {
   const id = (agent as { id?: unknown }).id;
   return typeof id === 'string' ? id : null;
 }
+
+function readNonEmptyStringField(obj: unknown, field: string): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const value = (obj as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Cursor APIレスポンスからAgentが実際に生成したレポート本文らしきものを
+ * 抜き出す。Cursor Agents APIが完了後の応答でどのフィールド名を使うのか
+ * (専用の会話ログエンドポイントが別に存在するのかも含め)未確認のため、
+ * 想定されるフィールド名を優先順位付きで探索し、最初に見つかった非空文字列を
+ * 返す。1つも見つからなければnull(存在しないものをでっち上げない)。
+ * 正式なフィールド名・エンドポイントが確認でき次第、この探索順を更新する。
+ */
+export function extractCursorAgentSummaryText(cursorResponse: unknown): string | null {
+  if (!cursorResponse || typeof cursorResponse !== 'object') return null;
+  const agent = (cursorResponse as { agent?: unknown }).agent;
+  const run = (cursorResponse as { run?: unknown }).run;
+  const candidates: Array<[unknown, string]> = [
+    [agent, 'summary'],
+    [agent, 'result'],
+    [agent, 'output'],
+    [agent, 'report'],
+    [cursorResponse, 'summary'],
+    [run, 'summary'],
+  ];
+  for (const [obj, field] of candidates) {
+    const text = readNonEmptyStringField(obj, field);
+    if (text) return text;
+  }
+  return null;
+}

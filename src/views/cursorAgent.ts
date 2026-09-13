@@ -121,7 +121,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
     問答履歴
     <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
   </div>
-  <input type="search" id="agentHistorySearch" placeholder="リポジトリ・プロンプト・応答を検索..." style="margin-bottom:8px;">
+  <input type="search" id="agentHistorySearch" placeholder="リポジトリ・Agent ID・プロンプト・応答を検索..." style="margin-bottom:8px;">
   <div id="agentHistoryBody">
     <div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>
   </div>
@@ -150,7 +150,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
   // 生JSONはdetails/summaryで折りたたんで併記する(agent.name等は外部API
   // からの非信頼入力のため、innerHTMLではなくDOM API+textContentで組み立て、
   // hrefもhttps://始まりのみ許可する)。
-  function renderCursorResponse(data) {
+  function renderCursorResponse(data, reportText) {
     resultEl.innerHTML = '';
     var agent = data && data.agent;
     var run = data && data.run;
@@ -174,6 +174,27 @@ textarea:focus, select:focus { border-color: var(--accent); }
     if (run && run.status) statusParts.push('Run: ' + run.status);
     statusLine.textContent = statusParts.join(' / ');
     card.appendChild(statusLine);
+
+    // Agentが実際に生成したレポート本文(reportText)が取得できていれば、
+    // 制御情報(status等)より前面に、本文として最も目立つ位置に表示する。
+    // 見つからない場合は「未取得」と明示し、あたかも本文が無いかのように
+    // 空欄のまま黙って見せない(でっち上げず、状態を伝える)。
+    var reportBox = document.createElement('div');
+    reportBox.style.marginTop = '8px';
+    reportBox.style.marginBottom = '8px';
+    reportBox.style.padding = '10px';
+    reportBox.style.border = '1px solid var(--border)';
+    reportBox.style.borderRadius = '6px';
+    reportBox.style.whiteSpace = 'pre-wrap';
+    reportBox.style.wordBreak = 'break-word';
+    if (reportText) {
+      reportBox.textContent = reportText;
+    } else {
+      reportBox.style.color = 'var(--text-muted)';
+      reportBox.style.fontSize = '11px';
+      reportBox.textContent = 'レポート本文はまだ取得できていません(Agentが実行中か、応答にレポートらしきフィールドが含まれていません)。「最新状態を取得」で再取得してください。';
+    }
+    card.appendChild(reportBox);
 
     if (typeof agent.url === 'string' && agent.url.indexOf('https://') === 0) {
       var link = document.createElement('a');
@@ -220,7 +241,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
           showError((res.data && res.data.error) || ('起動に失敗しました: HTTP ' + res.status));
           return;
         }
-        renderCursorResponse(res.data.cursorResponse);
+        renderCursorResponse(res.data.cursorResponse, res.data.reportText);
         if (res.data.historySaved === false) {
           showError('⚠️ Agentの起動には成功しましたが、問答履歴の保存に失敗しました(D1のcursor_agent_launch_logテーブル未作成の可能性があります)');
         }
@@ -288,8 +309,13 @@ textarea:focus, select:focus { border-color: var(--accent); }
           return;
         }
         var text = JSON.stringify(res.data.cursorResponse);
-        tdResponse.textContent = text;
-        allHistoryRows.forEach(function(r) { if (r.id === id) r.cursor_response = text; });
+        tdResponse.textContent = res.data.reportText || text;
+        allHistoryRows.forEach(function(r) {
+          if (r.id === id) {
+            r.cursor_response = text;
+            r.report_text = res.data.reportText;
+          }
+        });
       })
       .catch(function(err) {
         window.alert('通信エラー: ' + ((err && err.message) || '不明'));
@@ -308,7 +334,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
     }
     var table = document.createElement('table');
     table.className = 'history-table';
-    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>プロンプト</th><th>応答</th><th></th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>日時(JST)</th><th>リポジトリ</th><th>Agent ID</th><th>プロンプト</th><th>応答</th><th></th></tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(row) {
       var tr = document.createElement('tr');
@@ -316,12 +342,25 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdDate.textContent = formatJstFromUtcString(row.created_at);
       var tdRepo = document.createElement('td');
       tdRepo.textContent = row.repo_full_name;
+      var tdAgentId = document.createElement('td');
+      if (row.agent_id) {
+        var agentLink = document.createElement('a');
+        agentLink.href = 'https://cursor.com/agents/' + encodeURIComponent(row.agent_id);
+        agentLink.target = '_blank';
+        agentLink.rel = 'noopener noreferrer';
+        agentLink.textContent = row.agent_id;
+        tdAgentId.appendChild(agentLink);
+      } else {
+        tdAgentId.textContent = '(未記録)';
+      }
       var tdPrompt = document.createElement('td');
       tdPrompt.className = 'history-prompt';
       tdPrompt.textContent = row.prompt;
       var tdResponse = document.createElement('td');
       tdResponse.className = 'history-response';
-      tdResponse.textContent = row.cursor_response;
+      // report_text(Agentが実際に生成したレポート本文)が取得できていれば
+      // それを表示し、見つかっていなければ生の応答JSONにフォールバックする。
+      tdResponse.textContent = row.report_text || row.cursor_response;
       var tdActions = document.createElement('td');
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'history-refresh-btn';
@@ -336,6 +375,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdActions.appendChild(deleteBtn);
       tr.appendChild(tdDate);
       tr.appendChild(tdRepo);
+      tr.appendChild(tdAgentId);
       tr.appendChild(tdPrompt);
       tr.appendChild(tdResponse);
       tr.appendChild(tdActions);
@@ -346,15 +386,17 @@ textarea:focus, select:focus { border-color: var(--accent); }
     historyBodyEl.appendChild(table);
   }
 
-  // リポジトリ・プロンプト・応答のいずれかに検索語(大文字小文字を区別しない)を
-  // 含む行だけを残す。検索語が空の場合は全件を返す。
+  // リポジトリ・Agent ID・プロンプト・応答のいずれかに検索語(大文字小文字を
+  // 区別しない)を含む行だけを残す。検索語が空の場合は全件を返す。
   function filterHistoryRows(rows, query) {
     var q = (query || '').trim().toLowerCase();
     if (!q) return rows;
     return rows.filter(function(row) {
       return (row.repo_full_name || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.agent_id || '').toLowerCase().indexOf(q) !== -1 ||
         (row.prompt || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.cursor_response || '').toLowerCase().indexOf(q) !== -1;
+        (row.cursor_response || '').toLowerCase().indexOf(q) !== -1 ||
+        (row.report_text || '').toLowerCase().indexOf(q) !== -1;
     });
   }
 
