@@ -230,6 +230,14 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('commError');
     expect(html).toContain('status-badge');
   });
+
+  it('モーダルのタイムライン各エントリに生データ(raw_response)を必ず表示する(report_text抽出漏れでも読めるようにするため)', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('row.raw_response');
+    expect(html).toContain('生データ(JSON)を見る');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -501,6 +509,23 @@ describe('GET /api/cursor-agent/history/:id/timeline', () => {
     expect(data.rows[1].report_text).toBe('最終レポート');
   });
 
+  // 対象: 「抽出できたreport_textが無いエントリは画面上で読める情報がゼロに
+  // なり、モーダルの意味が無くなる」という指摘への対応。抽出ロジックの
+  // 精度に関わらず必ずこの場で読めるよう、DBに保存済みのraw_response
+  // (生JSON)を毎エントリに含めて返す。
+  it('各エントリにraw_response(生JSON)を含める(report_textが未抽出でも生データをこの場で読めるようにするため)', async () => {
+    const db = setupDb();
+    const launchId = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: '日次報告して', agentId: 'bc-1',
+      agentStatus: 'RUNNING', runStatus: 'RUNNING', reportText: null,
+      rawResponse: { agent: { id: 'bc-1', status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00',
+    });
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${launchId}/timeline`, { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    const data = await res.json() as { rows: Array<{ raw_response: string }> };
+    expect(JSON.parse(data.rows[0].raw_response)).toEqual({ agent: { id: 'bc-1', status: 'RUNNING' } });
+  });
+
   it('他ユーザーの起動には404を返す', async () => {
     const db = setupDb();
     const launchId = insertLaunchWithStatus(db, {
@@ -625,6 +650,27 @@ describe('POST /api/cursor-agent/history/:id/refresh', () => {
     const db = setupDb();
     const id = insertLaunchWithStatus(db, { userId: 'user1', prompt: 'READMEを直して', agentId: 'bc_1', agentStatus: 'RUNNING', rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00' });
     const fetchMock = vi.fn().mockResolvedValue(new Response('Not Found', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, { method: 'POST', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(502);
+
+    const statusRows = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_status_log WHERE launch_id = ?').get(id) as { c: number };
+    expect(statusRows.c).toBe(1);
+  });
+
+  // 対象: 「未取得」(agent_status等が全てnull)の空のstatus_log行がモーダルの
+  // タイムラインに増えていく不具合。HTTP自体は200でも本文がJSONとして
+  // 解析できない(空・不正な形式)場合、cursorResponseがnullになり
+  // extractCursorAgentFieldsも全てnullを返す。これを「取得できた」ものとして
+  // status_logへ記録すると、情報量ゼロの行が連鎖に積み上がり続ける
+  // (ユーザー報告: 「未取得」の行が意味の無いまま残る)。
+  // JSON解析に失敗した場合は通信障害として扱い、status_logへは記録しない。
+  it('Cursor APIがHTTP 200でもJSONとして解析できない応答を返した場合はstatus_logに記録せずエラーを返す(空の「未取得」行を積み上げない)', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, { userId: 'user1', prompt: 'READMEを直して', agentId: 'bc_1', agentStatus: 'RUNNING', rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00' });
+    const fetchMock = vi.fn().mockResolvedValue(new Response('not json', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const auth = await makeAuthHeader('user1');
