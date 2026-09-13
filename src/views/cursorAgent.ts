@@ -78,6 +78,11 @@ textarea:focus, select:focus { border-color: var(--accent); }
   color: var(--danger); font-size: 11px; padding: 3px 8px; cursor: pointer;
 }
 .history-delete-btn:disabled { opacity: .5; cursor: not-allowed; }
+.history-refresh-btn {
+  background: transparent; border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--accent); font-size: 11px; padding: 3px 8px; cursor: pointer;
+}
+.history-refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
 #agentHistorySearch {
   width: 100%; background: var(--input-bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px;
@@ -271,6 +276,30 @@ textarea:focus, select:focus { border-color: var(--accent); }
       });
   }
 
+  function refreshHistoryRow(id, btn, tdResponse) {
+    btn.disabled = true;
+    var origText = btn.textContent;
+    btn.textContent = '取得中...';
+    fetch('/api/cursor-agent/history/' + encodeURIComponent(id) + '/refresh', { method: 'POST', credentials: 'same-origin' })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (res.status !== 200) {
+          window.alert('最新状態の取得に失敗しました: ' + ((res.data && res.data.error) || ('HTTP ' + res.status)));
+          return;
+        }
+        var text = JSON.stringify(res.data.cursorResponse);
+        tdResponse.textContent = text;
+        allHistoryRows.forEach(function(r) { if (r.id === id) r.cursor_response = text; });
+      })
+      .catch(function(err) {
+        window.alert('通信エラー: ' + ((err && err.message) || '不明'));
+      })
+      .then(function() {
+        btn.disabled = false;
+        btn.textContent = origText;
+      });
+  }
+
   function renderHistory(rows) {
     if (!rows || rows.length === 0) {
       historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">' +
@@ -294,10 +323,16 @@ textarea:focus, select:focus { border-color: var(--accent); }
       tdResponse.className = 'history-response';
       tdResponse.textContent = row.cursor_response;
       var tdActions = document.createElement('td');
+      var refreshBtn = document.createElement('button');
+      refreshBtn.className = 'history-refresh-btn';
+      refreshBtn.textContent = '最新状態を取得';
+      refreshBtn.style.marginRight = '6px';
+      refreshBtn.addEventListener('click', function() { refreshHistoryRow(row.id, refreshBtn, tdResponse); });
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'history-delete-btn';
       deleteBtn.textContent = '削除';
       deleteBtn.addEventListener('click', function() { deleteHistoryRow(row.id, deleteBtn); });
+      tdActions.appendChild(refreshBtn);
       tdActions.appendChild(deleteBtn);
       tr.appendChild(tdDate);
       tr.appendChild(tdRepo);

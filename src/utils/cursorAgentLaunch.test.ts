@@ -4,6 +4,7 @@ import {
   validateCursorAgentLaunchRequest,
   formatCursorAgentValidationError,
   buildCursorAgentRequestBody,
+  buildCursorAgentStatusUrl,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -120,5 +121,15 @@ describe('buildCursorAgentRequestBody', () => {
   it('プロンプトはトリムしてから埋め込む', () => {
     const body = buildCursorAgentRequestBody('  猫を直して  ', 'nekoserver/cloudflare-workers-github-oauth-1');
     expect(body.prompt.text).toBe('猫を直して');
+  });
+});
+
+describe('buildCursorAgentStatusUrl', () => {
+  it('GET /v1/agents/{id}のURLを組み立てる(起動後の最新状態・結果を取得し直すため)', () => {
+    expect(buildCursorAgentStatusUrl('bc-123')).toBe('https://api.cursor.com/v1/agents/bc-123');
+  });
+
+  it('agent_idをURLエンコードする', () => {
+    expect(buildCursorAgentStatusUrl('bc/../123')).toBe('https://api.cursor.com/v1/agents/bc%2F..%2F123');
   });
 });

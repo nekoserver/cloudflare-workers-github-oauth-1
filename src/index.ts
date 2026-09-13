@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13405,6 +13405,51 @@ app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
     .run();
   if (!result.meta.changes) return jsonUtf8({ error: '見つかりません' }, 404);
   return jsonUtf8({ deleted: true });
+});
+
+/**
+ * launch直後にD1へ保存されるcursor_responseは、Agentがまだ実行中(RUNNING等)の
+ * 制御情報でしかなく、実際の作業結果(完了後の状態)ではない。このAPIで
+ * Cursor APIのGET /v1/agents/{id}へ問い合わせ直し、D1の記録を最新状態へ
+ * 更新した上で呼び出し元(ブラウザ)へそのまま返す(=結果はアプリ内部だけに
+ * 溜め込まず、呼び出し元に返す)。
+ */
+app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  if (!c.env.CURSOR_API_KEY) {
+    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
+  }
+  const row = await c.env.DB
+    .prepare(`SELECT agent_id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ agent_id: string | null }>();
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+  if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため最新状態を取得できません' }, 400);
+
+  let res: Response;
+  try {
+    res = await fetch(buildCursorAgentStatusUrl(row.agent_id), {
+      headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 最新状態の取得に失敗', { userId: user.sub, agentId: row.agent_id, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] 最新状態取得でCursor APIエラー応答', { userId: user.sub, agentId: row.agent_id, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const cursorResponse: unknown = await res.json().catch(() => null);
+  await c.env.DB
+    .prepare(`UPDATE cursor_agent_launch_log SET cursor_response = ? WHERE id = ? AND user_id = ?`)
+    .bind(JSON.stringify(cursorResponse), id, user.sub)
+    .run();
+  return jsonUtf8({ cursorResponse });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

@@ -126,6 +126,15 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('filterHistoryRows');
     expect(html).toContain("method: 'DELETE'");
   });
+
+  it('各行に「最新状態を取得」ボタンを持ち、/refreshへPOSTする', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).toContain('refreshHistoryRow');
+    expect(html).toContain('最新状態を取得');
+    expect(html).toContain('/refresh');
+  });
 });
 
 describe('POST /api/cursor-agent/launch', () => {
@@ -331,5 +340,97 @@ describe('DELETE /api/cursor-agent/history/:id', () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/api/cursor-agent/history/999999', { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
     expect(res.status).toBe(404);
+  });
+});
+
+// 対象: POST /api/cursor-agent/history/:id/refresh。
+// launch直後にD1へ保存されるcursor_responseは、Agentがまだ実行中(RUNNING等)の
+// 制御情報でしかなく、実際の作業結果(完了後の状態)ではない。呼び出し元
+// (ブラウザ)が後からこのAPIを叩いて、Cursor APIの最新状態を取得し直し、
+// D1の記録も更新できるようにする。
+//
+// 故障シナリオ:
+//   (1) CURSOR_API_KEY未設定でもCursor APIへ問い合わせようとする
+//   (2) 他ユーザーの履歴行のagent_idに対して問い合わせできてしまう
+//   (3) agent_id自体が記録されていない行に対して問い合わせて例外になる
+//   (4) 取得した最新状態をD1へ反映しない(=結局読み出しても古いまま)
+//   (5) Cursor APIがエラーを返した場合に握りつぶし、D1を不正な内容で上書きする
+describe('POST /api/cursor-agent/history/:id/refresh', () => {
+  it('agent_idでCursor APIへ最新状態を問い合わせ、D1のcursor_responseを更新する', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, 'READMEを直して', 'bc_1', '{"agent":{"status":"RUNNING"}}', '2026-09-13 00:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+
+    const latestStatus = { agent: { id: 'bc_1', status: 'FINISHED', name: '日次報告' } };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(latestStatus), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, {
+      method: 'POST',
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { cursorResponse: unknown };
+    expect(data.cursorResponse).toEqual(latestStatus);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.cursor.com/v1/agents/bc_1');
+
+    const row = db.prepare('SELECT cursor_response FROM cursor_agent_launch_log WHERE id = ?').get(id) as { cursor_response: string };
+    expect(JSON.parse(row.cursor_response)).toEqual(latestStatus);
+  });
+
+  it('CURSOR_API_KEY未設定なら400を返し、Cursor APIを呼ばない', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, 'READMEを直して', 'bc_1', '{"agent":{"status":"RUNNING"}}', '2026-09-13 00:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, { method: 'POST', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('他ユーザーの履歴行は問い合わせできない(404、Cursor APIも呼ばない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('other-user', ALLOWED_REPO, '他人の起動', 'bc_3', '{"agent":{"status":"RUNNING"}}', '2026-09-13 02:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, { method: 'POST', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('Cursor APIがエラーを返した場合はD1を上書きせずエラーを返す(握りつぶさない)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, 'READMEを直して', 'bc_1', '{"agent":{"status":"RUNNING"}}', '2026-09-13 00:00:00');
+    const id = (db.prepare('SELECT id FROM cursor_agent_launch_log').get() as { id: number }).id;
+    const fetchMock = vi.fn().mockResolvedValue(new Response('Not Found', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/refresh`, { method: 'POST', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(502);
+
+    const row = db.prepare('SELECT cursor_response FROM cursor_agent_launch_log WHERE id = ?').get(id) as { cursor_response: string };
+    expect(JSON.parse(row.cursor_response)).toEqual({ agent: { status: 'RUNNING' } });
   });
 });
