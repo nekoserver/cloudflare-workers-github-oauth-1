@@ -6,6 +6,20 @@ const minimalUser = {
   aiChatModel: 'claude-sonnet-4-6',
 };
 
+function routeSource(source: string, routeStart: string): string {
+  const start = source.indexOf(routeStart);
+  if (start < 0) return '';
+  const nextRoute = source.indexOf('\napp.', start + routeStart.length);
+  return source.slice(start, nextRoute < 0 ? undefined : nextRoute);
+}
+
+function namedFunctionSource(source: string, signature: string): string {
+  const start = source.indexOf(signature);
+  if (start < 0) return '';
+  const nextFunction = source.indexOf('\n    function ', start + signature.length);
+  return source.slice(start, nextFunction < 0 ? undefined : nextFunction);
+}
+
 describe('AIチャット詳細パネル: Markdownプレビュー', () => {
   it('parseMd 関数が存在する', () => {
     const html = getAiChatPage(minimalUser);
@@ -246,9 +260,8 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
 
   it('showResultsPanel がキーワード引数を受け取りハイライトを適用する', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function showResultsPanel(');
-    expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 700);
+    const fnBody = namedFunctionSource(html, 'function showResultsPanel(');
+    expect(fnBody).not.toBe('');
     expect(fnBody).toContain('keyword');
     expect(fnBody).toContain('applyKeywordHighlight');
   });
@@ -1401,7 +1414,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 9700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('body.model');
   });
 
@@ -1411,7 +1424,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 9200);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -2079,7 +2092,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2089,7 +2102,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('shareId');
   });
 
@@ -2099,7 +2112,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('userHash');
   });
 
