@@ -1337,7 +1337,7 @@ describe('回答バブル コピーボタン', () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
-    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg)');
+    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults)');
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const copyBtnIdx = fn.indexOf('bubble-copy-btn');
     expect(guardIdx).toBeGreaterThan(-1);
@@ -1350,12 +1350,12 @@ describe('回答バブル コピーボタン', () => {
     const modalIdx = html.indexOf('function renderAiResultInModal(');
     expect(modalIdx).toBeGreaterThan(-1);
     const modalFn = html.slice(modalIdx, modalIdx + 700);
-    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg)');
+    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults)');
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
     const submitFn = html.slice(submitIdx, submitIdx + 3600);
-    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
+    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);");
   });
 });
 
@@ -1438,7 +1438,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
-    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
+    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);");
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
@@ -1473,6 +1473,20 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('searchShares:');
     expect(fn).toContain('searchAiChatShares(');
     expect(fn).toContain('hitCount: results.length');
+  });
+
+  it('index.ts の /api/aichat が searchCursorAgentHistory を渡す（スラッシュコマンド /neko csearch 用、Cursor VM履歴を表示検索して質問文最大30件を返す）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, src.indexOf("if (!c.env.AI)", idx) + 200);
+    expect(fn).toContain('searchCursorAgentHistory:');
+    expect(fn).toContain('queryCursorAgentHistoryWithSearch');
+    expect(fn).toContain('mapCursorAgentHistoryToCsearchItems');
+    expect(fn).toContain('nekoCursorResults:');
+    expect(fn).not.toContain('persistCursorAgentPastLogHits');
   });
 
   it('index.ts の /api/aichat が vectorizedAnswers を渡す（/neko vcount用、aichat_answer_vectorsの件数・総回答数・最大30件の一覧を返す）', () => {

@@ -244,6 +244,14 @@ export function getAiChatPage(user: {
     .search-log-date { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
     .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
+    .csearch-answer-link { color: var(--accent-color, #667eea); cursor: pointer; }
+    .csearch-result-table td { word-break: break-word; white-space: normal; }
+    #cursorAgentAnswerModal .search-log-modal { width: min(840px, 96vw); }
+    #cursorAgentAnswerModalBody {
+      white-space: pre-wrap; word-break: break-word; font-size: 13px;
+      color: var(--text-primary); background: var(--bg-secondary);
+      padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
+    }
 
     .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
@@ -1079,6 +1087,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="cursorAgentAnswerModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" aria-labelledby="cursorAgentAnswerModalTitle">
+      <div class="search-log-head">
+        <span class="search-log-title" id="cursorAgentAnswerModalTitle">回答全文</span>
+        <button class="search-log-close" id="cursorAgentAnswerModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body">
+        <pre id="cursorAgentAnswerModalBody"></pre>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="impressionsSubqueryModal" aria-hidden="true" style="z-index:800;">
     <div class="search-log-modal" style="max-width:480px;" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -1630,6 +1650,111 @@ export function getAiChatPage(user: {
       var td = e.target.closest('td[data-share-id]');
       if (!td) return;
       openHistoryModalByShareId(td.getAttribute('data-share-id'), '[]');
+    });
+
+    var cursorAgentAnswerModal = document.getElementById('cursorAgentAnswerModal');
+    var cursorAgentAnswerModalTitle = document.getElementById('cursorAgentAnswerModalTitle');
+    var cursorAgentAnswerModalClose = document.getElementById('cursorAgentAnswerModalClose');
+    var cursorAgentAnswerModalBody = document.getElementById('cursorAgentAnswerModalBody');
+
+    function formatCursorAgentCsearchAnswerText(payload) {
+      if (payload && typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+      var answers = [];
+      if (payload && Array.isArray(payload.answers)) {
+        payload.answers.forEach(function(a) {
+          if (typeof a === 'string' && a.length > 0) answers.push(a);
+        });
+      }
+      if (answers.length === 0) return 'キャッシュに回答文がありません';
+      var body = answers.join('\\n\\n');
+      if (payload && typeof payload.cacheError === 'string' && payload.cacheError.trim()) {
+        return body + '\\n\\n' + payload.cacheError;
+      }
+      return body;
+    }
+
+    function closeCursorAgentAnswerModal() {
+      cursorAgentAnswerModal.classList.remove('open');
+      cursorAgentAnswerModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openCursorAgentAnswerModal(launchId, question) {
+      cursorAgentAnswerModalTitle.textContent = question || '回答全文';
+      cursorAgentAnswerModalBody.textContent = '読み込み中...';
+      cursorAgentAnswerModal.style.zIndex = String(getNextZ());
+      cursorAgentAnswerModal.classList.add('open');
+      cursorAgentAnswerModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/cursor-agent/history/' + encodeURIComponent(String(launchId)) + '/conversation', { credentials: 'same-origin' })
+        .then(function(res) { return res.json().then(function(data) { return data; }); })
+        .then(function(data) {
+          cursorAgentAnswerModalBody.textContent = formatCursorAgentCsearchAnswerText(data || {});
+        })
+        .catch(function(err) {
+          cursorAgentAnswerModalBody.textContent = '回答の取得に失敗しました: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+
+    function createCsearchAnswerLink(item) {
+      var a = document.createElement('a');
+      a.href = '#';
+      a.className = 'csearch-answer-link';
+      a.textContent = '回答全文';
+      a.setAttribute('data-launch-id', String(item.id));
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCursorAgentAnswerModal(item.id, item.question || '');
+      });
+      return a;
+    }
+
+    function wireCsearchAnswerLinks(el, items) {
+      if (!el || !items || items.length === 0) return;
+      var table = el.querySelector('table');
+      if (!table) {
+        table = document.createElement('table');
+        table.className = 'csearch-result-table';
+        var thead = document.createElement('thead');
+        var headRow = document.createElement('tr');
+        var qHead = document.createElement('th');
+        qHead.textContent = '質問文';
+        var aHead = document.createElement('th');
+        aHead.textContent = '回答全文';
+        headRow.appendChild(qHead);
+        headRow.appendChild(aHead);
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        var tbody = document.createElement('tbody');
+        items.forEach(function(item) {
+          var tr = document.createElement('tr');
+          var qTd = document.createElement('td');
+          qTd.textContent = item.question || '(質問文なし)';
+          var aTd = document.createElement('td');
+          aTd.appendChild(createCsearchAnswerLink(item));
+          tr.appendChild(qTd);
+          tr.appendChild(aTd);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        el.appendChild(table);
+        return;
+      }
+      table.classList.add('csearch-result-table');
+      var rows = table.querySelectorAll('tbody tr');
+      rows.forEach(function(tr, i) {
+        var item = items[i];
+        if (!item) return;
+        var lastTd = tr.cells[tr.cells.length - 1];
+        if (!lastTd) return;
+        lastTd.textContent = '';
+        lastTd.appendChild(createCsearchAnswerLink(item));
+      });
+    }
+
+    cursorAgentAnswerModalClose.addEventListener('click', closeCursorAgentAnswerModal);
+    cursorAgentAnswerModal.addEventListener('click', function(e) { if (e.target === cursorAgentAnswerModal) closeCursorAgentAnswerModal(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && cursorAgentAnswerModal.classList.contains('open')) closeCursorAgentAnswerModal();
     });
 
     searchImpressionsBody.addEventListener('click', function(e) {
@@ -3415,7 +3540,7 @@ export function getAiChatPage(user: {
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
         canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
-        ztKeywordSharesModal: 920,
+        ztKeywordSharesModal: 920, cursorAgentAnswerModal: 700,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3617,7 +3742,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -6678,7 +6803,7 @@ export function getAiChatPage(user: {
       heading.appendChild(btn);
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg) {
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
@@ -6740,13 +6865,16 @@ export function getAiChatPage(user: {
         tokEl.textContent = parts.join(' / ') + ' tokens';
         el.appendChild(tokEl);
       }
+      if (isLocalCommand && nekoCursorResults && nekoCursorResults.length > 0) {
+        wireCsearchAnswerLinks(el, nekoCursorResults);
+      }
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg, nekoCursorResults) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -7034,7 +7162,7 @@ export function getAiChatPage(user: {
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
-            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);
+            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {

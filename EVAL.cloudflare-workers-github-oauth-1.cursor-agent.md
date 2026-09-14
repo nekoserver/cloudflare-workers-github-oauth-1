@@ -20,7 +20,7 @@
 | キャッシュ保存 | 達成（条件付き） | 成功終端だけ保存し、再表示で API を省略できる | 0139 未適用だと本文検索はフォールバック |
 | 応答検索 | 達成 | 入力途中でも本文＋画面列で絞れる | 全文索引なし。件数増で INSTR が重い |
 | 過去応答検索 | 達成 | キーワード×ヒット起動が D1 に残る | 0140 未適用だと `persistError` |
-| AIチャット入力窓からの同一操作 | 未着手 | なし | `/neko search` は `ai_chat_shares` のまま |
+| AIチャット入力窓からの同一操作 | 部分達成 | スラッシュコマンド `/neko csearch` で質問文表＋キャッシュ全文モーダル | 起動と 0140 保存は未着手。`/neko search` は `ai_chat_shares` のまま |
 | ダイナミックワーカーからの同一操作 | 未着手 | なし | `-external` API が無い |
 
 総合: **本体ページ経路のコアは一通り動く（SPEC 実装済み欄は充足）。入口3つのうち1つだけ完了。全体到達はおおよそ 1/3。**
@@ -63,6 +63,7 @@
 | 2026-09-14 03:20 | [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) | 本番 D1 の `no such table: cursor_agent_answer_cache` を SPEC に必載 | 未作成とキャッシュ0件を区別するテスト用文言を固定した |
 | 2026-09-14 03:34 | [`afc8f75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afc8f75) | 0139 欠落時は画面列で再検索。`searchError` は残す。「解除」撤去 | 0140 だけ適用してもインクリメンタルが死ななくなった。空欄化で一覧復帰 |
 | 2026-09-14 04:06 | [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) | 実装済み範囲と入力窓・dynamicneko 到達点を横断 SPEC にまとめる | 次工程の境界（コーパス分離、`user_id` を分裂させない）を文書として得た |
+| 2026-09-14 05:17 | [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) | スラッシュコマンド `/neko csearch` で入力窓から Cursor VM 履歴を表検索し、回答全文をキャッシュモーダルで読む | AIチャット入口の表示検索を得た。起動と 0140 保存は残る |
 
 SPEC への関連コミット追記（`c2ffca8` / `870afe7` / `b542e59` / `4797ef5` / `55d3d2c` / `8a8e0f2` / `510d36a` / `414e58a` / `204ebac`）は機能増ではない。ハッシュを SPEC に残し、後から「いつ入れたか」を辿れるようにした行である。
 
@@ -156,6 +157,7 @@ D1 失敗を 500 にしない判断（[`62fee07`](https://github.com/nekoserver/
 ### 関連コミット
 
 - [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
+- [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) AIチャットに /neko csearch を追加しCursor VM過去ログを表で返す
 
 ### 関連資料
 

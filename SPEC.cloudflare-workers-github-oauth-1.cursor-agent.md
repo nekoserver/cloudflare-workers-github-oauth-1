@@ -16,8 +16,8 @@ D1 `cursor_agent_*` テーブル、および今日以降の AIチャット入力
 
 | 状態 | 内容 |
 |---|---|
-| 実装済み | Cursor API への問い合わせ、会話応答のチャンク抽出・結合、回答キャッシュ保存、応答本文＋画面列の検索、過去ログ検索（キーワード×ヒット起動の保存） |
-| 未実装（本 SPEC の次工程） | AIチャット入力窓から同じ起動・検索・過去検索を行う |
+| 実装済み | Cursor API への問い合わせ、会話応答のチャンク抽出・結合、回答キャッシュ保存、応答本文＋画面列の検索、過去ログ検索（キーワード×ヒット起動の保存）、AIチャット入力窓からの表示検索（スラッシュコマンド `/neko csearch`） |
+| 未実装（本 SPEC の次工程） | AIチャット入力窓からの起動と過去ログ保存 |
 | 未実装（本 SPEC の次工程） | ダイナミックワーカーから同じ起動・検索・過去検索を行う |
 
 入口が違っても、D1 の所有者は GitHub ユーザー（`user_id`）で一意にする。
@@ -255,9 +255,9 @@ JOIN 失敗時は画面の列だけで再検索する。プロンプト等に一
 ## 7. 今日以降: AIチャット入力窓からの Cursor VM 問い合わせと過去検索
 
 **対象**: `/aichat` の入力窓（`src/views/aichat.ts`）、
-`src/utils/aichatSlashCommand.ts` の `/neko` サブコマンド —
+`src/utils/aichatSlashCommand.ts` の `/neko` スラッシュコマンド —
 ログイン済みセッションから、`/cursor-agent` と同じ起動・応答検索・過去ログ検索を
-入力窓で完結させる。**未実装。**
+入力窓で完結させる。検索（`/neko csearch`）は実装済み。起動と過去ログ保存は未実装。
 
 ### 背景
 
@@ -276,16 +276,35 @@ Cursor VM の起動履歴（`cursor_agent_launch_log`）とは別コーパスで
 4. 所有者は JWT の `user.sub`。既存 `/api/cursor-agent/*` と同じ行が見える
 5. コア処理は `cursorAgentLaunch.ts` の既存関数を呼ぶ。ハンドラへコピペしない
 
-### コマンド案（実装時に確定してよい。コーパスは分離する）
+### スラッシュコマンド案（実装時に確定してよい。コーパスは分離する）
 
-| 入力 | 動き | 既存 API 相当 |
-|---|---|---|
-| `/neko cursor <プロンプト>` | VM 起動。許可リポジトリは現状1件なので省略可 | `POST /api/cursor-agent/launch` |
-| `/neko cursor-search <語>` | ヒット件数と一覧（最大件数を決める）。D1 過去ログへは書かない | `GET /api/cursor-agent/history?q=` |
-| `/neko cursor-past <語>` | 同じ検索をしたうえで 0140 へ保存 | `POST .../past-log-search` |
+| 入力 | 動き | 既存 API 相当 | 状態 |
+|---|---|---|---|
+| `/neko cursor <プロンプト>` | VM 起動。許可リポジトリは現状1件なので省略可 | `POST /api/cursor-agent/launch` | 未実装 |
+| `/neko csearch <語>` | ヒットした質問文を表で返す（最大30件）。回答全文は最上位モーダルでキャッシュから読む。0140へは書かない | `queryCursorAgentHistoryWithSearch` + `GET .../history/:id/conversation` | 実装済み |
+| `/neko cursor-past <語>` | 同じ検索をしたうえで 0140 へ保存 | `POST .../past-log-search` | 未実装 |
 
 `/neko search` の意味を Cursor VM 側に付け替えてはいけない。
 AIチャット過去ログ検索は残す。
+
+### 実装済み: `/neko csearch`
+
+**対象**: `/aichat` 入力窓のスラッシュコマンド `/neko csearch <キーワード>`、
+`POST /api/aichat` の `searchCursorAgentHistory`、
+応答バブル内の質問文表、「回答全文」リンク、`#cursorAgentAnswerModal` —
+件数表示の代わりにヒットした起動の質問文（`prompt`）を表にし、
+リンクから `GET /api/cursor-agent/history/:id/conversation` のキャッシュ優先本文を
+最上位モーダルで読む。
+
+#### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | `/neko search` と混ざり `ai_chat_shares` を見る | 別スラッシュコマンド。`searchShares` は呼ばない |
+| 2 | ヒット有無だけ出して質問文が無い | `formatAichatNekoCsearchResults` が質問文表を返す |
+| 3 | 回答全文が AIチャット `historyModal` を開く | `nekoCursorResults` と専用モーダル。`getNextZ()` 登録 |
+| 4 | キャッシュ欠落を空で握りつぶす | モーダルにエラーまたは「キャッシュに回答文がありません」 |
+| 5 | 入力のたびに 0140 へ書く | 表示検索のみ。`persistCursorAgentPastLogHits` は呼ばない |
 
 応答のチャンク結合とキャッシュ書き込みは、起動直後ではなく
 成功終端を確認したあと（既存 conversation 経路）で行う。入力窓から起動した行も
@@ -451,10 +470,12 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 | `src/cursor-agent-past-log-search.test.ts` | POST 過去ログ、0140 未作成 |
 | `src/cursor-agent-history-answer-search-e2e.test.ts` | インクリメンタル、searchError と行の同時表示 |
 | `src/cursor-agent-answer-modal-e2e.test.ts` | Agent ID → モーダル回答 |
+| `src/aichat-slash-csearch.test.ts` | スラッシュコマンド `/neko csearch` の解釈・表整形・タイムアウト |
+| `src/aichat-neko-csearch-modal.test.ts` | 入力窓の質問文表とキャッシュ全文モーダル |
 
 次工程で追加するテストの置き場:
 
-- AIチャット: `aichatSlashCommand` のユニットテスト + 入力窓 E2E
+- AIチャット: 起動と過去ログ保存の slash / E2E
 - dynamicneko: `src/dynamicneko-aichat-external-endpoints.test.ts` と同型の
   Bearer secret / allowlist / login 解決テスト
 
@@ -468,6 +489,7 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 
 - [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
 - [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
+- [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) AIチャットに /neko csearch を追加しCursor VM過去ログを表で返す
 
 ### 関連資料
 
