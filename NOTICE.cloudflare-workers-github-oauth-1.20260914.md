@@ -27,7 +27,9 @@ RUNNING 中の途中回答はキャッシュしない。
 インクリメンタル検索は画面の列（プロンプト・レポート・Agent ID・リポジトリ）で
 継続し、回答本文ヒットだけが 0139 適用後に有効になる。
 本番 D1 の文言は次のとおり。データ破損時とテーブル未設定時のテストに使う。
-`SPEC.cursor-agent.md` へまとめるときも残す。
+[`SPEC.cursor-agent.md`](SPEC.cursor-agent.md) へまとめるときも残す。
+起動から検索までの現状と、AIチャット入力窓・ダイナミックワーカー対応の到達点は
+[`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)。
 
 ```text
 回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
@@ -35,3 +37,14 @@ RUNNING 中の途中回答はキャッシュしない。
 
 過去ログ表(migration 0140)が未作成のまま「過去ログ検索」すると、ヒット一覧は返しつつ
 `persistError` が出る。
+
+## cursor-agent の次工程は AIチャット入力窓とダイナミックワーカー
+
+**対象**: `/aichat` 入力窓と `nekoserver/dynamicneko`。
+
+`/cursor-agent` 単体では起動・チャンク結合・キャッシュ・応答検索・過去ログ検索まで
+できた。入力窓の `/neko search` は `ai_chat_shares` であり Cursor VM 履歴とは別物。
+dynamicneko は Cookie セッションが無いので、aichat/kimi-code の `-external` と同じく
+Bearer secret + Service Binding が必要。launch の `user_id` を
+`dynamicneko-service` にすると本体ページの履歴と分裂する。詳細は
+[`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md) 節7・節8。

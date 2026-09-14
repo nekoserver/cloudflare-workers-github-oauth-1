@@ -63,5 +63,28 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 
 ### 関連
 
+- [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
+- [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
+- [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
+
+## 2. cursor-agent 横断 SPEC に現状と次工程をまとめる
+
+**対象**: [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md) —
+`/cursor-agent` で実装済みの API 問い合わせ・チャンク処理・キャッシュ・応答検索・
+過去ログ検索と、今日以降の AIチャット入力窓・ダイナミックワーカー対応の到達点。
+
+### 背景
+
+日付付き SPEC が機能単位に分かれており、次に足す2経路（入力窓 / dynamicneko）の
+境界が見えにくかった。コーパス混同（`/neko search` = `ai_chat_shares`）と
+`user_id='dynamicneko-service'` での履歴分裂を先に文書化する。
+
+### 関連コミット
+
+- [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
+
+### 関連
+
+- [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
 - [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
