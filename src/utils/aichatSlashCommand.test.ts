@@ -146,7 +146,7 @@ describe('formatAichatSlashCommandHelp', () => {
   it('/neko qsearch の説明は質問IDと最新回答モーダルであると書く', () => {
     const result = formatAichatSlashCommandHelp();
     expect(result).toContain('/neko qsearch');
-    expect(result).toContain('質問IDをパラメータとして');
+    expect(result).toContain('質問IDと言語モデルをパラメータとして');
     expect(result).toContain('最上位モーダル');
   });
 

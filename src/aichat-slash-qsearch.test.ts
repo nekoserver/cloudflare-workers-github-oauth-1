@@ -77,17 +77,17 @@ describe('mapAiChatSharesToQsearchItems', () => {
 });
 
 describe('buildAichatQsearchIdHref / parseAichatQsearchHref', () => {
-  it('質問IDだけをクエリパラメータとして付ける', () => {
+  it('質問IDと言語モデルをクエリパラメータとして付ける', () => {
     const href = buildAichatQsearchIdHref({
       id: 's1',
       question: '東京駅について',
       model: 'llama-3.3-70b-instruct-fp8-fast',
     });
-    expect(href).toBe('#qsearch?id=s1');
+    expect(href).toBe('#qsearch?id=s1&model=llama-3.3-70b-instruct-fp8-fast');
     const parsed = parseAichatQsearchHref(href);
-    expect(parsed).toEqual({ id: 's1' });
+    expect(parsed).toEqual({ id: 's1', model: 'llama-3.3-70b-instruct-fp8-fast' });
     expect(href).not.toContain('question=');
-    expect(href).not.toContain('model=');
+    expect(href).not.toContain('answer=');
   });
 
   it('閉じ括弧を含む質問IDでもhrefの ) でMarkdownリンクが壊れない', () => {

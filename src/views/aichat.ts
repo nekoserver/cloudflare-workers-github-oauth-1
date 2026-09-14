@@ -1859,13 +1859,13 @@ export function getAiChatPage(user: {
       qsearchAnswerModal.setAttribute('aria-hidden', 'true');
     }
 
-    function openQsearchAnswerModal(id) {
+    function openQsearchAnswerModal(id, model) {
       qsearchAnswerModalTitle.textContent = id || '最新の回答';
       qsearchAnswerModalBody.textContent = '読み込み中...';
       qsearchAnswerModal.style.zIndex = String(getNextZ());
       qsearchAnswerModal.classList.add('open');
       qsearchAnswerModal.setAttribute('aria-hidden', 'false');
-      fetch('/api/aichat/qsearch/latest-answer?id=' + encodeURIComponent(id || ''), { credentials: 'same-origin' })
+      fetch('/api/aichat/qsearch/latest-answer?id=' + encodeURIComponent(id || '') + '&model=' + encodeURIComponent(model || ''), { credentials: 'same-origin' })
         .then(function(res) { return res.json().then(function(data) { return data; }); })
         .then(function(data) {
           var payload = data || {};
@@ -1895,7 +1895,7 @@ export function getAiChatPage(user: {
       var params = new URLSearchParams(normalized.slice(prefix.length));
       var id = params.get('id') || '';
       if (!id) return null;
-      return { id: id };
+      return { id: id, model: params.get('model') || '' };
     }
 
     function bindQsearchIdLink(a) {
@@ -1907,7 +1907,7 @@ export function getAiChatPage(user: {
         e.preventDefault();
         e.stopPropagation();
         if (!parsed) return;
-        openQsearchAnswerModal(parsed.id || '');
+        openQsearchAnswerModal(parsed.id || '', parsed.model || '');
       });
     }
 

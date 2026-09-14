@@ -8,17 +8,17 @@ import {
 } from './utils/aichatQsearchLatest';
 
 // 対象: /neko qsearch の質問IDクリックが呼ぶ
-// GET /api/aichat/qsearch/latest-answer?id=
-// 質問IDで種行を特定し、同じ質問文・モデルの過去ログから
-// 1番新しい回答文だけを返す。
+// GET /api/aichat/qsearch/latest-answer?id=&model=
+// 質問IDで種行を特定し、パラメータの言語モデルで過去ログを絞り、
+// 1番新しい回答文だけを返す。回答文はパラメータにしない。
 //
 // 故障シナリオ:
 //   (1) 同じ質問・モデルが複数あるのに古い回答を返す
-//   (2) 別モデルの行を混ぜる
+//   (2) 表の短縮モデル名がフルパスの保存値と一致しない
 //   (3) 改行付き質問の種行から正規化一致する兄弟を拾えない
 //   (4) 削除済み・他ユーザーの行を返す
 //   (5) 見つからない・必須パラメータ欠落を空成功にする
-//   (6) 空モデルの種行から最新兄弟を拾えない
+//   (6) (モデル不明) を空文字のモデルと突き合わせない
 
 interface D1Row {
   [key: string]: unknown;
@@ -100,12 +100,12 @@ describe('findLatestAiChatShareAnswer', () => {
       model: 'gpt-5',
       createdAt: '2026-09-14 12:00:00',
     });
-    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'old'));
+    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'old', 'gpt-5'));
     expect(value.id).toBe('new');
     expect(value.answer).toBe('## 最新\n\n**新しい回答**');
   });
 
-  it('種行とモデルが違う兄弟は混ぜない', async () => {
+  it('表の短縮モデル名はフルパスの保存モデルと一致させ、別モデルは混ぜない', async () => {
     const real = setupDb();
     insertShare(real, {
       id: 's1',
@@ -121,7 +121,12 @@ describe('findLatestAiChatShareAnswer', () => {
       model: 'gpt-5',
       createdAt: '2026-09-14 12:00:00',
     });
-    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 's1'));
+    const value = expectOk(await findLatestAiChatShareAnswer(
+      wrapD1(real),
+      'user1',
+      's1',
+      'llama-3.3-70b-instruct-fp8-fast',
+    ));
     expect(value.id).toBe('s1');
     expect(value.answer).toBe('llamaの回答');
   });
@@ -142,7 +147,7 @@ describe('findLatestAiChatShareAnswer', () => {
       model: 'gpt-5',
       createdAt: '2026-09-14 12:00:00',
     });
-    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 's2'));
+    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 's2', 'gpt-5'));
     expect(value.id).toBe('s2b');
   });
 
@@ -164,12 +169,12 @@ describe('findLatestAiChatShareAnswer', () => {
       model: 'gpt-5',
       createdAt: '2026-09-14 12:01:00',
     });
-    expect(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'del')).toEqual({
+    expect(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'del', 'gpt-5')).toEqual({
       ok: false,
       errorCode: 'not_found',
       detail: '一致する過去ログがありません',
     });
-    expect(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'other')).toEqual({
+    expect(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'other', 'gpt-5')).toEqual({
       ok: false,
       errorCode: 'not_found',
       detail: '一致する過去ログがありません',
@@ -177,13 +182,13 @@ describe('findLatestAiChatShareAnswer', () => {
   });
 
   it('質問IDが空なら missing_params を返し空成功にしない', async () => {
-    const result = await findLatestAiChatShareAnswer(wrapD1(setupDb()), 'user1', '  ');
+    const result = await findLatestAiChatShareAnswer(wrapD1(setupDb()), 'user1', '  ', 'gpt-5');
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.errorCode).toBe('missing_params');
   });
 
-  it('空モデルの種行から同じ空モデルの最新兄弟を返す', async () => {
+  it('(モデル不明) は空のモデル行と突き合わせる', async () => {
     const real = setupDb();
     insertShare(real, {
       id: 'blank',
@@ -199,22 +204,23 @@ describe('findLatestAiChatShareAnswer', () => {
       model: '',
       createdAt: '2026-09-14 12:00:00',
     });
-    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'blank'));
+    const value = expectOk(await findLatestAiChatShareAnswer(wrapD1(real), 'user1', 'blank', '(モデル不明)'));
     expect(value.id).toBe('blank-new');
     expect(value.answer).toBe('モデルなしの新しい回答');
   });
 });
 
 describe('GET /api/aichat/qsearch/latest-answer の配線', () => {
-  it('index.ts が質問IDで findLatestAiChatShareAnswer を呼ぶ', () => {
+  it('index.ts が質問IDと言語モデルで findLatestAiChatShareAnswer を呼ぶ', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.get('/api/aichat/qsearch/latest-answer'");
     expect(idx).toBeGreaterThan(-1);
     const snippet = src.slice(idx, idx + 900);
     expect(snippet).toContain('findLatestAiChatShareAnswer');
     expect(snippet).toContain("c.req.query('id')");
+    expect(snippet).toContain("c.req.query('model')");
     expect(snippet).not.toContain("c.req.query('question')");
-    expect(snippet).not.toContain("c.req.query('model')");
+    expect(snippet).not.toContain("c.req.query('answer')");
     expect(snippet).toContain("errorCode === 'missing_params'");
     expect(src.indexOf("app.get('/api/aichat/shares/:id'")).toBeGreaterThan(idx);
   });

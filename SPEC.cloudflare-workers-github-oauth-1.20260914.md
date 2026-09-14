@@ -214,25 +214,25 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 **対象**: スラッシュコマンド `/neko qsearch` の応答表、`buildAichatQsearchIdHref`、
 `GET /api/aichat/qsearch/latest-answer`、`#qsearchAnswerModal` —
-各行の先頭に質問IDリンクを置き、質問IDをパラメータとして過去ログを検索し、
+各行の先頭に質問IDリンクを置き、質問IDと言語モデルをパラメータとして過去ログを検索し、
 一番新しい回答文だけを最上位モーダルで Markdown 表示する。リンクに下線は付けない。
 
 ### 背景
 
 表に質問文とモデルは出るが、同じ質問・同じモデルの回答が複数あると、どれが最新か分からない。
-行の質問IDを押して、その質問IDで種行を特定し、同じ質問文・同じモデルの最新回答だけを読みたい。
+行の質問IDを押して、その質問IDで種行を特定し、パラメータの言語モデルで最新回答だけを読みたい。
 `/neko search` の結果一覧や `/neko csearch` の Cursor VM モーダルとは混ぜない。
-リンクと API のクエリは質問IDだけにし、質問文やモデル名はサーバ側で種行から解決する。
+リンクと API のクエリは質問IDと言語モデルだけにし、回答文や質問文は載せない。
 
 ### 故障シナリオ
 
 | # | 故障 | 対処 |
 |---|---|---|
-| 1 | 行頭に質問IDリンクが無い | Markdown `[id](#qsearch?id=)` を出し `parseMd` が実アンカーを作る |
+| 1 | 行頭に質問IDリンクが無い | Markdown `[id](#qsearch?id=&model=)` を出し `parseMd` が実アンカーを作る |
 | 2 | リンクに下線が残る | `.qsearch-id-link` を `text-decoration: none` |
 | 3 | `target="_blank"` で別タブへ飛ぶ | 配線時に `target` を外し `preventDefault` する |
-| 4 | 複数ヒットで古い回答を出す | 種行の質問文・モデルで再検索し `ORDER BY created_at DESC LIMIT 1` |
-| 5 | 質問文やモデル名をクエリに載せる | href / API は `id` のみ。種行から質問文とモデルを解決する |
+| 4 | 複数ヒットで古い回答を出す | 種行の質問文とパラメータの言語モデルで再検索し `ORDER BY created_at DESC LIMIT 1` |
+| 5 | 短縮モデル名がフルパスと不一致 | 末尾一致 (`s.model LIKE '%/' \|\| ?`) |
 | 6 | historyModal / csearch モーダルを開く | 専用 `#qsearchAnswerModal` のみ。`getNextZ` に登録 |
 | 7 | 回答が生の `##` `**` のまま | `innerHTML = parseMd(text)`。エラーは `textContent` |
 | 8 | 見つからない・必須欠落を空成功にする | discriminated union。400/404 と案内文 |
@@ -241,9 +241,9 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 | ファイル | 変更概要 |
 |---|---|
-| `src/utils/aichatSlashCommand.ts` | 質問IDリンク、href は `id` のみ、ヘルプ |
-| `src/utils/aichatQsearchLatest.ts` | 質問IDで種行を特定し最新1件を返す |
-| `src/index.ts` | `GET /api/aichat/qsearch/latest-answer?id=` |
+| `src/utils/aichatSlashCommand.ts` | 質問IDリンク、href は `id` と `model`、ヘルプ |
+| `src/utils/aichatQsearchLatest.ts` | 質問IDで種行を特定し、言語モデルで最新1件を返す |
+| `src/index.ts` | `GET /api/aichat/qsearch/latest-answer?id=&model=` |
 | `src/views/aichat.ts` | 下線なしリンク、最上位モーダル、parseMd 描画 |
 
 ### テスト
