@@ -84,3 +84,36 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 - [`002ea48`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/002ea48) AIRPORT_LISTにLKCSを追加しCOUNTRY_BORDERSにアルバニアを補完する
 - [`e5b5b75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e5b5b75) 毎回落ちていたソース照合テストとマスタ契約を現行実装に合わせる
 - [`49914a0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/49914a0) /neko説明は列挙せずhelp案内に揃え、城タップテストのscrollIntoViewを補う
+
+## 3. cursor-agent回答文のMarkdown表示とD1キャッシュ優先
+
+**対象**: `GET /api/cursor-agent/history/:id/conversation`、
+`cursor_agent_answer_cache`、`GET /cursor-agent` の回答モーダル
+(`src/views/cursorAgent.ts`) — Agent IDタップ時の回答文をMarkdown描画し、
+D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断片を1本へまとめて保存する。
+
+### 背景
+
+回答文は `textContent` のまま出てMarkdownにならず、毎回Cursor APIへ問い合わせていた。
+会話はassistant断片が複数に分かれることがある。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | キャッシュがあるのに毎回Cursor APIを呼ぶ | 非空の `answer_text` があれば `source=cache` で返す |
+| 2 | 断片を複数行のままキャッシュする | `mergeCursorAgentConversationAnswers` で1本化 |
+| 3 | user_messageや生JSONをキャッシュする | assistant回答文だけを `answer_text` に保存 |
+| 4 | 空回答をキャッシュして再取得できなくなる | 空はINSERTしない |
+| 5 | キャッシュ表未作成でAPI回答まで落ちる | 読み書き失敗は `cacheError` に残し回答は返す |
+| 6 | Markdownがプレーンテキストのまま | `parseMd` + `.preview-area` |
+| 7 | 生HTMLをinnerHTMLしてXSSになる | `parseMd` 内の `esc()` 後にだけ innerHTML |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/cursorAgentLaunch.ts` | 回答断片の結合関数を追加 |
+| `src/index.ts` | キャッシュ優先の会話API、削除時のキャッシュ削除、0139登録 |
+| `src/views/cursorAgent.ts` | 回答欄を parseMd でMarkdown描画 |
+| `migrations/0139_create_cursor_agent_answer_cache.sql` | キャッシュテーブル |

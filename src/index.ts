@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -546,6 +546,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'kimi_code_markdown_snippets', migration: '0136', description: '/kimi-codeページの「📝 Markdownとして保存」ボタンで、生成されたコード(言語問わず)をMarkdown化して保存したもの。/kimi-code/markdown/:idで閲覧でき、Rubyコードブロックはその場でWASM実行できる', syncPolicy: 'auto' },
   { name: 'cursor_agent_launch_log', migration: '0137', description: '/cursor-agentページからCursor Background Agent APIを起動したプロンプト・レスポンス(問答ペア)の履歴。AIチャットのai_chat_sharesと同様、後から一覧・詳細を読み出せる', syncPolicy: 'auto' },
   { name: 'cursor_agent_status_log', migration: '0138', description: 'cursor_agent_launch_log 1件(1回の起動)に対する状態取得履歴(初回起動時・以後の「最新状態を取得」のたびに追記。上書きせず連鎖として保持する。ruby_wasm_snippet_verificationsと同じ親子パターン)', syncPolicy: 'auto' },
+  { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2134,6 +2135,13 @@ CREATE TABLE IF NOT EXISTS cursor_agent_status_log (
   fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_status_log_launch ON cursor_agent_status_log(launch_id, fetched_at);`,
+  '0139': `CREATE TABLE IF NOT EXISTS cursor_agent_answer_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  launch_id INTEGER NOT NULL UNIQUE REFERENCES cursor_agent_launch_log(id),
+  answer_text TEXT NOT NULL,
+  cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_answer_cache(launch_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2387,6 +2395,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
   cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
   cursor_agent_status_log: { id: 'pk', launch_id: 'fk+idx' },
+  cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2517,6 +2526,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   kimi_code_markdown_snippets: 'ai',
   cursor_agent_launch_log: 'ai',
   cursor_agent_status_log: 'ai',
+  cursor_agent_answer_cache: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2642,6 +2652,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   kimi_code_markdown_snippets: { user_id: 'user_sessions' },
   cursor_agent_launch_log: { user_id: 'user_sessions' },
   cursor_agent_status_log: { launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_answer_cache: { launch_id: 'cursor_agent_launch_log' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -13495,6 +13506,12 @@ app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
     .bind(id, user.sub)
     .first<{ id: number }>();
   if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_answer_cache WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュ削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
   await c.env.DB.prepare(`DELETE FROM cursor_agent_status_log WHERE launch_id = ?`).bind(id).run();
   await c.env.DB.prepare(`DELETE FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`).bind(id, user.sub).run();
   return jsonUtf8({ deleted: true });
@@ -13559,9 +13576,10 @@ app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
 });
 
 /**
- * /cursor-agent ページのAgent IDタップ用。Cursorアプリ
- * (https://cursor.com/agents/{id})に表示される会話と同じ内容を
- * GET /v0/agents/{id}/conversation から取得し、assistantの回答文だけを返す。
+ * /cursor-agent ページのAgent IDタップ用。
+ * まず cursor_agent_answer_cache を見、回答文があれば Cursor API は呼ばない。
+ * キャッシュが空のときだけ GET /v0/agents/{id}/conversation を呼び、
+ * assistant の断片を1本の回答文にまとめてキャッシュへ書く。
  * 他ユーザーの起動・agent_id未記録・API失敗は握りつぶさない。
  */
 app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) => {
@@ -13569,15 +13587,31 @@ app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) 
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
-  if (!c.env.CURSOR_API_KEY) {
-    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
-  }
   const row = await c.env.DB
     .prepare(`SELECT agent_id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
     .bind(id, user.sub)
     .first<{ agent_id: string | null }>();
   if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
   if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため会話を取得できません' }, 400);
+
+  let cacheError: string | undefined;
+  try {
+    const cached = await c.env.DB
+      .prepare(`SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?`)
+      .bind(id)
+      .first<{ answer_text: string | null }>();
+    if (cached && typeof cached.answer_text === 'string' && cached.answer_text.length > 0) {
+      return jsonUtf8({ answers: [cached.answer_text], source: 'cache' });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    cacheError = `回答キャッシュの読み出しに失敗しました: ${message}`;
+    logger.error('[cursor-agent] 回答キャッシュ読み出し失敗', { userId: user.sub, launchId: id, error: message });
+  }
+
+  if (!c.env.CURSOR_API_KEY) {
+    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
+  }
 
   let res: Response;
   try {
@@ -13599,7 +13633,24 @@ app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) 
     logger.warn('[cursor-agent] 会話取得でCursor APIの応答がJSONとして解析できませんでした', { userId: user.sub, agentId: row.agent_id });
     return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
   }
-  return jsonUtf8({ answers: extractCursorAgentConversationAnswers(conversation) });
+  const merged = mergeCursorAgentConversationAnswers(extractCursorAgentConversationAnswers(conversation));
+  if (merged.length > 0) {
+    try {
+      await c.env.DB
+        .prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`)
+        .bind(id, merged)
+        .run();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      cacheError = cacheError
+        ? `${cacheError}; 回答キャッシュの保存に失敗しました: ${message}`
+        : `回答キャッシュの保存に失敗しました: ${message}`;
+      logger.error('[cursor-agent] 回答キャッシュ保存失敗', { userId: user.sub, launchId: id, error: message });
+    }
+  }
+  return jsonUtf8(cacheError
+    ? { answers: merged.length > 0 ? [merged] : [], source: 'api', cacheError }
+    : { answers: merged.length > 0 ? [merged] : [], source: 'api' });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

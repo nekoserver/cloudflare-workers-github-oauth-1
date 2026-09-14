@@ -9,8 +9,9 @@ import { getCursorAgentPage } from './views/cursorAgent';
 // 故障シナリオ:
 //   (1) Agent IDタップが外部遷移のまま残り、モーダルが開かない
 //   (2) 会話APIのanswersがDOMに反映されず、回答欄が「読み込み中」のまま
-//   (3) innerHTMLで回答を流し込み、XSSになる
+//   (3) parseMdを通さず生HTMLをinnerHTMLし、XSSになる
 //   (4) z-indexが未設定で他パネルの裏に隠れる
+//   (5) MarkdownがtextContentのまま出て見出しや太字にならない
 
 let dom: JSDOM | undefined;
 
@@ -52,8 +53,8 @@ function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
 }
 
 describe('E2E: Agent IDタップ → 最上位モーダルに回答文が埋め込まれる', () => {
-  it('会話APIのanswersが #agentDetailAnswerBody にtextContentで描画され、モーダルにz-indexが付く', async () => {
-    const answerText = 'READMEを更新しました';
+  it('会話APIのanswersが #agentDetailAnswerBody にMarkdownとして描画され、モーダルにz-indexが付く', async () => {
+    const answerText = '## 完了\n\n**README**を更新しました';
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/cursor-agent/history')) {
@@ -102,15 +103,57 @@ describe('E2E: Agent IDタップ → 最上位モーダルに回答文が埋め�
 
     await waitFor(() => {
       const body = document.getElementById('agentDetailAnswerBody');
-      return Boolean(body && body.textContent && body.textContent.indexOf(answerText) !== -1);
+      return Boolean(body && body.querySelector('h2') && body.querySelector('strong'));
     });
 
     expect(overlay.hidden).toBe(false);
     expect(Number(overlay.style.zIndex)).toBeGreaterThan(1000);
     const answerBody = document.getElementById('agentDetailAnswerBody') as HTMLElement;
-    expect(answerBody.querySelector('.answer-item')?.textContent).toBe(answerText);
+    const item = answerBody.querySelector('.answer-item');
+    expect(item?.classList.contains('preview-area')).toBe(true);
+    expect(item?.querySelector('h2')?.textContent).toBe('完了');
+    expect(item?.querySelector('strong')?.textContent).toBe('README');
     expect(answerBody.innerHTML).not.toContain('<img');
     expect(document.getElementById('agentDetailModalTitle')?.textContent).toBe('Agent: bc-e2e-1');
+  });
+
+  it('回答に生HTMLがあってもparseMd経由でエスケープされ、imgは作られない', async () => {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/cursor-agent/history')) {
+        return new Response(JSON.stringify({
+          rows: [{
+            id: 9,
+            repo_full_name: 'nekoserver/cloudflare-workers-github-oauth-1',
+            prompt: 'XSS確認',
+            agent_id: 'bc-e2e-xss',
+            created_at: '2026-09-13 10:00:00',
+            agent_status: 'FINISHED',
+            report_text: null,
+            raw_response: '{}',
+          }],
+        }), { status: 200 });
+      }
+      if (url.indexOf('/conversation') !== -1) {
+        return new Response(JSON.stringify({ answers: ['<img src=x onerror=alert(1)>'] }), { status: 200 });
+      }
+      if (url.indexOf('/timeline') !== -1) {
+        return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    dom = buildDom(fetchImpl);
+    const { document } = dom.window;
+    await waitFor(() => Boolean(document.querySelector('.agent-id-link')));
+    (document.querySelector('.agent-id-link') as HTMLButtonElement).click();
+    await waitFor(() => {
+      const body = document.getElementById('agentDetailAnswerBody');
+      return Boolean(body && body.querySelector('.answer-item'));
+    });
+    const answerBody = document.getElementById('agentDetailAnswerBody') as HTMLElement;
+    expect(answerBody.querySelector('img')).toBeNull();
+    expect(answerBody.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 
   it('会話APIが失敗したら空の成功表示にせず、エラーを回答欄へ出す', async () => {

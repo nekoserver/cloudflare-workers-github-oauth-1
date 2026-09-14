@@ -1,4 +1,5 @@
 import { CURSOR_AGENT_ALLOWED_REPOS } from '../utils/cursorAgentLaunch';
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
 
 function escCursorAgent(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -38,6 +39,11 @@ export function getCursorAgentPage(username: string): string {
   --status-yellow-bg: light-dark(#fff8c5, #2b2111);
   --status-red:    light-dark(#cf222e, #f85149);
   --status-red-bg: light-dark(#fff0ee, #2d0e0a);
+  --text-primary: var(--text-strong);
+  --border-color: var(--border);
+  --accent-color: var(--accent);
+  --bg-secondary: var(--panel);
+  --code-bg: var(--input-bg);
 }
 * { box-sizing: border-box; }
 body {
@@ -129,11 +135,13 @@ textarea:focus, select:focus { border-color: var(--accent); }
 .answer-section { margin-bottom: 14px; }
 .answer-section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
 .answer-item {
-  white-space: pre-wrap; word-break: break-word;
+  word-break: break-word;
   border: 1px solid var(--border); border-radius: 6px;
   padding: 10px; margin-bottom: 8px; background: var(--input-bg);
 }
+.answer-item.preview-area { white-space: normal; }
 .answer-empty { color: var(--text-muted); font-size: 12px; }
+${getMarkdownPreviewCSS()}
 </style>
 </head>
 <body>
@@ -186,6 +194,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
 
 <script>
 (function() {
+  ${getMarkdownParserScript()}
   var repoEl = document.getElementById('agentRepo');
   var promptEl = document.getElementById('agentPrompt');
   var launchBtn = document.getElementById('agentLaunchBtn');
@@ -495,8 +504,8 @@ textarea:focus, select:focus { border-color: var(--accent); }
 
   /**
    * Cursorアプリ(https://cursor.com/agents/{id})の会話にある回答文を
-   * 最上位レイヤーのモーダルへ埋め込む。外部遷移せず、textContentで描画する
-   * (非信頼入力をinnerHTMLに流さない)。
+   * 最上位レイヤーのモーダルへ埋め込む。断片は1本にまとめ、parseMdで
+   * Markdownとして描画する。生テキストはparseMd内のesc()で先に逃す。
    */
   function renderConversationAnswers(answers, errorMessage) {
     modalAnswerBody.innerHTML = '';
@@ -507,19 +516,23 @@ textarea:focus, select:focus { border-color: var(--accent); }
       modalAnswerBody.appendChild(err);
       return;
     }
-    if (!answers || answers.length === 0) {
+    var merged = '';
+    if (answers && answers.length) {
+      for (var i = 0; i < answers.length; i++) {
+        if (answers[i]) merged = merged ? merged + '\\n\\n' + answers[i] : answers[i];
+      }
+    }
+    if (!merged) {
       var empty = document.createElement('div');
       empty.className = 'answer-empty';
       empty.textContent = '回答文はまだありません';
       modalAnswerBody.appendChild(empty);
       return;
     }
-    answers.forEach(function(text) {
-      var answer = document.createElement('div');
-      answer.className = 'answer-item';
-      answer.textContent = text;
-      modalAnswerBody.appendChild(answer);
-    });
+    var answer = document.createElement('div');
+    answer.className = 'answer-item preview-area';
+    answer.innerHTML = parseMd(merged);
+    modalAnswerBody.appendChild(answer);
   }
 
   function loadConversationAnswers(row) {

@@ -10,6 +10,7 @@ import {
   extractCursorAgentFields,
   buildCursorAgentConversationUrl,
   extractCursorAgentConversationAnswers,
+  mergeCursorAgentConversationAnswers,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -314,5 +315,28 @@ describe('extractCursorAgentConversationAnswers', () => {
     expect(extractCursorAgentConversationAnswers({})).toEqual([]);
     expect(extractCursorAgentConversationAnswers({ messages: 'nope' })).toEqual([]);
     expect(extractCursorAgentConversationAnswers({ messages: [null, 1, {}] })).toEqual([]);
+  });
+});
+
+// 対象: 会話APIのassistant断片を1本の回答文へまとめる。
+// キャッシュには断片ごとではなく結合後の回答文だけを残す。
+//
+// 故障シナリオ:
+//   (1) 断片を空文字やユーザー発言まで結合してしまう
+//   (2) 区切りなしで連結しMarkdown見出しが壊れる
+describe('mergeCursorAgentConversationAnswers', () => {
+  it('複数の回答断片を空行区切りで1本にまとめる', () => {
+    expect(mergeCursorAgentConversationAnswers([
+      '## 完了',
+      '**README**を更新しました',
+    ])).toBe('## 完了\n\n**README**を更新しました');
+  });
+
+  it('空文字の断片は捨て、残った回答文だけを結合する', () => {
+    expect(mergeCursorAgentConversationAnswers(['', '本文', ''])).toBe('本文');
+  });
+
+  it('断片が無いときは空文字を返す(空キャッシュとして扱う)', () => {
+    expect(mergeCursorAgentConversationAnswers([])).toBe('');
   });
 });
