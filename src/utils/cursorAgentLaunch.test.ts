@@ -15,6 +15,9 @@ import {
   buildCursorAgentHistoryListSql,
   buildCursorAgentAnswerCacheCountSql,
   isCursorAgentSuccessfulTerminal,
+  buildCursorAgentSearchLogUpsertSql,
+  buildCursorAgentSearchHistoryInsertSql,
+  persistCursorAgentPastLogHits,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -410,5 +413,32 @@ describe('buildCursorAgentAnswerCacheCountSql', () => {
     expect(sql).toContain('INNER JOIN cursor_agent_launch_log l ON l.id = a.launch_id');
     expect(sql).toContain('WHERE l.user_id = ?');
     expect(sql).not.toContain('l.prompt');
+  });
+});
+
+describe('cursor-agent過去ログ検索のSQLと保存', () => {
+  it('集計テーブルは (user_id, keyword, launch_id) で UNIQUE upsert する', () => {
+    const sql = buildCursorAgentSearchLogUpsertSql();
+    expect(sql).toContain('INSERT INTO cursor_agent_search_log');
+    expect(sql).toContain('ON CONFLICT(user_id, keyword, launch_id)');
+    expect(sql).toContain('select_count = cursor_agent_search_log.select_count + 1');
+  });
+
+  it('明細テーブルは seq_num をキーワード×起動ごとに採番して追記する', () => {
+    const sql = buildCursorAgentSearchHistoryInsertSql();
+    expect(sql).toContain('INSERT INTO cursor_agent_search_history');
+    expect(sql).toContain('seq_num');
+    expect(sql).toContain('FROM cursor_agent_search_history WHERE user_id = ? AND keyword = ? AND launch_id = ?');
+  });
+
+  it('空キーワードはDBを触らず empty_keyword で返す', async () => {
+    let prepared = 0;
+    const db = { prepare() { prepared += 1; return { bind() { return { async run() { return {}; } }; } }; } };
+    const result = await persistCursorAgentPastLogHits(db, {
+      userId: 'user1', keyword: '   ', launchIds: [1], resultCount: 1, nowIso: '2026-09-14T00:00:00.000Z',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('empty_keyword');
+    expect(prepared).toBe(0);
   });
 });

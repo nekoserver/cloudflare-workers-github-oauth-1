@@ -280,6 +280,106 @@ export function buildCursorAgentAnswerCacheCountSql(): string {
        WHERE l.user_id = ?`;
 }
 
+/**
+ * 過去ログ検索の集計行。AIチャットの aichat_search_log と同じく
+ * (user_id, keyword, ヒットしたレコード) を UNIQUE で結び、再検索では
+ * last_searched_at と select_count だけ更新する。
+ */
+export function buildCursorAgentSearchLogUpsertSql(): string {
+  return `INSERT INTO cursor_agent_search_log
+       (user_id, keyword, launch_id, first_searched_at, last_searched_at, select_count, result_count)
+     VALUES (?, ?, ?, ?, ?, 1, ?)
+     ON CONFLICT(user_id, keyword, launch_id) DO UPDATE SET
+       last_searched_at = excluded.last_searched_at,
+       select_count = cursor_agent_search_log.select_count + 1,
+       result_count = excluded.result_count`;
+}
+
+/**
+ * 過去ログ検索の明細行。同じキーワード×起動を何度完了検索しても
+ * seq_num を増やして追記する(aichat_search_history と同じ)。
+ */
+export function buildCursorAgentSearchHistoryInsertSql(): string {
+  return `INSERT INTO cursor_agent_search_history
+       (user_id, keyword, launch_id, seq_num, searched_at, result_count)
+     VALUES (?, ?, ?,
+       (SELECT COALESCE(COUNT(*), 0) + 1 FROM cursor_agent_search_history WHERE user_id = ? AND keyword = ? AND launch_id = ?),
+       ?, ?)`;
+}
+
+export type CursorAgentPastLogDb = {
+  prepare: (sql: string) => {
+    bind: (...args: unknown[]) => {
+      run: () => Promise<unknown>;
+    };
+  };
+};
+
+export type CursorAgentPastLogPersistErrorCode = 'empty_keyword' | 'persist_failed';
+
+export type CursorAgentPastLogPersistResult =
+  | { ok: true; keyword: string; launchIds: number[]; savedCount: number; resultCount: number }
+  | {
+      ok: false;
+      errorCode: CursorAgentPastLogPersistErrorCode;
+      detail: string;
+      keyword: string;
+      launchIds: number[];
+      savedCount: number;
+      resultCount: number;
+    };
+
+/**
+ * 「過去ログ検索」完了時だけ、キーワードとヒットした起動 id を結びつける。
+ * 空キーワードは INSERT しない。表未作成は persist_failed を返し、空成功にしない。
+ */
+export async function persistCursorAgentPastLogHits(
+  db: CursorAgentPastLogDb,
+  params: {
+    userId: string;
+    keyword: string;
+    launchIds: number[];
+    resultCount: number;
+    nowIso: string;
+  },
+): Promise<CursorAgentPastLogPersistResult> {
+  const keyword = normalizeCursorAgentHistorySearchQuery(params.keyword);
+  const launchIds = params.launchIds.filter((id) => Number.isInteger(id) && id > 0);
+  if (!keyword) {
+    return {
+      ok: false,
+      errorCode: 'empty_keyword',
+      detail: 'keyword は必須です',
+      keyword: '',
+      launchIds,
+      savedCount: 0,
+      resultCount: 0,
+    };
+  }
+  try {
+    for (const launchId of launchIds) {
+      await db.prepare(buildCursorAgentSearchLogUpsertSql())
+        .bind(params.userId, keyword, launchId, params.nowIso, params.nowIso, params.resultCount)
+        .run();
+      await db.prepare(buildCursorAgentSearchHistoryInsertSql())
+        .bind(params.userId, keyword, launchId, params.userId, keyword, launchId, params.nowIso, params.resultCount)
+        .run();
+    }
+    return { ok: true, keyword, launchIds, savedCount: launchIds.length, resultCount: params.resultCount };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      errorCode: 'persist_failed',
+      detail,
+      keyword,
+      launchIds,
+      savedCount: 0,
+      resultCount: params.resultCount,
+    };
+  }
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent

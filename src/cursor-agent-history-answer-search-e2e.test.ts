@@ -2,15 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { getCursorAgentPage } from './views/cursorAgent';
 
-// 対象: /cursor-agent 問答履歴の検索ボタン。
-// インクリメンタルサーチは使わず、明示操作で
-// GET /api/cursor-agent/history?q= 経由で cursor_agent_answer_cache.answer_text
-// をサーバ側検索すること。
+// 対象: /cursor-agent 問答履歴の検索。入力途中はデバウンス付きインクリメンタル
+// で GET /api/cursor-agent/history?q= し、入力完了の「過去ログ検索」は
+// POST /api/cursor-agent/history/past-log-search でキーワードとヒット行を保存する。
 //
 // 故障シナリオ:
-//   (1) inputのたびに再取得し、ページ初期読み込みの一覧応答が検索結果を上書きする
+//   (1) 初期読み込みの遅延応答が後からの検索結果を上書きする
 //   (2) クライアントの filterHistoryRows だけで終わり、APIに q が付かない
-//   (3) プロンプトにだけある語で行が残る
+//   (3) 入力のたびに過去ログへ保存してしまう
 //   (4) searchError を握りつぶして「0件」とだけ出す
 //   (5) キャッシュ0件を「検索が壊れている」と区別できない
 
@@ -86,7 +85,7 @@ const answerHitRow = {
 };
 
 describe('E2E: 問答履歴検索は回答キャッシュをサーバへ問い合わせる', () => {
-  it('入力だけでは検索せず、検索ボタンで ?q= を付けてキャッシュを問い合わせる', async () => {
+  it('入力後デバウンスで ?q= を付けてキャッシュを問い合わせる(キー入力だけでは過去ログへ保存しない)', async () => {
     const fetchUrls: string[] = [];
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -116,16 +115,63 @@ describe('E2E: 問答履歴検索は回答キャッシュをサーバへ問い�
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     await sleep(40);
     expect(fetchUrls.filter((u) => historyPath(u).pathname === '/api/cursor-agent/history').length).toBe(urlsAfterLoad);
-    expect(document.querySelectorAll('.agent-id-link').length).toBe(2);
+    expect(fetchUrls.some((u) => String(u).indexOf('/past-log-search') !== -1)).toBe(false);
 
-    (document.getElementById('agentHistorySearchBtn') as HTMLButtonElement).click();
     await waitFor(() => fetchUrls.some((u) => historyPath(u).q === 'kaleidoscope'));
     await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
 
     const ids = Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent);
     expect(ids).toEqual(['bc-answer-hit', 'bc-prompt-only']);
     expect(fetchUrls.some((u) => u.indexOf('/api/cursor-agent/history?q=' + encodeURIComponent('kaleidoscope')) !== -1)).toBe(true);
+    expect(fetchUrls.some((u) => String(u).indexOf('/past-log-search') !== -1)).toBe(false);
     expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('件ヒット');
+  });
+
+  it('過去ログ検索ボタンは POST し、ヒットした Agent ID を一覧に出す', async () => {
+    const fetchCalls: Array<{ url: string; method: string; body: string }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method || 'GET').toUpperCase();
+      fetchCalls.push({ url, method, body: typeof init?.body === 'string' ? init.body : '' });
+      const { pathname, q } = historyPath(url);
+      if (pathname === '/api/cursor-agent/history/past-log-search' && method === 'POST') {
+        return new Response(JSON.stringify({
+          rows: [answerHitRow],
+          source: 'answer_cache',
+          query: 'kaleidoscope',
+          cacheTotal: 1,
+          savedCount: 1,
+          resultCount: 1,
+        }), { status: 200 });
+      }
+      if (pathname === '/api/cursor-agent/history') {
+        if (q === 'kaleidoscope') {
+          return new Response(JSON.stringify({
+            rows: [answerHitRow],
+            source: 'answer_cache',
+            query: 'kaleidoscope',
+            cacheTotal: 1,
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ rows: [answerHitRow, promptOnlyRow], source: 'launch_log' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    dom = buildDom(fetchImpl);
+    const { document } = dom.window;
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
+
+    const search = document.getElementById('agentHistorySearch') as HTMLInputElement;
+    search.value = 'kaleidoscope';
+    (document.getElementById('agentHistoryPastLogSearchBtn') as HTMLButtonElement).click();
+    await waitFor(() => fetchCalls.some((c) => c.url.indexOf('/past-log-search') !== -1 && c.method === 'POST'));
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 1);
+
+    const post = fetchCalls.find((c) => c.url.indexOf('/past-log-search') !== -1);
+    expect(post?.body).toContain('kaleidoscope');
+    expect(Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent)).toEqual(['bc-answer-hit']);
+    expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('過去ログ');
   });
 
   it('初期読み込みの遅延応答が、後から押したキャッシュ検索の結果を上書きしない', async () => {
