@@ -60,7 +60,7 @@ function wrapD1(db: DatabaseSync) {
   };
 }
 
-function setupDb(withSearchTables = true): DatabaseSync {
+function setupDb(withSearchTables = true, withAnswerCache = true): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec(`
     CREATE TABLE cursor_agent_launch_log (
@@ -83,12 +83,12 @@ function setupDb(withSearchTables = true): DatabaseSync {
       raw_response TEXT NOT NULL,
       fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE TABLE cursor_agent_answer_cache (
+    ${withAnswerCache ? `CREATE TABLE cursor_agent_answer_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       launch_id INTEGER NOT NULL UNIQUE REFERENCES cursor_agent_launch_log(id),
       answer_text TEXT NOT NULL,
       cached_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+    );` : ''}
     CREATE TABLE user_sessions (
       user_id TEXT PRIMARY KEY,
       revoked_at TEXT,
@@ -276,5 +276,25 @@ describe('POST /api/cursor-agent/history/past-log-search', () => {
     expect(data.rows.map((r) => r.id)).toEqual([matchId]);
     expect(data.savedCount).toBe(0);
     expect(data.persistError).toBeTruthy();
+  });
+
+  it('回答キャッシュ表が無くてもプロンプト一致は保存し、searchErrorを残す', async () => {
+    const db = setupDb(true, false);
+    const matchId = insertLaunch(db, 'user1', '表なしのプロンプト', 'bc-miss', '2026-09-14 00:00:00');
+    insertLaunch(db, 'user1', '別件', 'bc-other', '2026-09-14 01:00:00');
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history/past-log-search', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword: '表なし' }),
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { rows: Array<{ id: number }>; searchError?: string; savedCount: number };
+    expect(data.searchError).toContain('回答キャッシュの検索に失敗しました');
+    expect(data.searchError).toContain('no such table: cursor_agent_answer_cache');
+    expect(data.rows.map((r) => r.id)).toEqual([matchId]);
+    expect(data.savedCount).toBe(1);
+    const logRows = db.prepare('SELECT keyword, launch_id FROM cursor_agent_search_log').all() as Array<{ keyword: string; launch_id: number }>;
+    expect(logRows).toEqual([{ keyword: '表なし', launch_id: matchId }]);
   });
 });

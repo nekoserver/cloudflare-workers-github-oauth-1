@@ -13,6 +13,11 @@ import {
   mergeCursorAgentConversationAnswers,
   normalizeCursorAgentHistorySearchQuery,
   buildCursorAgentHistoryListSql,
+  buildCursorAgentHistorySearchBinds,
+  CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT,
+  CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT_WITHOUT_CACHE,
+  isCursorAgentAnswerCacheMissingError,
+  queryCursorAgentHistoryWithSearch,
   buildCursorAgentAnswerCacheCountSql,
   isCursorAgentSuccessfulTerminal,
   buildCursorAgentSearchLogUpsertSql,
@@ -392,6 +397,99 @@ describe('buildCursorAgentHistoryListSql', () => {
     expect(sql).toContain('instr(lower(l.repo_full_name), lower(?)) > 0');
     expect(sql).toContain('WHERE l.user_id = ?');
     expect(sql).not.toContain('INNER JOIN cursor_agent_answer_cache');
+  });
+
+  it('キャッシュJOINなしの検索SQLは画面の列だけをINSTRし、キャッシュ表名を含まない', () => {
+    const sql = buildCursorAgentHistoryListSql(true, false);
+    expect(sql).not.toContain('cursor_agent_answer_cache');
+    expect(sql).not.toContain('answer_text');
+    expect(sql).toContain('instr(lower(l.prompt), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(coalesce(s.report_text, \'\')), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(coalesce(l.agent_id, \'\')), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(l.repo_full_name), lower(?)) > 0');
+  });
+});
+
+describe('buildCursorAgentHistorySearchBinds', () => {
+  it('キャッシュありは user_id のあとに検索語を5回、なしは4回 bind する', () => {
+    expect(CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT).toBe(5);
+    expect(CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT_WITHOUT_CACHE).toBe(4);
+    expect(buildCursorAgentHistorySearchBinds('user1', 'readme')).toEqual(
+      ['user1', 'readme', 'readme', 'readme', 'readme', 'readme'],
+    );
+    expect(buildCursorAgentHistorySearchBinds('user1', 'readme', false)).toEqual(
+      ['user1', 'readme', 'readme', 'readme', 'readme'],
+    );
+  });
+});
+
+describe('isCursorAgentAnswerCacheMissingError', () => {
+  it('本番D1とnode:sqliteのキャッシュ表欠落だけを真にする', () => {
+    expect(isCursorAgentAnswerCacheMissingError(
+      'D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR',
+    )).toBe(true);
+    expect(isCursorAgentAnswerCacheMissingError('no such table: cursor_agent_answer_cache')).toBe(true);
+    expect(isCursorAgentAnswerCacheMissingError('no such table: cursor_agent_search_log')).toBe(false);
+    expect(isCursorAgentAnswerCacheMissingError('D1_ERROR: SQLITE_ERROR')).toBe(false);
+  });
+});
+
+describe('queryCursorAgentHistoryWithSearch', () => {
+  it('キャッシュ表欠落ならJOINなしで再検索し、searchErrorは残す', async () => {
+    const sqls: string[] = [];
+    const db = {
+      prepare(sql: string) {
+        sqls.push(sql);
+        if (sql.includes('cursor_agent_answer_cache')) {
+          throw new Error('D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR');
+        }
+        return {
+          bind() {
+            return {
+              async all() {
+                return { results: [{ id: 7, prompt: '表なし' }] };
+              },
+            };
+          },
+        };
+      },
+    };
+    const result = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string }>(db, 'user1', '表なし');
+    expect(result.searchError).toContain('回答キャッシュの検索に失敗しました');
+    expect(result.searchError).toContain('no such table: cursor_agent_answer_cache');
+    expect(result.rows).toEqual([{ id: 7, prompt: '表なし' }]);
+    expect(sqls[0]).toContain('cursor_agent_answer_cache');
+    expect(sqls[1]).not.toContain('cursor_agent_answer_cache');
+  });
+
+  it('キャッシュ表欠落以外の失敗は空行とsearchErrorだけ返す', async () => {
+    let prepareCount = 0;
+    const db = {
+      prepare() {
+        prepareCount += 1;
+        throw new Error('D1_ERROR: database is locked');
+      },
+    };
+    const result = await queryCursorAgentHistoryWithSearch(db, 'user1', 'readme');
+    expect(result.rows).toEqual([]);
+    expect(result.searchError).toContain('database is locked');
+    expect(prepareCount).toBe(1);
+  });
+
+  it('フォールバック再検索も失敗したら元のsearchErrorを残し空行にする', async () => {
+    const db = {
+      prepare(sql: string) {
+        if (sql.includes('cursor_agent_answer_cache')) {
+          throw new Error('no such table: cursor_agent_answer_cache');
+        }
+        throw new Error('fallback boom');
+      },
+    };
+    const result = await queryCursorAgentHistoryWithSearch(db, 'user1', 'readme');
+    expect(result.rows).toEqual([]);
+    expect(result.searchError).toContain('回答キャッシュの検索に失敗しました');
+    expect(result.searchError).toContain('no such table: cursor_agent_answer_cache');
+    expect(result.searchError).not.toContain('fallback boom');
   });
 });
 
