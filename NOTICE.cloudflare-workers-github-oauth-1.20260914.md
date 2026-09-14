@@ -73,12 +73,12 @@ Bearer secret + Service Binding が必要。launch の `user_id` を
 エラー文字列は Markdown 解釈せず `textContent` のまま出す。`/neko help` の表記は `Cursor VM`
 であり `Cursor VM(courts)` とは書かない。
 
-## `/neko qseqrch` は AIチャット過去ログの質問文表であり `/neko search` とも `/neko csearch` とも違う
+## `/neko qsearch` は AIチャット過去ログの質問文表であり `/neko search` とも `/neko csearch` とも違う
 
-**対象**: スラッシュコマンド `/neko qseqrch <キーワード>`。
+**対象**: スラッシュコマンド `/neko qsearch <キーワード>`。
 
 `/neko search` は同じ `ai_chat_shares` を見るが、応答は件数だけ（一覧はモーダル）。
-`/neko qseqrch` は同じコーパス（質問文・回答文）を検索し、ヒットした質問文と回答モデルを
-チャット本文のMarkdown表にする。サブコマンド名は `qsearch` ではなく `qseqrch`。
+`/neko qsearch` は同じコーパス（質問文・回答文）を検索し、ヒットした質問文と回答モデルを
+チャット本文のMarkdown表にする。`qseqrch` は誤記であり、正式名は `qsearch`。
 `/neko csearch` は Cursor VM 起動履歴なので、キーワードが同じでもヒット集合は一致しない。
 モデル名はフルパスを短くし、欠落は `(モデル不明)`。最大30件（`searchAiChatShares` の LIMIT と同じ）。

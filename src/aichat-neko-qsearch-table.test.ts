@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getAiChatPage } from './views/aichat';
-import { formatAichatNekoQseqrchResults } from './utils/aichatSlashCommand';
+import { formatAichatNekoQsearchResults } from './utils/aichatSlashCommand';
 
-// 対象: /aichat 入力窓のスラッシュコマンド `/neko qseqrch` 応答。
+// 対象: /aichat 入力窓のスラッシュコマンド `/neko qsearch` 応答。
 // 質問文と回答モデルのMarkdown表が応答バブルに出ること。
 // /neko search の件数表示や /neko csearch の Cursor VM 表と混ぜない。
 //
@@ -31,12 +31,12 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
   new Function(scriptSrc)();
   const chatInput = document.getElementById('chatInput') as HTMLTextAreaElement;
   const chatForm = document.getElementById('chatForm') as HTMLFormElement;
-  chatInput.value = '/neko qseqrch 駅';
+  chatInput.value = '/neko qsearch 駅';
   chatForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
-describe('AIチャット(DOM実動作): /neko qseqrch の質問文・モデル表', () => {
+describe('AIチャット(DOM実動作): /neko qsearch の質問文・モデル表', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it('ヒット時は応答バブルに質問文とモデルの表が出る', async () => {
@@ -45,7 +45,7 @@ describe('AIチャット(DOM実動作): /neko qseqrch の質問文・モデル�
       { id: 's2', question: '新幹線について', model: 'gpt-5' },
     ];
     await setupChatSubmitTest({
-      response: formatAichatNekoQseqrchResults('駅', { results }),
+      response: formatAichatNekoQsearchResults('駅', { results }),
       usedModel: 'local/neko',
       nekoResults: null,
     });
@@ -64,7 +64,7 @@ describe('AIチャット(DOM実動作): /neko qseqrch の質問文・モデル�
 
   it('ヒット0件では表を出さない', async () => {
     await setupChatSubmitTest({
-      response: formatAichatNekoQseqrchResults('駅', { results: [] }),
+      response: formatAichatNekoQsearchResults('駅', { results: [] }),
       usedModel: 'local/neko',
     });
     const bubble = document.querySelector('.chat-bubble.assistant') as HTMLElement;
