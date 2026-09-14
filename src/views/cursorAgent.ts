@@ -419,7 +419,10 @@ ${getMarkdownPreviewCSS()}
   // 自動的に最新状態を取得し直してDBへ追記する(=「どのタイミングで
   // チェックして書き込むべきか」への回答: 終了が確定するまでは開くたびに
   // 追記、確定後は読むだけにする)。
-  var TERMINAL_AGENT_STATUSES = ['FINISHED', 'COMPLETED', 'ERROR', 'FAILED', 'CANCELLED'];
+  // IDLE: ステータス確認用エンドポイントが実行中の作業が無いAgentに対して
+  // 返す値(本番実データで確認)。これを終了状態に含めないと、既に完了した
+  // Agentでもページを開くたびに無駄にCursor APIへ問い合わせ続けてしまう。
+  var TERMINAL_AGENT_STATUSES = ['FINISHED', 'COMPLETED', 'IDLE', 'ERROR', 'FAILED', 'CANCELLED'];
 
   function isTerminalStatus(status) {
     return TERMINAL_AGENT_STATUSES.indexOf((status || '').toUpperCase()) !== -1;
@@ -432,6 +435,7 @@ ${getMarkdownPreviewCSS()}
     if (row.commError) return { color: 'red', label: '通信障害' };
     var s = (row.agent_status || '').toUpperCase();
     if (s === 'RUNNING' || s === 'ACTIVE') return { color: 'green', label: row.agent_status };
+    if (s === 'FINISHED' || s === 'COMPLETED' || s === 'IDLE') return { color: 'green', label: row.agent_status };
     return { color: 'yellow', label: row.agent_status || '未取得' };
   }
 

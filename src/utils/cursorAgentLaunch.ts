@@ -110,9 +110,16 @@ export function buildCursorAgentStatusUrl(agentId: string): string {
 export function extractCursorAgentId(cursorResponse: unknown): string | null {
   if (!cursorResponse || typeof cursorResponse !== 'object') return null;
   const agent = (cursorResponse as { agent?: unknown }).agent;
-  if (!agent || typeof agent !== 'object') return null;
-  const id = (agent as { id?: unknown }).id;
-  return typeof id === 'string' ? id : null;
+  if (agent && typeof agent === 'object') {
+    const id = (agent as { id?: unknown }).id;
+    if (typeof id === 'string') return id;
+  }
+  // ステータス確認用エンドポイント(GET /v1/agents/{id})はagentキーで
+  // ラップされず、id等がレスポンスのトップレベルに直接入ったフラットな形で
+  // 返る(起動時レスポンスは{agent:{...}, run:{...}}という入れ子。本番実データで
+  // 確認済み)。agentが無い場合はcursorResponse自体から読む。
+  const topLevelId = (cursorResponse as { id?: unknown }).id;
+  return typeof topLevelId === 'string' ? topLevelId : null;
 }
 
 function readNonEmptyStringField(obj: unknown, field: string): string | null {
@@ -253,7 +260,10 @@ export function isCursorAgentSuccessfulTerminal(
 ): boolean {
   const agent = (agentStatus ?? '').trim().toUpperCase();
   const run = (runStatus ?? '').trim().toUpperCase();
-  return agent === 'FINISHED' || agent === 'COMPLETED' || run === 'COMPLETED';
+  // IDLE: ステータス確認用エンドポイント(GET /v1/agents/{id})が実行中の作業が
+  // 無いAgentに対して返す値(本番実データで確認)。FINISHED/COMPLETEDが
+  // 起動時レスポンス側の値であるのに対し、ステータス確認側はこちらを使う。
+  return agent === 'FINISHED' || agent === 'COMPLETED' || agent === 'IDLE' || run === 'COMPLETED';
 }
 
 /**
@@ -456,11 +466,18 @@ export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFi
   const run = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { run?: unknown }).run
     : null;
-  const url = readNonEmptyStringField(agent, 'url');
+  // ステータス確認用エンドポイント(GET /v1/agents/{id})はagentキーでラップ
+  // されず、status等がレスポンスのトップレベルに直接入ったフラットな形で
+  // 返る(起動時レスポンスは{agent:{...}, run:{...}}という入れ子。本番実データで
+  // 確認済み。runに相当するオブジェクトはこの形には無く、latestRunIdという
+  // ID参照だけが入っている)。agentが無い場合はcursorResponse自体をagent
+  // 相当として読む。
+  const agentLike = (agent && typeof agent === 'object') ? agent : cursorResponse;
+  const url = readNonEmptyStringField(agentLike, 'url');
   return {
     id: extractCursorAgentId(cursorResponse),
-    name: readNonEmptyStringField(agent, 'name'),
-    status: readNonEmptyStringField(agent, 'status'),
+    name: readNonEmptyStringField(agentLike, 'name'),
+    status: readNonEmptyStringField(agentLike, 'status'),
     url: url && url.startsWith('https://') ? url : null,
     runStatus: readNonEmptyStringField(run, 'status'),
     reportText: extractCursorAgentSummaryText(cursorResponse),
