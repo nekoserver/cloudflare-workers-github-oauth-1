@@ -166,3 +166,4 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 ### 関連コミット
 
 - [`245906c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/245906c) cursor-agentの履歴検索を回答キャッシュ本文のサーバ検索へ切り替える
+- [`bc95820`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bc95820) cursor-agent履歴検索からインクリメンタルを外しキャッシュ表だけを明示検索する
