@@ -126,3 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 - `src/aichat-slash-csearch.test.ts`: JST換算、表の3列、Markdownリンク
 - `src/aichat-neko-csearch-modal.test.ts`: `<a href="#csearch-id">表示</a>`、クリックでモーダル、payload欠落時もリンク
 - `src/utils/markdownRenderer.test.ts`: 表内ハッシュリンクが実アンカーになる
+
+### 関連コミット
+
+- [`d944bf8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d944bf8) /neko csearch の操作列を「表示」リンクにし作成時刻(JST)を先頭列へ出す
