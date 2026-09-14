@@ -13518,6 +13518,9 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: message });
+    // 表未作成・破損の確認用。本番D1は
+    // 「回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR」
+    // になる。SPEC.cursor-agent.md に必載。
     return jsonUtf8({
       rows: [],
       source: 'answer_cache',

@@ -162,6 +162,11 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 
 - 回答キャッシュは Agent ID タップ(会話API)のあとで埋まる。未タップの起動は検索対象に入らない
 - 追加のD1マイグレーションは不要(0139の `cursor_agent_answer_cache` を使う)
+- 表未作成・表破損時は空成功にせず、次の `searchError` を出す。データ破損時とテーブル未設定時のテストに使う。`SPEC.cursor-agent.md` へまとめるときもこの文言を残す
+
+```text
+回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
+```
 
 ### 関連コミット
 

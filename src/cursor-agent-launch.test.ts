@@ -663,6 +663,9 @@ describe('GET /api/cursor-agent/history', () => {
   });
 
   it('回答キャッシュ表が無い検索は空成功にせずsearchErrorを返す', async () => {
+    // 本番D1の文言:
+    // 回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
+    // 表未作成とデータ破損の両方の確認に使う。SPEC.cursor-agent.md 必載。
     const db = new DatabaseSync(':memory:');
     db.exec(`
       CREATE TABLE cursor_agent_launch_log (
@@ -702,6 +705,7 @@ describe('GET /api/cursor-agent/history', () => {
     const data = await res.json() as { rows: unknown[]; searchError?: string };
     expect(data.rows).toEqual([]);
     expect(data.searchError).toContain('回答キャッシュの検索に失敗しました');
+    expect(data.searchError).toContain('no such table: cursor_agent_answer_cache');
   });
 });
 
