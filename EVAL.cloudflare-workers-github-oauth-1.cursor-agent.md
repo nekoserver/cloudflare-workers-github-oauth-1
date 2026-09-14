@@ -153,6 +153,12 @@ D1 失敗を 500 にしない判断（[`62fee07`](https://github.com/nekoserver/
 
 **対象**: 仕様と、同日の警告 EVAL。
 
+### 関連コミット
+
+- [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
+
+### 関連資料
+
 - [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
 - [`SPEC.cloudflare-workers-github-oauth-1.20260913.md`](SPEC.cloudflare-workers-github-oauth-1.20260913.md)

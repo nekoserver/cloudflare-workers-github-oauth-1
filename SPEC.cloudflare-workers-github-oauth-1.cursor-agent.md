@@ -467,6 +467,7 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 ### 関連コミット
 
 - [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
+- [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
 
 ### 関連資料
 
