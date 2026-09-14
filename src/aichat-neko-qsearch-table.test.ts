@@ -4,7 +4,7 @@ import { getAiChatPage } from './views/aichat';
 import { formatAichatNekoQsearchResults } from './utils/aichatSlashCommand';
 
 // 対象: /aichat 入力窓のスラッシュコマンド `/neko qsearch` 応答。
-// 質問文と回答モデルのMarkdown表が応答バブルに出ること。
+// 質問ID・質問文・回答モデルのMarkdown表が応答バブルに出ること。
 // /neko search の件数表示や /neko csearch の Cursor VM 表と混ぜない。
 //
 // 故障シナリオ:
@@ -56,6 +56,7 @@ describe('AIチャット(DOM実動作): /neko qsearch の質問文・モデル�
     expect(bubble.textContent).toContain('gpt-5');
     const table = bubble.querySelector('table');
     expect(table).not.toBeNull();
+    expect(table!.textContent).toContain('質問ID');
     expect(table!.textContent).toContain('質問文');
     expect(table!.textContent).toContain('モデル');
     expect(document.querySelector('.neko-results-link')).toBeNull();

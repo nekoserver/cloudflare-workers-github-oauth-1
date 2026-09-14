@@ -245,10 +245,20 @@ export function getAiChatPage(user: {
     .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .csearch-answer-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
+    .qsearch-id-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
     .csearch-result-table .csearch-created-at { white-space: nowrap; color: var(--text-muted, var(--text-secondary)); font-size: 12px; }
     .csearch-result-table td { word-break: break-word; white-space: normal; }
+    .qsearch-result-table td { word-break: break-word; white-space: normal; }
+    .qsearch-result-table .qsearch-id-link { white-space: nowrap; }
     #cursorAgentAnswerModal .search-log-modal { width: min(840px, 96vw); }
     #cursorAgentAnswerModalBody {
+      word-break: break-word; font-size: 13px;
+      color: var(--text-primary); background: var(--bg-secondary);
+      padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
+      white-space: normal;
+    }
+    #qsearchAnswerModal .search-log-modal { width: min(840px, 96vw); }
+    #qsearchAnswerModalBody {
       word-break: break-word; font-size: 13px;
       color: var(--text-primary); background: var(--bg-secondary);
       padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
@@ -1101,6 +1111,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="qsearchAnswerModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" aria-labelledby="qsearchAnswerModalTitle">
+      <div class="search-log-head">
+        <span class="search-log-title" id="qsearchAnswerModalTitle">最新の回答</span>
+        <button class="search-log-close" id="qsearchAnswerModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body">
+        <div id="qsearchAnswerModalBody" class="preview-area"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="impressionsSubqueryModal" aria-hidden="true" style="z-index:800;">
     <div class="search-log-modal" style="max-width:480px;" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -1819,6 +1841,87 @@ export function getAiChatPage(user: {
     cursorAgentAnswerModal.addEventListener('click', function(e) { if (e.target === cursorAgentAnswerModal) closeCursorAgentAnswerModal(); });
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && cursorAgentAnswerModal.classList.contains('open')) closeCursorAgentAnswerModal();
+    });
+
+    var qsearchAnswerModal = document.getElementById('qsearchAnswerModal');
+    var qsearchAnswerModalTitle = document.getElementById('qsearchAnswerModalTitle');
+    var qsearchAnswerModalClose = document.getElementById('qsearchAnswerModalClose');
+    var qsearchAnswerModalBody = document.getElementById('qsearchAnswerModalBody');
+
+    function formatAichatQsearchAnswerText(payload) {
+      if (payload && typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+      if (payload && typeof payload.answer === 'string' && payload.answer.length > 0) return payload.answer;
+      return '回答文がありません';
+    }
+
+    function closeQsearchAnswerModal() {
+      qsearchAnswerModal.classList.remove('open');
+      qsearchAnswerModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openQsearchAnswerModal(question, model) {
+      qsearchAnswerModalTitle.textContent = question || '最新の回答';
+      qsearchAnswerModalBody.textContent = '読み込み中...';
+      qsearchAnswerModal.style.zIndex = String(getNextZ());
+      qsearchAnswerModal.classList.add('open');
+      qsearchAnswerModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/aichat/qsearch/latest-answer?question=' + encodeURIComponent(question || '') + '&model=' + encodeURIComponent(model || ''), { credentials: 'same-origin' })
+        .then(function(res) { return res.json().then(function(data) { return data; }); })
+        .then(function(data) {
+          var payload = data || {};
+          var text = formatAichatQsearchAnswerText(payload);
+          if (typeof payload.error === 'string' && payload.error.trim()) {
+            qsearchAnswerModalBody.textContent = text;
+            return;
+          }
+          qsearchAnswerModalBody.innerHTML = parseMd(text);
+        })
+        .catch(function(err) {
+          qsearchAnswerModalBody.textContent = '回答の取得に失敗しました: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+
+    function parseAichatQsearchHref(href) {
+      if (!href) return null;
+      var normalized = String(href);
+      while (normalized.indexOf('&amp;') !== -1) {
+        normalized = normalized.split('&amp;').join('&');
+      }
+      var prefix = '#qsearch?';
+      if (normalized.indexOf(prefix) !== 0) return null;
+      var params = new URLSearchParams(normalized.slice(prefix.length));
+      var id = params.get('id') || '';
+      var question = params.get('question') || '';
+      var model = params.get('model') || '';
+      if (!id && !question) return null;
+      return { id: id, question: question, model: model };
+    }
+
+    function bindQsearchIdLink(a) {
+      if (!a) return;
+      var parsed = parseAichatQsearchHref(a.getAttribute('href') || '');
+      a.className = 'qsearch-id-link';
+      a.removeAttribute('target');
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!parsed) return;
+        openQsearchAnswerModal(parsed.question || '', parsed.model || '');
+      });
+    }
+
+    function wireQsearchIdLinks(el) {
+      if (!el) return;
+      var table = el.querySelector('table');
+      if (table) table.classList.add('qsearch-result-table');
+      var links = el.querySelectorAll('a[href^="#qsearch"]');
+      links.forEach(function(a) { bindQsearchIdLink(a); });
+    }
+
+    qsearchAnswerModalClose.addEventListener('click', closeQsearchAnswerModal);
+    qsearchAnswerModal.addEventListener('click', function(e) { if (e.target === qsearchAnswerModal) closeQsearchAnswerModal(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && qsearchAnswerModal.classList.contains('open')) closeQsearchAnswerModal();
     });
 
     searchImpressionsBody.addEventListener('click', function(e) {
@@ -3604,7 +3707,7 @@ export function getAiChatPage(user: {
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
         canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
-        ztKeywordSharesModal: 920, cursorAgentAnswerModal: 700,
+        ztKeywordSharesModal: 920, cursorAgentAnswerModal: 700, qsearchAnswerModal: 700,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -6931,6 +7034,7 @@ export function getAiChatPage(user: {
       }
       if (isLocalCommand) {
         wireCsearchAnswerLinks(el, nekoCursorResults || []);
+        wireQsearchIdLinks(el);
       }
       return el;
     }

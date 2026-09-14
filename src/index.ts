@@ -350,6 +350,7 @@ import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/b
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -6377,6 +6378,34 @@ export async function buildAnswerPropagationGraph(
 
   return { nodes, edges };
 }
+
+/**
+ * /neko qsearch の質問IDクリック用。質問文とモデル名で AI 応答過去ログを検索し、
+ * created_at が一番新しい回答文だけを返す。
+ */
+app.get('/api/aichat/qsearch/latest-answer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const question = (c.req.query('question') ?? '').trim();
+  const model = (c.req.query('model') ?? '').trim();
+  try {
+    const result = await findLatestAiChatShareAnswer(
+      c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+      user.sub,
+      question,
+      model,
+    );
+    if (!result.ok) {
+      const status = result.errorCode === 'missing_params' ? 400 : 404;
+      return jsonUtf8({ error: result.detail }, status);
+    }
+    return jsonUtf8(result.value);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('qsearch latest-answer failed', { error: message });
+    return jsonUtf8({ error: '最新回答の取得に失敗しました: ' + message }, 500);
+  }
+});
 
 /**
  * AIチャット共有履歴の全文検索 API（認証が必要）
