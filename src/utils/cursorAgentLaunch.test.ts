@@ -175,8 +175,12 @@ describe('extractCursorAgentId', () => {
     expect(extractCursorAgentId({ agent: null })).toBeNull();
   });
 
-  it('トップレベルにidがあるだけの誤った形(旧実装が想定していた形)ではnullを返す(agent.id以外は信用しない)', () => {
-    expect(extractCursorAgentId({ id: 'bc-123', status: 'CREATING' })).toBeNull();
+  it('agentキーが無くトップレベルにidがある場合はそちらを返す(ステータス確認用エンドポイントGET /v1/agents/{id}の実際のレスポンス形。本番実データで確認済み。起動時レスポンスの{agent:{...}}形とは別)', () => {
+    expect(extractCursorAgentId({ id: 'bc-123', status: 'IDLE' })).toBe('bc-123');
+  });
+
+  it('agentキーがある場合は常にそちらを優先する(agent.id以外のトップレベルidを誤って拾わない)', () => {
+    expect(extractCursorAgentId({ id: 'wrong-id', agent: { id: 'bc-correct' } })).toBe('bc-correct');
   });
 });
 
@@ -263,6 +267,49 @@ describe('extractCursorAgentFields', () => {
     expect(extractCursorAgentFields(null)).toEqual({
       id: null, name: null, status: null, url: null, runStatus: null, reportText: null,
     });
+  });
+
+  it('ステータス確認用エンドポイント(GET /v1/agents/{id})のフラットなレスポンス(agentでラップされない)からもstatus等を抽出する(本番実データで確認済み。起動時レスポンス{agent:{...},run:{...}}とは別形)', () => {
+    // 実際に本番D1のcursor_agent_status_log.raw_responseに記録されていた
+    // 生レスポンス。agentキーによるラップが無く、id/name/status/urlが
+    // トップレベルに直接入っている。これをagent配下だと思って読んでいたため
+    // status/run_statusが常にnullになり、cursor_agent_answer_cacheへの
+    // 書き込みが永久にスキップされ続けていた(実データで発覚)。
+    const statusResponse = {
+      id: 'bc-ce09778b-69b0-4ca6-956b-92502fca800c',
+      name: 'Claude CLI機能一覧',
+      status: 'IDLE',
+      env: { type: 'cloud' },
+      repos: [{ url: 'https://github.com/nekoserver/cloudflare-workers-github-oauth-1' }],
+      workOnCurrentBranch: false,
+      openAsCursorGithubApp: false,
+      skipReviewerRequest: false,
+      url: 'https://cursor.com/agents/bc-ce09778b-69b0-4ca6-956b-92502fca800c',
+      createdAt: '2026-09-14T01:38:09.293Z',
+      updatedAt: '2026-09-14T01:39:40.897Z',
+      latestRunId: 'run-a9918391-e9c1-40c7-9cbb-2dff196af2c0',
+    };
+    const result = extractCursorAgentFields(statusResponse);
+    expect(result.id).toBe('bc-ce09778b-69b0-4ca6-956b-92502fca800c');
+    expect(result.name).toBe('Claude CLI機能一覧');
+    expect(result.status).toBe('IDLE');
+    expect(result.url).toBe('https://cursor.com/agents/bc-ce09778b-69b0-4ca6-956b-92502fca800c');
+    // このフラットな形にはrun相当のオブジェクトが無い(latestRunIdという
+    // ID参照だけ)ため、runStatusは無理に推測せずnullのままにする。
+    expect(result.runStatus).toBeNull();
+  });
+
+  it('起動時レスポンス(agent/runの入れ子)は従来通り優先して読む(フラット形へのフォールバックが入れ子形を壊さないことの確認)', () => {
+    const response = {
+      agent: { id: 'bc-1', status: 'RUNNING', url: 'https://cursor.com/agents/bc-1' },
+      run: { status: 'RUNNING' },
+      // トップレベルにも別のstatusが紛れ込んでいても、agentがある限り
+      // agent側を優先する(フラットへのフォールバックは agent が無い時だけ)。
+      status: 'DUMMY_SHOULD_NOT_BE_USED',
+    };
+    const result = extractCursorAgentFields(response);
+    expect(result.status).toBe('RUNNING');
+    expect(result.runStatus).toBe('RUNNING');
   });
 });
 
@@ -509,13 +556,18 @@ describe('queryCursorAgentHistoryWithSearch', () => {
 });
 
 describe('isCursorAgentSuccessfulTerminal', () => {
-  it('FINISHED/COMPLETEDだけを成功終端とする', () => {
+  it('FINISHED/COMPLETED/IDLEを成功終端とする', () => {
     expect(isCursorAgentSuccessfulTerminal('FINISHED', 'COMPLETED')).toBe(true);
     expect(isCursorAgentSuccessfulTerminal('finished', null)).toBe(true);
     expect(isCursorAgentSuccessfulTerminal(null, 'COMPLETED')).toBe(true);
     expect(isCursorAgentSuccessfulTerminal('RUNNING', 'RUNNING')).toBe(false);
     expect(isCursorAgentSuccessfulTerminal('ERROR', 'FAILED')).toBe(false);
     expect(isCursorAgentSuccessfulTerminal(null, null)).toBe(false);
+  });
+
+  it('IDLE(ステータス確認用エンドポイントが返す、実行中の作業が無い状態)も成功終端とする(本番実データで確認: agent/runの入れ子が無いフラットなレスポンスで観測)', () => {
+    expect(isCursorAgentSuccessfulTerminal('IDLE', null)).toBe(true);
+    expect(isCursorAgentSuccessfulTerminal('idle', null)).toBe(true);
   });
 });
 
