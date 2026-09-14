@@ -203,3 +203,7 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 - `src/aichat-slash-qseqrch.test.ts`: 表整形・Cursor VM非混同・タイムアウト
 - `src/aichat-neko-qseqrch-table.test.ts`: 応答バブルに質問文・モデル表
+
+### 関連コミット
+
+- [`50c40a4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/50c40a4) /neko qseqrch でAIチャット過去ログの質問文と回答モデルを表で返す
