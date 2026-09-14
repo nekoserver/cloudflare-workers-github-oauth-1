@@ -208,3 +208,4 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 ### 関連コミット
 
 - [`50c40a4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/50c40a4) /neko qseqrch でAIチャット過去ログの質問文と回答モデルを表で返す
+- [`2d6aa48`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2d6aa48) /neko qseqrch の誤記を qsearch に直す
