@@ -84,6 +84,14 @@ describe('getMarkdownParserScript', () => {
     expect(html).toContain('2026-09-14 14:50:00');
   });
 
+  it('テーブル内のハッシュリンクはクエリ付きqsearchの質問IDでも実アンカーになる', () => {
+    const parseMd = loadParseMd();
+    const href = '#qsearch?id=s1&question=%E9%A7%85&model=gpt-5';
+    const html = parseMd(`| 質問ID | 質問文 | モデル |\n|---|---|---|\n| [s1](${href}) | 駅 | gpt-5 |`);
+    expect(html).toContain('<a href="#qsearch?id=s1&amp;question=%E9%A7%85&amp;model=gpt-5"');
+    expect(html).toContain('>s1</a>');
+  });
+
   // 対象: AIチャットページ(aichat.ts)がこのユーティリティへ統合される前、独自に
   // 保持していたLaTeXコマンド記号変換機能(mdInlineのlatexMap)。統合の際に機能を
   // 落とさないよう、inline()のesc()呼び出しの直後に同等のロジックを追加した。

@@ -209,3 +209,49 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 - [`50c40a4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/50c40a4) /neko qseqrch でAIチャット過去ログの質問文と回答モデルを表で返す
 - [`2d6aa48`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2d6aa48) /neko qseqrch の誤記を qsearch に直す
+
+## 6. `/neko qsearch` の行頭質問IDから最新回答を最上位モーダルで読む
+
+**対象**: スラッシュコマンド `/neko qsearch` の応答表、`buildAichatQsearchIdHref`、
+`GET /api/aichat/qsearch/latest-answer`、`#qsearchAnswerModal` —
+各行の先頭に質問IDリンクを置き、質問文とモデル名をパラメータとして過去ログを検索し、
+一番新しい回答文だけを最上位モーダルで Markdown 表示する。リンクに下線は付けない。
+
+### 背景
+
+表に質問文とモデルは出るが、同じ質問・同じモデルの回答が複数あると、どれが最新か分からない。
+行の質問IDを押して、その質問文とモデルで `ai_chat_shares` を再検索し、最新の回答だけを読みたい。
+`/neko search` の結果一覧や `/neko csearch` の Cursor VM モーダルとは混ぜない。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 行頭に質問IDリンクが無い | Markdown `[id](#qsearch?id=&question=&model=)` を出し `parseMd` が実アンカーを作る |
+| 2 | リンクに下線が残る | `.qsearch-id-link` を `text-decoration: none` |
+| 3 | `target="_blank"` で別タブへ飛ぶ | 配線時に `target` を外し `preventDefault` する |
+| 4 | 複数ヒットで古い回答を出す | `ORDER BY created_at DESC LIMIT 1` |
+| 5 | 短縮モデル名がフルパスと不一致 | 末尾一致 (`s.model LIKE '%/' \|\| ?`) |
+| 6 | historyModal / csearch モーダルを開く | 専用 `#qsearchAnswerModal` のみ。`getNextZ` に登録 |
+| 7 | 回答が生の `##` `**` のまま | `innerHTML = parseMd(text)`。エラーは `textContent` |
+| 8 | 見つからない・必須欠落を空成功にする | discriminated union。400/404 と案内文 |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/aichatSlashCommand.ts` | 質問IDリンク、href 生成、ヘルプ |
+| `src/utils/aichatQsearchLatest.ts` | 質問文・モデルで最新1件を返す |
+| `src/index.ts` | `GET /api/aichat/qsearch/latest-answer` |
+| `src/views/aichat.ts` | 下線なしリンク、最上位モーダル、parseMd 描画 |
+
+### テスト
+
+- `src/aichat-slash-qsearch.test.ts`: 表の質問IDリンク・href の括弧エスケープ
+- `src/aichat-qsearch-latest-answer.test.ts`: 最新件・短縮モデル・削除行除外
+- `src/aichat-neko-qsearch-modal.test.ts`: 下線なし、APIパラメータ、Markdown、XSS
+
+### 関連コミット
+
+- [`9dca313`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/9dca313) /neko qsearch の行頭質問IDから最新回答を最上位モーダルで開く
+

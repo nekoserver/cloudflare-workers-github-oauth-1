@@ -2,18 +2,21 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   AICHAT_QSEARCH_LIMIT,
   AICHAT_SEARCH_TIMEOUT_MS,
+  buildAichatQsearchIdHref,
   formatAichatNekoQsearchResults,
+  formatAichatQsearchAnswerText,
   formatAichatQsearchModelName,
   formatAichatSlashCommandHelp,
   interpretAichatSlashCommand,
   mapAiChatSharesToQsearchItems,
+  parseAichatQsearchHref,
   type AichatQsearchItem,
   type AichatSearchOutcome,
 } from './utils/aichatSlashCommand';
 
 // 対象: AIチャット入力窓のスラッシュコマンド `/neko qsearch <キーワード>`。
 // AI応答の過去ログ(ai_chat_shares)を質問文・回答文の両方で検索し、
-// ヒットした質問文と回答モデルをMarkdown表で返す。
+// ヒットした質問文と回答モデルをMarkdown表で返す。行頭は質問IDリンク。
 // /neko search は件数のみ。/neko csearch は Cursor VM 履歴であり混ぜない。
 //
 // 故障シナリオ:
@@ -24,6 +27,8 @@ import {
 //   (5) モデル名欠落を空文字で握りつぶす
 //   (6) 検索例外・タイムアウトを握りつぶす
 //   (7) 質問文のパイプでMarkdown表が壊れる
+//   (8) 行頭に質問IDリンクが無く、質問文・モデルをAPIへ渡せない
+//   (9) 最新回答の失敗を空文字で握りつぶす
 
 describe('formatAichatQsearchModelName', () => {
   it('フルパスのモデル名は末尾だけにする', () => {
@@ -71,8 +76,56 @@ describe('mapAiChatSharesToQsearchItems', () => {
   });
 });
 
+describe('buildAichatQsearchIdHref / parseAichatQsearchHref', () => {
+  it('質問IDに質問文とモデルをクエリパラメータとして付ける', () => {
+    const href = buildAichatQsearchIdHref({
+      id: 's1',
+      question: '東京駅について',
+      model: 'llama-3.3-70b-instruct-fp8-fast',
+    });
+    expect(href.startsWith('#qsearch?')).toBe(true);
+    const parsed = parseAichatQsearchHref(href);
+    expect(parsed).toEqual({
+      id: 's1',
+      question: '東京駅について',
+      model: 'llama-3.3-70b-instruct-fp8-fast',
+    });
+  });
+
+  it('閉じ括弧を含む質問文でもhrefの ) でMarkdownリンクが壊れない', () => {
+    const href = buildAichatQsearchIdHref({
+      id: 's9',
+      question: '駅(東京)について',
+      model: 'gpt-5',
+    });
+    expect(href).not.toContain(')');
+    expect(parseAichatQsearchHref(href)?.question).toBe('駅(東京)について');
+  });
+
+  it('qsearch以外のhrefはnullを返す(握りつぶして空文字にしない)', () => {
+    expect(parseAichatQsearchHref('#csearch-11')).toBeNull();
+    expect(parseAichatQsearchHref('')).toBeNull();
+    expect(parseAichatQsearchHref(null)).toBeNull();
+  });
+});
+
+describe('formatAichatQsearchAnswerText', () => {
+  it('回答文があればそれを返す', () => {
+    expect(formatAichatQsearchAnswerText({ answer: '## 結論\n\n**駅**です' })).toBe('## 結論\n\n**駅**です');
+  });
+
+  it('errorがあれば回答文よりエラーを優先し、空にしない', () => {
+    expect(formatAichatQsearchAnswerText({ error: '見つかりません', answer: '古い' })).toBe('見つかりません');
+  });
+
+  it('回答欠落は空にせず案内する', () => {
+    expect(formatAichatQsearchAnswerText({ answer: '' })).toBe('回答文がありません');
+    expect(formatAichatQsearchAnswerText({})).toBe('回答文がありません');
+  });
+});
+
 describe('formatAichatNekoQsearchResults', () => {
-  it('ヒット時は件数の代わりに質問文とモデルのMarkdown表を出す', () => {
+  it('ヒット時は件数の代わりに質問ID・質問文・モデルのMarkdown表を出す', () => {
     const results: AichatQsearchItem[] = [
       { id: 's1', question: '東京駅について', model: 'llama-3.3-70b-instruct-fp8-fast' },
       { id: 's2', question: '新幹線について', model: 'gpt-5' },
@@ -80,8 +133,10 @@ describe('formatAichatNekoQsearchResults', () => {
     const text = formatAichatNekoQsearchResults('駅', { results });
     expect(text).toContain('AIチャット過去ログ検索');
     expect(text).toContain('駅');
-    expect(text).toContain('| 質問文 | モデル |');
+    expect(text).toContain('| 質問ID | 質問文 | モデル |');
+    expect(text).toContain(`[s1](${buildAichatQsearchIdHref(results[0])})`);
     expect(text).toContain('| 東京駅について | llama-3.3-70b-instruct-fp8-fast |');
+    expect(text).toContain(`[s2](${buildAichatQsearchIdHref(results[1])})`);
     expect(text).toContain('| 新幹線について | gpt-5 |');
     expect(text).not.toMatch(/ヒット.*件/);
     expect(text).not.toMatch(/[├└│─┼]/);
@@ -91,7 +146,7 @@ describe('formatAichatNekoQsearchResults', () => {
     const text = formatAichatNekoQsearchResults('見つからない', { results: [] });
     expect(text).toContain('見つからない');
     expect(text).toContain('0件');
-    expect(text).not.toContain('| 質問文 | モデル |');
+    expect(text).not.toContain('| 質問ID | 質問文 | モデル |');
   });
 
   it('キーワード未指定は使い方を案内する', () => {
@@ -192,7 +247,7 @@ describe('interpretAichatSlashCommand: /neko qsearch', () => {
     expect(help.handled).toBe(true);
     if (!help.handled) throw new Error('not handled');
     expect(help.response).toContain('/neko qsearch');
-    expect(formatAichatSlashCommandHelp()).toContain('質問文と回答モデル');
+    expect(formatAichatSlashCommandHelp()).toContain('質問ID');
   });
 
   it('誤記 qseqrch は未対応として扱い、qsearch を案内する', async () => {
