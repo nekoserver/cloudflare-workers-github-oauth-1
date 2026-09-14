@@ -146,6 +146,13 @@ describe('formatAichatSlashCommandHelp', () => {
     const result = formatAichatSlashCommandHelp();
     expect(result).not.toMatch(/[├└│─┼]/);
   });
+
+  it('/neko csearch の説明は Cursor VM と書き、Cursor VM(courts) とは書かない', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).toContain('Cursor VM');
+    expect(result).not.toContain('Cursor VM(courts)');
+    expect(result).not.toContain('(courts)');
+  });
 });
 
 describe('formatDigHelp', () => {

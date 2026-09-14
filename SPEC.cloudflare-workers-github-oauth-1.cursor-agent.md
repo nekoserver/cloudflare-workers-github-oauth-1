@@ -494,6 +494,7 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 - [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
 - [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) AIチャットに /neko csearch を追加しCursor VM過去ログを表で返す
 - [`d944bf8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d944bf8) /neko csearch の操作列を「表示」リンクにし作成時刻(JST)を先頭列へ出す
+- [`be77572`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/be77572) /neko csearch の表示下線を外しモーダル回答をMarkdown描画する
 
 ### 関連資料
 

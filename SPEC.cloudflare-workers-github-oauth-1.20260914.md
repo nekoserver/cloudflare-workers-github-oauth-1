@@ -130,3 +130,41 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 ### 関連コミット
 
 - [`d944bf8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d944bf8) /neko csearch の操作列を「表示」リンクにし作成時刻(JST)を先頭列へ出す
+
+## 4. `/neko csearch` の表示リンク下線を外し、モーダル回答をMarkdown描画する
+
+**対象**: `/aichat` の `.csearch-answer-link`、`#cursorAgentAnswerModalBody`、
+`formatAichatSlashCommandHelp` の `/neko csearch` 行 —
+「表示」の下線を消し、キャッシュ回答を `parseMd` で見出し・太字が出るようにし、
+ヘルプ表記の `Cursor VM(courts)` を `Cursor VM` に揃える。
+
+### 背景
+
+#1806 で「表示」は実リンクになったが下線が残り、モーダル本文は `<pre>` + `textContent`
+のため Markdown が生のまま出ていた。ヘルプだけ `Cursor VM(courts)` と書いており、
+他の「Cursor VM」表記と食い違う。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 「表示」に下線が残る | `.csearch-answer-link` を `text-decoration: none` |
+| 2 | 回答が `##` `**` の生テキスト | `innerHTML = parseMd(text)` と `.preview-area` |
+| 3 | 生HTMLを innerHTML して XSS | `parseMd` 内の `esc()` 後だけ innerHTML。エラーは textContent |
+| 4 | ヘルプが `Cursor VM(courts)` | `formatAichatSlashCommandHelp` を `Cursor VM` に直す |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/views/aichat.ts` | 下線削除、モーダル本体を preview-area の div、parseMd 描画 |
+| `src/utils/aichatSlashCommand.ts` | `/neko help` の csearch 説明を Cursor VM に変更 |
+
+### テスト
+
+- `src/aichat-neko-csearch-modal.test.ts`: 下線なし、h2/strong、XSSエスケープ
+- `src/utils/aichatSlashCommand.test.ts`: ヘルプに `(courts)` を含まない
+
+### 関連コミット
+
+- [`be77572`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/be77572) /neko csearch の表示下線を外しモーダル回答をMarkdown描画する
