@@ -12,6 +12,8 @@ import { getCursorAgentPage } from './views/cursorAgent';
 //   (3) 入力のたびに過去ログへ保存してしまう
 //   (4) searchError を握りつぶして「0件」とだけ出す
 //   (5) キャッシュ0件を「検索が壊れている」と区別できない
+//   (6) searchError があると一致行まで履歴欄から消える
+//   (7) 解除ボタンが無いと検索欄を空にしても全件に戻らない
 
 let dom: JSDOM | undefined;
 
@@ -274,5 +276,78 @@ describe('E2E: 問答履歴検索は回答キャッシュをサーバへ問い�
       return Boolean(status && status.textContent && status.textContent.indexOf('回答キャッシュは0件') !== -1);
     });
     expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('Agent ID');
+  });
+
+  it('searchErrorがあってもプロンプト一致の行は履歴欄に残す', async () => {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const { pathname, q } = historyPath(String(input));
+      if (pathname === '/api/cursor-agent/history') {
+        if (q) {
+          return new Response(JSON.stringify({
+            rows: [promptOnlyRow],
+            source: 'answer_cache',
+            query: 'kaleidoscope',
+            searchError: '回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR',
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ rows: [answerHitRow, promptOnlyRow], source: 'launch_log' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    dom = buildDom(fetchImpl);
+    const { document } = dom.window;
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
+
+    const search = document.getElementById('agentHistorySearch') as HTMLInputElement;
+    search.value = 'kaleidoscope';
+    (document.getElementById('agentHistorySearchBtn') as HTMLButtonElement).click();
+
+    await waitFor(() => {
+      const body = document.getElementById('agentHistoryBody');
+      return Boolean(
+        body
+        && body.textContent
+        && body.textContent.indexOf('回答キャッシュの検索に失敗しました') !== -1
+        && document.querySelectorAll('.agent-id-link').length === 1,
+      );
+    });
+    expect(document.getElementById('agentHistoryBody')?.textContent).toContain('no such table: cursor_agent_answer_cache');
+    expect(Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent)).toEqual(['bc-prompt-only']);
+    expect(document.getElementById('agentHistorySearchClearBtn')).toBeNull();
+  });
+
+  it('検索欄を空にすると解除ボタンなしで全件一覧に戻る', async () => {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const { pathname, q } = historyPath(String(input));
+      if (pathname === '/api/cursor-agent/history') {
+        if (q === 'kaleidoscope') {
+          return new Response(JSON.stringify({
+            rows: [answerHitRow],
+            source: 'answer_cache',
+            query: 'kaleidoscope',
+            cacheTotal: 1,
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ rows: [answerHitRow, promptOnlyRow], source: 'launch_log' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    dom = buildDom(fetchImpl);
+    const { document } = dom.window;
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
+    expect(document.getElementById('agentHistorySearchClearBtn')).toBeNull();
+
+    const search = document.getElementById('agentHistorySearch') as HTMLInputElement;
+    search.value = 'kaleidoscope';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 1);
+    expect(Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent)).toEqual(['bc-answer-hit']);
+
+    search.value = '';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
+    expect(Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent)).toEqual(['bc-answer-hit', 'bc-prompt-only']);
   });
 });

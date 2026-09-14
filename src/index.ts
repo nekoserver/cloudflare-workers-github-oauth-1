@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentHistorySearchBinds, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, persistCursorAgentPastLogHits, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, persistCursorAgentPastLogHits, queryCursorAgentHistoryWithSearch, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13478,8 +13478,9 @@ type CursorAgentHistoryRow = {
  * 返す。各行にはcursor_agent_status_logの最新1件(fetched_at最大)の状態
  * (agent_status/run_status/report_text)を相関サブクエリで結合する
  * (=「問答集」として、起動時点の情報と最新の答えをまとめて読み出せるようにする)。
- * q があるときは画面上の列ではなく cursor_agent_answer_cache.answer_text を
- * 検索する。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
+ * q があるときは回答キャッシュ本文と画面の列を INSTR する。
+ * キャッシュ表(0139)が無いときは画面の列だけで再検索し、診断用 searchError は残す。
+ * AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
  */
 app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -13504,31 +13505,20 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
   }
-  try {
-    const { results } = await c.env.DB
-      .prepare(buildCursorAgentHistoryListSql(true))
-      .bind(...buildCursorAgentHistorySearchBinds(user.sub, searchQuery))
-      .all<CursorAgentHistoryRow>();
-    return jsonUtf8({
-      rows: results ?? [],
-      source: 'answer_cache',
-      query: searchQuery,
-      cacheTotal,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: message });
-    // 表未作成・破損の確認用。本番D1は
-    // 「回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR」
-    // になる。SPEC.cursor-agent.md に必載。
-    return jsonUtf8({
-      rows: [],
-      source: 'answer_cache',
-      query: searchQuery,
-      cacheTotal,
-      searchError: `回答キャッシュの検索に失敗しました: ${message}`,
-    });
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  if (listed.searchError) {
+    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: listed.searchError });
   }
+  // 表未作成・破損の確認用。本番D1は
+  // 「回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR」
+  // になる。SPEC.cursor-agent.md に必載。0140を適用しても 0139 が無い限り残る。
+  return jsonUtf8({
+    rows: listed.rows,
+    source: 'answer_cache',
+    query: searchQuery,
+    cacheTotal,
+    searchError: listed.searchError || undefined,
+  });
 });
 
 /**
@@ -13561,18 +13551,11 @@ app.post('/api/cursor-agent/history/past-log-search', authMiddleware, async (c) 
     logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
   }
 
-  let rows: CursorAgentHistoryRow[] = [];
-  let searchError = '';
-  try {
-    const listed = await c.env.DB
-      .prepare(buildCursorAgentHistoryListSql(true))
-      .bind(...buildCursorAgentHistorySearchBinds(user.sub, searchQuery))
-      .all<CursorAgentHistoryRow>();
-    rows = listed.results ?? [];
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[cursor-agent] 過去ログ検索の履歴取得に失敗', { userId: user.sub, error: message });
-    searchError = `回答キャッシュの検索に失敗しました: ${message}`;
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  const rows = listed.rows;
+  const searchError = listed.searchError ?? '';
+  if (searchError) {
+    logger.error('[cursor-agent] 過去ログ検索の履歴取得に失敗', { userId: user.sub, error: searchError });
   }
 
   const launchIds = rows.map((row) => row.id);

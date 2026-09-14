@@ -185,7 +185,6 @@ ${getMarkdownPreviewCSS()}
     <input type="search" id="agentHistorySearch" placeholder="回答・プロンプト・レポートを検索..." autocomplete="off">
     <button type="button" class="btn" id="agentHistorySearchBtn" style="padding:4px 10px;font-size:11px;">検索</button>
     <button type="button" class="btn" id="agentHistoryPastLogSearchBtn" style="padding:4px 10px;font-size:11px;">過去ログ検索</button>
-    <button type="button" class="btn" id="agentHistorySearchClearBtn" style="padding:4px 10px;font-size:11px;">解除</button>
   </div>
   <div id="agentHistorySearchStatus"></div>
   <div id="agentHistoryBody">
@@ -339,7 +338,6 @@ ${getMarkdownPreviewCSS()}
   var historySearchEl = document.getElementById('agentHistorySearch');
   var historySearchBtn = document.getElementById('agentHistorySearchBtn');
   var historyPastLogSearchBtn = document.getElementById('agentHistoryPastLogSearchBtn');
-  var historySearchClearBtn = document.getElementById('agentHistorySearchClearBtn');
   var historySearchStatusEl = document.getElementById('agentHistorySearchStatus');
   // 入力途中はデバウンス付きインクリメンタルで GET する。保存は
   // 「過去ログ検索」だけが POST /api/cursor-agent/history/past-log-search する。
@@ -649,9 +647,9 @@ ${getMarkdownPreviewCSS()}
     if (!rows || rows.length === 0) {
       var emptyEl = document.createElement('div');
       emptyEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
-      emptyEl.textContent = searchError
-        ? '回答キャッシュを検索できませんでした'
-        : ((historySearchEl.value || '').trim() ? '検索条件に一致する履歴がありません' : 'まだ起動履歴がありません');
+      emptyEl.textContent = (historySearchEl.value || '').trim()
+        ? '検索条件に一致する履歴がありません'
+        : 'まだ起動履歴がありません';
       historyBodyEl.appendChild(emptyEl);
       return;
     }
@@ -739,7 +737,8 @@ ${getMarkdownPreviewCSS()}
       return;
     }
     if (payload && payload.searchError) {
-      historySearchStatusEl.textContent = payload.searchError;
+      var hitNote = allHistoryRows.length > 0 ? '（画面の列で' + allHistoryRows.length + '件ヒット）' : '';
+      historySearchStatusEl.textContent = payload.searchError + hitNote;
       return;
     }
     var total = payload && typeof payload.cacheTotal === 'number' ? payload.cacheTotal : null;
@@ -884,7 +883,7 @@ ${getMarkdownPreviewCSS()}
    * 履歴を読み込む。モーダルを開かなくても異常(通信障害・応答遅延)に
    * 気付けるよう、終了状態(FINISHED等)に達していない行だけ、読み込み直後に
    * 自動でCursor APIへ問い合わせ直す(=チェックのタイミング: ページを開いた
-   * 時・検索解除の時・起動直後。既に終了している行は問い合わせない)。
+   * 時・検索欄を空にした時・起動直後。既に終了している行は問い合わせない)。
    * 問い合わせに失敗した行はcommErrorを立てて赤バッジで表示する。
    * 検索中はキャッシュ問い合わせを優先し、この一覧再取得では上書きしない。
    */
@@ -920,7 +919,6 @@ ${getMarkdownPreviewCSS()}
     runAnswerCacheSearch();
   });
   historyPastLogSearchBtn.addEventListener('click', runPastLogSearch);
-  historySearchClearBtn.addEventListener('click', clearAnswerCacheSearch);
   historySearchEl.addEventListener('input', scheduleIncrementalSearch);
   historySearchEl.addEventListener('keydown', function(ev) {
     if (ev.key === 'Enter') {

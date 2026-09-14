@@ -165,13 +165,14 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('日時(JST)');
   });
 
-  it('問答履歴に再読み込みボタンを置かない(検索と隣り合い紛らわしく、ページ表示・解除・行の最新状態取得と重複する)', async () => {
+  it('問答履歴に再読み込みボタンと検索解除ボタンを置かない(検索欄を空にすれば一覧に戻る)', async () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
     const html = await res.text();
     expect(html).not.toContain('agentHistoryReloadBtn');
     expect(html).not.toContain('>再読み込み<');
-    expect(html).toContain('agentHistorySearchClearBtn');
+    expect(html).not.toContain('agentHistorySearchClearBtn');
+    expect(html).not.toContain('>解除<');
     expect(html).toContain('最新状態を取得');
     expect(html).toContain('loadHistory()');
   });
@@ -666,6 +667,8 @@ describe('GET /api/cursor-agent/history', () => {
     // 本番D1の文言:
     // 回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
     // 表未作成とデータ破損の両方の確認に使う。SPEC.cursor-agent.md 必載。
+    // 0140(過去ログ表)を適用しても 0139 が無い限りこの searchError は残る。
+    // 画面の列に一致しない語はフォールバック後も0件だが、空成功(searchErrorなし)にはしない。
     const db = new DatabaseSync(':memory:');
     db.exec(`
       CREATE TABLE cursor_agent_launch_log (
@@ -706,6 +709,55 @@ describe('GET /api/cursor-agent/history', () => {
     expect(data.rows).toEqual([]);
     expect(data.searchError).toContain('回答キャッシュの検索に失敗しました');
     expect(data.searchError).toContain('no such table: cursor_agent_answer_cache');
+  });
+
+  it('回答キャッシュ表が無くてもプロンプトに一致する行は返し、searchErrorも残す', async () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE cursor_agent_launch_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        repo_full_name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        agent_id TEXT,
+        agent_name TEXT,
+        agent_url TEXT,
+        cursor_response TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE cursor_agent_status_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        launch_id INTEGER NOT NULL,
+        agent_status TEXT,
+        run_status TEXT,
+        report_text TEXT,
+        raw_response TEXT NOT NULL,
+        fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE user_sessions (
+        user_id TEXT PRIMARY KEY,
+        revoked_at TEXT,
+        last_activity_at TEXT
+      );
+    `);
+    db.prepare(`INSERT INTO user_sessions (user_id, revoked_at) VALUES (?, NULL)`).run('user1');
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '表なし', 'bc-miss', '{}', '2026-09-13 00:00:00');
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, cursor_response, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('user1', ALLOWED_REPO, '別件', 'bc-other', '{}', '2026-09-13 01:00:00');
+
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/api/cursor-agent/history?q=' + encodeURIComponent('表なし'), {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { rows: Array<{ prompt: string; agent_id: string }>; searchError?: string };
+    expect(data.searchError).toContain('回答キャッシュの検索に失敗しました');
+    expect(data.searchError).toContain('no such table: cursor_agent_answer_cache');
+    expect(data.rows.map((r) => r.prompt)).toEqual(['表なし']);
+    expect(data.rows[0].agent_id).toBe('bc-miss');
   });
 });
 
