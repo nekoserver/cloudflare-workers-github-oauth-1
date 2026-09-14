@@ -180,10 +180,7 @@ ${getMarkdownPreviewCSS()}
 </div>
 
 <div class="panel">
-  <div class="panel-label">
-    問答履歴
-    <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
-  </div>
+  <div class="panel-label">問答履歴</div>
   <div class="history-search-row">
     <input type="search" id="agentHistorySearch" placeholder="回答・プロンプト・レポートを検索..." autocomplete="off">
     <button type="button" class="btn" id="agentHistorySearchBtn" style="padding:4px 10px;font-size:11px;">検索</button>
@@ -338,7 +335,6 @@ ${getMarkdownPreviewCSS()}
   });
 
   var historyBodyEl = document.getElementById('agentHistoryBody');
-  var historyReloadBtn = document.getElementById('agentHistoryReloadBtn');
   var historySearchEl = document.getElementById('agentHistorySearch');
   var historySearchBtn = document.getElementById('agentHistorySearchBtn');
   var historySearchClearBtn = document.getElementById('agentHistorySearchClearBtn');
@@ -811,7 +807,7 @@ ${getMarkdownPreviewCSS()}
    * 履歴を読み込む。モーダルを開かなくても異常(通信障害・応答遅延)に
    * 気付けるよう、終了状態(FINISHED等)に達していない行だけ、読み込み直後に
    * 自動でCursor APIへ問い合わせ直す(=チェックのタイミング: ページを開いた
-   * 時・再読み込みボタンを押した時。既に終了している行は問い合わせない)。
+   * 時・検索解除の時・起動直後。既に終了している行は問い合わせない)。
    * 問い合わせに失敗した行はcommErrorを立てて赤バッジで表示する。
    * 検索中はキャッシュ問い合わせを優先し、この一覧再取得では上書きしない。
    */
@@ -839,11 +835,6 @@ ${getMarkdownPreviewCSS()}
       .catch(function() { historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>'; });
   }
 
-  historyReloadBtn.addEventListener('click', function() {
-    activeAnswerSearch = '';
-    if (historySearchStatusEl) historySearchStatusEl.textContent = '';
-    loadHistory();
-  });
   historySearchBtn.addEventListener('click', runAnswerCacheSearch);
   historySearchClearBtn.addEventListener('click', clearAnswerCacheSearch);
   historySearchEl.addEventListener('keydown', function(ev) {

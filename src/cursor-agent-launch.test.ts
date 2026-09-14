@@ -165,6 +165,17 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('日時(JST)');
   });
 
+  it('問答履歴に再読み込みボタンを置かない(検索と隣り合い紛らわしく、ページ表示・解除・行の最新状態取得と重複する)', async () => {
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    expect(html).not.toContain('agentHistoryReloadBtn');
+    expect(html).not.toContain('>再読み込み<');
+    expect(html).toContain('agentHistorySearchClearBtn');
+    expect(html).toContain('最新状態を取得');
+    expect(html).toContain('loadHistory()');
+  });
+
   it('履歴の各行に削除ボタン、履歴パネルに検索窓を持つ', async () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });

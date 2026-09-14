@@ -195,3 +195,26 @@ INNER JOIN でキャッシュ行だけを見ていたため、画面上のプロ
 ### 関連コミット
 
 - [`a9a5f83`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a9a5f83) 履歴検索を画面の語でもヒットさせ、失敗メッセージが見えるようにする
+
+## 6. 問答履歴の再読み込みボタンを撤去する
+
+**対象**: `GET /cursor-agent` 問答履歴パネル右上の「再読み込み」 —
+検索と隣り合い、何を対象に何をするボタンか分からず誤操作の原因になっていた。
+
+### 背景
+
+ボタンは `GET /api/cursor-agent/history` で最新100件を取り直し、未終了行だけ
+`POST .../refresh` する。これはページを開いたときと同じ `loadHistory()` であり、
+検索「解除」と行の「最新状態を取得」と重複する。押すと検索条件を捨てて一覧に戻る。
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/views/cursorAgent.ts` | `agentHistoryReloadBtn` を撤去。`loadHistory` はページ表示・起動直後・解除・行refresh後に残す |
+
+### 注意事項
+
+- 未終了行の自動 refresh はページを開いたときに従来どおり走る
+- 個別の最新化は各行の「最新状態を取得」を使う
+
