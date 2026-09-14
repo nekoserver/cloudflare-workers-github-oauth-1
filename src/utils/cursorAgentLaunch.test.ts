@@ -399,6 +399,21 @@ describe('buildCursorAgentHistoryListSql', () => {
     expect(sql).not.toContain('INNER JOIN cursor_agent_answer_cache');
   });
 
+  it('検索ありではキャッシュ済み回答本文(a.answer_text)もSELECT列に含める(dynamicneko CursorOpsのcursor cacheモジュールが一覧取得だけでキャッシュ済み回答を読めるようにするため)', () => {
+    const sql = buildCursorAgentHistoryListSql(true);
+    expect(sql).toContain('a.answer_text as cached_answer_text');
+  });
+
+  it('キャッシュJOINなしの検索SQLはcached_answer_textを含まない', () => {
+    const sql = buildCursorAgentHistoryListSql(true, false);
+    expect(sql).not.toContain('cached_answer_text');
+  });
+
+  it('検索なしのSQLはcached_answer_textを含まない', () => {
+    const sql = buildCursorAgentHistoryListSql(false);
+    expect(sql).not.toContain('cached_answer_text');
+  });
+
   it('キャッシュJOINなしの検索SQLは画面の列だけをINSTRし、キャッシュ表名を含まない', () => {
     const sql = buildCursorAgentHistoryListSql(true, false);
     expect(sql).not.toContain('cursor_agent_answer_cache');

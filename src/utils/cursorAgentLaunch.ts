@@ -280,7 +280,7 @@ export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean, include
          )`
     : '';
   return `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
-              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
+              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at${useCache ? ', a.answer_text as cached_answer_text' : ''}
        FROM cursor_agent_launch_log l
        LEFT JOIN cursor_agent_status_log s ON s.id = (
          SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1

@@ -154,6 +154,29 @@ describe('POST /api/cursor-agent/query-external', () => {
     expect(body.rows[0].answer).toBe('デプロイはwranglerで行います');
   });
 
+  it('回答キャッシュ(cursor_agent_answer_cache)と状態ログのreport_textが異なる場合、AIチャットの/neko csearchモーダルと同じくキャッシュ側を優先して返す', async () => {
+    const db = setupDb(['ok@example.com']);
+    db.prepare(
+      `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, cursor_response) VALUES (?, ?, ?, ?)`
+    ).run('nekoserver', ALLOWED_REPO, 'デプロイ手順を教えて', '{}');
+    const launchId = Number((db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id);
+    db.prepare(`INSERT INTO cursor_agent_status_log (launch_id, report_text, raw_response) VALUES (?, ?, ?)`).run(
+      launchId, '(自動検出の短い要約)', '{}'
+    );
+    db.prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`).run(
+      launchId, '会話APIから取得した回答全文です'
+    );
+    const res = await app.request(
+      '/api/cursor-agent/query-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', login: 'nekoserver', keyword: 'デプロイ' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { rows: Array<{ answer: string | null }> };
+    expect(body.rows).toHaveLength(1);
+    expect(body.rows[0].answer).toBe('会話APIから取得した回答全文です');
+  });
+
   it('ヒットしないキーワードは空配列を返す(握りつぶさずsearchErrorはnull)', async () => {
     const db = setupDb(['ok@example.com']);
     insertLaunch(db, 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
