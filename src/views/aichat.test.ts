@@ -1485,6 +1485,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('searchCursorAgentHistory:');
     expect(fn).toContain('queryCursorAgentHistoryWithSearch');
     expect(fn).toContain('mapCursorAgentHistoryToCsearchItems');
+    expect(fn).toContain('created_at');
     expect(fn).toContain('nekoCursorResults:');
     expect(fn).not.toContain('persistCursorAgentPastLogHits');
   });

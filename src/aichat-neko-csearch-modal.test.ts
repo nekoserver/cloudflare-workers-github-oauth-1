@@ -3,16 +3,19 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getAiChatPage } from './views/aichat';
 import { formatAichatNekoCsearchResults } from './utils/aichatSlashCommand';
 
-// 対象: /aichat 入力窓のスラッシュコマンド `/neko csearch` 応答。質問文表の「回答全文」リンクを
+// 対象: /aichat 入力窓のスラッシュコマンド `/neko csearch` 応答。質問文表の「表示」リンクを
 // 押すと最上位レイヤーの専用モーダルが開き、回答キャッシュ
 // (GET /api/cursor-agent/history/:id/conversation) から全文を読む。
-// /neko search の nekoResults / historyModal とは混ぜない。
+// 各行の先頭は質問の作成時刻(JST)。/neko search の nekoResults / historyModal とは混ぜない。
 //
 // 故障シナリオ:
-//   (1) 表や回答全文リンクが出ない
-//   (2) リンクが AIチャット詳細(historyModal)や nekoResultsModal を開く
-//   (3) キャッシュ取得失敗を空のまま握りつぶす
-//   (4) モーダルが getNextZ 未登録で裏に入る
+//   (1) 表や表示リンクが出ない
+//   (2) 「表示」が <a> ではなくプレーンテキストになる
+//   (3) リンクが AIチャット詳細(historyModal)や nekoResultsModal を開く
+//   (4) キャッシュ取得失敗を空のまま握りつぶす
+//   (5) モーダルが getNextZ 未登録で裏に入る
+//   (6) 作成時刻がJSTで出ない
+//   (7) nekoCursorResults欠落時にMarkdownリンクが消える
 
 const minimalUser = {
   username: 'testuser',
@@ -71,13 +74,13 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
   return { fetchMock };
 }
 
-describe('AIチャット(DOM実動作): /neko csearch の質問文表と回答全文モーダル', () => {
+describe('AIチャット(DOM実動作): /neko csearch の質問文表と表示モーダル', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('nekoCursorResultsがある場合、応答バブルに質問文表と回答全文リンクが出る', async () => {
+  it('nekoCursorResultsがある場合、応答バブルにJST時刻・質問文・表示リンク(<a>)が出る', async () => {
     const results = [
-      { id: 11, question: 'READMEを直して' },
-      { id: 12, question: '検索フォールバック' },
+      { id: 11, question: 'READMEを直して', createdAtJst: '2026-09-14 14:50:00' },
+      { id: 12, question: '検索フォールバック', createdAtJst: '2026-09-14 15:00:00' },
     ];
     await setupChatSubmitTest({
       response: formatAichatNekoCsearchResults('readme', { results }),
@@ -89,14 +92,19 @@ describe('AIチャット(DOM実動作): /neko csearch の質問文表と回答�
     const bubble = document.querySelector('.chat-bubble.assistant') as HTMLElement;
     expect(bubble.textContent).toContain('READMEを直して');
     expect(bubble.textContent).toContain('検索フォールバック');
+    expect(bubble.textContent).toContain('2026-09-14 14:50:00');
+    expect(bubble.textContent).toContain('2026-09-14 15:00:00');
     const links = document.querySelectorAll('.csearch-answer-link');
     expect(links).toHaveLength(2);
-    expect(links[0].textContent).toBe('回答全文');
+    expect(links[0].tagName).toBe('A');
+    expect(links[0].textContent).toBe('表示');
+    expect(links[0].getAttribute('href')).toBe('#csearch-11');
     expect(links[0].getAttribute('data-launch-id')).toBe('11');
+    expect(links[1].getAttribute('href')).toBe('#csearch-12');
     expect(document.querySelector('.neko-results-link')).toBeNull();
   });
 
-  it('ヒット0件では回答全文リンクも表も出さない', async () => {
+  it('ヒット0件では表示リンクも表も出さない', async () => {
     await setupChatSubmitTest({
       response: formatAichatNekoCsearchResults('readme', { results: [] }),
       usedModel: 'local/neko',
@@ -106,15 +114,16 @@ describe('AIチャット(DOM実動作): /neko csearch の質問文表と回答�
     expect(document.querySelector('.csearch-result-table')).toBeNull();
   });
 
-  it('回答全文をクリックすると専用モーダルが最上位で開き、キャッシュ本文を表示する', async () => {
-    const results = [{ id: 11, question: 'READMEを直して' }];
+  it('表示をクリックすると専用モーダルが最上位で開き、キャッシュ本文を表示する', async () => {
+    const results = [{ id: 11, question: 'READMEを直して', createdAtJst: '2026-09-14 14:50:00' }];
     const { fetchMock } = await setupChatSubmitTest({
       response: formatAichatNekoCsearchResults('readme', { results }),
       usedModel: 'local/neko',
       nekoCursorResults: results,
     });
 
-    const link = document.querySelector('.csearch-answer-link') as HTMLElement;
+    const link = document.querySelector('.csearch-answer-link') as HTMLAnchorElement;
+    expect(link.tagName).toBe('A');
     link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -133,7 +142,7 @@ describe('AIチャット(DOM実動作): /neko csearch の質問文表と回答�
   });
 
   it('会話APIがエラーを返しても空にせずモーダルへ書く', async () => {
-    const results = [{ id: 12, question: '無い起動' }];
+    const results = [{ id: 12, question: '無い起動', createdAtJst: '2026-09-14 14:50:00' }];
     await setupChatSubmitTest({
       response: formatAichatNekoCsearchResults('x', { results }),
       usedModel: 'local/neko',
@@ -144,6 +153,27 @@ describe('AIチャット(DOM実動作): /neko csearch の質問文表と回答�
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(document.getElementById('cursorAgentAnswerModal')!.classList.contains('open')).toBe(true);
     expect(document.getElementById('cursorAgentAnswerModalBody')!.textContent).toContain('見つかりません');
+  });
+
+  it('nekoCursorResultsが無くてもMarkdownの表示は実リンクになり、クリックでモーダルが開く', async () => {
+    const results = [{ id: 11, question: 'READMEを直して', createdAtJst: '2026-09-14 14:50:00' }];
+    const { fetchMock } = await setupChatSubmitTest({
+      response: formatAichatNekoCsearchResults('readme', { results }),
+      usedModel: 'local/neko',
+      nekoResults: null,
+    });
+    const link = document.querySelector('a[href="#csearch-11"]') as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.tagName).toBe('A');
+    expect(link.textContent).toBe('表示');
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/cursor-agent/history/11/conversation',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+    expect(document.getElementById('cursorAgentAnswerModal')!.classList.contains('open')).toBe(true);
+    expect(document.getElementById('cursorAgentAnswerModalBody')!.textContent).toBe('キャッシュの回答全文です');
   });
 
   it('#cursorAgentAnswerModal はstaticZDefaultsに登録済み(CLAUDE.mdルール26)', () => {

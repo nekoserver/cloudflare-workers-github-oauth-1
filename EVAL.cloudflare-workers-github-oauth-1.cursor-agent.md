@@ -64,6 +64,7 @@
 | 2026-09-14 03:34 | [`afc8f75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afc8f75) | 0139 欠落時は画面列で再検索。`searchError` は残す。「解除」撤去 | 0140 だけ適用してもインクリメンタルが死ななくなった。空欄化で一覧復帰 |
 | 2026-09-14 04:06 | [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) | 実装済み範囲と入力窓・dynamicneko 到達点を横断 SPEC にまとめる | 次工程の境界（コーパス分離、`user_id` を分裂させない）を文書として得た |
 | 2026-09-14 05:17 | [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) | スラッシュコマンド `/neko csearch` で入力窓から Cursor VM 履歴を表検索し、回答全文をキャッシュモーダルで読む | AIチャット入口の表示検索を得た。起動と 0140 保存は残る |
+| 2026-09-14 06:17 | [`d944bf8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d944bf8) | `/neko csearch` の操作列を「表示」実リンクにし、先頭列へ作成時刻(JST)を出す | プレーンテキストでは `parseMd` がアンカーを作らず押せなかった。SQLite UTC を JST 換算して誤解を避ける |
 
 SPEC への関連コミット追記（`c2ffca8` / `870afe7` / `b542e59` / `4797ef5` / `55d3d2c` / `8a8e0f2` / `510d36a` / `414e58a` / `204ebac`）は機能増ではない。ハッシュを SPEC に残し、後から「いつ入れたか」を辿れるようにした行である。
 
