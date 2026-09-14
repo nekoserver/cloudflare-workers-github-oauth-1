@@ -1473,6 +1473,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('searchShares:');
     expect(fn).toContain('searchAiChatShares(');
     expect(fn).toContain('hitCount: results.length');
+    expect(fn).toContain('model: r.model');
   });
 
   it('index.ts の /api/aichat が searchCursorAgentHistory を渡す（スラッシュコマンド /neko csearch 用、Cursor VM履歴を表示検索して質問文最大30件を返す）', () => {

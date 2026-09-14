@@ -168,3 +168,42 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 ### 関連コミット
 
 - [`be77572`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/be77572) /neko csearch の表示下線を外しモーダル回答をMarkdown描画する
+
+## 5. `/neko qseqrch` でAIチャット過去ログの質問文と回答モデルを表で返す
+
+**対象**: スラッシュコマンド `/neko qseqrch <キーワード>`、`searchShares` / `searchAiChatShares`、
+`formatAichatNekoQseqrchResults` —
+質問文・回答文の両方を検索し、ヒットした質問文と答えたモデル名をMarkdown表でチャット本文へ出す。
+`/neko search` は件数のみ、`/neko csearch` は Cursor VM 履歴であり混ぜない。
+
+### 背景
+
+`/neko search` はヒット件数だけを応答し、質問文はモーダルへ隠れる。
+Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも質問文を表で見たい。
+そのとき「どのモデルが答えたか」が分からないと追いづらい。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | `/neko search` と同じ件数表示になる | `formatAichatNekoQseqrchResults` が質問文・モデル表を返す |
+| 2 | Cursor VM 履歴と混ざる | `searchShares` だけを呼ぶ。`searchCursorAgentHistory` は呼ばない |
+| 3 | モデル名欠落を空にする | `formatAichatQseqrchModelName` が `(モデル不明)` |
+| 4 | ヒット0件を空文字にする | `0件` と明示し表は出さない |
+| 5 | 質問文の `|` で表が壊れる | セル内のパイプをエスケープする |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/aichatSlashCommand.ts` | `qseqrch` 解釈、表整形、ヘルプ |
+| `src/index.ts` | `searchShares` の結果に `model` を載せる |
+
+### テスト
+
+- `src/aichat-slash-qseqrch.test.ts`: 表整形・Cursor VM非混同・タイムアウト
+- `src/aichat-neko-qseqrch-table.test.ts`: 応答バブルに質問文・モデル表
+
+### 関連コミット
+
+- [`50c40a4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/50c40a4) /neko qseqrch でAIチャット過去ログの質問文と回答モデルを表で返す
