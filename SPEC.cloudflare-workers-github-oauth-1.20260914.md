@@ -79,6 +79,10 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 境界が見えにくかった。コーパス混同（`/neko search` = `ai_chat_shares`）と
 `user_id='dynamicneko-service'` での履歴分裂を先に文書化する。
 
+### 関連コミット
+
+- [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
+
 ### 関連
 
 - [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)

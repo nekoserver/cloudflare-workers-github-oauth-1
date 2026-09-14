@@ -66,3 +66,4 @@ JOIN 失敗で `rows` を常に空にすると、インクリメンタル検索�
 - [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
 - [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) 回答キャッシュ表未作成時のD1検索エラーをSPEC.cursor-agent.mdに残す
 - [`afc8f75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afc8f75) 回答キャッシュ表欠落時も画面の列で検索し解除ボタンを撤去する
+- [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる

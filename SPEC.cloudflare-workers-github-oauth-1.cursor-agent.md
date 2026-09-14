@@ -464,6 +464,12 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 
 **対象**: 日付付き SPEC・NOTICE・既存の aichat/dynamicneko 資料。
 
+### 関連コミット
+
+- [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
+
+### 関連資料
+
 - [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md) — 診断文言の必載コピー
 - [`SPEC.cloudflare-workers-github-oauth-1.20260913.md`](SPEC.cloudflare-workers-github-oauth-1.20260913.md) — モーダル回答、キャッシュ検索、過去ログ
 - [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md) — 0139 欠落フォールバック
