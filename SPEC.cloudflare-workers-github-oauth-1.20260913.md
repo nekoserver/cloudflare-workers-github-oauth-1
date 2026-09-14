@@ -162,11 +162,17 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 
 - 回答キャッシュは Agent ID タップ(会話API)のあとで埋まる。未タップの起動は検索対象に入らない
 - 追加のD1マイグレーションは不要(0139の `cursor_agent_answer_cache` を使う)
+- 表未作成・表破損時は空成功にせず、次の `searchError` を出す。データ破損時とテーブル未設定時のテストに使う。`SPEC.cursor-agent.md` へまとめるときもこの文言を残す
+
+```text
+回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
+```
 
 ### 関連コミット
 
 - [`245906c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/245906c) cursor-agentの履歴検索を回答キャッシュ本文のサーバ検索へ切り替える
 - [`bc95820`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bc95820) cursor-agent履歴検索からインクリメンタルを外しキャッシュ表だけを明示検索する
+- [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) 回答キャッシュ表未作成時のD1検索エラーをSPEC.cursor-agent.mdに残す
 
 ## 5. 履歴検索が画面の語で0件になる不具合とエラー非表示
 
@@ -217,4 +223,54 @@ INNER JOIN でキャッシュ行だけを見ていたため、画面上のプロ
 
 - 未終了行の自動 refresh はページを開いたときに従来どおり走る
 - 個別の最新化は各行の「最新状態を取得」を使う
+
+### 関連コミット
+
+- [`4f125c1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/4f125c1) 問答履歴の再読み込みボタンを撤去する
+
+## 7. VM応答履歴の過去ログ検索（キーワード×ヒット起動の保存）
+
+**対象**: `GET /cursor-agent` 問答履歴の検索窓、`POST /api/cursor-agent/history/past-log-search`、
+D1 `cursor_agent_search_log` / `cursor_agent_search_history`（migration 0140） —
+入力途中のインクリメンタル検索は残しつつ、「過去ログ検索」ボタンで
+AIチャット左サイドバーの検索完了（`aichat_search_log` へキーワード×ヒット共有を結ぶ）と
+同等に、検索キーワードとヒットした VM 起動履歴を結びつける。
+
+### 背景
+
+問答履歴の検索は入力途中でもヒットが浮かぶ方が使いやすい。一方で、キー入力のたびに
+D1へ検索ログを書くと途中語まで残る。AIチャットはインクリメンタル表示と、
+完了時のキーワード×ヒット記録を分けている。同じ形を cursor-agent の応答履歴にも載せる。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 入力のたびに過去ログへ INSERT する | GET `?q=` は表示のみ。保存は「過去ログ検索」の POST だけ |
+| 2 | 初期読み込みの遅延応答が検索結果を上書きする | `historyFetchSeq` と AbortController で古い応答を破棄 |
+| 3 | 他人の `launch_id` をクライアント指定で結ぶ | サーバ側で自分の履歴を再検索し、その id だけ保存 |
+| 4 | 同じキーワード×起動で行が増殖する | UNIQUE(user_id, keyword, launch_id) + ON CONFLICT で select_count 加算 |
+| 5 | 空キーワードで INSERT する | 正規化後空なら 400。persist も empty_keyword |
+| 6 | 表未作成で空成功になる | persist_failed を返し、検索ヒットは残したまま persistError を出す |
+| 7 | searchError が `.error-msg` で見えない | `history-search-error` を継続 |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `migrations/0140_create_cursor_agent_search_log.sql` | 集計・明細テーブル、UNIQUE と launch_id FK |
+| `src/utils/cursorAgentLaunch.ts` | upsert/insert SQL と `persistCursorAgentPastLogHits` |
+| `src/index.ts` | POST 過去ログ検索、/status レジストリ、履歴削除時の子行削除 |
+| `src/views/cursorAgent.ts` | インクリメンタル（300ms）と「過去ログ検索」ボタン |
+
+### 注意事項
+
+- 正規化は AIチャットに合わせ、キーワード文字列を各行に持つ（キーワードマスタは作らない）
+- `launch_id` は SQL FK、`user_id` は論理 FK（`user_sessions`）
+- 0件ヒットでは結び付ける行が無いので集計・明細ともに INSERT しない
+- デプロイ後に下記 SQL を D1 で実行する必要がある
+
+### 関連コミット
+
+- [`2082ec9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2082ec9) cursor-agentに過去ログ検索を追加しインクリメンタル検索を戻す
 

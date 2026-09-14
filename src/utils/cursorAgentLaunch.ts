@@ -214,8 +214,26 @@ export function mergeCursorAgentConversationAnswers(answers: string[]): string {
 /** 履歴検索語の最大長。極端に長い q でINSTRが重くならないように切る。 */
 export const CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH = 200;
 
-/** 検索SQLで user_id のあとに同じ検索語を何回 bind するか。 */
+/** 検索SQLで user_id のあとに同じ検索語を何回 bind するか(回答キャッシュJOINあり)。 */
 export const CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT = 5;
+
+/** キャッシュ表が無いときのフォールバック検索(画面の列のみ)の bind 回数。 */
+export const CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT_WITHOUT_CACHE = 4;
+
+/**
+ * D1 / node:sqlite が cursor_agent_answer_cache 欠落を返すときの判定。
+ * 本番は `D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR`。
+ * 過去ログ表(0140)の欠落とは区別する。
+ */
+export function isCursorAgentAnswerCacheMissingError(detail: string): boolean {
+  const lower = detail.toLowerCase();
+  return lower.includes('no such table') && lower.includes('cursor_agent_answer_cache');
+}
+
+/** 履歴検索の診断用 searchError。判定には使わず、表示とログ専用。 */
+export function formatCursorAgentAnswerCacheSearchError(detail: string): string {
+  return `回答キャッシュの検索に失敗しました: ${detail}`;
+}
 
 /**
  * GET /api/cursor-agent/history?q= の検索語を正規化する。
@@ -243,19 +261,22 @@ export function isCursorAgentSuccessfulTerminal(
  * 回答キャッシュ本文に加え、画面に出ているプロンプト・レポート・
  * Agent ID・リポジトリも INSTR で見る。キャッシュ未作成の行を落とさないよう
  * LEFT JOIN にする。LIKE ではなく INSTR で %/_ をリテラルとして扱う。
+ * includeAnswerCache=false は 0139 未適用時のフォールバック。JOINせず画面の列だけ見る。
  */
-export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string {
-  const answerJoin = hasAnswerSearch
+export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean, includeAnswerCache = true): string {
+  const useCache = hasAnswerSearch && includeAnswerCache;
+  const answerJoin = useCache
     ? '\n       LEFT JOIN cursor_agent_answer_cache a ON a.launch_id = l.id'
     : '';
+  const visibleColumnFilter = `instr(lower(l.prompt), lower(?)) > 0
+           OR instr(lower(coalesce(s.report_text, '')), lower(?)) > 0
+           OR instr(lower(coalesce(l.agent_id, '')), lower(?)) > 0
+           OR instr(lower(l.repo_full_name), lower(?)) > 0`;
   const answerFilter = hasAnswerSearch
     ? `
          AND (
-           instr(lower(coalesce(a.answer_text, '')), lower(?)) > 0
-           OR instr(lower(l.prompt), lower(?)) > 0
-           OR instr(lower(coalesce(s.report_text, '')), lower(?)) > 0
-           OR instr(lower(coalesce(l.agent_id, '')), lower(?)) > 0
-           OR instr(lower(l.repo_full_name), lower(?)) > 0
+           ${useCache ? `instr(lower(coalesce(a.answer_text, '')), lower(?)) > 0
+           OR ` : ''}${visibleColumnFilter}
          )`
     : '';
   return `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
@@ -268,8 +289,56 @@ export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string
        ORDER BY l.created_at DESC, l.id DESC LIMIT 100`;
 }
 
-export function buildCursorAgentHistorySearchBinds(userId: string, query: string): unknown[] {
-  return [userId, ...Array(CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT).fill(query)];
+export function buildCursorAgentHistorySearchBinds(
+  userId: string,
+  query: string,
+  includeAnswerCache = true,
+): unknown[] {
+  const bindCount = includeAnswerCache
+    ? CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT
+    : CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT_WITHOUT_CACHE;
+  return [userId, ...Array(bindCount).fill(query)];
+}
+
+export type CursorAgentHistoryListDb = {
+  prepare: (sql: string) => {
+    bind: (...args: unknown[]) => {
+      all: <T = unknown>() => Promise<{ results?: T[] }>;
+    };
+  };
+};
+
+/**
+ * q 付き履歴検索。キャッシュ表が無いときは画面の列だけで再検索する。
+ * 診断用 searchError は残す(0140を適用しても 0139 欠落は消えない)。
+ */
+export async function queryCursorAgentHistoryWithSearch<T>(
+  db: CursorAgentHistoryListDb,
+  userId: string,
+  searchQuery: string,
+): Promise<{ rows: T[]; searchError: string | null }> {
+  try {
+    const listed = await db
+      .prepare(buildCursorAgentHistoryListSql(true, true))
+      .bind(...buildCursorAgentHistorySearchBinds(userId, searchQuery, true))
+      .all<T>();
+    return { rows: listed.results ?? [], searchError: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const searchError = formatCursorAgentAnswerCacheSearchError(message);
+    if (!isCursorAgentAnswerCacheMissingError(message)) {
+      return { rows: [], searchError };
+    }
+    try {
+      const fallback = await db
+        .prepare(buildCursorAgentHistoryListSql(true, false))
+        .bind(...buildCursorAgentHistorySearchBinds(userId, searchQuery, false))
+        .all<T>();
+      return { rows: fallback.results ?? [], searchError };
+    } catch {
+      return { rows: [], searchError };
+    }
+  }
 }
 
 /** 自分の起動に紐づく回答キャッシュ件数。検索0件が「未キャッシュ」か「不一致」かを分ける。 */
@@ -278,6 +347,106 @@ export function buildCursorAgentAnswerCacheCountSql(): string {
        FROM cursor_agent_answer_cache a
        INNER JOIN cursor_agent_launch_log l ON l.id = a.launch_id
        WHERE l.user_id = ?`;
+}
+
+/**
+ * 過去ログ検索の集計行。AIチャットの aichat_search_log と同じく
+ * (user_id, keyword, ヒットしたレコード) を UNIQUE で結び、再検索では
+ * last_searched_at と select_count だけ更新する。
+ */
+export function buildCursorAgentSearchLogUpsertSql(): string {
+  return `INSERT INTO cursor_agent_search_log
+       (user_id, keyword, launch_id, first_searched_at, last_searched_at, select_count, result_count)
+     VALUES (?, ?, ?, ?, ?, 1, ?)
+     ON CONFLICT(user_id, keyword, launch_id) DO UPDATE SET
+       last_searched_at = excluded.last_searched_at,
+       select_count = cursor_agent_search_log.select_count + 1,
+       result_count = excluded.result_count`;
+}
+
+/**
+ * 過去ログ検索の明細行。同じキーワード×起動を何度完了検索しても
+ * seq_num を増やして追記する(aichat_search_history と同じ)。
+ */
+export function buildCursorAgentSearchHistoryInsertSql(): string {
+  return `INSERT INTO cursor_agent_search_history
+       (user_id, keyword, launch_id, seq_num, searched_at, result_count)
+     VALUES (?, ?, ?,
+       (SELECT COALESCE(COUNT(*), 0) + 1 FROM cursor_agent_search_history WHERE user_id = ? AND keyword = ? AND launch_id = ?),
+       ?, ?)`;
+}
+
+export type CursorAgentPastLogDb = {
+  prepare: (sql: string) => {
+    bind: (...args: unknown[]) => {
+      run: () => Promise<unknown>;
+    };
+  };
+};
+
+export type CursorAgentPastLogPersistErrorCode = 'empty_keyword' | 'persist_failed';
+
+export type CursorAgentPastLogPersistResult =
+  | { ok: true; keyword: string; launchIds: number[]; savedCount: number; resultCount: number }
+  | {
+      ok: false;
+      errorCode: CursorAgentPastLogPersistErrorCode;
+      detail: string;
+      keyword: string;
+      launchIds: number[];
+      savedCount: number;
+      resultCount: number;
+    };
+
+/**
+ * 「過去ログ検索」完了時だけ、キーワードとヒットした起動 id を結びつける。
+ * 空キーワードは INSERT しない。表未作成は persist_failed を返し、空成功にしない。
+ */
+export async function persistCursorAgentPastLogHits(
+  db: CursorAgentPastLogDb,
+  params: {
+    userId: string;
+    keyword: string;
+    launchIds: number[];
+    resultCount: number;
+    nowIso: string;
+  },
+): Promise<CursorAgentPastLogPersistResult> {
+  const keyword = normalizeCursorAgentHistorySearchQuery(params.keyword);
+  const launchIds = params.launchIds.filter((id) => Number.isInteger(id) && id > 0);
+  if (!keyword) {
+    return {
+      ok: false,
+      errorCode: 'empty_keyword',
+      detail: 'keyword は必須です',
+      keyword: '',
+      launchIds,
+      savedCount: 0,
+      resultCount: 0,
+    };
+  }
+  try {
+    for (const launchId of launchIds) {
+      await db.prepare(buildCursorAgentSearchLogUpsertSql())
+        .bind(params.userId, keyword, launchId, params.nowIso, params.nowIso, params.resultCount)
+        .run();
+      await db.prepare(buildCursorAgentSearchHistoryInsertSql())
+        .bind(params.userId, keyword, launchId, params.userId, keyword, launchId, params.nowIso, params.resultCount)
+        .run();
+    }
+    return { ok: true, keyword, launchIds, savedCount: launchIds.length, resultCount: params.resultCount };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      errorCode: 'persist_failed',
+      detail,
+      keyword,
+      launchIds,
+      savedCount: 0,
+      resultCount: params.resultCount,
+    };
+  }
 }
 
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {

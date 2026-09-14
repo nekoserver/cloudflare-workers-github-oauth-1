@@ -98,7 +98,7 @@ textarea:focus, select:focus { border-color: var(--accent); }
 }
 .history-refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
 .history-search-row {
-  display: flex; gap: 8px; margin-bottom: 8px; align-items: center;
+  display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap;
 }
 #agentHistorySearch {
   flex: 1; min-width: 0; background: var(--input-bg); color: var(--text);
@@ -184,7 +184,7 @@ ${getMarkdownPreviewCSS()}
   <div class="history-search-row">
     <input type="search" id="agentHistorySearch" placeholder="回答・プロンプト・レポートを検索..." autocomplete="off">
     <button type="button" class="btn" id="agentHistorySearchBtn" style="padding:4px 10px;font-size:11px;">検索</button>
-    <button type="button" class="btn" id="agentHistorySearchClearBtn" style="padding:4px 10px;font-size:11px;">解除</button>
+    <button type="button" class="btn" id="agentHistoryPastLogSearchBtn" style="padding:4px 10px;font-size:11px;">過去ログ検索</button>
   </div>
   <div id="agentHistorySearchStatus"></div>
   <div id="agentHistoryBody">
@@ -337,15 +337,17 @@ ${getMarkdownPreviewCSS()}
   var historyBodyEl = document.getElementById('agentHistoryBody');
   var historySearchEl = document.getElementById('agentHistorySearch');
   var historySearchBtn = document.getElementById('agentHistorySearchBtn');
-  var historySearchClearBtn = document.getElementById('agentHistorySearchClearBtn');
+  var historyPastLogSearchBtn = document.getElementById('agentHistoryPastLogSearchBtn');
   var historySearchStatusEl = document.getElementById('agentHistorySearchStatus');
-  // 検索はインクリメンタルにしない。検索ボタン/Enterだけが
-  // GET /api/cursor-agent/history?q= で回答キャッシュ本文を問い合わせる。
+  // 入力途中はデバウンス付きインクリメンタルで GET する。保存は
+  // 「過去ログ検索」だけが POST /api/cursor-agent/history/past-log-search する。
   // 初期読み込みの遅延応答が検索結果を上書きしないよう世代番号で破棄する。
   var allHistoryRows = [];
   var lastSearchError = '';
   var historyFetchSeq = 0;
   var activeAnswerSearch = '';
+  var historySearchTimer = null;
+  var historyAbortCtrl = null;
 
   // D1のcreated_atはdatetime('now')でUTC('YYYY-MM-DD HH:MM:SS'形式、タイムゾーン
   // 表記なし)で保存されるため、そのまま表示するとJSTだと誤解されうる。
@@ -645,9 +647,9 @@ ${getMarkdownPreviewCSS()}
     if (!rows || rows.length === 0) {
       var emptyEl = document.createElement('div');
       emptyEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
-      emptyEl.textContent = searchError
-        ? '回答キャッシュを検索できませんでした'
-        : ((historySearchEl.value || '').trim() ? '検索条件に一致する履歴がありません' : 'まだ起動履歴がありません');
+      emptyEl.textContent = (historySearchEl.value || '').trim()
+        ? '検索条件に一致する履歴がありません'
+        : 'まだ起動履歴がありません';
       historyBodyEl.appendChild(emptyEl);
       return;
     }
@@ -735,22 +737,31 @@ ${getMarkdownPreviewCSS()}
       return;
     }
     if (payload && payload.searchError) {
-      historySearchStatusEl.textContent = payload.searchError;
+      var hitNote = allHistoryRows.length > 0 ? '（画面の列で' + allHistoryRows.length + '件ヒット）' : '';
+      historySearchStatusEl.textContent = payload.searchError + hitNote;
       return;
     }
     var total = payload && typeof payload.cacheTotal === 'number' ? payload.cacheTotal : null;
     var n = allHistoryRows.length;
+    var text = '';
     if (total === 0) {
-      historySearchStatusEl.textContent = '回答キャッシュは0件です。Agent IDを開くと検索対象になります。';
-      return;
+      text = '回答キャッシュは0件です。Agent IDを開くと検索対象になります。';
+    } else {
+      text = (total === null ? '' : '回答キャッシュ' + total + '件中') + n + '件ヒット';
     }
-    historySearchStatusEl.textContent = (total === null ? '' : '回答キャッシュ' + total + '件中') + n + '件ヒット';
+    if (payload && typeof payload.savedCount === 'number') {
+      text += '、過去ログに' + payload.savedCount + '件保存';
+    }
+    if (payload && payload.persistError) {
+      text += '（過去ログ保存失敗）';
+    }
+    historySearchStatusEl.textContent = text;
   }
 
   function applyHistoryPayload(d, commErrorIds) {
     if (!d) return;
     allHistoryRows = d.rows || [];
-    lastSearchError = d.searchError || '';
+    lastSearchError = [d.searchError, d.persistError].filter(Boolean).join('\\n') || '';
     if (commErrorIds) {
       allHistoryRows.forEach(function(row) { if (commErrorIds[row.id]) row.commError = true; });
     }
@@ -761,12 +772,18 @@ ${getMarkdownPreviewCSS()}
   function fetchHistoryRows(query) {
     var seq = ++historyFetchSeq;
     var q = (query || '').trim();
-    return fetch(buildCursorAgentHistoryUrl(q), { credentials: 'same-origin' })
+    if (historyAbortCtrl) historyAbortCtrl.abort();
+    historyAbortCtrl = new AbortController();
+    return fetch(buildCursorAgentHistoryUrl(q), { credentials: 'same-origin', signal: historyAbortCtrl.signal })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (seq !== historyFetchSeq) return null;
         if (!q && activeAnswerSearch) return null;
         return d;
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return null;
+        throw err;
       });
   }
 
@@ -784,7 +801,6 @@ ${getMarkdownPreviewCSS()}
       return;
     }
     activeAnswerSearch = q;
-    historyFetchSeq += 1;
     historyBodyEl.innerHTML = '';
     var loading = document.createElement('div');
     loading.style.cssText = 'font-size:11px;color:var(--text-muted);';
@@ -794,6 +810,66 @@ ${getMarkdownPreviewCSS()}
     fetchAndRenderHistory(null, q).catch(function() {
       historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>';
     });
+  }
+
+  function runPastLogSearch() {
+    if (historySearchTimer) {
+      clearTimeout(historySearchTimer);
+      historySearchTimer = null;
+    }
+    var q = (historySearchEl.value || '').trim();
+    if (!q) {
+      clearAnswerCacheSearch();
+      return;
+    }
+    activeAnswerSearch = q;
+    var seq = ++historyFetchSeq;
+    if (historyAbortCtrl) historyAbortCtrl.abort();
+    historyBodyEl.innerHTML = '';
+    var loading = document.createElement('div');
+    loading.style.cssText = 'font-size:11px;color:var(--text-muted);';
+    loading.textContent = '過去ログを検索して保存中...';
+    historyBodyEl.appendChild(loading);
+    if (historySearchStatusEl) historySearchStatusEl.textContent = '過去ログを検索して保存中...';
+    fetch('/api/cursor-agent/history/past-log-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ keyword: q })
+    })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (seq !== historyFetchSeq) return;
+        if (res.status !== 200) {
+          lastSearchError = (res.data && res.data.error) || ('過去ログ検索に失敗しました: HTTP ' + res.status);
+          allHistoryRows = [];
+          renderHistory(allHistoryRows, lastSearchError);
+          if (historySearchStatusEl) historySearchStatusEl.textContent = lastSearchError;
+          return;
+        }
+        applyHistoryPayload(res.data, null);
+      })
+      .catch(function(err) {
+        if (seq !== historyFetchSeq) return;
+        historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>';
+        if (historySearchStatusEl) historySearchStatusEl.textContent = '通信エラー: ' + ((err && err.message) || '不明');
+      });
+  }
+
+  function scheduleIncrementalSearch() {
+    var q = (historySearchEl.value || '').trim();
+    if (historySearchTimer) {
+      clearTimeout(historySearchTimer);
+      historySearchTimer = null;
+    }
+    if (!q) {
+      if (activeAnswerSearch) clearAnswerCacheSearch();
+      return;
+    }
+    historySearchTimer = setTimeout(function() {
+      historySearchTimer = null;
+      runAnswerCacheSearch();
+    }, 300);
   }
 
   function clearAnswerCacheSearch() {
@@ -807,7 +883,7 @@ ${getMarkdownPreviewCSS()}
    * 履歴を読み込む。モーダルを開かなくても異常(通信障害・応答遅延)に
    * 気付けるよう、終了状態(FINISHED等)に達していない行だけ、読み込み直後に
    * 自動でCursor APIへ問い合わせ直す(=チェックのタイミング: ページを開いた
-   * 時・検索解除の時・起動直後。既に終了している行は問い合わせない)。
+   * 時・検索欄を空にした時・起動直後。既に終了している行は問い合わせない)。
    * 問い合わせに失敗した行はcommErrorを立てて赤バッジで表示する。
    * 検索中はキャッシュ問い合わせを優先し、この一覧再取得では上書きしない。
    */
@@ -835,11 +911,22 @@ ${getMarkdownPreviewCSS()}
       .catch(function() { historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>'; });
   }
 
-  historySearchBtn.addEventListener('click', runAnswerCacheSearch);
-  historySearchClearBtn.addEventListener('click', clearAnswerCacheSearch);
+  historySearchBtn.addEventListener('click', function() {
+    if (historySearchTimer) {
+      clearTimeout(historySearchTimer);
+      historySearchTimer = null;
+    }
+    runAnswerCacheSearch();
+  });
+  historyPastLogSearchBtn.addEventListener('click', runPastLogSearch);
+  historySearchEl.addEventListener('input', scheduleIncrementalSearch);
   historySearchEl.addEventListener('keydown', function(ev) {
     if (ev.key === 'Enter') {
       ev.preventDefault();
+      if (historySearchTimer) {
+        clearTimeout(historySearchTimer);
+        historySearchTimer = null;
+      }
       runAnswerCacheSearch();
     }
   });

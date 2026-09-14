@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentHistorySearchBinds, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, persistCursorAgentPastLogHits, queryCursorAgentHistoryWithSearch, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -349,7 +349,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -547,6 +547,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cursor_agent_launch_log', migration: '0137', description: '/cursor-agentページからCursor Background Agent APIを起動したプロンプト・レスポンス(問答ペア)の履歴。AIチャットのai_chat_sharesと同様、後から一覧・詳細を読み出せる', syncPolicy: 'auto' },
   { name: 'cursor_agent_status_log', migration: '0138', description: 'cursor_agent_launch_log 1件(1回の起動)に対する状態取得履歴(初回起動時・以後の「最新状態を取得」のたびに追記。上書きせず連鎖として保持する。ruby_wasm_snippet_verificationsと同じ親子パターン)', syncPolicy: 'auto' },
   { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
+  { name: 'cursor_agent_search_log', migration: '0140', description: '/cursor-agentの「過去ログ検索」で、検索キーワードとヒットした起動履歴(cursor_agent_launch_log)を結びつける集計。AIチャットのaichat_search_logと同じく (user_id, keyword, launch_id) が一意', syncPolicy: 'auto' },
+  { name: 'cursor_agent_search_history', migration: '0140', description: '/cursor-agentの「過去ログ検索」明細。同じキーワード×起動を完了検索するたびにseq_numを増やして追記する(aichat_search_history相当)', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2142,6 +2144,31 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_status_log_launch ON cursor_agent_st
   cached_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_answer_cache(launch_id);`,
+  '0140': `CREATE TABLE IF NOT EXISTS cursor_agent_search_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  first_searched_at TEXT NOT NULL,
+  last_searched_at TEXT NOT NULL,
+  select_count INTEGER NOT NULL DEFAULT 1,
+  result_count INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cursor_agent_search_log_unique ON cursor_agent_search_log(user_id, keyword, launch_id);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_log_user ON cursor_agent_search_log(user_id, last_searched_at);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_log_launch ON cursor_agent_search_log(launch_id);
+CREATE TABLE IF NOT EXISTS cursor_agent_search_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  seq_num INTEGER NOT NULL,
+  searched_at TEXT NOT NULL,
+  result_count INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_lookup ON cursor_agent_search_history(user_id, keyword, launch_id);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_user ON cursor_agent_search_history(user_id, searched_at);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_launch ON cursor_agent_search_history(launch_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2396,6 +2423,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
   cursor_agent_status_log: { id: 'pk', launch_id: 'fk+idx' },
   cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
+  cursor_agent_search_log: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx' },
+  cursor_agent_search_history: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx', seq_num: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2527,6 +2556,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cursor_agent_launch_log: 'ai',
   cursor_agent_status_log: 'ai',
   cursor_agent_answer_cache: 'ai',
+  cursor_agent_search_log: 'ai',
+  cursor_agent_search_history: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2653,6 +2684,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   cursor_agent_launch_log: { user_id: 'user_sessions' },
   cursor_agent_status_log: { launch_id: 'cursor_agent_launch_log' },
   cursor_agent_answer_cache: { launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_search_log: { user_id: 'user_sessions', launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_search_history: { user_id: 'user_sessions', launch_id: 'cursor_agent_launch_log' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -5460,6 +5493,16 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>();
       return buildAichatSourceTotals(sourceRows.results ?? []);
     },
+    searchCursorAgentHistory: async (keyword) => {
+      if (!c.env.DB) return { results: [] };
+      const searchQuery = normalizeCursorAgentHistorySearchQuery(keyword);
+      if (!searchQuery) return { results: [] };
+      const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string }>(c.env.DB, user.sub, searchQuery);
+      return {
+        results: mapCursorAgentHistoryToCsearchItems(listed.rows),
+        searchError: listed.searchError,
+      };
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
@@ -5467,6 +5510,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       usedModel: 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
+      nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
       svg: slashCommand.svg ?? null,
     });
   }
@@ -13445,8 +13489,9 @@ type CursorAgentHistoryRow = {
  * 返す。各行にはcursor_agent_status_logの最新1件(fetched_at最大)の状態
  * (agent_status/run_status/report_text)を相関サブクエリで結合する
  * (=「問答集」として、起動時点の情報と最新の答えをまとめて読み出せるようにする)。
- * q があるときは画面上の列ではなく cursor_agent_answer_cache.answer_text を
- * 検索する。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
+ * q があるときは回答キャッシュ本文と画面の列を INSTR する。
+ * キャッシュ表(0139)が無いときは画面の列だけで再検索し、診断用 searchError は残す。
+ * AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
  */
 app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -13471,28 +13516,85 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
   }
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  if (listed.searchError) {
+    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: listed.searchError });
+  }
+  // 表未作成・破損の確認用。本番D1は
+  // 「回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR」
+  // になる。SPEC.cursor-agent.md に必載。0140を適用しても 0139 が無い限り残る。
+  return jsonUtf8({
+    rows: listed.rows,
+    source: 'answer_cache',
+    query: searchQuery,
+    cacheTotal,
+    searchError: listed.searchError || undefined,
+  });
+});
+
+/**
+ * /cursor-agent の「過去ログ検索」。AIチャット左サイドバーの検索完了
+ * (aichat_search_log へキーワード×ヒット共有を結ぶ)と同じく、サーバ側で
+ * 履歴を検索し、ヒットした自分の起動 id だけをキーワードへ結びつける。
+ * クライアントが送った launchIds は使わない。キー入力の GET では保存しない。
+ */
+app.post('/api/cursor-agent/history/past-log-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  let body: { keyword?: string } = {};
   try {
-    const { results } = await c.env.DB
-      .prepare(buildCursorAgentHistoryListSql(true))
-      .bind(...buildCursorAgentHistorySearchBinds(user.sub, searchQuery))
-      .all<CursorAgentHistoryRow>();
-    return jsonUtf8({
-      rows: results ?? [],
-      source: 'answer_cache',
-      query: searchQuery,
-      cacheTotal,
-    });
+    body = await c.req.json<{ keyword?: string }>();
+  } catch {
+    body = {};
+  }
+  const searchQuery = normalizeCursorAgentHistorySearchQuery(body.keyword);
+  if (!searchQuery) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let cacheTotal: number | null = null;
+  try {
+    const countRow = await c.env.DB
+      .prepare(buildCursorAgentAnswerCacheCountSql())
+      .bind(user.sub)
+      .first<{ c: number }>();
+    cacheTotal = Number(countRow?.c ?? 0);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: message });
-    return jsonUtf8({
-      rows: [],
-      source: 'answer_cache',
-      query: searchQuery,
-      cacheTotal,
-      searchError: `回答キャッシュの検索に失敗しました: ${message}`,
+    logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
+  }
+
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  const rows = listed.rows;
+  const searchError = listed.searchError ?? '';
+  if (searchError) {
+    logger.error('[cursor-agent] 過去ログ検索の履歴取得に失敗', { userId: user.sub, error: searchError });
+  }
+
+  const launchIds = rows.map((row) => row.id);
+  const persist = await persistCursorAgentPastLogHits(c.env.DB, {
+    userId: user.sub,
+    keyword: searchQuery,
+    launchIds,
+    resultCount: launchIds.length,
+    nowIso: new Date().toISOString(),
+  });
+  if (!persist.ok && persist.errorCode === 'persist_failed') {
+    logger.error('[cursor-agent] 過去ログ検索の保存に失敗', {
+      userId: user.sub,
+      keyword: searchQuery,
+      error: persist.detail,
     });
   }
+
+  return jsonUtf8({
+    rows,
+    source: 'answer_cache',
+    query: searchQuery,
+    cacheTotal,
+    searchError: searchError || undefined,
+    savedCount: persist.ok ? persist.savedCount : 0,
+    resultCount: launchIds.length,
+    persistError: persist.ok ? undefined : persist.detail,
+  });
 });
 
 /**
@@ -13535,6 +13637,18 @@ app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
     .bind(id, user.sub)
     .first<{ id: number }>();
   if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_search_history WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 過去ログ検索明細の削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_search_log WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 過去ログ検索集計の削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
   try {
     await c.env.DB.prepare(`DELETE FROM cursor_agent_answer_cache WHERE launch_id = ?`).bind(id).run();
   } catch (err) {

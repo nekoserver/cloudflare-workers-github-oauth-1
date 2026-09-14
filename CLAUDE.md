@@ -317,6 +317,12 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 - GitHub webhook → Slack/外部Worker(Altワーカー)通知パイプライン(経路A/B/Cの区別・write-onlyデータストア事故・Slack app_mentionのbot判定):
   [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md)
+- /cursor-agent（起動・チャンク結合・キャッシュ・応答/過去検索。次工程はAIチャット入力窓とダイナミックワーカー。診断エラー `no such table: cursor_agent_answer_cache` は `SPEC.cursor-agent.md` に必載）:
+  [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
+  [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
+  [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md)
+  [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 
 ---
 
