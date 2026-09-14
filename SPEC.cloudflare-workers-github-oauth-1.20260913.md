@@ -41,3 +41,46 @@ Agent ID は既にアプリ内モーダルを開いていたが、本文は状�
 ### 関連コミット
 
 - [`8eb1aeb`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8eb1aeba46e2a40654d20f8aa54c1909494d96f7) cursor-agentのAgent IDタップでアプリ先の回答文を最上位モーダルへ埋め込む
+
+## 2. 毎回落ちているユニットテストの修復
+
+**対象**: jsdom環境のJWT検証(`src/utils/jwt.ts`)、空港/国境マスタ
+(`src/data/airports.ts` / `src/data/countryBorders.ts`)、
+`/apis` の `/api/aichat` 説明、および実装と乖離したソース文字列テスト —
+毎回失敗していた15ファイル20件を、実装の契約に合わせて修復する。
+
+### 背景
+
+`npx vitest run` を回すたびに同じ20件が落ち、新規変更の成否が見えなくなっていた。
+原因は実装退行ではなく、(1) jsdomとNodeのSubtleCryptoでArrayBufferのrealmが違う、
+(2) マスタデータの欠落、(3) 実装変更後に更新されていないソース照合テスト、の3系統だった。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | jsdomでJWT検証が例外になり /cheese-search /wasm-modules が401 | verifyにUint8Arrayを渡す |
+| 2 | APT_REGIONSのLKCSがAIRPORT_LISTに無く国旗が欠ける | LKCSを追加 |
+| 3 | AIRPORT_LISTの🇦🇱にCOUNTRY_BORDERS.ALが無く国境描画が例外 | ALポリゴンを追加 |
+| 4 | 古いテストが /neko hms 列挙を要求し、新しい契約(/neko help案内)と衝突する | 列挙しない契約にテストを揃える |
+| 5 | ソース照合テストが古い断片を探し続けて落ちる | 現行実装の契約に合わせて更新 |
+| 6 | aichat履歴E2Eでscript実行時にfetch未定義 | beforeParseでfetchを注入 |
+| 7 | 城タップ座標が古い2点ビュー計算のまま当たない | tourPoints全体で視点を再計算 |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/jwt.ts` | SubtleCrypto.verifyへTypedArrayを渡す |
+| `src/utils/jwt-jsdom.test.ts` | jsdom環境でのJWT往復テストを追加 |
+| `src/data/airports.ts` | LKCSを追加 |
+| `src/data/countryBorders.ts` | アルバニア(AL)の国境データを追加 |
+| `src/views/apis.ts` / `src/data/apiEndpointList.ts` | /nekoは列挙せず /neko help へ案内 |
+| 複数の `*.test.ts` | ソース照合・並び順・城タップ座標の契約を現行実装に合わせる |
+
+### 関連コミット
+
+- [`16892c9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/16892c9) jsdom環境でもJWT検証が通るようSubtleCryptoへTypedArrayを渡す
+- [`002ea48`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/002ea48) AIRPORT_LISTにLKCSを追加しCOUNTRY_BORDERSにアルバニアを補完する
+- [`e5b5b75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e5b5b75) 毎回落ちていたソース照合テストとマスタ契約を現行実装に合わせる
+- [`49914a0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/49914a0) /neko説明は列挙せずhelp案内に揃え、城タップテストのscrollIntoViewを補う

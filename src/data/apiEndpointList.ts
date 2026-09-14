@@ -4,7 +4,7 @@
 export type ApiEndpointEntry = { group: string; method: string; path: string; desc: string };
 
 export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
-  { group: 'AI チャット', method: 'POST', path: '/api/aichat', desc: 'AI にメッセージを送信（/neko ローカルコマンドではAIを呼ばず応答し、uuidgen4・uuidgen7は生成したUUIDを履歴にも保存する）' },
+  { group: 'AI チャット', method: 'POST', path: '/api/aichat', desc: 'AI にメッセージを送信（/neko ローカルコマンドではAIを呼ばず応答し、一覧は /neko help で確認可能。uuidgen4・uuidgen7は生成したUUIDを履歴にも保存する）' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares/search', desc: 'AIチャット全文検索' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares/calendar', desc: '月別カレンダー' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/daily-stats', desc: '日別統計（キーワード・モデル）' },

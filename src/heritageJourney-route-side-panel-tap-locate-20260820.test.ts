@@ -27,6 +27,7 @@ function setupPage() {
   };
   const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
   proto.getContext = () => ctx;
+  Element.prototype.scrollIntoView = function() {};
   // eslint-disable-next-line no-new-func
   new Function(scriptSrc)();
   return { arcCalls };

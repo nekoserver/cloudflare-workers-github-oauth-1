@@ -35,19 +35,20 @@ afterEach(() => {
 
 function buildDom(fetchImpl: typeof fetch): JSDOM {
   const html = getAiChatPage(minimalUser);
-  const instance = new JSDOM(html, {
+  return new JSDOM(html, {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     url: 'https://example.com/aichat',
+    beforeParse(window) {
+      window.fetch = fetchImpl as unknown as typeof window.fetch;
+      // jsdomはscrollIntoView/matchMedia等の一部ブラウザAPIを実装しないため、
+      // ページ側コードが参照していても即例外にならないよう最低限のダミーを補う。
+      window.matchMedia = window.matchMedia || ((() => ({
+        matches: false, addListener: () => {}, removeListener: () => {},
+        addEventListener: () => {}, removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia);
+    },
   });
-  instance.window.fetch = fetchImpl as unknown as typeof instance.window.fetch;
-  // jsdomはscrollIntoView/matchMedia等の一部ブラウザAPIを実装しないため、
-  // ページ側コードが参照していても即例外にならないよう最低限のダミーを補う。
-  instance.window.matchMedia = instance.window.matchMedia || ((() => ({
-    matches: false, addListener: () => {}, removeListener: () => {},
-    addEventListener: () => {}, removeEventListener: () => {},
-  })) as unknown as typeof instance.window.matchMedia);
-  return instance;
 }
 
 describe('E2E: サイドバー検索結果クリック → 詳細プレビューモーダルに添付画像が表示される', () => {

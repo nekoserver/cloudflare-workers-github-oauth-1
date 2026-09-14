@@ -257,9 +257,9 @@ describe('buildGroupErData', () => {
     // 異名FK: group_id → repo_groups.id
     expect(resolveLogicalFkTargetCol('repo_group_members', 'group_id')).toBe('id');
     expect(resolveLogicalFkTargetCol('group_oauth_apps', 'group_id')).toBe('id');
-    // 異名FK: request_id → ai_summary_log.id
-    expect(resolveLogicalFkTargetCol('commit_agent_log', 'request_id')).toBe('id');
-    expect(resolveLogicalFkTargetCol('ai_summary_link_access_log', 'request_id')).toBe('id');
+    // 同名FK: request_id → ai_summary_log.request_id (UNIQUE)
+    expect(resolveLogicalFkTargetCol('commit_agent_log', 'request_id')).toBe('request_id');
+    expect(resolveLogicalFkTargetCol('ai_summary_link_access_log', 'request_id')).toBe('request_id');
     // 同名FK: repo_name → installation_permissions.repo_name (override 無し)
     expect(resolveLogicalFkTargetCol('repo_color_settings', 'repo_name')).toBe('repo_name');
     expect(resolveLogicalFkTargetCol('repo_group_members', 'repo_name')).toBe('repo_name');
