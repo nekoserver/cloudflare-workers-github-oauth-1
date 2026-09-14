@@ -191,3 +191,7 @@ INNER JOIN でキャッシュ行だけを見ていたため、画面上のプロ
 
 - 検索はサーバ側のまま。インクリメンタルサーチは戻さない
 - 回答キャッシュ本文でも、画面の列でもヒットする
+
+### 関連コミット
+
+- [`a9a5f83`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a9a5f83) 履歴検索を画面の語でもヒットさせ、失敗メッセージが見えるようにする
