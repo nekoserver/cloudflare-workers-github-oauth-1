@@ -88,6 +88,18 @@ describe('POST /api/aichat/permission-external', () => {
     const body = await res.json() as { allowed: boolean };
     expect(body.allowed).toBe(false);
   });
+
+  it('許可リストには登録されているがgithub_login未設定のメールアドレスはallowed:falseを返す(グレーアウト表示にするため。query-external側の500エラーをボタンを押すまで知れない状態にしない)', async () => {
+    const db = createMockDb({ 'ok@example.com': '' });
+    const res = await app.request(
+      '/api/aichat/permission-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: db }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { allowed: boolean };
+    expect(body.allowed).toBe(false);
+  });
 });
 
 describe('POST /api/aichat/query-external', () => {

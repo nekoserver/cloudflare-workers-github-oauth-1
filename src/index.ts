@@ -12951,13 +12951,20 @@ app.post('/api/kimi-code/generate-external', async (c) => {
 });
 
 /**
- * dynamicnekoのAI問い合わせウィジェットが、質問を送信する前に許可ユーザーか
- * どうかを確認するAPI。Bearer secret(AICHAT_EXTERNAL_SECRET)で認証した上、
- * D1のdynamicneko_aichat_allowed_usersに登録されたメールアドレスかどうかを
- * 判定する。フェイルクローズ(DB未設定・クエリ失敗時もallowed:falseを返す。
- * ルール8: 記録はlogger.error、通知はレスポンスのerrorフィールド)。
+ * dynamicnekoのAI問い合わせウィジェット・CursorOps(cursor cacheモジュール)双方が、
+ * 実際に送信する前に許可ユーザーかどうかを確認するAPI。Bearer secret
+ * (AICHAT_EXTERNAL_SECRET)で認証した上、D1のdynamicneko_aichat_allowed_usersに
+ * 登録されたメールアドレスかどうか、かつgithub_loginが登録済みかどうかを判定する。
+ * フェイルクローズ(DB未設定・クエリ失敗時もallowed:falseを返す。ルール8: 記録は
+ * logger.error、通知はレスポンスのerrorフィールド)。
+ *
+ * github_login未登録の場合もallowed:falseにする(メール自体は許可リストに
+ * あっても、query-external側は運用側の設定漏れで500を返す。「ボタンを押すまで
+ * 使えないと分からない」体験を避け、事前にグレーアウト表示できるようにするため)。
+ *
  * dynamicneko側はこのAPIの結果でUIをグレーアウトするが、実際の問い合わせ本体
- * (/api/aichat/query-external)側でも同じ判定を必ず再検証する。
+ * (/api/aichat/query-external・/api/cursor-agent/query-external)側でも
+ * 同じ判定を必ず再検証する。
  */
 app.post('/api/aichat/permission-external', async (c) => {
   const auth = c.req.header('Authorization') ?? '';
@@ -12970,7 +12977,9 @@ app.post('/api/aichat/permission-external', async (c) => {
   const email = body?.email ?? '';
   try {
     const allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
-    return jsonUtf8({ allowed });
+    if (!allowed) return jsonUtf8({ allowed: false });
+    const login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+    return jsonUtf8({ allowed: login !== null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[dynamicneko-aichat] 権限確認クエリ失敗', { email, error: message });
