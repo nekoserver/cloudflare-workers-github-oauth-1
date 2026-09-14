@@ -13809,7 +13809,39 @@ app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) 
     )
     .bind(id)
     .first<{ agent_status: string | null; run_status: string | null }>();
-  const canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(latestStatus?.agent_status, latestStatus?.run_status);
+  let canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(latestStatus?.agent_status, latestStatus?.run_status);
+
+  // DB上のcursor_agent_status_logは、/cursor-agentページを開いたときの
+  // 自動リフレッシュか明示的なrefresh呼び出しでしか更新されない。/neko csearch
+  // の「表示」だけを使い続けているユーザーの起動記録は、Agentが実際には
+  // とっくに完了していてもDB上は起動直後のRUNNING等のまま更新されず、
+  // isCursorAgentSuccessfulTerminalが永遠にfalseのままになる(実データで
+  // cursor_agent_answer_cacheが0件だった原因。詳細はNOTICE参照)。
+  // DB上が非終了のときだけ、会話取得の前にrefreshと同じCursor APIステータス
+  // 問い合わせで鮮度を取り直す。既に終了扱いならAPI呼び出しを増やさない。
+  if (!canCacheFinalAnswer && c.env.CURSOR_API_KEY) {
+    try {
+      const statusRes = await fetch(buildCursorAgentStatusUrl(row.agent_id), {
+        headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+      });
+      if (statusRes.ok) {
+        const statusJson: unknown = await statusRes.json().catch(() => null);
+        if (statusJson !== null) {
+          const fields = extractCursorAgentFields(statusJson);
+          await c.env.DB
+            .prepare(
+              `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
+            )
+            .bind(id, fields.status, fields.runStatus, fields.reportText, JSON.stringify(statusJson))
+            .run();
+          canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(fields.status, fields.runStatus);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('[cursor-agent] 会話取得前の状態再取得に失敗(そのまま続行)', { userId: user.sub, agentId: row.agent_id, error: message });
+    }
+  }
 
   let cacheError: string | undefined;
   if (canCacheFinalAnswer) {

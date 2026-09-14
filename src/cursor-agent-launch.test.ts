@@ -1034,8 +1034,8 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
         { id: 'm2', type: 'assistant_message', text: 'READMEを更新しました' },
       ],
     };
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(conversation), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(conversation), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -1171,6 +1171,62 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     expect(cacheRows[0].answer_text).not.toContain('READMEを直して');
   });
 
+  it('DB上のステータスが古いRUNNINGのままでも、会話取得前にCursor APIのステータスを再取得し、実際は終了していればキャッシュする(本番でcursor_agent_answer_cacheが0件だった実データを踏まえた再発防止テスト)', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-stale',
+      agentStatus: 'RUNNING', runStatus: 'RUNNING',
+      rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00',
+    });
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes('/conversation')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          messages: [{ type: 'assistant_message', text: '実際はもう完了していた回答' }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        agent: { id: 'bc-stale', status: 'FINISHED' },
+        run: { status: 'COMPLETED' },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[]; source?: string };
+    expect(data.source).toBe('api');
+    expect(data.answers).toEqual(['実際はもう完了していた回答']);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.cursor.com/v1/agents/bc-stale',
+      expect.objectContaining({ headers: expect.any(Object) })
+    );
+    const cacheRows = db.prepare('SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?').all(id) as { answer_text: string }[];
+    expect(cacheRows).toHaveLength(1);
+    expect(cacheRows[0].answer_text).toBe('実際はもう完了していた回答');
+    const statusRows = db.prepare('SELECT agent_status, run_status FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY id DESC').all(id) as { agent_status: string; run_status: string }[];
+    expect(statusRows[0].agent_status).toBe('FINISHED');
+    expect(statusRows[0].run_status).toBe('COMPLETED');
+  });
+
+  it('CURSOR_API_KEY未設定なら、DB上のステータスが古くても追加のステータス問い合わせは行わずキャッシュもしない', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-stale-nokey',
+      agentStatus: 'RUNNING', runStatus: 'RUNNING',
+      rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('RUNNING中の非空回答はキャッシュせず、次回復帰で再取得できるようにする', async () => {
     const db = setupDb();
     const id = insertLaunchWithStatus(db, {
@@ -1178,11 +1234,11 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
       agentStatus: 'RUNNING', runStatus: 'RUNNING',
       rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00',
     });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify({
         messages: [{ type: 'assistant_message', text: 'まだ途中の回答' }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    ));
+    )));
     const auth = await makeAuthHeader('user1');
     const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
       headers: { Authorization: auth },
@@ -1201,9 +1257,9 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
       userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-empty',
       rawResponse: {}, createdAt: '2026-09-13 00:00:00',
     });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify({ messages: [{ type: 'user_message', text: '質問だけ' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    ));
+    )));
     const auth = await makeAuthHeader('user1');
     const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
       headers: { Authorization: auth },
