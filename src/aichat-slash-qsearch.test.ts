@@ -1,17 +1,17 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
-  AICHAT_QSEQRCH_LIMIT,
+  AICHAT_QSEARCH_LIMIT,
   AICHAT_SEARCH_TIMEOUT_MS,
-  formatAichatNekoQseqrchResults,
-  formatAichatQseqrchModelName,
+  formatAichatNekoQsearchResults,
+  formatAichatQsearchModelName,
   formatAichatSlashCommandHelp,
   interpretAichatSlashCommand,
-  mapAiChatSharesToQseqrchItems,
-  type AichatQseqrchItem,
+  mapAiChatSharesToQsearchItems,
+  type AichatQsearchItem,
   type AichatSearchOutcome,
 } from './utils/aichatSlashCommand';
 
-// 対象: AIチャット入力窓のスラッシュコマンド `/neko qseqrch <キーワード>`。
+// 対象: AIチャット入力窓のスラッシュコマンド `/neko qsearch <キーワード>`。
 // AI応答の過去ログ(ai_chat_shares)を質問文・回答文の両方で検索し、
 // ヒットした質問文と回答モデルをMarkdown表で返す。
 // /neko search は件数のみ。/neko csearch は Cursor VM 履歴であり混ぜない。
@@ -25,32 +25,32 @@ import {
 //   (6) 検索例外・タイムアウトを握りつぶす
 //   (7) 質問文のパイプでMarkdown表が壊れる
 
-describe('formatAichatQseqrchModelName', () => {
+describe('formatAichatQsearchModelName', () => {
   it('フルパスのモデル名は末尾だけにする', () => {
-    expect(formatAichatQseqrchModelName('@cf/meta/llama-3.3-70b-instruct-fp8-fast'))
+    expect(formatAichatQsearchModelName('@cf/meta/llama-3.3-70b-instruct-fp8-fast'))
       .toBe('llama-3.3-70b-instruct-fp8-fast');
   });
 
   it('スラッシュ無しはそのまま使う', () => {
-    expect(formatAichatQseqrchModelName('gpt-5')).toBe('gpt-5');
+    expect(formatAichatQsearchModelName('gpt-5')).toBe('gpt-5');
   });
 
   it('欠落は空にせずプレースホルダにする', () => {
-    expect(formatAichatQseqrchModelName(null)).toBe('(モデル不明)');
-    expect(formatAichatQseqrchModelName('')).toBe('(モデル不明)');
-    expect(formatAichatQseqrchModelName('   ')).toBe('(モデル不明)');
+    expect(formatAichatQsearchModelName(null)).toBe('(モデル不明)');
+    expect(formatAichatQsearchModelName('')).toBe('(モデル不明)');
+    expect(formatAichatQsearchModelName('   ')).toBe('(モデル不明)');
   });
 });
 
-describe('mapAiChatSharesToQseqrchItems', () => {
+describe('mapAiChatSharesToQsearchItems', () => {
   it('質問文とモデルを載せ、上限件数で切る', () => {
-    const rows = Array.from({ length: AICHAT_QSEQRCH_LIMIT + 5 }, (_, i) => ({
+    const rows = Array.from({ length: AICHAT_QSEARCH_LIMIT + 5 }, (_, i) => ({
       id: `s${i + 1}`,
       question: `質問${i + 1}`,
       model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     }));
-    const items = mapAiChatSharesToQseqrchItems(rows);
-    expect(items).toHaveLength(AICHAT_QSEQRCH_LIMIT);
+    const items = mapAiChatSharesToQsearchItems(rows);
+    expect(items).toHaveLength(AICHAT_QSEARCH_LIMIT);
     expect(items[0]).toEqual({
       id: 's1',
       question: '質問1',
@@ -59,25 +59,25 @@ describe('mapAiChatSharesToQseqrchItems', () => {
   });
 
   it('空の質問文は握りつぶさずプレースホルダにする', () => {
-    expect(mapAiChatSharesToQseqrchItems([{ id: 's9', question: '  \n', model: 'm' }])).toEqual([
+    expect(mapAiChatSharesToQsearchItems([{ id: 's9', question: '  \n', model: 'm' }])).toEqual([
       { id: 's9', question: '(質問文なし)', model: 'm' },
     ]);
   });
 
   it('改行はセル崩壊を避けるため空白に潰す', () => {
-    expect(mapAiChatSharesToQseqrchItems([{ id: 's2', question: '一行目\n二行目', model: 'gpt-5' }])).toEqual([
+    expect(mapAiChatSharesToQsearchItems([{ id: 's2', question: '一行目\n二行目', model: 'gpt-5' }])).toEqual([
       { id: 's2', question: '一行目 二行目', model: 'gpt-5' },
     ]);
   });
 });
 
-describe('formatAichatNekoQseqrchResults', () => {
+describe('formatAichatNekoQsearchResults', () => {
   it('ヒット時は件数の代わりに質問文とモデルのMarkdown表を出す', () => {
-    const results: AichatQseqrchItem[] = [
+    const results: AichatQsearchItem[] = [
       { id: 's1', question: '東京駅について', model: 'llama-3.3-70b-instruct-fp8-fast' },
       { id: 's2', question: '新幹線について', model: 'gpt-5' },
     ];
-    const text = formatAichatNekoQseqrchResults('駅', { results });
+    const text = formatAichatNekoQsearchResults('駅', { results });
     expect(text).toContain('AIチャット過去ログ検索');
     expect(text).toContain('駅');
     expect(text).toContain('| 質問文 | モデル |');
@@ -88,30 +88,30 @@ describe('formatAichatNekoQseqrchResults', () => {
   });
 
   it('ヒット0件は0件と明示し表を出さない(握りつぶさない)', () => {
-    const text = formatAichatNekoQseqrchResults('見つからない', { results: [] });
+    const text = formatAichatNekoQsearchResults('見つからない', { results: [] });
     expect(text).toContain('見つからない');
     expect(text).toContain('0件');
     expect(text).not.toContain('| 質問文 | モデル |');
   });
 
   it('キーワード未指定は使い方を案内する', () => {
-    const text = formatAichatNekoQseqrchResults('', { results: [] });
-    expect(text).toContain('/neko qseqrch');
+    const text = formatAichatNekoQsearchResults('', { results: [] });
+    expect(text).toContain('/neko qsearch');
   });
 
   it('質問文のパイプはMarkdown表が壊れないようエスケープする', () => {
-    const text = formatAichatNekoQseqrchResults('x', {
+    const text = formatAichatNekoQsearchResults('x', {
       results: [{ id: 's1', question: 'A|B', model: 'gpt-5' }],
     });
     expect(text).toContain('A\\|B');
   });
 });
 
-describe('interpretAichatSlashCommand: /neko qseqrch', () => {
+describe('interpretAichatSlashCommand: /neko qsearch', () => {
   const now = new Date('2026-09-14T00:00:00.000Z');
   const unusedLog = async () => null;
 
-  it('/neko qseqrch <キーワード> はsearchSharesへ渡し、質問文とモデルの表を返す', async () => {
+  it('/neko qsearch <キーワード> はsearchSharesへ渡し、質問文とモデルの表を返す', async () => {
     const outcome: AichatSearchOutcome = {
       hitCount: 2,
       results: [
@@ -121,7 +121,7 @@ describe('interpretAichatSlashCommand: /neko qseqrch', () => {
     };
     const searchFn = vi.fn().mockResolvedValue(outcome);
     const searchCursor = vi.fn();
-    const result = await interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+    const result = await interpretAichatSlashCommand('/neko qsearch 駅', now, {
       fetchLatestCommitAgentLog: unusedLog,
       searchShares: searchFn,
       searchCursorAgentHistory: searchCursor,
@@ -130,8 +130,8 @@ describe('interpretAichatSlashCommand: /neko qseqrch', () => {
     expect(searchCursor).not.toHaveBeenCalled();
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
-    expect(result.response).toBe(formatAichatNekoQseqrchResults('駅', {
-      results: mapAiChatSharesToQseqrchItems(outcome.results),
+    expect(result.response).toBe(formatAichatNekoQsearchResults('駅', {
+      results: mapAiChatSharesToQsearchItems(outcome.results),
     }));
     expect(result.resultsForModal).toBeUndefined();
     expect(result.cursorResultsForModal).toBeUndefined();
@@ -139,7 +139,7 @@ describe('interpretAichatSlashCommand: /neko qseqrch', () => {
 
   it('ヒット0件は表を出さずcursorResultsForModalも付けない', async () => {
     const searchFn = vi.fn().mockResolvedValue({ hitCount: 0, results: [] });
-    const result = await interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+    const result = await interpretAichatSlashCommand('/neko qsearch 駅', now, {
       fetchLatestCommitAgentLog: unusedLog,
       searchShares: searchFn,
     });
@@ -151,7 +151,7 @@ describe('interpretAichatSlashCommand: /neko qseqrch', () => {
 
   it('キーワードの空白は連結して渡す', async () => {
     const searchFn = vi.fn().mockResolvedValue({ hitCount: 0, results: [] });
-    await interpretAichatSlashCommand('/neko qseqrch 東京 駅', now, {
+    await interpretAichatSlashCommand('/neko qsearch 東京 駅', now, {
       fetchLatestCommitAgentLog: unusedLog,
       searchShares: searchFn,
     });
@@ -160,43 +160,57 @@ describe('interpretAichatSlashCommand: /neko qseqrch', () => {
 
   it('キーワード未指定はdepsを呼ばず使い方を返す', async () => {
     const searchFn = vi.fn();
-    const result = await interpretAichatSlashCommand('/neko qseqrch', now, {
+    const result = await interpretAichatSlashCommand('/neko qsearch', now, {
       fetchLatestCommitAgentLog: unusedLog,
       searchShares: searchFn,
     });
     expect(searchFn).not.toHaveBeenCalled();
     expect(result).toEqual({
       handled: true,
-      response: formatAichatNekoQseqrchResults('', { results: [] }),
+      response: formatAichatNekoQsearchResults('', { results: [] }),
     });
   });
 
   it('検索API未設定は握りつぶさず案内する', async () => {
-    const result = await interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+    const result = await interpretAichatSlashCommand('/neko qsearch 駅', now, {
       fetchLatestCommitAgentLog: unusedLog,
     });
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
-    expect(result.response).toContain('/neko qseqrch');
+    expect(result.response).toContain('/neko qsearch');
     expect(result.response).toContain('利用できません');
   });
 
-  it('未対応コマンドと /neko help に /neko qseqrch を含める', async () => {
+  it('未対応コマンドと /neko help に /neko qsearch を含める', async () => {
     const deps = { fetchLatestCommitAgentLog: unusedLog };
     const unknown = await interpretAichatSlashCommand('/neko unknown', now, deps);
     expect(unknown.handled).toBe(true);
     if (!unknown.handled) throw new Error('not handled');
-    expect(unknown.response).toContain('/neko qseqrch');
+    expect(unknown.response).toContain('/neko qsearch');
 
     const help = await interpretAichatSlashCommand('/neko help', now, deps);
     expect(help.handled).toBe(true);
     if (!help.handled) throw new Error('not handled');
-    expect(help.response).toContain('/neko qseqrch');
+    expect(help.response).toContain('/neko qsearch');
     expect(formatAichatSlashCommandHelp()).toContain('質問文と回答モデル');
+  });
+
+  it('誤記 qseqrch は未対応として扱い、qsearch を案内する', async () => {
+    const searchFn = vi.fn();
+    const result = await interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+      fetchLatestCommitAgentLog: unusedLog,
+      searchShares: searchFn,
+    });
+    expect(searchFn).not.toHaveBeenCalled();
+    expect(result.handled).toBe(true);
+    if (!result.handled) throw new Error('not handled');
+    expect(result.response).toContain('未対応');
+    expect(result.response).toContain('/neko qsearch');
+    expect(result.response).not.toContain('/neko qseqrch');
   });
 });
 
-describe('interpretAichatSlashCommand: /neko qseqrch のタイムアウト・エラー処理', () => {
+describe('interpretAichatSlashCommand: /neko qsearch のタイムアウト・エラー処理', () => {
   const now = new Date('2026-09-14T00:00:00.000Z');
 
   afterEach(() => {
@@ -207,7 +221,7 @@ describe('interpretAichatSlashCommand: /neko qseqrch のタイムアウト・エ
     vi.useFakeTimers();
     const neverResolves = new Promise<AichatSearchOutcome>(() => {});
     const searchFn = vi.fn().mockReturnValue(neverResolves);
-    const resultPromise = interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+    const resultPromise = interpretAichatSlashCommand('/neko qsearch 駅', now, {
       fetchLatestCommitAgentLog: async () => null,
       searchShares: searchFn,
     });
@@ -216,12 +230,12 @@ describe('interpretAichatSlashCommand: /neko qseqrch のタイムアウト・エ
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
     expect(result.response).toContain('タイムアウト');
-    expect(result.response).toContain('/neko qseqrch');
+    expect(result.response).toContain('/neko qsearch');
   });
 
   it('searchSharesが例外を投げた場合は握りつぶさずエラーを返す', async () => {
     const searchFn = vi.fn().mockRejectedValue(new Error('D1 query failed'));
-    const result = await interpretAichatSlashCommand('/neko qseqrch 駅', now, {
+    const result = await interpretAichatSlashCommand('/neko qsearch 駅', now, {
       fetchLatestCommitAgentLog: async () => null,
       searchShares: searchFn,
     });
