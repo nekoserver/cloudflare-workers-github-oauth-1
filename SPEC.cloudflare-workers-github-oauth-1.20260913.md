@@ -266,3 +266,5 @@ D1へ検索ログを書くと途中語まで残る。AIチャットはインク�
 
 ### 関連コミット
 
+- [`2082ec9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2082ec9) cursor-agentに過去ログ検索を追加しインクリメンタル検索を戻す
+
