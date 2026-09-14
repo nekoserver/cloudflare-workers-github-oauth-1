@@ -68,3 +68,7 @@ Bearer secret + Service Binding が必要。launch の `user_id` を
 `created_at` は D1 の `datetime('now')`（UTC・TZなし）なので、そのまま出すと JST と誤解される。
 `formatCursorAgentCreatedAtJst` で UTC として解釈してから JST 表示にする。欠落は `(時刻不明)`。
 0139 未適用だと本文検索は画面列フォールバックになり、会話取得もキャッシュを読めない。
+「表示」リンクに下線は付けない。モーダル本文は `<pre>` + `textContent` だと Markdown が
+生のままなので、`#cursorAgentAnswerModalBody` を `.preview-area` の div にし `parseMd` で描画する。
+エラー文字列は Markdown 解釈せず `textContent` のまま出す。`/neko help` の表記は `Cursor VM`
+であり `Cursor VM(courts)` とは書かない。

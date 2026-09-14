@@ -239,6 +239,7 @@ describe('interpretAichatSlashCommand: /neko csearch', () => {
     if (!help.handled) throw new Error('not handled');
     expect(help.response).toContain('/neko csearch');
     expect(formatAichatSlashCommandHelp()).toContain('Cursor VM');
+    expect(formatAichatSlashCommandHelp()).not.toContain('Cursor VM(courts)');
     expect(formatAichatSlashCommandHelp()).toContain('表示');
     expect(formatAichatSlashCommandHelp()).toContain('作成時刻');
   });

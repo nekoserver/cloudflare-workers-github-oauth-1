@@ -244,14 +244,15 @@ export function getAiChatPage(user: {
     .search-log-date { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
     .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
-    .csearch-answer-link { color: var(--accent-color); cursor: pointer; text-decoration: underline; }
+    .csearch-answer-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
     .csearch-result-table .csearch-created-at { white-space: nowrap; color: var(--text-muted, var(--text-secondary)); font-size: 12px; }
     .csearch-result-table td { word-break: break-word; white-space: normal; }
     #cursorAgentAnswerModal .search-log-modal { width: min(840px, 96vw); }
     #cursorAgentAnswerModalBody {
-      white-space: pre-wrap; word-break: break-word; font-size: 13px;
+      word-break: break-word; font-size: 13px;
       color: var(--text-primary); background: var(--bg-secondary);
       padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
+      white-space: normal;
     }
 
     .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -1095,7 +1096,7 @@ export function getAiChatPage(user: {
         <button class="search-log-close" id="cursorAgentAnswerModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body">
-        <pre id="cursorAgentAnswerModalBody"></pre>
+        <div id="cursorAgentAnswerModalBody" class="preview-area"></div>
       </div>
     </div>
   </div>
@@ -1688,7 +1689,13 @@ export function getAiChatPage(user: {
       fetch('/api/cursor-agent/history/' + encodeURIComponent(String(launchId)) + '/conversation', { credentials: 'same-origin' })
         .then(function(res) { return res.json().then(function(data) { return data; }); })
         .then(function(data) {
-          cursorAgentAnswerModalBody.textContent = formatCursorAgentCsearchAnswerText(data || {});
+          var payload = data || {};
+          var text = formatCursorAgentCsearchAnswerText(payload);
+          if (typeof payload.error === 'string' && payload.error.trim()) {
+            cursorAgentAnswerModalBody.textContent = text;
+            return;
+          }
+          cursorAgentAnswerModalBody.innerHTML = parseMd(text);
         })
         .catch(function(err) {
           cursorAgentAnswerModalBody.textContent = '回答の取得に失敗しました: ' + (err && err.message ? err.message : String(err));

@@ -16,6 +16,9 @@ import { formatAichatNekoCsearchResults } from './utils/aichatSlashCommand';
 //   (5) モーダルが getNextZ 未登録で裏に入る
 //   (6) 作成時刻がJSTで出ない
 //   (7) nekoCursorResults欠落時にMarkdownリンクが消える
+//   (8) 「表示」リンクに下線が残る
+//   (9) モーダル回答が textContent のままで見出し・太字にならない
+//  (10) parseMdを通さず生HTMLをinnerHTMLし、XSSになる
 
 const minimalUser = {
   username: 'testuser',
@@ -43,6 +46,18 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
       return Promise.resolve({
         ok: false,
         json: () => Promise.resolve({ error: '見つかりません' }),
+      });
+    }
+    if (u.includes('/api/cursor-agent/history/13/conversation')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ answers: ['## 完了\n\n**README**を更新しました'], source: 'cache' }),
+      });
+    }
+    if (u.includes('/api/cursor-agent/history/14/conversation')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ answers: ['<img src=x onerror=alert(1)>'], source: 'cache' }),
       });
     }
     if (u.includes('/api/aichat/shares/')) {
@@ -182,5 +197,53 @@ describe('AIチャット(DOM実動作): /neko csearch の質問文表と表示�
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 800);
     expect(block).toContain('cursorAgentAnswerModal');
+  });
+
+  it('表示リンクのCSSは下線を付けない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.csearch-answer-link');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, html.indexOf('}', idx) + 1);
+    expect(block).toContain('text-decoration: none');
+    expect(block).not.toContain('text-decoration: underline');
+  });
+
+  it('回答モーダル本体はpreview-areaのdivで、preではない', () => {
+    const html = buildPage();
+    expect(html).toContain('id="cursorAgentAnswerModalBody"');
+    expect(html).toMatch(/<div[^>]*id="cursorAgentAnswerModalBody"[^>]*class="[^"]*preview-area/);
+    expect(html).not.toMatch(/<pre id="cursorAgentAnswerModalBody"/);
+  });
+
+  it('表示クリック後、キャッシュ回答をparseMdでMarkdown描画する', async () => {
+    const results = [{ id: 13, question: 'READMEを直して', createdAtJst: '2026-09-14 14:50:00' }];
+    await setupChatSubmitTest({
+      response: formatAichatNekoCsearchResults('readme', { results }),
+      usedModel: 'local/neko',
+      nekoCursorResults: results,
+    });
+    const link = document.querySelector('.csearch-answer-link') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const body = document.getElementById('cursorAgentAnswerModalBody')!;
+    expect(body.classList.contains('preview-area')).toBe(true);
+    expect(body.querySelector('h2')?.textContent).toBe('完了');
+    expect(body.querySelector('strong')?.textContent).toBe('README');
+    expect(body.textContent).toContain('を更新しました');
+  });
+
+  it('回答に生HTMLがあってもparseMd経由でエスケープされ、imgは作られない', async () => {
+    const results = [{ id: 14, question: 'XSS確認', createdAtJst: '2026-09-14 14:50:00' }];
+    await setupChatSubmitTest({
+      response: formatAichatNekoCsearchResults('xss', { results }),
+      usedModel: 'local/neko',
+      nekoCursorResults: results,
+    });
+    const link = document.querySelector('.csearch-answer-link') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const body = document.getElementById('cursorAgentAnswerModalBody')!;
+    expect(body.querySelector('img')).toBeNull();
+    expect(body.innerHTML).toContain('&lt;img');
   });
 });
