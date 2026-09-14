@@ -349,7 +349,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -13062,6 +13062,58 @@ app.post('/api/aichat/query-external', async (c) => {
     logger.error('[dynamicneko-aichat] AI問い合わせ失敗', { email, error: message });
     return jsonUtf8({ error: 'AI問い合わせでサーバーエラーが発生しました: ' + message }, 500);
   }
+});
+
+/**
+ * dynamicnekoの新規「CursorOps」ページ(cursor cacheモジュール)からの
+ * Cursor VMキャッシュ検索。Bearer secret(AICHAT_EXTERNAL_SECRET、AIに聞く
+ * ウィジェットと共用)で認証した上、dynamicneko_aichat_allowed_usersに登録された
+ * メールアドレスかどうかをサーバー側で必ず再検証する。/neko csearch(AIチャットの
+ * スラッシュコマンド)と同じ queryCursorAgentHistoryWithSearch を使い、
+ * login(GitHub login。本体Workerのuser.subと同一値)をuser_idとして自分の
+ * 起動履歴だけを検索する(他ユーザーの履歴は返さない)。
+ */
+app.post('/api/cursor-agent/query-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; login?: string; keyword?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const login = (body?.login ?? '').trim();
+  const keyword = normalizeCursorAgentHistorySearchQuery(body?.keyword);
+  if (!login) return jsonUtf8({ error: 'login は必須です' }, 400);
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-cursor-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-cursor-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはCursor VMキャッシュ検索を許可されていません' }, 403);
+  }
+
+  const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string; created_at: string; report_text: string | null }>(c.env.DB, login, keyword);
+  if (listed.searchError) {
+    logger.error('[dynamicneko-cursor-cache] 過去ログ検索に失敗', { login, error: listed.searchError });
+  }
+  return jsonUtf8({
+    rows: listed.rows.slice(0, 30).map((row) => ({
+      id: row.id,
+      question: (row.prompt ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+      createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
+      answer: row.report_text ?? null,
+    })),
+    searchError: listed.searchError || undefined,
+  });
 });
 
 /**
