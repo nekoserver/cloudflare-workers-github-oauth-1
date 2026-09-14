@@ -192,9 +192,13 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain("'/api/cursor-agent/history?q=' + encodeURIComponent");
     expect(html).toContain('回答・プロンプト・レポートを検索');
     expect(html).toContain('agentHistorySearchBtn');
+    expect(html).toContain('agentHistoryPastLogSearchBtn');
+    expect(html).toContain('過去ログ検索');
     expect(html).toContain('runAnswerCacheSearch');
+    expect(html).toContain('runPastLogSearch');
+    expect(html).toContain('/api/cursor-agent/history/past-log-search');
     expect(html).not.toContain('filterHistoryRows');
-    expect(html).not.toContain("historySearchEl.addEventListener('input'");
+    expect(html).toContain("historySearchEl.addEventListener('input'");
     expect(html).not.toContain('リポジトリ・Agent ID・プロンプト・応答を検索');
     expect(html).toContain('history-search-error');
     expect(html).not.toContain("errEl.className = 'error-msg'");
