@@ -117,3 +117,7 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 | `src/index.ts` | キャッシュ優先の会話API、削除時のキャッシュ削除、0139登録 |
 | `src/views/cursorAgent.ts` | 回答欄を parseMd でMarkdown描画 |
 | `migrations/0139_create_cursor_agent_answer_cache.sql` | キャッシュテーブル |
+
+### 関連コミット
+
+- [`af7b23a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/af7b23a) cursor-agentの回答文をMarkdown表示しD1キャッシュを優先する
