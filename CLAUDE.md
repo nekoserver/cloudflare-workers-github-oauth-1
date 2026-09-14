@@ -322,6 +322,7 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
   [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
   [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md)
+  [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 
 ---
 
