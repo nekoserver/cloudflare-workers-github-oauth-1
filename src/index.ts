@@ -348,7 +348,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
+import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
@@ -12993,9 +12993,8 @@ app.post('/api/aichat/query-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string; question?: string; model?: string; login?: string }>().catch(() => null);
+  const body = await c.req.json<{ email?: string; question?: string; model?: string }>().catch(() => null);
   const email = body?.email ?? '';
-  const login = body?.login ?? '';
   const question = (body?.question ?? '').trim().slice(0, 4000);
   if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
   const model = resolveDynamicnekoAichatModel(body?.model);
@@ -13013,11 +13012,28 @@ app.post('/api/aichat/query-external', async (c) => {
     return jsonUtf8({ error: 'このメールアドレスはAI問い合わせを許可されていません' }, 403);
   }
 
+  // login(user_id)はリクエスト本文から受け取らない。Bearer secretと許可済み
+  // メールアドレス1件さえ知っていれば任意のloginを送りつけて他ユーザーの
+  // 履歴を検索・書き込みできてしまう脆弱性(PR #1809/#1810で混入)が実際に
+  // 発覚したため、サーバー側で検証済みのemailに紐づく登録済みloginだけを
+  // 信頼する(resolveDynamicnekoAllowedLogin参照)。
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-aichat] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-aichat] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
   // /neko aireqst のみ、AIを呼ばずローカルで応答する(他の/nekoサブコマンドは
   // user.subベースのCookieセッション前提のD1参照が多く、dynamicneko側の
   // Bearer secret認証とは前提が異なるため対象外。必要になれば個別に追加する)。
   if (question.toLowerCase() === '/neko aireqst') {
-    if (!login) return jsonUtf8({ error: 'login は必須です' }, 400);
     try {
       const month = new Date().toISOString().slice(0, 7);
       const sourceRows = await c.env.DB.prepare(
@@ -13070,8 +13086,14 @@ app.post('/api/aichat/query-external', async (c) => {
  * ウィジェットと共用)で認証した上、dynamicneko_aichat_allowed_usersに登録された
  * メールアドレスかどうかをサーバー側で必ず再検証する。/neko csearch(AIチャットの
  * スラッシュコマンド)と同じ queryCursorAgentHistoryWithSearch を使い、
- * login(GitHub login。本体Workerのuser.subと同一値)をuser_idとして自分の
+ * emailに紐づく「サーバー側で登録済みの」GitHub loginをuser_idとして自分の
  * 起動履歴だけを検索する(他ユーザーの履歴は返さない)。
+ *
+ * セキュリティ: リクエスト本文のloginは一切受け取らない・信用しない。
+ * Bearer secretと許可済みメールアドレス1件さえ知っていれば、loginを任意の
+ * 値に差し替えて他ユーザーの履歴を検索できてしまう脆弱性(PR #1809/#1810で
+ * 混入)が実際に発覚したため、resolveDynamicnekoAllowedLoginでDB側の
+ * 登録済みloginだけを信頼する。
  */
 app.post('/api/cursor-agent/query-external', async (c) => {
   const auth = c.req.header('Authorization') ?? '';
@@ -13081,11 +13103,9 @@ app.post('/api/cursor-agent/query-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string; login?: string; keyword?: string }>().catch(() => null);
+  const body = await c.req.json<{ email?: string; keyword?: string }>().catch(() => null);
   const email = body?.email ?? '';
-  const login = (body?.login ?? '').trim();
   const keyword = normalizeCursorAgentHistorySearchQuery(body?.keyword);
-  if (!login) return jsonUtf8({ error: 'login は必須です' }, 400);
   if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
 
   let allowed = false;
@@ -13099,6 +13119,19 @@ app.post('/api/cursor-agent/query-external', async (c) => {
   if (!allowed) {
     logger.warn('[dynamicneko-cursor-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
     return jsonUtf8({ error: 'このメールアドレスはCursor VMキャッシュ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-cursor-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-cursor-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
   }
 
   const listed = await queryCursorAgentHistoryWithSearch<{
