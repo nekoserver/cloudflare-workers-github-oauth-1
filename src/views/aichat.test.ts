@@ -1475,7 +1475,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('hitCount: results.length');
   });
 
-  it('index.ts の /api/aichat が searchCursorAgentHistory を渡す（/neko csearch用、Cursor VM履歴を表示検索して質問文最大30件を返す）', () => {
+  it('index.ts の /api/aichat が searchCursorAgentHistory を渡す（スラッシュコマンド /neko csearch 用、Cursor VM履歴を表示検索して質問文最大30件を返す）', () => {
     const { readFileSync } = require('node:fs');
     const { resolve } = require('node:path');
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');

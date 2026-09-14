@@ -307,7 +307,7 @@ export type CursorAgentCsearchOutcome = {
 };
 
 /**
- * Cursor VM履歴行を `/neko csearch` の表行へ変換する。
+ * スラッシュコマンド `/neko csearch` 用に、Cursor VM履歴行を表行へ変換する。
  * チャット本文を埋め尽くさないよう最大30件。空promptは握りつぶさない。
  */
 export function mapCursorAgentHistoryToCsearchItems(
@@ -321,7 +321,7 @@ export function mapCursorAgentHistoryToCsearchItems(
 }
 
 /**
- * `/neko csearch` の応答本文。ヒット有無の件数だけにせず、
+ * スラッシュコマンド `/neko csearch` の応答本文。ヒット有無の件数だけにせず、
  * 質問文と「回答全文」列のMarkdown表を返す(リンク化はUI側)。
  */
 export function formatAichatNekoCsearchResults(keyword: string, outcome: CursorAgentCsearchOutcome): string {
@@ -346,7 +346,7 @@ export function formatAichatNekoCsearchResults(keyword: string, outcome: CursorA
 }
 
 /**
- * `/neko csearch` の回答全文モーダル本文。
+ * スラッシュコマンド `/neko csearch` の回答全文モーダル本文。
  * 会話API(キャッシュ優先)のJSONから、空握りつぶしなしで表示文字列を組み立てる。
  */
 export function formatCursorAgentCsearchAnswerText(payload: {
@@ -1120,6 +1120,7 @@ export async function interpretAichatSlashCommand(
   }
 
   if (subcommand === 'csearch') {
+    // スラッシュコマンド。システムコマンドではない。
     const keyword = parts.slice(2).join(' ').trim();
     if (!keyword) {
       return { handled: true, response: formatAichatNekoCsearchResults('', { results: [] }) };

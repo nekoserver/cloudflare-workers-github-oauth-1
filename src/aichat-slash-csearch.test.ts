@@ -11,7 +11,7 @@ import {
   type CursorAgentCsearchOutcome,
 } from './utils/aichatSlashCommand';
 
-// 対象: AIチャット入力窓の `/neko csearch <キーワード>`。
+// 対象: AIチャット入力窓のスラッシュコマンド `/neko csearch <キーワード>`。
 // Cursor VM(courts)の起動履歴を queryCursorAgentHistoryWithSearch 相当の
 // APIで検索し、ヒット有無の件数だけにせず質問文を表で返す。
 // 回答全文はチャット本文に出さず、リンク経由でキャッシュから読む。

@@ -44,7 +44,7 @@ RUNNING 中の途中回答はキャッシュしない。
 
 `/cursor-agent` 単体では起動・チャンク結合・キャッシュ・応答検索・過去ログ検索まで
 できた。入力窓の `/neko search` は `ai_chat_shares` であり Cursor VM 履歴とは別物。
-表示検索は `/neko csearch` で入力窓からできるようになった（0140 へは書かない）。
+表示検索はスラッシュコマンド `/neko csearch` で入力窓からできるようになった（0140 へは書かない）。
 起動と過去ログ保存、およびダイナミックワーカー経路は未着手。
 dynamicneko は Cookie セッションが無いので、aichat/kimi-code の `-external` と同じく
 Bearer secret + Service Binding が必要。launch の `user_id` を
@@ -53,7 +53,7 @@ Bearer secret + Service Binding が必要。launch の `user_id` を
 
 ## `/neko csearch` は Cursor VM 履歴の表示検索であり `/neko search` と混ぜない
 
-**対象**: AIチャット入力窓の `/neko csearch <キーワード>`。
+**対象**: AIチャット入力窓のスラッシュコマンド `/neko csearch <キーワード>`。システムコマンドではない。
 
 `/neko search` / `/neko s` は `ai_chat_shares`（AIチャットの質問・回答）を見る。
 `/neko csearch` は `cursor_agent_launch_log` と回答キャッシュ（courts / Cursor VM の過去ログ）を見る。

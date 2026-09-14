@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getAiChatPage } from './views/aichat';
 import { formatAichatNekoCsearchResults } from './utils/aichatSlashCommand';
 
-// 対象: /aichat 入力窓の `/neko csearch` 応答。質問文表の「回答全文」リンクを
+// 対象: /aichat 入力窓のスラッシュコマンド `/neko csearch` 応答。質問文表の「回答全文」リンクを
 // 押すと最上位レイヤーの専用モーダルが開き、回答キャッシュ
 // (GET /api/cursor-agent/history/:id/conversation) から全文を読む。
 // /neko search の nekoResults / historyModal とは混ぜない。
