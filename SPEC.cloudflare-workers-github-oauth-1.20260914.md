@@ -164,3 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 
 - `src/aichat-neko-csearch-modal.test.ts`: 下線なし、h2/strong、XSSエスケープ
 - `src/utils/aichatSlashCommand.test.ts`: ヘルプに `(courts)` を含まない
+
+### 関連コミット
+
+- [`be77572`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/be77572) /neko csearch の表示下線を外しモーダル回答をMarkdown描画する
