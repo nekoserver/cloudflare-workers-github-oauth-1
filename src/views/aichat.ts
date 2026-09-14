@@ -244,7 +244,8 @@ export function getAiChatPage(user: {
     .search-log-date { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
     .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
-    .csearch-answer-link { color: var(--accent-color, #667eea); cursor: pointer; }
+    .csearch-answer-link { color: var(--accent-color); cursor: pointer; text-decoration: underline; }
+    .csearch-result-table .csearch-created-at { white-space: nowrap; color: var(--text-muted, var(--text-secondary)); font-size: 12px; }
     .csearch-result-table td { word-break: break-word; white-space: normal; }
     #cursorAgentAnswerModal .search-log-modal { width: min(840px, 96vw); }
     #cursorAgentAnswerModalBody {
@@ -1694,32 +1695,70 @@ export function getAiChatPage(user: {
         });
     }
 
-    function createCsearchAnswerLink(item) {
-      var a = document.createElement('a');
-      a.href = '#';
+    function parseCsearchHrefId(href) {
+      if (!href) return '';
+      var prefix = '#csearch-';
+      if (href.indexOf(prefix) !== 0) return '';
+      var rest = href.slice(prefix.length);
+      if (!rest) return '';
+      var i;
+      for (i = 0; i < rest.length; i++) {
+        var code = rest.charCodeAt(i);
+        if (code < 48 || code > 57) return '';
+      }
+      return rest;
+    }
+
+    function bindCsearchAnswerLink(a, item) {
+      if (!a || !item) return;
+      a.href = '#csearch-' + item.id;
       a.className = 'csearch-answer-link';
-      a.textContent = '回答全文';
+      a.textContent = '表示';
+      a.removeAttribute('target');
       a.setAttribute('data-launch-id', String(item.id));
       a.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         openCursorAgentAnswerModal(item.id, item.question || '');
       });
+    }
+
+    function createCsearchAnswerLink(item) {
+      var a = document.createElement('a');
+      bindCsearchAnswerLink(a, item);
       return a;
     }
 
+    function questionFromCsearchRow(tr) {
+      if (!tr || !tr.cells || tr.cells.length < 2) return '';
+      return (tr.cells[tr.cells.length - 2].textContent || '').trim();
+    }
+
+    function createdAtFromCsearchRow(tr) {
+      if (!tr || !tr.cells || tr.cells.length < 3) return '(時刻不明)';
+      return (tr.cells[0].textContent || '').trim() || '(時刻不明)';
+    }
+
     function wireCsearchAnswerLinks(el, items) {
-      if (!el || !items || items.length === 0) return;
+      if (!el) return;
+      var byId = {};
+      (items || []).forEach(function(item) {
+        if (item && item.id != null) byId[String(item.id)] = item;
+      });
       var table = el.querySelector('table');
       if (!table) {
+        if (!items || items.length === 0) return;
         table = document.createElement('table');
         table.className = 'csearch-result-table';
         var thead = document.createElement('thead');
         var headRow = document.createElement('tr');
+        var tHead = document.createElement('th');
+        tHead.textContent = '作成時刻(JST)';
         var qHead = document.createElement('th');
         qHead.textContent = '質問文';
         var aHead = document.createElement('th');
-        aHead.textContent = '回答全文';
+        aHead.textContent = '表示';
+        headRow.appendChild(tHead);
         headRow.appendChild(qHead);
         headRow.appendChild(aHead);
         thead.appendChild(headRow);
@@ -1727,10 +1766,14 @@ export function getAiChatPage(user: {
         var tbody = document.createElement('tbody');
         items.forEach(function(item) {
           var tr = document.createElement('tr');
+          var timeTd = document.createElement('td');
+          timeTd.className = 'csearch-created-at';
+          timeTd.textContent = item.createdAtJst || '(時刻不明)';
           var qTd = document.createElement('td');
           qTd.textContent = item.question || '(質問文なし)';
           var aTd = document.createElement('td');
           aTd.appendChild(createCsearchAnswerLink(item));
+          tr.appendChild(timeTd);
           tr.appendChild(qTd);
           tr.appendChild(aTd);
           tbody.appendChild(tr);
@@ -1742,12 +1785,26 @@ export function getAiChatPage(user: {
       table.classList.add('csearch-result-table');
       var rows = table.querySelectorAll('tbody tr');
       rows.forEach(function(tr, i) {
-        var item = items[i];
-        if (!item) return;
         var lastTd = tr.cells[tr.cells.length - 1];
         if (!lastTd) return;
-        lastTd.textContent = '';
-        lastTd.appendChild(createCsearchAnswerLink(item));
+        var existing = lastTd.querySelector('a');
+        var hrefId = existing ? parseCsearchHrefId(existing.getAttribute('href') || '') : '';
+        var item = (hrefId && byId[hrefId]) || (items && items[i]) || null;
+        if (!item) {
+          var inferredId = hrefId || (existing && existing.getAttribute('data-launch-id')) || '';
+          if (!inferredId) return;
+          item = {
+            id: Number(inferredId),
+            question: questionFromCsearchRow(tr),
+            createdAtJst: createdAtFromCsearchRow(tr),
+          };
+        }
+        if (existing) {
+          bindCsearchAnswerLink(existing, item);
+        } else {
+          lastTd.textContent = '';
+          lastTd.appendChild(createCsearchAnswerLink(item));
+        }
       });
     }
 
@@ -6865,8 +6922,8 @@ export function getAiChatPage(user: {
         tokEl.textContent = parts.join(' / ') + ' tokens';
         el.appendChild(tokEl);
       }
-      if (isLocalCommand && nekoCursorResults && nekoCursorResults.length > 0) {
-        wireCsearchAnswerLinks(el, nekoCursorResults);
+      if (isLocalCommand) {
+        wireCsearchAnswerLinks(el, nekoCursorResults || []);
       }
       return el;
     }

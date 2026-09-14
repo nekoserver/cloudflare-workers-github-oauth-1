@@ -5497,7 +5497,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       if (!c.env.DB) return { results: [] };
       const searchQuery = normalizeCursorAgentHistorySearchQuery(keyword);
       if (!searchQuery) return { results: [] };
-      const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string }>(c.env.DB, user.sub, searchQuery);
+      const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string; created_at: string }>(c.env.DB, user.sub, searchQuery);
       return {
         results: mapCursorAgentHistoryToCsearchItems(listed.rows),
         searchError: listed.searchError,

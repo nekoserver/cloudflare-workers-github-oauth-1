@@ -27,6 +27,21 @@ export function formatJstDateTime(now: Date): string {
   return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
 }
 
+/**
+ * Cursor VM起動履歴の created_at(SQLite datetime('now')=UTC、TZなし)をJST表示にする。
+ * 欠落・不正は空文字で握りつぶさない。
+ */
+export function formatCursorAgentCreatedAtJst(createdAt: string | null | undefined): string {
+  if (!createdAt || !createdAt.trim()) return '(時刻不明)';
+  const utcString = createdAt.trim();
+  const isoUtc = utcString.includes('T')
+    ? utcString
+    : utcString.replace(' ', 'T') + (utcString.endsWith('Z') ? '' : 'Z');
+  const d = new Date(isoUtc);
+  if (Number.isNaN(d.getTime())) return utcString;
+  return formatJstDateTime(d);
+}
+
 /** DateをUnixエポックからの経過秒数に変換する。 */
 export function formatEpochTime(now: Date): string {
   return String(Math.floor(now.getTime() / 1000));
@@ -146,7 +161,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
-    '| /neko csearch <キーワード> | Cursor VM(courts)の過去ログを検索し、ヒットした質問文を表で表示します。回答全文はリンクから最上位モーダルでキャッシュを読みます |',
+    '| /neko csearch <キーワード> | Cursor VM(courts)の過去ログを検索し、ヒットした質問文を表で表示します。各行の先頭は作成時刻(JST)です。「表示」リンクから最上位モーダルでキャッシュを読みます |',
     '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
@@ -299,6 +314,7 @@ export const AICHAT_CSEARCH_LIMIT = 30;
 export type CursorAgentCsearchItem = {
   id: number;
   question: string;
+  createdAtJst: string;
 };
 
 export type CursorAgentCsearchOutcome = {
@@ -308,21 +324,23 @@ export type CursorAgentCsearchOutcome = {
 
 /**
  * スラッシュコマンド `/neko csearch` 用に、Cursor VM履歴行を表行へ変換する。
- * チャット本文を埋め尽くさないよう最大30件。空promptは握りつぶさない。
+ * チャット本文を埋め尽くさないよう最大30件。空prompt・欠落時刻は握りつぶさない。
  */
 export function mapCursorAgentHistoryToCsearchItems(
-  rows: Array<{ id: number; prompt?: string | null }>,
+  rows: Array<{ id: number; prompt?: string | null; created_at?: string | null }>,
   limit = AICHAT_CSEARCH_LIMIT,
 ): CursorAgentCsearchItem[] {
   return rows.slice(0, limit).map((row) => ({
     id: row.id,
     question: (row.prompt ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+    createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
   }));
 }
 
 /**
  * スラッシュコマンド `/neko csearch` の応答本文。ヒット有無の件数だけにせず、
- * 質問文と「回答全文」列のMarkdown表を返す(リンク化はUI側)。
+ * 作成時刻(JST)・質問文・「表示」リンク列のMarkdown表を返す。
+ * 表示セルは parseMd が実アンカーを作れるよう [表示](#csearch-{id}) にする。
  */
 export function formatAichatNekoCsearchResults(keyword: string, outcome: CursorAgentCsearchOutcome): string {
   if (!keyword) {
@@ -335,9 +353,12 @@ export function formatAichatNekoCsearchResults(keyword: string, outcome: CursorA
   const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
   const lines = [
     `## Cursor VM 過去ログ検索「${keyword}」`,
-    '| 質問文 | 回答全文 |',
-    '|---|---|',
-    ...outcome.results.map((item) => `| ${escapeCell(item.question)} | 回答全文 |`),
+    '| 作成時刻(JST) | 質問文 | 表示 |',
+    '|---|---|---|',
+    ...outcome.results.map((item) => {
+      const created = escapeCell(item.createdAtJst?.trim() || '(時刻不明)');
+      return `| ${created} | ${escapeCell(item.question)} | [表示](#csearch-${item.id}) |`;
+    }),
   ];
   if (outcome.searchError) {
     lines.push('', `⚠️ ${outcome.searchError}`);

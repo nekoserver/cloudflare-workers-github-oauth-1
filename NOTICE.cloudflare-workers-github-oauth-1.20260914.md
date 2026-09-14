@@ -61,6 +61,10 @@ Bearer secret + Service Binding が必要。launch の `user_id` を
 
 `csearch` は `queryCursorAgentHistoryWithSearch` の表示検索であり、
 0140 の `cursor_agent_search_log` / `cursor_agent_search_history` には書かない。
-回答全文はチャット本文に出さず、表の「回答全文」から `#cursorAgentAnswerModal` を開き、
+回答全文はチャット本文に出さず、表の先頭列に作成時刻(JST)、末尾列の「表示」
+（Markdown `[表示](#csearch-{id})` → 実アンカー）から `#cursorAgentAnswerModal` を開き、
 `GET /api/cursor-agent/history/:id/conversation` をキャッシュ優先で読む。
+プレーンテキスト「回答全文」だと `parseMd` が `<a>` を作らず、見た目がリンクにならない。
+`created_at` は D1 の `datetime('now')`（UTC・TZなし）なので、そのまま出すと JST と誤解される。
+`formatCursorAgentCreatedAtJst` で UTC として解釈してから JST 表示にする。欠落は `(時刻不明)`。
 0139 未適用だと本文検索は画面列フォールバックになり、会話取得もキャッシュを読めない。

@@ -281,7 +281,7 @@ Cursor VM の起動履歴（`cursor_agent_launch_log`）とは別コーパスで
 | 入力 | 動き | 既存 API 相当 | 状態 |
 |---|---|---|---|
 | `/neko cursor <プロンプト>` | VM 起動。許可リポジトリは現状1件なので省略可 | `POST /api/cursor-agent/launch` | 未実装 |
-| `/neko csearch <語>` | ヒットした質問文を表で返す（最大30件）。回答全文は最上位モーダルでキャッシュから読む。0140へは書かない | `queryCursorAgentHistoryWithSearch` + `GET .../history/:id/conversation` | 実装済み |
+| `/neko csearch <語>` | ヒットした質問文を表で返す（最大30件）。先頭列は作成時刻(JST)。「表示」リンクから最上位モーダルでキャッシュを読む。0140へは書かない | `queryCursorAgentHistoryWithSearch` + `GET .../history/:id/conversation` | 実装済み |
 | `/neko cursor-past <語>` | 同じ検索をしたうえで 0140 へ保存 | `POST .../past-log-search` | 未実装 |
 
 `/neko search` の意味を Cursor VM 側に付け替えてはいけない。
@@ -291,9 +291,9 @@ AIチャット過去ログ検索は残す。
 
 **対象**: `/aichat` 入力窓のスラッシュコマンド `/neko csearch <キーワード>`、
 `POST /api/aichat` の `searchCursorAgentHistory`、
-応答バブル内の質問文表、「回答全文」リンク、`#cursorAgentAnswerModal` —
-件数表示の代わりにヒットした起動の質問文（`prompt`）を表にし、
-リンクから `GET /api/cursor-agent/history/:id/conversation` のキャッシュ優先本文を
+応答バブル内の質問文表、「表示」リンク、`#cursorAgentAnswerModal` —
+件数表示の代わりにヒットした起動の作成時刻(JST)と質問文（`prompt`）を表にし、
+`[表示](#csearch-{id})` から `GET /api/cursor-agent/history/:id/conversation` のキャッシュ優先本文を
 最上位モーダルで読む。
 
 #### 故障シナリオ
@@ -302,9 +302,12 @@ AIチャット過去ログ検索は残す。
 |---|---|---|
 | 1 | `/neko search` と混ざり `ai_chat_shares` を見る | 別スラッシュコマンド。`searchShares` は呼ばない |
 | 2 | ヒット有無だけ出して質問文が無い | `formatAichatNekoCsearchResults` が質問文表を返す |
-| 3 | 回答全文が AIチャット `historyModal` を開く | `nekoCursorResults` と専用モーダル。`getNextZ()` 登録 |
-| 4 | キャッシュ欠落を空で握りつぶす | モーダルにエラーまたは「キャッシュに回答文がありません」 |
-| 5 | 入力のたびに 0140 へ書く | 表示検索のみ。`persistCursorAgentPastLogHits` は呼ばない |
+| 3 | 「表示」がプレーンテキストで実リンクにならない | Markdown が `[表示](#csearch-{id})` を出し、`parseMd` が `<a>` を作る。クリックは `preventDefault` して専用モーダル |
+| 4 | 回答全文が AIチャット `historyModal` を開く | `nekoCursorResults` と専用モーダル。`getNextZ()` 登録 |
+| 5 | キャッシュ欠落を空で握りつぶす | モーダルにエラーまたは「キャッシュに回答文がありません」 |
+| 6 | 入力のたびに 0140 へ書く | 表示検索のみ。`persistCursorAgentPastLogHits` は呼ばない |
+| 7 | `created_at` 欠落・不正を空にする | `formatCursorAgentCreatedAtJst` が `(時刻不明)` または原文を残す |
+| 8 | parseMd の `target="_blank"` で別タブへ飛ぶ | 配線時に `target` を外し `preventDefault` する |
 
 応答のチャンク結合とキャッシュ書き込みは、起動直後ではなく
 成功終端を確認したあと（既存 conversation 経路）で行う。入力窓から起動した行も

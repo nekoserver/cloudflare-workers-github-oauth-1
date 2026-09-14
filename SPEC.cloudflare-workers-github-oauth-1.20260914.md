@@ -88,3 +88,41 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 - [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
 - [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
+
+## 3. `/neko csearch` の「表示」を実リンクにし先頭列へ作成時刻(JST)を出す
+
+**対象**: スラッシュコマンド `/neko csearch` の応答表、`formatAichatNekoCsearchResults`、
+`mapCursorAgentHistoryToCsearchItems`、`#cursorAgentAnswerModal` —
+操作列をプレーンテキスト「回答全文」から Markdown `[表示](#csearch-{id})` に変え、
+各行の先頭に質問の作成時刻(JST)を置く。クリックは最上位モーダルでキャッシュ全文を読む。
+
+### 背景
+
+#1805 でスラッシュコマンド自体は認識されるようになったが、表の操作列が
+プレーンテキストだったため `parseMd` が `<a>` を作らず、「回答全文」がリンクに見えなかった。
+加えて作成時刻が無く、どの起動か時刻で辿れなかった。`created_at` は D1 の
+`datetime('now')`（UTC・TZなし）なので、そのまま出すと JST と誤解される。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 「表示」がプレーンテキスト | Markdown リンクを出し `parseMd` が実アンカーを作る |
+| 2 | `target="_blank"` で別タブへ飛ぶ | 配線時に `target` を外し `preventDefault` する |
+| 3 | `nekoCursorResults` 欠落でリンク消失 | href `#csearch-{id}` から id を復元してモーダルを開く |
+| 4 | `created_at` 欠落・不正を空にする | `(時刻不明)` または原文を残す |
+| 5 | AIチャット `historyModal` を開く | 専用 `#cursorAgentAnswerModal` のみ |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/aichatSlashCommand.ts` | `formatCursorAgentCreatedAtJst`、表を3列、`[表示](#csearch-{id})` |
+| `src/index.ts` | 履歴検索で `created_at` を渡す |
+| `src/views/aichat.ts` | 実アンカー配線、下線リンク、時刻列 |
+
+### テスト
+
+- `src/aichat-slash-csearch.test.ts`: JST換算、表の3列、Markdownリンク
+- `src/aichat-neko-csearch-modal.test.ts`: `<a href="#csearch-id">表示</a>`、クリックでモーダル、payload欠落時もリンク
+- `src/utils/markdownRenderer.test.ts`: 表内ハッシュリンクが実アンカーになる
