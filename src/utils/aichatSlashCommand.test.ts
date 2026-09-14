@@ -139,6 +139,7 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko factor');
     expect(result).toContain('/neko dig');
     expect(result).toContain('/neko help');
+    expect(result).toContain('/neko csearch');
   });
 
   it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {

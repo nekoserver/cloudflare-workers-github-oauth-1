@@ -349,7 +349,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5493,6 +5493,16 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>();
       return buildAichatSourceTotals(sourceRows.results ?? []);
     },
+    searchCursorAgentHistory: async (keyword) => {
+      if (!c.env.DB) return { results: [] };
+      const searchQuery = normalizeCursorAgentHistorySearchQuery(keyword);
+      if (!searchQuery) return { results: [] };
+      const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string }>(c.env.DB, user.sub, searchQuery);
+      return {
+        results: mapCursorAgentHistoryToCsearchItems(listed.rows),
+        searchError: listed.searchError,
+      };
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
@@ -5500,6 +5510,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       usedModel: 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
+      nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
       svg: slashCommand.svg ?? null,
     });
   }

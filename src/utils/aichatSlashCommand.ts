@@ -146,6 +146,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko csearch <キーワード> | Cursor VM(courts)の過去ログを検索し、ヒットした質問文を表で表示します。回答全文はリンクから最上位モーダルでキャッシュを読みます |',
     '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
@@ -291,6 +292,82 @@ export function formatAichatSearchResults(keyword: string, outcome: AichatSearch
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
   return `「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`;
+}
+
+export const AICHAT_CSEARCH_LIMIT = 30;
+
+export type CursorAgentCsearchItem = {
+  id: number;
+  question: string;
+};
+
+export type CursorAgentCsearchOutcome = {
+  results: CursorAgentCsearchItem[];
+  searchError?: string | null;
+};
+
+/**
+ * Cursor VM履歴行を `/neko csearch` の表行へ変換する。
+ * チャット本文を埋め尽くさないよう最大30件。空promptは握りつぶさない。
+ */
+export function mapCursorAgentHistoryToCsearchItems(
+  rows: Array<{ id: number; prompt?: string | null }>,
+  limit = AICHAT_CSEARCH_LIMIT,
+): CursorAgentCsearchItem[] {
+  return rows.slice(0, limit).map((row) => ({
+    id: row.id,
+    question: (row.prompt ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+  }));
+}
+
+/**
+ * `/neko csearch` の応答本文。ヒット有無の件数だけにせず、
+ * 質問文と「回答全文」列のMarkdown表を返す(リンク化はUI側)。
+ */
+export function formatAichatNekoCsearchResults(keyword: string, outcome: CursorAgentCsearchOutcome): string {
+  if (!keyword) {
+    return '❌ キーワードを指定してください: /neko csearch <キーワード>';
+  }
+  if (outcome.results.length === 0) {
+    const extra = outcome.searchError ? `\n⚠️ ${outcome.searchError}` : '';
+    return `Cursor VM 過去ログ「${keyword}」: 0件${extra}`;
+  }
+  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const lines = [
+    `## Cursor VM 過去ログ検索「${keyword}」`,
+    '| 質問文 | 回答全文 |',
+    '|---|---|',
+    ...outcome.results.map((item) => `| ${escapeCell(item.question)} | 回答全文 |`),
+  ];
+  if (outcome.searchError) {
+    lines.push('', `⚠️ ${outcome.searchError}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * `/neko csearch` の回答全文モーダル本文。
+ * 会話API(キャッシュ優先)のJSONから、空握りつぶしなしで表示文字列を組み立てる。
+ */
+export function formatCursorAgentCsearchAnswerText(payload: {
+  answers?: unknown;
+  error?: unknown;
+  cacheError?: unknown;
+}): string {
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    return payload.error;
+  }
+  const answers = Array.isArray(payload.answers)
+    ? payload.answers.filter((a): a is string => typeof a === 'string' && a.length > 0)
+    : [];
+  if (answers.length === 0) {
+    return 'キャッシュに回答文がありません';
+  }
+  const body = answers.join('\n\n');
+  if (typeof payload.cacheError === 'string' && payload.cacheError.trim()) {
+    return `${body}\n\n${payload.cacheError}`;
+  }
+  return body;
 }
 
 /**
@@ -661,6 +738,7 @@ export type AichatSlashCommandDeps = {
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
+  searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
   logSearchShares?: (keyword: string, outcome: AichatSearchOutcome) => Promise<void>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
   hourlyTokenUsage?: () => Promise<HourlyTokenUsageRow[]>;
@@ -890,7 +968,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; svg?: string }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string }
   | { handled: false };
 
 /**
@@ -1038,6 +1116,31 @@ export async function interpretAichatSlashCommand(
       handled: true,
       response: formatAichatSearchResults(keyword, outcome.value),
       resultsForModal: outcome.value.results.length > 0 ? outcome.value.results : undefined,
+    };
+  }
+
+  if (subcommand === 'csearch') {
+    const keyword = parts.slice(2).join(' ').trim();
+    if (!keyword) {
+      return { handled: true, response: formatAichatNekoCsearchResults('', { results: [] }) };
+    }
+    if (!deps.searchCursorAgentHistory) {
+      return { handled: true, response: '❌ /neko csearch は現在利用できません(Cursor VM履歴検索API未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.searchCursorAgentHistory(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko csearch がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko csearch でエラーが発生しました: ${outcome.message}` };
+    }
+    return {
+      handled: true,
+      response: formatAichatNekoCsearchResults(keyword, outcome.value),
+      cursorResultsForModal: outcome.value.results.length > 0 ? outcome.value.results : undefined,
     };
   }
 
@@ -1409,6 +1512,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }

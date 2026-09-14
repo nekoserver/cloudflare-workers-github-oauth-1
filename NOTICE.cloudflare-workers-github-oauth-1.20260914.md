@@ -44,7 +44,23 @@ RUNNING 中の途中回答はキャッシュしない。
 
 `/cursor-agent` 単体では起動・チャンク結合・キャッシュ・応答検索・過去ログ検索まで
 できた。入力窓の `/neko search` は `ai_chat_shares` であり Cursor VM 履歴とは別物。
+表示検索は `/neko csearch` で入力窓からできるようになった（0140 へは書かない）。
+起動と過去ログ保存、およびダイナミックワーカー経路は未着手。
 dynamicneko は Cookie セッションが無いので、aichat/kimi-code の `-external` と同じく
 Bearer secret + Service Binding が必要。launch の `user_id` を
 `dynamicneko-service` にすると本体ページの履歴と分裂する。詳細は
 [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md) 節7・節8。
+
+## `/neko csearch` は Cursor VM 履歴の表示検索であり `/neko search` と混ぜない
+
+**対象**: AIチャット入力窓の `/neko csearch <キーワード>`。
+
+`/neko search` / `/neko s` は `ai_chat_shares`（AIチャットの質問・回答）を見る。
+`/neko csearch` は `cursor_agent_launch_log` と回答キャッシュ（courts / Cursor VM の過去ログ）を見る。
+同じキーワードでもヒット集合は一致しない。
+
+`csearch` は `queryCursorAgentHistoryWithSearch` の表示検索であり、
+0140 の `cursor_agent_search_log` / `cursor_agent_search_history` には書かない。
+回答全文はチャット本文に出さず、表の「回答全文」から `#cursorAgentAnswerModal` を開き、
+`GET /api/cursor-agent/history/:id/conversation` をキャッシュ優先で読む。
+0139 未適用だと本文検索は画面列フォールバックになり、会話取得もキャッシュを読めない。
