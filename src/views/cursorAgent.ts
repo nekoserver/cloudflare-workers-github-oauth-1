@@ -174,7 +174,7 @@ ${getMarkdownPreviewCSS()}
     問答履歴
     <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
   </div>
-  <input type="search" id="agentHistorySearch" placeholder="リポジトリ・Agent ID・プロンプト・応答を検索..." style="margin-bottom:8px;">
+  <input type="search" id="agentHistorySearch" placeholder="回答内容を検索..." style="margin-bottom:8px;">
   <div id="agentHistoryBody">
     <div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>
   </div>
@@ -325,9 +325,10 @@ ${getMarkdownPreviewCSS()}
   var historyBodyEl = document.getElementById('agentHistoryBody');
   var historyReloadBtn = document.getElementById('agentHistoryReloadBtn');
   var historySearchEl = document.getElementById('agentHistorySearch');
-  // サーバーから読み込んだ全件を保持し、検索窓の入力ではAPIを再度叩かず
-  // クライアント側でリポジトリ・プロンプト・応答の3列に対して部分一致で絞り込む。
+  // サーバーから読み込んだ行を保持する。検索は画面上の列ではなく
+  // GET /api/cursor-agent/history?q= で回答キャッシュ本文を問い合わせる。
   var allHistoryRows = [];
+  var lastSearchError = '';
 
   // D1のcreated_atはdatetime('now')でUTC('YYYY-MM-DD HH:MM:SS'形式、タイムゾーン
   // 表記なし)で保存されるため、そのまま表示するとJSTだと誤解されうる。
@@ -355,7 +356,7 @@ ${getMarkdownPreviewCSS()}
           return;
         }
         allHistoryRows = allHistoryRows.filter(function(r) { return r.id !== id; });
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+        renderHistory(allHistoryRows, lastSearchError);
       })
       .catch(function(err) {
         btn.disabled = false;
@@ -375,7 +376,7 @@ ${getMarkdownPreviewCSS()}
           var failedRow = allHistoryRows.filter(function(r) { return r.id === id; })[0];
           if (failedRow && res.status === 502) {
             failedRow.commError = true;
-            renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+            renderHistory(allHistoryRows, lastSearchError);
           }
           return;
         }
@@ -611,15 +612,26 @@ ${getMarkdownPreviewCSS()}
         return loadTimelineAndRender();
       })
       .then(function() {
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+        renderHistory(allHistoryRows, lastSearchError);
       })
       .catch(function() { modalBody.textContent = '読み込みに失敗しました'; });
   }
 
-  function renderHistory(rows) {
+  function renderHistory(rows, searchError) {
+    historyBodyEl.innerHTML = '';
+    if (searchError) {
+      var errEl = document.createElement('div');
+      errEl.className = 'error-msg';
+      errEl.textContent = searchError;
+      historyBodyEl.appendChild(errEl);
+    }
     if (!rows || rows.length === 0) {
-      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">' +
-        (allHistoryRows.length === 0 ? 'まだ起動履歴がありません' : '検索条件に一致する履歴がありません') + '</div>';
+      var emptyEl = document.createElement('div');
+      emptyEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
+      emptyEl.textContent = searchError
+        ? '回答キャッシュを検索できませんでした'
+        : ((historySearchEl.value || '').trim() ? '回答内容に一致する履歴がありません' : 'まだ起動履歴がありません');
+      historyBodyEl.appendChild(emptyEl);
       return;
     }
     var table = document.createElement('table');
@@ -690,34 +702,25 @@ ${getMarkdownPreviewCSS()}
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    historyBodyEl.innerHTML = '';
     historyBodyEl.appendChild(table);
   }
 
-  // リポジトリ・Agent ID・プロンプト・状態・レポートのいずれかに検索語
-  // (大文字小文字を区別しない)を含む行だけを残す。検索語が空の場合は全件を返す。
-  function filterHistoryRows(rows, query) {
-    var q = (query || '').trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(function(row) {
-      return (row.repo_full_name || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.agent_id || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.prompt || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.agent_status || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.run_status || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.report_text || '').toLowerCase().indexOf(q) !== -1;
-    });
+  function buildCursorAgentHistoryUrl(query) {
+    var q = (query || '').trim();
+    if (!q) return '/api/cursor-agent/history';
+    return '/api/cursor-agent/history?q=' + encodeURIComponent(q);
   }
 
   function fetchAndRenderHistory(commErrorIds) {
-    return fetch('/api/cursor-agent/history', { credentials: 'same-origin' })
+    return fetch(buildCursorAgentHistoryUrl(historySearchEl.value), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         allHistoryRows = d.rows || [];
+        lastSearchError = d.searchError || '';
         if (commErrorIds) {
           allHistoryRows.forEach(function(row) { if (commErrorIds[row.id]) row.commError = true; });
         }
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+        renderHistory(allHistoryRows, lastSearchError);
       });
   }
 
@@ -746,7 +749,9 @@ ${getMarkdownPreviewCSS()}
 
   historyReloadBtn.addEventListener('click', loadHistory);
   historySearchEl.addEventListener('input', function() {
-    renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+    fetchAndRenderHistory().catch(function() {
+      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>';
+    });
   });
   loadHistory();
 })();

@@ -211,6 +211,40 @@ export function mergeCursorAgentConversationAnswers(answers: string[]): string {
   return answers.filter((text) => typeof text === 'string' && text.length > 0).join('\n\n');
 }
 
+/** 履歴検索語の最大長。極端に長い q でINSTRが重くならないように切る。 */
+export const CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH = 200;
+
+/**
+ * GET /api/cursor-agent/history?q= の検索語を正規化する。
+ * 空白のみは空(=検索なし・全件)にする。未指定も空。
+ */
+export function normalizeCursorAgentHistorySearchQuery(raw: string | null | undefined): string {
+  return (raw ?? '').trim().slice(0, CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH);
+}
+
+/**
+ * 問答履歴一覧のSQLを組み立てる。検索ありのときは
+ * cursor_agent_answer_cache.answer_text だけを INSTR で絞る。
+ * プロンプト/リポジトリ/レポートは条件に使わない。
+ * LIKE ではなく INSTR にすることで %/_ をリテラルとして扱える。
+ */
+export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string {
+  const answerJoin = hasAnswerSearch
+    ? '\n       INNER JOIN cursor_agent_answer_cache a ON a.launch_id = l.id'
+    : '';
+  const answerFilter = hasAnswerSearch
+    ? '\n         AND instr(lower(a.answer_text), lower(?)) > 0'
+    : '';
+  return `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
+              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
+       FROM cursor_agent_launch_log l
+       LEFT JOIN cursor_agent_status_log s ON s.id = (
+         SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1
+       )${answerJoin}
+       WHERE l.user_id = ?${answerFilter}
+       ORDER BY l.created_at DESC, l.id DESC LIMIT 100`;
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent

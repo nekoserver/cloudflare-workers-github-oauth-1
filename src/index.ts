@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, normalizeCursorAgentHistorySearchQuery, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13445,25 +13445,35 @@ type CursorAgentHistoryRow = {
  * 返す。各行にはcursor_agent_status_logの最新1件(fetched_at最大)の状態
  * (agent_status/run_status/report_text)を相関サブクエリで結合する
  * (=「問答集」として、起動時点の情報と最新の答えをまとめて読み出せるようにする)。
- * AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
+ * q があるときは画面上の列ではなく cursor_agent_answer_cache.answer_text を
+ * 検索する。AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
  */
 app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ rows: [] });
-  const { results } = await c.env.DB
-    .prepare(
-      `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
-              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
-       FROM cursor_agent_launch_log l
-       LEFT JOIN cursor_agent_status_log s ON s.id = (
-         SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1
-       )
-       WHERE l.user_id = ?
-       ORDER BY l.created_at DESC, l.id DESC LIMIT 100`
-    )
-    .bind(user.sub)
-    .all<CursorAgentHistoryRow>();
-  return jsonUtf8({ rows: results ?? [] });
+  const searchQuery = normalizeCursorAgentHistorySearchQuery(c.req.query('q'));
+  const hasAnswerSearch = searchQuery.length > 0;
+  if (!hasAnswerSearch) {
+    const { results } = await c.env.DB
+      .prepare(buildCursorAgentHistoryListSql(false))
+      .bind(user.sub)
+      .all<CursorAgentHistoryRow>();
+    return jsonUtf8({ rows: results ?? [] });
+  }
+  try {
+    const { results } = await c.env.DB
+      .prepare(buildCursorAgentHistoryListSql(true))
+      .bind(user.sub, searchQuery)
+      .all<CursorAgentHistoryRow>();
+    return jsonUtf8({ rows: results ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: message });
+    return jsonUtf8({
+      rows: [],
+      searchError: `回答キャッシュの検索に失敗しました: ${message}`,
+    });
+  }
 });
 
 /**

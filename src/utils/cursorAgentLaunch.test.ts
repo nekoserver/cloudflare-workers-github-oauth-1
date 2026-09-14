@@ -11,6 +11,8 @@ import {
   buildCursorAgentConversationUrl,
   extractCursorAgentConversationAnswers,
   mergeCursorAgentConversationAnswers,
+  normalizeCursorAgentHistorySearchQuery,
+  buildCursorAgentHistoryListSql,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -338,5 +340,49 @@ describe('mergeCursorAgentConversationAnswers', () => {
 
   it('断片が無いときは空文字を返す(空キャッシュとして扱う)', () => {
     expect(mergeCursorAgentConversationAnswers([])).toBe('');
+  });
+});
+
+// 対象: GET /api/cursor-agent/history?q= の検索語正規化とSQL組み立て。
+// 検索対象は画面上のプロンプト/リポジトリではなく
+// cursor_agent_answer_cache.answer_text。
+//
+// 故障シナリオ:
+//   (1) 空白だけの q を検索扱いして INNER JOIN し、キャッシュ未作成の履歴が消える
+//   (2) 検索SQLが answer_text ではなく prompt を見る
+//   (3) LIKE の %/_ をエスケープせず、意図しない広域一致になる
+describe('normalizeCursorAgentHistorySearchQuery', () => {
+  it('前後空白を除いた検索語を返す', () => {
+    expect(normalizeCursorAgentHistorySearchQuery('  README  ')).toBe('README');
+  });
+
+  it('空・空白のみ・未指定は空文字にする(全件取得)', () => {
+    expect(normalizeCursorAgentHistorySearchQuery('')).toBe('');
+    expect(normalizeCursorAgentHistorySearchQuery('   ')).toBe('');
+    expect(normalizeCursorAgentHistorySearchQuery(undefined)).toBe('');
+    expect(normalizeCursorAgentHistorySearchQuery(null)).toBe('');
+  });
+
+  it('極端に長い検索語は200文字で切る', () => {
+    expect(normalizeCursorAgentHistorySearchQuery('あ'.repeat(250))).toHaveLength(200);
+  });
+});
+
+describe('buildCursorAgentHistoryListSql', () => {
+  it('検索なしでは回答キャッシュをJOINしない(最新100件の自分の履歴)', () => {
+    const sql = buildCursorAgentHistoryListSql(false);
+    expect(sql).toContain('FROM cursor_agent_launch_log l');
+    expect(sql).toContain('WHERE l.user_id = ?');
+    expect(sql).not.toContain('cursor_agent_answer_cache');
+    expect(sql).not.toContain('answer_text');
+  });
+
+  it('検索ありではanswer_textをINSTRで絞り、promptは条件に使わない', () => {
+    const sql = buildCursorAgentHistoryListSql(true);
+    expect(sql).toContain('INNER JOIN cursor_agent_answer_cache a ON a.launch_id = l.id');
+    expect(sql).toContain('instr(lower(a.answer_text), lower(?)) > 0');
+    expect(sql).not.toContain('l.prompt LIKE');
+    expect(sql).not.toContain('instr(lower(l.prompt)');
+    expect(sql).toContain('WHERE l.user_id = ?');
   });
 });
