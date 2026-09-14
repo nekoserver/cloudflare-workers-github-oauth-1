@@ -61,8 +61,8 @@ Cursor APIステータス問い合わせ(`GET /v1/agents/{id}`)を行って
 ## 対応PR
 
 この修正は `nekoserver/cloudflare-workers-github-oauth-1` の
-`GET /api/cursor-agent/history/:id/conversation` に対して実施する
-(このNOTICE作成時点ではまだ実装中。実装後にコミットハッシュを追記する)。
+`GET /api/cursor-agent/history/:id/conversation` に対して実施した。
+関連コミット: [`983b9f1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/983b9f1)
 
 ## 教訓
 
