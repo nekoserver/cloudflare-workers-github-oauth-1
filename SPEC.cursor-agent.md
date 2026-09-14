@@ -1,6 +1,10 @@
 # SPEC.cursor-agent.md
 
-日付付き SPEC（`SPEC.cloudflare-workers-github-oauth-1.20260913.md` など）を後からここにまとめる。
+日付付き SPEC と実装の横断まとめは
+[`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
+へ移した。起動・チャンク結合・キャッシュ・応答検索・過去ログ検索の現状と、
+今日以降の AIチャット入力窓・ダイナミックワーカー対応の到達点はそちらを正とする。
+
 統合しても、次の診断メッセージ節は削除しない。表未作成とデータ破損の確認に使う。
 
 ## 1. 回答キャッシュ表が無い／壊れているときの検索エラー
@@ -52,10 +56,12 @@ JOIN 失敗で `rows` を常に空にすると、インクリメンタル検索�
 **対象**: `queryCursorAgentHistoryWithSearch`、`GET /cursor-agent` の検索窓 —
 0139 未適用でもプロンプト等で絞り込み、検索欄を空にすれば一覧へ戻す。「解除」は置かない。
 
-詳細は [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md)。
+詳細は [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md)
+および横断まとめ [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md) 節4。
 
 ### 関連
 
+- [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - [`SPEC.cloudflare-workers-github-oauth-1.20260913.md`](SPEC.cloudflare-workers-github-oauth-1.20260913.md) 節4・節5
 - [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
 - [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) 回答キャッシュ表未作成時のD1検索エラーをSPEC.cursor-agent.mdに残す
