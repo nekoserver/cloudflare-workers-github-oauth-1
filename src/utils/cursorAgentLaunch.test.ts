@@ -14,6 +14,7 @@ import {
   normalizeCursorAgentHistorySearchQuery,
   buildCursorAgentHistoryListSql,
   buildCursorAgentAnswerCacheCountSql,
+  isCursorAgentSuccessfulTerminal,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -378,13 +379,27 @@ describe('buildCursorAgentHistoryListSql', () => {
     expect(sql).not.toContain('answer_text');
   });
 
-  it('検索ありではanswer_textをINSTRで絞り、promptは条件に使わない', () => {
+  it('検索ありでは回答キャッシュ・プロンプト・レポート・Agent ID・リポジトリをINSTRで絞る', () => {
     const sql = buildCursorAgentHistoryListSql(true);
-    expect(sql).toContain('INNER JOIN cursor_agent_answer_cache a ON a.launch_id = l.id');
-    expect(sql).toContain('instr(lower(a.answer_text), lower(?)) > 0');
-    expect(sql).not.toContain('l.prompt LIKE');
-    expect(sql).not.toContain('instr(lower(l.prompt)');
+    expect(sql).toContain('LEFT JOIN cursor_agent_answer_cache a ON a.launch_id = l.id');
+    expect(sql).toContain('instr(lower(coalesce(a.answer_text, \'\')), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(l.prompt), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(coalesce(s.report_text, \'\')), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(coalesce(l.agent_id, \'\')), lower(?)) > 0');
+    expect(sql).toContain('instr(lower(l.repo_full_name), lower(?)) > 0');
     expect(sql).toContain('WHERE l.user_id = ?');
+    expect(sql).not.toContain('INNER JOIN cursor_agent_answer_cache');
+  });
+});
+
+describe('isCursorAgentSuccessfulTerminal', () => {
+  it('FINISHED/COMPLETEDだけを成功終端とする', () => {
+    expect(isCursorAgentSuccessfulTerminal('FINISHED', 'COMPLETED')).toBe(true);
+    expect(isCursorAgentSuccessfulTerminal('finished', null)).toBe(true);
+    expect(isCursorAgentSuccessfulTerminal(null, 'COMPLETED')).toBe(true);
+    expect(isCursorAgentSuccessfulTerminal('RUNNING', 'RUNNING')).toBe(false);
+    expect(isCursorAgentSuccessfulTerminal('ERROR', 'FAILED')).toBe(false);
+    expect(isCursorAgentSuccessfulTerminal(null, null)).toBe(false);
   });
 });
 

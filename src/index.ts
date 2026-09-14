@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentHistorySearchBinds, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13474,7 +13474,7 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
   try {
     const { results } = await c.env.DB
       .prepare(buildCursorAgentHistoryListSql(true))
-      .bind(user.sub, searchQuery)
+      .bind(...buildCursorAgentHistorySearchBinds(user.sub, searchQuery))
       .all<CursorAgentHistoryRow>();
     return jsonUtf8({
       rows: results ?? [],
@@ -13623,19 +13623,29 @@ app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) 
   if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
   if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため会話を取得できません' }, 400);
 
+  const latestStatus = await c.env.DB
+    .prepare(
+      `SELECT agent_status, run_status FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at DESC, id DESC LIMIT 1`
+    )
+    .bind(id)
+    .first<{ agent_status: string | null; run_status: string | null }>();
+  const canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(latestStatus?.agent_status, latestStatus?.run_status);
+
   let cacheError: string | undefined;
-  try {
-    const cached = await c.env.DB
-      .prepare(`SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?`)
-      .bind(id)
-      .first<{ answer_text: string | null }>();
-    if (cached && typeof cached.answer_text === 'string' && cached.answer_text.length > 0) {
-      return jsonUtf8({ answers: [cached.answer_text], source: 'cache' });
+  if (canCacheFinalAnswer) {
+    try {
+      const cached = await c.env.DB
+        .prepare(`SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?`)
+        .bind(id)
+        .first<{ answer_text: string | null }>();
+      if (cached && typeof cached.answer_text === 'string' && cached.answer_text.length > 0) {
+        return jsonUtf8({ answers: [cached.answer_text], source: 'cache' });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      cacheError = `回答キャッシュの読み出しに失敗しました: ${message}`;
+      logger.error('[cursor-agent] 回答キャッシュ読み出し失敗', { userId: user.sub, launchId: id, error: message });
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    cacheError = `回答キャッシュの読み出しに失敗しました: ${message}`;
-    logger.error('[cursor-agent] 回答キャッシュ読み出し失敗', { userId: user.sub, launchId: id, error: message });
   }
 
   if (!c.env.CURSOR_API_KEY) {
@@ -13663,7 +13673,7 @@ app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) 
     return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
   }
   const merged = mergeCursorAgentConversationAnswers(extractCursorAgentConversationAnswers(conversation));
-  if (merged.length > 0) {
+  if (merged.length > 0 && canCacheFinalAnswer) {
     try {
       await c.env.DB
         .prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`)

@@ -179,14 +179,14 @@ describe('GET /cursor-agent', () => {
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
     const html = await res.text();
     expect(html).toContain("'/api/cursor-agent/history?q=' + encodeURIComponent");
-    expect(html).toContain('回答キャッシュを検索');
+    expect(html).toContain('回答・プロンプト・レポートを検索');
     expect(html).toContain('agentHistorySearchBtn');
     expect(html).toContain('runAnswerCacheSearch');
     expect(html).not.toContain('filterHistoryRows');
     expect(html).not.toContain("historySearchEl.addEventListener('input'");
     expect(html).not.toContain('リポジトリ・Agent ID・プロンプト・応答を検索');
-    expect(html).toContain('searchError');
-    expect(html).toContain('cacheTotal');
+    expect(html).toContain('history-search-error');
+    expect(html).not.toContain("errEl.className = 'error-msg'");
   });
 
   it('各行に「最新状態を取得」ボタンを持ち、/refreshへPOSTする', async () => {
@@ -570,7 +570,7 @@ describe('GET /api/cursor-agent/history', () => {
     expect(data.rows[0].report_text).toBe('最新のレポート');
   });
 
-  it('q指定時は自分の回答キャッシュ本文が一致する履歴だけを返す(プロンプト一致は無視)', async () => {
+  it('q指定時は回答キャッシュ本文が一致する履歴を返す(プロンプトに無くてもヒット)', async () => {
     const db = setupDb();
     const matchId = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'プロンプトには出ない起動', agentId: 'bc_ans_1',
@@ -602,14 +602,14 @@ describe('GET /api/cursor-agent/history', () => {
     expect((data as { cacheTotal?: number }).cacheTotal).toBe(2);
   });
 
-  it('qがプロンプトにだけある語では0件になる(キャッシュ未作成の行もヒットしない)', async () => {
+  it('qがプロンプトにだけある語でも、キャッシュ未作成の行をサーバ側検索で返す', async () => {
     const db = setupDb();
     const cachedId = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'UNIQUE_PROMPT_TOKEN を直して', agentId: 'bc_p_1',
       agentStatus: 'FINISHED', reportText: null,
       rawResponse: { agent: { id: 'bc_p_1' } }, createdAt: '2026-09-13 00:00:00',
     });
-    insertLaunchWithStatus(db, {
+    const uncachedId = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'UNIQUE_PROMPT_TOKEN キャッシュなし', agentId: 'bc_p_2',
       agentStatus: 'FINISHED', reportText: null,
       rawResponse: { agent: { id: 'bc_p_2' } }, createdAt: '2026-09-13 01:00:00',
@@ -619,7 +619,7 @@ describe('GET /api/cursor-agent/history', () => {
     const auth = await makeAuthHeader('user1');
     const res = await app.request('/api/cursor-agent/history?q=UNIQUE_PROMPT_TOKEN', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
     const data = await res.json() as { rows: Array<{ id: number }> };
-    expect(data.rows).toEqual([]);
+    expect(data.rows.map((r) => r.id).sort()).toEqual([cachedId, uncachedId].sort());
   });
 
   it('qの英字は大文字小文字を区別せず、%はワイルドカードにしない', async () => {
@@ -1050,6 +1050,7 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     const db = setupDb();
     const id = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-cached',
+      agentStatus: 'FINISHED', runStatus: 'COMPLETED',
       rawResponse: {}, createdAt: '2026-09-13 00:00:00',
     });
     db.prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`).run(id, '## キャッシュ済み\n\n**本文**');
@@ -1070,6 +1071,7 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     const db = setupDb();
     const id = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-merge',
+      agentStatus: 'FINISHED', runStatus: 'COMPLETED',
       rawResponse: {}, createdAt: '2026-09-13 00:00:00',
     });
     const conversation = {
@@ -1096,6 +1098,30 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     expect(cacheRows).toHaveLength(1);
     expect(cacheRows[0].answer_text).toBe('## 完了\n\n**README**を更新しました');
     expect(cacheRows[0].answer_text).not.toContain('READMEを直して');
+  });
+
+  it('RUNNING中の非空回答はキャッシュせず、次回復帰で再取得できるようにする', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: '実行中', agentId: 'bc-running',
+      agentStatus: 'RUNNING', runStatus: 'RUNNING',
+      rawResponse: { agent: { status: 'RUNNING' } }, createdAt: '2026-09-13 00:00:00',
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        messages: [{ type: 'assistant_message', text: 'まだ途中の回答' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[]; source?: string };
+    expect(data.source).toBe('api');
+    expect(data.answers).toEqual(['まだ途中の回答']);
+    const cacheCount = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_answer_cache WHERE launch_id = ?').get(id) as { c: number };
+    expect(cacheCount.c).toBe(0);
   });
 
   it('空の回答はキャッシュせず、次回復帰でAPIを再試行できるようにする', async () => {
@@ -1146,6 +1172,7 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     db.prepare(`INSERT INTO user_sessions (user_id, revoked_at) VALUES (?, NULL)`).run('user1');
     const id = insertLaunchWithStatus(db, {
       userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-notable',
+      agentStatus: 'FINISHED', runStatus: 'COMPLETED',
       rawResponse: {}, createdAt: '2026-09-13 00:00:00',
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(

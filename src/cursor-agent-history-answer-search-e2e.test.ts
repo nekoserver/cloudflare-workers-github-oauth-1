@@ -95,7 +95,7 @@ describe('E2E: 問答履歴検索は回答キャッシュをサーバへ問い�
       if (pathname === '/api/cursor-agent/history') {
         if (q === 'kaleidoscope') {
           return new Response(JSON.stringify({
-            rows: [answerHitRow],
+            rows: [answerHitRow, promptOnlyRow],
             source: 'answer_cache',
             query: 'kaleidoscope',
             cacheTotal: 1,
@@ -120,13 +120,12 @@ describe('E2E: 問答履歴検索は回答キャッシュをサーバへ問い�
 
     (document.getElementById('agentHistorySearchBtn') as HTMLButtonElement).click();
     await waitFor(() => fetchUrls.some((u) => historyPath(u).q === 'kaleidoscope'));
-    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 1);
+    await waitFor(() => document.querySelectorAll('.agent-id-link').length === 2);
 
     const ids = Array.from(document.querySelectorAll('.agent-id-link')).map((el) => el.textContent);
-    expect(ids).toEqual(['bc-answer-hit']);
+    expect(ids).toEqual(['bc-answer-hit', 'bc-prompt-only']);
     expect(fetchUrls.some((u) => u.indexOf('/api/cursor-agent/history?q=' + encodeURIComponent('kaleidoscope')) !== -1)).toBe(true);
-    expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('回答キャッシュ');
-    expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('1件ヒット');
+    expect(document.getElementById('agentHistorySearchStatus')?.textContent).toContain('件ヒット');
   });
 
   it('初期読み込みの遅延応答が、後から押したキャッシュ検索の結果を上書きしない', async () => {

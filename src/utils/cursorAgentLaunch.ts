@@ -214,6 +214,9 @@ export function mergeCursorAgentConversationAnswers(answers: string[]): string {
 /** 履歴検索語の最大長。極端に長い q でINSTRが重くならないように切る。 */
 export const CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH = 200;
 
+/** 検索SQLで user_id のあとに同じ検索語を何回 bind するか。 */
+export const CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT = 5;
+
 /**
  * GET /api/cursor-agent/history?q= の検索語を正規化する。
  * 空白のみは空(=検索なし・全件)にする。未指定も空。
@@ -223,17 +226,37 @@ export function normalizeCursorAgentHistorySearchQuery(raw: string | null | unde
 }
 
 /**
+ * 成功終端だけ回答キャッシュしてよい。RUNNING 中の非空文を UNIQUE で
+ * 永久保存すると、以後キャッシュ優先で途中回答のまま更新不能になる。
+ */
+export function isCursorAgentSuccessfulTerminal(
+  agentStatus: string | null | undefined,
+  runStatus: string | null | undefined,
+): boolean {
+  const agent = (agentStatus ?? '').trim().toUpperCase();
+  const run = (runStatus ?? '').trim().toUpperCase();
+  return agent === 'FINISHED' || agent === 'COMPLETED' || run === 'COMPLETED';
+}
+
+/**
  * 問答履歴一覧のSQLを組み立てる。検索ありのときは
- * cursor_agent_answer_cache.answer_text だけを INSTR で絞る。
- * プロンプト/リポジトリ/レポートは条件に使わない。
- * LIKE ではなく INSTR にすることで %/_ をリテラルとして扱える。
+ * 回答キャッシュ本文に加え、画面に出ているプロンプト・レポート・
+ * Agent ID・リポジトリも INSTR で見る。キャッシュ未作成の行を落とさないよう
+ * LEFT JOIN にする。LIKE ではなく INSTR で %/_ をリテラルとして扱う。
  */
 export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string {
   const answerJoin = hasAnswerSearch
-    ? '\n       INNER JOIN cursor_agent_answer_cache a ON a.launch_id = l.id'
+    ? '\n       LEFT JOIN cursor_agent_answer_cache a ON a.launch_id = l.id'
     : '';
   const answerFilter = hasAnswerSearch
-    ? '\n         AND instr(lower(a.answer_text), lower(?)) > 0'
+    ? `
+         AND (
+           instr(lower(coalesce(a.answer_text, '')), lower(?)) > 0
+           OR instr(lower(l.prompt), lower(?)) > 0
+           OR instr(lower(coalesce(s.report_text, '')), lower(?)) > 0
+           OR instr(lower(coalesce(l.agent_id, '')), lower(?)) > 0
+           OR instr(lower(l.repo_full_name), lower(?)) > 0
+         )`
     : '';
   return `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
               s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
@@ -243,6 +266,10 @@ export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string
        )${answerJoin}
        WHERE l.user_id = ?${answerFilter}
        ORDER BY l.created_at DESC, l.id DESC LIMIT 100`;
+}
+
+export function buildCursorAgentHistorySearchBinds(userId: string, query: string): unknown[] {
+  return [userId, ...Array(CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT).fill(query)];
 }
 
 /** 自分の起動に紐づく回答キャッシュ件数。検索0件が「未キャッシュ」か「不一致」かを分ける。 */

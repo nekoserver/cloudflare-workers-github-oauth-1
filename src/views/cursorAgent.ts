@@ -109,6 +109,10 @@ textarea:focus, select:focus { border-color: var(--accent); }
 #agentHistorySearchStatus {
   font-size: 11px; color: var(--text-muted); margin-bottom: 8px; min-height: 16px;
 }
+.history-search-error {
+  margin-bottom: 8px; padding: 8px 12px; border-radius: 6px;
+  background: var(--danger-bg); color: var(--danger); font-size: 12px;
+}
 .status-badge {
   display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px;
   border-radius: 10px; line-height: 1.6; margin-right: 4px;
@@ -181,7 +185,7 @@ ${getMarkdownPreviewCSS()}
     <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
   </div>
   <div class="history-search-row">
-    <input type="search" id="agentHistorySearch" placeholder="回答キャッシュを検索..." autocomplete="off">
+    <input type="search" id="agentHistorySearch" placeholder="回答・プロンプト・レポートを検索..." autocomplete="off">
     <button type="button" class="btn" id="agentHistorySearchBtn" style="padding:4px 10px;font-size:11px;">検索</button>
     <button type="button" class="btn" id="agentHistorySearchClearBtn" style="padding:4px 10px;font-size:11px;">解除</button>
   </div>
@@ -638,7 +642,7 @@ ${getMarkdownPreviewCSS()}
     historyBodyEl.innerHTML = '';
     if (searchError) {
       var errEl = document.createElement('div');
-      errEl.className = 'error-msg';
+      errEl.className = 'history-search-error';
       errEl.textContent = searchError;
       historyBodyEl.appendChild(errEl);
     }
@@ -647,7 +651,7 @@ ${getMarkdownPreviewCSS()}
       emptyEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
       emptyEl.textContent = searchError
         ? '回答キャッシュを検索できませんでした'
-        : ((historySearchEl.value || '').trim() ? '回答内容に一致する履歴がありません' : 'まだ起動履歴がありません');
+        : ((historySearchEl.value || '').trim() ? '検索条件に一致する履歴がありません' : 'まだ起動履歴がありません');
       historyBodyEl.appendChild(emptyEl);
       return;
     }
@@ -744,7 +748,7 @@ ${getMarkdownPreviewCSS()}
       historySearchStatusEl.textContent = '回答キャッシュは0件です。Agent IDを開くと検索対象になります。';
       return;
     }
-    historySearchStatusEl.textContent = '回答キャッシュ' + (total === null ? '' : total + '件中') + n + '件ヒット';
+    historySearchStatusEl.textContent = (total === null ? '' : '回答キャッシュ' + total + '件中') + n + '件ヒット';
   }
 
   function applyHistoryPayload(d, commErrorIds) {
@@ -788,9 +792,9 @@ ${getMarkdownPreviewCSS()}
     historyBodyEl.innerHTML = '';
     var loading = document.createElement('div');
     loading.style.cssText = 'font-size:11px;color:var(--text-muted);';
-    loading.textContent = '回答キャッシュを検索中...';
+    loading.textContent = '履歴を検索中...';
     historyBodyEl.appendChild(loading);
-    if (historySearchStatusEl) historySearchStatusEl.textContent = '回答キャッシュを検索中...';
+    if (historySearchStatusEl) historySearchStatusEl.textContent = '履歴を検索中...';
     fetchAndRenderHistory(null, q).catch(function() {
       historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>';
     });
