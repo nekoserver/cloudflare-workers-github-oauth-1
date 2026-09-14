@@ -160,3 +160,7 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 
 - 回答キャッシュは Agent ID タップ(会話API)のあとで埋まる。未タップの起動は検索対象に入らない
 - 追加のD1マイグレーションは不要(0139の `cursor_agent_answer_cache` を使う)
+
+### 関連コミット
+
+- [`245906c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/245906c) cursor-agentの履歴検索を回答キャッシュ本文のサーバ検索へ切り替える
