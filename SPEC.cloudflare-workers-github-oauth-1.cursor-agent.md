@@ -477,3 +477,4 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 - [`SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md`](SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md)
 - [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md) — Binding / secret 名
 - [`EVAL.cloudflare-workers-github-oauth-1.20260914.md`](EVAL.cloudflare-workers-github-oauth-1.20260914.md) — 作成時点の警告。成功終端キャッシュとインクリメンタルは現行で対処済み
+- [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md) — 2026-09-13〜14 の実装評価と達成度（時系列コミット表）
