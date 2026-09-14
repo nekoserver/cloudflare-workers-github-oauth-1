@@ -211,6 +211,75 @@ export function mergeCursorAgentConversationAnswers(answers: string[]): string {
   return answers.filter((text) => typeof text === 'string' && text.length > 0).join('\n\n');
 }
 
+/** 履歴検索語の最大長。極端に長い q でINSTRが重くならないように切る。 */
+export const CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH = 200;
+
+/** 検索SQLで user_id のあとに同じ検索語を何回 bind するか。 */
+export const CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT = 5;
+
+/**
+ * GET /api/cursor-agent/history?q= の検索語を正規化する。
+ * 空白のみは空(=検索なし・全件)にする。未指定も空。
+ */
+export function normalizeCursorAgentHistorySearchQuery(raw: string | null | undefined): string {
+  return (raw ?? '').trim().slice(0, CURSOR_AGENT_HISTORY_SEARCH_MAX_LENGTH);
+}
+
+/**
+ * 成功終端だけ回答キャッシュしてよい。RUNNING 中の非空文を UNIQUE で
+ * 永久保存すると、以後キャッシュ優先で途中回答のまま更新不能になる。
+ */
+export function isCursorAgentSuccessfulTerminal(
+  agentStatus: string | null | undefined,
+  runStatus: string | null | undefined,
+): boolean {
+  const agent = (agentStatus ?? '').trim().toUpperCase();
+  const run = (runStatus ?? '').trim().toUpperCase();
+  return agent === 'FINISHED' || agent === 'COMPLETED' || run === 'COMPLETED';
+}
+
+/**
+ * 問答履歴一覧のSQLを組み立てる。検索ありのときは
+ * 回答キャッシュ本文に加え、画面に出ているプロンプト・レポート・
+ * Agent ID・リポジトリも INSTR で見る。キャッシュ未作成の行を落とさないよう
+ * LEFT JOIN にする。LIKE ではなく INSTR で %/_ をリテラルとして扱う。
+ */
+export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string {
+  const answerJoin = hasAnswerSearch
+    ? '\n       LEFT JOIN cursor_agent_answer_cache a ON a.launch_id = l.id'
+    : '';
+  const answerFilter = hasAnswerSearch
+    ? `
+         AND (
+           instr(lower(coalesce(a.answer_text, '')), lower(?)) > 0
+           OR instr(lower(l.prompt), lower(?)) > 0
+           OR instr(lower(coalesce(s.report_text, '')), lower(?)) > 0
+           OR instr(lower(coalesce(l.agent_id, '')), lower(?)) > 0
+           OR instr(lower(l.repo_full_name), lower(?)) > 0
+         )`
+    : '';
+  return `SELECT l.id, l.repo_full_name, l.prompt, l.agent_id, l.agent_name, l.agent_url, l.created_at,
+              s.agent_status, s.run_status, s.report_text, s.raw_response, s.fetched_at as last_status_at
+       FROM cursor_agent_launch_log l
+       LEFT JOIN cursor_agent_status_log s ON s.id = (
+         SELECT id FROM cursor_agent_status_log WHERE launch_id = l.id ORDER BY fetched_at DESC, id DESC LIMIT 1
+       )${answerJoin}
+       WHERE l.user_id = ?${answerFilter}
+       ORDER BY l.created_at DESC, l.id DESC LIMIT 100`;
+}
+
+export function buildCursorAgentHistorySearchBinds(userId: string, query: string): unknown[] {
+  return [userId, ...Array(CURSOR_AGENT_HISTORY_SEARCH_QUERY_BIND_COUNT).fill(query)];
+}
+
+/** 自分の起動に紐づく回答キャッシュ件数。検索0件が「未キャッシュ」か「不一致」かを分ける。 */
+export function buildCursorAgentAnswerCacheCountSql(): string {
+  return `SELECT COUNT(*) as c
+       FROM cursor_agent_answer_cache a
+       INNER JOIN cursor_agent_launch_log l ON l.id = a.launch_id
+       WHERE l.user_id = ?`;
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent

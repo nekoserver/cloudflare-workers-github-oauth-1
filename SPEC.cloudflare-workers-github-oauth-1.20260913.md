@@ -121,3 +121,77 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 ### 関連コミット
 
 - [`af7b23a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/af7b23a) cursor-agentの回答文をMarkdown表示しD1キャッシュを優先する
+
+## 4. cursor-agent履歴検索を回答キャッシュ本文へ切り替える
+
+**対象**: `GET /api/cursor-agent/history?q=`、`GET /cursor-agent` の検索窓
+(`#agentHistorySearch`)、`cursor_agent_answer_cache.answer_text` —
+問答履歴の検索を、画面に載っている最新100件のプロンプト/リポジトリ/レポート
+ではなく、D1の回答キャッシュ本文に対するサーバ側検索へ切り替える。
+
+### 背景
+
+検索はクライアントの `filterHistoryRows` が、すでに読み込んだ一覧列だけを
+絞り込んでいた。Agent IDタップ後にキャッシュされた回答文は一覧に出ていないため、
+回答の中身では探せなかった。また最新100件以外の起動も対象外だった。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 画面上のプロンプト/レポートだけで絞り、answer_textを見ない | `q` があるときだけ `INNER JOIN cursor_agent_answer_cache` + `instr(lower(a.answer_text), lower(?))` |
+| 2 | 他人のキャッシュ行がヒットする | `l.user_id = ?` を維持 |
+| 3 | 空の q でキャッシュ未作成の履歴が消える | 空白のみは検索なし(LEFT JOINのみ) |
+| 4 | キャッシュ未作成の行がプロンプト一致で残る | 検索時はキャッシュ行がある起動だけ |
+| 5 | `%` `_` がLIKEワイルドカードになる | INSTRでリテラル一致 |
+| 6 | キャッシュ表未作成で空配列だけ返す | `searchError` を返し履歴欄に表示。ログにも残す |
+| 7 | プレースホルダが「リポジトリ・プロンプト」のまま | 「回答キャッシュを検索...」に更新 |
+| 8 | 入力のたびに再取得し、初期読み込みの一覧応答が検索結果を上書きする | インクリメンタルサーチを撤去。検索ボタン/Enterのみ。世代番号で遅延応答を破棄 |
+| 9 | キャッシュ0件を検索故障と区別できない | `cacheTotal` を返し「回答キャッシュは0件」と表示 |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/cursorAgentLaunch.ts` | 検索語正規化と履歴SQL組み立てを追加 |
+| `src/index.ts` | `GET /api/cursor-agent/history` が `q` で回答本文を検索 |
+| `src/views/cursorAgent.ts` | 検索ボタン/Enterで `?q=` を付けて回答キャッシュを問い合わせ。inputでは検索しない |
+| `src/cursor-agent-launch.test.ts` ほか | 回答本文ヒット・プロンプト非ヒット・searchError・E2E |
+
+### 注意事項
+
+- 回答キャッシュは Agent ID タップ(会話API)のあとで埋まる。未タップの起動は検索対象に入らない
+- 追加のD1マイグレーションは不要(0139の `cursor_agent_answer_cache` を使う)
+
+### 関連コミット
+
+- [`245906c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/245906c) cursor-agentの履歴検索を回答キャッシュ本文のサーバ検索へ切り替える
+- [`bc95820`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bc95820) cursor-agent履歴検索からインクリメンタルを外しキャッシュ表だけを明示検索する
+
+## 5. 履歴検索が画面の語で0件になる不具合とエラー非表示
+
+**対象**: `GET /api/cursor-agent/history?q=`、`#agentHistorySearch` —
+INNER JOIN でキャッシュ行だけを見ていたため、画面上のプロンプトで検索すると
+常に0件になり、失敗時の `error-msg` は `display:none` で消えていた。
+
+### 背景
+
+回答テーブル専用検索は、キャッシュが空、またはユーザーが表に見えている
+プロンプト語を入れると「検索がまったく効かない」ように見える。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | プロンプト一致が0件 | LEFT JOIN + プロンプト/レポート/Agent ID/リポジトリも INSTR |
+| 2 | searchError が `.error-msg` の display:none で見えない | `history-search-error` で常時表示 |
+| 3 | RUNNING の途中文を UNIQUE キャッシュして更新不能 | FINISHED/COMPLETED のときだけ保存・ヒット |
+
+### 注意事項
+
+- 検索はサーバ側のまま。インクリメンタルサーチは戻さない
+- 回答キャッシュ本文でも、画面の列でもヒットする
+
+### 関連コミット
+
+- [`a9a5f83`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a9a5f83) 履歴検索を画面の語でもヒットさせ、失敗メッセージが見えるようにする

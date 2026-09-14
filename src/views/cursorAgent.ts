@@ -97,12 +97,22 @@ textarea:focus, select:focus { border-color: var(--accent); }
   color: var(--accent); font-size: 11px; padding: 3px 8px; cursor: pointer;
 }
 .history-refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
+.history-search-row {
+  display: flex; gap: 8px; margin-bottom: 8px; align-items: center;
+}
 #agentHistorySearch {
-  width: 100%; background: var(--input-bg); color: var(--text);
+  flex: 1; min-width: 0; background: var(--input-bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px;
   outline: none;
 }
 #agentHistorySearch:focus { border-color: var(--accent); }
+#agentHistorySearchStatus {
+  font-size: 11px; color: var(--text-muted); margin-bottom: 8px; min-height: 16px;
+}
+.history-search-error {
+  margin-bottom: 8px; padding: 8px 12px; border-radius: 6px;
+  background: var(--danger-bg); color: var(--danger); font-size: 12px;
+}
 .status-badge {
   display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px;
   border-radius: 10px; line-height: 1.6; margin-right: 4px;
@@ -174,7 +184,12 @@ ${getMarkdownPreviewCSS()}
     問答履歴
     <button class="btn" id="agentHistoryReloadBtn" style="float:right;padding:4px 10px;font-size:11px;">再読み込み</button>
   </div>
-  <input type="search" id="agentHistorySearch" placeholder="リポジトリ・Agent ID・プロンプト・応答を検索..." style="margin-bottom:8px;">
+  <div class="history-search-row">
+    <input type="search" id="agentHistorySearch" placeholder="回答・プロンプト・レポートを検索..." autocomplete="off">
+    <button type="button" class="btn" id="agentHistorySearchBtn" style="padding:4px 10px;font-size:11px;">検索</button>
+    <button type="button" class="btn" id="agentHistorySearchClearBtn" style="padding:4px 10px;font-size:11px;">解除</button>
+  </div>
+  <div id="agentHistorySearchStatus"></div>
   <div id="agentHistoryBody">
     <div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>
   </div>
@@ -325,9 +340,16 @@ ${getMarkdownPreviewCSS()}
   var historyBodyEl = document.getElementById('agentHistoryBody');
   var historyReloadBtn = document.getElementById('agentHistoryReloadBtn');
   var historySearchEl = document.getElementById('agentHistorySearch');
-  // サーバーから読み込んだ全件を保持し、検索窓の入力ではAPIを再度叩かず
-  // クライアント側でリポジトリ・プロンプト・応答の3列に対して部分一致で絞り込む。
+  var historySearchBtn = document.getElementById('agentHistorySearchBtn');
+  var historySearchClearBtn = document.getElementById('agentHistorySearchClearBtn');
+  var historySearchStatusEl = document.getElementById('agentHistorySearchStatus');
+  // 検索はインクリメンタルにしない。検索ボタン/Enterだけが
+  // GET /api/cursor-agent/history?q= で回答キャッシュ本文を問い合わせる。
+  // 初期読み込みの遅延応答が検索結果を上書きしないよう世代番号で破棄する。
   var allHistoryRows = [];
+  var lastSearchError = '';
+  var historyFetchSeq = 0;
+  var activeAnswerSearch = '';
 
   // D1のcreated_atはdatetime('now')でUTC('YYYY-MM-DD HH:MM:SS'形式、タイムゾーン
   // 表記なし)で保存されるため、そのまま表示するとJSTだと誤解されうる。
@@ -355,7 +377,7 @@ ${getMarkdownPreviewCSS()}
           return;
         }
         allHistoryRows = allHistoryRows.filter(function(r) { return r.id !== id; });
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+        renderHistory(allHistoryRows, lastSearchError);
       })
       .catch(function(err) {
         btn.disabled = false;
@@ -375,7 +397,7 @@ ${getMarkdownPreviewCSS()}
           var failedRow = allHistoryRows.filter(function(r) { return r.id === id; })[0];
           if (failedRow && res.status === 502) {
             failedRow.commError = true;
-            renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+            renderHistory(allHistoryRows, lastSearchError);
           }
           return;
         }
@@ -611,15 +633,26 @@ ${getMarkdownPreviewCSS()}
         return loadTimelineAndRender();
       })
       .then(function() {
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+        renderHistory(allHistoryRows, lastSearchError);
       })
       .catch(function() { modalBody.textContent = '読み込みに失敗しました'; });
   }
 
-  function renderHistory(rows) {
+  function renderHistory(rows, searchError) {
+    historyBodyEl.innerHTML = '';
+    if (searchError) {
+      var errEl = document.createElement('div');
+      errEl.className = 'history-search-error';
+      errEl.textContent = searchError;
+      historyBodyEl.appendChild(errEl);
+    }
     if (!rows || rows.length === 0) {
-      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">' +
-        (allHistoryRows.length === 0 ? 'まだ起動履歴がありません' : '検索条件に一致する履歴がありません') + '</div>';
+      var emptyEl = document.createElement('div');
+      emptyEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
+      emptyEl.textContent = searchError
+        ? '回答キャッシュを検索できませんでした'
+        : ((historySearchEl.value || '').trim() ? '検索条件に一致する履歴がありません' : 'まだ起動履歴がありません');
+      historyBodyEl.appendChild(emptyEl);
       return;
     }
     var table = document.createElement('table');
@@ -690,35 +723,88 @@ ${getMarkdownPreviewCSS()}
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    historyBodyEl.innerHTML = '';
     historyBodyEl.appendChild(table);
   }
 
-  // リポジトリ・Agent ID・プロンプト・状態・レポートのいずれかに検索語
-  // (大文字小文字を区別しない)を含む行だけを残す。検索語が空の場合は全件を返す。
-  function filterHistoryRows(rows, query) {
-    var q = (query || '').trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(function(row) {
-      return (row.repo_full_name || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.agent_id || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.prompt || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.agent_status || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.run_status || '').toLowerCase().indexOf(q) !== -1 ||
-        (row.report_text || '').toLowerCase().indexOf(q) !== -1;
+  function buildCursorAgentHistoryUrl(query) {
+    var q = (query || '').trim();
+    if (!q) return '/api/cursor-agent/history';
+    return '/api/cursor-agent/history?q=' + encodeURIComponent(q);
+  }
+
+  function renderSearchStatus(payload) {
+    if (!historySearchStatusEl) return;
+    if (!activeAnswerSearch) {
+      historySearchStatusEl.textContent = '';
+      return;
+    }
+    if (payload && payload.searchError) {
+      historySearchStatusEl.textContent = payload.searchError;
+      return;
+    }
+    var total = payload && typeof payload.cacheTotal === 'number' ? payload.cacheTotal : null;
+    var n = allHistoryRows.length;
+    if (total === 0) {
+      historySearchStatusEl.textContent = '回答キャッシュは0件です。Agent IDを開くと検索対象になります。';
+      return;
+    }
+    historySearchStatusEl.textContent = (total === null ? '' : '回答キャッシュ' + total + '件中') + n + '件ヒット';
+  }
+
+  function applyHistoryPayload(d, commErrorIds) {
+    if (!d) return;
+    allHistoryRows = d.rows || [];
+    lastSearchError = d.searchError || '';
+    if (commErrorIds) {
+      allHistoryRows.forEach(function(row) { if (commErrorIds[row.id]) row.commError = true; });
+    }
+    renderHistory(allHistoryRows, lastSearchError);
+    renderSearchStatus(d);
+  }
+
+  function fetchHistoryRows(query) {
+    var seq = ++historyFetchSeq;
+    var q = (query || '').trim();
+    return fetch(buildCursorAgentHistoryUrl(q), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (seq !== historyFetchSeq) return null;
+        if (!q && activeAnswerSearch) return null;
+        return d;
+      });
+  }
+
+  function fetchAndRenderHistory(commErrorIds, query) {
+    var q = query === undefined ? activeAnswerSearch : query;
+    return fetchHistoryRows(q).then(function(d) {
+      applyHistoryPayload(d, commErrorIds);
     });
   }
 
-  function fetchAndRenderHistory(commErrorIds) {
-    return fetch('/api/cursor-agent/history', { credentials: 'same-origin' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        allHistoryRows = d.rows || [];
-        if (commErrorIds) {
-          allHistoryRows.forEach(function(row) { if (commErrorIds[row.id]) row.commError = true; });
-        }
-        renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
-      });
+  function runAnswerCacheSearch() {
+    var q = (historySearchEl.value || '').trim();
+    if (!q) {
+      clearAnswerCacheSearch();
+      return;
+    }
+    activeAnswerSearch = q;
+    historyFetchSeq += 1;
+    historyBodyEl.innerHTML = '';
+    var loading = document.createElement('div');
+    loading.style.cssText = 'font-size:11px;color:var(--text-muted);';
+    loading.textContent = '履歴を検索中...';
+    historyBodyEl.appendChild(loading);
+    if (historySearchStatusEl) historySearchStatusEl.textContent = '履歴を検索中...';
+    fetchAndRenderHistory(null, q).catch(function() {
+      historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>';
+    });
+  }
+
+  function clearAnswerCacheSearch() {
+    activeAnswerSearch = '';
+    historySearchEl.value = '';
+    if (historySearchStatusEl) historySearchStatusEl.textContent = '';
+    loadHistory();
   }
 
   /**
@@ -727,11 +813,17 @@ ${getMarkdownPreviewCSS()}
    * 自動でCursor APIへ問い合わせ直す(=チェックのタイミング: ページを開いた
    * 時・再読み込みボタンを押した時。既に終了している行は問い合わせない)。
    * 問い合わせに失敗した行はcommErrorを立てて赤バッジで表示する。
+   * 検索中はキャッシュ問い合わせを優先し、この一覧再取得では上書きしない。
    */
   function loadHistory() {
+    if (activeAnswerSearch) {
+      runAnswerCacheSearch();
+      return;
+    }
     historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込み中...</div>';
-    fetchAndRenderHistory()
+    fetchAndRenderHistory(null, '')
       .then(function() {
+        if (activeAnswerSearch) return;
         var pending = allHistoryRows.filter(function(row) { return row.agent_id && !isTerminalStatus(row.agent_status); });
         if (pending.length === 0) return;
         var commErrorIds = {};
@@ -739,14 +831,26 @@ ${getMarkdownPreviewCSS()}
           return fetch('/api/cursor-agent/history/' + encodeURIComponent(row.id) + '/refresh', { method: 'POST', credentials: 'same-origin' })
             .then(function(r) { if (r.status !== 200) commErrorIds[row.id] = true; })
             .catch(function() { commErrorIds[row.id] = true; });
-        })).then(function() { return fetchAndRenderHistory(commErrorIds); });
+        })).then(function() {
+          if (activeAnswerSearch) return;
+          return fetchAndRenderHistory(commErrorIds, '');
+        });
       })
       .catch(function() { historyBodyEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">読み込みに失敗しました</div>'; });
   }
 
-  historyReloadBtn.addEventListener('click', loadHistory);
-  historySearchEl.addEventListener('input', function() {
-    renderHistory(filterHistoryRows(allHistoryRows, historySearchEl.value));
+  historyReloadBtn.addEventListener('click', function() {
+    activeAnswerSearch = '';
+    if (historySearchStatusEl) historySearchStatusEl.textContent = '';
+    loadHistory();
+  });
+  historySearchBtn.addEventListener('click', runAnswerCacheSearch);
+  historySearchClearBtn.addEventListener('click', clearAnswerCacheSearch);
+  historySearchEl.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      runAnswerCacheSearch();
+    }
   });
   loadHistory();
 })();
