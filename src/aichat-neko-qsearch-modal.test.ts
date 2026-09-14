@@ -7,7 +7,7 @@ import {
 } from './utils/aichatSlashCommand';
 
 // 対象: /aichat 入力窓のスラッシュコマンド `/neko qsearch` 応答。
-// 表の行頭の質問IDリンクを押すと、質問文・モデルを付けて
+// 表の行頭の質問IDリンクを押すと、質問IDと言語モデルをパラメータとして
 // GET /api/aichat/qsearch/latest-answer を呼び、最新回答を最上位モーダルでMarkdown表示する。
 // リンクに下線は付けない。/neko search の nekoResults / historyModal と /neko csearch とは混ぜない。
 //
@@ -15,7 +15,7 @@ import {
 //   (1) 行頭に質問IDの実リンクが出ない
 //   (2) リンクに下線が残る
 //   (3) クリックが historyModal や csearch モーダルを開く
-//   (4) APIに question/model を付けない
+//   (4) APIに質問IDと言語モデルを付けない、または回答文を付ける
 //   (5) モーダルが getNextZ 未登録で裏に入る
 //   (6) 回答が textContent のままで見出し・太字にならない
 //   (7) parseMdを通さず生HTMLをinnerHTMLし、XSSになる
@@ -39,15 +39,14 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
     const u = String(url);
     if (u.includes('/api/aichat/qsearch/latest-answer')) {
       const parsed = new URL(u, 'https://example.test');
-      const question = parsed.searchParams.get('question') || '';
-      const model = parsed.searchParams.get('model') || '';
-      if (question === 'XSS確認') {
+      const id = parsed.searchParams.get('id') || '';
+      if (id === 's3') {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ answer: '<img src=x onerror=alert(1)>' }),
         });
       }
-      if (question === '見つからない') {
+      if (id === 's4') {
         return Promise.resolve({
           ok: false,
           json: () => Promise.resolve({ error: '一致する過去ログがありません' }),
@@ -57,9 +56,9 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
         ok: true,
         json: () => Promise.resolve({
           answer: '## 完了\n\n**最新回答**です',
-          id: 'new',
-          question,
-          model,
+          id,
+          question: '東京駅について',
+          model: 'gpt-5',
         }),
       });
     }
@@ -140,7 +139,7 @@ describe('AIチャット(DOM実動作): /neko qsearch の質問IDと最新回答
     expect(html).not.toMatch(/<pre id="qsearchAnswerModalBody"/);
   });
 
-  it('質問IDクリック後、questionとmodelを付けて最新回答APIを呼びMarkdown描画する', async () => {
+  it('質問IDクリック後、質問IDと言語モデルを付けて最新回答APIを呼びMarkdown描画する', async () => {
     const results = [{ id: 's1', question: '東京駅について', model: 'gpt-5' }];
     const { fetchMock } = await setupChatSubmitTest({
       response: formatAichatNekoQsearchResults('駅', { results }),
@@ -152,10 +151,10 @@ describe('AIチャット(DOM実動作): /neko qsearch の質問IDと最新回答
     const latestCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/aichat/qsearch/latest-answer'));
     expect(latestCalls).toHaveLength(1);
     const called = String(latestCalls[0][0]);
-    expect(called).toContain('question=');
-    expect(called).toContain('model=');
-    expect(decodeURIComponent(called)).toContain('東京駅について');
-    expect(decodeURIComponent(called)).toContain('gpt-5');
+    expect(called).toContain('id=s1');
+    expect(called).toContain('model=gpt-5');
+    expect(called).not.toContain('question=');
+    expect(called).not.toContain('answer=');
     const modal = document.getElementById('qsearchAnswerModal')!;
     expect(modal.classList.contains('open')).toBe(true);
     const body = document.getElementById('qsearchAnswerModalBody')!;

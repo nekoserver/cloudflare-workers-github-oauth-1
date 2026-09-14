@@ -161,7 +161,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
-    '| /neko qsearch <キーワード> | 質問文・回答文にキーワードを含む過去ログを検索し、ヒットした質問文と回答モデルを表で表示します。各行の先頭は質問IDです。質問IDから最上位モーダルで最新の回答を読みます |',
+    '| /neko qsearch <キーワード> | 質問文・回答文にキーワードを含む過去ログを検索し、ヒットした質問文と回答モデルを表で表示します。各行の先頭は質問IDです。質問IDと言語モデルをパラメータとして最上位モーダルで最新の回答を読みます |',
     '| /neko csearch <キーワード> | Cursor VMの過去ログを検索し、ヒットした質問文を表で表示します。各行の先頭は作成時刻(JST)です。「表示」リンクから最上位モーダルでキャッシュを読みます |',
     '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
@@ -351,21 +351,19 @@ function encodeAichatQsearchParam(value: string): string {
   });
 }
 
-export function buildAichatQsearchIdHref(item: Pick<AichatQsearchItem, 'id' | 'question' | 'model'>): string {
-  return `#qsearch?id=${encodeAichatQsearchParam(item.id)}&question=${encodeAichatQsearchParam(item.question)}&model=${encodeAichatQsearchParam(item.model)}`;
+export function buildAichatQsearchIdHref(item: Pick<AichatQsearchItem, 'id' | 'model'>): string {
+  return `#qsearch?id=${encodeAichatQsearchParam(item.id)}&model=${encodeAichatQsearchParam(item.model)}`;
 }
 
-export function parseAichatQsearchHref(href: string | null | undefined): AichatQsearchItem | null {
+export function parseAichatQsearchHref(href: string | null | undefined): { id: string; model: string } | null {
   if (!href) return null;
   const normalized = href.replace(/&amp;/g, '&');
   const prefix = '#qsearch?';
   if (!normalized.startsWith(prefix)) return null;
   const params = new URLSearchParams(normalized.slice(prefix.length));
   const id = params.get('id') ?? '';
-  const question = params.get('question') ?? '';
-  const model = params.get('model') ?? '';
-  if (!id && !question) return null;
-  return { id, question, model };
+  if (!id) return null;
+  return { id, model: params.get('model') ?? '' };
 }
 
 export function formatAichatQsearchAnswerText(payload: {
@@ -384,7 +382,7 @@ export function formatAichatQsearchAnswerText(payload: {
 /**
  * スラッシュコマンド `/neko qsearch` の応答本文。ヒット有無の件数だけにせず、
  * 質問ID・質問文・回答モデル列のMarkdown表を返す。
- * 質問IDは parseMd が実アンカーを作れるよう [id](#qsearch?id=&question=&model=) にする。
+ * 質問IDは parseMd が実アンカーを作れるよう [id](#qsearch?id=&model=) にする。
  */
 export function formatAichatNekoQsearchResults(keyword: string, outcome: AichatQsearchOutcome): string {
   if (!keyword) {

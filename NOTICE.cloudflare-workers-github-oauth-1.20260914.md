@@ -79,10 +79,12 @@ Bearer secret + Service Binding が必要。launch の `user_id` を
 
 `/neko search` は同じ `ai_chat_shares` を見るが、応答は件数だけ（一覧はモーダル）。
 `/neko qsearch` は同じコーパス（質問文・回答文）を検索し、ヒットした質問文と回答モデルを
-チャット本文のMarkdown表にする。行頭は質問IDリンクで、質問文とモデル名を
-`GET /api/aichat/qsearch/latest-answer` に付けて再検索し、一番新しい回答だけを
+チャット本文のMarkdown表にする。行頭は質問IDリンクで、質問IDと言語モデルを
+`GET /api/aichat/qsearch/latest-answer?id=&model=` に付けて再検索し、一番新しい回答だけを
 `#qsearchAnswerModal` で Markdown 表示する。リンクに下線は付けない。
 `qseqrch` は誤記であり、正式名は `qsearch`。
 `/neko csearch` は Cursor VM 起動履歴なので、キーワードが同じでもヒット集合は一致しない。
 モデル名はフルパスを短くし、欠落は `(モデル不明)`。最大30件（`searchAiChatShares` の LIMIT と同じ）。
-表の短縮モデル名は保存側フルパスの末尾と一致させる。同じ質問・モデルが複数あるときは `created_at` が最新の1件だけを返す。
+リンクと API のクエリは質問IDと言語モデルだけにする。回答文や質問文は載せない。
+サーバは種行から質問文を解決し、表の短縮モデル名は保存側フルパスの末尾と一致させる。
+同じ質問・モデルが複数あるときは `created_at` が最新の1件だけを返す。

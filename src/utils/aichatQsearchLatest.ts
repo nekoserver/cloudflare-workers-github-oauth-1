@@ -25,19 +25,34 @@ export function isAichatQsearchUnknownModel(model: string): boolean {
 }
 
 /**
- * AI応答過去ログを質問文とモデル名で検索し、created_atが一番新しい1件だけを返す。
+ * 質問IDで種行を特定し、パラメータの言語モデルで過去ログを絞り、
+ * created_atが一番新しい回答文だけを返す。
  * 表に出す短縮モデル名はフルパス保存値の末尾と一致させる。
  */
 export async function findLatestAiChatShareAnswer(
   db: AichatQsearchLatestDb,
   userId: string,
-  question: string,
+  id: string,
   model: string,
 ): Promise<LatestAiChatShareAnswerResult> {
-  const normalizedQuestion = normalizeAichatQsearchQuestion(question);
-  if (!normalizedQuestion) {
-    return { ok: false, errorCode: 'missing_params', detail: 'question は必須です' };
+  const shareId = (id ?? '').trim();
+  if (!shareId) {
+    return { ok: false, errorCode: 'missing_params', detail: 'id は必須です' };
   }
+  const seedRows = await db
+    .prepare(
+      `SELECT s.id, s.question, s.answer, s.model, s.created_at
+       FROM ai_chat_shares s
+       WHERE s.user_id = ? AND s.id = ? AND s.deleted_at IS NULL
+       LIMIT 1`,
+    )
+    .bind(userId, shareId)
+    .all<LatestAiChatShareAnswer>();
+  const seed = seedRows.results?.[0];
+  if (!seed) {
+    return { ok: false, errorCode: 'not_found', detail: '一致する過去ログがありません' };
+  }
+  const normalizedQuestion = normalizeAichatQsearchQuestion(seed.question ?? '');
   const modelParam = (model ?? '').trim();
   const unknownModel = isAichatQsearchUnknownModel(modelParam) ? 1 : 0;
   const rows = await db

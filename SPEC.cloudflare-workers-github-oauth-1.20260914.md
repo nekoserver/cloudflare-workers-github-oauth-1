@@ -214,23 +214,24 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 **対象**: スラッシュコマンド `/neko qsearch` の応答表、`buildAichatQsearchIdHref`、
 `GET /api/aichat/qsearch/latest-answer`、`#qsearchAnswerModal` —
-各行の先頭に質問IDリンクを置き、質問文とモデル名をパラメータとして過去ログを検索し、
+各行の先頭に質問IDリンクを置き、質問IDと言語モデルをパラメータとして過去ログを検索し、
 一番新しい回答文だけを最上位モーダルで Markdown 表示する。リンクに下線は付けない。
 
 ### 背景
 
 表に質問文とモデルは出るが、同じ質問・同じモデルの回答が複数あると、どれが最新か分からない。
-行の質問IDを押して、その質問文とモデルで `ai_chat_shares` を再検索し、最新の回答だけを読みたい。
+行の質問IDを押して、その質問IDで種行を特定し、パラメータの言語モデルで最新回答だけを読みたい。
 `/neko search` の結果一覧や `/neko csearch` の Cursor VM モーダルとは混ぜない。
+リンクと API のクエリは質問IDと言語モデルだけにし、回答文や質問文は載せない。
 
 ### 故障シナリオ
 
 | # | 故障 | 対処 |
 |---|---|---|
-| 1 | 行頭に質問IDリンクが無い | Markdown `[id](#qsearch?id=&question=&model=)` を出し `parseMd` が実アンカーを作る |
+| 1 | 行頭に質問IDリンクが無い | Markdown `[id](#qsearch?id=&model=)` を出し `parseMd` が実アンカーを作る |
 | 2 | リンクに下線が残る | `.qsearch-id-link` を `text-decoration: none` |
 | 3 | `target="_blank"` で別タブへ飛ぶ | 配線時に `target` を外し `preventDefault` する |
-| 4 | 複数ヒットで古い回答を出す | `ORDER BY created_at DESC LIMIT 1` |
+| 4 | 複数ヒットで古い回答を出す | 種行の質問文とパラメータの言語モデルで再検索し `ORDER BY created_at DESC LIMIT 1` |
 | 5 | 短縮モデル名がフルパスと不一致 | 末尾一致 (`s.model LIKE '%/' \|\| ?`) |
 | 6 | historyModal / csearch モーダルを開く | 専用 `#qsearchAnswerModal` のみ。`getNextZ` に登録 |
 | 7 | 回答が生の `##` `**` のまま | `innerHTML = parseMd(text)`。エラーは `textContent` |
@@ -240,9 +241,9 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 | ファイル | 変更概要 |
 |---|---|
-| `src/utils/aichatSlashCommand.ts` | 質問IDリンク、href 生成、ヘルプ |
-| `src/utils/aichatQsearchLatest.ts` | 質問文・モデルで最新1件を返す |
-| `src/index.ts` | `GET /api/aichat/qsearch/latest-answer` |
+| `src/utils/aichatSlashCommand.ts` | 質問IDリンク、href は `id` と `model`、ヘルプ |
+| `src/utils/aichatQsearchLatest.ts` | 質問IDで種行を特定し、言語モデルで最新1件を返す |
+| `src/index.ts` | `GET /api/aichat/qsearch/latest-answer?id=&model=` |
 | `src/views/aichat.ts` | 下線なしリンク、最上位モーダル、parseMd 描画 |
 
 ### テスト
@@ -254,4 +255,6 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 ### 関連コミット
 
 - [`9dca313`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/9dca313) /neko qsearch の行頭質問IDから最新回答を最上位モーダルで開く
+- [`a214f33`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a214f33) /neko qsearch の最新回答APIパラメータを質問IDにする
+- [`a0eaf9a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a0eaf9a) /neko qsearch の最新回答APIパラメータを質問IDと言語モデルにする
 
