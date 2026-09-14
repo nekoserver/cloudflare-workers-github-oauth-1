@@ -256,4 +256,5 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 
 - [`9dca313`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/9dca313) /neko qsearch の行頭質問IDから最新回答を最上位モーダルで開く
 - [`a214f33`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a214f33) /neko qsearch の最新回答APIパラメータを質問IDにする
+- [`a0eaf9a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a0eaf9a) /neko qsearch の最新回答APIパラメータを質問IDと言語モデルにする
 
