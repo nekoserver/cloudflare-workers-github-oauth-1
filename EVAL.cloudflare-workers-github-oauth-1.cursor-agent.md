@@ -156,6 +156,7 @@ D1 失敗を 500 にしない判断（[`62fee07`](https://github.com/nekoserver/
 ### 関連コミット
 
 - [`762eaaf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/762eaaf) cursor-agentの実装評価と達成度をEVALに時系列でまとめる
+- [`bd0d7cf`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd0d7cf) AIチャットに /neko csearch を追加しCursor VM過去ログを表で返す
 
 ### 関連資料
 
