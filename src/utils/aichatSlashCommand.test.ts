@@ -140,6 +140,13 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko dig');
     expect(result).toContain('/neko help');
     expect(result).toContain('/neko csearch');
+    expect(result).toContain('/neko qseqrch');
+  });
+
+  it('/neko qseqrch の説明は質問文と回答モデルの表であると書く', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).toContain('/neko qseqrch');
+    expect(result).toContain('質問文と回答モデル');
   });
 
   it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {

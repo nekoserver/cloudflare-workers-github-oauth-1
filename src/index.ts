@@ -5341,7 +5341,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       if (!c.env.DB) return { hitCount: 0, results: [] };
       const db = c.env.DB as unknown as D1Like;
       const { results } = await searchAiChatShares(db, user.sub, keyword);
-      return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question })) };
+      return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question, model: r.model })) };
     },
     logSearchShares: c.env.DB ? (keyword, outcome) => logNekoMultiSearchResults(c.env.DB!, user.sub, keyword, outcome) : undefined,
     vectorizedAnswers: async () => {

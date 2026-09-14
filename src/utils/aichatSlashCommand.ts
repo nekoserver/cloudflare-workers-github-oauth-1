@@ -161,6 +161,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko qseqrch <キーワード> | 質問文・回答文にキーワードを含む過去ログを検索し、ヒットした質問文と回答モデルを表で表示します |',
     '| /neko csearch <キーワード> | Cursor VMの過去ログを検索し、ヒットした質問文を表で表示します。各行の先頭は作成時刻(JST)です。「表示」リンクから最上位モーダルでキャッシュを読みます |',
     '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
@@ -289,6 +290,7 @@ export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string
 export type AichatResultItem = {
   id: string;
   question: string;
+  model?: string;
 };
 
 export type AichatSearchOutcome = {
@@ -307,6 +309,59 @@ export function formatAichatSearchResults(keyword: string, outcome: AichatSearch
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
   return `「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`;
+}
+
+export const AICHAT_QSEQRCH_LIMIT = 30;
+
+export type AichatQseqrchItem = {
+  id: string;
+  question: string;
+  model: string;
+};
+
+export type AichatQseqrchOutcome = {
+  results: AichatQseqrchItem[];
+};
+
+/**
+ * スラッシュコマンド `/neko qseqrch` 用に、AIチャット過去ログ行を表行へ変換する。
+ * チャット本文を埋め尽くさないよう最大30件。空の質問文・モデルは握りつぶさない。
+ */
+export function formatAichatQseqrchModelName(model: string | null | undefined): string {
+  if (!model || !model.trim()) return '(モデル不明)';
+  const trimmed = model.trim();
+  return trimmed.split('/').pop() || trimmed;
+}
+
+export function mapAiChatSharesToQseqrchItems(
+  rows: Array<{ id: string; question?: string | null; model?: string | null }>,
+  limit = AICHAT_QSEQRCH_LIMIT,
+): AichatQseqrchItem[] {
+  return rows.slice(0, limit).map((row) => ({
+    id: row.id,
+    question: (row.question ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+    model: formatAichatQseqrchModelName(row.model),
+  }));
+}
+
+/**
+ * スラッシュコマンド `/neko qseqrch` の応答本文。ヒット有無の件数だけにせず、
+ * 質問文と回答モデル列のMarkdown表を返す。
+ */
+export function formatAichatNekoQseqrchResults(keyword: string, outcome: AichatQseqrchOutcome): string {
+  if (!keyword) {
+    return '❌ キーワードを指定してください: /neko qseqrch <キーワード>';
+  }
+  if (outcome.results.length === 0) {
+    return `AIチャット過去ログ「${keyword}」: 0件`;
+  }
+  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  return [
+    `## AIチャット過去ログ検索「${keyword}」`,
+    '| 質問文 | モデル |',
+    '|---|---|',
+    ...outcome.results.map((item) => `| ${escapeCell(item.question)} | ${escapeCell(item.model)} |`),
+  ].join('\n');
 }
 
 export const AICHAT_CSEARCH_LIMIT = 30;
@@ -1140,6 +1195,31 @@ export async function interpretAichatSlashCommand(
     };
   }
 
+  if (subcommand === 'qseqrch') {
+    const keyword = parts.slice(2).join(' ').trim();
+    if (!keyword) {
+      return { handled: true, response: formatAichatNekoQseqrchResults('', { results: [] }) };
+    }
+    if (!deps.searchShares) {
+      return { handled: true, response: '❌ /neko qseqrch は現在利用できません(過去ログ検索API未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.searchShares(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko qseqrch がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko qseqrch でエラーが発生しました: ${outcome.message}` };
+    }
+    const results = mapAiChatSharesToQseqrchItems(outcome.value.results);
+    return {
+      handled: true,
+      response: formatAichatNekoQseqrchResults(keyword, { results }),
+    };
+  }
+
   if (subcommand === 'csearch') {
     // スラッシュコマンド。システムコマンドではない。
     const keyword = parts.slice(2).join(' ').trim();
@@ -1534,6 +1614,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qseqrch, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
