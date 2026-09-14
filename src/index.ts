@@ -13101,7 +13101,13 @@ app.post('/api/cursor-agent/query-external', async (c) => {
     return jsonUtf8({ error: 'このメールアドレスはCursor VMキャッシュ検索を許可されていません' }, 403);
   }
 
-  const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string; created_at: string; report_text: string | null }>(c.env.DB, login, keyword);
+  const listed = await queryCursorAgentHistoryWithSearch<{
+    id: number;
+    prompt: string;
+    created_at: string;
+    report_text: string | null;
+    cached_answer_text?: string | null;
+  }>(c.env.DB, login, keyword);
   if (listed.searchError) {
     logger.error('[dynamicneko-cursor-cache] 過去ログ検索に失敗', { login, error: listed.searchError });
   }
@@ -13110,7 +13116,15 @@ app.post('/api/cursor-agent/query-external', async (c) => {
       id: row.id,
       question: (row.prompt ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
       createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
-      answer: row.report_text ?? null,
+      // AIチャットの /neko csearch モーダルが表示する回答本文と揃える。
+      // モーダルは GET /api/cursor-agent/history/:id/conversation を叩いて
+      // cursor_agent_answer_cache を優先的に読む(未キャッシュならCursor APIへ
+      // ライブ問い合わせしてキャッシュへ書き戻す)。この外部API(dynamicneko用)は
+      // 「cursor vmのキャッシュ」に問い合わせる仕様のため、ライブ問い合わせは
+      // 行わずcursor_agent_answer_cache(cached_answer_text)だけを見る。
+      // cached_answer_textが無い場合のみ、起動直後の状態取得で自動抽出された
+      // report_text(状態ログの簡易レポート)にフォールバックする。
+      answer: row.cached_answer_text ?? row.report_text ?? null,
     })),
     searchError: listed.searchError || undefined,
   });
