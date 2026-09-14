@@ -245,6 +245,14 @@ export function buildCursorAgentHistoryListSql(hasAnswerSearch: boolean): string
        ORDER BY l.created_at DESC, l.id DESC LIMIT 100`;
 }
 
+/** 自分の起動に紐づく回答キャッシュ件数。検索0件が「未キャッシュ」か「不一致」かを分ける。 */
+export function buildCursorAgentAnswerCacheCountSql(): string {
+  return `SELECT COUNT(*) as c
+       FROM cursor_agent_answer_cache a
+       INNER JOIN cursor_agent_launch_log l ON l.id = a.launch_id
+       WHERE l.user_id = ?`;
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent

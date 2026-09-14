@@ -250,7 +250,7 @@ async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string):
 
 import { getKimiCodePage } from './views/kimiCode';
 import { getCursorAgentPage } from './views/cursorAgent';
-import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, normalizeCursorAgentHistorySearchQuery, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
@@ -13460,17 +13460,36 @@ app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
       .all<CursorAgentHistoryRow>();
     return jsonUtf8({ rows: results ?? [] });
   }
+  let cacheTotal: number | null = null;
+  try {
+    const countRow = await c.env.DB
+      .prepare(buildCursorAgentAnswerCacheCountSql())
+      .bind(user.sub)
+      .first<{ c: number }>();
+    cacheTotal = Number(countRow?.c ?? 0);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
+  }
   try {
     const { results } = await c.env.DB
       .prepare(buildCursorAgentHistoryListSql(true))
       .bind(user.sub, searchQuery)
       .all<CursorAgentHistoryRow>();
-    return jsonUtf8({ rows: results ?? [] });
+    return jsonUtf8({
+      rows: results ?? [],
+      source: 'answer_cache',
+      query: searchQuery,
+      cacheTotal,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: message });
     return jsonUtf8({
       rows: [],
+      source: 'answer_cache',
+      query: searchQuery,
+      cacheTotal,
       searchError: `回答キャッシュの検索に失敗しました: ${message}`,
     });
   }

@@ -13,6 +13,7 @@ import {
   mergeCursorAgentConversationAnswers,
   normalizeCursorAgentHistorySearchQuery,
   buildCursorAgentHistoryListSql,
+  buildCursorAgentAnswerCacheCountSql,
   type CursorAgentLaunchInput,
 } from './cursorAgentLaunch';
 
@@ -384,5 +385,15 @@ describe('buildCursorAgentHistoryListSql', () => {
     expect(sql).not.toContain('l.prompt LIKE');
     expect(sql).not.toContain('instr(lower(l.prompt)');
     expect(sql).toContain('WHERE l.user_id = ?');
+  });
+});
+
+describe('buildCursorAgentAnswerCacheCountSql', () => {
+  it('自分の起動に紐づく回答キャッシュ件数を数える', () => {
+    const sql = buildCursorAgentAnswerCacheCountSql();
+    expect(sql).toContain('FROM cursor_agent_answer_cache a');
+    expect(sql).toContain('INNER JOIN cursor_agent_launch_log l ON l.id = a.launch_id');
+    expect(sql).toContain('WHERE l.user_id = ?');
+    expect(sql).not.toContain('l.prompt');
   });
 });

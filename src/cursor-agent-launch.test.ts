@@ -179,10 +179,14 @@ describe('GET /cursor-agent', () => {
     const res = await app.request('/cursor-agent', { headers: { Authorization: auth } }, { JWT_SECRET });
     const html = await res.text();
     expect(html).toContain("'/api/cursor-agent/history?q=' + encodeURIComponent");
-    expect(html).toContain('回答内容を検索');
+    expect(html).toContain('回答キャッシュを検索');
+    expect(html).toContain('agentHistorySearchBtn');
+    expect(html).toContain('runAnswerCacheSearch');
     expect(html).not.toContain('filterHistoryRows');
+    expect(html).not.toContain("historySearchEl.addEventListener('input'");
     expect(html).not.toContain('リポジトリ・Agent ID・プロンプト・応答を検索');
     expect(html).toContain('searchError');
+    expect(html).toContain('cacheTotal');
   });
 
   it('各行に「最新状態を取得」ボタンを持ち、/refreshへPOSTする', async () => {
@@ -593,6 +597,9 @@ describe('GET /api/cursor-agent/history', () => {
     const data = await res.json() as { rows: Array<{ id: number; prompt: string }> };
     expect(data.rows.map((r) => r.id)).toEqual([matchId]);
     expect(data.rows[0].prompt).toBe('プロンプトには出ない起動');
+    expect((data as { source?: string; query?: string; cacheTotal?: number }).source).toBe('answer_cache');
+    expect((data as { query?: string }).query).toBe('kaleidoscope');
+    expect((data as { cacheTotal?: number }).cacheTotal).toBe(2);
   });
 
   it('qがプロンプトにだけある語では0件になる(キャッシュ未作成の行もヒットしない)', async () => {
