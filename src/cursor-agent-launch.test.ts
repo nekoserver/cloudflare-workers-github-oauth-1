@@ -89,6 +89,12 @@ function setupDb(): DatabaseSync {
       raw_response TEXT NOT NULL,
       fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE cursor_agent_answer_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      launch_id INTEGER NOT NULL UNIQUE REFERENCES cursor_agent_launch_log(id),
+      answer_text TEXT NOT NULL,
+      cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE user_sessions (
       user_id TEXT PRIMARY KEY,
       revoked_at TEXT,
@@ -264,7 +270,8 @@ describe('GET /cursor-agent', () => {
     expect(html).toContain('renderConversationAnswers');
     expect(html).toContain('agentDetailAnswerBody');
     expect(html).toContain('getNextZ()');
-    expect(html).toContain('answer.textContent');
+    expect(html).toContain('parseMd(');
+    expect(html).toContain('preview-area');
     expect(html).toContain('回答文');
   });
 
@@ -605,6 +612,7 @@ describe('DELETE /api/cursor-agent/history/:id', () => {
   it('自分の履歴行を削除できる(関連するstatus_log行も削除される)', async () => {
     const db = setupDb();
     const id = insertLaunchWithStatus(db, { userId: 'user1', prompt: '削除対象', agentId: 'bc_1', agentStatus: 'RUNNING', rawResponse: {}, createdAt: '2026-09-13 00:00:00' });
+    db.prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`).run(id, 'キャッシュ済み回答');
 
     const auth = await makeAuthHeader('user1');
     const res = await app.request(`/api/cursor-agent/history/${id}`, { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
@@ -614,6 +622,8 @@ describe('DELETE /api/cursor-agent/history/:id', () => {
     expect(launchCount.c).toBe(0);
     const statusCount = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_status_log WHERE launch_id = ?').get(id) as { c: number };
     expect(statusCount.c).toBe(0);
+    const cacheCount = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_answer_cache WHERE launch_id = ?').get(id) as { c: number };
+    expect(cacheCount.c).toBe(0);
   });
 
   it('他ユーザーの履歴行は削除できない(404、実際には削除されない)', async () => {
@@ -626,6 +636,40 @@ describe('DELETE /api/cursor-agent/history/:id', () => {
 
     const row = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_launch_log WHERE id = ?').get(id) as { c: number };
     expect(row.c).toBe(1);
+  });
+
+  it('回答キャッシュテーブルが未作成でも履歴削除は成功し、launch/statusは消える', async () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE cursor_agent_launch_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        repo_full_name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        agent_id TEXT,
+        agent_name TEXT,
+        agent_url TEXT,
+        cursor_response TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE cursor_agent_status_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        launch_id INTEGER NOT NULL,
+        agent_status TEXT,
+        run_status TEXT,
+        report_text TEXT,
+        raw_response TEXT NOT NULL,
+        fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE user_sessions (user_id TEXT PRIMARY KEY, revoked_at TEXT, last_activity_at TEXT);
+    `);
+    db.prepare(`INSERT INTO user_sessions (user_id, revoked_at) VALUES (?, NULL)`).run('user1');
+    const id = insertLaunchWithStatus(db, { userId: 'user1', prompt: '削除対象', agentId: 'bc_1', agentStatus: 'RUNNING', rawResponse: {}, createdAt: '2026-09-13 00:00:00' });
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}`, { method: 'DELETE', headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+    const launchCount = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_launch_log WHERE id = ?').get(id) as { c: number };
+    expect(launchCount.c).toBe(0);
   });
 
   it('存在しないidを指定した場合も404を返す', async () => {
@@ -867,5 +911,122 @@ describe('GET /api/cursor-agent/history/:id/conversation', () => {
     const data = await res.json() as { error?: string; answers?: string[] };
     expect(data.error).toBeTruthy();
     expect(data.answers).toBeUndefined();
+  });
+
+  it('キャッシュに回答文があればCursor APIを呼ばずsource=cacheで返す', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-cached',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    db.prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`).run(id, '## キャッシュ済み\n\n**本文**');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[]; source?: string };
+    expect(data.source).toBe('cache');
+    expect(data.answers).toEqual(['## キャッシュ済み\n\n**本文**']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('キャッシュが空ならCursor APIを呼び、断片を1本にまとめて回答文だけをキャッシュする', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-merge',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    const conversation = {
+      id: 'bc-merge',
+      messages: [
+        { id: 'm1', type: 'user_message', text: 'READMEを直して' },
+        { id: 'm2', type: 'assistant_message', text: '## 完了' },
+        { id: 'm3', type: 'assistant_message', text: '**README**を更新しました' },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(conversation), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[]; source?: string };
+    expect(data.source).toBe('api');
+    expect(data.answers).toEqual(['## 完了\n\n**README**を更新しました']);
+    const cacheRows = db.prepare('SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?').all(id) as { answer_text: string }[];
+    expect(cacheRows).toHaveLength(1);
+    expect(cacheRows[0].answer_text).toBe('## 完了\n\n**README**を更新しました');
+    expect(cacheRows[0].answer_text).not.toContain('READMEを直して');
+  });
+
+  it('空の回答はキャッシュせず、次回復帰でAPIを再試行できるようにする', async () => {
+    const db = setupDb();
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-empty',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ messages: [{ type: 'user_message', text: '質問だけ' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[] };
+    expect(data.answers).toEqual([]);
+    const cacheCount = db.prepare('SELECT COUNT(*) as c FROM cursor_agent_answer_cache WHERE launch_id = ?').get(id) as { c: number };
+    expect(cacheCount.c).toBe(0);
+  });
+
+  it('キャッシュテーブル未作成でもCursor APIの回答は返し、cacheErrorを残す', async () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE cursor_agent_launch_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        repo_full_name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        agent_id TEXT,
+        agent_name TEXT,
+        agent_url TEXT,
+        cursor_response TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE cursor_agent_status_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        launch_id INTEGER NOT NULL,
+        agent_status TEXT,
+        run_status TEXT,
+        report_text TEXT,
+        raw_response TEXT NOT NULL,
+        fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE user_sessions (user_id TEXT PRIMARY KEY, revoked_at TEXT, last_activity_at TEXT);
+    `);
+    db.prepare(`INSERT INTO user_sessions (user_id, revoked_at) VALUES (?, NULL)`).run('user1');
+    const id = insertLaunchWithStatus(db, {
+      userId: 'user1', prompt: 'READMEを直して', agentId: 'bc-notable',
+      rawResponse: {}, createdAt: '2026-09-13 00:00:00',
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        messages: [{ type: 'assistant_message', text: 'テーブル無しでも返す' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    ));
+    const auth = await makeAuthHeader('user1');
+    const res = await app.request(`/api/cursor-agent/history/${id}/conversation`, {
+      headers: { Authorization: auth },
+    }, { JWT_SECRET, DB: wrapD1(db), CURSOR_API_KEY: 'key_test' });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { answers: string[]; cacheError?: string };
+    expect(data.answers).toEqual(['テーブル無しでも返す']);
+    expect(data.cacheError).toBeTruthy();
   });
 });

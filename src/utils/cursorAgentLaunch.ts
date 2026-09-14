@@ -202,6 +202,15 @@ export function extractCursorAgentConversationAnswers(payload: unknown): string[
   return answers;
 }
 
+/**
+ * 会話APIから抜いた回答断片を、キャッシュ用の1本の回答文へまとめる。
+ * 空文字は捨て、残った断片だけを空行区切りで結合する。
+ * 断片が無いときは空文字を返し、空キャッシュとしては扱わない(呼び出し側でINSERTしない)。
+ */
+export function mergeCursorAgentConversationAnswers(answers: string[]): string {
+  return answers.filter((text) => typeof text === 'string' && text.length > 0).join('\n\n');
+}
+
 export function extractCursorAgentFields(cursorResponse: unknown): CursorAgentFields {
   const agent = (cursorResponse && typeof cursorResponse === 'object')
     ? (cursorResponse as { agent?: unknown }).agent
