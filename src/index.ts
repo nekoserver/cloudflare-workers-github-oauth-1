@@ -6380,20 +6380,18 @@ export async function buildAnswerPropagationGraph(
 }
 
 /**
- * /neko qsearch の質問IDクリック用。質問文とモデル名で AI 応答過去ログを検索し、
- * created_at が一番新しい回答文だけを返す。
+ * /neko qsearch の質問IDクリック用。質問IDで種行を特定し、
+ * 同じ質問文・モデルの過去ログから created_at が一番新しい回答文だけを返す。
  */
 app.get('/api/aichat/qsearch/latest-answer', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const question = (c.req.query('question') ?? '').trim();
-  const model = (c.req.query('model') ?? '').trim();
+  const id = (c.req.query('id') ?? '').trim();
   try {
     const result = await findLatestAiChatShareAnswer(
       c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
       user.sub,
-      question,
-      model,
+      id,
     );
     if (!result.ok) {
       const status = result.errorCode === 'missing_params' ? 400 : 404;

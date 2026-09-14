@@ -1859,16 +1859,19 @@ export function getAiChatPage(user: {
       qsearchAnswerModal.setAttribute('aria-hidden', 'true');
     }
 
-    function openQsearchAnswerModal(question, model) {
-      qsearchAnswerModalTitle.textContent = question || '最新の回答';
+    function openQsearchAnswerModal(id) {
+      qsearchAnswerModalTitle.textContent = id || '最新の回答';
       qsearchAnswerModalBody.textContent = '読み込み中...';
       qsearchAnswerModal.style.zIndex = String(getNextZ());
       qsearchAnswerModal.classList.add('open');
       qsearchAnswerModal.setAttribute('aria-hidden', 'false');
-      fetch('/api/aichat/qsearch/latest-answer?question=' + encodeURIComponent(question || '') + '&model=' + encodeURIComponent(model || ''), { credentials: 'same-origin' })
+      fetch('/api/aichat/qsearch/latest-answer?id=' + encodeURIComponent(id || ''), { credentials: 'same-origin' })
         .then(function(res) { return res.json().then(function(data) { return data; }); })
         .then(function(data) {
           var payload = data || {};
+          if (payload && typeof payload.question === 'string' && payload.question.trim()) {
+            qsearchAnswerModalTitle.textContent = payload.question;
+          }
           var text = formatAichatQsearchAnswerText(payload);
           if (typeof payload.error === 'string' && payload.error.trim()) {
             qsearchAnswerModalBody.textContent = text;
@@ -1891,10 +1894,8 @@ export function getAiChatPage(user: {
       if (normalized.indexOf(prefix) !== 0) return null;
       var params = new URLSearchParams(normalized.slice(prefix.length));
       var id = params.get('id') || '';
-      var question = params.get('question') || '';
-      var model = params.get('model') || '';
-      if (!id && !question) return null;
-      return { id: id, question: question, model: model };
+      if (!id) return null;
+      return { id: id };
     }
 
     function bindQsearchIdLink(a) {
@@ -1906,7 +1907,7 @@ export function getAiChatPage(user: {
         e.preventDefault();
         e.stopPropagation();
         if (!parsed) return;
-        openQsearchAnswerModal(parsed.question || '', parsed.model || '');
+        openQsearchAnswerModal(parsed.id || '');
       });
     }
 

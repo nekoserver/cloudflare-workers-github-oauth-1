@@ -86,9 +86,9 @@ describe('getMarkdownParserScript', () => {
 
   it('テーブル内のハッシュリンクはクエリ付きqsearchの質問IDでも実アンカーになる', () => {
     const parseMd = loadParseMd();
-    const href = '#qsearch?id=s1&question=%E9%A7%85&model=gpt-5';
+    const href = '#qsearch?id=s1';
     const html = parseMd(`| 質問ID | 質問文 | モデル |\n|---|---|---|\n| [s1](${href}) | 駅 | gpt-5 |`);
-    expect(html).toContain('<a href="#qsearch?id=s1&amp;question=%E9%A7%85&amp;model=gpt-5"');
+    expect(html).toContain('<a href="#qsearch?id=s1"');
     expect(html).toContain('>s1</a>');
   });
 

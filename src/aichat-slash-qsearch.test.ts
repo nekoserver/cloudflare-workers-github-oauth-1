@@ -27,7 +27,7 @@ import {
 //   (5) モデル名欠落を空文字で握りつぶす
 //   (6) 検索例外・タイムアウトを握りつぶす
 //   (7) 質問文のパイプでMarkdown表が壊れる
-//   (8) 行頭に質問IDリンクが無く、質問文・モデルをAPIへ渡せない
+//   (8) 行頭に質問IDリンクが無く、質問IDをAPIへ渡せない
 //   (9) 最新回答の失敗を空文字で握りつぶす
 
 describe('formatAichatQsearchModelName', () => {
@@ -77,29 +77,27 @@ describe('mapAiChatSharesToQsearchItems', () => {
 });
 
 describe('buildAichatQsearchIdHref / parseAichatQsearchHref', () => {
-  it('質問IDに質問文とモデルをクエリパラメータとして付ける', () => {
+  it('質問IDだけをクエリパラメータとして付ける', () => {
     const href = buildAichatQsearchIdHref({
       id: 's1',
       question: '東京駅について',
       model: 'llama-3.3-70b-instruct-fp8-fast',
     });
-    expect(href.startsWith('#qsearch?')).toBe(true);
+    expect(href).toBe('#qsearch?id=s1');
     const parsed = parseAichatQsearchHref(href);
-    expect(parsed).toEqual({
-      id: 's1',
-      question: '東京駅について',
-      model: 'llama-3.3-70b-instruct-fp8-fast',
-    });
+    expect(parsed).toEqual({ id: 's1' });
+    expect(href).not.toContain('question=');
+    expect(href).not.toContain('model=');
   });
 
-  it('閉じ括弧を含む質問文でもhrefの ) でMarkdownリンクが壊れない', () => {
+  it('閉じ括弧を含む質問IDでもhrefの ) でMarkdownリンクが壊れない', () => {
     const href = buildAichatQsearchIdHref({
-      id: 's9',
-      question: '駅(東京)について',
+      id: 's9(tokyo)',
+      question: '駅について',
       model: 'gpt-5',
     });
     expect(href).not.toContain(')');
-    expect(parseAichatQsearchHref(href)?.question).toBe('駅(東京)について');
+    expect(parseAichatQsearchHref(href)?.id).toBe('s9(tokyo)');
   });
 
   it('qsearch以外のhrefはnullを返す(握りつぶして空文字にしない)', () => {

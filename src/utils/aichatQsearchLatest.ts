@@ -25,20 +25,33 @@ export function isAichatQsearchUnknownModel(model: string): boolean {
 }
 
 /**
- * AI応答過去ログを質問文とモデル名で検索し、created_atが一番新しい1件だけを返す。
- * 表に出す短縮モデル名はフルパス保存値の末尾と一致させる。
+ * 質問IDで種行を特定し、同じ質問文・モデルの過去ログから
+ * created_atが一番新しい回答文だけを返す。
  */
 export async function findLatestAiChatShareAnswer(
   db: AichatQsearchLatestDb,
   userId: string,
-  question: string,
-  model: string,
+  id: string,
 ): Promise<LatestAiChatShareAnswerResult> {
-  const normalizedQuestion = normalizeAichatQsearchQuestion(question);
-  if (!normalizedQuestion) {
-    return { ok: false, errorCode: 'missing_params', detail: 'question は必須です' };
+  const shareId = (id ?? '').trim();
+  if (!shareId) {
+    return { ok: false, errorCode: 'missing_params', detail: 'id は必須です' };
   }
-  const modelParam = (model ?? '').trim();
+  const seedRows = await db
+    .prepare(
+      `SELECT s.id, s.question, s.answer, s.model, s.created_at
+       FROM ai_chat_shares s
+       WHERE s.user_id = ? AND s.id = ? AND s.deleted_at IS NULL
+       LIMIT 1`,
+    )
+    .bind(userId, shareId)
+    .all<LatestAiChatShareAnswer>();
+  const seed = seedRows.results?.[0];
+  if (!seed) {
+    return { ok: false, errorCode: 'not_found', detail: '一致する過去ログがありません' };
+  }
+  const normalizedQuestion = normalizeAichatQsearchQuestion(seed.question ?? '');
+  const modelParam = (seed.model ?? '').trim();
   const unknownModel = isAichatQsearchUnknownModel(modelParam) ? 1 : 0;
   const rows = await db
     .prepare(
@@ -48,13 +61,13 @@ export async function findLatestAiChatShareAnswer(
          AND REPLACE(REPLACE(TRIM(s.question), CHAR(13), ''), CHAR(10), ' ') = ?
          AND (
            CASE WHEN ? = 1 THEN TRIM(COALESCE(s.model, '')) = ''
-           ELSE (s.model = ? OR (INSTR(s.model, '/') > 0 AND s.model LIKE '%/' || ?))
+           ELSE TRIM(s.model) = ?
            END
          )
        ORDER BY s.created_at DESC
        LIMIT 1`,
     )
-    .bind(userId, normalizedQuestion, unknownModel, modelParam, modelParam)
+    .bind(userId, normalizedQuestion, unknownModel, modelParam)
     .all<LatestAiChatShareAnswer>();
   const row = rows.results?.[0];
   if (!row) {
