@@ -57,6 +57,10 @@ CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_
 - `src/cursor-agent-past-log-search.test.ts`: キャッシュ表なしでもプロンプト一致を保存
 - `src/cursor-agent-history-answer-search-e2e.test.ts`: エラーと行の同時表示、検索欄クリアで全件復帰
 
+### 関連コミット
+
+- [`afc8f75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afc8f75) 回答キャッシュ表欠落時も画面の列で検索し解除ボタンを撤去する
+
 ### 関連
 
 - [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
