@@ -317,6 +317,9 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 - GitHub webhook → Slack/外部Worker(Altワーカー)通知パイプライン(経路A/B/Cの区別・write-onlyデータストア事故・Slack app_mentionのbot判定):
   [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md)
+- /cursor-agent の回答キャッシュ表未作成・破損時の検索エラー（`no such table: cursor_agent_answer_cache`。データ破損・テーブル未設定のテストに使う。まとめ先 `SPEC.cursor-agent.md`）:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
+  [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
 
 ---
 

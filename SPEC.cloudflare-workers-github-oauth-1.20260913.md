@@ -162,11 +162,17 @@ D1キャッシュがあればCursor APIを呼ばず、無ければAPI後に断�
 
 - 回答キャッシュは Agent ID タップ(会話API)のあとで埋まる。未タップの起動は検索対象に入らない
 - 追加のD1マイグレーションは不要(0139の `cursor_agent_answer_cache` を使う)
+- 表未作成・表破損時は空成功にせず、次の `searchError` を出す。データ破損時とテーブル未設定時のテストに使う。`SPEC.cursor-agent.md` へまとめるときもこの文言を残す
+
+```text
+回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
+```
 
 ### 関連コミット
 
 - [`245906c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/245906c) cursor-agentの履歴検索を回答キャッシュ本文のサーバ検索へ切り替える
 - [`bc95820`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bc95820) cursor-agent履歴検索からインクリメンタルを外しキャッシュ表だけを明示検索する
+- [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) 回答キャッシュ表未作成時のD1検索エラーをSPEC.cursor-agent.mdに残す
 
 ## 5. 履歴検索が画面の語で0件になる不具合とエラー非表示
 
