@@ -38,6 +38,15 @@ Cache API の `put` は iOS の容量制限で失敗しうる。失敗しても�
 `3.4.1` のままなのに成功扱いすると、4.0 に切り替えたつもりで 3.4 バイナリを
 実行し続ける。
 
+jsDelivr の `@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm` 本体を 2026-09-15 に
+取得して確認した。マジックは `\0asm`、`RUBY_DESCRIPTION` は
+`ruby 4.0.0 (2025-12-25 revision 553f1675…)`。`ruby 3.4.1` という説明文字列は
+入っていない。したがってブラウザで `puts RUBY_VERSION` が `3.4.1` なら、
+4.0 バイナリではなく **3.4 の URL を読んでいる古い HTML** が動いている。
+`GET /ruby-wasm` の HTML は `Cache-Control: private, no-store` にし、
+初期コードを `puts RUBY_VERSION` にする。
+
+
 ## 初回が遅いのは 32MB をグルーの後で取り始めていたから
 
 **対象**: `/ruby-wasm` の読み込み開始タイミング。

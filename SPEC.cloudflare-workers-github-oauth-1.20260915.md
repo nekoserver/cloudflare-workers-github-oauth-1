@@ -306,11 +306,50 @@ esm.sh の往復のあいだ巨大ダウンロードが動かない。HTML パ�
 
 ### 関連コミット
 
-(コミット後に追記)
+- [`106f27f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/106f27f) Ruby/WASMの初回取得をpreloadと並行読み込みで早くする
 
 ### 関連
 
 対応するIssueは無い。4.0 読み込みが直ったあとの初回待ち時間への対処。
+
+---
+
+## 7. puts RUBY_VERSION が 3.4.1 のままにならないようにする
+
+**対象**: `GET /ruby-wasm` の HTML キャッシュと初期サンプルコード、起動後の
+`RUBY_VERSION` 照合 — 4.0 バイナリ URL に差し替えても、キャッシュされた古い HTML が
+3.4 の `ruby+stdlib.wasm` を読み続けると `puts RUBY_VERSION` が `3.4.1` のままになる。
+
+### 背景
+
+jsDelivr 上の `@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm` を取得して確認すると、
+`RUBY_DESCRIPTION` は `ruby 4.0.0` で `ruby 3.4.1` ではない。ブラウザが 3.4.1 を出すのは
+3.4 バイナリを実行しているときだけ。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 古い HTML がキャッシュされ 3.4 URL のまま | `Cache-Control: private, no-store, no-cache, must-revalidate` |
+| 2 | 4.0 URL なのに 3.4.1 で成功扱い | 起動後に `RUBY_VERSION` が `4.0` で始まらなければエラー |
+| 3 | 初期サンプルが hello world のままでバージョンに気づかない | 初期コードを `puts RUBY_VERSION` にする |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/index.ts` | `/ruby-wasm` に Cache-Control no-store |
+| `src/views/rubyWasm.ts` | 初期コードを `puts RUBY_VERSION` |
+| `src/ruby-wasm-csp-20260831.test.ts` | no-store と 4.0 URL、初期コードを検証 |
+
+### 関連コミット
+
+(コミット後に追記)
+
+### 関連
+
+対応するIssueは無い。4.0 切り替え後も `RUBY_VERSION` が 3.4.1 のままという報告への対処。
+
 
 
 
