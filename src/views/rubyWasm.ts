@@ -5,7 +5,7 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 // 含むCRubyはこの環境ではwasm32-unknown-unknownへ自前ビルドできない
 // (NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md 3節と同じ制約)。
 // バイナリ本体(ruby+stdlib.wasm、約30MB)はリポジトリに含めず、公式npm
-// パッケージ(@ruby/3.4-wasm-wasi)をjsDelivr CDN経由でブラウザから直接
+// パッケージ(@ruby/4.0-wasm-wasi)をjsDelivr CDN経由でブラウザから直接
 // 読み込む。他のwasm/*-wasmクレートのように自前Rust実装+public/wasm配下の
 // 静的配信ではない、この機能固有の構成であることに注意。
 // dist/esm/browser.js は"@bjorn3/browser_wasi_shim"のようなbare specifier
@@ -20,11 +20,11 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 // 実行するため、同じCDN URL(バージョン固定)をここから再利用しバージョンの
 // 食い違いを防ぐ。
 export const RUBY_WASM_JS_URL = 'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js';
-export const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
+export const RUBY_WASM_BINARY_URL = 'https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm';
 
 export type RubyWasmVersionInfo = {
   /** @ruby/{X.Y}-wasm-wasi のビルドライン(パッケージのメジャー.マイナー)。
-   *  実際のCRubyパッチバージョン(例: 3.4.2)はwasmバイナリ内部にしか無く、
+   *  実際のCRubyパッチバージョン(例: 4.0.0)はwasmバイナリ内部にしか無く、
    *  Worker側からは(ブラウザでWASMを実行しない限り)取得できないため、
    *  ここではパッケージ名に埋め込まれたビルドラインのみを返す。 */
   rubyBuildLine: string;

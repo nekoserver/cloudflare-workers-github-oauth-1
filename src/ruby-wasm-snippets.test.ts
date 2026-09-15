@@ -148,7 +148,7 @@ describe('POST /api/ruby-wasm/snippets', () => {
     }, { JWT_SECRET, DB: wrapD1(db) });
 
     const data = await res.json() as { rubyVersion: string };
-    expect(data.rubyVersion).toMatch(/^\d+\.\d+$/);
+    expect(data.rubyVersion).toBe('4.0');
   });
 
   it('タイトルを指定すればそれを使う', async () => {
