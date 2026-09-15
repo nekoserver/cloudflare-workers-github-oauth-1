@@ -73,7 +73,7 @@ describe('🔑キー管理ページ(/api-keys)のHTML', () => {
 
   it('生キーは発行直後の一度だけ表示するモーダルを持つ', () => {
     expect(html).toContain('id="rawKeyModal"');
-    expect(html).toContain('showRawKeyModal(res.data.rawKey)');
+    expect(html).toContain('showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown)');
   });
 
   it('一覧描画時にラベルやプレフィックスをエスケープしている(XSS対策)', () => {
