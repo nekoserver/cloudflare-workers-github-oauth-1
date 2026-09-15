@@ -118,6 +118,8 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .modal-box { background: var(--card-bg); border-radius: 12px; padding: 28px; max-width: 520px; width: 90%; }
     .modal-box h3 { color: var(--text-primary); margin-bottom: 12px; }
     .modal-box p { color: var(--text-muted); font-size: 13px; margin-bottom: 12px; }
+    .countdown-notice { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; }
+    .countdown-notice.countdown-notice-error { color: var(--danger-color); }
     .raw-key-box {
       font-family: monospace; font-size: 13px; word-break: break-all;
       background: var(--bg-secondary); padding: 12px; border-radius: 8px; margin-bottom: 12px;
@@ -199,6 +201,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     <div class="modal-box">
       <h3>✅ APIキーを発行しました</h3>
       <p>このキーは今だけ表示されます。安全な場所に保存してください(再表示はできません)。</p>
+      <p class="countdown-notice" id="countdownNotice"></p>
       <div class="raw-key-box" id="rawKeyText"></div>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="closeRawKeyModal()">閉じる</button>
@@ -343,7 +346,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             return;
           }
           labelEl.value = '';
-          showRawKeyModal(res.data.rawKey);
+          showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown);
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの発行に失敗しました'); });
@@ -382,8 +385,12 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .catch(function() { alert('APIキーの失効に失敗しました'); });
     }
 
-    function showRawKeyModal(rawKey) {
+    function showRawKeyModal(rawKey, countdownNotice, countdown) {
       document.getElementById('rawKeyText').textContent = rawKey;
+      var noticeEl = document.getElementById('countdownNotice');
+      noticeEl.textContent = countdownNotice || '';
+      noticeEl.className = 'countdown-notice';
+      if (countdown && countdown.ok === false) noticeEl.classList.add('countdown-notice-error');
       var modal = document.getElementById('rawKeyModal');
       modal.style.zIndex = String(getNextZ());
       modal.classList.add('show');
