@@ -19445,9 +19445,28 @@ app.post('/api/public-keys', authMiddleware, async (c) => {
       'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString(), expiresAt).run();
 
-    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt });
+    // APIキー発行と同じ共通処理を使い、期限付きの公開鍵も/countdownへ登録する。
+    // 無期限の場合はinsertCountdownEvent側で正常なスキップとして扱われる。
+    const countdown = await insertCountdownEvent(db, {
+      userId: user.sub,
+      label: 'PK期限',
+      targetAt: expiresAt,
+    });
+    if (!countdown.ok) {
+      logger.error('公開鍵期限カウントダウンの自動登録に失敗', {
+        userId: user.sub,
+        keyId: id,
+        errorCode: countdown.errorCode,
+        error: countdown.detail,
+      });
+    }
+    const countdownNotice = formatCountdownInsertNotice(countdown, 'PK期限');
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt, countdown });
     return c.json({
       key: { id, label, createdAt: now.toISOString(), expiresAt },
+      countdown,
+      countdownNotice,
     }, 201);
   } catch (error) {
     logger.error('Failed to register public key', {
