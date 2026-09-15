@@ -8,9 +8,9 @@ import { getWelcomePage } from './views/welcome';
 import { getCountdownRegisterScript } from './utils/countdownRegister';
 
 // 対象: POST /api/api-keys でキー発行したあと、発行した有効期限日時を
-// /countdown の countdown_events へ予定名 'PK期限' で新規予約する処理。
-// 予定名は右下ウィジェットと完了トーストの表示名。専用のAPIモードではない。
-// 登録は発行ハンドラ内の D1 INSERT で行い、ブラウザの後追い POST には依存しない。
+// /countdown の countdown_events へ予定名 'PK期限' で予約する処理。
+// 登録はログイン時の cf-auth 期限と同じ upsert(同じ user_id+予定名なら
+// target_at だけ更新)。ブラウザの後追い POST には依存しない。
 //
 // 故障シナリオ:
 //   (1) 30日/90日キー発行後に countdown_events へ行が作られない
@@ -20,7 +20,8 @@ import { getCountdownRegisterScript } from './utils/countdownRegister';
 //   (5) INSERT 失敗を空の詳細で握りつぶし、画面にも出ない
 //   (6) 発行モーダルが countdownNotice を表示せず、登録成否に気づけない
 //   (7) サーバーINSERTとクライアントPOSTの二重登録で同じ期限が2行になる
-//   (8) welcome 側の登録ボタンが共通関数を使わず、二重実装のまま分岐する
+//   (8) 2回発行で行が増え続け、ログイン時の upsert と食い違う
+//   (9) welcome 側の登録ボタンが共通関数を使わず、二重実装のまま分岐する
 
 const JWT_SECRET = 'test-secret';
 
@@ -31,7 +32,8 @@ async function makeAuthHeader(sub = 'test-user') {
 
 function createApiKeyIssueMockDb(opts?: { throwOnCountdownInsert?: boolean }) {
   const apiKeys: { id: string; user_id: string; expires_at: string | null }[] = [];
-  const countdownEvents: { user_id: string; label: string; target_at: string }[] = [];
+  const countdownEvents: { id: number; user_id: string; label: string; target_at: string }[] = [];
+  let nextCountdownId = 1;
   const db = {
     prepare(sql: string) {
       return {
@@ -39,6 +41,12 @@ function createApiKeyIssueMockDb(opts?: { throwOnCountdownInsert?: boolean }) {
           return {
             async first() {
               if (sql.includes('user_sessions')) return { revoked_at: null };
+              if (sql.includes('FROM countdown_events')) {
+                const userId = params[0] as string;
+                const label = params[1] as string;
+                const found = countdownEvents.find((row) => row.user_id === userId && row.label === label);
+                return found ? { id: found.id } : null;
+              }
               return null;
             },
             async run() {
@@ -50,11 +58,17 @@ function createApiKeyIssueMockDb(opts?: { throwOnCountdownInsert?: boolean }) {
                 });
                 return { success: true };
               }
+              if (sql.includes('UPDATE countdown_events')) {
+                const row = countdownEvents.find((item) => item.id === params[1]);
+                if (row) row.target_at = params[0] as string;
+                return { success: true };
+              }
               if (sql.includes('INSERT INTO countdown_events')) {
                 if (opts?.throwOnCountdownInsert) {
                   throw new Error('countdown table missing');
                 }
                 countdownEvents.push({
+                  id: nextCountdownId++,
                   user_id: params[0] as string,
                   label: params[1] as string,
                   target_at: params[2] as string,
@@ -138,7 +152,7 @@ describe('POST /api/api-keys: 発行後に PK期限 カウントダウンを予�
     expect(body.countdown).toEqual({ ok: true, registered: false, skipReason: 'no_expiry' });
   });
 
-  it('2回発行したら PK期限 が2行増える(既存行の上書きではない)', async () => {
+  it('2回発行したら PK期限 は1行のまま、後から発行した期限で更新される', async () => {
     const { db, countdownEvents } = createApiKeyIssueMockDb();
     const headers = {
       Authorization: await makeAuthHeader(),
@@ -156,9 +170,12 @@ describe('POST /api/api-keys: 発行後に PK期限 カウントダウンを予�
     );
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
-    expect(countdownEvents).toHaveLength(2);
-    expect(countdownEvents.map((row) => row.label)).toEqual(['PK期限', 'PK期限']);
-    expect(countdownEvents[0].target_at).not.toBe(countdownEvents[1].target_at);
+    const firstBody = await first.json() as { key: { expiresAt: string } };
+    const secondBody = await second.json() as { key: { expiresAt: string } };
+    expect(countdownEvents).toHaveLength(1);
+    expect(countdownEvents[0].label).toBe('PK期限');
+    expect(countdownEvents[0].target_at).toBe(secondBody.key.expiresAt);
+    expect(countdownEvents[0].target_at).not.toBe(firstBody.key.expiresAt);
   });
 
   it('カウントダウンINSERT失敗でもキー発行は201で成功し、失敗詳細が空にならない', async () => {
@@ -203,7 +220,7 @@ describe('🔑キー管理ページ: 発行モーダルにサーバー側の登�
     expect(block).not.toContain("fetch('/api/countdown'");
   });
 
-  it('POST /api/api-keys ハンドラが insertCountdownEvent を PK期限 で呼ぶ', () => {
+  it('POST /api/api-keys ハンドラが upsert互換の insertCountdownEvent を PK期限 で呼ぶ', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/api-keys', authMiddleware,");
     const block = src.slice(idx, idx + 2800);
