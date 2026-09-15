@@ -150,6 +150,7 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 
 - `src/utils/countdown.test.ts`: 予定名をそのままINSERT、無期限スキップ、失敗時の空でない detail、2回で2行
 - `src/apiKeys-countdown-deadline.test.ts`: `POST /api/api-keys` の期限一致・無期限スキップ・失敗時201・モーダル連携・二重POST禁止
+- `src/apiKeys-countdown-sqlite-e2e.test.ts`: 本物の SQLite で発行→`GET /api/countdown` / `GET /api/countdown/next` まで読み戻す。発行ボタンの JSDOM 操作も含む
 
 ### 関連コミット
 
