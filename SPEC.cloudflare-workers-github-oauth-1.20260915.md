@@ -101,4 +101,5 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 ### 関連コミット
 
 - [`a10b898`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a10b898) カウントダウン登録処理を共通化しAPIキー発行時にPK期限で予約する
+- [`5298528`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5298528) PK期限はトースト用の予定名であり専用の呼び出し方ではない
 
