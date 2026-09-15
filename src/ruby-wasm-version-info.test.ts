@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getRubyWasmVersionInfo, parseRubyWasmVersionInfo } from './views/rubyWasm';
+import { getRubyWasmVersionInfo, parseRubyWasmVersionInfo, RUBY_WASM_BINARY_URL } from './views/rubyWasm';
 
 // 対象: src/views/rubyWasm.ts の parseRubyWasmVersionInfo()/getRubyWasmVersionInfo()。
 // `/neko rubyver` スラッシュコマンド(src/utils/aichatSlashCommand.ts)が表示する
@@ -12,9 +12,17 @@ import { getRubyWasmVersionInfo, parseRubyWasmVersionInfo } from './views/rubyWa
 //       空欄になり気づかれにくい)
 //   (2) パッケージバージョンにハイフンや複数のドットが含まれる場合に
 //       正規表現が誤って途中で区切ってしまう
+//   (3) 4系バイナリURLを3.4のまま誤認する
 
 describe('parseRubyWasmVersionInfo', () => {
-  it('実際に使われているURL形式から正しくビルドライン・パッケージバージョンを取り出す', () => {
+  it('4.0のURL形式からビルドライン 4.0 とパッケージバージョンを取り出す', () => {
+    const info = parseRubyWasmVersionInfo(
+      'https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm'
+    );
+    expect(info).toEqual({ rubyBuildLine: '4.0', wasmWasiPackageVersion: '2.10.1' });
+  });
+
+  it('3.4のURL形式も引き続きパースできる(過去スニペットの記録用)', () => {
     const info = parseRubyWasmVersionInfo(
       'https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm'
     );
@@ -43,4 +51,21 @@ describe('getRubyWasmVersionInfo', () => {
     expect(info.rubyBuildLine).toMatch(/^\d+\.\d+$/);
     expect(info.wasmWasiPackageVersion.length).toBeGreaterThan(0);
   });
+
+  it('読み込むビルドラインは 4.0 で、3.4 のまま残さない', () => {
+    const info = getRubyWasmVersionInfo();
+    expect(info.rubyBuildLine).toBe('4.0');
+    expect(info.wasmWasiPackageVersion).toBe('2.10.1');
+    expect(RUBY_WASM_BINARY_URL).toContain('@ruby/4.0-wasm-wasi@2.10.1');
+    expect(RUBY_WASM_BINARY_URL).not.toContain('@ruby/3.4-wasm-wasi');
+  });
+});
+
+describe('RUBY_WASM_BINARY_URL のCDN実体', () => {
+  it('jsDelivr の 4.0 バイナリが 2xx で存在し、サイズが本体相当である', async () => {
+    const res = await fetch(RUBY_WASM_BINARY_URL, { method: 'HEAD' });
+    expect(res.ok).toBe(true);
+    const len = Number(res.headers.get('content-length') || '0');
+    expect(len).toBeGreaterThan(5_000_000);
+  }, 20000);
 });

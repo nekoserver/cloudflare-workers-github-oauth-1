@@ -159,4 +159,109 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 
 対応するIssueは無い。🔑キー管理ページの発行フロー修正として実施した。
 
+---
+
+## 4. Ruby/WASM の読み込み先を 4.0 系に切り替える
+
+**対象**: `/ruby-wasm`、`/kimi-code/markdown/:id`、`/neko rubyver`、
+`POST /api/ruby-wasm/snippets` の `ruby_version` —
+公式 CRuby WASM バイナリを `@ruby/3.4-wasm-wasi` から `@ruby/4.0-wasm-wasi` へ切り替える。
+JS グルーコード `@ruby/wasm-wasi@2.10.1` はそのまま使い、バイナリ側のパッケージバージョンも 2.10.1 に揃える。
+
+### 背景
+
+`ruby/ruby.wasm` が `@ruby/4.0-wasm-wasi` を公式配布している。ページが読むのは CDN 上の
+`ruby+stdlib.wasm` 1本なので、URL のビルドラインを 4.0 に変えれば 4 系になる。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 4.0 パッケージが無く CDN が 404 | `@ruby/4.0-wasm-wasi@2.10.1` の実在を npm と Range GET で確認してから URL を変える |
+| 2 | `/ruby-wasm` だけ 4.0 で kimi-code が 3.4 のまま | 両方 `RUBY_WASM_BINARY_URL` を共有する |
+| 3 | `/neko rubyver` が 3.4 のまま表示される | `getRubyWasmVersionInfo()` が URL からビルドラインを取る |
+| 4 | 新規スニペットの `ruby_version` が 3.4 のまま | 保存時に `getRubyWasmVersionInfo().rubyBuildLine` を書く |
+| 5 | 過去の 3.4 URL をパースできなくなる | パーサは 3.4 も 4.0 も受け付ける |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/views/rubyWasm.ts` | `RUBY_WASM_BINARY_URL` を `@ruby/4.0-wasm-wasi@2.10.1` にする |
+| `src/index.ts` | コメント例を 4.0 に合わせる。マイグレーション DEFAULT `'3.4'` は既存行用のため変えない |
+
+### 注意事項
+
+- 既存スニペットの `ruby_version='3.4'` は保存当時の値のまま残る
+- 無期限ではなく、これから保存する行が `4.0` になる
+- JS グルーはこれまで通り esm.sh の `@ruby/wasm-wasi@2.10.1`
+
+### テスト
+
+- `src/ruby-wasm-version-info.test.ts`: ビルドライン 4.0、CDN の WASM マジック
+- `src/ruby-wasm-page-20260831.test.ts` / `src/kimi-code-markdown-page.test.ts`: HTML が 4.0 URL を読む
+- `src/ruby-wasm-snippets.test.ts`: 保存時 `ruby_version` が `4.0`
+- `src/aichat-slash-rubyver.test.ts`: `/neko rubyver` が 4.0 を出す
+
+### 関連コミット
+
+- [`f0c6138`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f0c6138) Ruby/WASMの読み込み先を公式4.0バイナリに切り替える
+
+### 関連
+
+対応するIssueは無い。Ruby/WASM の公式 4.0 パッケージへの追随。
+
+---
+
+## 5. Ruby/WASM 4.0 の読み込みを compileStreaming から外す
+
+**対象**: `/ruby-wasm` と `/kimi-code/markdown/:id` のブラウザ側 WASM 初期化
+(`src/utils/rubyWasmLoader.ts`、`src/views/rubyWasm.ts`、`src/views/kimiCodeMarkdown.ts`) —
+4.0 の `ruby+stdlib.wasm`(非圧縮約32MB)を `WebAssembly.compileStreaming` で読むと、
+iOS などでモジュール読み込みが失敗・ハングし、進捗も出ないため止まったように見える。
+
+### 背景
+
+3.4 では同じ `compileStreaming` + jsDelivr 経路で動いていた。4.0 はバイナリが約2MB大きく、
+gzip 展開とストリーミングコンパイルの組み合わせでモバイルブラウザが本文を WASM として
+解釈できない／終わらないことがある。ダウンロード中にステータスが更新されないと、
+失敗と待ちの区別もつかない。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | `compileStreaming` が巨大 gzip WASM で失敗・ハングする | 本文を ArrayBuffer にしてから `WebAssembly.compile` する |
+| 2 | 進捗が無く「読み込めない」と誤認する | 受信バイト量をステータスに出す。Content-Length が圧縮サイズで受信(展開後)を超えたらパーセントを付けない |
+| 3 | 毎回 32MB を取り直して遅い | Cache API にバイナリを残し、バージョン付きキャッシュ名で 3.4 と衝突させない。`put` 失敗は変数に残して読み込み自体は続行する |
+| 4 | `/ruby-wasm` だけ直して kimi-code が古い経路のまま | 共通 `loadRubyWasmVm` を両方から呼ぶ |
+| 6 | 4.0 URL なのに `RUBY_VERSION` が 3.4.1 のまま成功扱い | 起動後に `RUBY_VERSION` を評価し、期待ビルドラインで始まらなければエラーにする。ステータスに実バージョンを出す |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/rubyWasmLoader.ts` | 進捗・結合・キャッシュ名・arrayBuffer compile・インラインローダー |
+| `src/views/rubyWasm.ts` | 共通ローダー呼び出し。案内文を約32MB・進捗・2回目キャッシュに更新 |
+| `src/views/kimiCodeMarkdown.ts` | 同じローダーに切り替え |
+
+### 注意事項
+
+- 初回ダウンロード自体は CDN 上の約32MBなので、進捗表示とキャッシュが改善の本体である
+- `compileStreaming` は使わない。MIME が `application/wasm` でもストリーミング経路は使わない
+
+### テスト
+
+- `src/ruby-wasm-loader.test.ts`: 進捗文言、チャンク結合、HTTPエラー、compileStreaming 非使用、両ページの埋め込み
+- 既存の `/ruby-wasm` HTML・構文テスト
+
+### 関連コミット
+
+(コミット後に追記)
+
+### 関連
+
+対応するIssueは無い。4.0 切り替え後の読み込み失敗への対処。
+
+
 

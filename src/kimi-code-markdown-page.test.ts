@@ -54,6 +54,8 @@ describe('getKimiCodeMarkdownDetailPage', () => {
     expect(scriptMatch).not.toBeNull();
     const payload = JSON.parse(scriptMatch![1]);
     expect(payload.code).toBe(RUBY_CODE);
+    expect(html).toContain('https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
+    expect(html).not.toContain('@ruby/3.4-wasm-wasi');
   });
 
   it('言語指定の無いフェンスでもRubyらしければ実行可能として扱う', () => {

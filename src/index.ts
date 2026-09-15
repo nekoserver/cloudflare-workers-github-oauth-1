@@ -13481,7 +13481,7 @@ app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   }
   const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
   const id = crypto.randomUUID();
-  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"3.4")を
+  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"4.0")を
   // 記録する。将来対応バージョンが増えた場合、このスニペットがどのバージョン向けに
   // 生成されたコードかを区別できるようにするため(動作確認履歴側でもこの値を
   // デフォルトのバージョンとして使う)。

@@ -18,7 +18,9 @@ describe('/neko rubyver', () => {
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
     expect(result.response).toContain('Ruby (WASM)');
-    expect(result.response).toMatch(/\d+\.\d+/);
+    expect(result.response).toContain('| 4.0 |');
+    expect(result.response).toContain('2.10.1');
+    expect(result.response).not.toContain('| 3.4 |');
     expect(result.response).toContain('取得できません');
   });
 
