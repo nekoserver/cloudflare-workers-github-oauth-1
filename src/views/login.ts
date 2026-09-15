@@ -287,6 +287,28 @@ export function getLoginPage(returnTo?: string | null): string {
       });
     }
 
+    // IndexedDBに鍵が残っていても、サーバー側で失効済みならログインボタンを
+    // 一切表示しない。照会失敗時も安全側に倒して空の一覧を返す。
+    function filterAvailableKeys(entries) {
+      if (!entries || entries.length === 0) return Promise.resolve([]);
+      return fetch('/auth/public-key/available', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keys: entries.map(function(entry) {
+            return { userId: entry.userId, keyId: entry.keyId };
+          }),
+        }),
+      }).then(function(r) {
+        if (!r.ok) return [];
+        return r.json().then(function(data) {
+          var available = new Set(Array.isArray(data.keyIds) ? data.keyIds : []);
+          return entries.filter(function(entry) { return available.has(entry.keyId); });
+        });
+      }).catch(function() { return []; });
+    }
+
     function base64UrlEncode(buf) {
       var bytes = new Uint8Array(buf);
       var binary = '';
@@ -355,7 +377,7 @@ export function getLoginPage(returnTo?: string | null): string {
       });
     }
 
-    listLocalKeys().then(function(entries) {
+    listLocalKeys().then(filterAvailableKeys).then(function(entries) {
       if (!entries || entries.length === 0) return;
       var list = document.getElementById('passkeyList');
       list.innerHTML = '';

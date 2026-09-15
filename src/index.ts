@@ -19282,9 +19282,12 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
     return c.json({ keys: [] });
   }
   try {
+    // 失効済みキーは周知期間として7日間だけ一覧に残す。それより古いものは
+    // DBには監査用に保持したまま、キー管理ページのレスポンスから除外する。
+    const revokedKeyVisibleAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const rows = await db.prepare(
-      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
-    ).bind(user.sub).all<{
+      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? AND (revoked_at IS NULL OR revoked_at > ?) ORDER BY created_at DESC'
+    ).bind(user.sub, revokedKeyVisibleAfter).all<{
       id: string; label: string; key_prefix: string; created_at: string;
       expires_at: string | null; revoked_at: string | null; last_used_at: string | null;
     }>();
@@ -19295,6 +19298,41 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキー一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * ログインページが、このブラウザにある公開鍵のうち現在も利用可能なものだけを
+ * 表示するための照会。失効済み公開鍵は失効からの経過時間にかかわらず返さない。
+ */
+app.post('/auth/public-key/available', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keyIds: [] });
+  }
+  try {
+    const body = await c.req.json<{ keys?: Array<{ userId?: string; keyId?: string }> }>();
+    const candidates = Array.isArray(body.keys) ? body.keys.slice(0, 100) : [];
+    const now = new Date().toISOString();
+    const keyIds: string[] = [];
+
+    for (const candidate of candidates) {
+      const userId = typeof candidate?.userId === 'string' ? candidate.userId.trim() : '';
+      const keyId = typeof candidate?.keyId === 'string' ? candidate.keyId.trim() : '';
+      if (!userId || !keyId) continue;
+      const row = await db.prepare(
+        'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+      ).bind(keyId, userId, now).first<{ id: string }>();
+      if (row) keyIds.push(keyId);
+    }
+
+    return c.json({ keyIds });
+  } catch (error) {
+    logger.error('Failed to check available public keys', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // 状態を確認できないときに失効鍵を表示しないよう、fail closedにする。
+    return c.json({ keyIds: [] });
   }
 });
 
