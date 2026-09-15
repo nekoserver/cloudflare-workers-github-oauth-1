@@ -155,6 +155,7 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 ### 関連コミット
 
 - [`fb477fb`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/fb477fb) APIキー発行時にログイン時と同じくサーバー側でカウントダウンへPK期限を予約する
+- [`836f951`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/836f951) APIキー発行からカウントダウン一覧までSQLite実テーブルで読み戻すテストを追加する
 
 ### 関連
 
