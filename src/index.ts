@@ -13336,6 +13336,72 @@ app.post('/api/aichat/qsearch-external/latest-answer', async (c) => {
 });
 
 /**
+ * dynamicnekoの/ai-cacheページの左サイドパネル(言語モデル色丸の凡例)用。
+ * /aichatページのナビバー色丸と同じ aichat_model_colors をそのまま返す。
+ * 色データはユーザー固有ではないため、permission-externalと同じ認可チェック
+ * (許可済みメールアドレスかどうか)だけを行い、login解決は行わない。
+ */
+app.post('/api/aichat/model-colors-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let modelColors: Record<string, string> = {};
+  const modelLabels: Record<string, string> = {};
+  try {
+    const rows = await c.env.DB.prepare('SELECT model_id, color, label FROM aichat_model_colors').all<{ model_id: string; color: string; label: string }>();
+    for (const row of rows.results ?? []) {
+      modelColors[row.model_id] = row.color;
+      modelLabels[row.model_id] = row.label;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+  if (newAssignments.length > 0) {
+    const db = c.env.DB;
+    for (const a of newAssignments) {
+      modelLabels[a.model_id] = a.label;
+      safeWaitUntil(
+        c,
+        db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+          .bind(a.model_id, a.color, a.label)
+          .run()
+          .catch(() => {})
+      );
+    }
+  }
+  // /ai-cacheの左サイドパネル(言語モデル色丸の凡例)向けに、色と表示ラベルを
+  // 一覧配列で返す(モデルIDはUIで表示するには長すぎるため)。
+  const models = Object.entries(merged).map(([id, color]) => ({
+    id,
+    color,
+    label: modelLabels[id] ?? id,
+  }));
+  return jsonUtf8({ models });
+});
+
+/**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
  * パネルの検索(target=kimi-gemma)から後で読み出せる。
