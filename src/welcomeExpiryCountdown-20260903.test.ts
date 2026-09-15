@@ -37,7 +37,7 @@ describe('getWelcomePage: セッション期限のカウントダウン登録ボ
     const html = getWelcomePage(baseUser);
     const start = html.indexOf('window.registerExpiryCountdown');
     const body = html.slice(start, start + 700);
-    expect(body).toContain("fetch('/api/countdown'");
+    expect(body).toContain('window.registerCountdownEvent({');
     expect(body).toContain('new Date(expiresAtTimestamp * 1000).toISOString()');
   });
 });
