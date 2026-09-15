@@ -282,7 +282,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertApiKeyDeadlineCountdown, formatApiKeyDeadlineCountdownNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -19328,10 +19328,23 @@ app.post('/api/api-keys', authMiddleware, async (c) => {
       'INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, keyHash, keyPrefix, now.toISOString(), expiresAt).run();
 
-    logger.info('Created api key', { userId: user.sub, keyId: id, label, expiresAt });
+    const countdown = await insertApiKeyDeadlineCountdown(db, user.sub, expiresAt);
+    if (!countdown.ok) {
+      logger.error('APIキー期限カウントダウンの自動登録に失敗', {
+        userId: user.sub,
+        keyId: id,
+        errorCode: countdown.errorCode,
+        error: countdown.detail,
+      });
+    }
+    const countdownNotice = formatApiKeyDeadlineCountdownNotice(countdown);
+
+    logger.info('Created api key', { userId: user.sub, keyId: id, label, expiresAt, countdown });
     return c.json({
       key: { id, label, keyPrefix, createdAt: now.toISOString(), expiresAt },
       rawKey,
+      countdown,
+      countdownNotice,
     }, 201);
   } catch (error) {
     logger.error('Failed to create api key', {

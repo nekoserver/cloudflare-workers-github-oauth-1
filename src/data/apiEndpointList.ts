@@ -150,7 +150,7 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'プロフィール・設定', method: 'GET', path: '/api/settings/slack-notify', desc: 'Slack通知設定の現在値取得(CF_AUTH_WEBHOOK_SECRETのBearer認証が必要)' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/slack-notify', desc: 'Slack通知ON/OFF設定' },
   { group: 'APIキー管理', method: 'GET', path: '/api/api-keys', desc: '🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)' },
-  { group: 'APIキー管理', method: 'POST', path: '/api/api-keys', desc: 'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)' },
+  { group: 'APIキー管理', method: 'POST', path: '/api/api-keys', desc: 'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)。有効期限付きなら /countdown へ Key期限 を予約' },
   { group: 'APIキー管理', method: 'POST', path: '/api/api-keys/:id/revoke', desc: 'APIキー失効(自分が発行したキーのみ)' },
   { group: 'ワークスペース・関数', method: 'GET', path: '/api/workspaces', desc: 'ワークスペース一覧' },
   { group: 'ワークスペース・関数', method: 'POST', path: '/api/workspaces/switch', desc: 'ワークスペース切り替え' },
