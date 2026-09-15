@@ -1,26 +1,29 @@
 /**
- * POST /api/aichat/qsearch-external のテスト
+ * POST /api/aichat/qsearch-external, POST /api/aichat/qsearch-external/latest-answer のテスト
  *
  * 対象: dynamicnekoの/ai-cacheページ(AiCachePage)がService Binding経由で
- * 呼ぶ外部API。AIチャットのスラッシュコマンド「/neko qsearch」と同じ
- * searchAiChatShares を使い、質問文・回答文にキーワードを含む過去ログを
- * 検索して回答本文まで含めて返す。Bearer secret(AICHAT_EXTERNAL_SECRET、
- * 他の外部APIと共用)で認証した上、dynamicneko_aichat_allowed_usersに
- * 登録されたメールアドレスかどうかを判定する。
+ * 呼ぶ外部API。AIチャットのスラッシュコマンド「/neko qsearch」と全く同じ
+ * データ形(質問ID・質問文・言語モデルの表)を返す。質問文・回答文にキーワードを
+ * 含む過去ログを検索するが、回答本文自体はここでは返さない(/neko qsearch
+ * 本体がモーダルを開くまで回答を表示しない設計に揃えている)。回答本文が
+ * 必要なときは、表の1行(質問ID+言語モデル)を指定して
+ * /api/aichat/qsearch-external/latest-answer を別途呼ぶ。
  *
  * 故障シナリオ:
  *   (1) Bearer secretが一致しないリクエストが素通りしてしまう
  *   (2) 未許可メールアドレスがD1検索まで到達してしまう
- *   (3) keyword未指定・空文字でも検索が実行されてしまう
+ *   (3) keyword/id未指定・空文字でも検索/取得が実行されてしまう
  *   (4)(セキュリティ) リクエスト本文のloginをそのままuser_idとして信用すると、
  *       Bearer secretと許可済みメールアドレス1件さえ知っていれば、loginを
- *       任意の値に差し替えて他ユーザーの質問・回答全文を検索できてしまう
- *       (/api/cursor-agent/query-externalで実際に発覚した脆弱性と同じ穴)。
- *       サーバー側はリクエスト本文のloginを一切受け取らず、emailに紐づく
- *       github_loginだけを信頼すること
+ *       任意の値に差し替えて他ユーザーの質問・回答全文を検索・取得できて
+ *       しまう(/api/cursor-agent/query-externalで実際に発覚した脆弱性と
+ *       同じ穴)。サーバー側はリクエスト本文のloginを一切受け取らず、
+ *       emailに紐づくgithub_loginだけを信頼すること
  *   (5) 許可済みだがgithub_login未登録のメールアドレスがuser_id空文字等で
  *       検索されてしまう
  *   (6) D1未設定時にフェイルオープンする
+ *   (7) qsearch-externalが検索結果に回答本文まで含めて返してしまう
+ *       (/neko qsearch本体の表示と食い違う。件数が多いと重くもなる)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -77,10 +80,10 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
   return db;
 }
 
-function insertShare(db: DatabaseSync, userId: string, question: string, answer: string, model = '@cf/google/gemma-4-26b-a4b-it'): void {
+function insertShare(db: DatabaseSync, id: string, userId: string, question: string, answer: string, model = '@cf/google/gemma-4-26b-a4b-it'): void {
   db.prepare(
     `INSERT INTO ai_chat_shares (id, user_id, question, answer, model, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`
-  ).run(`share-${Math.random().toString(36).slice(2)}`, userId, question, answer, model);
+  ).run(id, userId, question, answer, model);
 }
 
 describe('POST /api/aichat/qsearch-external', () => {
@@ -96,7 +99,7 @@ describe('POST /api/aichat/qsearch-external', () => {
 
   it('未許可メールアドレスは403で拒否され、D1検索は実行されない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    insertShare(db, 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
     const res = await app.request(
       '/api/aichat/qsearch-external',
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ng@example.com', keyword: 'デプロイ' }) },
@@ -129,39 +132,41 @@ describe('POST /api/aichat/qsearch-external', () => {
 
   it('リクエスト本文にloginを含めて他ユーザーを騙ろうとしても無視され、emailに紐づく自分のloginだけで検索される(脆弱性の再発防止)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    insertShare(db, 'nekoserver', 'デプロイ手順を教えて', '自分の回答');
-    insertShare(db, 'victim-user', 'デプロイ手順その2', '他人の回答は見えないはず');
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', '自分の回答');
+    insertShare(db, 'share-2', 'victim-user', 'デプロイ手順その2', '他人の回答は見えないはず');
     const res = await app.request(
       '/api/aichat/qsearch-external',
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', login: 'victim-user', keyword: 'デプロイ' }) },
       { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { rows: Array<{ question: string; answer: string | null }> };
+    const body = await res.json() as { rows: Array<{ id: string; question: string; model: string }> };
     expect(body.rows).toHaveLength(1);
+    expect(body.rows[0].id).toBe('share-1');
     expect(body.rows[0].question).toBe('デプロイ手順を教えて');
-    expect(body.rows[0].answer).toBe('自分の回答');
   });
 
-  it('許可済みメールアドレスは自分(emailに紐づくlogin一致)の質問・回答だけを検索して返す', async () => {
+  it('許可済みメールアドレスは自分(emailに紐づくlogin一致)の質問だけを検索して/neko qsearchと同じ表(質問ID・質問文・言語モデル)を返す。回答本文は含めない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    insertShare(db, 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
-    insertShare(db, 'other-user', 'デプロイ方法は?', '他人の回答は見えないはず');
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います', '@cf/qwen/qwen3.8-27b');
+    insertShare(db, 'share-2', 'other-user', 'デプロイ方法は?', '他人の回答は見えないはず');
     const res = await app.request(
       '/api/aichat/qsearch-external',
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', keyword: 'デプロイ' }) },
       { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { rows: Array<{ id: string; question: string; createdAtJst: string; answer: string | null; model?: string | null }> };
+    const body = await res.json() as { rows: Array<Record<string, unknown>> };
     expect(body.rows).toHaveLength(1);
+    expect(body.rows[0].id).toBe('share-1');
     expect(body.rows[0].question).toBe('デプロイ手順を教えて');
-    expect(body.rows[0].answer).toBe('デプロイはwranglerで行います');
+    expect(body.rows[0].model).toBe('qwen3.8-27b');
+    expect('answer' in body.rows[0]).toBe(false);
   });
 
   it('回答が質問文・回答文どちらにもキーワードを含まない場合はヒットしない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    insertShare(db, 'nekoserver', '今日の天気は?', '晴れです');
+    insertShare(db, 'share-1', 'nekoserver', '今日の天気は?', '晴れです');
     const res = await app.request(
       '/api/aichat/qsearch-external',
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', keyword: 'デプロイ' }) },
@@ -176,6 +181,83 @@ describe('POST /api/aichat/qsearch-external', () => {
     const res = await app.request(
       '/api/aichat/qsearch-external',
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', keyword: 'デプロイ' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET }
+    );
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('POST /api/aichat/qsearch-external/latest-answer', () => {
+  it('Bearer secretが一致しない場合は401', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: 'Bearer wrong', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', id: 'share-1', model: 'qwen3.8-27b' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('idが空の場合は400', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', id: '  ', model: 'qwen3.8-27b' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('未許可メールアドレスは403で拒否される', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ng@example.com', id: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('リクエスト本文にloginを含めて他ユーザーの回答を取得しようとしても、emailに紐づく自分のloginでしか一致しない(脆弱性の再発防止)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertShare(db, 'share-victim', 'victim-user', 'デプロイ手順を教えて', '他人の回答', '@cf/google/gemma-4-26b-a4b-it');
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', login: 'victim-user', id: 'share-victim', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('質問ID+言語モデルが一致する自分の最新回答を返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います', '@cf/google/gemma-4-26b-a4b-it');
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', id: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { answer: string; question: string };
+    expect(body.answer).toBe('デプロイはwranglerで行います');
+    expect(body.question).toBe('デプロイ手順を教えて');
+  });
+
+  it('一致する過去ログが無ければ404', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', id: 'no-such-id', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('DB未設定時はフェイルクローズで503を返す', async () => {
+    const res = await app.request(
+      '/api/aichat/qsearch-external/latest-answer',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', id: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
       { AICHAT_EXTERNAL_SECRET: SECRET }
     );
     expect(res.status).toBe(503);

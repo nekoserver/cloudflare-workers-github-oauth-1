@@ -349,7 +349,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
@@ -13257,19 +13257,81 @@ app.post('/api/aichat/qsearch-external', async (c) => {
 
   try {
     const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, login, keyword);
-    return jsonUtf8({
-      rows: results.map((row) => ({
-        id: row.id,
-        question: (row.question ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
-        createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
-        answer: row.answer ?? null,
-        model: row.model ?? null,
-      })),
-    });
+    // /neko qsearch(AIチャットのスラッシュコマンド)のテーブルと同じ形
+    // (質問ID・質問文・言語モデル)で返す。回答本文はここでは返さない
+    // (件数が多いと重く、/neko qsearch側もモーダルを開くまでは表示しない
+    // 設計に揃えている)。回答本文が必要な場合は
+    // /api/aichat/qsearch-external/latest-answer を別途呼ぶ。
+    return jsonUtf8({ rows: mapAiChatSharesToQsearchItems(results) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[dynamicneko-ai-cache] 過去ログ検索に失敗', { login, error: message });
     return jsonUtf8({ error: '過去ログ検索でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/ai-cacheページで、検索結果の表から1件クリックしたときに
+ * 呼ばれる。/neko qsearch のモーダルが使う findLatestAiChatShareAnswer と
+ * 同じロジックで、質問ID+言語モデルから一番新しい回答文を1件返す。
+ * 認可・login解決はqsearch-externalと同じ(リクエスト本文のloginは信用しない)。
+ */
+app.post('/api/aichat/qsearch-external/latest-answer', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; id?: string; model?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const id = (body?.id ?? '').trim();
+  const model = body?.model ?? '';
+  if (!id) return jsonUtf8({ error: 'id は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-ai-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const result = await findLatestAiChatShareAnswer(
+      c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+      login,
+      id,
+      model,
+    );
+    if (!result.ok) {
+      const status = result.errorCode === 'missing_params' ? 400 : 404;
+      return jsonUtf8({ error: result.detail }, status);
+    }
+    return jsonUtf8(result.value);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 最新回答の取得に失敗', { login, error: message });
+    return jsonUtf8({ error: '最新回答の取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
