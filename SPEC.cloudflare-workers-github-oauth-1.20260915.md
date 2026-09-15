@@ -257,11 +257,61 @@ gzip 展開とストリーミングコンパイルの組み合わせでモバイ
 
 ### 関連コミット
 
-(コミット後に追記)
+- [`1ba7163`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1ba7163) Ruby/WASM 4.0の読み込みをcompileStreamingから外し進捗とバージョン検証を入れる
 
 ### 関連
 
 対応するIssueは無い。4.0 切り替え後の読み込み失敗への対処。
+
+---
+
+## 6. Ruby/WASM 初回読み込みを preload と並行取得で短くする
+
+**対象**: `/ruby-wasm` と `/kimi-code/markdown/:id` の WASM 取得開始タイミング
+(`getRubyWasmPreloadTags`、`loadRubyWasmVm`) —
+4.0 バイナリは約32MBあり、グルーの `import()` が終わってから fetch を始めると、
+esm.sh の往復のあいだ巨大ダウンロードが動かない。HTML パース直後から preload し、
+グルーとバイナリを `Promise.all` で同時に取る。
+
+### 背景
+
+読み込み自体は直ったが初回が遅い。バイナリサイズは公式 stdlib 付き WASM の制約で
+落とせない（`StringIO` や `require` が必要）。待てる部分は「開始が遅い」こと。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | グルー import 完了まで 32MB の fetch が始まらない | `Promise.all([import(js), fetch(wasm)])` |
+| 2 | スクリプト実行前にダウンロードが始まらない | `<link rel="preload" as="fetch" crossorigin="anonymous">` と `modulepreload` |
+| 3 | preload と fetch の CORS モードが違って二重取得になる | fetch は `mode:'cors', credentials:'omit'` |
+| 4 | Ruby の無い Markdown 詳細でも 32MB を preload する | `runnableCount > 0` のときだけタグを出す |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/rubyWasmLoader.ts` | preload タグ生成、並行読み込み、CORS を anonymous に揃える |
+| `src/views/rubyWasm.ts` | head に preload |
+| `src/views/kimiCodeMarkdown.ts` | Ruby ブロックがあるときだけ preload |
+
+### 注意事項
+
+- 初回の転送量自体は約32MBのまま。2回目は Cache API
+- preload は connect-src/script-src に jsDelivr と esm.sh があるページで効く
+
+### テスト
+
+- `src/ruby-wasm-loader.test.ts`: preload タグ、`Promise.all`、直列 import→fetch が無いこと、Ruby 無しページは preload しない
+
+### 関連コミット
+
+(コミット後に追記)
+
+### 関連
+
+対応するIssueは無い。4.0 読み込みが直ったあとの初回待ち時間への対処。
+
 
 
 
