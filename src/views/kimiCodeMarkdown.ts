@@ -1,7 +1,8 @@
 import { escapeHtml } from '../utils/html';
 import { splitMarkdownCodeBlocks, isRunnableRubyCodeBlock, type MarkdownCodeBlockSegment } from '../utils/markdownCodeBlocks';
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
-import { RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL } from './rubyWasm';
+import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmVersionInfo, RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL } from './rubyWasm';
 
 const SHARED_STYLE = `
 :root {
@@ -149,6 +150,9 @@ export function getKimiCodeMarkdownDetailPage(
     })
     .join('\n');
 
+  const versionInfo = getRubyWasmVersionInfo();
+  const wasmCacheName = rubyWasmBinaryCacheName(versionInfo.rubyBuildLine, versionInfo.wasmWasiPackageVersion);
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -181,24 +185,23 @@ ${bodyHtml}
   if (runnableCount === 0) return;
   var rubyVM = null;
 
-  import('${RUBY_WASM_JS_URL}').then(function(mod) {
-    return fetch('${RUBY_WASM_BINARY_URL}').then(function(res) {
-      if (!res.ok) throw new Error('Rubyバイナリの取得に失敗しました: HTTP ' + res.status);
-      return WebAssembly.compileStreaming(res);
-    }).then(function(compiled) {
-      return mod.DefaultRubyVM(compiled, { consolePrint: false });
-    }).then(function(result) {
-      rubyVM = result.vm;
+  ${getRubyWasmLoaderScript()}
+  loadRubyWasmVm('${RUBY_WASM_JS_URL}', '${RUBY_WASM_BINARY_URL}', '${wasmCacheName}', {
+    expectedBuildLine: '${versionInfo.rubyBuildLine}',
+    onStatus: function() {},
+    onReady: function(vm) {
+      rubyVM = vm;
       document.querySelectorAll('[data-run-ruby-block]').forEach(function(btn) {
         btn.disabled = false;
         btn.textContent = '▶ 実行';
       });
-    });
-  }).catch(function(err) {
-    document.querySelectorAll('[data-run-ruby-block]').forEach(function(btn) {
-      btn.textContent = '❌ WASM読み込み失敗';
-    });
-    console.error(err);
+    },
+    onError: function(err) {
+      document.querySelectorAll('[data-run-ruby-block]').forEach(function(btn) {
+        btn.textContent = '❌ WASM読み込み失敗';
+      });
+      console.error(err);
+    }
   });
 
   document.querySelectorAll('[data-run-ruby-block]').forEach(function(btn) {

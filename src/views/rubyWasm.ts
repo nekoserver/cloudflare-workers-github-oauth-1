@@ -1,10 +1,11 @@
 import { escapeHtml } from '../utils/html';
+import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 // 公式ビルド済みWASMパッケージ(CRuby WASI版)を使う。C言語のコード生成を
 // 含むCRubyはこの環境ではwasm32-unknown-unknownへ自前ビルドできない
 // (NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md 3節と同じ制約)。
-// バイナリ本体(ruby+stdlib.wasm、約30MB)はリポジトリに含めず、公式npm
+// バイナリ本体(ruby+stdlib.wasm、4.0は非圧縮約32MB)はリポジトリに含めず、公式npm
 // パッケージ(@ruby/4.0-wasm-wasi)をjsDelivr CDN経由でブラウザから直接
 // 読み込む。他のwasm/*-wasmクレートのように自前Rust実装+public/wasm配下の
 // 静的配信ではない、この機能固有の構成であることに注意。
@@ -54,6 +55,8 @@ export function getRubyWasmVersionInfo(): RubyWasmVersionInfo {
 
 export function getRubyWasmPage(username: string): string {
   const safeUsername = escapeHtml(username);
+  const versionInfo = getRubyWasmVersionInfo();
+  const wasmCacheName = rubyWasmBinaryCacheName(versionInfo.rubyBuildLine, versionInfo.wasmWasiPackageVersion);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -260,7 +263,7 @@ export function getRubyWasmPage(username: string): string {
     <div class="card">
       <div class="title">Ruby コード実行 (WASM)</div>
       <div class="subtitle">CRubyの公式WASM(WASI)ビルドをブラウザ上のWebAssemblyで実行します。</div>
-      <div class="notice">初回読み込みはRuby本体(約30MB、jsDelivr CDN配信)を取得するため数秒〜数十秒かかります。</div>
+      <div class="notice">初回はRuby本体(非圧縮約32MB)をCDNから取得します。通信状況により数十秒かかることがあります。進捗は下のステータスに出ます。2回目以降はブラウザキャッシュを使います。</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
       <div class="toolbar">
         <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
@@ -454,22 +457,26 @@ export function getRubyWasmPage(username: string): string {
     var deleteConfirmCancelBtn = document.getElementById('deleteConfirmCancelBtn');
     var openSwipeRow = null;
 
-    import('${RUBY_WASM_JS_URL}').then(function(mod) {
-      return fetch('${RUBY_WASM_BINARY_URL}').then(function(res) {
-        if (!res.ok) throw new Error('Rubyバイナリの取得に失敗しました: HTTP ' + res.status);
-        return WebAssembly.compileStreaming(res);
-      }).then(function(compiled) {
-        return mod.DefaultRubyVM(compiled, { consolePrint: false });
-      }).then(function(result) {
-        rubyVM = result.vm;
-        wasmStatus.textContent = 'WASMモジュール読み込み完了';
+    ${getRubyWasmLoaderScript()}
+    loadRubyWasmVm('${RUBY_WASM_JS_URL}', '${RUBY_WASM_BINARY_URL}', '${wasmCacheName}', {
+      expectedBuildLine: '${versionInfo.rubyBuildLine}',
+      onStatus: function(text) {
+        wasmStatus.textContent = text;
+        wasmStatus.className = 'wasm-status loading';
+      },
+      onReady: function(vm, ver) {
+        rubyVM = vm;
+        wasmStatus.textContent = ver
+          ? 'WASMモジュール読み込み完了 (' + ver + ')'
+          : 'WASMモジュール読み込み完了';
         wasmStatus.className = 'wasm-status ready';
         runBtn.disabled = false;
         modalRunBtn.disabled = false;
-      });
-    }).catch(function(err) {
-      wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
-      wasmStatus.className = 'wasm-status error';
+      },
+      onError: function(err) {
+        wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
+        wasmStatus.className = 'wasm-status error';
+      }
     });
 
     function openModal(overlay) {
