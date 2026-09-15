@@ -13202,6 +13202,78 @@ app.post('/api/cursor-agent/query-external', async (c) => {
 });
 
 /**
+ * dynamicnekoの/ai-cacheページ(AiCachePage)からのAI応答ログ検索。Bearer secret
+ * (AICHAT_EXTERNAL_SECRET、他の外部APIと共用)で認証した上、
+ * dynamicneko_aichat_allowed_usersに登録されたメールアドレスかどうかを
+ * サーバー側で必ず再検証する。/neko qsearch(AIチャットのスラッシュコマンド)と
+ * 同じ searchAiChatShares を使い、emailに紐づく「サーバー側で登録済みの」
+ * GitHub loginをuser_idとして自分の質問・回答だけを検索する
+ * (他ユーザーの履歴は返さない)。
+ *
+ * セキュリティ: リクエスト本文のloginは一切受け取らない・信用しない。
+ * Bearer secretと許可済みメールアドレス1件さえ知っていれば、loginを任意の
+ * 値に差し替えて他ユーザーの履歴を検索できてしまう脆弱性
+ * (/api/cursor-agent/query-externalで発覚したものと同じ穴)を作らないため、
+ * resolveDynamicnekoAllowedLoginでDB側の登録済みloginだけを信頼する。
+ */
+app.post('/api/aichat/qsearch-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; keyword?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const keyword = (body?.keyword ?? '').trim();
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-ai-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, login, keyword);
+    return jsonUtf8({
+      rows: results.map((row) => ({
+        id: row.id,
+        question: (row.question ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+        createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
+        answer: row.answer ?? null,
+        model: row.model ?? null,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 過去ログ検索に失敗', { login, error: message });
+    return jsonUtf8({ error: '過去ログ検索でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
  * パネルの検索(target=kimi-gemma)から後で読み出せる。
