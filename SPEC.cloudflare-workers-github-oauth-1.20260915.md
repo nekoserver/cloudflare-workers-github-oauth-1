@@ -45,7 +45,7 @@ APIキーの有効期限はキー管理ページの一覧に表示されるだ�
 
 ### 関連コミット
 
-(コミット後に追記)
+- [`c141417`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c141417) APIキー発行時にカウントダウンへKey期限を予約する
 
 ### 関連
 
