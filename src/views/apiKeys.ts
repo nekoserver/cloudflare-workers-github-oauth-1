@@ -4,7 +4,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { getCountdownRegisterScript, API_KEY_DEADLINE_LABEL } from '../utils/countdownRegister';
+import { getCountdownRegisterScript } from '../utils/countdownRegister';
 
 export function getApiKeysPage(user: { name?: string; username: string }): string {
   const displayName = escapeHtml(user.name || user.username);
@@ -349,7 +349,22 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
           }
           labelEl.value = '';
           showRawKeyModal(res.data.rawKey);
-          registerApiKeyDeadlineCountdown(res.data.key && res.data.key.expiresAt);
+          if (res.data.key && res.data.key.expiresAt) {
+            setCountdownNotice('カウントダウンへ登録しています...', false);
+            registerCountdownEvent({
+              label: 'PK期限',
+              targetAt: res.data.key.expiresAt,
+              confirmNavigate: false,
+              onSuccess: function() {
+                setCountdownNotice('カウントダウンに登録しました', false);
+              },
+              onError: function(msg) {
+                setCountdownNotice(msg || 'カウントダウンへの登録に失敗しました', true);
+              }
+            });
+          } else {
+            setCountdownNotice('無期限のためカウントダウンには登録しませんでした', false);
+          }
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの発行に失敗しました'); });
@@ -393,25 +408,6 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
       if (!noticeEl) return;
       noticeEl.textContent = text || '';
       noticeEl.className = 'countdown-notice' + (isError ? ' countdown-notice-error' : '');
-    }
-
-    function registerApiKeyDeadlineCountdown(expiresAt) {
-      if (!expiresAt) {
-        setCountdownNotice('無期限のためカウントダウンには登録しませんでした', false);
-        return;
-      }
-      setCountdownNotice('カウントダウンへ登録しています...', false);
-      registerCountdownEvent({
-        label: ${JSON.stringify(API_KEY_DEADLINE_LABEL)},
-        targetAt: expiresAt,
-        confirmNavigate: false,
-        onSuccess: function() {
-          setCountdownNotice(${JSON.stringify('カウントダウンに「' + API_KEY_DEADLINE_LABEL + '」を登録しました')}, false);
-        },
-        onError: function(msg) {
-          setCountdownNotice(msg || 'カウントダウンへの登録に失敗しました', true);
-        }
-      });
     }
 
     function showRawKeyModal(rawKey) {

@@ -53,25 +53,26 @@ APIキーの有効期限はキー管理ページの一覧に表示されるだ�
 
 ---
 
-## 2. カウントダウン登録ボタン処理を共通化し api-keys から「PK期限」で呼ぶ
+## 2. カウントダウン登録処理を共通化し、api-keys では予定名を「PK期限」にする
 
 **対象**: `/welcome` の「⏱️ カウントダウンに登録」ボタン、`/api-keys` のキー発行後処理、
-`POST /api/countdown` — welcome と同じクライアント登録処理を共通ライブラリにし、
-APIキー発行直後に label=`PK期限`・targetAt=`expiresAt` で呼び出す。
+`POST /api/countdown` — welcome と同じクライアント登録処理を共通関数にし、
+APIキー発行直後は `label` に表示名「PK期限」、`targetAt` に発行した期限を渡す。
+`label` は右下ウィジェットと完了トーストに出る予定名であり、特別な呼び出しモードではない。
 
 ### 背景
 
 サーバー側 `POST /api/api-keys` 内で `countdown_events` へ INSERT する方式は、
 デプロイ前の Worker では届かず、キー発行しても `/countdown` に予定が付かない。
 welcome の登録ボタンは既に動いている `POST /api/countdown` なので、その処理を
-共通化して api-keys からも使う。項目名は「PK期限」。
+共通化して api-keys からも使う。渡す予定名はトーストに出る「PK期限」。
 
 ### 故障シナリオ
 
 | # | 故障 | 対処 |
 |---|---|---|
 | 1 | 共通スクリプト未埋め込みで `registerCountdownEvent` が未定義 | `getCountdownRegisterScript()` を welcome と api-keys の両方へ入れる |
-| 2 | ラベルが PK期限 ではない | `API_KEY_DEADLINE_LABEL` を共通定数にしてページへ埋め込む |
+| 2 | 予定名(label)が PK期限 ではない | api-keys 側で `label: 'PK期限'` を渡す(共通関数は文字列をそのまま送る) |
 | 3 | 発行した `expiresAt` と違う日時を送る | `res.data.key.expiresAt` をそのまま `targetAt` にする |
 | 4 | 無期限キーでも POST する | `expiresAt` が無いときは POST しない |
 | 5 | 登録後に `/countdown` へ遷移し生キーが見えなくなる | api-keys は `confirmNavigate: false` |
@@ -83,7 +84,7 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 |---|---|
 | `src/utils/countdownRegister.ts` | `window.registerCountdownEvent` を返す共通スクリプト |
 | `src/views/welcome.ts` | セッション期限ボタンから共通関数を呼ぶ |
-| `src/views/apiKeys.ts` | キー発行後に label=`PK期限` で共通関数を呼ぶ |
+| `src/views/apiKeys.ts` | キー発行後に共通関数へ予定名 `PK期限` と `expiresAt` を渡す |
 | `src/index.ts` | サーバー側の自動 INSERT を外し、二重登録を防ぐ |
 
 ### 注意事項
