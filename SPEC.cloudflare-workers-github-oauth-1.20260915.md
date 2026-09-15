@@ -159,4 +159,56 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 
 対応するIssueは無い。🔑キー管理ページの発行フロー修正として実施した。
 
+---
+
+## 4. Ruby/WASM の読み込み先を 4.0 系に切り替える
+
+**対象**: `/ruby-wasm`、`/kimi-code/markdown/:id`、`/neko rubyver`、
+`POST /api/ruby-wasm/snippets` の `ruby_version` —
+公式 CRuby WASM バイナリを `@ruby/3.4-wasm-wasi` から `@ruby/4.0-wasm-wasi` へ切り替える。
+JS グルーコード `@ruby/wasm-wasi@2.10.1` はそのまま使い、バイナリ側のパッケージバージョンも 2.10.1 に揃える。
+
+### 背景
+
+`ruby/ruby.wasm` が `@ruby/4.0-wasm-wasi` を公式配布している。ページが読むのは CDN 上の
+`ruby+stdlib.wasm` 1本なので、URL のビルドラインを 4.0 に変えれば 4 系になる。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 4.0 パッケージが無く CDN が 404 | `@ruby/4.0-wasm-wasi@2.10.1` の実在を npm と Range GET で確認してから URL を変える |
+| 2 | `/ruby-wasm` だけ 4.0 で kimi-code が 3.4 のまま | 両方 `RUBY_WASM_BINARY_URL` を共有する |
+| 3 | `/neko rubyver` が 3.4 のまま表示される | `getRubyWasmVersionInfo()` が URL からビルドラインを取る |
+| 4 | 新規スニペットの `ruby_version` が 3.4 のまま | 保存時に `getRubyWasmVersionInfo().rubyBuildLine` を書く |
+| 5 | 過去の 3.4 URL をパースできなくなる | パーサは 3.4 も 4.0 も受け付ける |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/views/rubyWasm.ts` | `RUBY_WASM_BINARY_URL` を `@ruby/4.0-wasm-wasi@2.10.1` にする |
+| `src/index.ts` | コメント例を 4.0 に合わせる。マイグレーション DEFAULT `'3.4'` は既存行用のため変えない |
+
+### 注意事項
+
+- 既存スニペットの `ruby_version='3.4'` は保存当時の値のまま残る
+- 無期限ではなく、これから保存する行が `4.0` になる
+- JS グルーはこれまで通り esm.sh の `@ruby/wasm-wasi@2.10.1`
+
+### テスト
+
+- `src/ruby-wasm-version-info.test.ts`: ビルドライン 4.0、CDN の WASM マジック
+- `src/ruby-wasm-page-20260831.test.ts` / `src/kimi-code-markdown-page.test.ts`: HTML が 4.0 URL を読む
+- `src/ruby-wasm-snippets.test.ts`: 保存時 `ruby_version` が `4.0`
+- `src/aichat-slash-rubyver.test.ts`: `/neko rubyver` が 4.0 を出す
+
+### 関連コミット
+
+- [`f0c6138`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f0c6138) Ruby/WASMの読み込み先を公式4.0バイナリに切り替える
+
+### 関連
+
+対応するIssueは無い。Ruby/WASM の公式 4.0 パッケージへの追随。
+
 
