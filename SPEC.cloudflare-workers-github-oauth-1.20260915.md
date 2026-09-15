@@ -160,4 +160,62 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 
 対応するIssueは無い。🔑キー管理ページの発行フロー修正として実施した。
 
+---
+
+## 4. APIキー発行のカウントダウン登録をログイン時の upsert に揃える
+
+**対象**: `POST /api/api-keys`、`upsertCfAuthDeadlineCountdown`、D1 `countdown_events`、
+予定名 `PK期限` — 有効期限付きAPIキーを発行したときのカウントダウン予約を、
+ログイン時の `cf-auth 期限` と同じ upsert にする。同じ `user_id` + 予定名なら
+`target_at` だけ更新し、行は増やさない。
+
+### 背景
+
+ログイン通知(`POST /webhook/cf-auth` の hasAccess=OK)は、最初から
+`SELECT → 既存なら UPDATE / 無ければ INSERT` で `cf-auth 期限` を1行に保っている。
+APIキー発行側だけ毎回 INSERT すると、ログイン時の鍵登録と処理が食い違う。
+発行処理はログイン時の upsert をそのまま共有すれば足りる。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 30日/90日キー発行後に `countdown_events` へ行が作られない | 発行成功後に `upsertCountdownEvent` を必ず呼ぶ |
+| 2 | 2回発行で `PK期限` が行増殖し、ログイン時の upsert と食い違う | 同じ `user_id`+予定名なら `target_at` だけ更新する |
+| 3 | `PK期限` が既存の `cf-auth 期限` を上書きする | 予定名で行を分け、ラベルが違えば別行のままにする |
+| 4 | 無期限キーなのに null 日時で不正行が入る | `targetAt=null` は書き込まず `skipReason=no_expiry` |
+| 5 | upsert 失敗でキー発行が 500 になる | 失敗は判別可能な結果で返し、キー発行は 201 のまま |
+| 6 | 失敗を空文字で握りつぶす | `errorCode` + 空でない `detail` をレスポンスとログとモーダルへ出す |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/countdown.ts` | `insertCountdownEvent` を `upsertCountdownEvent` に置換。ログイン時と同じ SELECT/UPDATE/INSERT |
+| `src/index.ts` | `upsertCfAuthDeadlineCountdown` と `POST /api/api-keys` の両方が `upsertCountdownEvent` を呼ぶ |
+| `src/views/apis.ts` / `src/data/apiEndpointList.ts` | 同一ユーザーは既存行の期限を更新する旨を追記 |
+| `src/utils/countdown.test.ts` / `src/apiKeys-countdown-deadline.test.ts` / `src/apiKeys-countdown-sqlite-e2e.test.ts` | 2回発行で1行更新、予定名違いで別行、SQLite実テーブルで `GET /api/countdown` まで確認 |
+
+### 注意事項
+
+- 無期限キーはカウントダウンへ登録しない
+- 同じユーザーが有効期限付きキーを複数発行すると、`PK期限` は最新発行キーの `expires_at` で上書きされる(ログイン時の `cf-auth 期限` と同じ)
+- `cf-auth 期限` と `PK期限` は予定名が違うので共存する
+- カウントダウン登録失敗でも生キーの発行自体は成功する。失敗内容は発行モーダルと API レスポンスの `countdownNotice` で通知する
+
+### テスト
+
+- `src/utils/countdown.test.ts`: 新規INSERT、同一ラベルは UPDATE、別ラベルは別行、無期限スキップ、失敗時の空でない detail
+- `src/apiKeys-countdown-deadline.test.ts`: `POST /api/api-keys` の期限一致・2回発行で1行・無期限スキップ・失敗時201
+- `src/apiKeys-countdown-sqlite-e2e.test.ts`: 本物の SQLite で発行→`GET /api/countdown`。2回発行は1行更新。`cf-auth 期限` 既存行があっても `PK期限` は別行
+- `src/webhook-cf-auth-endpoint.test.ts`: ログイン時の新規作成と既存更新が、共通関数に寄せたあとも維持される
+
+### 関連コミット
+
+- [`7d064d9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/7d064d9) APIキー発行のカウントダウン登録をログイン時と同じupsertにする
+
+### 関連
+
+対応するIssueは無い。ログイン時のカウントダウン登録に発行処理を揃える修正。
+
 
