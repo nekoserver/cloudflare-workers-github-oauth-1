@@ -282,7 +282,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, COUNTDOWN_EVENT_INSERT_SQL, insertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, upsertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -3357,21 +3357,16 @@ async function upsertCfAuthDeadlineCountdown(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!db) return { ok: false, error: 'DB未設定です' };
   const targetAt = computeCfAuthDeadlineTargetAt(loginAt);
-  try {
-    const existing = await db.prepare(
-      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1'
-    ).bind(userId, CF_AUTH_DEADLINE_LABEL).first<{ id: number }>();
-    if (existing) {
-      await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?').bind(targetAt, existing.id).run();
-    } else {
-      await db.prepare(COUNTDOWN_EVENT_INSERT_SQL).bind(userId, CF_AUTH_DEADLINE_LABEL, targetAt).run();
-    }
-    return { ok: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('cf-auth期限カウントダウンの自動登録に失敗', { userId, error: message });
-    return { ok: false, error: message };
+  const result = await upsertCountdownEvent(db, {
+    userId,
+    label: CF_AUTH_DEADLINE_LABEL,
+    targetAt,
+  });
+  if (!result.ok) {
+    logger.error('cf-auth期限カウントダウンの自動登録に失敗', { userId, error: result.detail });
+    return { ok: false, error: result.detail };
   }
+  return { ok: true };
 }
 
 async function recordApiAccess(db: D1Database | undefined, method: string, routePath: string, statusCode: number): Promise<void> {
@@ -19326,7 +19321,7 @@ app.post('/api/api-keys', authMiddleware, async (c) => {
       'INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, keyHash, keyPrefix, now.toISOString(), expiresAt).run();
 
-    const countdown = await insertCountdownEvent(db, {
+    const countdown = await upsertCountdownEvent(db, {
       userId: user.sub,
       label: 'PK期限',
       targetAt: expiresAt,

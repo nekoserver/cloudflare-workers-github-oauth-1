@@ -130,6 +130,7 @@ export interface CountdownInsertDb {
   prepare(sql: string): {
     bind(...args: unknown[]): {
       run(): Promise<unknown>;
+      first<T>(): Promise<T | null>;
     };
   };
 }
@@ -140,13 +141,12 @@ export type CountdownInsertResult =
   | { ok: false; errorCode: 'no_db' | 'insert_failed'; detail: string };
 
 /**
- * countdown_events へ単発の予定を新規INSERTする。
- * label は右下ウィジェットと完了トーストに出る予定名で、呼び出し側が渡す文字列をそのまま保存する。
+ * ログイン時の cf-auth 期限登録と同じ upsert。
+ * 同じ user_id + label の行があれば target_at だけ更新し、無ければ新規INSERTする。
  * targetAt が null のときは予約しない(無期限など)。
- * 既存行があっても上書きせず、呼ぶたびに新しい行を追加する。
  * 失敗しても例外は投げず、判別可能な結果を返す。
  */
-export async function insertCountdownEvent(
+export async function upsertCountdownEvent(
   db: CountdownInsertDb | undefined,
   params: { userId: string; label: string; targetAt: string | null }
 ): Promise<CountdownInsertResult> {
@@ -157,8 +157,16 @@ export async function insertCountdownEvent(
     return { ok: false, errorCode: 'no_db', detail: 'DB未設定です' };
   }
   try {
-    await db.prepare(COUNTDOWN_EVENT_INSERT_SQL)
-      .bind(params.userId, params.label, params.targetAt).run();
+    const existing = await db.prepare(
+      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1'
+    ).bind(params.userId, params.label).first<{ id: number }>();
+    if (existing) {
+      await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?')
+        .bind(params.targetAt, existing.id).run();
+    } else {
+      await db.prepare(COUNTDOWN_EVENT_INSERT_SQL)
+        .bind(params.userId, params.label, params.targetAt).run();
+    }
     return { ok: true, registered: true };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

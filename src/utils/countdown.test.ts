@@ -5,7 +5,7 @@ import {
   computeCfAuthDeadlineTargetAt,
   CF_AUTH_DEADLINE_LABEL,
   CF_AUTH_SESSION_TTL_MS,
-  insertCountdownEvent,
+  upsertCountdownEvent,
   formatCountdownInsertNotice,
   COUNTDOWN_EVENT_INSERT_SQL,
   computeCountdownGroupPosition,
@@ -209,35 +209,55 @@ describe('filterCountdownEventsByDate', () => {
   });
 });
 
-// 対象: countdown_events への単発INSERT。APIキー発行時は予定名 'PK期限' を渡す。
+// 対象: ログイン時の cf-auth 期限登録と同じ upsert。APIキー発行時は予定名 'PK期限' を渡す。
 //
 // 故障シナリオ:
 //   (1) 有効期限付きなのに INSERT されない
 //   (2) 無期限なのに null の target_at で不正行が作られる
 //   (3) INSERT失敗を空文字で握りつぶし、呼び出し元が失敗に気づけない
-//   (4) 2回発行しても既存行を上書きしてしまい、先に発行したキーの期限が消える
+//   (4) 2回発行で行が増え続け、ログイン時の upsert と食い違う
 //   (5) 渡した予定名ではなく別の固定ラベルでINSERTしてしまう
-function createCountdownInsertMock(opts?: { throwOnInsert?: boolean }): {
+function createCountdownUpsertMock(opts?: { throwOnWrite?: boolean }): {
   db: CountdownInsertDb;
-  inserts: { user_id: string; label: string; target_at: string }[];
+  rows: { id: number; user_id: string; label: string; target_at: string }[];
   sqls: string[];
 } {
-  const inserts: { user_id: string; label: string; target_at: string }[] = [];
+  const rows: { id: number; user_id: string; label: string; target_at: string }[] = [];
   const sqls: string[] = [];
+  let nextId = 1;
   const db: CountdownInsertDb = {
     prepare(sql: string) {
       sqls.push(sql);
       return {
         bind(...params: unknown[]) {
           return {
+            async first<T>() {
+              if (sql.includes('FROM countdown_events')) {
+                const userId = params[0] as string;
+                const label = params[1] as string;
+                const found = rows.find((row) => row.user_id === userId && row.label === label);
+                return (found ? { id: found.id } : null) as T | null;
+              }
+              return null;
+            },
             async run() {
-              if (opts?.throwOnInsert) throw new Error('D1 insert failed');
-              expect(params).toHaveLength(3);
-              inserts.push({
-                user_id: params[0] as string,
-                label: params[1] as string,
-                target_at: params[2] as string,
-              });
+              if (opts?.throwOnWrite) throw new Error('D1 insert failed');
+              if (sql.includes('UPDATE countdown_events')) {
+                const targetAt = params[0] as string;
+                const id = params[1] as number;
+                const row = rows.find((item) => item.id === id);
+                if (row) row.target_at = targetAt;
+                return { success: true };
+              }
+              if (sql.includes('INSERT INTO countdown_events')) {
+                expect(params).toHaveLength(3);
+                rows.push({
+                  id: nextId++,
+                  user_id: params[0] as string,
+                  label: params[1] as string,
+                  target_at: params[2] as string,
+                });
+              }
               return { success: true };
             },
           };
@@ -245,69 +265,69 @@ function createCountdownInsertMock(opts?: { throwOnInsert?: boolean }): {
       };
     },
   };
-  return { db, inserts, sqls };
+  return { db, rows, sqls };
 }
 
-describe('insertCountdownEvent', () => {
+describe('upsertCountdownEvent', () => {
   const expiresAt = '2026-10-15T08:00:00.000Z';
 
   it('有効期限があるときは渡した user_id・予定名・expiresAt で新規INSERTする', async () => {
-    const { db, inserts } = createCountdownInsertMock();
-    const result = await insertCountdownEvent(db, {
+    const { db, rows } = createCountdownUpsertMock();
+    const result = await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: expiresAt,
     });
     expect(result).toEqual({ ok: true, registered: true });
-    expect(inserts).toEqual([
-      { user_id: 'octocat', label: 'PK期限', target_at: expiresAt },
+    expect(rows).toEqual([
+      { id: 1, user_id: 'octocat', label: 'PK期限', target_at: expiresAt },
     ]);
   });
 
-  it('ログイン時の cf-auth 期限登録と同じ INSERT 文を使い、group_id は SQL の NULL リテラルにする', async () => {
-    const { db, sqls } = createCountdownInsertMock();
-    await insertCountdownEvent(db, {
+  it('ログイン時と同じ INSERT 文を使い、group_id は SQL の NULL リテラルにする', async () => {
+    const { db, sqls } = createCountdownUpsertMock();
+    await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: expiresAt,
     });
-    expect(sqls).toEqual([COUNTDOWN_EVENT_INSERT_SQL]);
+    expect(sqls).toContain(COUNTDOWN_EVENT_INSERT_SQL);
     expect(COUNTDOWN_EVENT_INSERT_SQL).toBe(
       'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)'
     );
   });
 
-  it('ログイン時の upsertCfAuthDeadlineCountdown も同じ INSERT 定数を使う', () => {
+  it('ログイン時の upsertCfAuthDeadlineCountdown は upsertCountdownEvent を呼ぶ', () => {
     const src = readFileSync(resolve(__dirname, '../index.ts'), 'utf-8');
     const idx = src.indexOf('async function upsertCfAuthDeadlineCountdown');
-    const block = src.slice(idx, idx + 1200);
-    expect(block).toContain('COUNTDOWN_EVENT_INSERT_SQL');
-    expect(block).not.toContain('VALUES (?, ?, ?, ?)');
+    const block = src.slice(idx, idx + 900);
+    expect(block).toContain('upsertCountdownEvent(');
+    expect(block).toContain('CF_AUTH_DEADLINE_LABEL');
   });
 
   it('予定名は呼び出し側の文字列をそのまま保存する(専用モードではない)', async () => {
-    const { db, inserts } = createCountdownInsertMock();
-    await insertCountdownEvent(db, {
+    const { db, rows } = createCountdownUpsertMock();
+    await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: '会議',
       targetAt: expiresAt,
     });
-    expect(inserts[0].label).toBe('会議');
+    expect(rows[0].label).toBe('会議');
   });
 
   it('無期限(targetAt=null)のときはINSERTせず skipReason=no_expiry を返す', async () => {
-    const { db, inserts } = createCountdownInsertMock();
-    const result = await insertCountdownEvent(db, {
+    const { db, rows } = createCountdownUpsertMock();
+    const result = await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: null,
     });
     expect(result).toEqual({ ok: true, registered: false, skipReason: 'no_expiry' });
-    expect(inserts).toHaveLength(0);
+    expect(rows).toHaveLength(0);
   });
 
   it('DB未設定は insert せず errorCode=no_db と空でない詳細を返す', async () => {
-    const result = await insertCountdownEvent(undefined, {
+    const result = await upsertCountdownEvent(undefined, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: expiresAt,
@@ -318,9 +338,9 @@ describe('insertCountdownEvent', () => {
     expect(result.detail.length).toBeGreaterThan(0);
   });
 
-  it('INSERT失敗は握りつぶさず errorCode=insert_failed と例外メッセージを返す', async () => {
-    const { db, inserts } = createCountdownInsertMock({ throwOnInsert: true });
-    const result = await insertCountdownEvent(db, {
+  it('書き込み失敗は握りつぶさず errorCode=insert_failed と例外メッセージを返す', async () => {
+    const { db, rows } = createCountdownUpsertMock({ throwOnWrite: true });
+    const result = await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: expiresAt,
@@ -329,26 +349,41 @@ describe('insertCountdownEvent', () => {
     if (result.ok) return;
     expect(result.errorCode).toBe('insert_failed');
     expect(result.detail).toBe('D1 insert failed');
-    expect(inserts).toHaveLength(0);
+    expect(rows).toHaveLength(0);
   });
 
-  it('2回呼んだら2行INSERTする(既存行を上書きしない)', async () => {
-    const { db, inserts } = createCountdownInsertMock();
-    await insertCountdownEvent(db, {
+  it('同じ user_id+予定名なら2回目は INSERT せず target_at だけ更新する(ログイン時と同じ)', async () => {
+    const { db, rows, sqls } = createCountdownUpsertMock();
+    await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: '2026-10-15T00:00:00.000Z',
     });
-    await insertCountdownEvent(db, {
+    await upsertCountdownEvent(db, {
       userId: 'octocat',
       label: 'PK期限',
       targetAt: '2026-12-14T00:00:00.000Z',
     });
-    expect(inserts).toHaveLength(2);
-    expect(inserts.map((row) => row.target_at)).toEqual([
-      '2026-10-15T00:00:00.000Z',
-      '2026-12-14T00:00:00.000Z',
-    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].target_at).toBe('2026-12-14T00:00:00.000Z');
+    expect(sqls).toContain('SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1');
+    expect(sqls).toContain('UPDATE countdown_events SET target_at = ? WHERE id = ?');
+  });
+
+  it('予定名が違えば別行になる(PK期限は cf-auth 期限を上書きしない)', async () => {
+    const { db, rows } = createCountdownUpsertMock();
+    await upsertCountdownEvent(db, {
+      userId: 'octocat',
+      label: 'cf-auth 期限',
+      targetAt: '2026-10-01T00:00:00.000Z',
+    });
+    await upsertCountdownEvent(db, {
+      userId: 'octocat',
+      label: 'PK期限',
+      targetAt: '2026-10-15T00:00:00.000Z',
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.label).sort()).toEqual(['PK期限', 'cf-auth 期限']);
   });
 });
 

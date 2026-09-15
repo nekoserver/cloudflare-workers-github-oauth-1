@@ -6,7 +6,7 @@ import { createJWT } from './utils/jwt';
 import { getApiKeysPage } from './views/apiKeys';
 
 // 対象: POST /api/api-keys → 本物の SQLite(countdown_events) → GET /api/countdown。
-// ログイン時の cf-auth 期限と同じく、発行リクエスト内の INSERT が
+// ログイン時の cf-auth 期限と同じ upsert が、発行リクエスト内で
 // /countdown の一覧APIから読めることを、モックSQLではなく実テーブルで保証する。
 //
 // 故障シナリオ:
@@ -16,6 +16,7 @@ import { getApiKeysPage } from './views/apiKeys';
 //   (4) 無期限キーなのに countdown_events へ行が入る
 //   (5) 発行モーダルが countdownNotice を出さず、登録成否に気づけない
 //   (6) group_id カラム付きの本番スキーマで INSERT が落ちる
+//   (7) 2回発行で行が増え続け、ログイン時の upsert と食い違う
 
 const JWT_SECRET = 'test-secret';
 
@@ -206,14 +207,42 @@ describe('SQLite実テーブル: APIキー発行が /countdown 一覧に PK期�
     expect(ownList.events.map((e) => e.label)).toEqual(['PK期限']);
   });
 
-  it('2回発行したら GET /api/countdown に PK期限 が2件載る', async () => {
+  it('2回発行したら GET /api/countdown の PK期限 は1件のまま、後から発行した期限で更新される', async () => {
     const db = setupDb();
-    expect((await issueKey(db, { label: 'A', expiresInDays: 30 })).status).toBe(201);
-    expect((await issueKey(db, { label: 'B', expiresInDays: 90 })).status).toBe(201);
+    const first = await issueKey(db, { label: 'A', expiresInDays: 30 });
+    const second = await issueKey(db, { label: 'B', expiresInDays: 90 });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const firstBody = await first.json() as { key: { expiresAt: string } };
+    const secondBody = await second.json() as { key: { expiresAt: string } };
+    const stored = db.prepare('SELECT label, target_at FROM countdown_events').all() as Array<{
+      label: string;
+      target_at: string;
+    }>;
+    expect(stored).toHaveLength(1);
+    expect(stored[0].label).toBe('PK期限');
+    expect(stored[0].target_at).toBe(secondBody.key.expiresAt);
+    expect(stored[0].target_at).not.toBe(firstBody.key.expiresAt);
+
     const list = await (await listCountdown(db)).json() as { events: Array<{ label: string; target_at: string }> };
-    expect(list.events).toHaveLength(2);
-    expect(list.events.every((e) => e.label === 'PK期限')).toBe(true);
-    expect(list.events[0].target_at).not.toBe(list.events[1].target_at);
+    expect(list.events).toHaveLength(1);
+    expect(list.events[0].label).toBe('PK期限');
+    expect(list.events[0].target_at).toBe(secondBody.key.expiresAt);
+  });
+
+  it('ログイン時の cf-auth 期限行があっても PK期限 は別行で登録される', async () => {
+    const db = setupDb();
+    db.prepare('INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)')
+      .run('test-user', 'cf-auth 期限', '2026-09-22T00:00:00.000Z');
+    const issueRes = await issueKey(db, { label: '監視用', expiresInDays: 30 });
+    expect(issueRes.status).toBe(201);
+    const issued = await issueRes.json() as { key: { expiresAt: string } };
+    const list = await (await listCountdown(db)).json() as { events: Array<{ label: string; target_at: string }> };
+    expect(list.events.map((e) => e.label).sort()).toEqual(['PK期限', 'cf-auth 期限']);
+    const pk = list.events.find((e) => e.label === 'PK期限');
+    const cfAuth = list.events.find((e) => e.label === 'cf-auth 期限');
+    expect(pk?.target_at).toBe(issued.key.expiresAt);
+    expect(cfAuth?.target_at).toBe('2026-09-22T00:00:00.000Z');
   });
 });
 
