@@ -4,6 +4,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getCountdownRegisterScript, API_KEY_DEADLINE_LABEL } from '../utils/countdownRegister';
 
 export function getApiKeysPage(user: { name?: string; username: string }): string {
   const displayName = escapeHtml(user.name || user.username);
@@ -221,6 +222,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
 
   <script>
     ${getThemeToggleScript()}
+    ${getCountdownRegisterScript()}
 
     function toggleDropdown() {
       document.getElementById('dropdownMenu').classList.toggle('show');
@@ -346,7 +348,8 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             return;
           }
           labelEl.value = '';
-          showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown);
+          showRawKeyModal(res.data.rawKey);
+          registerApiKeyDeadlineCountdown(res.data.key && res.data.key.expiresAt);
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの発行に失敗しました'); });
@@ -385,12 +388,35 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .catch(function() { alert('APIキーの失効に失敗しました'); });
     }
 
-    function showRawKeyModal(rawKey, countdownNotice, countdown) {
-      document.getElementById('rawKeyText').textContent = rawKey;
+    function setCountdownNotice(text, isError) {
       var noticeEl = document.getElementById('countdownNotice');
-      noticeEl.textContent = countdownNotice || '';
-      noticeEl.className = 'countdown-notice';
-      if (countdown && countdown.ok === false) noticeEl.classList.add('countdown-notice-error');
+      if (!noticeEl) return;
+      noticeEl.textContent = text || '';
+      noticeEl.className = 'countdown-notice' + (isError ? ' countdown-notice-error' : '');
+    }
+
+    function registerApiKeyDeadlineCountdown(expiresAt) {
+      if (!expiresAt) {
+        setCountdownNotice('無期限のためカウントダウンには登録しませんでした', false);
+        return;
+      }
+      setCountdownNotice('カウントダウンへ登録しています...', false);
+      registerCountdownEvent({
+        label: ${JSON.stringify(API_KEY_DEADLINE_LABEL)},
+        targetAt: expiresAt,
+        confirmNavigate: false,
+        onSuccess: function() {
+          setCountdownNotice(${JSON.stringify('カウントダウンに「' + API_KEY_DEADLINE_LABEL + '」を登録しました')}, false);
+        },
+        onError: function(msg) {
+          setCountdownNotice(msg || 'カウントダウンへの登録に失敗しました', true);
+        }
+      });
+    }
+
+    function showRawKeyModal(rawKey) {
+      document.getElementById('rawKeyText').textContent = rawKey;
+      setCountdownNotice('', false);
       var modal = document.getElementById('rawKeyModal');
       modal.style.zIndex = String(getNextZ());
       modal.classList.add('show');

@@ -50,3 +50,50 @@ APIキーの有効期限はキー管理ページの一覧に表示されるだ�
 ### 関連
 
 対応するIssueは無い。🔑キー管理ページの発行フロー改善として実施した。
+
+---
+
+## 2. カウントダウン登録ボタン処理を共通化し api-keys から「PK期限」で呼ぶ
+
+**対象**: `/welcome` の「⏱️ カウントダウンに登録」ボタン、`/api-keys` のキー発行後処理、
+`POST /api/countdown` — welcome と同じクライアント登録処理を共通ライブラリにし、
+APIキー発行直後に label=`PK期限`・targetAt=`expiresAt` で呼び出す。
+
+### 背景
+
+サーバー側 `POST /api/api-keys` 内で `countdown_events` へ INSERT する方式は、
+デプロイ前の Worker では届かず、キー発行しても `/countdown` に予定が付かない。
+welcome の登録ボタンは既に動いている `POST /api/countdown` なので、その処理を
+共通化して api-keys からも使う。項目名は「PK期限」。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 共通スクリプト未埋め込みで `registerCountdownEvent` が未定義 | `getCountdownRegisterScript()` を welcome と api-keys の両方へ入れる |
+| 2 | ラベルが PK期限 ではない | `API_KEY_DEADLINE_LABEL` を共通定数にしてページへ埋め込む |
+| 3 | 発行した `expiresAt` と違う日時を送る | `res.data.key.expiresAt` をそのまま `targetAt` にする |
+| 4 | 無期限キーでも POST する | `expiresAt` が無いときは POST しない |
+| 5 | 登録後に `/countdown` へ遷移し生キーが見えなくなる | api-keys は `confirmNavigate: false` |
+| 6 | welcome ボタンが旧実装のまま分岐する | welcome も同じ `registerCountdownEvent` を呼ぶ |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/countdownRegister.ts` | `window.registerCountdownEvent` を返す共通スクリプト |
+| `src/views/welcome.ts` | セッション期限ボタンから共通関数を呼ぶ |
+| `src/views/apiKeys.ts` | キー発行後に label=`PK期限` で共通関数を呼ぶ |
+| `src/index.ts` | サーバー側の自動 INSERT を外し、二重登録を防ぐ |
+
+### 注意事項
+
+- 無期限キーはカウントダウンへ登録しない
+- 生キーモーダル表示中は `/countdown` へ自動遷移しない
+- この変更を本番に載せるにはデプロイが必要
+
+### テスト
+
+- `src/utils/countdownRegister.test.ts`: POST ボディ・失敗時 onError・confirmNavigate
+- `src/apiKeys-countdown-deadline.test.ts`: api-keys / welcome が共通関数を使うこと
+

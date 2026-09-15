@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getCountdownRegisterScript, SESSION_DEADLINE_LABEL } from '../utils/countdownRegister';
 import { loginMethodLabel, LOGIN_METHOD_PUBLIC_KEY } from '../utils/loginHistory';
 
 export function getWelcomePage(user: {
@@ -414,6 +415,7 @@ export function getWelcomePage(user: {
 
   <script>
     ${getThemeToggleScript()}
+    ${getCountdownRegisterScript()}
 
     function toggleDropdown() {
       const dropdown = document.getElementById('dropdownMenu');
@@ -454,37 +456,15 @@ export function getWelcomePage(user: {
 
       // セッション有効期限をそのまま/countdownページのカウントダウンタイマーとして登録する。
       // targetAtにはこのページで計算済みのexpiresAtTimestamp(UNIX秒)をそのまま使う
-      // (再計算による誤差を避けるため)。
+      // (再計算による誤差を避けるため)。登録処理自体は共通ライブラリ
+      // (src/utils/countdownRegister.ts の window.registerCountdownEvent)に切り出している。
       window.registerExpiryCountdown = function() {
-        var btn = document.getElementById('countdownRegisterBtn');
-        if (btn) btn.disabled = true;
-        fetch('/api/countdown', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            label: 'セッション有効期限',
-            targetAt: new Date(expiresAtTimestamp * 1000).toISOString(),
-          }),
-        })
-          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
-          .then(function(res) {
-            if (!res.ok) {
-              alert(res.data.error || 'カウントダウンへの登録に失敗しました');
-              if (btn) btn.disabled = false;
-              return;
-            }
-            if (btn) {
-              btn.textContent = '✅ 登録しました';
-            }
-            if (confirm('カウントダウンに登録しました。/countdownページを開きますか?')) {
-              window.location.href = '/countdown';
-            }
-          })
-          .catch(function() {
-            alert('カウントダウンへの登録に失敗しました');
-            if (btn) btn.disabled = false;
-          });
+        window.registerCountdownEvent({
+          label: ${JSON.stringify(SESSION_DEADLINE_LABEL)},
+          targetAt: new Date(expiresAtTimestamp * 1000).toISOString(),
+          button: document.getElementById('countdownRegisterBtn'),
+          confirmNavigate: true
+        });
       };
     })();
     ` : ''}
