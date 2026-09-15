@@ -175,6 +175,9 @@ export async function upsertCountdownEvent(
 }
 
 /** 発行レスポンス/発行モーダル向けのカウントダウン登録結果文言。 */
+/** 既存の呼び出し元との互換名。実装は同一 user_id + label の upsert。 */
+export const insertCountdownEvent = upsertCountdownEvent;
+
 export function formatCountdownInsertNotice(
   result: CountdownInsertResult,
   label: string

@@ -297,11 +297,12 @@ describe('upsertCountdownEvent', () => {
     );
   });
 
-  it('ログイン時の upsertCfAuthDeadlineCountdown は upsertCountdownEvent を呼ぶ', () => {
+  it('ログイン時の upsert と同じ検索・更新キーを使う', () => {
     const src = readFileSync(resolve(__dirname, '../index.ts'), 'utf-8');
     const idx = src.indexOf('async function upsertCfAuthDeadlineCountdown');
-    const block = src.slice(idx, idx + 900);
-    expect(block).toContain('upsertCountdownEvent(');
+    const block = src.slice(idx, idx + 1400);
+    expect(block).toContain('user_id = ? AND label = ?');
+    expect(block).toContain('UPDATE countdown_events SET target_at = ? WHERE id = ?');
     expect(block).toContain('CF_AUTH_DEADLINE_LABEL');
   });
 

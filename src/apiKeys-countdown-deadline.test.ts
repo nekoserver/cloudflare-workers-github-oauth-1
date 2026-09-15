@@ -220,11 +220,11 @@ describe('🔑キー管理ページ: 発行モーダルにサーバー側の登�
     expect(block).not.toContain("fetch('/api/countdown'");
   });
 
-  it('POST /api/api-keys ハンドラが upsertCountdownEvent を PK期限 で呼ぶ', () => {
+  it('POST /api/api-keys ハンドラが upsert互換の insertCountdownEvent を PK期限 で呼ぶ', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/api-keys', authMiddleware,");
     const block = src.slice(idx, idx + 2800);
-    expect(block).toContain('upsertCountdownEvent(');
+    expect(block).toContain('insertCountdownEvent(');
     expect(block).toContain("label: 'PK期限'");
     expect(block).toContain('formatCountdownInsertNotice(');
     expect(block).toContain('countdownNotice');

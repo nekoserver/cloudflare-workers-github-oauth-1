@@ -282,7 +282,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, upsertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -3357,16 +3357,23 @@ async function upsertCfAuthDeadlineCountdown(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!db) return { ok: false, error: 'DB未設定です' };
   const targetAt = computeCfAuthDeadlineTargetAt(loginAt);
-  const result = await upsertCountdownEvent(db, {
-    userId,
-    label: CF_AUTH_DEADLINE_LABEL,
-    targetAt,
-  });
-  if (!result.ok) {
-    logger.error('cf-auth期限カウントダウンの自動登録に失敗', { userId, error: result.detail });
-    return { ok: false, error: result.detail };
+  try {
+    const existing = await db.prepare(
+      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1'
+    ).bind(userId, CF_AUTH_DEADLINE_LABEL).first<{ id: number }>();
+    if (existing) {
+      await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?').bind(targetAt, existing.id).run();
+    } else {
+      await db.prepare(
+        'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)'
+      ).bind(userId, CF_AUTH_DEADLINE_LABEL, targetAt).run();
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('cf-auth期限カウントダウンの自動登録に失敗', { userId, error: message });
+    return { ok: false, error: message };
   }
-  return { ok: true };
 }
 
 async function recordApiAccess(db: D1Database | undefined, method: string, routePath: string, statusCode: number): Promise<void> {
@@ -13474,7 +13481,7 @@ app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   }
   const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
   const id = crypto.randomUUID();
-  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"3.4")を
+  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"4.0")を
   // 記録する。将来対応バージョンが増えた場合、このスニペットがどのバージョン向けに
   // 生成されたコードかを区別できるようにするため(動作確認履歴側でもこの値を
   // デフォルトのバージョンとして使う)。
@@ -19275,9 +19282,12 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
     return c.json({ keys: [] });
   }
   try {
+    // 失効済みキーは周知期間として7日間だけ一覧に残す。それより古いものは
+    // DBには監査用に保持したまま、キー管理ページのレスポンスから除外する。
+    const revokedKeyVisibleAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const rows = await db.prepare(
-      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
-    ).bind(user.sub).all<{
+      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? AND (revoked_at IS NULL OR revoked_at > ?) ORDER BY created_at DESC'
+    ).bind(user.sub, revokedKeyVisibleAfter).all<{
       id: string; label: string; key_prefix: string; created_at: string;
       expires_at: string | null; revoked_at: string | null; last_used_at: string | null;
     }>();
@@ -19288,6 +19298,41 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキー一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * ログインページが、このブラウザにある公開鍵のうち現在も利用可能なものだけを
+ * 表示するための照会。失効済み公開鍵は失効からの経過時間にかかわらず返さない。
+ */
+app.post('/auth/public-key/available', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keyIds: [] });
+  }
+  try {
+    const body = await c.req.json<{ keys?: Array<{ userId?: string; keyId?: string }> }>();
+    const candidates = Array.isArray(body.keys) ? body.keys.slice(0, 100) : [];
+    const now = new Date().toISOString();
+    const keyIds: string[] = [];
+
+    for (const candidate of candidates) {
+      const userId = typeof candidate?.userId === 'string' ? candidate.userId.trim() : '';
+      const keyId = typeof candidate?.keyId === 'string' ? candidate.keyId.trim() : '';
+      if (!userId || !keyId) continue;
+      const row = await db.prepare(
+        'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+      ).bind(keyId, userId, now).first<{ id: string }>();
+      if (row) keyIds.push(keyId);
+    }
+
+    return c.json({ keyIds });
+  } catch (error) {
+    logger.error('Failed to check available public keys', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // 状態を確認できないときに失効鍵を表示しないよう、fail closedにする。
+    return c.json({ keyIds: [] });
   }
 });
 
@@ -19321,7 +19366,7 @@ app.post('/api/api-keys', authMiddleware, async (c) => {
       'INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, keyHash, keyPrefix, now.toISOString(), expiresAt).run();
 
-    const countdown = await upsertCountdownEvent(db, {
+    const countdown = await insertCountdownEvent(db, {
       userId: user.sub,
       label: 'PK期限',
       targetAt: expiresAt,
@@ -19438,9 +19483,28 @@ app.post('/api/public-keys', authMiddleware, async (c) => {
       'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString(), expiresAt).run();
 
-    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt });
+    // APIキー発行と同じ共通処理を使い、期限付きの公開鍵も/countdownへ登録する。
+    // 無期限の場合はinsertCountdownEvent側で正常なスキップとして扱われる。
+    const countdown = await insertCountdownEvent(db, {
+      userId: user.sub,
+      label: 'PK期限',
+      targetAt: expiresAt,
+    });
+    if (!countdown.ok) {
+      logger.error('公開鍵期限カウントダウンの自動登録に失敗', {
+        userId: user.sub,
+        keyId: id,
+        errorCode: countdown.errorCode,
+        error: countdown.detail,
+      });
+    }
+    const countdownNotice = formatCountdownInsertNotice(countdown, 'PK期限');
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt, countdown });
     return c.json({
       key: { id, label, createdAt: now.toISOString(), expiresAt },
+      countdown,
+      countdownNotice,
     }, 201);
   } catch (error) {
     logger.error('Failed to register public key', {
