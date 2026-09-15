@@ -119,6 +119,72 @@ export const CF_AUTH_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const CF_AUTH_DEADLINE_LABEL = 'cf-auth 期限';
 
 /**
+ * countdown_events へのINSERTに必要な最小限のD1形。
+ * テストではこの形を満たすモックを渡せる。
+ */
+export interface CountdownInsertDb {
+  prepare(sql: string): {
+    bind(...args: unknown[]): {
+      run(): Promise<unknown>;
+    };
+  };
+}
+
+export type CountdownInsertResult =
+  | { ok: true; registered: true }
+  | { ok: true; registered: false; skipReason: 'no_expiry' }
+  | { ok: false; errorCode: 'no_db' | 'insert_failed'; detail: string };
+
+/**
+ * countdown_events へ単発の予定を新規INSERTする。
+ * label は右下ウィジェットと完了トーストに出る予定名で、呼び出し側が渡す文字列をそのまま保存する。
+ * targetAt が null のときは予約しない(無期限など)。
+ * 既存行があっても上書きせず、呼ぶたびに新しい行を追加する。
+ * 失敗しても例外は投げず、判別可能な結果を返す。
+ */
+export async function insertCountdownEvent(
+  db: CountdownInsertDb | undefined,
+  params: { userId: string; label: string; targetAt: string | null }
+): Promise<CountdownInsertResult> {
+  if (!params.targetAt) {
+    return { ok: true, registered: false, skipReason: 'no_expiry' };
+  }
+  if (!db) {
+    return { ok: false, errorCode: 'no_db', detail: 'DB未設定です' };
+  }
+  try {
+    await db.prepare(
+      'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, ?)'
+    ).bind(params.userId, params.label, params.targetAt, null).run();
+    return { ok: true, registered: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ok: false, errorCode: 'insert_failed', detail };
+  }
+}
+
+/** 発行レスポンス/発行モーダル向けのカウントダウン登録結果文言。 */
+export function formatCountdownInsertNotice(
+  result: CountdownInsertResult,
+  label: string
+): string {
+  if (!result.ok) {
+    return `カウントダウンへの登録に失敗しました: ${result.detail}`;
+  }
+  if (result.registered) {
+    return `カウントダウンに「${label}」を登録しました`;
+  }
+  switch (result.skipReason) {
+    case 'no_expiry':
+      return '無期限のためカウントダウンには登録しませんでした';
+    default: {
+      const _exhaustive: never = result.skipReason;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
  * cf-authへのログイン日時(loginAt)から、cf-auth側のセッション有効期限
  * (CF_AUTH_SESSION_TTL_MS)ぶん先の日時をISO 8601形式で返す。
  * /webhook/cf-authのログイン通知を受けるたびに、countdown_eventsへ

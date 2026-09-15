@@ -4,7 +4,6 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { getCountdownRegisterScript } from '../utils/countdownRegister';
 
 export function getApiKeysPage(user: { name?: string; username: string }): string {
   const displayName = escapeHtml(user.name || user.username);
@@ -222,7 +221,6 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
 
   <script>
     ${getThemeToggleScript()}
-    ${getCountdownRegisterScript()}
 
     function toggleDropdown() {
       document.getElementById('dropdownMenu').classList.toggle('show');
@@ -348,23 +346,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             return;
           }
           labelEl.value = '';
-          showRawKeyModal(res.data.rawKey);
-          if (res.data.key && res.data.key.expiresAt) {
-            setCountdownNotice('カウントダウンへ登録しています...', false);
-            registerCountdownEvent({
-              label: 'PK期限',
-              targetAt: res.data.key.expiresAt,
-              confirmNavigate: false,
-              onSuccess: function() {
-                setCountdownNotice('カウントダウンに登録しました', false);
-              },
-              onError: function(msg) {
-                setCountdownNotice(msg || 'カウントダウンへの登録に失敗しました', true);
-              }
-            });
-          } else {
-            setCountdownNotice('無期限のためカウントダウンには登録しませんでした', false);
-          }
+          showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown);
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの発行に失敗しました'); });
@@ -403,16 +385,12 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .catch(function() { alert('APIキーの失効に失敗しました'); });
     }
 
-    function setCountdownNotice(text, isError) {
-      var noticeEl = document.getElementById('countdownNotice');
-      if (!noticeEl) return;
-      noticeEl.textContent = text || '';
-      noticeEl.className = 'countdown-notice' + (isError ? ' countdown-notice-error' : '');
-    }
-
-    function showRawKeyModal(rawKey) {
+    function showRawKeyModal(rawKey, countdownNotice, countdown) {
       document.getElementById('rawKeyText').textContent = rawKey;
-      setCountdownNotice('', false);
+      var noticeEl = document.getElementById('countdownNotice');
+      noticeEl.textContent = countdownNotice || '';
+      noticeEl.className = 'countdown-notice';
+      if (countdown && countdown.ok === false) noticeEl.classList.add('countdown-notice-error');
       var modal = document.getElementById('rawKeyModal');
       modal.style.zIndex = String(getNextZ());
       modal.classList.add('show');
