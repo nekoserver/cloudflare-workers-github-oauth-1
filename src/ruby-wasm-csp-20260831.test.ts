@@ -11,8 +11,8 @@
  * 故障シナリオ:
  *   (1) /ruby-wasmのCSPにwasm-unsafe-eval・cdn.jsdelivr.net・esm.shの
  *       いずれかが含まれず、WASM読み込みがブラウザ側でブロックされる
- *   (2) /ruby-wasm用のCSP上書きが他のページにも波及し、サイト全体の
- *       CSPが不必要に緩和される
+ *   (3) /ruby-wasmのHTMLがキャッシュされ、4.0 URLに差し替えたあとも
+ *       3.4 のページが残り `puts RUBY_VERSION` が 3.4.1 のままになる
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -63,5 +63,21 @@ describe('GET /ruby-wasm', () => {
     expect(csp).not.toContain('wasm-unsafe-eval');
     expect(csp).not.toContain('jsdelivr');
     expect(csp).not.toContain('esm.sh');
+  });
+
+  it('HTMLをキャッシュさせない(古い3.4ページが残りRUBY_VERSIONが3.4.1のままになるのを防ぐ)', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/ruby-wasm',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+    expect(res.status).toBe(200);
+    const cacheControl = res.headers.get('Cache-Control') || '';
+    expect(cacheControl).toContain('no-store');
+    const html = await res.text();
+    expect(html).toContain('@ruby/4.0-wasm-wasi');
+    expect(html).not.toContain('@ruby/3.4-wasm-wasi');
+    expect(html).toContain('puts RUBY_VERSION');
   });
 });

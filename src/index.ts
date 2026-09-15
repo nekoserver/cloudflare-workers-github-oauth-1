@@ -11259,6 +11259,7 @@ app.get('/ruby-wasm', authMiddleware, async (c) => {
     'Content-Security-Policy',
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
+  c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate');
   return c.html(getRubyWasmPage(user.sub));
 });
 

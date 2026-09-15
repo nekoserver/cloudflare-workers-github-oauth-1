@@ -152,6 +152,8 @@ describe('/ruby-wasm ページの読み込み経路', () => {
     expect(html).toContain('rel="preload"');
     expect(html).toContain('as="fetch"');
     expect(html).toContain('rel="modulepreload"');
+    expect(html).toContain('puts RUBY_VERSION');
+    expect(html).not.toContain('@ruby/3.4-wasm-wasi');
   });
 });
 

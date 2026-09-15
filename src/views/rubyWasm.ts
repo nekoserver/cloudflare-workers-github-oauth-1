@@ -269,7 +269,7 @@ export function getRubyWasmPage(username: string): string {
       <div class="toolbar">
         <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
       </div>
-      <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
+      <textarea id="inputCode" placeholder="puts RUBY_VERSION">puts RUBY_VERSION</textarea>
       <div class="toolbar">
         <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
         <button type="button" class="btn-secondary" id="clearBtn">🧹 クリア</button>
