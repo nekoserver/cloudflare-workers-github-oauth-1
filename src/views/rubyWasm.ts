@@ -1,5 +1,5 @@
 import { escapeHtml } from '../utils/html';
-import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmLoaderScript, getRubyWasmPreloadTags, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 // 公式ビルド済みWASMパッケージ(CRuby WASI版)を使う。C言語のコード生成を
@@ -64,6 +64,7 @@ export function getRubyWasmPage(username: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ruby (WASM) - Cloudflare Workers GitHub OAuth</title>
+  ${getRubyWasmPreloadTags(RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL)}
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}

@@ -5,6 +5,7 @@ import {
   concatUint8Chunks,
   formatRubyWasmDownloadStatus,
   getRubyWasmLoaderScript,
+  getRubyWasmPreloadTags,
   rubyWasmBinaryCacheName,
 } from './utils/rubyWasmLoader';
 import { getRubyWasmPage, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './views/rubyWasm';
@@ -73,6 +74,21 @@ describe('rubyWasmBinaryCacheName', () => {
   });
 });
 
+describe('getRubyWasmPreloadTags', () => {
+  it('バイナリは fetch preload、グルーは modulepreload で HTML パース直後から取り始める', () => {
+    const tags = getRubyWasmPreloadTags(
+      'https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js',
+      'https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm'
+    );
+    expect(tags).toContain('rel="preload"');
+    expect(tags).toContain('as="fetch"');
+    expect(tags).toContain('crossorigin="anonymous"');
+    expect(tags).toContain('rel="modulepreload"');
+    expect(tags).toContain('https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
+    expect(tags).toContain('https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js');
+  });
+});
+
 describe('compileRubyWasmFromResponse', () => {
   it('HTTPエラーなら Module を返さず例外にする', async () => {
     const res = new Response('not found', { status: 404, statusText: 'Not Found' });
@@ -109,6 +125,9 @@ describe('getRubyWasmLoaderScript', () => {
     expect(script).toContain('caches.open');
     expect(script).toContain('eval(\'RUBY_VERSION\')');
     expect(script).toContain('expectedBuildLine');
+    expect(script).toContain('Promise.all');
+    expect(script).toContain("credentials: 'omit'");
+    expect(script).not.toMatch(/return import\(jsUrl\)\.then\(function\(mod\) \{[\s\S]*fetchRubyWasmBytes/);
   });
 
   it('インラインJSを eval でき、進捗フォーマットがTS版と同じ結果になる', () => {
@@ -130,6 +149,9 @@ describe('/ruby-wasm ページの読み込み経路', () => {
     expect(html).toContain(RUBY_WASM_BINARY_URL);
     expect(html).toContain('ruby-wasm-binary-4.0-2.10.1');
     expect(html).toContain("expectedBuildLine: '4.0'");
+    expect(html).toContain('rel="preload"');
+    expect(html).toContain('as="fetch"');
+    expect(html).toContain('rel="modulepreload"');
   });
 });
 
@@ -141,5 +163,12 @@ describe('/kimi-code/markdown 詳細の読み込み経路', () => {
     expect(html).toContain(RUBY_WASM_JS_URL);
     expect(html).toContain(RUBY_WASM_BINARY_URL);
     expect(html).toContain("expectedBuildLine: '4.0'");
+    expect(html).toContain('rel="preload"');
+  });
+
+  it('実行可能なRubyブロックが無いページでは32MBバイナリをpreloadしない', () => {
+    const html = getKimiCodeMarkdownDetailPage('tester', 't', 'p', '```ts\nconst x = 1;\n```');
+    expect(html).not.toContain('rel="preload"');
+    expect(html).not.toContain('rel="modulepreload"');
   });
 });
