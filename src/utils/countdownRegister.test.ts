@@ -1,18 +1,15 @@
 import { JSDOM } from 'jsdom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  API_KEY_DEADLINE_LABEL,
-  SESSION_DEADLINE_LABEL,
-  getCountdownRegisterScript,
-} from './countdownRegister';
+import { getCountdownRegisterScript } from './countdownRegister';
 
-// 対象: /welcome の「⏱️ カウントダウンに登録」ボタンが POST /api/countdown する処理。
-// ページごとにコピペせず共通ライブラリ化し、/api-keys からも同じ関数を呼ぶ。
+// 対象: /welcome の「⏱️ カウントダウンに登録」が POST /api/countdown する処理。
+// label は countdown_events の名前(右下ウィジェットと完了トーストの表示名)で、
+// 呼び出し側が任意の文字列を渡す。
 //
 // 故障シナリオ:
 //   (1) 共通スクリプトが window.registerCountdownEvent を公開しない
-//   (2) label/targetAt が POST ボディに乗らず、別ページから呼べない
-//   (3) confirmNavigate=false なのに /countdown へ遷移し、APIキー生表示が消える
+//   (2) 渡した label/targetAt が POST ボディに乗らない
+//   (3) confirmNavigate=false なのに確認ダイアログを出す
 //   (4) 失敗時に onError が空文字になり、呼び出し元が原因を出せない
 
 function setupWindow() {
@@ -24,16 +21,6 @@ function setupWindow() {
   win.eval(getCountdownRegisterScript());
   return win;
 }
-
-describe('カウントダウン登録の共通ラベル', () => {
-  it('APIキー期限の固定ラベルは「PK期限」', () => {
-    expect(API_KEY_DEADLINE_LABEL).toBe('PK期限');
-  });
-
-  it('セッション期限の固定ラベルは「セッション有効期限」', () => {
-    expect(SESSION_DEADLINE_LABEL).toBe('セッション有効期限');
-  });
-});
 
 describe('getCountdownRegisterScript', () => {
   it('スクリプトとして構文エラーが無い', () => {
@@ -61,10 +48,10 @@ describe('window.registerCountdownEvent: 実DOMでの POST', () => {
     vi.restoreAllMocks();
   });
 
-  it('指定したラベルと日時を POST /api/countdown へ送り、成功時は onSuccess を呼ぶ', async () => {
+  it('渡した label と targetAt をそのまま POST し、成功時は onSuccess を呼ぶ', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ ok: true, id: 7, label: 'PK期限' }),
+      json: () => Promise.resolve({ ok: true, id: 7, label: '会議' }),
     });
     win.fetch = fetchMock as unknown as typeof fetch;
     const onSuccess = vi.fn();
@@ -73,7 +60,7 @@ describe('window.registerCountdownEvent: 実DOMでの POST', () => {
     await (win as unknown as {
       registerCountdownEvent: (opts: Record<string, unknown>) => Promise<unknown>;
     }).registerCountdownEvent({
-      label: 'PK期限',
+      label: '会議',
       targetAt: '2026-10-15T08:00:00.000Z',
       confirmNavigate: false,
       onSuccess,
@@ -85,7 +72,7 @@ describe('window.registerCountdownEvent: 実DOMでの POST', () => {
       expect.objectContaining({ method: 'POST', credentials: 'same-origin' })
     );
     const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
-    expect(body).toEqual({ label: 'PK期限', targetAt: '2026-10-15T08:00:00.000Z' });
+    expect(body).toEqual({ label: '会議', targetAt: '2026-10-15T08:00:00.000Z' });
     expect(onSuccess).toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
     expect(win.location.pathname).toBe('/welcome');
@@ -103,7 +90,7 @@ describe('window.registerCountdownEvent: 実DOMでの POST', () => {
     await (win as unknown as {
       registerCountdownEvent: (opts: Record<string, unknown>) => Promise<unknown>;
     }).registerCountdownEvent({
-      label: 'PK期限',
+      label: '会議',
       targetAt: 'not-a-date',
       confirmNavigate: false,
       onSuccess,

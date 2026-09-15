@@ -1,19 +1,10 @@
 /**
- * /welcome の「⏱️ カウントダウンに登録」ボタンが使う POST /api/countdown
- * 単発登録を、どのページのテンプレートからも同じ関数で呼べるようにしたもの。
- * getCountdownWidgetScript / getCountdownQuickAddModalScript と同じく、
- * 埋め込み用のスクリプト文字列を返す。
+ * /welcome の「⏱️ カウントダウンに登録」が POST /api/countdown する処理。
+ * どのページからも同じ関数で、ラベルと日時を渡して単発登録する。
+ * label は countdown_events の名前で、右下ウィジェットと完了トーストに出る表示名。
  *
- * 公開API: window.registerCountdownEvent({ label, targetAt, button, confirmNavigate, onSuccess, onError })
- * - welcome: confirmNavigate=true で登録後に /countdown へ進むか確認する
- * - /api-keys: confirmNavigate=false。生キーモーダルを消さない
+ * window.registerCountdownEvent({ label, targetAt, button, confirmNavigate, onSuccess, onError })
  */
-
-/** APIキー発行時に /countdown へ予約する固定ラベル。 */
-export const API_KEY_DEADLINE_LABEL = 'PK期限';
-
-/** /welcome のセッション期限ボタンが使う固定ラベル。 */
-export const SESSION_DEADLINE_LABEL = 'セッション有効期限';
 
 /** <script>内に展開する、単発カウントダウン登録の共通処理。 */
 export function getCountdownRegisterScript(): string {

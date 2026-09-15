@@ -3,7 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { getCountdownRegisterScript, SESSION_DEADLINE_LABEL } from '../utils/countdownRegister';
+import { getCountdownRegisterScript } from '../utils/countdownRegister';
 import { loginMethodLabel, LOGIN_METHOD_PUBLIC_KEY } from '../utils/loginHistory';
 
 export function getWelcomePage(user: {
@@ -460,7 +460,7 @@ export function getWelcomePage(user: {
       // (src/utils/countdownRegister.ts の window.registerCountdownEvent)に切り出している。
       window.registerExpiryCountdown = function() {
         window.registerCountdownEvent({
-          label: ${JSON.stringify(SESSION_DEADLINE_LABEL)},
+          label: 'セッション有効期限',
           targetAt: new Date(expiresAtTimestamp * 1000).toISOString(),
           button: document.getElementById('countdownRegisterBtn'),
           confirmNavigate: true
