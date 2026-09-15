@@ -282,7 +282,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, COUNTDOWN_EVENT_INSERT_SQL, insertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -3364,9 +3364,7 @@ async function upsertCfAuthDeadlineCountdown(
     if (existing) {
       await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?').bind(targetAt, existing.id).run();
     } else {
-      await db.prepare(
-        'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)'
-      ).bind(userId, CF_AUTH_DEADLINE_LABEL, targetAt).run();
+      await db.prepare(COUNTDOWN_EVENT_INSERT_SQL).bind(userId, CF_AUTH_DEADLINE_LABEL, targetAt).run();
     }
     return { ok: true };
   } catch (err) {

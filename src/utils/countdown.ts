@@ -118,6 +118,10 @@ export const CF_AUTH_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** /countdownで自動登録するcf-authの期限カウントダウンの固定ラベル。 */
 export const CF_AUTH_DEADLINE_LABEL = 'cf-auth 期限';
 
+/** ログイン時の cf-auth 期限登録と同じ単発INSERT。group_id は SQL の NULL リテラル。 */
+export const COUNTDOWN_EVENT_INSERT_SQL =
+  'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)';
+
 /**
  * countdown_events へのINSERTに必要な最小限のD1形。
  * テストではこの形を満たすモックを渡せる。
@@ -153,9 +157,8 @@ export async function insertCountdownEvent(
     return { ok: false, errorCode: 'no_db', detail: 'DB未設定です' };
   }
   try {
-    await db.prepare(
-      'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, ?)'
-    ).bind(params.userId, params.label, params.targetAt, null).run();
+    await db.prepare(COUNTDOWN_EVENT_INSERT_SQL)
+      .bind(params.userId, params.label, params.targetAt).run();
     return { ok: true, registered: true };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

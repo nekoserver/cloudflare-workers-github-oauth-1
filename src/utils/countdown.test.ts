@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   computeCfAuthDeadlineTargetAt,
   CF_AUTH_DEADLINE_LABEL,
   CF_AUTH_SESSION_TTL_MS,
   insertCountdownEvent,
   formatCountdownInsertNotice,
+  COUNTDOWN_EVENT_INSERT_SQL,
   computeCountdownGroupPosition,
   filterCountdownEventsByDate,
   findNextCountdownEvent,
@@ -216,21 +219,24 @@ describe('filterCountdownEventsByDate', () => {
 //   (5) 渡した予定名ではなく別の固定ラベルでINSERTしてしまう
 function createCountdownInsertMock(opts?: { throwOnInsert?: boolean }): {
   db: CountdownInsertDb;
-  inserts: { user_id: string; label: string; target_at: string; group_id: unknown }[];
+  inserts: { user_id: string; label: string; target_at: string }[];
+  sqls: string[];
 } {
-  const inserts: { user_id: string; label: string; target_at: string; group_id: unknown }[] = [];
+  const inserts: { user_id: string; label: string; target_at: string }[] = [];
+  const sqls: string[] = [];
   const db: CountdownInsertDb = {
-    prepare(_sql: string) {
+    prepare(sql: string) {
+      sqls.push(sql);
       return {
         bind(...params: unknown[]) {
           return {
             async run() {
               if (opts?.throwOnInsert) throw new Error('D1 insert failed');
+              expect(params).toHaveLength(3);
               inserts.push({
                 user_id: params[0] as string,
                 label: params[1] as string,
                 target_at: params[2] as string,
-                group_id: params[3],
               });
               return { success: true };
             },
@@ -239,7 +245,7 @@ function createCountdownInsertMock(opts?: { throwOnInsert?: boolean }): {
       };
     },
   };
-  return { db, inserts };
+  return { db, inserts, sqls };
 }
 
 describe('insertCountdownEvent', () => {
@@ -254,8 +260,29 @@ describe('insertCountdownEvent', () => {
     });
     expect(result).toEqual({ ok: true, registered: true });
     expect(inserts).toEqual([
-      { user_id: 'octocat', label: 'PK期限', target_at: expiresAt, group_id: null },
+      { user_id: 'octocat', label: 'PK期限', target_at: expiresAt },
     ]);
+  });
+
+  it('ログイン時の cf-auth 期限登録と同じ INSERT 文を使い、group_id は SQL の NULL リテラルにする', async () => {
+    const { db, sqls } = createCountdownInsertMock();
+    await insertCountdownEvent(db, {
+      userId: 'octocat',
+      label: 'PK期限',
+      targetAt: expiresAt,
+    });
+    expect(sqls).toEqual([COUNTDOWN_EVENT_INSERT_SQL]);
+    expect(COUNTDOWN_EVENT_INSERT_SQL).toBe(
+      'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, NULL)'
+    );
+  });
+
+  it('ログイン時の upsertCfAuthDeadlineCountdown も同じ INSERT 定数を使う', () => {
+    const src = readFileSync(resolve(__dirname, '../index.ts'), 'utf-8');
+    const idx = src.indexOf('async function upsertCfAuthDeadlineCountdown');
+    const block = src.slice(idx, idx + 1200);
+    expect(block).toContain('COUNTDOWN_EVENT_INSERT_SQL');
+    expect(block).not.toContain('VALUES (?, ?, ?, ?)');
   });
 
   it('予定名は呼び出し側の文字列をそのまま保存する(専用モードではない)', async () => {
