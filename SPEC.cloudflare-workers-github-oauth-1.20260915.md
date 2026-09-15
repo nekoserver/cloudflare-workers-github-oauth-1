@@ -151,6 +151,10 @@ welcome の登録ボタンは既に動いている `POST /api/countdown` なの�
 - `src/utils/countdown.test.ts`: 予定名をそのままINSERT、無期限スキップ、失敗時の空でない detail、2回で2行
 - `src/apiKeys-countdown-deadline.test.ts`: `POST /api/api-keys` の期限一致・無期限スキップ・失敗時201・モーダル連携・二重POST禁止
 
+### 関連コミット
+
+- [`fb477fb`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/fb477fb) APIキー発行時にログイン時と同じくサーバー側でカウントダウンへPK期限を予約する
+
 ### 関連
 
 対応するIssueは無い。🔑キー管理ページの発行フロー修正として実施した。
