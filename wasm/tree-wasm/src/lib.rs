@@ -49,7 +49,6 @@ fn tree_format_impl(
     entries: &str,
     root_label: &str,
     max_depth: u32,
-    show_hidden: bool,
 ) -> Result<String, String> {
     if root_label.trim().is_empty() {
         return Err("ルート名は空にできません".to_string());
@@ -65,7 +64,7 @@ fn tree_format_impl(
         {
             return Err(format!("不正なパスです: {path}"));
         }
-        if !show_hidden && path.split('/').any(|part| part.starts_with('.')) {
+        if path.split('/').any(|part| part.starts_with('.')) {
             continue;
         }
         let is_file = match kind {
@@ -85,9 +84,8 @@ pub fn tree_format(
     entries: &str,
     root_label: &str,
     max_depth: u32,
-    show_hidden: bool,
 ) -> Result<String, JsValue> {
-    tree_format_impl(entries, root_label, max_depth, show_hidden)
+    tree_format_impl(entries, root_label, max_depth)
         .map_err(|error| JsValue::from_str(&error))
 }
 
@@ -99,26 +97,26 @@ mod tests {
     fn パス一覧を名前順のmarkdownツリーへ変換する() {
         let input = "src/index.ts\tblob\nREADME.md\tblob\nsrc\ttree";
         assert_eq!(
-            tree_format_impl(input, "owner/repo", 10, false).unwrap(),
+            tree_format_impl(input, "owner/repo", 10).unwrap(),
             "- owner/repo/\n  - README.md\n  - src/\n    - index.ts"
         );
     }
 
     #[test]
-    fn 深さと隠しファイルを制御できる() {
+    fn 深さを制御し隠しファイルを除外できる() {
         let input = ".github\ttree\n.github/workflows/ci.yml\tblob\nsrc\ttree\nsrc/lib.rs\tblob";
         assert_eq!(
-            tree_format_impl(input, "repo", 1, false).unwrap(),
+            tree_format_impl(input, "repo", 1).unwrap(),
             "- repo/\n  - src/"
         );
-        assert!(tree_format_impl(input, "repo", 3, true)
+        assert!(!tree_format_impl(input, "repo", 3)
             .unwrap()
             .contains(".github/"));
     }
 
     #[test]
     fn 不正な入力を拒否する() {
-        assert!(tree_format_impl("README.md\tunknown", "repo", 2, false).is_err());
-        assert!(tree_format_impl("../secret\tblob", "repo", 2, false).is_err());
+        assert!(tree_format_impl("README.md\tunknown", "repo", 2).is_err());
+        assert!(tree_format_impl("../secret\tblob", "repo", 2).is_err());
     }
 }
