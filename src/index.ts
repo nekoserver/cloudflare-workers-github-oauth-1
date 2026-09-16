@@ -2659,9 +2659,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
   user_public_keys: { user_id: 'user_sessions' },
-  public_key_challenges: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions', key_id: 'user_public_keys' },
   login_history: { user_id: 'user_sessions' },
-  public_key_security_events: { user_id: 'user_sessions' },
+  public_key_security_events: { user_id: 'user_sessions', key_id: 'user_public_keys' },
   user_preferences: { user_id: 'user_sessions' },
   wine_details: { wine_id: 'wine_embeddings' },
   wine_metadata: { id: 'wine_embeddings' },
@@ -2773,6 +2773,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   heritage_question_view_log: { user_id: 'user_sessions', question_master_id: 'heritage_ai_question_masters' },
   heritage_area_boxes: { user_id: 'user_sessions' },
   heritage_area_items: { area_seq: 'heritage_area_boxes' },
+  heritage_master: { moved_to: 'heritage_master' },
 
   // ========================================================================
   // /workflow/NNNN ページ
@@ -2847,6 +2848,13 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
 
   // ID名が異なる参照先 → 各マスターの id (PK)
   'wine_details.wine_id': 'id',
+  'public_key_challenges.key_id': 'id',
+  'public_key_security_events.key_id': 'id',
+  'ruby_wasm_snippet_verifications.snippet_id': 'id',
+  'cursor_agent_status_log.launch_id': 'id',
+  'cursor_agent_answer_cache.launch_id': 'id',
+  'cursor_agent_search_log.launch_id': 'id',
+  'cursor_agent_search_history.launch_id': 'id',
   'ai_chat_shares.image_id': 'id',
   'aichat_search_log.share_id': 'id',
   'aichat_search_history.share_id': 'id',
@@ -2861,6 +2869,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'aichat_moondream_analyses.share_id': 'id',
   'aichat_moondream_analyses.image_id': 'id',
   'heritage_question_view_log.question_master_id': 'id',
+  'heritage_master.moved_to': 'id',
   'ts_function_catalog.repo_id': 'id',
   'ts_function_callers.repo_id': 'id',
   'ts_function_callers.callee_id': 'id',
@@ -2869,6 +2878,10 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'ts_function_impact.repo_id': 'id',
   'ts_commit_quality.repo_id': 'id',
   'api_search_keyword_sections.keyword_id': 'id',
+
+  // workflow_hierarchy の親子番号 → workflow_registry.workflow_no
+  'workflow_hierarchy.child_workflow_no': 'workflow_no',
+  'workflow_hierarchy.parent_workflow_no': 'workflow_no',
 
   // search_history_id → commit_search_history.id
   'commit_search_repo_stats.search_history_id': 'id',
