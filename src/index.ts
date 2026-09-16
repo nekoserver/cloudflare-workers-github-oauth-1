@@ -70,6 +70,7 @@ import {
   stripHtmlTags,
 } from './utils/ghAttach';
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+import { fetchRepositoryTreeMarkdown } from './utils/githubRepositoryTree';
 
 /**
  * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
@@ -195,50 +196,17 @@ async function fetchAndFormatRepositoryTree(
 ): Promise<string> {
   const parsed = parseOwnerRepo(repoFullNameInput);
   if (!parsed) throw new Error('リポジトリは owner/repo 形式で指定してください');
-  const repoFullName = `${parsed.owner}/${parsed.repo}`;
   const userSession = await getUserSession(c.env.DB, userSub);
   const accessToken = userSession?.githubAccessToken;
   if (!accessToken) throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
 
-  const repoApiUrl = `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`;
-  const githubHeaders = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
-  };
-  // Trees APIのtree_shaにHEADという疑似refは使えず、既定ブランチがmain以外の
-  // リポジトリもある。Repository APIからdefault_branchを取得して明示的に渡す。
-  const repoRes = await fetch(repoApiUrl, { headers: githubHeaders });
-  if (!repoRes.ok) {
-    const ghMessage = await extractGithubErrorMessage(repoRes);
-    logger.warn('repository tree: repository fetch failed', { repoFullName, userSub, status: repoRes.status, ghMessage });
-    throw new Error(describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage));
-  }
-  const repoBody = await repoRes.json<{ default_branch?: unknown }>();
-  if (typeof repoBody.default_branch !== 'string' || !repoBody.default_branch.trim()) {
-    throw new Error('GitHub Repository APIの応答に既定ブランチがありません');
-  }
-
-  const res = await fetch(
-    `${repoApiUrl}/git/trees/${encodeURIComponent(repoBody.default_branch)}?recursive=1`,
-    { headers: githubHeaders }
-  );
-  if (!res.ok) {
-    const ghMessage = await extractGithubErrorMessage(res);
-    logger.warn('repository tree: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
-    throw new Error(describeGithubApiError('ディレクトリツリーの取得', res.status, ghMessage));
-  }
-  const body = await res.json<{ truncated?: boolean; tree?: Array<{ path?: unknown; type?: unknown }> }>();
-  if (!Array.isArray(body.tree)) throw new Error('GitHub Trees APIの応答形式が不正です');
-  const entries = body.tree
-    .filter((entry): entry is { path: string; type: 'tree' | 'blob' | 'commit' } =>
-      typeof entry.path === 'string' && (entry.type === 'tree' || entry.type === 'blob' || entry.type === 'commit'))
-    .map((entry) => `${entry.path}\t${entry.type}`)
-    .join('\n');
-  const { formatTreeViaWasm } = await import('./utils/treeWasmServer');
-  const tree = formatTreeViaWasm(entries, repoFullName, depth, showHidden);
-  return `## ${repoFullName} ディレクトリツリー (${depth}階層)\n\n${tree}${body.truncated ? '\n\n⚠️ GitHub APIの上限により一部のパスは省略されています。' : ''}`;
+  return fetchRepositoryTreeMarkdown({
+    owner: parsed.owner,
+    repo: parsed.repo,
+    accessToken,
+    depth,
+    showHidden,
+  });
 }
 
 /**
