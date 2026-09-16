@@ -86,7 +86,10 @@ export function sha256HexViaWasm(input: string): string {
 - `tree-wasm`: GitHub Trees APIの`path`・`type`一覧を受け取り、リポジトリの
   ディレクトリ構造を罫線文字を使わないMarkdown入れ子リストへ整形するRust実装。
   名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスやOAuthは
-  WASMに持ち込まずWorker側が担当する想定で、現在は接続前のコア実装プロトタイプ
+  WASMに持ち込まずWorker側が担当する。`/neko tree <owner/repo>`で既定2階層、
+  `--depth 1`から`--depth 4`で表示階層、`--all`（または`-a`）で隠しパス表示を指定する。
+  Worker側はユーザーのGitHub OAuthトークンでTrees APIを取得し、
+  `src/utils/treeWasmServer.ts`からWASMの`tree_format`を呼び出す
 - `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
   一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
   `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
