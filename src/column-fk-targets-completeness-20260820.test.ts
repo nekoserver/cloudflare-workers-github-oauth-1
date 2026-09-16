@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS } from './index';
+import {
+  TABLE_COLUMN_KEYS,
+  COLUMN_FK_TARGETS,
+  resolveLogicalFkTargetCol,
+} from './index';
 
 // 対象: `TABLE_COLUMN_KEYS`(全テーブルのPK/FK/UK/IDXバッジ定義)と
 // `COLUMN_FK_TARGETS`(ER図・/statusページで使う論理FKの参照先テーブル定義)。
@@ -16,6 +20,26 @@ import { TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS } from './index';
 //       将来のリファクタで再び登録漏れになる
 
 describe('COLUMN_FK_TARGETS — user_id/share_idカラムの登録漏れが無いこと(全テーブル横断)', () => {
+  it('FKバッジを持つ全カラムに参照先テーブルが登録されている', () => {
+    const missing = Object.entries(TABLE_COLUMN_KEYS)
+      .flatMap(([table, cols]) => Object.entries(cols)
+        .filter(([, keyType]) => keyType?.includes('fk'))
+        .filter(([column]) => !COLUMN_FK_TARGETS[table]?.[column])
+        .map(([column]) => `${table}.${column}`));
+    expect(missing).toEqual([]);
+  });
+
+  it('全ての論理FKが存在する参照先テーブル・キーカラムを指している', () => {
+    const invalid = Object.entries(COLUMN_FK_TARGETS)
+      .flatMap(([fromTable, columns]) => Object.entries(columns).flatMap(([fromColumn, toTable]) => {
+        const toColumn = resolveLogicalFkTargetCol(fromTable, fromColumn);
+        return TABLE_COLUMN_KEYS[toTable]?.[toColumn]
+          ? []
+          : [`${fromTable}.${fromColumn}->${toTable}.${toColumn}`];
+      }));
+    expect(invalid).toEqual([]);
+  });
+
   it('user_idカラムを持つテーブル(user_sessions自身を除く)は全てCOLUMN_FK_TARGETSにuser_id→user_sessionsを登録している', () => {
     const missing = Object.entries(TABLE_COLUMN_KEYS)
       .filter(([table, cols]) => table !== 'user_sessions' && 'user_id' in cols)
