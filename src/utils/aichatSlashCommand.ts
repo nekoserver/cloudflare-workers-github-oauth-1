@@ -352,7 +352,7 @@ function encodeAichatQsearchParam(value: string): string {
   });
 }
 
-export function buildAichatQsearchIdHref(item: Pick<AichatQsearchItem, 'id' | 'model'>): string {
+export function buildAichatQsearchIdHref(item: AichatQsearchItem): string {
   return `#qsearch?id=${encodeAichatQsearchParam(item.id)}&model=${encodeAichatQsearchParam(item.model)}`;
 }
 
