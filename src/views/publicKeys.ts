@@ -110,6 +110,15 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       font-size: 13px; color: var(--text-muted); background: var(--bg-secondary);
       border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; line-height: 1.6;
     }
+    .registration-result {
+      display: none; margin: -12px 0 24px; padding: 12px 14px; border-radius: 8px;
+      font-size: 13px; line-height: 1.6; border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-secondary);
+    }
+    .registration-result.show { display: block; }
+    .registration-result.success { border-color: var(--success-color); }
+    .registration-result.warning { border-color: var(--danger-color); }
+    .registration-result a { color: var(--accent-color); font-weight: 600; margin-left: 8px; }
     .back-btn {
       background: var(--accent-color); color: white; border: none; border-radius: 8px;
       padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -174,6 +183,10 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
           </select>
         </div>
         <button class="btn btn-primary" id="generateBtn" onclick="generateAndRegisterKey()">鍵ペアを生成して登録</button>
+      </div>
+      <div id="registrationResult" class="registration-result" role="status" aria-live="polite">
+        <span id="registrationResultText"></span>
+        <a id="countdownPageLink" href="/countdown">カウントダウンを確認</a>
       </div>
 
       <table>
@@ -306,6 +319,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       var expiryVal = expiryEl.value;
       var expiresInDays = expiryVal === 'null' ? null : parseInt(expiryVal, 10);
       btn.disabled = true;
+      hideRegistrationResult();
 
       crypto.subtle.generateKey(
         { name: 'ECDSA', namedCurve: 'P-256' },
@@ -327,6 +341,7 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
               }
               return saveKeyPair(res.data.key.id, keyPair, label).then(function() {
                 labelEl.value = '';
+                showRegistrationResult(res.data.countdownNotice, res.data.countdown);
                 loadKeys();
               });
             });
@@ -336,6 +351,25 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       }).finally(function() {
         btn.disabled = false;
       });
+    }
+
+    // 公開鍵登録と同じサーバー処理内で行われたカウントダウン登録の結果を表示する。
+    // countdown.okだけでなくregisteredも見ることで、無期限による正常スキップ時には
+    // /countdownへの不要な導線を出さない。
+    function showRegistrationResult(message, countdown) {
+      var result = document.getElementById('registrationResult');
+      var text = document.getElementById('registrationResultText');
+      var link = document.getElementById('countdownPageLink');
+      var registered = !!(countdown && countdown.ok && countdown.registered);
+      var failed = !!(countdown && !countdown.ok);
+      text.textContent = message || '公開鍵を登録しました。';
+      link.style.display = registered ? 'inline' : 'none';
+      result.className = 'registration-result show ' + (failed ? 'warning' : 'success');
+    }
+
+    function hideRegistrationResult() {
+      var result = document.getElementById('registrationResult');
+      result.className = 'registration-result';
     }
 
     function isKeyExpired(item) {
