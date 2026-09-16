@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
+import { getPublicKeysPage } from './views/publicKeys';
 
 // /public-keysで公開鍵を登録した際、その公開鍵のexpires_atと同じ日時を
 // countdown_eventsへ「PK期限」として自動登録する結合テスト。
@@ -105,5 +106,27 @@ describe('POST /api/public-keys: 公開鍵の期限をカウントダウンへ�
       detail: 'countdown insert failed',
     });
     expect(body.countdownNotice).toContain('countdown insert failed');
+  });
+});
+
+describe('/public-keys: 公開鍵登録からカウントダウン確認までの導線', () => {
+  const html = getPublicKeysPage({ name: 'Test', username: 'test-user' });
+
+  it('サーバーが返したカウントダウン登録結果をステータス領域へ表示する', () => {
+    expect(html).toContain('id="registrationResult"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('showRegistrationResult(res.data.countdownNotice, res.data.countdown)');
+    expect(html).toContain("text.textContent = message || '公開鍵を登録しました。'");
+  });
+
+  it('登録済みの場合だけカウントダウン確認リンクを表示する', () => {
+    expect(html).toContain('id="countdownPageLink" href="/countdown"');
+    expect(html).toContain('countdown.ok && countdown.registered');
+    expect(html).toContain("link.style.display = registered ? 'inline' : 'none'");
+  });
+
+  it('カウントダウン登録失敗は警告表示にする', () => {
+    expect(html).toContain('countdown && !countdown.ok');
+    expect(html).toContain("failed ? 'warning' : 'success'");
   });
 });
