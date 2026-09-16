@@ -163,6 +163,34 @@ export async function insertCountdownEvent(
   }
 }
 
+/**
+ * ログインのように「現在有効な予定」が常に1件であるべき用途向けの置換登録。
+ * ユーザーとシステムラベルが一致する旧予定だけを除去し、実際に発行した期限を登録する。
+ */
+export async function replaceCountdownEvent(
+  db: CountdownInsertDb | undefined,
+  params: { userId: string; label: string; targetAt: string | null }
+): Promise<CountdownInsertResult> {
+  if (!params.targetAt) {
+    return { ok: true, registered: false, skipReason: 'no_expiry' };
+  }
+  if (!db) {
+    return { ok: false, errorCode: 'no_db', detail: 'DB未設定です' };
+  }
+  try {
+    await db.prepare(
+      'DELETE FROM countdown_events WHERE user_id = ? AND label = ?'
+    ).bind(params.userId, params.label).run();
+    await db.prepare(
+      'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, ?)'
+    ).bind(params.userId, params.label, params.targetAt, null).run();
+    return { ok: true, registered: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ok: false, errorCode: 'insert_failed', detail };
+  }
+}
+
 /** 発行レスポンス/発行モーダル向けのカウントダウン登録結果文言。 */
 export function formatCountdownInsertNotice(
   result: CountdownInsertResult,

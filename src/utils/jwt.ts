@@ -55,17 +55,21 @@ async function getKey(secret: string): Promise<CryptoKey> {
 /**
  * JWTを生成
  */
-export async function createJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>, secret: string, expiresIn: number = 3600): Promise<string> {
+export async function createJWT(
+  payload: Omit<JWTPayload, 'iat' | 'exp'>,
+  secret: string,
+  expiresIn: number = 3600,
+  issuedAtSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<string> {
   const header = {
     alg: 'HS256',
     typ: 'JWT'
   };
 
-  const now = Math.floor(Date.now() / 1000);
   const fullPayload: JWTPayload = {
     ...payload,
-    iat: now,
-    exp: now + expiresIn
+    iat: issuedAtSeconds,
+    exp: issuedAtSeconds + expiresIn
   };
 
   const encoder = new TextEncoder();

@@ -282,7 +282,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, replaceCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -331,7 +331,7 @@ import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
-import { getSessionDurationSeconds, renewSession, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
+import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
@@ -4140,6 +4140,25 @@ async function hasCfAuthAccess(db: D1Database | undefined, userId: string): Prom
   return userSession !== null;
 }
 
+async function syncLoginSessionCountdown(
+  db: D1Database | undefined,
+  userId: string,
+  targetAt: string
+): Promise<void> {
+  const result = await replaceCountdownEvent(db, {
+    userId,
+    label: 'セッション有効期限',
+    targetAt,
+  });
+  if (!result.ok) {
+    logger.error('セッション期限カウントダウンの置換登録に失敗', {
+      userId,
+      errorCode: result.errorCode,
+      error: result.detail,
+    });
+  }
+}
+
 // ログイン確定処理（D1保存・JWT発行・Cookieセット）。
 // 即時ログイン(/auth/github/callback)とメール確認後ログイン(/auth/email-confirm)の
 // 両方から共通利用する。
@@ -4167,6 +4186,7 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
   await recordLoginMethod(c.env.DB, params.githubLogin, LOGIN_METHOD_GITHUB_OAUTH);
 
   const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
   const token = await createJWT(
@@ -4178,7 +4198,15 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
       github_access_token: params.accessToken,
     },
     params.jwtSecret,
-    sessionDurationSeconds
+    sessionDurationSeconds,
+    issuedAtSeconds
+  );
+
+  // 設定保存時ではなく、実際に新しいJWTを発行した時点でのみ期限予定を更新する。
+  await syncLoginSessionCountdown(
+    c.env.DB,
+    params.githubLogin,
+    new Date((issuedAtSeconds + sessionDurationSeconds) * 1000).toISOString()
   );
 
   logger.info('GitHub OAuth authentication successful', {
@@ -4269,12 +4297,20 @@ async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: 
   await recordLoginMethod(c.env.DB, params.userId, LOGIN_METHOD_PUBLIC_KEY);
 
   const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
   const token = await createJWT(
     { sub: params.userId },
     params.jwtSecret,
-    sessionDurationSeconds
+    sessionDurationSeconds,
+    issuedAtSeconds
+  );
+
+  await syncLoginSessionCountdown(
+    c.env.DB,
+    params.userId,
+    new Date((issuedAtSeconds + sessionDurationSeconds) * 1000).toISOString()
   );
 
   logger.info('Public key (passkey) authentication successful', { userId: params.userId });
@@ -19764,26 +19800,17 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
       return c.json({ error: 'データベースの更新に失敗しました' }, 500);
     }
 
-    const jwtSecret = c.env.JWT_SECRET;
-    if (!jwtSecret) {
-      return c.json({ error: 'サーバー設定エラー' }, 500);
-    }
-
-    const renewed = await renewSession({
-      currentUser: user,
-      newDuration: sessionDuration,
-      jwtSecret,
-      idleTimeoutEnv: c.env.SESSION_IDLE_TIMEOUT_SECONDS,
-    });
-
     const headers = new Headers();
-    for (const cookie of renewed.cookies) {
-      headers.append('Set-Cookie', cookie);
-    }
+    headers.append('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
     headers.set('Content-Type', 'application/json; charset=utf-8');
 
     return new Response(
-      JSON.stringify({ message: 'セッション有効期限を変更しました（即時反映）', sessionDuration }),
+      JSON.stringify({
+        message: '次回ログイン時のセッション有効期限を変更しました',
+        sessionDuration,
+        appliesAt: 'next_login',
+        currentSessionUnchanged: true,
+      }),
       { status: 200, headers }
     );
   } catch (error) {
