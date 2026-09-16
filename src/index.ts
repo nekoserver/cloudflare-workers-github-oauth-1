@@ -185,6 +185,62 @@ async function fetchAndFormatGhPrList(
   return formatPrListViaWasm(repoFullName, json, maskAuthor);
 }
 
+/** GitHub Trees APIから取得したパスをtree-wasmでMarkdownツリーへ整形する。 */
+async function fetchAndFormatRepositoryTree(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  userSub: string,
+  repoFullNameInput: string,
+  depth: number,
+  showHidden: boolean
+): Promise<string> {
+  const parsed = parseOwnerRepo(repoFullNameInput);
+  if (!parsed) throw new Error('リポジトリは owner/repo 形式で指定してください');
+  const repoFullName = `${parsed.owner}/${parsed.repo}`;
+  const userSession = await getUserSession(c.env.DB, userSub);
+  const accessToken = userSession?.githubAccessToken;
+  if (!accessToken) throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
+
+  const repoApiUrl = `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`;
+  const githubHeaders = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  // Trees APIのtree_shaにHEADという疑似refは使えず、既定ブランチがmain以外の
+  // リポジトリもある。Repository APIからdefault_branchを取得して明示的に渡す。
+  const repoRes = await fetch(repoApiUrl, { headers: githubHeaders });
+  if (!repoRes.ok) {
+    const ghMessage = await extractGithubErrorMessage(repoRes);
+    logger.warn('repository tree: repository fetch failed', { repoFullName, userSub, status: repoRes.status, ghMessage });
+    throw new Error(describeGithubApiError('リポジトリ情報の取得', repoRes.status, ghMessage));
+  }
+  const repoBody = await repoRes.json<{ default_branch?: unknown }>();
+  if (typeof repoBody.default_branch !== 'string' || !repoBody.default_branch.trim()) {
+    throw new Error('GitHub Repository APIの応答に既定ブランチがありません');
+  }
+
+  const res = await fetch(
+    `${repoApiUrl}/git/trees/${encodeURIComponent(repoBody.default_branch)}?recursive=1`,
+    { headers: githubHeaders }
+  );
+  if (!res.ok) {
+    const ghMessage = await extractGithubErrorMessage(res);
+    logger.warn('repository tree: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
+    throw new Error(describeGithubApiError('ディレクトリツリーの取得', res.status, ghMessage));
+  }
+  const body = await res.json<{ truncated?: boolean; tree?: Array<{ path?: unknown; type?: unknown }> }>();
+  if (!Array.isArray(body.tree)) throw new Error('GitHub Trees APIの応答形式が不正です');
+  const entries = body.tree
+    .filter((entry): entry is { path: string; type: 'tree' | 'blob' | 'commit' } =>
+      typeof entry.path === 'string' && (entry.type === 'tree' || entry.type === 'blob' || entry.type === 'commit'))
+    .map((entry) => `${entry.path}\t${entry.type}`)
+    .join('\n');
+  const { formatTreeViaWasm } = await import('./utils/treeWasmServer');
+  const tree = formatTreeViaWasm(entries, repoFullName, depth, showHidden);
+  return `## ${repoFullName} ディレクトリツリー (${depth}階層)\n\n${tree}${body.truncated ? '\n\n⚠️ GitHub APIの上限により一部のパスは省略されています。' : ''}`;
+}
+
 /**
  * `/neko mlb` 用に、MLB Stats APIから指定日(YYYY-MM-DD)の試合予定を取得し、
  * 開始時刻・対戦カード・両チーム先発投手だけの軽量な形に整形する。
@@ -5526,6 +5582,17 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         }
       }
       return fetchAndFormatGhPrList(c, user.sub, repoFullName);
+    },
+    repositoryTree: async (repoFullName, depth, showHidden) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('tree').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('treeモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      return fetchAndFormatRepositoryTree(c, user.sub, repoFullName, depth, showHidden);
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),

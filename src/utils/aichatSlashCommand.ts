@@ -175,6 +175,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
+    '| /neko tree <owner/repo> [--depth 1-4] [--all] | 指定リポジトリのディレクトリツリーをWASM(Rust実装)で表示します(既定2階層、--allで隠しパスも表示) |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
@@ -864,6 +865,7 @@ export type AichatSlashCommandDeps = {
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   ghPrList?: (repoFullName: string) => Promise<string>;
+  repositoryTree?: (repoFullName: string, depth: number, showHidden: boolean) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
@@ -1540,6 +1542,40 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'tree') {
+    const args = parts.slice(2);
+    const repoArg = args[0];
+    if (!repoArg) {
+      return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-4] [--all]' };
+    }
+    let depth = 2;
+    let showHidden = false;
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--all' || args[i] === '-a') {
+        showHidden = true;
+      } else if (args[i] === '--depth' || args[i] === '-d') {
+        const value = args[++i];
+        if (!value || !/^[1-4]$/.test(value)) {
+          return { handled: true, response: '❌ --depth は1から4の整数で指定してください' };
+        }
+        depth = Number(value);
+      } else {
+        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4] [--all]` };
+      }
+    }
+    if (!deps.repositoryTree) {
+      return { handled: true, response: '❌ /neko tree は現在利用できません(WASM未設定)' };
+    }
+    try {
+      return { handled: true, response: await deps.repositoryTree(repoArg, depth, showHidden) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko tree の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'mlb') {
     const parsed = parseMlbFilterArgs(parts.slice(2));
     if (!parsed) {
@@ -1653,6 +1689,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
