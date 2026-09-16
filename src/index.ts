@@ -70,6 +70,11 @@ import {
   stripHtmlTags,
 } from './utils/ghAttach';
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+import {
+  buildGithubRepositoryApiUrl,
+  buildGithubTreeApiUrl,
+  parseDefaultBranch,
+} from './utils/repositoryTree';
 
 /**
  * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
@@ -199,9 +204,30 @@ async function fetchAndFormatRepositoryTree(
   const accessToken = userSession?.githubAccessToken;
   if (!accessToken) throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
 
+  const githubHeaders = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+
+  // Trees APIに疑似参照のHEADを渡すと、存在するリポジトリでもGitHub側で
+  // 解決されず404になる場合がある。Repository APIで実際の既定ブランチを
+  // 取得してからtree_shaとして渡す。
+  const repositoryRes = await fetch(
+    buildGithubRepositoryApiUrl(parsed.owner, parsed.repo),
+    { headers: githubHeaders },
+  );
+  if (!repositoryRes.ok) {
+    const ghMessage = await extractGithubErrorMessage(repositoryRes);
+    logger.warn('repository tree: repository fetch failed', { repoFullName, userSub, status: repositoryRes.status, ghMessage });
+    throw new Error(describeGithubApiError('リポジトリ情報の取得', repositoryRes.status, ghMessage));
+  }
+  const defaultBranch = parseDefaultBranch(await repositoryRes.json<unknown>());
+  if (!defaultBranch) throw new Error('GitHub Repository APIの応答に既定ブランチがありません');
+
   const res = await fetch(
-    `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/trees/HEAD?recursive=1`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/vnd.github+json', 'User-Agent': 'Cloudflare-Workers-GitHub-OAuth' } }
+    buildGithubTreeApiUrl(parsed.owner, parsed.repo, defaultBranch),
+    { headers: githubHeaders },
   );
   if (!res.ok) {
     const ghMessage = await extractGithubErrorMessage(res);
