@@ -1,6 +1,7 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
+import type { TreeFormatOptions } from './treeWasmServer';
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -175,7 +176,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
-    '| /neko tree <owner/repo> [--depth 1-4] | 指定リポジトリのディレクトリツリーをWASM(Rust実装)で表示します(既定2階層) |',
+    '| /neko tree <owner/repo> [options] | ツリーを表示します。--depth、--pattern、--files-only、--dirs-only、--hidden、--sort name\|time、--reverseに対応 |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
@@ -865,7 +866,7 @@ export type AichatSlashCommandDeps = {
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   ghPrList?: (repoFullName: string) => Promise<string>;
-  repositoryTree?: (repoFullName: string, depth: number) => Promise<string>;
+  repositoryTree?: (repoFullName: string, depth: number, options?: TreeFormatOptions) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
@@ -1549,6 +1550,7 @@ export async function interpretAichatSlashCommand(
       return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-4]' };
     }
     let depth = 2;
+    const treeOptions: TreeFormatOptions = {};
     for (let i = 1; i < args.length; i++) {
       // IMEなどがASCIIの`--`をem/en dashへ置換しても受け付ける。
       const option = args[i].replace(/^[—–]/, '--');
@@ -1559,15 +1561,39 @@ export async function interpretAichatSlashCommand(
           return { handled: true, response: '❌ --depth は1から4の整数で指定してください' };
         }
         depth = Number(value);
+      } else if (option === '--files-only' || option === '-f') {
+        treeOptions.filesOnly = true;
+      } else if (option === '--dirs-only') {
+        treeOptions.directoriesOnly = true;
+      } else if (option === '--hidden' || option === '-a') {
+        treeOptions.includeHidden = true;
+      } else if (option === '--reverse' || option === '-r') {
+        treeOptions.reverse = true;
+      } else if (option === '--time' || option === '-t') {
+        treeOptions.sort = 'time';
+      } else if (option === '--pattern' || option === '-P' || /^(?:--pattern|-P)=/.test(option)) {
+        const value = option.includes('=') ? option.slice(option.indexOf('=') + 1) : args[++i];
+        if (!value || value.length > 100) return { handled: true, response: '❌ --pattern は1〜100文字で指定してください' };
+        treeOptions.pattern = value;
+      } else if (option === '--sort' || /^--sort=/.test(option)) {
+        const value = option.includes('=') ? option.slice(option.indexOf('=') + 1) : args[++i];
+        if (value !== 'name' && value !== 'time') return { handled: true, response: '❌ --sort は name または time を指定してください' };
+        treeOptions.sort = value;
       } else {
-        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4]` };
+        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4] [--pattern glob] [--files-only|--dirs-only] [--hidden] [--sort name|time] [--reverse]` };
       }
+    }
+    if (treeOptions.filesOnly && treeOptions.directoriesOnly) {
+      return { handled: true, response: '❌ --files-only と --dirs-only は同時に指定できません' };
     }
     if (!deps.repositoryTree) {
       return { handled: true, response: '❌ /neko tree は現在利用できません(WASM未設定)' };
     }
     try {
-      return { handled: true, response: await deps.repositoryTree(repoArg, depth) };
+      const response = Object.keys(treeOptions).length
+        ? await deps.repositoryTree(repoArg, depth, treeOptions)
+        : await deps.repositoryTree(repoArg, depth);
+      return { handled: true, response };
     } catch (err) {
       return {
         handled: true,

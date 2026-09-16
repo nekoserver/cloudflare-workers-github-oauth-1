@@ -196,7 +196,8 @@ async function fetchAndFormatRepositoryTree(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   userSub: string,
   repoFullNameInput: string,
-  depth: number
+  depth: number,
+  options: import('./utils/treeWasmServer').TreeFormatOptions = {},
 ): Promise<string> {
   const parsed = parseOwnerRepo(repoFullNameInput);
   if (!parsed) throw new Error('リポジトリは owner/repo 形式で指定してください');
@@ -249,7 +250,7 @@ async function fetchAndFormatRepositoryTree(
     .map((entry) => `${entry.path}\t${entry.type}`)
     .join('\n');
   const { formatTreeViaWasm } = await import('./utils/treeWasmServer');
-  const tree = formatTreeViaWasm(entries, repoFullName, depth);
+  const tree = formatTreeViaWasm(entries, repoFullName, depth, options);
   return `## ${repoFullName} ディレクトリツリー (${depth}階層)\n\n${tree}${body.truncated ? '\n\n⚠️ GitHub APIの上限により一部のパスは省略されています。' : ''}`;
 }
 
@@ -5595,7 +5596,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       }
       return fetchAndFormatGhPrList(c, user.sub, repoFullName);
     },
-    repositoryTree: async (repoFullName, depth) => {
+    repositoryTree: async (repoFullName, depth, options) => {
       if (c.env.DB) {
         const row = await c.env.DB.prepare(
           'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
@@ -5604,7 +5605,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           throw new Error('treeモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
         }
       }
-      return fetchAndFormatRepositoryTree(c, user.sub, repoFullName, depth);
+      return fetchAndFormatRepositoryTree(c, user.sub, repoFullName, depth, options);
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),

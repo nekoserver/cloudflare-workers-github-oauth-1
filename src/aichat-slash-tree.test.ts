@@ -27,6 +27,31 @@ describe('/neko tree', () => {
     expect(repositoryTree).toHaveBeenCalledWith('owner/repo', 3);
   });
 
+  it('フィルタ・種別・並べ替えオプションをWASMアダプターへ渡す', async () => {
+    const repositoryTree = vi.fn().mockResolvedValue('tree');
+    await interpretAichatSlashCommand(
+      '/neko tree owner/repo --pattern=*.ts --files-only --hidden --sort time --reverse',
+      new Date(),
+      { ...baseDeps, repositoryTree },
+    );
+    expect(repositoryTree).toHaveBeenCalledWith('owner/repo', 2, {
+      pattern: '*.ts', filesOnly: true, includeHidden: true, sort: 'time', reverse: true,
+    });
+  });
+
+  it('競合する種別限定と不正なsortを拒否する', async () => {
+    const repositoryTree = vi.fn();
+    const conflict = await interpretAichatSlashCommand(
+      '/neko tree owner/repo --files-only --dirs-only', new Date(), { ...baseDeps, repositoryTree },
+    );
+    const invalidSort = await interpretAichatSlashCommand(
+      '/neko tree owner/repo --sort size', new Date(), { ...baseDeps, repositoryTree },
+    );
+    expect(conflict.handled && conflict.response).toContain('同時に指定できません');
+    expect(invalidSort.handled && invalidSort.response).toContain('name または time');
+    expect(repositoryTree).not.toHaveBeenCalled();
+  });
+
   it('高負荷な--allオプションは受け付けない', async () => {
     const repositoryTree = vi.fn();
     const result = await interpretAichatSlashCommand('/neko tree owner/repo --all', new Date(), { ...baseDeps, repositoryTree });

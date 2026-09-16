@@ -87,7 +87,10 @@ export function sha256HexViaWasm(input: string): string {
   ディレクトリ構造を罫線文字を使わないMarkdown入れ子リストへ整形するRust実装。
   名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスやOAuthは
   WASMに持ち込まずWorker側が担当する。`/neko tree <owner/repo>`で既定2階層、
-  `--depth 1`から`--depth 4`で表示階層を指定する。隠しパスは常に除外する。
+  `--depth 1`から`--depth 4`で表示階層を指定する。`--pattern '*.ts'`で名前を
+  glob絞り込み、`--files-only`/`--dirs-only`で種別を限定できる。`--hidden`で
+  隠しパスを含め、`--sort name|time`と`--reverse`で順序を変更する。時刻順は
+  3列目にUnixミリ秒の時刻が渡された場合に利用できる。
   Worker側はユーザーのGitHub OAuthトークンでTrees APIを取得する。WASM生成物を
   リポジトリへ含めるまでは、`src/utils/treeWasmServer.ts`の互換アダプターが
   `tree_format`と同じTSV契約・出力規則を提供し、未生成ファイルのimportでWorker全体を
