@@ -27,4 +27,22 @@ describe('/neko tree', () => {
     expect(invalidDepth.handled && invalidDepth.response).toContain('1から4');
     expect(repositoryTree).not.toHaveBeenCalled();
   });
+
+  it('GitHub Trees APIが404を返した場合は取得エラーをそのまま表示する', async () => {
+    const repositoryTree = vi.fn().mockRejectedValue(
+      new Error('ディレクトリツリーの取得に失敗しました(404: Not Found)'),
+    );
+
+    const result = await interpretAichatSlashCommand(
+      '/neko tree missing-owner/missing-repo',
+      new Date(),
+      { ...baseDeps, repositoryTree },
+    );
+
+    expect(repositoryTree).toHaveBeenCalledWith('missing-owner/missing-repo', 2, false);
+    expect(result).toEqual({
+      handled: true,
+      response: '❌ /neko tree の実行中にエラーが発生しました: ディレクトリツリーの取得に失敗しました(404: Not Found)',
+    });
+  });
 });
