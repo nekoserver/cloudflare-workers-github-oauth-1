@@ -73,6 +73,7 @@ import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghP
 import {
   buildGithubRepositoryApiUrl,
   buildGithubTreeApiUrl,
+  fetchGithubRepositoryWithPublicFallback,
   parseDefaultBranch,
 } from './utils/repositoryTree';
 
@@ -213,13 +214,17 @@ async function fetchAndFormatRepositoryTree(
   // Trees APIに疑似参照のHEADを渡すと、存在するリポジトリでもGitHub側で
   // 解決されず404になる場合がある。Repository APIで実際の既定ブランチを
   // 取得してからtree_shaとして渡す。
-  const repositoryRes = await fetch(
+  const repositoryFetch = await fetchGithubRepositoryWithPublicFallback(
     buildGithubRepositoryApiUrl(parsed.owner, parsed.repo),
-    { headers: githubHeaders },
+    githubHeaders,
   );
+  const repositoryRes = repositoryFetch.response;
   if (!repositoryRes.ok) {
     const ghMessage = await extractGithubErrorMessage(repositoryRes);
     logger.warn('repository tree: repository fetch failed', { repoFullName, userSub, status: repositoryRes.status, ghMessage });
+    if (repositoryRes.status === 404) {
+      throw new Error(`リポジトリ ${repoFullName} が見つからないか、GitHubアカウントに参照権限がありません。owner/repo の綴りと、非公開リポジトリの場合はOAuth権限を確認してください`);
+    }
     throw new Error(describeGithubApiError('リポジトリ情報の取得', repositoryRes.status, ghMessage));
   }
   const defaultBranch = parseDefaultBranch(await repositoryRes.json<unknown>());
@@ -227,7 +232,9 @@ async function fetchAndFormatRepositoryTree(
 
   const res = await fetch(
     buildGithubTreeApiUrl(parsed.owner, parsed.repo, defaultBranch),
-    { headers: githubHeaders },
+    { headers: repositoryFetch.usedAnonymousFallback
+      ? { Accept: githubHeaders.Accept, 'User-Agent': githubHeaders['User-Agent'] }
+      : githubHeaders },
   );
   if (!res.ok) {
     const ghMessage = await extractGithubErrorMessage(res);
