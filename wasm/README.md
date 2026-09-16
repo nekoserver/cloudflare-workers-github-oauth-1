@@ -83,6 +83,10 @@ export function sha256HexViaWasm(input: string): string {
   が`WASM_MODULE_REGISTRY`自体を仮想ディレクトリとして渡す
   (`"name\ttype\tsize\tmtime"`形式のTSVをls-wasmへ渡し、整形済みテキストを受け取る)。
   `/neko ls [-l] [-a]`。ブラウザページは無くサーバー(Worker)実行のみ
+- `tree-wasm`: GitHub Trees APIの`path`・`type`一覧を受け取り、リポジトリの
+  ディレクトリ構造を罫線文字を使わないMarkdown入れ子リストへ整形するRust実装。
+  名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスやOAuthは
+  WASMに持ち込まずWorker側が担当する想定で、現在は接続前のコア実装プロトタイプ
 - `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
   一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
   `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
