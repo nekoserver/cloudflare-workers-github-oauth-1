@@ -175,7 +175,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
-    '| /neko tree <owner/repo> [--depth 1-4] [--all] | 指定リポジトリのディレクトリツリーをWASM(Rust実装)で表示します(既定2階層、--allで隠しパスも表示) |',
+    '| /neko tree <owner/repo> [--depth 1-4] | 指定リポジトリのディレクトリツリーをWASM(Rust実装)で表示します(既定2階層) |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
@@ -865,7 +865,7 @@ export type AichatSlashCommandDeps = {
   digLookup?: (name: string, qtype: string) => Promise<string>;
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   ghPrList?: (repoFullName: string) => Promise<string>;
-  repositoryTree?: (repoFullName: string, depth: number, showHidden: boolean) => Promise<string>;
+  repositoryTree?: (repoFullName: string, depth: number) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
@@ -1546,28 +1546,28 @@ export async function interpretAichatSlashCommand(
     const args = parts.slice(2);
     const repoArg = args[0];
     if (!repoArg) {
-      return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-4] [--all]' };
+      return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-4]' };
     }
     let depth = 2;
-    let showHidden = false;
     for (let i = 1; i < args.length; i++) {
-      if (args[i] === '--all' || args[i] === '-a') {
-        showHidden = true;
-      } else if (args[i] === '--depth' || args[i] === '-d') {
-        const value = args[++i];
+      // IMEなどがASCIIの`--`をem/en dashへ置換しても受け付ける。
+      const option = args[i].replace(/^[—–]/, '--');
+      const depthWithEquals = option.match(/^(?:--depth|-d)=(.*)$/);
+      if (option === '--depth' || option === '-d' || depthWithEquals) {
+        const value = depthWithEquals ? depthWithEquals[1] : args[++i];
         if (!value || !/^[1-4]$/.test(value)) {
           return { handled: true, response: '❌ --depth は1から4の整数で指定してください' };
         }
         depth = Number(value);
       } else {
-        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4] [--all]` };
+        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4]` };
       }
     }
     if (!deps.repositoryTree) {
       return { handled: true, response: '❌ /neko tree は現在利用できません(WASM未設定)' };
     }
     try {
-      return { handled: true, response: await deps.repositoryTree(repoArg, depth, showHidden) };
+      return { handled: true, response: await deps.repositoryTree(repoArg, depth) };
     } catch (err) {
       return {
         handled: true,
