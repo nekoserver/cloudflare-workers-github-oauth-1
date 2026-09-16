@@ -74,7 +74,7 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     id: 'tree',
     name: 'tree (repository tree, Rust)',
     description:
-      'GitHub Trees APIのpath・type一覧を、罫線文字を使わないMarkdown入れ子リストへ整形する。名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスとOAuthはWorker側が担当する想定で、現在は接続前のコア実装プロトタイプ',
+      'GitHub Trees APIのpath・type一覧を、罫線文字を使わないMarkdown入れ子リストへ整形する。名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスとOAuthはWorker側が担当し、AIチャットの/neko treeサブコマンドから実行する',
     wasmPath: 'wasm/tree-wasm/target/wasm32-unknown-unknown/release/tree_wasm.wasm',
     sourceDir: 'wasm/tree-wasm',
     sourceFile: 'wasm/tree-wasm/src/lib.rs',
