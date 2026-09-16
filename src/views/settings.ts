@@ -372,7 +372,7 @@ export function getSettingsPage(user: {
           <button class="btn btn-save" onclick="saveSessionDuration()">保存</button>
           <button class="btn btn-cancel" onclick="cancelSessionDuration()">キャンセル</button>
         </div>
-        <div class="success-message" id="sessionSuccessMessage">✓ セッション有効期限を変更しました</div>
+        <div class="success-message" id="sessionSuccessMessage">✓ 保存しました。次回ログインから適用されます（現在の期限とカウントダウンは変わりません）</div>
         <div class="button-container" id="idleTimeoutButtonContainer" style="display:none">
           <button class="btn btn-save" onclick="saveIdleTimeout()">保存</button>
           <button class="btn btn-cancel" onclick="cancelIdleTimeout()">キャンセル</button>
