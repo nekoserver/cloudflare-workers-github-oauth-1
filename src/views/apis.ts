@@ -597,8 +597,10 @@ const APIS = [
       res:{message:'設定を保存しました',key:'d1_query_catalog_sort',value:'count'} },
   ]},
   { group: 'APIキー管理', endpoints: [
-    { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)',
+    { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まず、失効済みキーは失効後7日以内のみ表示)',
       res:{keys:[{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',label:'監視用',key_prefix:'nkapi_ab12cd34********',created_at:'2026-08-15T00:00:00.000Z',expires_at:'2026-09-14T00:00:00.000Z',revoked_at:null,last_used_at:null}]} },
+    { method:'POST', path:'/auth/public-key/available', desc:'ブラウザに保存された公開鍵のうち、未失効かつ有効期限内のキーIDを取得', body:[{n:'keys',req:true,s:[{userId:'nekoserver',keyId:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}]}],
+      res:{keyIds:['xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx']} },
     { method:'POST', path:'/api/api-keys', desc:'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)。有効期限付きなら /countdown へ予定名 PK期限 を予約する', body:[{n:'label',req:true,s:'監視用'},{n:'expiresInDays',s:30}],
       res:{key:{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',label:'監視用',keyPrefix:'nkapi_ab12cd34********',createdAt:'2026-08-15T00:00:00.000Z',expiresAt:'2026-09-14T00:00:00.000Z'},rawKey:'nkapi_ab12cd34ef56gh78ij90kl12mn34op56...',countdown:{ok:true,registered:true},countdownNotice:'カウントダウンに「PK期限」を登録しました'} },
     { method:'POST', path:'/api/api-keys/:id/revoke', desc:'APIキー失効(自分が発行したキーのみ)', path_params:['id'], pp:{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'},
