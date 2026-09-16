@@ -15,11 +15,18 @@ function node(): TreeNode {
   return { isFile: false, timestamp: null, children: new Map() };
 }
 
-/** `*`・`?`を使える、tree(1)の-P相当の軽量なパターン照合。 */
+/**
+ * `*`・`?`を使える、tree(1)の-P相当の軽量なパターン照合。
+ * ワイルドカードを含まないパターン(例: "MCP")は、名前全体との完全一致ではなく
+ * 部分一致(大文字小文字を区別しない)として扱う。深さ4等でいったん出力した
+ * ツリー全体に対して、さらにキーワードで絞り込みたいという用途のため。
+ */
 function matchesPattern(value: string, pattern?: string): boolean {
   if (!pattern) return true;
+  const hasWildcard = pattern.includes('*') || pattern.includes('?');
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
-  return new RegExp(`^${escaped}$`, 'i').test(value);
+  const source = hasWildcard ? `^${escaped}$` : escaped;
+  return new RegExp(source, 'i').test(value);
 }
 
 /**

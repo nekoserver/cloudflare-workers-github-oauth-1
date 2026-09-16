@@ -30,6 +30,20 @@ describe('formatTreeViaWasm', () => {
     expect(oldest.indexOf('old.txt')).toBeLessThan(oldest.indexOf('new.txt'));
   });
 
+  it('ワイルドカードなしのパターンはキーワードの部分一致として絞り込める', () => {
+    const input = [
+      'src\ttree',
+      'src/mcpServer.ts\tblob',
+      'src/other\ttree',
+      'src/other/deep\ttree',
+      'src/other/deep/mcpHelper.ts\tblob',
+      'README.md\tblob',
+    ].join('\n');
+    expect(formatTreeViaWasm(input, 'repo', 4, { pattern: 'MCP', filesOnly: true })).toBe(
+      '- repo/\n  - src/\n    - mcpServer.ts\n    - other/\n      - deep/\n        - mcpHelper.ts',
+    );
+  });
+
   it('隠しファイルとディレクトリ限定をオプションで表示できる', () => {
     const input = '.github\ttree\nsrc\ttree\nsrc/lib.rs\tblob';
     expect(formatTreeViaWasm(input, 'repo', 2, { includeHidden: true, directoriesOnly: true }))
