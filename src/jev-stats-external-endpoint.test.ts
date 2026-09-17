@@ -14,12 +14,22 @@
  *   (5) 1ラベルでも評価済みならshare_id単位で「分析済み」1件として数える
  *       はずが、ラベル数(20件)ぶん重複カウントしてしまう
  *   (6) DB未設定時にフェイルオープンする
+ *   (7) AICHAT_EXTERNAL_SECRETさえ知っていれば本文に任意のemailを書くだけで
+ *       他ユーザーの集計を読めてしまう(実際に報告された脆弱性)。userToken
+ *       (AICHAT_USER_TOKEN_SECRETで署名した短寿命JWT、sub=email)を必須にし、
+ *       本文の生emailは一切受け付けないことで塞ぐ
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import app from './index';
+import { createJWT } from './utils/jwt';
 
 const SECRET = 'test-aichat-external-secret';
+const USER_TOKEN_SECRET = 'test-user-token-secret';
+
+function makeUserToken(email: string, secret: string = USER_TOKEN_SECRET, expiresIn = 60): Promise<string> {
+  return createJWT({ sub: email }, secret, expiresIn);
+}
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -104,12 +114,13 @@ function insertEvaluation(db: DatabaseSync, args: { shareId: string; userId: str
   ).run(args.shareId, args.userId, args.model, args.labelId, args.value);
 }
 
-const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET };
+const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET };
 
 async function postStats(db: DatabaseSync, email: string): Promise<Response> {
+  const userToken = await makeUserToken(email);
   return app.request(
     '/api/aichat/jev-stats-external',
-    { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) },
+    { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken }) },
     { ...BASE_ENV, DB: wrapD1(db) }
   );
 }
@@ -117,12 +128,58 @@ async function postStats(db: DatabaseSync, email: string): Promise<Response> {
 describe('POST /api/aichat/jev-stats-external', () => {
   it('Bearer secretが一致しない場合は401', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-stats-external',
-      { method: 'POST', headers: { Authorization: 'Bearer wrong', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com' }) },
+      { method: 'POST', headers: { Authorization: 'Bearer wrong', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken }) },
       { ...BASE_ENV, DB: wrapD1(db) }
     );
     expect(res.status).toBe(401);
+  });
+
+  it('userTokenが無い場合は401(本文の生emailは受け付けない)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await app.request(
+      '/api/aichat/jev-stats-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com' }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('AICHAT_USER_TOKEN_SECRETと異なる鍵で署名したuserTokenは401(偽造トークンを拒否する)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const forgedToken = await makeUserToken('ok@example.com', 'wrong-secret');
+    const res = await app.request(
+      '/api/aichat/jev-stats-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: forgedToken }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('他ユーザーのemailを本文に直接書いても、userTokenのsub以外は集計対象にならない(実際に報告された脆弱性の再発防止)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver', 'victim@example.com': 'victim-user' });
+    insertShare(db, 'share-victim', 'victim-user', 'gemma-4-26b-a4b-it');
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await app.request(
+      '/api/aichat/jev-stats-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, email: 'victim@example.com' }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+    const body = await res.json() as { totalAnswers: number };
+    expect(body.totalAnswers).toBe(0);
+  });
+
+  it('AICHAT_USER_TOKEN_SECRET未設定時は503を返す(フェイルオープンしない)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await app.request(
+      '/api/aichat/jev-stats-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(503);
   });
 
   it('未許可メールアドレスは403で拒否される', async () => {
@@ -160,12 +217,13 @@ describe('POST /api/aichat/jev-stats-external', () => {
     expect(body.analyzedAnswers).toBe(0);
   });
 
-  it('リクエスト本文にloginを含めて他ユーザーの集計を騙ろうとしても、emailに紐づく自分のloginでしか集計されない(脆弱性の再発防止)', async () => {
+  it('リクエスト本文にloginを含めて他ユーザーの集計を騙ろうとしても、userTokenのsub(email)に紐づく自分のloginでしか集計されない(脆弱性の再発防止)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     insertShare(db, 'share-victim', 'victim-user', 'gemma-4-26b-a4b-it');
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-stats-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', login: 'victim-user' }) },
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, login: 'victim-user' }) },
       { ...BASE_ENV, DB: wrapD1(db) }
     );
     const body = await res.json() as { totalAnswers: number };
@@ -220,9 +278,10 @@ describe('POST /api/aichat/jev-stats-external', () => {
   });
 
   it('DB未設定時はフェイルクローズで503を返す', async () => {
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-stats-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com' }) },
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken }) },
       { ...BASE_ENV }
     );
     expect(res.status).toBe(503);

@@ -17,13 +17,23 @@
  *   (7) target_type='source_question'なのにmodelを保存してしまい、
  *       モデル非依存であるべき評価がモデル別に分裂する
  *   (8) JEV_API_KEY未設定時にフェイルオープンする
+ *   (9) AICHAT_EXTERNAL_SECRETさえ知っていれば本文に任意のemailを書くだけで
+ *       他ユーザーの評価データを読み書きできてしまう(実際に報告された脆弱性)。
+ *       userToken(AICHAT_USER_TOKEN_SECRETで署名した短寿命JWT、sub=email)を
+ *       必須にし、本文の生emailは一切受け付けないことで塞ぐ
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import app from './index';
+import { createJWT } from './utils/jwt';
 
 const SECRET = 'test-aichat-external-secret';
 const JEV_KEY = 'test-jev-key';
+const USER_TOKEN_SECRET = 'test-user-token-secret';
+
+function makeUserToken(email: string, secret: string = USER_TOKEN_SECRET, expiresIn = 60): Promise<string> {
+  return createJWT({ sub: email }, secret, expiresIn);
+}
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -120,58 +130,92 @@ function insertEvaluation(db: DatabaseSync, args: { targetType: string; shareId:
   ).run(args.targetType, args.shareId, args.userId, args.model, args.labelId, args.value);
 }
 
-const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, JEV_API_KEY: JEV_KEY };
+const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET, JEV_API_KEY: JEV_KEY };
+
+async function postJevScore(db: DatabaseSync, body: Record<string, unknown>, envOverrides: Record<string, unknown> = {}): Promise<Response> {
+  return app.request(
+    '/api/aichat/jev-score-external',
+    { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    { ...BASE_ENV, DB: wrapD1(db), ...envOverrides }
+  );
+}
 
 describe('POST /api/aichat/jev-score-external', () => {
   it('Bearer secretが一致しない場合は401', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: 'Bearer wrong', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { method: 'POST', headers: { Authorization: 'Bearer wrong', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
       { ...BASE_ENV, DB: wrapD1(db) }
     );
     expect(res.status).toBe(401);
   });
 
-  it('JEV_API_KEY未設定時は503を返す(フェイルオープンしない)', async () => {
+  it('userTokenが無い場合は401(本文の生emailは受け付けない)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await postJevScore(db, { email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
+    expect(res.status).toBe(401);
+  });
+
+  it('AICHAT_EXTERNAL_SECRETは正しいが、AICHAT_USER_TOKEN_SECRETと異なる鍵で署名したuserTokenは401(偽造トークンを拒否する)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const forgedToken = await makeUserToken('ok@example.com', 'wrong-secret');
+    const res = await postJevScore(db, { userToken: forgedToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
+    expect(res.status).toBe(401);
+  });
+
+  it('AICHAT_USER_TOKEN_SECRET未設定時は503を返す(フェイルオープンしない)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, JEV_API_KEY: JEV_KEY, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(503);
+  });
+
+  it('JEV_API_KEY未設定時は503を返す(フェイルオープンしない)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await app.request(
+      '/api/aichat/jev-score-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET, DB: wrapD1(db) }
     );
     expect(res.status).toBe(503);
   });
 
   it('未許可メールアドレスは403で拒否される', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res = await app.request(
-      '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ng@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-      { ...BASE_ENV, DB: wrapD1(db) }
-    );
+    const userToken = await makeUserToken('ng@example.com');
+    const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
     expect(res.status).toBe(403);
   });
 
   it('shareIdが空の場合は400', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res = await app.request(
-      '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: '  ', model: 'gemma-4-26b-a4b-it' }) },
-      { ...BASE_ENV, DB: wrapD1(db) }
-    );
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postJevScore(db, { userToken, shareId: '  ', model: 'gemma-4-26b-a4b-it' });
     expect(res.status).toBe(400);
   });
 
-  it('リクエスト本文にloginを含めて他ユーザーの回答を評価させようとしても、emailに紐づく自分のloginでしか一致しない(脆弱性の再発防止)', async () => {
+  it('リクエスト本文にloginを含めて他ユーザーの回答を評価させようとしても、userTokenのsub(email)に紐づく自分のloginでしか一致しない(脆弱性の再発防止)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     insertShare(db, 'share-victim', 'victim-user', '他人の質問', '他人の回答', '@cf/google/gemma-4-26b-a4b-it');
     insertLabels(db, [{ id: 1, text: 'ラベル1' }]);
-    const res = await app.request(
-      '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', login: 'victim-user', shareId: 'share-victim', model: 'gemma-4-26b-a4b-it' }) },
-      { ...BASE_ENV, DB: wrapD1(db) }
-    );
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postJevScore(db, { userToken, login: 'victim-user', shareId: 'share-victim', model: 'gemma-4-26b-a4b-it' });
+    expect(res.status).toBe(404);
+  });
+
+  it('他ユーザーのemailを本文に直接書いても(userTokenを偽造しない限り)自分のuserTokenのsub以外は評価対象にならない(実際に報告された脆弱性の再発防止)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver', 'victim@example.com': 'victim-user' });
+    insertShare(db, 'share-victim', 'victim-user', '他人の質問', '他人の回答', '@cf/google/gemma-4-26b-a4b-it');
+    insertLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postJevScore(db, { userToken, email: 'victim@example.com', shareId: 'share-victim', model: 'gemma-4-26b-a4b-it' });
     expect(res.status).toBe(404);
   });
 
@@ -189,11 +233,8 @@ describe('POST /api/aichat/jev-score-external', () => {
       return new Response('{}', { status: 200 });
     }) as typeof fetch;
     try {
-      const res = await app.request(
-        '/api/aichat/jev-score-external',
-        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-        { ...BASE_ENV, DB: wrapD1(db) }
-      );
+      const userToken = await makeUserToken('ok@example.com');
+      const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
       expect(res.status).toBe(200);
       const bodyJson = await res.json() as { scores: Array<{ labelId: number; value: number }>; cachedCount: number; newlyEvaluatedCount: number };
       expect(bodyJson.cachedCount).toBe(2);
@@ -218,11 +259,8 @@ describe('POST /api/aichat/jev-score-external', () => {
       return new Response(JSON.stringify({ answers: { '2': 0.42 } }), { status: 200 });
     }) as typeof fetch;
     try {
-      const res = await app.request(
-        '/api/aichat/jev-score-external',
-        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-        { ...BASE_ENV, DB: wrapD1(db) }
-      );
+      const userToken = await makeUserToken('ok@example.com');
+      const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
       expect(res.status).toBe(200);
       const bodyJson = await res.json() as { scores: Array<{ labelId: number; value: number }>; cachedCount: number; newlyEvaluatedCount: number };
       expect(bodyJson.cachedCount).toBe(1);
@@ -252,11 +290,8 @@ describe('POST /api/aichat/jev-score-external', () => {
       return new Response(JSON.stringify({ answers: { '1': 0.55 } }), { status: 200 });
     }) as typeof fetch;
     try {
-      const res = await app.request(
-        '/api/aichat/jev-score-external',
-        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it', targetType: 'source_question' }) },
-        { ...BASE_ENV, DB: wrapD1(db) }
-      );
+      const userToken = await makeUserToken('ok@example.com');
+      const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it', targetType: 'source_question' });
       expect(res.status).toBe(200);
       expect(capturedState).toBe('これは質問です');
 
@@ -275,11 +310,8 @@ describe('POST /api/aichat/jev-score-external', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => new Response('internal error', { status: 500 })) as typeof fetch;
     try {
-      const res = await app.request(
-        '/api/aichat/jev-score-external',
-        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-        { ...BASE_ENV, DB: wrapD1(db) }
-      );
+      const userToken = await makeUserToken('ok@example.com');
+      const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
       expect(res.status).toBe(502);
       const bodyJson = await res.json() as { error: string };
       expect(bodyJson.error).not.toBe('');
@@ -302,11 +334,8 @@ describe('POST /api/aichat/jev-score-external', () => {
       return new Response('{}', { status: 200 });
     }) as typeof fetch;
     try {
-      const res = await app.request(
-        '/api/aichat/jev-score-external',
-        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
-        { ...BASE_ENV, DB: wrapD1(db) }
-      );
+      const userToken = await makeUserToken('ok@example.com');
+      const res = await postJevScore(db, { userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' });
       expect(res.status).toBe(500);
       expect(fetchCalled).toBe(false);
     } finally {
@@ -315,9 +344,10 @@ describe('POST /api/aichat/jev-score-external', () => {
   });
 
   it('DB未設定時はフェイルクローズで503を返す', async () => {
+    const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(
       '/api/aichat/jev-score-external',
-      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
       { ...BASE_ENV }
     );
     expect(res.status).toBe(503);
