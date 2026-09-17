@@ -14,7 +14,8 @@ Jevは文章生成・要約向けの通常のLLMとは異なり、あらかじ�
 というニーズに対し、Jevを個々の回答の確定ラベル付け役、既存のベクトル埋め込みを類似検索・
 重複スキップ役として役割分担させる。
 
-**現状のステータス**: 設計のみ。Jev APIキーを取得できるか未確定のため、実装は保留。
+**現状のステータス**: Jev APIキー取得済み(`wrangler secret put JEV_API_KEY`で設定)。
+実装に着手する。
 
 ## 2. 全体フロー
 
@@ -23,10 +24,10 @@ Jevは文章生成・要約向けの通常のLLMとは異なり、あらかじ�
    titleRightに一括処理ボタンを追加
         ↓ クリック
 ② cloudflare-workers-github-oauth-1側のAPIへリクエスト
-   (対象範囲: 今開いている質問グループ分 or キャッシュ全体、要決定)
+   (対象範囲: 今開いている質問グループ分のみ)
         ↓
 ③ 未処理分だけ抽出
-   jev_evaluationsに(target_type, target_id, model, question_id)が
+   jev_evaluationsに(target_type, cache_question_id, model, axis_id)が
    無い組み合わせ = 未処理、として重複を防ぐ
    (任意の最適化: aichat_answer_vectorsでほぼ同一の回答が既に
     評価済みならJev呼び出し自体を省略し、そのラベルを流用する)
@@ -34,11 +35,17 @@ Jevは文章生成・要約向けの通常のLLMとは異なり、あらかじ�
 ④ 未処理分だけJev APIへ投げる(score中心、20軸を並列評価)
         ↓
 ⑤ 結果を保存
-   jev_questions(質問=評価軸は追記専用・不変)
-   jev_evaluations(target_type, target_id, model, question_id, value)
+   jev_axes(評価軸は追記専用・不変)
+   jev_evaluations(target_type, cache_question_id, model, axis_id, value)
         ↓
 ⑥ モデルごとにGROUP BY集計 → 比較表示(グループ平均→詳細20軸→元キャッシュ本文)
 ```
+
+**`cache_question_id`が全ての紐付けの起点**であることが重要。ai-cacheの回答文は
+既に`(質問ID, モデル名)`で一意に識別されており、その質問IDは過去ログ検索の
+キーワードとも結びついている。分析結果をこの`cache_question_id`にそのまま
+紐付けることで、既存の「検索キーワード→質問ID→モデル→回答本文」という鎖に
+Jevの分析結果が輪として加わるだけになり、迷子になるデータが生まれない。
 
 LLMへの再エスカレーション(疑問点を埋めるために別のAIへ聞き直す)は、
 「モデル比較の粗い指標が欲しいだけ」という目的には不要と判断し、対象外とした。
@@ -47,11 +54,14 @@ CI監視(GitHub webhook→Slack通知の判定)へのJev導入も、ChatGPT通�
 
 ## 3. テーブル設計
 
-**対象**: 新規テーブル`jev_questions`・`jev_evaluations` — 評価軸を追記専用にし、
-軸が増えても過去の評価データと矛盾しないようにする。
+**対象**: 新規テーブル`jev_axes`・`jev_evaluations` — 評価軸を追記専用にし、
+軸が増えても過去の評価データと矛盾しないようにする。「ai-cacheの質問ID」と
+「Jevの評価軸ID」が同じ`question_id`という言葉で混同しないよう、列名を
+`cache_question_id`(ai-cache側の質問ID)と`axis_id`(Jevの評価軸ID)に分けて
+明確に区別する。
 
 ```sql
-CREATE TABLE jev_questions (
+CREATE TABLE jev_axes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,      -- noul / choice / score
   question_text TEXT NOT NULL,
@@ -62,20 +72,27 @@ CREATE TABLE jev_questions (
 
 CREATE TABLE jev_evaluations (
   target_type TEXT NOT NULL,        -- 'answer' または 'source_question'
-  target_id TEXT NOT NULL,          -- answer_id、または元の質問のid
+  cache_question_id TEXT NOT NULL,  -- ai-cache側の質問ID(AiCacheQsearchRow.id)
   model TEXT,                       -- source_questionの場合はNULL(モデル非依存)
-  question_id INTEGER NOT NULL REFERENCES jev_questions(id),
+  axis_id INTEGER NOT NULL REFERENCES jev_axes(id),
   value REAL NOT NULL,              -- 0〜1のscore/probability
   computed_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (target_type, target_id, model, question_id)
+  PRIMARY KEY (target_type, cache_question_id, model, axis_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_jev_evaluations_cache_question_id ON jev_evaluations(cache_question_id);
 ```
 
 ### 設計判断のポイント
 
-- **`jev_questions`は追記専用(UPDATE禁止)**。質問文を変えたくなったら新しい行を追加する。
-  同じ`question_id`が指す質問文は永久に変わらないため、過去の`value`と矛盾しない
-- **集計は必ず`question_id`で明示的にJOINする**。score列を1本にまとめて雑平均しない
+- **`jev_axes`は追記専用(UPDATE禁止)**。質問文を変えたくなったら新しい行を追加する。
+  同じ`axis_id`が指す質問文は永久に変わらないため、過去の`value`と矛盾しない
+- **集計は必ず`axis_id`で明示的にJOINする**。score列を1本にまとめて雑平均しない
+- **`cache_question_id`が全ての紐付けの起点**。ai-cacheの回答文は既に
+  `(cache_question_id, model)`で一意に識別されており、その質問IDは過去ログ検索の
+  キーワードとも結びついている。分析結果を同じ`cache_question_id`に紐付けることで、
+  既存の「検索キーワード→質問ID→モデル→回答本文」の鎖にそのまま乗る(片方だけ
+  持ち回るコードは書かない)
 - **`target_type`で「回答」と「元の質問文」を同じ軸で評価できる**。回答が曖昧なとき、
   モデルの問題か質問の聞き方の問題かを、同じ評価軸を両方に適用して切り分けられる
   (質問の具体性が高いのに回答の具体性が低い→モデルの問題、質問の具体性自体が
@@ -85,7 +102,7 @@ CREATE TABLE jev_evaluations (
 
 ## 4. 評価軸(初期セット・20軸・4グループ)
 
-**対象**: `jev_questions`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
+**対象**: `jev_axes`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
 (両極を明示)として表現し、質問側の原因切り分けにも同じ軸を使い回す。
 
 | グループ | 軸 | 悪い状態(0側) | 良い状態(1側) |
@@ -111,7 +128,7 @@ CREATE TABLE jev_evaluations (
 | 応答姿勢・手続き | 客観性 | 主観・憶測が混ざる | 客観的・検証済み |
 | 応答姿勢・手続き | 再現性 | 同条件でも判定基準が揺れる | 同一基準で再判定可能 |
 
-軸は今後いつでも追加できる(`jev_questions`への追記のみ、スキーマ変更不要)。
+軸は今後いつでも追加できる(`jev_axes`への追記のみ、スキーマ変更不要)。
 
 ## 5. UI設計
 
@@ -128,13 +145,23 @@ CREATE TABLE jev_evaluations (
 一括処理ボタンは`/ai-cache`の回答カード(`CardChrome`)の`titleRight`propに配置する
 (タイトル文字列右側に任意コンポーネントを埋め込む既存の仕組みをそのまま使える)。
 
-## 6. 未決事項(実装着手時に決定)
+## 6. 決定事項・残タスク
 
-1. **Jev APIキーの取得可否**(本計画が実装に進めるかどうかの前提条件)
-2. 一括処理ボタンの対象範囲: 今開いている質問グループ分のみ処理するか、
-   キャッシュ全体を一括処理するか
-3. モデル比較画面の設置場所: 新規ページか、既存の`/ai-cache`や`/status`に統合するか
-4. Jev呼び出しのタイミング: オンデマンド(ボタン押下時のみ)か、cronによる定期実行も
-   追加するか
-5. 過去分の回答への軸バックフィル要否(新しい評価軸を追加した際、既存の評価済み
-   回答に遡って適用するかどうか)
+- Jev APIキー: **取得済み**(`JEV_API_KEY`という名前で`wrangler secret put`設定)
+- 一括処理ボタンの対象範囲: **今開いている質問グループ分のみ**(キャッシュ全体の
+  一括処理は行わない)
+- モデル比較結果の表示場所: **`/ai-cache`側にモーダルで簡易表示**(専用ページは後回し)
+- Jev呼び出しのタイミング: **オンデマンドのみ**(ボタン押下時。cron等の定期実行なし)
+- 過去分の回答への軸バックフィル: **なし**(今後の新規評価分から対象。新しい軸を
+  追加しても既存データと矛盾しない設計のため、後から気が向いた時にバックフィル
+  ジョブを別途書けばよい)
+
+### 実装タスク
+
+1. D1マイグレーション: `jev_axes`(初期20軸をINSERT)・`jev_evaluations`
+2. コピペ用SQL(CLAUDE.mdルール14: `wrangler d1 execute`でそのまま実行できる形)
+3. cloudflare-workers-github-oauth-1にJev呼び出し用APIエンドポイントを追加
+   (未処理分だけ抽出→Jevへ→D1保存。`cache_question_id`/`model`/`axis_id`の
+   紐付けを崩さないこと)
+4. dynamicneko `/ai-cache`の回答カード(`CardChrome`の`titleRight`)に
+   一括処理ボタンを追加
