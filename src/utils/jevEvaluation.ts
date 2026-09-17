@@ -92,6 +92,17 @@ function extractScoreValue(entry: unknown): number | null {
   return null;
 }
 
+/**
+ * /ai-cacheの左サイドパネルの質問文リストで、既にJev評価済みの回答を
+ * 緑背景にするためのフラグを付与する。qsearch-externalのレスポンス組み立てで使う。
+ */
+export function attachJevResultFlags<T extends { id: string }>(
+  items: T[],
+  evaluatedShareIds: ReadonlySet<string>,
+): (T & { hasJevResult: boolean })[] {
+  return items.map((item) => ({ ...item, hasJevResult: evaluatedShareIds.has(item.id) }));
+}
+
 export type JevFetch = (url: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> }>;
 
 /**

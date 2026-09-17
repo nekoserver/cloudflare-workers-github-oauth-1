@@ -420,7 +420,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
-import { computeJevEvaluationPlan, callJevApi, type JevLabel } from './utils/jevEvaluation';
+import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -13432,7 +13432,26 @@ app.post('/api/aichat/qsearch-external', async (c) => {
     // (件数が多いと重く、/neko qsearch側もモーダルを開くまでは表示しない
     // 設計に揃えている)。回答本文が必要な場合は
     // /api/aichat/qsearch-external/latest-answer を別途呼ぶ。
-    return jsonUtf8({ rows: mapAiChatSharesToQsearchItems(results) });
+    const items = mapAiChatSharesToQsearchItems(results);
+    // /ai-cacheの左サイドパネルで、既にJev評価済みの回答を緑背景にするための
+    // フラグ。この確認に失敗しても検索結果自体は返す(装飾用フラグのため、
+    // 失敗時は全件hasJevResult=falseにフォールバックする。エラーはログに記録する)。
+    let evaluatedShareIds = new Set<string>();
+    if (items.length > 0 && c.env.DB) {
+      try {
+        const placeholders = items.map(() => '?').join(',');
+        const jevRows = await c.env.DB.prepare(
+          `SELECT DISTINCT share_id FROM jev_evaluations WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+        )
+          .bind(login, ...items.map((item) => item.id))
+          .all<{ share_id: string }>();
+        evaluatedShareIds = new Set((jevRows.results ?? []).map((row) => row.share_id));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[dynamicneko-ai-cache] jev_evaluations有無確認クエリ失敗', { login, error: message });
+      }
+    }
+    return jsonUtf8({ rows: attachJevResultFlags(items, evaluatedShareIds) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[dynamicneko-ai-cache] 過去ログ検索に失敗', { login, error: message });
