@@ -175,6 +175,14 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
   追加しても既存データと矛盾しない設計のため、後から気が向いた時にバックフィル
   ジョブを別途書けばよい)
 
+### 将来拡張(現時点では未着手・未設計)
+
+**対象**: 回答をハッシュ経由でネット接続モデルに引用評価させる仕組み(現状D1テーブル無し、
+今回のJev設計とは別物) — 作る場合もJevのテーブルには混ぜず、`share_id`だけを共通キーに
+した別テーブル(例: `citation_verifications`)にする。Jevは固定候補への高速判定、引用評価は
+ネットに繋いで最新情報と突き合わせる判定であり性質が異なるため、`jev_labels`/`jev_evaluations`
+に無理に統合しない。
+
 ### 実装タスク
 
 1. D1マイグレーション: `jev_label_groups`(初期4グループをINSERT)・`jev_labels`
