@@ -1,4 +1,24 @@
-export type JevLabel = { id: number; question_text: string };
+export type JevLabel = { id: number; question_text: string; criteria: string[] };
+
+/**
+ * jev_labels.options_jsonから、Jev API送信用のcriteria(0側/1側の説明2要素配列)を
+ * 取り出す。実測したJev APIの仕様で`criteria`は文字列ではなくlistが必須
+ * (HTTP 422 "Input should be a valid list"で判明)なため、不正な形式は
+ * nullを返して呼び出し元に判断を委ねる(黙って空配列などで誤魔化さない)。
+ */
+export function parseLabelCriteria(optionsJson: string | null): string[] | null {
+  if (!optionsJson) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(optionsJson);
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed) && parsed.length === 2 && parsed.every((v) => typeof v === 'string')) {
+    return parsed;
+  }
+  return null;
+}
 
 export type JevScoreResult = { labelId: number; value: number };
 
@@ -34,11 +54,14 @@ export function computeJevEvaluationPlan(
  * Jev APIの`questions`は配列ではなく、質問ID(ここではjev_labels.idの文字列化)を
  * キーにした辞書(オブジェクト)を要求する
  * (実測: 配列で送るとHTTP 422 "Input should be a valid dictionary")。
+ * score型の質問には`criteria`(0側/1側の説明を2要素の配列で)が必須
+ * (実測: 無いとHTTP 422 "Field required"、文字列で送るとHTTP 422
+ * "Input should be a valid list")。
  */
 export function buildJevRequestBody(state: string, labels: JevLabel[]) {
-  const questions: Record<string, { type: 'score'; question: string }> = {};
+  const questions: Record<string, { type: 'score'; question: string; criteria: string[] }> = {};
   for (const label of labels) {
-    questions[String(label.id)] = { type: 'score', question: label.question_text };
+    questions[String(label.id)] = { type: 'score', question: label.question_text, criteria: label.criteria };
   }
   return {
     model: 'jev-latest',
