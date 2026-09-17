@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachJevResultFlags,
   buildJevRequestBody,
   callJevApi,
   computeJevEvaluationPlan,
@@ -99,6 +100,23 @@ describe('parseJevApiResponse', () => {
   it('labelsが0件なら常に成功・空配列を返す', () => {
     const result = parseJevApiResponse([], { anything: true });
     expect(result).toEqual({ ok: true, scores: [] });
+  });
+});
+
+describe('attachJevResultFlags', () => {
+  it('evaluatedShareIdsに含まれるidだけhasJevResultをtrueにする', () => {
+    const items = [{ id: 'share-1', question: 'q1' }, { id: 'share-2', question: 'q2' }];
+    const result = attachJevResultFlags(items, new Set(['share-1']));
+    expect(result).toEqual([
+      { id: 'share-1', question: 'q1', hasJevResult: true },
+      { id: 'share-2', question: 'q2', hasJevResult: false },
+    ]);
+  });
+
+  it('evaluatedShareIdsが空なら全件falseになる', () => {
+    const items = [{ id: 'share-1' }];
+    const result = attachJevResultFlags(items, new Set());
+    expect(result).toEqual([{ id: 'share-1', hasJevResult: false }]);
   });
 });
 
