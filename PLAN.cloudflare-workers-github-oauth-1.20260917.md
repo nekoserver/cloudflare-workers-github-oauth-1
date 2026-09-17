@@ -178,10 +178,11 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 ### 将来拡張(現時点では未着手・未設計)
 
 **対象**: 回答をハッシュ経由でネット接続モデルに引用評価させる仕組み(現状D1テーブル無し、
-今回のJev設計とは別物) — 作る場合もJevのテーブルには混ぜず、`share_id`だけを共通キーに
-した別テーブル(例: `citation_verifications`)にする。Jevは固定候補への高速判定、引用評価は
-ネットに繋いで最新情報と突き合わせる判定であり性質が異なるため、`jev_labels`/`jev_evaluations`
-に無理に統合しない。
+今回のJev設計とは別物) — **同じテーブルに入れる案は最初から出ていない**。作る場合は常に
+独立した別テーブル(例: `citation_verifications`)にし、`jev_evaluations`とは`share_id`を
+外部キーとして共有するだけの関係にとどめる。Jevは固定候補への高速判定、引用評価はネットに
+繋いで最新情報と突き合わせる判定であり性質が異なるため、テーブルそのものを統合することは
+今後も行わない。
 
 ### 実装タスク
 
