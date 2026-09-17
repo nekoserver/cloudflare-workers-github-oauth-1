@@ -421,6 +421,7 @@ import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynam
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, type JevLabel } from './utils/jevEvaluation';
+import { matchKatakanaCountryName, parseCountryKeywordLabelRows } from './utils/jevCountryKeyword';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -13806,6 +13807,142 @@ app.post('/api/aichat/jev-score-external', async (c) => {
     shareId,
     model: evalModel,
     targetType,
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
+});
+
+/**
+ * jev-score-externalの国名版。AI分類のキーワードがカタカナの国名
+ * (「フランス」等、src/utils/jevCountryKeyword.tsのKATAKANA_COUNTRY_NAMES
+ * に登録済みのもの)だった場合専用のエントリポイント。
+ *
+ * jev_evaluations(ai_chat_sharesの回答をshare_id/modelで引く)とは対象が
+ * 異なるため、保存先もjev_country_keyword_labels/jev_country_keyword_evaluations
+ * (マイグレーション0145)という別テーブルに分けている。認可・login解決・
+ * userToken検証はjev-score-externalと同じパターンを踏襲する(リクエスト
+ * 本文のloginやemailは信用しない)。
+ *
+ * keywordがカタカナの既知国名一覧に一致しない場合は400で拒否する
+ * (この専用エンドポイントに旅程前提の一般キーワードが紛れ込むのを防ぐ)。
+ */
+app.post('/api/aichat/jev-country-score-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string; keyword?: string }>().catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
+  const rawKeyword = body?.keyword ?? '';
+  if (!rawKeyword.trim()) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+  const countryName = matchKatakanaCountryName(rawKeyword);
+  if (!countryName) {
+    return jsonUtf8({ error: 'keywordはカタカナの既知国名(例: フランス)である必要があります。このエンドポイントは国名専用です' }, 400);
+  }
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-country-score] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-country-score] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-country-score] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-country-score] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  let allLabels: JevLabel[] = [];
+  try {
+    const rows = await c.env.DB.prepare('SELECT id, question_text, options_json FROM jev_country_keyword_labels').all<{
+      id: number;
+      question_text: string;
+      options_json: string | null;
+    }>();
+    const parsed = parseCountryKeywordLabelRows(rows.results ?? []);
+    if (!parsed.ok) {
+      logger.error('[jev-country-score] jev_country_keyword_labels.options_jsonが不正です(Jev APIのcriteriaに必要な2要素配列)', { labelId: parsed.invalidLabelId });
+      return jsonUtf8({ error: `ラベル(id=${parsed.invalidLabelId})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+    }
+    allLabels = parsed.labels;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-country-score] jev_country_keyword_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_country_keyword_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) {
+    return jsonUtf8({ error: 'jev_country_keyword_labelsが1件も登録されていません' }, 500);
+  }
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_country_keyword_label_id as jev_label_id, value FROM jev_country_keyword_evaluations WHERE user_id = ? AND keyword = ?'
+    )
+      .bind(login, countryName)
+      .all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-country-score] jev_country_keyword_evaluations取得クエリ失敗', { countryName, error: message });
+    return jsonUtf8({ error: 'jev_country_keyword_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({
+      apiKey: c.env.JEV_API_KEY,
+      state: countryName,
+      labels: plan.pending,
+      fetchImpl: fetch,
+    });
+    if (!jevResult.ok) {
+      logger.error('[jev-country-score] Jev API呼び出し失敗', { countryName, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_country_keyword_evaluations (keyword, user_id, jev_country_keyword_label_id, value) VALUES (?, ?, ?, ?)'
+        )
+          .bind(countryName, login, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-country-score] jev_country_keyword_evaluations保存クエリ失敗', { countryName, error: message });
+      return jsonUtf8({ error: 'jev_country_keyword_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    keyword: countryName,
     scores: allScores,
     newlyEvaluatedCount: newScores.length,
     cachedCount: plan.cached.length,
