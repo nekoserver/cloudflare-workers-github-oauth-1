@@ -73,6 +73,16 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
     );
     CREATE TABLE aichat_images (id TEXT PRIMARY KEY, image_data_url TEXT);
     CREATE TABLE aichat_moondream_analyses (share_id TEXT, user_id TEXT, analysis_text TEXT);
+    CREATE TABLE jev_evaluations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      share_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      model TEXT,
+      jev_label_id INTEGER NOT NULL,
+      value REAL NOT NULL,
+      computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
@@ -162,6 +172,25 @@ describe('POST /api/aichat/qsearch-external', () => {
     expect(body.rows[0].question).toBe('デプロイ手順を教えて');
     expect(body.rows[0].model).toBe('qwen3.8-27b');
     expect('answer' in body.rows[0]).toBe(false);
+  });
+
+  it('jev_evaluationsに評価済み行がある回答はhasJevResult=trueを返す(/ai-cacheの緑背景判定用)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertShare(db, 'share-1', 'nekoserver', 'デプロイ手順を教えて', 'デプロイはwranglerで行います');
+    insertShare(db, 'share-2', 'nekoserver', 'デプロイ方法その2を教えて', '別の回答');
+    db.prepare(
+      `INSERT INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES ('answer', 'share-1', 'nekoserver', 'gemma-4-26b-a4b-it', 1, 0.8)`
+    ).run();
+    const res = await app.request(
+      '/api/aichat/qsearch-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', keyword: 'デプロイ' }) },
+      { AICHAT_EXTERNAL_SECRET: SECRET, DB: wrapD1(db) }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { rows: Array<{ id: string; hasJevResult: boolean }> };
+    const byId = Object.fromEntries(body.rows.map((r) => [r.id, r.hasJevResult]));
+    expect(byId['share-1']).toBe(true);
+    expect(byId['share-2']).toBe(false);
   });
 
   it('回答が質問文・回答文どちらにもキーワードを含まない場合はヒットしない', async () => {

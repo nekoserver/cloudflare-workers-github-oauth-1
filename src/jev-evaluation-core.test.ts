@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachJevResultFlags,
   buildJevRequestBody,
   callJevApi,
   computeJevEvaluationPlan,
@@ -42,22 +43,22 @@ describe('computeJevEvaluationPlan', () => {
 });
 
 describe('buildJevRequestBody', () => {
-  it('score型の質問をlabelsの並び順で組み立てる', () => {
+  it('questionsをラベルIDをキーにした辞書として組み立てる(配列だとJev APIが422を返すため)', () => {
     const body = buildJevRequestBody('回答本文', labels);
     expect(body).toEqual({
       model: 'jev-latest',
       state: '回答本文',
-      questions: [
-        { type: 'score', question: labels[0].question_text },
-        { type: 'score', question: labels[1].question_text },
-      ],
+      questions: {
+        '1': { type: 'score', question: labels[0].question_text },
+        '2': { type: 'score', question: labels[1].question_text },
+      },
     });
   });
 });
 
 describe('parseJevApiResponse', () => {
-  it('answers配列(数値)を順序通りlabelIdへ結び付ける', () => {
-    const result = parseJevApiResponse(labels, { answers: [0.9, 0.2] });
+  it('answers辞書(数値)をラベルIDのキーでlabelIdへ結び付ける', () => {
+    const result = parseJevApiResponse(labels, { answers: { '1': 0.9, '2': 0.2 } });
     expect(result).toEqual({
       ok: true,
       scores: [
@@ -67,8 +68,8 @@ describe('parseJevApiResponse', () => {
     });
   });
 
-  it('answers配列(オブジェクト形式 {score})にも対応する', () => {
-    const result = parseJevApiResponse(labels, { answers: [{ score: 0.7 }, { value: 0.4 }] });
+  it('answers辞書(オブジェクト形式 {score})にも対応する', () => {
+    const result = parseJevApiResponse(labels, { answers: { '1': { score: 0.7 }, '2': { value: 0.4 } } });
     expect(result).toEqual({
       ok: true,
       scores: [
@@ -84,14 +85,20 @@ describe('parseJevApiResponse', () => {
     if (!result.ok) expect(result.errorCode).toBe('unexpected_shape');
   });
 
-  it('件数が送信した質問数と一致しない場合はlength_mismatchで失敗を返す', () => {
-    const result = parseJevApiResponse(labels, { answers: [0.9] });
+  it('answersが配列(辞書ではない)場合はunexpected_shapeで失敗を返す', () => {
+    const result = parseJevApiResponse(labels, { answers: [0.9, 0.2] });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errorCode).toBe('length_mismatch');
+    if (!result.ok) expect(result.errorCode).toBe('unexpected_shape');
   });
 
-  it('answersの要素から数値を取り出せない場合はunexpected_shapeで失敗を返す', () => {
-    const result = parseJevApiResponse(labels, { answers: [{ foo: 'bar' }, 0.4] });
+  it('一部のラベルIDがanswersに含まれない場合はunexpected_shapeで失敗を返す', () => {
+    const result = parseJevApiResponse(labels, { answers: { '1': 0.9 } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('unexpected_shape');
+  });
+
+  it('answersの値から数値を取り出せない場合はunexpected_shapeで失敗を返す', () => {
+    const result = parseJevApiResponse(labels, { answers: { '1': { foo: 'bar' }, '2': 0.4 } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errorCode).toBe('unexpected_shape');
   });
@@ -102,12 +109,29 @@ describe('parseJevApiResponse', () => {
   });
 });
 
+describe('attachJevResultFlags', () => {
+  it('evaluatedShareIdsに含まれるidだけhasJevResultをtrueにする', () => {
+    const items = [{ id: 'share-1', question: 'q1' }, { id: 'share-2', question: 'q2' }];
+    const result = attachJevResultFlags(items, new Set(['share-1']));
+    expect(result).toEqual([
+      { id: 'share-1', question: 'q1', hasJevResult: true },
+      { id: 'share-2', question: 'q2', hasJevResult: false },
+    ]);
+  });
+
+  it('evaluatedShareIdsが空なら全件falseになる', () => {
+    const items = [{ id: 'share-1' }];
+    const result = attachJevResultFlags(items, new Set());
+    expect(result).toEqual([{ id: 'share-1', hasJevResult: false }]);
+  });
+});
+
 describe('callJevApi', () => {
   it('正常応答時はparseJevApiResponse相当の結果を返す', async () => {
     const fetchImpl = async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ answers: [0.5, 0.6] }),
+      json: async () => ({ answers: { '1': 0.5, '2': 0.6 } }),
       text: async () => '',
     });
     const result = await callJevApi({ apiKey: 'key', state: 'text', labels, fetchImpl });

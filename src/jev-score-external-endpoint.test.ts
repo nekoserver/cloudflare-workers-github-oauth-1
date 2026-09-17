@@ -214,7 +214,7 @@ describe('POST /api/aichat/jev-score-external', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (_url: string, init?: RequestInit) => {
       requestedQuestions = JSON.parse(String(init?.body)).questions;
-      return new Response(JSON.stringify({ answers: [0.42] }), { status: 200 });
+      return new Response(JSON.stringify({ answers: { '2': 0.42 } }), { status: 200 });
     }) as typeof fetch;
     try {
       const res = await app.request(
@@ -230,7 +230,7 @@ describe('POST /api/aichat/jev-score-external', () => {
         { labelId: 1, value: 0.9 },
         { labelId: 2, value: 0.42 },
       ]);
-      expect((requestedQuestions as unknown[]).length).toBe(1);
+      expect(Object.keys(requestedQuestions as Record<string, unknown>).length).toBe(1);
 
       const saved = db.prepare('SELECT jev_label_id, value FROM jev_evaluations WHERE share_id = ? AND jev_label_id = 2').get('share-1') as { jev_label_id: number; value: number };
       expect(saved.value).toBeCloseTo(0.42);
@@ -248,7 +248,7 @@ describe('POST /api/aichat/jev-score-external', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (_url: string, init?: RequestInit) => {
       capturedState = JSON.parse(String(init?.body)).state;
-      return new Response(JSON.stringify({ answers: [0.55] }), { status: 200 });
+      return new Response(JSON.stringify({ answers: { '1': 0.55 } }), { status: 200 });
     }) as typeof fetch;
     try {
       const res = await app.request(

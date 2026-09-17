@@ -30,22 +30,31 @@ export function computeJevEvaluationPlan(
   return { pending, cached };
 }
 
+/**
+ * Jev APIの`questions`は配列ではなく、質問ID(ここではjev_labels.idの文字列化)を
+ * キーにした辞書(オブジェクト)を要求する
+ * (実測: 配列で送るとHTTP 422 "Input should be a valid dictionary")。
+ */
 export function buildJevRequestBody(state: string, labels: JevLabel[]) {
+  const questions: Record<string, { type: 'score'; question: string }> = {};
+  for (const label of labels) {
+    questions[String(label.id)] = { type: 'score', question: label.question_text };
+  }
   return {
     model: 'jev-latest',
     state,
-    questions: labels.map((label) => ({ type: 'score' as const, question: label.question_text })),
+    questions,
   };
 }
 
 export type JevApiResult =
   | { ok: true; scores: JevScoreResult[] }
-  | { ok: false; errorCode: 'http_error' | 'invalid_json' | 'unexpected_shape' | 'length_mismatch'; detail: string };
+  | { ok: false; errorCode: 'http_error' | 'invalid_json' | 'unexpected_shape'; detail: string };
 
 /**
- * Jevのレスポンス(質問の並び順=labelsの並び順で1件ずつ値が返る想定)を
- * labelIdに結び付ける。文字列prefixでの判定はせず、常にこの判別可能な
- * 戻り値型(JevApiResult)で成否を表現する(ルール32)。
+ * Jevのレスポンス(answersも質問IDをキーにした辞書で返る想定)をlabelIdに
+ * 結び付ける。文字列prefixでの判定はせず、常にこの判別可能な戻り値型
+ * (JevApiResult)で成否を表現する(ルール32)。
  */
 export function parseJevApiResponse(labels: JevLabel[], json: unknown): JevApiResult {
   if (labels.length === 0) return { ok: true, scores: [] };
@@ -53,29 +62,22 @@ export function parseJevApiResponse(labels: JevLabel[], json: unknown): JevApiRe
     return { ok: false, errorCode: 'unexpected_shape', detail: 'レスポンスがオブジェクトではありません' };
   }
   const answers = (json as { answers?: unknown }).answers;
-  if (!Array.isArray(answers)) {
-    return { ok: false, errorCode: 'unexpected_shape', detail: 'answers配列がレスポンスに含まれていません' };
+  if (answers === null || typeof answers !== 'object' || Array.isArray(answers)) {
+    return { ok: false, errorCode: 'unexpected_shape', detail: 'answersが辞書(オブジェクト)ではありません' };
   }
-  if (answers.length !== labels.length) {
-    return {
-      ok: false,
-      errorCode: 'length_mismatch',
-      detail: `送信した質問数(${labels.length})とレスポンスの件数(${answers.length})が一致しません`,
-    };
-  }
+  const answersObj = answers as Record<string, unknown>;
 
   const scores: JevScoreResult[] = [];
-  for (let i = 0; i < labels.length; i++) {
-    const entry = answers[i];
-    const value = extractScoreValue(entry);
-    if (value === null) {
-      return {
-        ok: false,
-        errorCode: 'unexpected_shape',
-        detail: `answers[${i}]から数値のscoreを取り出せませんでした`,
-      };
+  for (const label of labels) {
+    const key = String(label.id);
+    if (!(key in answersObj)) {
+      return { ok: false, errorCode: 'unexpected_shape', detail: `answersに質問ID ${key} の結果が含まれていません` };
     }
-    scores.push({ labelId: labels[i].id, value });
+    const value = extractScoreValue(answersObj[key]);
+    if (value === null) {
+      return { ok: false, errorCode: 'unexpected_shape', detail: `answers[${key}]から数値のscoreを取り出せませんでした` };
+    }
+    scores.push({ labelId: label.id, value });
   }
   return { ok: true, scores };
 }
@@ -90,6 +92,17 @@ function extractScoreValue(entry: unknown): number | null {
     }
   }
   return null;
+}
+
+/**
+ * /ai-cacheの左サイドパネルの質問文リストで、既にJev評価済みの回答を
+ * 緑背景にするためのフラグを付与する。qsearch-externalのレスポンス組み立てで使う。
+ */
+export function attachJevResultFlags<T extends { id: string }>(
+  items: T[],
+  evaluatedShareIds: ReadonlySet<string>,
+): (T & { hasJevResult: boolean })[] {
+  return items.map((item) => ({ ...item, hasJevResult: evaluatedShareIds.has(item.id) }));
 }
 
 export type JevFetch = (url: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> }>;
