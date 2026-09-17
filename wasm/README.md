@@ -65,6 +65,12 @@ export function sha256HexViaWasm(input: string): string {
 
 ## 導入済みモジュール一覧
 
+Jev CLIについては、既存CLIを丸ごと移植するのではなく、入力検証・APIペイロード構築・
+レスポンス整形だけを候補にする実現可能性調査を
+[`SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md`](../SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md)
+に記載している。Jev APIキーとHTTP通信はWorker側に残す方針で、現時点では
+`jev-wasm`モジュールは未実装である。
+
 - `sha256-wasm`: SHA-256計算(`sha2` crate)。`/sha256-wasm`ページ・`/neko 256`
 - `factor-wasm`: GNU coreutils `factor` を模した素因数分解(試し割り法、
   0以上2^53以下の整数のみ対応)。`/factor-wasm`ページ・`/neko factor`。
