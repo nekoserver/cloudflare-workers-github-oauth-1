@@ -118,6 +118,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 2402703,
     builtAt: '2026-09-06',
   },
+  {
+    id: 'jev',
+    name: 'jev (Jev評価ロジック, Rust)',
+    description:
+      'Jev(TypeSafe AI System One Model)評価の純粋ロジック(criteriaの入力検証・未評価ラベルの抽出・APIリクエストボディ組み立て・レスポンス解析)をRustで実装。HTTP通信・APIキー・D1・認可はWorker側のTypeScriptが担当する。ブラウザページ・/neko サブコマンドからはまだ呼ばれておらず、src/utils/jevWasmServer.ts経由でのサーバー再利用のみ用意している',
+    wasmPath: 'public/wasm/jev_bg.wasm',
+    sourceDir: 'wasm/jev-wasm',
+    sourceFile: 'wasm/jev-wasm/src/lib.rs',
+    approxSize: '約106KB',
+    sizeBytes: 108613,
+    builtAt: '2026-09-17',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
