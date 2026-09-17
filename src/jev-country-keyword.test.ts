@@ -86,6 +86,25 @@ describe('COUNTRY_LEVEL_JEV_LABELS', () => {
     const ids = COUNTRY_LEVEL_JEV_LABELS.map((l) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('question_textはすべて一意(旅行質問集からの追加分との重複が無いことを保証)', () => {
+    const texts = COUNTRY_LEVEL_JEV_LABELS.map((l) => l.question_text);
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+
+  it('旅行質問集(パスポート有効期間・電子渡航認証等)から国名単体で判定できる質問を追加済み', () => {
+    const texts = COUNTRY_LEVEL_JEV_LABELS.map((l) => l.question_text);
+    expect(texts).toContain('パスポートの残存有効期間6か月以上を入国要件とする国ですか?');
+    expect(texts).toContain('電子渡航認証(ESTA/ETA等)の事前オンライン申請が必要な国ですか?');
+    expect(texts).toContain('入国審査で指紋・顔写真の採取がある国ですか?');
+  });
+
+  it('個人の予約状況・旅程依存の質問(航空券・宿泊予約の有無等)は含まない', () => {
+    const texts = COUNTRY_LEVEL_JEV_LABELS.map((l) => l.question_text);
+    for (const text of texts) {
+      expect(text).not.toMatch(/予約(は|済み)|購入済み|手配済み/);
+    }
+  });
 });
 
 describe('selectJevLabelsForKeyword', () => {
