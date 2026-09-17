@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS jev_categories (
+CREATE TABLE IF NOT EXISTS jev_labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,
   question_text TEXT NOT NULL,
@@ -13,15 +13,15 @@ CREATE TABLE IF NOT EXISTS jev_evaluations (
   share_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   model TEXT,
-  category_id INTEGER NOT NULL REFERENCES jev_categories(id),
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
   value REAL NOT NULL,
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, category_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, jev_label_id);
 CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share ON jev_evaluations(share_id);
 
-INSERT OR IGNORE INTO jev_categories (question_type, question_text, group_name) VALUES
+INSERT OR IGNORE INTO jev_labels (question_type, question_text, group_name) VALUES
   ('score', '事実性(0=事実誤認がある, 1=事実として正しい)', '事実の正確さ'),
   ('score', '根拠(0=根拠・出典が不足, 1=根拠が明示されている)', '事実の正確さ'),
   ('score', '出典品質(0=出所不明・低信頼, 1=一次情報・適切な資料)', '事実の正確さ'),

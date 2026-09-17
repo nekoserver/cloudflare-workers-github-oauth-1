@@ -3,7 +3,7 @@
 ## 1. 目的
 
 **対象**: dynamicnekoの`/ai-cache`ページ、cloudflare-workers-github-oauth-1側のAIチャット回答
-キャッシュ(`aichat_answer_vectors`等)、新規D1テーブル`jev_categories`/`jev_evaluations` —
+キャッシュ(`aichat_answer_vectors`等)、新規D1テーブル`jev_labels`/`jev_evaluations` —
 キャッシュ済みのAI回答を1件ずつ読み返すことなく、モデルごとの大まかな精度・傾向を把握
 できるようにする。
 
@@ -27,18 +27,18 @@ Jevは文章生成・要約向けの通常のLLMとは異なり、あらかじ�
    (対象範囲: 今開いている質問グループ分のみ)
         ↓
 ③ 未処理分だけ抽出
-   jev_evaluationsに(target_type, share_id, model, category_id)が
+   jev_evaluationsに(target_type, share_id, model, jev_label_id)が
    無い組み合わせ = 未処理、として重複を防ぐ
    (任意の最適化: aichat_answer_vectorsでほぼ同一の回答が既に
     評価済みならJev呼び出し自体を省略し、そのラベルを流用する)
         ↓
-④ 未処理分だけJev APIへ投げる(score中心、20項目を並列評価)
+④ 未処理分だけJev APIへ投げる(score中心、20ラベルを並列評価)
         ↓
 ⑤ 結果を保存
-   jev_categories(評価項目は追記専用・不変)
-   jev_evaluations(target_type, share_id, model, category_id, value)
+   jev_labels(ラベルは追記専用・不変)
+   jev_evaluations(target_type, share_id, model, jev_label_id, value)
         ↓
-⑥ モデルごとにGROUP BY集計 → 比較表示(グループ平均→詳細20項目→元キャッシュ本文)
+⑥ モデルごとにGROUP BY集計 → 比較表示(グループ平均→詳細20ラベル→元キャッシュ本文)
 ```
 
 **`share_id`が全ての紐付けの起点**であることが重要。ai-cacheの回答文は
@@ -54,14 +54,14 @@ CI監視(GitHub webhook→Slack通知の判定)へのJev導入も、ChatGPT通�
 
 ## 3. テーブル設計
 
-**対象**: 新規テーブル`jev_categories`・`jev_evaluations` — 評価項目を追記専用にし、
-項目が増えても過去の評価データと矛盾しないようにする。「ai-cacheの質問ID」と
-「Jevの評価項目ID」が同じ`question_id`という言葉で混同しないよう、列名を
-`share_id`(ai-cache側の質問ID)と`category_id`(Jevの評価項目ID)に分けて
+**対象**: 新規テーブル`jev_labels`・`jev_evaluations` — ラベルを追記専用にし、
+ラベルが増えても過去の評価データと矛盾しないようにする。「ai-cacheの質問ID」と
+「JevのラベルID」が同じ`question_id`という言葉で混同しないよう、列名を
+`share_id`(ai-cache側の質問ID)と`jev_label_id`(JevのラベルID)に分けて
 明確に区別する。
 
 ```sql
-CREATE TABLE jev_categories (
+CREATE TABLE jev_labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,      -- noul / choice / score
   question_text TEXT NOT NULL,
@@ -74,10 +74,10 @@ CREATE TABLE jev_evaluations (
   target_type TEXT NOT NULL,        -- 'answer' または 'source_question'
   share_id TEXT NOT NULL,  -- ai-cache側の質問ID(AiCacheQsearchRow.id)
   model TEXT,                       -- source_questionの場合はNULL(モデル非依存)
-  category_id INTEGER NOT NULL REFERENCES jev_categories(id),
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
   value REAL NOT NULL,              -- 0〜1のscore/probability
   computed_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (target_type, share_id, model, category_id)
+  PRIMARY KEY (target_type, share_id, model, jev_label_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share_id);
@@ -85,27 +85,27 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 
 ### 設計判断のポイント
 
-- **`jev_categories`は追記専用(UPDATE禁止)**。質問文を変えたくなったら新しい行を追加する。
-  同じ`category_id`が指す質問文は永久に変わらないため、過去の`value`と矛盾しない
-- **集計は必ず`category_id`で明示的にJOINする**。score列を1本にまとめて雑平均しない
+- **`jev_labels`は追記専用(UPDATE禁止)**。質問文を変えたくなったら新しい行を追加する。
+  同じ`jev_label_id`が指す質問文は永久に変わらないため、過去の`value`と矛盾しない
+- **集計は必ず`jev_label_id`で明示的にJOINする**。score列を1本にまとめて雑平均しない
 - **`share_id`が全ての紐付けの起点**。ai-cacheの回答文は既に
   `(share_id, model)`で一意に識別されており、その質問IDは過去ログ検索の
   キーワードとも結びついている。分析結果を同じ`share_id`に紐付けることで、
   既存の「検索キーワード→質問ID→モデル→回答本文」の鎖にそのまま乗る(片方だけ
   持ち回るコードは書かない)
-- **`target_type`で「回答」と「元の質問文」を同じ項目で評価できる**。回答が曖昧なとき、
-  モデルの問題か質問の聞き方の問題かを、同じ評価項目を両方に適用して切り分けられる
+- **`target_type`で「回答」と「元の質問文」を同じラベルで評価できる**。回答が曖昧なとき、
+  モデルの問題か質問の聞き方の問題かを、同じラベルを両方に適用して切り分けられる
   (質問の具体性が高いのに回答の具体性が低い→モデルの問題、質問の具体性自体が
   低い→聞き方の問題)
 - ベクトル埋め込み(`aichat_answer_vectors`)とJevは役割分担: ベクトルは類似検索・
-  重複スキップ用、Jevは固定項目への確定ラベル付け用
+  重複スキップ用、Jevは固定ラベルへの確定ラベル付け用
 
-## 4. 評価項目(初期セット・20項目・4グループ)
+## 4. ラベル(初期セット・20ラベル・4グループ)
 
-**対象**: `jev_categories`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
-(両極を明示)として表現し、質問側の原因切り分けにも同じ項目を使い回す。
+**対象**: `jev_labels`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
+(両極を明示)として表現し、質問側の原因切り分けにも同じラベルを使い回す。
 
-| グループ | 項目 | 悪い状態(0側) | 良い状態(1側) |
+| グループ | ラベル | 悪い状態(0側) | 良い状態(1側) |
 |---|---|---|---|
 | 事実の正確さ | 事実性 | 事実誤認(あり得ないことを言っている) | 事実として正しい |
 | 事実の正確さ | 根拠 | 根拠・出典が不足 | 根拠が明示されている |
@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 | 応答姿勢・手続き | 客観性 | 主観・憶測が混ざる | 客観的・検証済み |
 | 応答姿勢・手続き | 再現性 | 同条件でも判定基準が揺れる | 同一基準で再判定可能 |
 
-項目は今後いつでも追加できる(`jev_categories`への追記のみ、スキーマ変更不要)。
+ラベルは今後いつでも追加できる(`jev_labels`への追記のみ、スキーマ変更不要)。
 
 ## 5. UI設計
 
@@ -138,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 
 1. **一覧(モデル比較のトップ)**: モデル×4グループの平均scoreを表として表示
    (Markdownテーブル形式、罫線文字は使わない)
-2. **モデル行クリック→詳細**: 20項目の内訳と、score/フラグが低かった回答だけの一覧
+2. **モデル行クリック→詳細**: 20ラベルの内訳と、score/フラグが低かった回答だけの一覧
 3. **回答行クリック→本文**: `/ai-summary/{id}`と同じパターンで元のキャッシュ本文へ
    リンク(rule 22相当)
 
@@ -159,16 +159,16 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
   一括処理は行わない)
 - モデル比較結果の表示場所: **`/ai-cache`側にモーダルで簡易表示**(専用ページは後回し)
 - Jev呼び出しのタイミング: **オンデマンドのみ**(ボタン押下時。cron等の定期実行なし)
-- 過去分の回答への項目バックフィル: **なし**(今後の新規評価分から対象。新しい項目を
+- 過去分の回答へのラベルバックフィル: **なし**(今後の新規評価分から対象。新しいラベルを
   追加しても既存データと矛盾しない設計のため、後から気が向いた時にバックフィル
   ジョブを別途書けばよい)
 
 ### 実装タスク
 
-1. D1マイグレーション: `jev_categories`(初期20項目をINSERT)・`jev_evaluations`
+1. D1マイグレーション: `jev_labels`(初期20ラベルをINSERT)・`jev_evaluations`
 2. コピペ用SQL(CLAUDE.mdルール14: `wrangler d1 execute`でそのまま実行できる形)
 3. cloudflare-workers-github-oauth-1にJev呼び出し用APIエンドポイントを追加
-   (未処理分だけ抽出→Jevへ→D1保存。`share_id`/`model`/`category_id`の
+   (未処理分だけ抽出→Jevへ→D1保存。`share_id`/`model`/`jev_label_id`の
    紐付けを崩さないこと)
 4. dynamicneko `/ai-cache`の回答カード(`CardChrome`の`titleRight`)に
    一括処理ボタンを追加

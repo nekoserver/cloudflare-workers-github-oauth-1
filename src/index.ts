@@ -619,8 +619,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_log', migration: '0140', description: '/cursor-agentの「過去ログ検索」で、検索キーワードとヒットした起動履歴(cursor_agent_launch_log)を結びつける集計。AIチャットのaichat_search_logと同じく (user_id, keyword, launch_id) が一意', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_history', migration: '0140', description: '/cursor-agentの「過去ログ検索」明細。同じキーワード×起動を完了検索するたびにseq_numを増やして追記する(aichat_search_history相当)', syncPolicy: 'auto' },
-  { name: 'jev_categories', migration: '0144', description: 'Jev(TypeSafe AI System One Model)でAI回答の品質を評価する評価項目のマスター。追記専用(既存行は編集しない)で、項目を追加しても過去の評価データと矛盾しない設計', syncPolicy: 'manual' },
-  { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_categoriesの各項目でJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
+  { name: 'jev_labels', migration: '0144', description: 'Jev(TypeSafe AI System One Model)でAI回答の品質を評価するラベルのマスター。追記専用(既存行は編集しない)で、ラベルを追加しても過去の評価データと矛盾しない設計', syncPolicy: 'manual' },
+  { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_labelsの各ラベルでJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2241,7 +2241,7 @@ CREATE TABLE IF NOT EXISTS cursor_agent_search_history (
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_lookup ON cursor_agent_search_history(user_id, keyword, launch_id);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_user ON cursor_agent_search_history(user_id, searched_at);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_launch ON cursor_agent_search_history(launch_id);`,
-  '0144': `CREATE TABLE IF NOT EXISTS jev_categories (
+  '0144': `CREATE TABLE IF NOT EXISTS jev_labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,
   question_text TEXT NOT NULL,
@@ -2255,11 +2255,11 @@ CREATE TABLE IF NOT EXISTS jev_evaluations (
   share_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   model TEXT,
-  category_id INTEGER NOT NULL REFERENCES jev_categories(id),
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
   value REAL NOT NULL,
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, category_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, jev_label_id);
 CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share ON jev_evaluations(share_id);`,
 };
 
@@ -2517,8 +2517,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
   cursor_agent_search_log: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx' },
   cursor_agent_search_history: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx', seq_num: 'idx' },
-  jev_categories: { id: 'pk' },
-  jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', category_id: 'fk' },
+  jev_labels: { id: 'pk' },
+  jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2652,7 +2652,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cursor_agent_answer_cache: 'ai',
   cursor_agent_search_log: 'ai',
   cursor_agent_search_history: 'ai',
-  jev_categories: 'ai',
+  jev_labels: 'ai',
   jev_evaluations: 'ai',
 };
 
@@ -2861,7 +2861,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
-  jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', category_id: 'jev_categories' },
+  jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2961,7 +2961,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'aichat_answer_category_scores.share_id': 'id',
   'aichat_answer_category_scores.category_id': 'id',
   'jev_evaluations.share_id': 'id',
-  'jev_evaluations.category_id': 'id',
+  'jev_evaluations.jev_label_id': 'id',
   'aichat_answer_vectors.share_id': 'id',
   'aichat_answer_keyword_vectors.share_id': 'id',
   'aichat_moondream_analyses.share_id': 'id',
