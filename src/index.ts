@@ -420,6 +420,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
+import { computeJevEvaluationPlan, callJevApi, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -13568,6 +13569,142 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     label: modelLabels[id] ?? id,
   }));
   return jsonUtf8({ models });
+});
+
+/**
+ * dynamicnekoの/ai-cacheページの一括処理ボタン用。Jev(TypeSafe AI System One
+ * Model)にshare_id(target_type='answer'なら回答文、'source_question'なら
+ * 質問文そのもの)をjev_labelsの各ラベルで評価させ、jev_evaluationsに保存する。
+ * 認可・login解決はqsearch-externalと同じ(リクエスト本文のloginは信用しない)。
+ *
+ * 既に(target_type, login, share_id, model, jev_label_id)で評価済みのラベルは
+ * 再送しない(computeJevEvaluationPlan)。全ラベル評価済みならJevを一切呼ばず
+ * キャッシュ済みの結果だけを返す。
+ */
+app.post('/api/aichat/jev-score-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req
+    .json<{ email?: string; shareId?: string; model?: string; targetType?: string }>()
+    .catch(() => null);
+  const email = body?.email ?? '';
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  const targetType = body?.targetType === 'source_question' ? 'source_question' : 'answer';
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-score] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-score] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const answerResult = await findLatestAiChatShareAnswer(
+    c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+    login,
+    shareId,
+    model,
+  );
+  if (!answerResult.ok) {
+    const status = answerResult.errorCode === 'missing_params' ? 400 : 404;
+    return jsonUtf8({ error: answerResult.detail }, status);
+  }
+  const stateText = targetType === 'source_question' ? answerResult.value.question : answerResult.value.answer;
+  // source_questionはモデル非依存(質問文自体の評価)のため、保存時はmodelをNULL扱いにする。
+  const evalModel = targetType === 'source_question' ? null : model;
+
+  let allLabels: JevLabel[] = [];
+  try {
+    const rows = await c.env.DB.prepare('SELECT id, question_text FROM jev_labels').all<{ id: number; question_text: string }>();
+    allLabels = (rows.results ?? []).map((r) => ({ id: r.id, question_text: r.question_text }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) {
+    return jsonUtf8({ error: 'jev_labelsが1件も登録されていません' }, 500);
+  }
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind(targetType, login, shareId, evalModel, evalModel)
+      .all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({
+      apiKey: c.env.JEV_API_KEY,
+      state: stateText,
+      labels: plan.pending,
+      fetchImpl: fetch,
+    });
+    if (!jevResult.ok) {
+      logger.error('[jev-score] Jev API呼び出し失敗', { shareId, model: evalModel, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES (?, ?, ?, ?, ?, ?)'
+        )
+          .bind(targetType, shareId, login, evalModel, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-score] jev_evaluations保存クエリ失敗', { shareId, error: message });
+      return jsonUtf8({ error: 'jev_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    shareId,
+    model: evalModel,
+    targetType,
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
 });
 
 /**
