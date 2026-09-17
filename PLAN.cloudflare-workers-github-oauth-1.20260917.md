@@ -145,6 +145,13 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_cache_question_id ON jev_evaluati
 一括処理ボタンは`/ai-cache`の回答カード(`CardChrome`)の`titleRight`propに配置する
 (タイトル文字列右側に任意コンポーネントを埋め込む既存の仕組みをそのまま使える)。
 
+**左サイドパネルの質問文リストの色分け**(優先度低・いつでも実装可): `/ai-cache`
+左サイドの質問文一覧(`ai-cache-question-row.tsx`)で、その質問の回答に既にJev
+評価結果(`jev_evaluations`に該当行)がある場合は、リスト項目の背景色を緑にして
+一目で区別できるようにする。判定は`share_id`の存在チェックだけで済む
+(qsearch結果を返す際に`jev_evaluations`をJOINして`has_jev_result`フラグを
+一緒に返す形が実装しやすい)。
+
 ## 6. 決定事項・残タスク
 
 - Jev APIキー: **取得済み**(`JEV_API_KEY`という名前で`wrangler secret put`設定)
