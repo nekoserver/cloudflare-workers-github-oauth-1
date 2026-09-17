@@ -38,6 +38,8 @@ export type Bindings = {
   KIMI_CODE_EXTERNAL_SECRET?: string;
   /** dynamicnekoのAI問い合わせウィジェットがPOST /api/aichat/query-external・/api/aichat/permission-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
   AICHAT_EXTERNAL_SECRET?: string;
+  /** Jev(TypeSafe AI System One Model, https://api.typesafe.ai/v1/systemone)のAPIキー。wrangler secret putで設定する(平文で[vars]に書かない) */
+  JEV_API_KEY?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;

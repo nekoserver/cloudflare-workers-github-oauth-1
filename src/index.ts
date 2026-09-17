@@ -420,6 +420,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
+import { computeJevEvaluationPlan, callJevApi, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -619,6 +620,9 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_log', migration: '0140', description: '/cursor-agentの「過去ログ検索」で、検索キーワードとヒットした起動履歴(cursor_agent_launch_log)を結びつける集計。AIチャットのaichat_search_logと同じく (user_id, keyword, launch_id) が一意', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_history', migration: '0140', description: '/cursor-agentの「過去ログ検索」明細。同じキーワード×起動を完了検索するたびにseq_numを増やして追記する(aichat_search_history相当)', syncPolicy: 'auto' },
+  { name: 'jev_label_groups', migration: '0144', description: 'jev_labelsの表示グループ(事実の正確さ/論理・整合性/伝わりやすさ/応答姿勢・手続きの4分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_labels', migration: '0144', description: 'Jev(TypeSafe AI System One Model)でAI回答の品質を評価するラベルのマスター。追記専用(既存行は編集しない)で、ラベルを追加しても過去の評価データと矛盾しない設計', syncPolicy: 'manual' },
+  { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_labelsの各ラベルでJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2239,6 +2243,32 @@ CREATE TABLE IF NOT EXISTS cursor_agent_search_history (
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_lookup ON cursor_agent_search_history(user_id, keyword, launch_id);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_user ON cursor_agent_search_history(user_id, searched_at);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_launch ON cursor_agent_search_history(launch_id);`,
+  '0144': `CREATE TABLE IF NOT EXISTS jev_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_label_groups_name ON jev_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_type TEXT NOT NULL,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, jev_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share ON jev_evaluations(share_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2495,6 +2525,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
   cursor_agent_search_log: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx' },
   cursor_agent_search_history: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx', seq_num: 'idx' },
+  jev_label_groups: { id: 'pk' },
+  jev_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2628,6 +2661,9 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cursor_agent_answer_cache: 'ai',
   cursor_agent_search_log: 'ai',
   cursor_agent_search_history: 'ai',
+  jev_label_groups: 'ai',
+  jev_labels: 'ai',
+  jev_evaluations: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2835,6 +2871,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
+  jev_labels: { jev_group_id: 'jev_label_groups' },
+  jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2933,6 +2971,9 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'aichat_keyword_category_suggestions.suggested_category_id': 'id',
   'aichat_answer_category_scores.share_id': 'id',
   'aichat_answer_category_scores.category_id': 'id',
+  'jev_labels.jev_group_id': 'id',
+  'jev_evaluations.share_id': 'id',
+  'jev_evaluations.jev_label_id': 'id',
   'aichat_answer_vectors.share_id': 'id',
   'aichat_answer_keyword_vectors.share_id': 'id',
   'aichat_moondream_analyses.share_id': 'id',
@@ -13528,6 +13569,142 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     label: modelLabels[id] ?? id,
   }));
   return jsonUtf8({ models });
+});
+
+/**
+ * dynamicnekoの/ai-cacheページの一括処理ボタン用。Jev(TypeSafe AI System One
+ * Model)にshare_id(target_type='answer'なら回答文、'source_question'なら
+ * 質問文そのもの)をjev_labelsの各ラベルで評価させ、jev_evaluationsに保存する。
+ * 認可・login解決はqsearch-externalと同じ(リクエスト本文のloginは信用しない)。
+ *
+ * 既に(target_type, login, share_id, model, jev_label_id)で評価済みのラベルは
+ * 再送しない(computeJevEvaluationPlan)。全ラベル評価済みならJevを一切呼ばず
+ * キャッシュ済みの結果だけを返す。
+ */
+app.post('/api/aichat/jev-score-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req
+    .json<{ email?: string; shareId?: string; model?: string; targetType?: string }>()
+    .catch(() => null);
+  const email = body?.email ?? '';
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  const targetType = body?.targetType === 'source_question' ? 'source_question' : 'answer';
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-score] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-score] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const answerResult = await findLatestAiChatShareAnswer(
+    c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+    login,
+    shareId,
+    model,
+  );
+  if (!answerResult.ok) {
+    const status = answerResult.errorCode === 'missing_params' ? 400 : 404;
+    return jsonUtf8({ error: answerResult.detail }, status);
+  }
+  const stateText = targetType === 'source_question' ? answerResult.value.question : answerResult.value.answer;
+  // source_questionはモデル非依存(質問文自体の評価)のため、保存時はmodelをNULL扱いにする。
+  const evalModel = targetType === 'source_question' ? null : model;
+
+  let allLabels: JevLabel[] = [];
+  try {
+    const rows = await c.env.DB.prepare('SELECT id, question_text FROM jev_labels').all<{ id: number; question_text: string }>();
+    allLabels = (rows.results ?? []).map((r) => ({ id: r.id, question_text: r.question_text }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) {
+    return jsonUtf8({ error: 'jev_labelsが1件も登録されていません' }, 500);
+  }
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind(targetType, login, shareId, evalModel, evalModel)
+      .all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({
+      apiKey: c.env.JEV_API_KEY,
+      state: stateText,
+      labels: plan.pending,
+      fetchImpl: fetch,
+    });
+    if (!jevResult.ok) {
+      logger.error('[jev-score] Jev API呼び出し失敗', { shareId, model: evalModel, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES (?, ?, ?, ?, ?, ?)'
+        )
+          .bind(targetType, shareId, login, evalModel, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-score] jev_evaluations保存クエリ失敗', { shareId, error: message });
+      return jsonUtf8({ error: 'jev_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    shareId,
+    model: evalModel,
+    targetType,
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
 });
 
 /**
