@@ -5,7 +5,7 @@
 
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
-import { createJWT, JWTPayload, extractBearerToken } from './utils/jwt';
+import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
@@ -13591,6 +13591,35 @@ app.post('/api/aichat/model-colors-external', async (c) => {
 });
 
 /**
+ * jev-score-external・jev-stats-externalが共通で使う、リクエスト本文の
+ * userToken(短寿命JWT、sub=email)を検証してemailを取り出すヘルパー。
+ *
+ * これらのエンドポイントはAICHAT_EXTERNAL_SECRET(*-external全体で共通の
+ * サービス認証)に加え、本文のemailを直接信用せずAICHAT_USER_TOKEN_SECRETで
+ * 署名された短寿命トークンのsubだけを信用する。AICHAT_EXTERNAL_SECRETを
+ * 知っているだけの呼び出し元が任意のemailを名乗って他ユーザーの集計・評価
+ * データを読めてしまう問題を、別シークレットのトークン検証で切り離すため
+ * (jev-score-external・jev-stats-externalどちらもuser_id別のデータを扱うため
+ * 対象)。
+ */
+async function resolveJevUserTokenEmail(
+  userTokenSecret: string | undefined,
+  userToken: string | undefined,
+): Promise<{ ok: true; email: string } | { ok: false; status: 401 | 503; error: string }> {
+  if (!userTokenSecret) {
+    return { ok: false, status: 503, error: 'AICHAT_USER_TOKEN_SECRETが未設定です' };
+  }
+  if (!userToken) {
+    return { ok: false, status: 401, error: 'userTokenは必須です' };
+  }
+  const payload = await verifyJWT(userToken, userTokenSecret);
+  if (!payload || !payload.sub) {
+    return { ok: false, status: 401, error: 'userTokenが無効です' };
+  }
+  return { ok: true, email: payload.sub };
+}
+
+/**
  * dynamicnekoの/ai-cacheページの一括処理ボタン用。Jev(TypeSafe AI System One
  * Model)にshare_id(target_type='answer'なら回答文、'source_question'なら
  * 質問文そのもの)をjev_labelsの各ラベルで評価させ、jev_evaluationsに保存する。
@@ -13610,9 +13639,13 @@ app.post('/api/aichat/jev-score-external', async (c) => {
   if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
 
   const body = await c.req
-    .json<{ email?: string; shareId?: string; model?: string; targetType?: string }>()
+    .json<{ userToken?: string; shareId?: string; model?: string; targetType?: string }>()
     .catch(() => null);
-  const email = body?.email ?? '';
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
   const shareId = (body?.shareId ?? '').trim();
   const model = (body?.model ?? '').trim();
   const targetType = body?.targetType === 'source_question' ? 'source_question' : 'answer';
@@ -13753,8 +13786,12 @@ app.post('/api/aichat/jev-stats-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string }>().catch(() => null);
-  const email = body?.email ?? '';
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
 
   let allowed = false;
   try {
