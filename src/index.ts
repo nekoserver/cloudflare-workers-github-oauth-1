@@ -369,6 +369,7 @@ import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNo
 import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
+import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -16176,6 +16177,37 @@ app.get('/status/column-stats', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render column-stats', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+});
+
+app.get('/jev-rev-viewer', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  try {
+    const [evaluationsResult, labelsResult] = await Promise.all([
+      db.prepare('SELECT jev_label_id FROM jev_evaluations').all(),
+      db.prepare('SELECT id, question_text FROM jev_labels').all(),
+    ]);
+    const evaluations = (evaluationsResult.results ?? []) as { jev_label_id: number }[];
+    const labels = (labelsResult.results ?? []) as { id: number; question_text: string }[];
+    const counts = computeJevQuestionCounts(evaluations, labels);
+    const html = renderJevRevViewerPage(counts);
+
+    return new Response(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('Failed to render jev-rev-viewer', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render jev-rev-viewer', {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
