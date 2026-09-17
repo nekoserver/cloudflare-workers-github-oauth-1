@@ -3,7 +3,7 @@
 ## 1. 目的
 
 **対象**: dynamicnekoの`/ai-cache`ページ、cloudflare-workers-github-oauth-1側のAIチャット回答
-キャッシュ(`aichat_answer_vectors`等)、新規D1テーブル`jev_labels`/`jev_evaluations` —
+キャッシュ(`aichat_answer_vectors`等)、新規D1テーブル`jev_label_groups`/`jev_labels`/`jev_evaluations` —
 キャッシュ済みのAI回答を1件ずつ読み返すことなく、モデルごとの大まかな精度・傾向を把握
 できるようにする。
 
@@ -35,7 +35,8 @@ Jevは文章生成・要約向けの通常のLLMとは異なり、あらかじ�
 ④ 未処理分だけJev APIへ投げる(score中心、20ラベルを並列評価)
         ↓
 ⑤ 結果を保存
-   jev_labels(ラベルは追記専用・不変)
+   jev_label_groups(グループ名マスター)
+   jev_labels(ラベルは追記専用・不変、jev_group_idでグループを参照)
    jev_evaluations(target_type, share_id, model, jev_label_id, value)
         ↓
 ⑥ モデルごとにGROUP BY集計 → 比較表示(グループ平均→詳細20ラベル→元キャッシュ本文)
@@ -54,19 +55,28 @@ CI監視(GitHub webhook→Slack通知の判定)へのJev導入も、ChatGPT通�
 
 ## 3. テーブル設計
 
-**対象**: 新規テーブル`jev_labels`・`jev_evaluations` — ラベルを追記専用にし、
-ラベルが増えても過去の評価データと矛盾しないようにする。「ai-cacheの質問ID」と
-「JevのラベルID」が同じ`question_id`という言葉で混同しないよう、列名を
-`share_id`(ai-cache側の質問ID)と`jev_label_id`(JevのラベルID)に分けて
-明確に区別する。
+**対象**: 新規テーブル`jev_label_groups`・`jev_labels`・`jev_evaluations`(テーブル3つ) —
+ラベルを追記専用にし、ラベルが増えても過去の評価データと矛盾しないようにする。「ai-cacheの
+質問ID」と「JevのラベルID」が同じ`question_id`という言葉で混同しないよう、列名を
+`share_id`(ai-cache側の質問ID)と`jev_label_id`(JevのラベルID)に分けて明確に区別する。
+表示グループ(事実の正確さ等の4分類)も文字列のまま持たず`jev_label_groups`に正規化し、
+`jev_labels.jev_group_id`でIDとして参照する。
 
 ```sql
+CREATE TABLE jev_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,               -- 表示グループ名(下記4分類)
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_label_groups_name ON jev_label_groups(name);
+
 CREATE TABLE jev_labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,      -- noul / choice / score
   question_text TEXT NOT NULL,
   options_json TEXT,                -- choice/scoreの候補一覧
-  group_name TEXT NOT NULL,         -- 表示グループ(下記4分類)
+  jev_group_id INTEGER NOT NULL REFERENCES jev_label_groups(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -85,9 +95,11 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 
 ### 設計判断のポイント
 
-- **`jev_labels`は追記専用(UPDATE禁止)**。質問文を変えたくなったら新しい行を追加する。
-  同じ`jev_label_id`が指す質問文は永久に変わらないため、過去の`value`と矛盾しない
-- **集計は必ず`jev_label_id`で明示的にJOINする**。score列を1本にまとめて雑平均しない
+- **`jev_label_groups`/`jev_labels`は追記専用(UPDATE禁止)**。質問文やグループ名を
+  変えたくなったら新しい行を追加する。同じ`jev_label_id`が指す質問文は永久に変わらないため、
+  過去の`value`と矛盾しない
+- **集計は必ず`jev_label_id`(グループ集計なら`jev_group_id`)で明示的にJOINする**。
+  文字列のグループ名を雑にGROUP BYしない
 - **`share_id`が全ての紐付けの起点**。ai-cacheの回答文は既に
   `(share_id, model)`で一意に識別されており、その質問IDは過去ログ検索の
   キーワードとも結びついている。分析結果を同じ`share_id`に紐付けることで、
@@ -102,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 
 ## 4. ラベル(初期セット・20ラベル・4グループ)
 
-**対象**: `jev_labels`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
+**対象**: `jev_label_groups`・`jev_labels`への初期投入行 — 「良し悪し」を2値ではなく0〜1の連続score
 (両極を明示)として表現し、質問側の原因切り分けにも同じラベルを使い回す。
 
 | グループ | ラベル | 悪い状態(0側) | 良い状態(1側) |
@@ -128,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 | 応答姿勢・手続き | 客観性 | 主観・憶測が混ざる | 客観的・検証済み |
 | 応答姿勢・手続き | 再現性 | 同条件でも判定基準が揺れる | 同一基準で再判定可能 |
 
-ラベルは今後いつでも追加できる(`jev_labels`への追記のみ、スキーマ変更不要)。
+ラベルは今後いつでも追加できる(`jev_labels`/`jev_label_groups`への追記のみ、スキーマ変更不要)。
 
 ## 5. UI設計
 
@@ -165,7 +177,8 @@ CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share_id ON jev_evaluations(share
 
 ### 実装タスク
 
-1. D1マイグレーション: `jev_labels`(初期20ラベルをINSERT)・`jev_evaluations`
+1. D1マイグレーション: `jev_label_groups`(初期4グループをINSERT)・`jev_labels`
+   (初期20ラベルをINSERT)・`jev_evaluations`
 2. コピペ用SQL(CLAUDE.mdルール14: `wrangler d1 execute`でそのまま実行できる形)
 3. cloudflare-workers-github-oauth-1にJev呼び出し用APIエンドポイントを追加
    (未処理分だけ抽出→Jevへ→D1保存。`share_id`/`model`/`jev_label_id`の

@@ -619,6 +619,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_log', migration: '0140', description: '/cursor-agentの「過去ログ検索」で、検索キーワードとヒットした起動履歴(cursor_agent_launch_log)を結びつける集計。AIチャットのaichat_search_logと同じく (user_id, keyword, launch_id) が一意', syncPolicy: 'auto' },
   { name: 'cursor_agent_search_history', migration: '0140', description: '/cursor-agentの「過去ログ検索」明細。同じキーワード×起動を完了検索するたびにseq_numを増やして追記する(aichat_search_history相当)', syncPolicy: 'auto' },
+  { name: 'jev_label_groups', migration: '0144', description: 'jev_labelsの表示グループ(事実の正確さ/論理・整合性/伝わりやすさ/応答姿勢・手続きの4分類)のマスター', syncPolicy: 'manual' },
   { name: 'jev_labels', migration: '0144', description: 'Jev(TypeSafe AI System One Model)でAI回答の品質を評価するラベルのマスター。追記専用(既存行は編集しない)で、ラベルを追加しても過去の評価データと矛盾しない設計', syncPolicy: 'manual' },
   { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_labelsの各ラベルでJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
 ];
@@ -2241,12 +2242,18 @@ CREATE TABLE IF NOT EXISTS cursor_agent_search_history (
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_lookup ON cursor_agent_search_history(user_id, keyword, launch_id);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_user ON cursor_agent_search_history(user_id, searched_at);
 CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_launch ON cursor_agent_search_history(launch_id);`,
-  '0144': `CREATE TABLE IF NOT EXISTS jev_labels (
+  '0144': `CREATE TABLE IF NOT EXISTS jev_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_label_groups_name ON jev_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   question_type TEXT NOT NULL,
   question_text TEXT NOT NULL,
   options_json TEXT,
-  group_name TEXT NOT NULL,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_label_groups(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS jev_evaluations (
@@ -2517,7 +2524,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
   cursor_agent_search_log: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx' },
   cursor_agent_search_history: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx', seq_num: 'idx' },
-  jev_labels: { id: 'pk' },
+  jev_label_groups: { id: 'pk' },
+  jev_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
 };
 
@@ -2652,6 +2660,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cursor_agent_answer_cache: 'ai',
   cursor_agent_search_log: 'ai',
   cursor_agent_search_history: 'ai',
+  jev_label_groups: 'ai',
   jev_labels: 'ai',
   jev_evaluations: 'ai',
 };
@@ -2861,6 +2870,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
+  jev_labels: { jev_group_id: 'jev_label_groups' },
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
 
   // ========================================================================
@@ -2960,6 +2970,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'aichat_keyword_category_suggestions.suggested_category_id': 'id',
   'aichat_answer_category_scores.share_id': 'id',
   'aichat_answer_category_scores.category_id': 'id',
+  'jev_labels.jev_group_id': 'id',
   'jev_evaluations.share_id': 'id',
   'jev_evaluations.jev_label_id': 'id',
   'aichat_answer_vectors.share_id': 'id',
