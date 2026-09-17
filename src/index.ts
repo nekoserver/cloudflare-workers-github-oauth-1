@@ -13734,6 +13734,92 @@ app.post('/api/aichat/jev-score-external', async (c) => {
 });
 
 /**
+ * dynamicnekoの/ai-cacheページ向けのJev分析ダッシュボード集計。
+ * (1)過去回答文の全登録件数とJev分析済み件数の比率、(2)分析済み件数の
+ * モデル別内訳、(3)モデルごとの平均score、(4)ラベル(分析観点)ごとの
+ * 平均scoreをスコア順に返す。認可・login解決はqsearch-externalと同じ
+ * パターンを踏襲する(リクエスト本文のloginは信用しない)。
+ *
+ * 「分析済み」は target_type='answer' の(share_id, model)の組み合わせが
+ * 1件でもjev_evaluationsに存在することを指す(20ラベル全部が揃っている
+ * 保証はしないが、/ai-cache左サイドパネルのhasJevResult判定と同じ基準に
+ * 揃えている)。
+ */
+app.post('/api/aichat/jev-stats-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-stats] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-stats] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const totalRow = await c.env.DB.prepare('SELECT COUNT(*) as c FROM ai_chat_shares WHERE user_id = ?')
+      .bind(login)
+      .first<{ c: number }>();
+    const analyzedRow = await c.env.DB.prepare(
+      `SELECT COUNT(*) as c FROM (SELECT DISTINCT share_id, model FROM jev_evaluations WHERE target_type = 'answer' AND user_id = ?)`
+    )
+      .bind(login)
+      .first<{ c: number }>();
+    const byModelRows = await c.env.DB.prepare(
+      `SELECT model, COUNT(DISTINCT share_id) as analyzedCount, AVG(value) as avgScore FROM jev_evaluations WHERE target_type = 'answer' AND user_id = ? GROUP BY model ORDER BY avgScore DESC`
+    )
+      .bind(login)
+      .all<{ model: string | null; analyzedCount: number; avgScore: number }>();
+    const byLabelRows = await c.env.DB.prepare(
+      `SELECT jl.question_text as label, AVG(je.value) as avgScore FROM jev_evaluations je JOIN jev_labels jl ON jl.id = je.jev_label_id WHERE je.target_type = 'answer' AND je.user_id = ? GROUP BY je.jev_label_id ORDER BY avgScore DESC`
+    )
+      .bind(login)
+      .all<{ label: string; avgScore: number }>();
+
+    return jsonUtf8({
+      totalAnswers: totalRow?.c ?? 0,
+      analyzedAnswers: analyzedRow?.c ?? 0,
+      byModel: (byModelRows.results ?? []).map((r) => ({
+        model: r.model ?? '(モデル不明)',
+        analyzedCount: r.analyzedCount,
+        avgScore: r.avgScore,
+      })),
+      byLabel: (byLabelRows.results ?? []).map((r) => ({ label: r.label, avgScore: r.avgScore })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] 集計クエリ失敗', { login, error: message });
+    return jsonUtf8({ error: '集計でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
  * パネルの検索(target=kimi-gemma)から後で読み出せる。
