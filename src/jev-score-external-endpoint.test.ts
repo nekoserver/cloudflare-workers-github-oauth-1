@@ -103,12 +103,13 @@ function insertShare(db: DatabaseSync, id: string, userId: string, question: str
   ).run(id, userId, question, answer, model);
 }
 
-function insertLabels(db: DatabaseSync, labels: { id: number; text: string }[]): void {
+function insertLabels(db: DatabaseSync, labels: { id: number; text: string; optionsJson?: string | null }[]): void {
   db.prepare(`INSERT INTO jev_label_groups (id, name) VALUES (1, 'テストグループ')`).run();
   for (const label of labels) {
-    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text, jev_group_id) VALUES (?, 'score', ?, 1)`).run(
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text, options_json, jev_group_id) VALUES (?, 'score', ?, ?, 1)`).run(
       label.id,
-      label.text
+      label.text,
+      label.optionsJson === undefined ? JSON.stringify(['悪い状態', '良い状態']) : label.optionsJson
     );
   }
 }
@@ -284,6 +285,30 @@ describe('POST /api/aichat/jev-score-external', () => {
       expect(bodyJson.error).not.toBe('');
       const count = db.prepare('SELECT COUNT(*) as c FROM jev_evaluations').get() as { c: number };
       expect(count.c).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('jev_labels.options_jsonがcriteria(2要素配列)として不正な場合は500で失敗し、Jevへは送らない(黙って進めない)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertShare(db, 'share-1', 'nekoserver', '質問', '回答', '@cf/google/gemma-4-26b-a4b-it');
+    insertLabels(db, [{ id: 1, text: 'ラベル1', optionsJson: null }]);
+
+    let fetchCalled = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    try {
+      const res = await app.request(
+        '/api/aichat/jev-score-external',
+        { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ok@example.com', shareId: 'share-1', model: 'gemma-4-26b-a4b-it' }) },
+        { ...BASE_ENV, DB: wrapD1(db) }
+      );
+      expect(res.status).toBe(500);
+      expect(fetchCalled).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

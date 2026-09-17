@@ -420,7 +420,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
-import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, type JevLabel } from './utils/jevEvaluation';
+import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -13661,8 +13661,15 @@ app.post('/api/aichat/jev-score-external', async (c) => {
 
   let allLabels: JevLabel[] = [];
   try {
-    const rows = await c.env.DB.prepare('SELECT id, question_text FROM jev_labels').all<{ id: number; question_text: string }>();
-    allLabels = (rows.results ?? []).map((r) => ({ id: r.id, question_text: r.question_text }));
+    const rows = await c.env.DB.prepare('SELECT id, question_text, options_json FROM jev_labels').all<{ id: number; question_text: string; options_json: string | null }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-score] jev_labels.options_jsonが不正です(Jev APIのcriteriaに必要な2要素配列)', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score] jev_labels取得クエリ失敗', { error: message });

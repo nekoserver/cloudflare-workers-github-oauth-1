@@ -5,12 +5,13 @@ import {
   callJevApi,
   computeJevEvaluationPlan,
   parseJevApiResponse,
+  parseLabelCriteria,
   type JevLabel,
 } from './utils/jevEvaluation';
 
 const labels: JevLabel[] = [
-  { id: 1, question_text: '事実性(0=事実誤認がある, 1=事実として正しい)' },
-  { id: 2, question_text: '根拠(0=根拠・出典が不足, 1=根拠が明示されている)' },
+  { id: 1, question_text: '事実性', criteria: ['事実誤認がある', '事実として正しい'] },
+  { id: 2, question_text: '根拠', criteria: ['根拠・出典が不足', '根拠が明示されている'] },
 ];
 
 describe('computeJevEvaluationPlan', () => {
@@ -43,16 +44,37 @@ describe('computeJevEvaluationPlan', () => {
 });
 
 describe('buildJevRequestBody', () => {
-  it('questionsをラベルIDをキーにした辞書として組み立てる(配列だとJev APIが422を返すため)', () => {
+  it('questionsをラベルIDをキーにした辞書として組み立て、criteriaも含める(配列だと422、criteria無しでも422を確認済み)', () => {
     const body = buildJevRequestBody('回答本文', labels);
     expect(body).toEqual({
       model: 'jev-latest',
       state: '回答本文',
       questions: {
-        '1': { type: 'score', question: labels[0].question_text },
-        '2': { type: 'score', question: labels[1].question_text },
+        '1': { type: 'score', question: labels[0].question_text, criteria: labels[0].criteria },
+        '2': { type: 'score', question: labels[1].question_text, criteria: labels[1].criteria },
       },
     });
+  });
+});
+
+describe('parseLabelCriteria', () => {
+  it('2要素の文字列配列JSONを配列として返す', () => {
+    expect(parseLabelCriteria('["悪い状態", "良い状態"]')).toEqual(['悪い状態', '良い状態']);
+  });
+
+  it('nullや空文字はnullを返す', () => {
+    expect(parseLabelCriteria(null)).toBeNull();
+    expect(parseLabelCriteria('')).toBeNull();
+  });
+
+  it('不正なJSONはnullを返す(黙って空配列にしない)', () => {
+    expect(parseLabelCriteria('not json')).toBeNull();
+  });
+
+  it('文字列や1要素配列などcriteriaとして不正な形式はnullを返す', () => {
+    expect(parseLabelCriteria('"0=X, 1=Y"')).toBeNull();
+    expect(parseLabelCriteria('["only one"]')).toBeNull();
+    expect(parseLabelCriteria('[1, 2]')).toBeNull();
   });
 });
 
