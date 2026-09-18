@@ -74,6 +74,12 @@ function setupDb(): DatabaseSync {
       value REAL NOT NULL,
       computed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE jev_keyword_evaluation_locks (
+      user_id TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      locked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, keyword)
+    );
   `);
   db.prepare(`INSERT INTO user_sessions (user_id, last_activity_at, revoked_at) VALUES ('test-user', datetime('now'), NULL)`).run();
   return db;
@@ -185,6 +191,26 @@ describe('POST /api/aichat/jev-score-keyword', () => {
       expect(res.status).toBe(502);
       const count = db.prepare('SELECT COUNT(*) as c FROM jev_country_keyword_evaluations').get() as { c: number };
       expect(count.c).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('既に処理中(ロック行が存在し失効していない)の場合は409を返し、Jevを呼ばない', async () => {
+    const db = setupDb();
+    insertLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    db.prepare(`INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES ('test-user', 'フランス', datetime('now'))`).run();
+
+    let fetchCalled = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response(JSON.stringify({ answers: { '1': 0.5 } }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const res = await postJevScoreKeyword(db, { keyword: 'フランス' });
+      expect(res.status).toBe(409);
+      expect(fetchCalled).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

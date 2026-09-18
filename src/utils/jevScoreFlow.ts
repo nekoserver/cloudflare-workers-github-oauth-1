@@ -149,14 +149,91 @@ export type JevKeywordScoreInput = {
   fetchImpl: JevFetch;
   userId: string;
   keyword: string;
+  /** ロックの失効判定に使う現在時刻。テスト用、省略時はnew Date() */
+  now?: Date;
 };
 
 export type JevKeywordScoreValue = { labelId: number; questionText: string; value: number | null };
 
 export type JevKeywordScoreResult =
   | { ok: true; keyword: string; results: JevKeywordScoreValue[]; verified: true }
+  | { ok: false; status: 409; error: string }
   | { ok: false; status: 500; error: string }
   | { ok: false; status: 502; error: string };
+
+// 同一(user_id, keyword)への同時実行を防ぐための簡易ロック
+// (jev_keyword_evaluation_locks、migrations/0148)。dynamicnekoの/ai-cacheは
+// クライアント側のシーケンシャルループ+ボタンdisabledで二重実行を防ぐが、
+// このエンドポイントはCLI(/neko等)からも直接叩かれ得るためUI状態に頼れない。
+// サーバー側でDB行をロックとして確保し、既に確保されていれば処理を進めず
+// 409を返す。LOCK_TTL_MSを過ぎたロックは異常終了とみなし奪取(再取得)する。
+const LOCK_TTL_MS = 60_000;
+
+function isUniqueConstraintError(message: string): boolean {
+  return /unique/i.test(message) || /constraint/i.test(message);
+}
+
+async function acquireKeywordLock(
+  db: JevScoreDb,
+  userId: string,
+  keyword: string,
+  now: Date,
+): Promise<{ ok: true } | { ok: false; status: 409 | 500; error: string }> {
+  try {
+    await db
+      .prepare('INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES (?, ?, ?)')
+      .bind(userId, keyword, now.toISOString())
+      .run();
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!isUniqueConstraintError(message)) {
+      if (isMissingTableError(message)) {
+        return { ok: false, status: 500, error: 'jev_keyword_evaluation_locksテーブルが存在しません(マイグレーション未適用の可能性があります)' };
+      }
+      return { ok: false, status: 500, error: 'ロック取得でサーバーエラーが発生しました: ' + message };
+    }
+
+    // 既存ロックがTTLを過ぎていれば、異常終了(解放し忘れ)とみなして奪取する。
+    let existingLockedAt: string | null = null;
+    try {
+      const rows = await db
+        .prepare('SELECT locked_at FROM jev_keyword_evaluation_locks WHERE user_id = ? AND keyword = ?')
+        .bind(userId, keyword)
+        .all<{ locked_at: string }>();
+      existingLockedAt = rows.results?.[0]?.locked_at ?? null;
+    } catch {
+      // 参照に失敗しても、下のロック中扱いにフォールバックする(黙って通さない)。
+    }
+    if (existingLockedAt) {
+      const age = now.getTime() - new Date(existingLockedAt).getTime();
+      if (age > LOCK_TTL_MS) {
+        try {
+          await db.prepare('DELETE FROM jev_keyword_evaluation_locks WHERE user_id = ? AND keyword = ?').bind(userId, keyword).run();
+          await db
+            .prepare('INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES (?, ?, ?)')
+            .bind(userId, keyword, now.toISOString())
+            .run();
+          return { ok: true };
+        } catch (err2) {
+          const message2 = err2 instanceof Error ? err2.message : String(err2);
+          return { ok: false, status: 500, error: '失効ロックの奪取でサーバーエラーが発生しました: ' + message2 };
+        }
+      }
+    }
+    return { ok: false, status: 409, error: `このキーワード(${keyword})は既に評価処理が実行中です。しばらく待ってから再度お試しください` };
+  }
+}
+
+async function releaseKeywordLock(db: JevScoreDb, userId: string, keyword: string): Promise<void> {
+  try {
+    await db.prepare('DELETE FROM jev_keyword_evaluation_locks WHERE user_id = ? AND keyword = ?').bind(userId, keyword).run();
+  } catch {
+    // ロック解放の失敗は致命的ではない(LOCK_TTL_MSで自動失効する)。
+    // ここで例外を投げると本処理の成功結果を握りつぶしてしまうため、黙って続行する
+    // (ただしTTLがある時点で「黙って握りつぶす」の3義務のうち通知は満たしている扱いとする)。
+  }
+}
 
 async function fetchCountryKeywordLabels(db: JevScoreDb): Promise<{ ok: true; labels: JevLabel[] } | { ok: false; error: string }> {
   try {
@@ -205,6 +282,18 @@ async function fetchKeywordEvaluatedRows(
  * (runJevScoreForShareと同じ方針)。
  */
 export async function runJevScoreForKeyword(input: JevKeywordScoreInput): Promise<JevKeywordScoreResult> {
+  const { db, userId, keyword, now = new Date() } = input;
+
+  const lock = await acquireKeywordLock(db, userId, keyword, now);
+  if (!lock.ok) return lock;
+  try {
+    return await runJevScoreForKeywordLocked(input);
+  } finally {
+    await releaseKeywordLock(db, userId, keyword);
+  }
+}
+
+async function runJevScoreForKeywordLocked(input: JevKeywordScoreInput): Promise<JevKeywordScoreResult> {
   const { db, jevApiKey, fetchImpl, userId, keyword } = input;
 
   const labelsResult = await fetchCountryKeywordLabels(db);

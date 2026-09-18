@@ -628,6 +628,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_labelsの各ラベルでJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
   { name: 'jev_country_keyword_labels', migration: '0145', description: 'AI分類のキーワードがカタカナの国名だった場合に使う、国名1語から判定できるJev評価ラベルのマスター(jev_labelsとは別。旅程前提の質問を除いた国レベルの質問のみ)', syncPolicy: 'manual' },
   { name: 'jev_country_keyword_evaluations', migration: '0145', description: 'カタカナ国名キーワードをjev_country_keyword_labelsの各ラベルでJevに評価させた結果。share_id/modelではなくkeyword文字列で引く点がjev_evaluationsと異なる', syncPolicy: 'auto' },
+  { name: 'jev_keyword_evaluation_locks', migration: '0148', description: 'runJevScoreForKeywordの多重実行防止用の一時ロック行(user_id+keyword単位)。一定時間で失効し、処理完了後は削除される', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2312,6 +2313,12 @@ INSERT OR IGNORE INTO jev_country_keyword_labels (question_text, options_json) V
   ('日本からの直行便が就航している国ですか?', '["直行便は無く乗り継ぎが必要","日本からの直行便がある"]'),
   ('通年で温暖な気候(熱帯・亜熱帯)が中心の国ですか?', '["温帯・寒帯など温暖ではない地域が中心","熱帯・亜熱帯など温暖な地域が中心"]'),
   ('公用語の表記にラテン文字(アルファベット)を使う国ですか?', '["ラテン文字以外の文字体系を使う","ラテン文字(アルファベット)を使う"]');`,
+  '0148': `CREATE TABLE IF NOT EXISTS jev_keyword_evaluation_locks (
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  locked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, keyword)
+);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2573,6 +2580,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
   jev_country_keyword_labels: { id: 'pk' },
   jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
+  jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2711,6 +2719,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_evaluations: 'ai',
   jev_country_keyword_labels: 'ai',
   jev_country_keyword_evaluations: 'ai',
+  jev_keyword_evaluation_locks: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2921,6 +2930,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   jev_labels: { jev_group_id: 'jev_label_groups' },
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
+  jev_keyword_evaluation_locks: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
