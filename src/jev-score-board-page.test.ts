@@ -35,6 +35,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { JSDOM } from 'jsdom';
 import app from './index';
 import { createJWT } from './utils/jwt';
 
@@ -513,5 +514,65 @@ describe('GET /jev-score-board: th表記切替トグルとテーマボタンの�
     expect(scriptBody).toContain("setThMode('japanese')");
     expect(scriptBody).toContain('/api/jev-score-board/label-names');
     expect(() => new Function(scriptBody)).not.toThrow();
+  });
+});
+
+// 故障シナリオ(15): th表記切替の状態がCookieに保存されず、ページ再訪の
+// たびに選択がリセットされてしまう(特にデフォルトが「現行」のままだと、
+// 過去に「日本語」を選んだユーザーの意図に反する)。
+// jsdomで埋め込み<script>を実際に実行し、Cookie未設定時は「日本語」が
+// 初期状態になること・トグル操作でCookieへ書き込まれること・Cookieが
+// 既にあればそれを初期状態として復元することを検証する。
+describe('GET /jev-score-board: th表記切替のCookie永続化', () => {
+  function extractMainScript(html: string): string {
+    const start = html.indexOf('function escHtml(s) {');
+    const end = html.indexOf('</script>', start);
+    if (start === -1 || end === -1) throw new Error('メインスクリプトが見つかりません');
+    return html.slice(start, end);
+  }
+
+  function setupHarness(html: string, initialCookie: string) {
+    const script = extractMainScript(html);
+    const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://example.com/', pretendToBeVisual: true });
+    const window: any = dom.window;
+    window.fetch = () => Promise.resolve({ ok: true, json: async () => ({ labels: {} }) });
+    if (initialCookie) window.document.cookie = initialCookie;
+    window.eval(script);
+    return { window, document: window.document };
+  }
+
+  it('Cookie未設定時はデフォルトで「日本語」が初期状態になる', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const { document } = setupHarness(html, '');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.getElementById('thModeJapanese').classList.contains('active')).toBe(true);
+    expect(document.getElementById('thModeCurrent').classList.contains('active')).toBe(false);
+  });
+
+  it('「現行」に切り替えるとCookie(jev_score_board_th_mode=current)へ保存される', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const { document } = setupHarness(html, '');
+    await new Promise((r) => setTimeout(r, 0));
+
+    document.getElementById('thModeCurrent').click();
+    expect(document.cookie).toContain('jev_score_board_th_mode=current');
+    expect(document.getElementById('thModeCurrent').classList.contains('active')).toBe(true);
+    expect(document.getElementById('thModeJapanese').classList.contains('active')).toBe(false);
+  });
+
+  it('Cookieに保存済みの「現行」があれば、それを初期状態として復元する', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const { document } = setupHarness(html, 'jev_score_board_th_mode=current');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.getElementById('thModeCurrent').classList.contains('active')).toBe(true);
+    expect(document.getElementById('thModeJapanese').classList.contains('active')).toBe(false);
   });
 });
