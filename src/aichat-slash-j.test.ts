@@ -7,9 +7,11 @@ import {
 } from './utils/aichatSlashCommand';
 
 // 対象: AIチャットの入力窓 `/neko j <キーワード>` サブコマンド。
-// jev_country_keyword_evaluations(通常のjevテーブルとは別系統、キーワード
-// 文字列で引く国名専用の評価結果)にそのキーワードの評価データが登録
-// されているかを確認し、ヒット件数を返す。
+// jev_evaluations(dynamicnekoの/ai-cacheページの一括評価ボタンが書き込む、
+// share_id/modelで引く通常のJev評価結果)をai_chat_shares.questionの
+// キーワード部分一致で絞り込み、該当する評価済みshare件数を返す。
+// (jev_country_keyword_evaluationsという別系統のテーブルも存在するが、
+// 書き込み経路が無く実データが入らないため、/neko jはこちらを見ない)
 //
 // 故障シナリオ:
 //   (1) キーワード未指定でエラーにならず案内を返す

@@ -553,11 +553,12 @@ export type AichatJevKeywordLookupOutcome = {
 };
 
 /**
- * `/neko j <キーワード>` の結果を表示する。jev_country_keyword_evaluations
- * (通常のjev_evaluationsとは別系統、keyword文字列で引く国名専用の評価結果、
- * migrations/0145)にそのキーワードの評価データが何件登録されているかを
- * 表示するだけで、値の中身(criteria判定結果)は表示しない。0件のときは
- * 「未登録」と明示し、「0件」だけでは判別しづらい表示にならないようにする。
+ * `/neko j <キーワード>` の結果を表示する。jev_evaluations(dynamicnekoの
+ * /ai-cacheページの一括評価ボタンが書き込む、share_id/modelで引く通常の
+ * Jev評価結果)をai_chat_shares.questionのキーワード部分一致で絞り込み、
+ * 該当する評価済みshare件数が何件あるかを表示するだけで、値の中身
+ * (criteria判定結果)は表示しない。0件のときは「未登録」と明示し、
+ * 「0件」だけでは判別しづらい表示にならないようにする。
  */
 export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywordLookupOutcome): string {
   if (!keyword) {
