@@ -371,7 +371,7 @@ import { F1_CIRCUITS } from './data/f1Circuits';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
 import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
-import { runJevScoreForShare } from './utils/jevScoreFlow';
+import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -7838,6 +7838,38 @@ app.post('/api/aichat/jev-score', authMiddleware, async (c) => {
   }
 
   return jsonUtf8({ shareId, model, values: result.values, verified: result.verified, state: result.state });
+});
+
+/**
+ * jev_country_keyword_labels/jev_country_keyword_evaluations(migrations/0145、
+ * keyword文字列で引く国名専用のJev評価結果)への書き込みエンドポイント。
+ * これまでラベル定義(jev_country_keyword_labels)は登録済みだったが、
+ * 実際にJev APIを呼んで評価結果を書き込む処理が存在しなかった
+ * (jevCountryKeyword.tsのコメント参照)。/neko jの0件表示から自動では
+ * 呼ばれない(明示的にこのエンドポイントを叩いた場合のみ書き込む)。
+ */
+app.post('/api/aichat/jev-score-keyword', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ keyword?: string }>().catch(() => null);
+  const keyword = (body?.keyword ?? '').trim();
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  const result = await runJevScoreForKeyword({
+    db: c.env.DB,
+    jevApiKey: c.env.JEV_API_KEY,
+    fetchImpl: fetch,
+    userId: user.sub,
+    keyword,
+  });
+  if (!result.ok) {
+    logger.error('[jev-score-keyword] runJevScoreForKeyword失敗', { keyword, status: result.status, error: result.error });
+    return jsonUtf8({ error: result.error, verified: false }, result.status);
+  }
+
+  return jsonUtf8({ keyword: result.keyword, results: result.results, verified: result.verified });
 });
 
 /**
