@@ -573,9 +573,10 @@ export const AICHAT_JEV_KEYWORD_SCORE_LIMIT = 5;
  * Jev評価結果)を、ai_chat_shares.question・answerのどちらかにキーワードが
  * 部分一致するかで絞り込み(searchAiChatSharesが使う検索キーと同じ意味論)、
  * 該当する評価済みshare件数と、各shareのjev_label_id=1〜20(ループA)の
- * 個別スコアをMarkdown表で表示する(罫線・ツリー文字は使わない、CLAUDE.md
- * ルール16)。0件のときは「未登録」と明示し、「0件」だけでは判別しづらい
- * 表示にならないようにする。
+ * 個別スコアをMarkdown表で表示する。表は質問ID1件=1行とし、ラベル1〜20を
+ * 横方向の列として並べる(縦にラベル数だけ行を積まない)。罫線・ツリー文字は
+ * 使わない(CLAUDE.mdルール16)。0件のときは「未登録」と明示し、「0件」
+ * だけでは判別しづらい表示にならないようにする。
  */
 export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywordLookupOutcome): string {
   if (!keyword) {
@@ -585,18 +586,26 @@ export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywor
     return `「${keyword}」のJev評価データ: 0件(未登録)`;
   }
   const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  // ラベルIDの列見出しは、結果に含まれる全shareのjevLabelIdの和集合を
+  // 昇順に並べる(buildJevValuesForLoopは常に1〜20全件を返すため、
+  // 通常は1〜20固定になる)。
+  const labelIds = Array.from(new Set(outcome.results.flatMap((share) => share.values.map((v) => v.jevLabelId)))).sort((a, b) => a - b);
+  const labelColumns = labelIds.map((id) => `L${id}`);
   const lines = [
     `「${keyword}」のJev評価データ: ${outcome.hitCount}件`,
     '',
-    '| 質問ID | 質問文 | モデル | ラベルID | スコア |',
-    '|---|---|---|---|---|',
+    `| 質問ID | 質問文 | モデル | ${labelColumns.join(' | ')} |`,
+    `|---|---|---|${labelColumns.map(() => '---').join('|')}|`,
   ];
   for (const share of outcome.results) {
-    for (const v of share.values) {
-      lines.push(
-        `| ${escapeCell(share.shareId)} | ${escapeCell(share.question)} | ${escapeCell(share.model ?? '(不明)')} | ${v.jevLabelId} | ${v.value === null ? '-' : v.value} |`
-      );
-    }
+    const valueByLabelId = new Map(share.values.map((v) => [v.jevLabelId, v.value]));
+    const scoreCells = labelIds.map((id) => {
+      const value = valueByLabelId.get(id);
+      return value === undefined || value === null ? '-' : String(value);
+    });
+    lines.push(
+      `| ${escapeCell(share.shareId)} | ${escapeCell(share.question)} | ${escapeCell(share.model ?? '(不明)')} | ${scoreCells.join(' | ')} |`
+    );
   }
   if (outcome.hitCount > outcome.results.length) {
     lines.push('', `(先頭${outcome.results.length}件のみ表示。全${outcome.hitCount}件)`);

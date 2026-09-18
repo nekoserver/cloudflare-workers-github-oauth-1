@@ -35,7 +35,7 @@ describe('formatJevKeywordLookup', () => {
     expect(formatJevKeywordLookup('パスタ', { hitCount: 0, results: [] })).toBe('「パスタ」のJev評価データ: 0件(未登録)');
   });
 
-  it('ヒットしたshareの質問ID・質問文・モデル・ラベルID・スコアをMarkdown表で表示する', () => {
+  it('ヒットしたshareを1行とし、ラベル1〜20を横方向の列として並べたMarkdown表を表示する', () => {
     const outcome: AichatJevKeywordLookupOutcome = {
       hitCount: 1,
       results: [
@@ -52,10 +52,10 @@ describe('formatJevKeywordLookup', () => {
     };
     const response = formatJevKeywordLookup('フランス', outcome);
     expect(response).toContain('「フランス」のJev評価データ: 1件');
-    expect(response).toContain('| 質問ID | 質問文 | モデル | ラベルID | スコア |');
-    expect(response).toContain('| s1 | フランスの首都は? | gemma-4-26b-a4b-it | 1 | 0.9 |');
-    // 値が無いラベルIDも黙って除外せず、-として表に残す
-    expect(response).toContain('| s1 | フランスの首都は? | gemma-4-26b-a4b-it | 2 | - |');
+    // ラベルID(L1, L2, ...)が横方向の列見出しになる(縦にラベル数だけ行を積まない)
+    expect(response).toContain('| 質問ID | 質問文 | モデル | L1 | L2 |');
+    // 質問ID1件=1行に、L1のスコアとL2の欠落(-)が横並びで入る
+    expect(response).toContain('| s1 | フランスの首都は? | gemma-4-26b-a4b-it | 0.9 | - |');
   });
 
   it('表示上限(AICHAT_JEV_KEYWORD_SCORE_LIMIT)より多くヒットした場合は残数を案内する', () => {
