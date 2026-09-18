@@ -388,6 +388,21 @@ document.querySelectorAll('th.sortable-th').forEach(function(th) {
 // ===== th見出しの表記切替(現行のL1〜L20 / 日本語ラベル名) =====
 // 日本語ラベル名は初回切替時だけ取得し、以降は配列(オブジェクト)への
 // キャッシュ参照で賄う(切替のたびに再フェッチしない)。
+// トグル状態はCookieに保存し、ページを再訪した際も直前の選択を維持する。
+// Cookie未設定時のデフォルトは「日本語」。
+var TH_MODE_COOKIE = 'jev_score_board_th_mode';
+
+function readThModeCookie() {
+  var m = document.cookie.match(new RegExp('(?:^|; )' + TH_MODE_COOKIE + '=([^;]*)'));
+  if (!m) return null;
+  var v = decodeURIComponent(m[1]);
+  return (v === 'current' || v === 'japanese') ? v : null;
+}
+
+function writeThModeCookie(mode) {
+  document.cookie = TH_MODE_COOKIE + '=' + encodeURIComponent(mode) + '; path=/; max-age=' + (60 * 60 * 24 * 365) + '; SameSite=Lax';
+}
+
 var thMode = 'current';
 var labelNameCache = null;
 var thModeCurrentBtn = document.getElementById('thModeCurrent');
@@ -406,6 +421,7 @@ function applyThMode() {
 
 function setThMode(mode) {
   thMode = mode;
+  writeThModeCookie(mode);
   thModeCurrentBtn.classList.toggle('active', mode === 'current');
   thModeJapaneseBtn.classList.toggle('active', mode === 'japanese');
   if (mode === 'japanese' && !labelNameCache) {
@@ -426,6 +442,7 @@ function setThMode(mode) {
 
 thModeCurrentBtn.addEventListener('click', function() { setThMode('current'); });
 thModeJapaneseBtn.addEventListener('click', function() { setThMode('japanese'); });
+setThMode(readThModeCookie() || 'japanese');
 
 bindQuestionLinks();
 ${getThemeToggleScript()}
