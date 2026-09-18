@@ -48,9 +48,9 @@ export function renderJevScoreBoardPage(input: JevScoreBoardPageInput): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jevスコアボード</title>
-${getThemeCSS()}
 ${getThemeInitScript()}
 <style>
+  ${getThemeCSS()}
   * { box-sizing: border-box; }
   body {
     margin: 0;

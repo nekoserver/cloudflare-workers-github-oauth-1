@@ -18,6 +18,9 @@
  *   (6) top-by-labelのlabelIdが範囲外(0, 21, 非数値)は400
  *   (7) answerエンドポイントは他ユーザーのshareIdでは404
  *   (8) 応答HTMLにXSSペイロードを含む質問文を入れてもエスケープされる
+ *   (9) getThemeCSS()の戻り値(生のCSSテキスト)を<style>タグで囲まずに
+ *       <head>直下へ埋め込んでしまい、CSS変数定義が生テキストとして
+ *       画面に表示されてしまう(実際に発生した回帰)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -160,6 +163,25 @@ describe('GET /jev-score-board: keyword未指定時の初期表示', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('0件');
+  });
+
+  it('getThemeCSSのCSS変数定義は<style>タグの中に入っており、生テキストとして<head>に露出しない', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const styleOpenIdx = html.indexOf('<style>');
+    const styleCloseIdx = html.indexOf('</style>');
+    const bgPrimaryIdx = html.indexOf('--bg-primary');
+    expect(styleOpenIdx).toBeGreaterThan(-1);
+    expect(styleCloseIdx).toBeGreaterThan(styleOpenIdx);
+    // CSS変数定義(--bg-primary等)は必ず<style>〜</style>の内側にあること
+    expect(bgPrimaryIdx).toBeGreaterThan(styleOpenIdx);
+    expect(bgPrimaryIdx).toBeLessThan(styleCloseIdx);
+    // <head>直下に裸のCSSテキストが置かれていない(<style>より前に:rootが出てこない)
+    const headCloseIdx = html.indexOf('</head>');
+    const rootIdxBeforeStyle = html.slice(0, styleOpenIdx).indexOf(':root');
+    expect(rootIdxBeforeStyle).toBe(-1);
+    expect(headCloseIdx).toBeGreaterThan(styleCloseIdx);
   });
 });
 
