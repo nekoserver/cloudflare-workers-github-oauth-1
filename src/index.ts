@@ -5584,17 +5584,22 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
     jevKeywordLookup: async (keyword) => {
       if (!c.env.DB) return { hitCount: 0 };
+      // 「キーワード」はモデル名ではなく、/ai-cacheの検索ボックスで使う検索キー
+      // (searchAiChatSharesがquestion/answerの両方をINSTRで見ているのと同じもの)。
       // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
-      // "LIKE or GLOB pattern too complex" になるため、任意長になり得る自由入力の
-      // 検索語はsearchAiChatShares等と同じくINSTRを使う(中黒の表記ゆれもREPLACEで正規化)。
+      // "LIKE or GLOB pattern too complex" になるため、searchAiChatSharesと
+      // 同じくINSTRを使う(中黒の表記ゆれもREPLACEで正規化)。
       const normalized = keyword.replace(/[・･]/g, '・');
       const row = await c.env.DB.prepare(
         `SELECT COUNT(DISTINCT je.share_id) AS cnt
          FROM jev_evaluations je
          JOIN ai_chat_shares s ON s.id = je.share_id
          WHERE je.user_id = ? AND je.target_type = 'answer' AND s.deleted_at IS NULL
-           AND INSTR(REPLACE(s.question, '･', '・'), ?) > 0`
-      ).bind(user.sub, normalized).first<{ cnt: number }>();
+           AND (
+             INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+             OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+           )`
+      ).bind(user.sub, normalized, normalized).first<{ cnt: number }>();
       return { hitCount: row?.cnt ?? 0 };
     },
     generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),

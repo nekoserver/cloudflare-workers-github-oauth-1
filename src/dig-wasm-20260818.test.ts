@@ -55,7 +55,7 @@ describe('POST /api/aichat: /neko dig サーバー配線', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 7200);
+    const fn = src.slice(idx, idx + 7900);
     expect(fn).toContain('digLookup:');
     expect(fn).toContain("await import('./utils/digWasmServer')");
   });
