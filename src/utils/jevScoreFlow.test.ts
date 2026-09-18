@@ -203,6 +203,12 @@ function setupKeywordDb(): DatabaseSync {
       value REAL NOT NULL,
       computed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE jev_keyword_evaluation_locks (
+      user_id TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      locked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, keyword)
+    );
   `);
   return db;
 }
@@ -319,5 +325,69 @@ describe('runJevScoreForKeyword', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
     expect(result.results.find((r) => r.labelId === 1)?.value).toBeCloseTo(0.99);
+  });
+
+  it('同一(user_id, keyword)のロックが既に存在する場合は409を返し、Jevを呼ばない(多重実行防止)', async () => {
+    const db = setupKeywordDb();
+    insertKeywordLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const now = new Date('2026-09-18T00:00:30.000Z');
+    db.prepare(`INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES ('test-user', 'フランス', '2026-09-18T00:00:00.000Z')`).run();
+
+    let fetchCalled = false;
+    const fetchImpl = (async () => {
+      fetchCalled = true;
+      return { ok: true, status: 200, json: async () => ({ answers: { '1': 0.5 } }), text: async () => '' };
+    }) as unknown as typeof fetch;
+
+    const result = await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'test-user', keyword: 'フランス', now });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.status).toBe(409);
+    expect(fetchCalled).toBe(false);
+  });
+
+  it('ロックが60秒のTTLを過ぎていれば失効とみなして奪取し、通常どおり処理する', async () => {
+    const db = setupKeywordDb();
+    insertKeywordLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const now = new Date('2026-09-18T00:01:01.000Z');
+    db.prepare(`INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES ('test-user', 'フランス', '2026-09-18T00:00:00.000Z')`).run();
+
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => ({ answers: { '1': 0.5 } }), text: async () => '' })) as unknown as typeof fetch;
+    const result = await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'test-user', keyword: 'フランス', now });
+    expect(result.ok).toBe(true);
+  });
+
+  it('処理が正常終了した後はロック行が解放される(次の呼び出しがブロックされない)', async () => {
+    const db = setupKeywordDb();
+    insertKeywordLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => ({ answers: { '1': 0.5 } }), text: async () => '' })) as unknown as typeof fetch;
+
+    await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'test-user', keyword: 'フランス' });
+    const lockCount = db.prepare('SELECT COUNT(*) as c FROM jev_keyword_evaluation_locks').get() as { c: number };
+    expect(lockCount.c).toBe(0);
+  });
+
+  it('処理が失敗(502)してもロック行が解放される', async () => {
+    const db = setupKeywordDb();
+    insertKeywordLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const fetchImpl = (async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => 'internal error' })) as unknown as typeof fetch;
+
+    const result = await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'test-user', keyword: 'フランス' });
+    expect(result.ok).toBe(false);
+    const lockCount = db.prepare('SELECT COUNT(*) as c FROM jev_keyword_evaluation_locks').get() as { c: number };
+    expect(lockCount.c).toBe(0);
+  });
+
+  it('異なるキーワード・異なるユーザーは同時にロックを取れる(排他はuser_id+keyword単位)', async () => {
+    const db = setupKeywordDb();
+    insertKeywordLabels(db, [{ id: 1, text: 'ラベル1' }]);
+    const now = new Date('2026-09-18T00:00:00.000Z');
+    db.prepare(`INSERT INTO jev_keyword_evaluation_locks (user_id, keyword, locked_at) VALUES ('test-user', 'フランス', ?)`).run(now.toISOString());
+
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => ({ answers: { '1': 0.5 } }), text: async () => '' })) as unknown as typeof fetch;
+    const otherKeyword = await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'test-user', keyword: 'タイ', now });
+    expect(otherKeyword.ok).toBe(true);
+    const otherUser = await runJevScoreForKeyword({ db: wrapD1(db), jevApiKey: 'key', fetchImpl, userId: 'other-user', keyword: 'フランス', now });
+    expect(otherUser.ok).toBe(true);
   });
 });
