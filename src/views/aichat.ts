@@ -3931,7 +3931,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -4766,10 +4766,17 @@ export function getAiChatPage(user: {
           openValuesDisplay();
         }
       });
-      closeBtn.addEventListener('click', close);
-      modal.addEventListener('click', function(e) {
-        if (e.target === modal) close();
-      });
+      // closeBtn/modal(背景)のクリックは「今開いているモーダルを閉じる」だけの
+      // 副作用の無い操作なので、同じmodal/closeBtn要素を複数のボタン(複数の
+      // AI応答バブル)で共有してcreateJevValuesWidgetを繰り返し呼んでも、
+      // 二重登録によるリスナーの積み上がりを避けるため一度だけ配線する。
+      if (!modal.dataset.jevModalWired) {
+        modal.dataset.jevModalWired = '1';
+        closeBtn.addEventListener('click', close);
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) close();
+        });
+      }
 
       return { refresh: refresh };
     }
@@ -7157,7 +7164,7 @@ export function getAiChatPage(user: {
       heading.appendChild(btn);
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults) {
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
@@ -7210,14 +7217,36 @@ export function getAiChatPage(user: {
         el.appendChild(notice);
       }
       if (usage && (usage.input_tokens != null || usage.total_tokens != null)) {
-        var tokEl = document.createElement('div');
-        tokEl.style.cssText = 'text-align:right;font-size:10px;color:var(--text-muted);margin-top:6px;letter-spacing:0.02em;';
+        var tokRow = document.createElement('div');
+        tokRow.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;';
+        if (shareId) {
+          // トークン出力の左側にJev評価値ボタンを置く(通常のAI応答バブル画面での動作確認用)。
+          // historyModal専用ではなく、createJevValuesWidgetをここでも呼び出して
+          // 同じ挙動(状態色・確認モーダル・Jev問い合わせ・DB登録)を再現する。
+          var bubbleJevBtn = document.createElement('button');
+          bubbleJevBtn.type = 'button';
+          bubbleJevBtn.className = 'search-hist-btn';
+          bubbleJevBtn.style.cssText = 'padding:2px 5px;font-size:11px;line-height:1;';
+          bubbleJevBtn.textContent = '📔';
+          tokRow.appendChild(bubbleJevBtn);
+          var bubbleJevWidget = createJevValuesWidget({
+            button: bubbleJevBtn,
+            modal: jevValuesModal,
+            body: jevValuesBody,
+            closeBtn: jevValuesClose,
+            getContext: function() { return { shareId: shareId, model: model }; }
+          });
+          bubbleJevWidget.refresh();
+        }
+        var tokEl = document.createElement('span');
+        tokEl.style.cssText = 'font-size:10px;color:var(--text-muted);letter-spacing:0.02em;';
         var parts = [];
         if (usage.input_tokens != null) parts.push('in:' + usage.input_tokens.toLocaleString());
         if (usage.output_tokens != null) parts.push('out:' + usage.output_tokens.toLocaleString());
         if (usage.total_tokens != null) parts.push('total:' + usage.total_tokens.toLocaleString());
         tokEl.textContent = parts.join(' / ') + ' tokens';
-        el.appendChild(tokEl);
+        tokRow.appendChild(tokEl);
+        el.appendChild(tokRow);
       }
       if (isLocalCommand) {
         wireCsearchAnswerLinks(el, nekoCursorResults || []);
@@ -7226,10 +7255,10 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg, nekoCursorResults) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -7517,7 +7546,7 @@ export function getAiChatPage(user: {
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
-            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);
+            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {

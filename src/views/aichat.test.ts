@@ -1337,11 +1337,26 @@ describe('回答バブル コピーボタン', () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
-    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults)');
+    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId)');
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const copyBtnIdx = fn.indexOf('bubble-copy-btn');
     expect(guardIdx).toBeGreaterThan(-1);
     expect(copyBtnIdx).toBeGreaterThan(guardIdx);
+  });
+
+  it('通常のAI応答バブルのトークン出力行に、shareIdがある場合だけJev評価値ボタンをcreateJevValuesWidget経由で左側に設置する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function buildAssistantBubble(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 4200);
+    const usageGuardIdx = fn.indexOf("usage.input_tokens != null || usage.total_tokens != null");
+    const shareIdGuardIdx = fn.indexOf('if (shareId) {');
+    const widgetCallIdx = fn.indexOf('createJevValuesWidget({');
+    const tokRowAppendIdx = fn.indexOf("el.appendChild(tokRow);");
+    expect(usageGuardIdx).toBeGreaterThan(-1);
+    expect(shareIdGuardIdx).toBeGreaterThan(usageGuardIdx);
+    expect(widgetCallIdx).toBeGreaterThan(shareIdGuardIdx);
+    expect(tokRowAppendIdx).toBeGreaterThan(widgetCallIdx);
   });
 
   it('chatForm submit・renderAiResultInModal のどちらも isLocalCommand を buildAssistantBubble/appendBubble に渡す', () => {
@@ -1350,12 +1365,12 @@ describe('回答バブル コピーボタン', () => {
     const modalIdx = html.indexOf('function renderAiResultInModal(');
     expect(modalIdx).toBeGreaterThan(-1);
     const modalFn = html.slice(modalIdx, modalIdx + 700);
-    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults)');
+    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId)');
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
     const submitFn = html.slice(submitIdx, submitIdx + 3600);
-    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);");
+    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 });
 
@@ -1438,7 +1453,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
-    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults);");
+    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
