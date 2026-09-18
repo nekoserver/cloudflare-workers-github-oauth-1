@@ -4618,139 +4618,170 @@ export function getAiChatPage(user: {
         .catch(function() { addSubqueryMsg.textContent = '通信エラーが発生しました'; });
     });
 
-    // 📔ボタンの背景色3状態。固定色を使う(CLAUDE.CSS.mdの例外: バッジ・ステータス
-    // 表示で意味的に色が固定されているもの、PK/FK/UK/IDXバッジと同じ扱い)。
-    var JEV_BUTTON_COLORS = { pink: '#ffd6e8', yellow: '#fff8c5', green: '#d1f7dd' };
-    var JEV_BUTTON_TITLES = {
-      pink: 'Jev評価値: 通常のjevテーブルにこの質問+モデルのデータがありません(タップして追加)',
-      yellow: 'Jev評価値: テーブルはありますが評価データがまだありません(タップして追加)',
-      green: 'Jev評価値: 評価済みです(タップして表示)'
-    };
+    // アイコン設置(ボタンのイベント配線)〜モーダル処理(状態判定・確認・表示)〜
+    // Jev問い合わせ〜DB登録(POST /api/aichat/jev-score)までの一連の流れを
+    // 1つのファクトリ関数にまとめたもの。DOM要素と「今どのshareId/modelを
+    // 見ているか」を返すgetContext()だけを差し替えれば、historyModal以外の
+    // 場所(将来resultsPanel等に同種のボタンを置く場合)からも
+    // createJevValuesWidget(...)を呼ぶだけで同じ挙動を再現できる。
+    function createJevValuesWidget(config) {
+      var button = config.button;
+      var modal = config.modal;
+      var body = config.body;
+      var closeBtn = config.closeBtn;
+      var getContext = config.getContext;
 
-    function jevValuesGridHtml(values) {
-      if (!values || values.length === 0) {
-        return '<div class="search-log-loading">評価データがありません</div>';
+      // 固定色を使う(CLAUDE.CSS.mdの例外: バッジ・ステータス表示で意味的に
+      // 色が固定されているもの、PK/FK/UK/IDXバッジと同じ扱い)。
+      var COLORS = { pink: '#ffd6e8', yellow: '#fff8c5', green: '#d1f7dd' };
+      var TITLES = {
+        pink: 'Jev評価値: 通常のjevテーブルにこの質問+モデルのデータがありません(タップして追加)',
+        yellow: 'Jev評価値: テーブルはありますが評価データがまだありません(タップして追加)',
+        green: 'Jev評価値: 評価済みです(タップして表示)'
+      };
+
+      function gridHtml(values) {
+        if (!values || values.length === 0) {
+          return '<div class="search-log-loading">評価データがありません</div>';
+        }
+        var itemsHtml = values.map(function(v) {
+          var text = v.value === null || v.value === undefined ? '—' : String(v.value);
+          return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);min-width:44px;">'
+            + '<span style="font-size:10px;color:var(--text-muted);">' + escHtml(String(v.jevLabelId)) + '</span>'
+            + '<span style="font-size:14px;color:var(--text-primary);font-weight:600;">' + escHtml(text) + '</span>'
+            + '</span>';
+        }).join('');
+        return '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + itemsHtml + '</div>';
       }
-      var itemsHtml = values.map(function(v) {
-        var text = v.value === null || v.value === undefined ? '—' : String(v.value);
-        return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);min-width:44px;">'
-          + '<span style="font-size:10px;color:var(--text-muted);">' + escHtml(String(v.jevLabelId)) + '</span>'
-          + '<span style="font-size:14px;color:var(--text-primary);font-weight:600;">' + escHtml(text) + '</span>'
-          + '</span>';
-      }).join('');
-      return '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + itemsHtml + '</div>';
-    }
 
-    function applyJevButtonState(state) {
-      historyModalJevValuesBtn.style.background = JEV_BUTTON_COLORS[state] || '';
-      historyModalJevValuesBtn.dataset.jevState = state || '';
-      historyModalJevValuesBtn.title = JEV_BUTTON_TITLES[state] || 'Jev評価値';
-    }
-
-    function refreshJevValuesButtonState() {
-      if (!historyModalCurrentId) return;
-      var shareIdAtRequest = historyModalCurrentId;
-      fetch(
-        '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(historyModalCurrentId)) + '&model=' + encodeURIComponent(historyModalCurrentModel || ''),
-        { credentials: 'same-origin' }
-      )
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (historyModalCurrentId !== shareIdAtRequest) return;
-          applyJevButtonState(data && data.state);
-        })
-        .catch(function() {
-          if (historyModalCurrentId !== shareIdAtRequest) return;
-          applyJevButtonState('pink');
-        });
-    }
-
-    function showJevValuesResult(values, state, extraFooterHtml) {
-      applyJevButtonState(state);
-      jevValuesBody.innerHTML = jevValuesGridHtml(values) + (extraFooterHtml || '');
-    }
-
-    function openJevValuesModal() {
-      if (!historyModalCurrentId) return;
-      jevValuesModal.style.zIndex = String(getNextZ());
-      jevValuesModal.classList.add('open');
-      jevValuesModal.setAttribute('aria-hidden', 'false');
-      jevValuesBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch(
-        '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(historyModalCurrentId)) + '&model=' + encodeURIComponent(historyModalCurrentModel || ''),
-        { credentials: 'same-origin' }
-      )
-        .then(function(r) { return r.json(); })
-        .then(function(data) { showJevValuesResult(data && data.values, data && data.state, ''); })
-        .catch(function() {
-          jevValuesBody.innerHTML = '<div class="search-log-loading">読み込みに失敗しました</div>';
-        });
-    }
-
-    function closeJevValuesModal() {
-      jevValuesModal.classList.remove('open');
-      jevValuesModal.setAttribute('aria-hidden', 'true');
-    }
-
-    function runJevScoreAndShow() {
-      var shareIdAtRequest = historyModalCurrentId;
-      var modelAtRequest = historyModalCurrentModel || '';
-      jevValuesBody.innerHTML = '<div class="search-log-loading">Jevへ問い合わせ中...</div>';
-      fetch('/api/aichat/jev-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ shareId: shareIdAtRequest, model: modelAtRequest })
-      })
-        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
-        .then(function(result) {
-          if (historyModalCurrentId !== shareIdAtRequest) return;
-          if (!result.ok || !result.data || result.data.verified !== true) {
-            var errText = (result.data && result.data.error) || '書き込みに失敗しました';
-            jevValuesBody.innerHTML = '<div class="search-log-loading">' + escHtml(errText) + '</div>';
-            return;
-          }
-          showJevValuesResult(
-            result.data.values,
-            result.data.state,
-            '<div style="margin-top:10px;text-align:center;color:var(--text-primary);font-weight:600;">完了</div>'
-          );
-        })
-        .catch(function() {
-          if (historyModalCurrentId !== shareIdAtRequest) return;
-          jevValuesBody.innerHTML = '<div class="search-log-loading">通信エラーが発生しました</div>';
-        });
-    }
-
-    function showJevAddConfirm() {
-      jevValuesModal.style.zIndex = String(getNextZ());
-      jevValuesModal.classList.add('open');
-      jevValuesModal.setAttribute('aria-hidden', 'false');
-      jevValuesBody.innerHTML =
-        '<div style="text-align:center;padding:12px;">'
-        + '<div style="margin-bottom:12px;color:var(--text-primary);">Jev評価データがまだありません。追加しますか?</div>'
-        + '<button type="button" id="jevValuesConfirmYes" class="search-hist-btn" style="margin-right:8px;">はい</button>'
-        + '<button type="button" id="jevValuesConfirmNo" class="search-hist-btn">いいえ</button>'
-        + '</div>';
-      var yesBtn = document.getElementById('jevValuesConfirmYes');
-      var noBtn = document.getElementById('jevValuesConfirmNo');
-      if (noBtn) noBtn.addEventListener('click', closeJevValuesModal);
-      if (yesBtn) yesBtn.addEventListener('click', runJevScoreAndShow);
-    }
-
-    historyModalJevValuesBtn.addEventListener('click', function() {
-      if (!historyModalCurrentId) return;
-      var state = historyModalJevValuesBtn.dataset.jevState;
-      if (state === 'pink' || state === 'yellow') {
-        showJevAddConfirm();
-      } else {
-        openJevValuesModal();
+      function applyButtonState(state) {
+        button.style.background = COLORS[state] || '';
+        button.dataset.jevState = state || '';
+        button.title = TITLES[state] || 'Jev評価値';
       }
+
+      function refresh() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        var shareIdAtRequest = ctx.shareId;
+        fetch(
+          '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(shareIdAtRequest)) + '&model=' + encodeURIComponent(ctx.model || ''),
+          { credentials: 'same-origin' }
+        )
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            applyButtonState(data && data.state);
+          })
+          .catch(function() {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            applyButtonState('pink');
+          });
+      }
+
+      function showResult(values, state, extraFooterHtml) {
+        applyButtonState(state);
+        body.innerHTML = gridHtml(values) + (extraFooterHtml || '');
+      }
+
+      function close() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+
+      function openModal() {
+        modal.style.zIndex = String(getNextZ());
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function openValuesDisplay() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        openModal();
+        body.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+        fetch(
+          '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(ctx.shareId)) + '&model=' + encodeURIComponent(ctx.model || ''),
+          { credentials: 'same-origin' }
+        )
+          .then(function(r) { return r.json(); })
+          .then(function(data) { showResult(data && data.values, data && data.state, ''); })
+          .catch(function() {
+            body.innerHTML = '<div class="search-log-loading">読み込みに失敗しました</div>';
+          });
+      }
+
+      function runJevScoreAndShow() {
+        var ctx = getContext();
+        var shareIdAtRequest = ctx.shareId;
+        var modelAtRequest = ctx.model || '';
+        body.innerHTML = '<div class="search-log-loading">Jevへ問い合わせ中...</div>';
+        fetch('/api/aichat/jev-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ shareId: shareIdAtRequest, model: modelAtRequest })
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(result) {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            if (!result.ok || !result.data || result.data.verified !== true) {
+              var errText = (result.data && result.data.error) || '書き込みに失敗しました';
+              body.innerHTML = '<div class="search-log-loading">' + escHtml(errText) + '</div>';
+              return;
+            }
+            showResult(
+              result.data.values,
+              result.data.state,
+              '<div style="margin-top:10px;text-align:center;color:var(--text-primary);font-weight:600;">完了</div>'
+            );
+          })
+          .catch(function() {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            body.innerHTML = '<div class="search-log-loading">通信エラーが発生しました</div>';
+          });
+      }
+
+      function showAddConfirm() {
+        openModal();
+        body.innerHTML =
+          '<div style="text-align:center;padding:12px;">'
+          + '<div style="margin-bottom:12px;color:var(--text-primary);">Jev評価データがまだありません。追加しますか?</div>'
+          + '<button type="button" id="jevValuesConfirmYes" class="search-hist-btn" style="margin-right:8px;">はい</button>'
+          + '<button type="button" id="jevValuesConfirmNo" class="search-hist-btn">いいえ</button>'
+          + '</div>';
+        var yesBtn = document.getElementById('jevValuesConfirmYes');
+        var noBtn = document.getElementById('jevValuesConfirmNo');
+        if (noBtn) noBtn.addEventListener('click', close);
+        if (yesBtn) yesBtn.addEventListener('click', runJevScoreAndShow);
+      }
+
+      button.addEventListener('click', function() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        var state = button.dataset.jevState;
+        if (state === 'pink' || state === 'yellow') {
+          showAddConfirm();
+        } else {
+          openValuesDisplay();
+        }
+      });
+      closeBtn.addEventListener('click', close);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) close();
+      });
+
+      return { refresh: refresh };
+    }
+
+    var historyModalJevValuesWidget = createJevValuesWidget({
+      button: historyModalJevValuesBtn,
+      modal: jevValuesModal,
+      body: jevValuesBody,
+      closeBtn: jevValuesClose,
+      getContext: function() { return { shareId: historyModalCurrentId, model: historyModalCurrentModel }; }
     });
-    jevValuesClose.addEventListener('click', closeJevValuesModal);
-    jevValuesModal.addEventListener('click', function(e) {
-      if (e.target === jevValuesModal) closeJevValuesModal();
-    });
+    function refreshJevValuesButtonState() { historyModalJevValuesWidget.refresh(); }
 
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
