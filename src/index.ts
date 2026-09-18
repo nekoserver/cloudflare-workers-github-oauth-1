@@ -26,6 +26,7 @@ import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
+import { getJevLabelStatsPage, type JevLabelGroupCount } from './views/jevLabelStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -16749,6 +16750,40 @@ app.get('/jev-score-board', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score-board] ページ描画に失敗', { error: message });
     return new Response('Failed to render jev-score-board', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * 📋 Jev評価項目一覧ページ。「どのパターン(入力内容)のときにいくつの
+ * 質問項目でJevに問い合わせているか」を把握するための一覧。
+ * パターン1(回答/質問文評価、jev_labels)は表示グループ別・合計件数、
+ * パターン2(国名キーワード評価、jev_country_keyword_labels)は件数のみ。
+ */
+app.get('/jev-label-stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const groupRows = await c.env.DB.prepare(
+      `SELECT g.name AS name, COUNT(l.id) AS cnt
+       FROM jev_label_groups g
+       LEFT JOIN jev_labels l ON l.jev_group_id = g.id
+       GROUP BY g.id, g.name
+       ORDER BY g.id`
+    ).all<{ name: string; cnt: number }>();
+    const keywordRow = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS cnt FROM jev_country_keyword_labels'
+    ).first<{ cnt: number }>();
+
+    const groups: JevLabelGroupCount[] = (groupRows.results ?? []).map((r) => ({ groupName: r.name, labelCount: r.cnt }));
+    const totalAnswerLabels = groups.reduce((sum, g) => sum + g.labelCount, 0);
+    const keywordLabelCount = keywordRow?.cnt ?? 0;
+
+    const html = getJevLabelStatsPage({ name: user.name, username: user.sub }, { groups, totalAnswerLabels, keywordLabelCount });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-label-stats] ページ描画に失敗', { error: message });
+    return new Response('Failed to render jev-label-stats', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 
