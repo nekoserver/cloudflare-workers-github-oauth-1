@@ -370,7 +370,7 @@ import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
-import { buildJevValuesForLoop } from './utils/jevAnswerValues';
+import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -7780,12 +7780,139 @@ app.get('/api/aichat/jev-values', authMiddleware, async (c) => {
       .bind('answer', user.sub, shareId, model, model)
       .all<{ jev_label_id: number; value: number }>();
     const values = buildJevValuesForLoop(rows.results ?? []);
-    return jsonUtf8({ values });
+    return jsonUtf8({ values, tableMissing: false, state: computeJevButtonState(values, false) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      const values = buildJevValuesForLoop([]);
+      return jsonUtf8({ values, tableMissing: true, state: computeJevButtonState(values, true) });
+    }
     logger.error('[jev-values] jev_evaluations取得クエリ失敗', { shareId, error: message });
     return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
   }
+});
+
+/**
+ * AIチャットの詳細プレビューモーダルの📔ボタンがpink状態(通常のjevテーブルに
+ * この質問+モデルの評価データが1件も無い)のときの「追加しますか」確認後に
+ * 呼ばれる。表示中の回答バブルの回答文をJevの全ラベルで評価させ、
+ * jev_evaluationsへ書き込んだ後、書き込み内容を再読み込みして検証
+ * (ベリファイ)する。verified:trueを返すのは、実際にDBから読み戻して
+ * 確認できた場合のみ(書き込みSQLが成功しただけでは信用しない)。
+ */
+app.post('/api/aichat/jev-score', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ shareId?: string; model?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  const shareRow = await getAichatShareDetail(c.env.DB, user.sub, shareId, '');
+  if (!shareRow) return jsonUtf8({ error: 'Not found' }, 404);
+  const stateText = shareRow.answer;
+
+  let allLabels: JevLabel[] = [];
+  try {
+    const rows = await c.env.DB.prepare('SELECT id, question_text, options_json FROM jev_labels').all<{
+      id: number;
+      question_text: string;
+      options_json: string | null;
+    }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-score] jev_labels.options_jsonが不正です(Jev APIのcriteriaに必要な2要素配列)', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      return jsonUtf8({ error: 'jev_labelsテーブルが存在しません(マイグレーション未適用の可能性があります)' }, 500);
+    }
+    logger.error('[jev-score] jev_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) {
+    return jsonUtf8({ error: 'jev_labelsが1件も登録されていません' }, 500);
+  }
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind('answer', user.sub, shareId, model, model)
+      .all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      return jsonUtf8({ error: 'jev_evaluationsテーブルが存在しません(マイグレーション未適用の可能性があります)' }, 500);
+    }
+    logger.error('[jev-score] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({
+      apiKey: c.env.JEV_API_KEY,
+      state: stateText,
+      labels: plan.pending,
+      fetchImpl: fetch,
+    });
+    if (!jevResult.ok) {
+      logger.error('[jev-score] Jev API呼び出し失敗', { shareId, model, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    try {
+      for (const score of jevResult.scores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES (?, ?, ?, ?, ?, ?)'
+        )
+          .bind('answer', shareId, user.sub, model, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-score] jev_evaluations保存クエリ失敗', { shareId, error: message });
+      return jsonUtf8({ error: 'jev_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  // ベリファイ: 書き込みSQLの成功report(INSERT OR IGNOREはINSERT自体には成功しうる)を
+  // 信用せず、実際にDBから読み戻して全pendingラベルが揃っているか確認する。
+  let verifyRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind('answer', user.sub, shareId, model, model)
+      .all<{ jev_label_id: number; value: number }>();
+    verifyRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] ベリファイ用クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'ベリファイでサーバーエラーが発生しました: ' + message }, 500);
+  }
+  const verifiedIds = new Set(verifyRows.map((r) => r.jev_label_id));
+  const missingAfterWrite = plan.pending.filter((label) => !verifiedIds.has(label.id));
+  if (missingAfterWrite.length > 0) {
+    logger.error('[jev-score] ベリファイ失敗: 書き込んだはずのラベルがjev_evaluationsに見つかりません', {
+      shareId,
+      missingLabelIds: missingAfterWrite.map((l) => l.id),
+    });
+    return jsonUtf8({ error: 'jev_evaluationsへの書き込みをベリファイできませんでした(一部ラベルが未反映です)', verified: false }, 500);
+  }
+
+  const values = buildJevValuesForLoop(verifyRows);
+  return jsonUtf8({ shareId, model, values, verified: true, state: computeJevButtonState(values, false) });
 });
 
 /**

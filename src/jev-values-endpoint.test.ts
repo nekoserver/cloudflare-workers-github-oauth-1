@@ -60,7 +60,7 @@ describe('GET /api/aichat/jev-values', () => {
     expect(res.status).toBe(400);
   });
 
-  it('1〜20件のvalueをjevLabelId順に返す(該当行が無いIDはnull)', async () => {
+  it('1〜20件のvalueをjevLabelId順に返す(該当行が無いIDはnull)。1件でもあればstateはgreen', async () => {
     const authHeader = await makeAuthHeader();
     const rows = [
       { jev_label_id: 1, value: 0.8 },
@@ -72,11 +72,25 @@ describe('GET /api/aichat/jev-values', () => {
       { JWT_SECRET, DB: createMockDb(rows) },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { values: { jevLabelId: number; value: number | null }[] };
+    const body = (await res.json()) as { values: { jevLabelId: number; value: number | null }[]; state: string; tableMissing: boolean };
     expect(body.values).toHaveLength(20);
     expect(body.values[0]).toEqual({ jevLabelId: 1, value: 0.8 });
     expect(body.values[1]).toEqual({ jevLabelId: 2, value: null });
     expect(body.values[4]).toEqual({ jevLabelId: 5, value: 0.2 });
+    expect(body.state).toBe('green');
+    expect(body.tableMissing).toBe(false);
+  });
+
+  it('評価データが1件も無ければstateはyellow', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/api/aichat/jev-values?shareId=abc',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb([]) },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { state: string };
+    expect(body.state).toBe('yellow');
   });
 
   it('他ユーザーのuser_idでは評価値が返らない(user_idで絞り込まれる)', async () => {
@@ -92,7 +106,33 @@ describe('GET /api/aichat/jev-values', () => {
     expect(body.values.every((v) => v.value === null)).toBe(true);
   });
 
-  it('DBクエリが失敗すると500かつエラー内容を返す', async () => {
+  it('テーブル自体が存在しない場合は500ではなく200・state=pink・tableMissing=trueを返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const missingTableDb = {
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue({ revoked_at: null }),
+          all: vi.fn().mockRejectedValue(new Error('D1_ERROR: no such table: jev_evaluations')),
+        }),
+        first: vi.fn().mockImplementation(() => {
+          if (sql.includes('user_sessions')) return Promise.resolve({ revoked_at: null });
+          return Promise.resolve(null);
+        }),
+        all: vi.fn().mockResolvedValue({ results: [] }),
+      })),
+    };
+    const res = await app.request(
+      '/api/aichat/jev-values?shareId=abc',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: missingTableDb },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { state: string; tableMissing: boolean };
+    expect(body.state).toBe('pink');
+    expect(body.tableMissing).toBe(true);
+  });
+
+  it('テーブル欠落以外のDBクエリ失敗は500かつエラー内容を返す', async () => {
     const authHeader = await makeAuthHeader();
     const failingDb = {
       prepare: vi.fn().mockImplementation((sql: string) => ({
