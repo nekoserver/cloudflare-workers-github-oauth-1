@@ -450,6 +450,7 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
+import { summarizeApiKeyUsage, type ApiKeyEndpointStatRow } from './utils/apiKeyStats';
 import {
   isValidEcPublicKeyJwk,
   generateChallengeValue,
@@ -631,6 +632,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_country_keyword_labels', migration: '0145', description: 'AI分類のキーワードがカタカナの国名だった場合に使う、国名1語から判定できるJev評価ラベルのマスター(jev_labelsとは別。旅程前提の質問を除いた国レベルの質問のみ)', syncPolicy: 'manual' },
   { name: 'jev_country_keyword_evaluations', migration: '0145', description: 'カタカナ国名キーワードをjev_country_keyword_labelsの各ラベルでJevに評価させた結果。share_id/modelではなくkeyword文字列で引く点がjev_evaluationsと異なる', syncPolicy: 'auto' },
   { name: 'jev_keyword_evaluation_locks', migration: '0148', description: 'runJevScoreForKeywordの多重実行防止用の一時ロック行(user_id+keyword単位)。一定時間で失効し、処理完了後は削除される', syncPolicy: 'auto' },
+  { name: 'api_key_endpoint_stats', migration: '0149', description: 'APIキー(nkapi_...)単位のエンドポイント別・日別(JST)アクセス集計。🔑キー管理ページの使用統計表示で使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2321,6 +2323,16 @@ INSERT OR IGNORE INTO jev_country_keyword_labels (question_text, options_json) V
   locked_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, keyword)
 );`,
+  '0149': `CREATE TABLE IF NOT EXISTS api_key_endpoint_stats (
+  key_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  status_code INTEGER NOT NULL DEFAULT 0,
+  count INTEGER NOT NULL DEFAULT 1,
+  last_called_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (key_id, day, endpoint, status_code)
+);
+CREATE INDEX IF NOT EXISTS idx_api_key_endpoint_stats_key_id ON api_key_endpoint_stats(key_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2583,6 +2595,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_country_keyword_labels: { id: 'pk' },
   jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
+  api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2722,6 +2735,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_country_keyword_labels: 'ai',
   jev_country_keyword_evaluations: 'ai',
   jev_keyword_evaluation_locks: 'ai',
+  api_key_endpoint_stats: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2933,6 +2947,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
   jev_keyword_evaluation_locks: { user_id: 'user_sessions' },
+  api_key_endpoint_stats: { key_id: 'api_keys' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2974,6 +2989,9 @@ export const USER_PREFERENCE_KEYS: Record<string, { description: string; values:
  * ここに登録がない場合は fromCol と同名のカラムを参照する（同名FK）。
  */
 export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
+  // key_id 系 → api_keys.id
+  'api_key_endpoint_stats.key_id': 'id',
+
   // workspace_id 系 → workspaces.id
   'user_sessions.current_workspace_id': 'id',
   'commit_calendar_cache.workspace_id': 'id',
@@ -20510,6 +20528,41 @@ app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキーの失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 🔑キー管理ページの使用統計表示用。指定APIキー(自分が発行したものに限る)の
+ * エンドポイント別・日別・月別アクセス件数を返す。api_key_endpoint_statsは
+ * 「/api/aichatをAPIキー認証で叩いたリクエスト」だけを記録している(セッション
+ * Cookie/JWT経由のアクセスや、GET /のログイン判定は含まない)。
+ */
+app.get('/api/api-keys/:id/stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const ownerRow = await db.prepare(
+      'SELECT id FROM api_keys WHERE id = ? AND user_id = ?'
+    ).bind(keyId, user.sub).first<{ id: string }>();
+    if (!ownerRow) {
+      return c.json({ error: '対象のAPIキーが見つかりません' }, 404);
+    }
+    const rows = await db.prepare(
+      'SELECT day, endpoint, status_code, count FROM api_key_endpoint_stats WHERE key_id = ?'
+    ).bind(keyId).all<ApiKeyEndpointStatRow>();
+    const summary = summarizeApiKeyUsage(rows.results ?? []);
+    return c.json(summary);
+  } catch (error) {
+    logger.error('Failed to fetch api key usage stats', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '使用統計の取得に失敗しました' }, 500);
   }
 });
 

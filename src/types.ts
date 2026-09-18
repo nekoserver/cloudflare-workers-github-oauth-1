@@ -80,6 +80,8 @@ export type Bindings = {
 /** Hono コンテキスト変数 */
 export type Variables = {
   user: JWTPayload;
+  /** APIキー認証で通ったリクエストのみ設定される、そのキーのid(api_keys.id)。使用統計の記録に使う */
+  apiKeyId?: string;
 };
 
 // =====================================================

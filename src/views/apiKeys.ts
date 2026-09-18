@@ -126,6 +126,15 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
       color: var(--text-primary);
     }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .stats-modal-box { max-width: 560px; }
+    .stats-total { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+    .stats-section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin: 16px 0 8px; }
+    .stats-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .stats-bar-label { width: 150px; flex-shrink: 0; font-size: 12px; color: var(--text-secondary); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stats-bar-track { flex: 1; height: 14px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+    .stats-bar-fill { height: 100%; background: var(--accent-color); border-radius: 4px; }
+    .stats-bar-count { width: 44px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--text-secondary); }
+    .stats-empty { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
   </style>
 </head>
 <body>
@@ -219,6 +228,17 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     </div>
   </div>
 
+  <div class="modal-overlay" id="statsModal">
+    <div class="modal-box stats-modal-box">
+      <h3>📊 使用統計</h3>
+      <p>このAPIキーで <code>/api/aichat</code> を叩いたリクエストの集計です(セッションでのアクセスは含みません)。</p>
+      <div id="statsBody"><div class="stats-empty">読み込み中...</div></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeStatsModal()">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     ${getThemeToggleScript()}
 
@@ -251,7 +271,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         var z = parseInt(el.style.zIndex, 10);
         if (!isNaN(z) && z < 9000 && z > max) max = z;
       });
-      var staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000 };
+      var staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000, statsModal: 2000 };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
         if (el && el.classList.contains('show')) {
@@ -284,6 +304,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
           '<td><div class="key-cell">' +
             '<textarea class="key-textarea' + (revoked ? ' key-revoked-bg' : '') + '" readonly>' + escapeHtmlClient(displayKey) + '</textarea>' +
             '<button class="icon-btn" onclick="copyKeyText(this)">📋 コピー</button>' +
+            '<button class="icon-btn" onclick="showStats(&#39;' + item.id + '&#39;)">📊 統計</button>' +
             '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
           '</div></td>' +
           '<td>' + formatStatus(item) + '</td>' +
@@ -383,6 +404,59 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの失効に失敗しました'); });
+    }
+
+    function escapeBarLabel(s) {
+      return escapeHtmlClient(s);
+    }
+
+    function renderStatsBarSection(title, items, labelKey, countKey) {
+      if (!items || items.length === 0) {
+        return '<div class="stats-section-title">' + escapeHtmlClient(title) + '</div>' +
+          '<div class="stats-empty">データがありません</div>';
+      }
+      var max = items.reduce(function(m, it) { return Math.max(m, it[countKey]); }, 1);
+      var rows = items.map(function(it) {
+        var pct = Math.max(4, Math.round((it[countKey] / max) * 100));
+        return '<div class="stats-bar-row">' +
+          '<div class="stats-bar-label" title="' + escapeBarLabel(it[labelKey]) + '">' + escapeBarLabel(it[labelKey]) + '</div>' +
+          '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="stats-bar-count">' + it[countKey] + '</div>' +
+          '</div>';
+      }).join('');
+      return '<div class="stats-section-title">' + escapeHtmlClient(title) + '</div>' + rows;
+    }
+
+    function showStats(id) {
+      var modal = document.getElementById('statsModal');
+      var body = document.getElementById('statsBody');
+      body.innerHTML = '<div class="stats-empty">読み込み中...</div>';
+      modal.style.zIndex = String(getNextZ());
+      modal.classList.add('show');
+
+      fetch('/api/api-keys/' + encodeURIComponent(id) + '/stats', { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          if (!res.ok) {
+            body.innerHTML = '<div class="stats-empty">' + escapeHtmlClient(res.data.error || '取得に失敗しました') + '</div>';
+            return;
+          }
+          var data = res.data;
+          var html = '<div class="stats-total">合計 ' + data.totalCount + ' 回</div>';
+          // 直近30日分だけをグラフに使う(古いデータで棒が埋もれるのを防ぐ)
+          var recentDays = (data.byDay || []).slice(-30);
+          html += renderStatsBarSection('よく使われているエンドポイント', data.byEndpoint, 'endpoint', 'count');
+          html += renderStatsBarSection('月別(直近)', data.byMonth, 'month', 'count');
+          html += renderStatsBarSection('日別(直近30日)', recentDays, 'day', 'count');
+          body.innerHTML = html;
+        })
+        .catch(function() {
+          body.innerHTML = '<div class="stats-empty">通信エラーが発生しました</div>';
+        });
+    }
+
+    function closeStatsModal() {
+      document.getElementById('statsModal').classList.remove('show');
     }
 
     function showRawKeyModal(rawKey, countdownNotice, countdown) {
