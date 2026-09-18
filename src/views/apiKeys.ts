@@ -92,6 +92,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .status-expired { background: #a0a0a0; color: white; }
     .empty-row td { text-align: center; color: var(--text-muted); padding: 24px; }
     .key-cell { display: flex; align-items: center; gap: 6px; }
+    .status-cell { display: flex; align-items: center; gap: 8px; }
     .key-textarea {
       font-family: monospace; font-size: 12px; resize: none; overflow: hidden;
       width: 160px; height: 32px; padding: 6px 8px; border: 1px solid var(--input-border);
@@ -304,10 +305,11 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
           '<td><div class="key-cell">' +
             '<textarea class="key-textarea' + (revoked ? ' key-revoked-bg' : '') + '" readonly>' + escapeHtmlClient(displayKey) + '</textarea>' +
             '<button class="icon-btn" onclick="copyKeyText(this)">📋 コピー</button>' +
-            '<button class="icon-btn" onclick="showStats(&#39;' + item.id + '&#39;)">📊 統計</button>' +
             '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
           '</div></td>' +
-          '<td>' + formatStatus(item) + '</td>' +
+          '<td><div class="status-cell">' + formatStatus(item) +
+            '<button class="icon-btn" onclick="showStats(&#39;' + item.id + '&#39;)">📊 統計</button>' +
+          '</div></td>' +
           '<td>' + escapeHtmlClient(item.created_at) + '</td>' +
           '<td>' + (item.expires_at ? escapeHtmlClient(item.expires_at) : '無期限') + '</td>' +
           '<td>' + (item.last_used_at ? escapeHtmlClient(item.last_used_at) : '未使用') + '</td>' +

@@ -32,6 +32,17 @@ describe('🔑キー管理ページ: 使用統計モーダル', () => {
     expect(html).toContain("fetch('/api/api-keys/' + encodeURIComponent(id) + '/stats'");
   });
 
+  it('統計ボタンは状態列(formatStatus)の右側に置かれ、コピー/失効ボタンとは別の区画にある', () => {
+    const idx = html.indexOf("'<td><div class=\"status-cell\">' + formatStatus(item) +");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain('📊 統計');
+    // key-cell(コピー/失効の区画)には統計ボタンが無い
+    const keyCellIdx = html.indexOf("'<td><div class=\"key-cell\">'");
+    const keyCellEndIdx = html.indexOf('</div></td>', keyCellIdx);
+    expect(html.slice(keyCellIdx, keyCellEndIdx)).not.toContain('📊 統計');
+  });
+
   it('統計モーダルはgetNextZ()でz-indexを算出してから開く(ルール26)', () => {
     const idx = html.indexOf('function showStats(id)');
     expect(idx).toBeGreaterThan(-1);
