@@ -57,13 +57,37 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     expect(snippet).toContain('onJevComplete: function()');
   });
 
-  it('onJevComplete内はチェックボックスONかつ未ベクタ化の場合のみ自動実行する', () => {
+  it('onJevComplete内は✂️チェックボックスとjev自動化チェックボックスが両方ONかつ未ベクタ化の場合のみ自動実行する', () => {
     const html = buildPage();
     const idx = html.indexOf('onJevComplete: function()');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 300);
-    expect(snippet).toContain('if (autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors)');
+    expect(snippet).toContain('if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors)');
     expect(snippet).toContain('runVectorizeAndBulkRegisterChain();');
+  });
+
+  it('jev評価の自動化チェックボックス(aichat_auto_jev_score)がCookieを読み書きする', () => {
+    const html = buildPage();
+    expect(html).toContain('aichat_auto_jev_score');
+    expect(html).toContain('AUTO_JEV_COOKIE + \'=\' + (autoJevCheckbox.checked ? \'on\' : \'off\')');
+  });
+
+  it('onStateLoaded内はjev自動化チェックボックスONかつ未評価(pink/yellow)の場合のみrunJevScoreAndShowを自動実行する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('onStateLoaded: function(state)');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).toContain("if (autoJevCheckbox.checked && (state === 'pink' || state === 'yellow'))");
+    expect(snippet).toContain('bubbleJevWidget.runJevScoreAndShow();');
+  });
+
+  it('createJevValuesWidgetがonStateLoadedをrefresh成功時・失敗時の両方で呼び出す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function refresh()');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 900);
+    const occurrences = snippet.split("if (typeof onStateLoaded === 'function') onStateLoaded(").length - 1;
+    expect(occurrences).toBe(2);
   });
 
   it('createJevValuesWidget自体がonJevCompleteをJev成功時に呼び出す', () => {

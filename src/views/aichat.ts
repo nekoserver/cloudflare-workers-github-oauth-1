@@ -4633,6 +4633,7 @@ export function getAiChatPage(user: {
       var closeBtn = config.closeBtn;
       var getContext = config.getContext;
       var onJevComplete = config.onJevComplete;
+      var onStateLoaded = config.onStateLoaded;
 
       // 固定色を使う(CLAUDE.CSS.mdの例外: バッジ・ステータス表示で意味的に
       // 色が固定されているもの、PK/FK/UK/IDXバッジと同じ扱い)。
@@ -4674,11 +4675,14 @@ export function getAiChatPage(user: {
           .then(function(r) { return r.json(); })
           .then(function(data) {
             if (getContext().shareId !== shareIdAtRequest) return;
-            applyButtonState(data && data.state);
+            var state = data && data.state;
+            applyButtonState(state);
+            if (typeof onStateLoaded === 'function') onStateLoaded(state);
           })
           .catch(function() {
             if (getContext().shareId !== shareIdAtRequest) return;
             applyButtonState('pink');
+            if (typeof onStateLoaded === 'function') onStateLoaded('pink');
           });
       }
 
@@ -4782,7 +4786,7 @@ export function getAiChatPage(user: {
         });
       }
 
-      return { refresh: refresh };
+      return { refresh: refresh, runJevScoreAndShow: runJevScoreAndShow };
     }
 
     var historyModalJevValuesWidget = createJevValuesWidget({
@@ -7289,6 +7293,23 @@ export function getAiChatPage(user: {
             runVectorizeAndBulkRegisterChain();
           });
 
+          // Jev評価値ボタンの左に「jev評価の自動化」チェックボックスを置く。
+          // ONの時だけ、まだJev評価データが無い(pink/yellow)場合に
+          // runJevScoreAndShowを自動で呼び出しJev評価まで自動化する。
+          var autoJevLabel = document.createElement('label');
+          autoJevLabel.style.cssText = 'display:inline-flex;align-items:center;gap:2px;font-size:10px;color:var(--text-muted);cursor:pointer;';
+          var autoJevCheckbox = document.createElement('input');
+          autoJevCheckbox.type = 'checkbox';
+          autoJevCheckbox.style.cssText = 'width:12px;height:12px;margin:0;';
+          var AUTO_JEV_COOKIE = 'aichat_auto_jev_score';
+          var autoJevCookieMatch = document.cookie.match(/(?:^|;\s*)aichat_auto_jev_score=([^;]*)/);
+          autoJevCheckbox.checked = !!(autoJevCookieMatch && autoJevCookieMatch[1] === 'on');
+          autoJevCheckbox.addEventListener('change', function() {
+            document.cookie = AUTO_JEV_COOKIE + '=' + (autoJevCheckbox.checked ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          });
+          autoJevLabel.appendChild(autoJevCheckbox);
+          tokRow.appendChild(autoJevLabel);
+
           // トークン出力の左側にJev評価値ボタンを置く(通常のAI応答バブル画面での動作確認用)。
           // historyModal専用ではなく、createJevValuesWidgetをここでも呼び出して
           // 同じ挙動(状態色・確認モーダル・Jev問い合わせ・DB登録)を再現する。
@@ -7304,8 +7325,17 @@ export function getAiChatPage(user: {
             body: jevValuesBody,
             closeBtn: jevValuesClose,
             getContext: function() { return { shareId: shareId, model: model }; },
+            onStateLoaded: function(state) {
+              // 両方のチェックボックスがONの場合に限り、Jev評価から
+              // 「切り取り」(ベクタ化+キーワード抽出+一括登録)までを
+              // すべて自動で行う。jev自動化のみONの場合はJev評価だけを
+              // 自動化し、✂️側の自動実行はしない(onJevComplete側で判定)。
+              if (autoJevCheckbox.checked && (state === 'pink' || state === 'yellow')) {
+                bubbleJevWidget.runJevScoreAndShow();
+              }
+            },
             onJevComplete: function() {
-              if (autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors) {
+              if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors) {
                 runVectorizeAndBulkRegisterChain();
               }
             }
