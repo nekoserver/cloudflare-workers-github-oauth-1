@@ -129,7 +129,7 @@ describe('GET /jev-label-stats', () => {
   it('script タグ内の JS に構文エラーがない', () => {
     const html = getJevLabelStatsPage(
       { name: 'Test', username: 'test-user' },
-      { groups: [{ groupName: 'g1', labelCount: 1 }], totalAnswerLabels: 1, keywordLabelCount: 0 },
+      { groups: [{ groupName: 'g1', labelCount: 1, labels: [{ id: 1, questionText: 'q1' }] }], totalAnswerLabels: 1, keywordLabelCount: 0 },
     );
     const scriptRe = /<script>([\s\S]*?)<\/script>/g;
     let m: RegExpExecArray | null;
@@ -139,5 +139,62 @@ describe('GET /jev-label-stats', () => {
       expect(() => new Function(m![1])).not.toThrow();
     }
     expect(count).toBeGreaterThan(0);
+  });
+
+  it('グループ行をタップすると、そのグループの個別質問項目一覧(初期状態は非表示)が展開できる', async () => {
+    const db = setupDb();
+    db.exec(`
+      INSERT INTO jev_label_groups (id, name) VALUES (1, '事実の正確さ'), (2, '論理・整合性');
+      INSERT INTO jev_labels (jev_group_id, question_type, question_text) VALUES
+        (1, 'score', '事実に基づいているか'), (1, 'score', '出典が明確か'),
+        (2, 'score', '論理が一貫しているか');
+    `);
+    const res = await getPage(db);
+    const html = await res.text();
+
+    expect(html).toContain('onclick="toggleGroupDetail(0)"');
+    expect(html).toContain('id="groupDetail-0"');
+    expect(html).toContain('style="display:none;"');
+    expect(html).toContain('事実に基づいているか');
+    expect(html).toContain('出典が明確か');
+
+    const detail0Idx = html.indexOf('id="groupDetail-0"');
+    const detail1Idx = html.indexOf('id="groupDetail-1"');
+    const detail0Html = html.slice(detail0Idx, detail1Idx);
+    expect(detail0Html).toContain('事実に基づいているか');
+    expect(detail0Html).toContain('出典が明確か');
+    expect(detail0Html).not.toContain('論理が一貫しているか');
+  });
+
+  it('質問項目が1件も無いグループの詳細欄は「質問項目がありません」と表示する(空のまま黙らない)', async () => {
+    const db = setupDb();
+    db.exec(`INSERT INTO jev_label_groups (id, name) VALUES (1, '応答姿勢・手続き');`);
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('質問項目がありません');
+  });
+});
+
+describe('buildJevLabelGroupCounts', () => {
+  it('グループごとにjev_group_idで質問項目を振り分け、件数と一覧を返す', async () => {
+    const { buildJevLabelGroupCounts } = await import('./views/jevLabelStats');
+    const result = buildJevLabelGroupCounts(
+      [{ id: 1, name: 'A' }, { id: 2, name: 'B' }],
+      [
+        { id: 10, question_text: 'q10', jev_group_id: 1 },
+        { id: 11, question_text: 'q11', jev_group_id: 1 },
+        { id: 12, question_text: 'q12', jev_group_id: 2 },
+      ],
+    );
+    expect(result).toEqual([
+      { groupName: 'A', labelCount: 2, labels: [{ id: 10, questionText: 'q10' }, { id: 11, questionText: 'q11' }] },
+      { groupName: 'B', labelCount: 1, labels: [{ id: 12, questionText: 'q12' }] },
+    ]);
+  });
+
+  it('該当する質問項目が無いグループは件数0・空配列を返す(欠落しない)', async () => {
+    const { buildJevLabelGroupCounts } = await import('./views/jevLabelStats');
+    const result = buildJevLabelGroupCounts([{ id: 1, name: 'A' }], []);
+    expect(result).toEqual([{ groupName: 'A', labelCount: 0, labels: [] }]);
   });
 });

@@ -26,7 +26,7 @@ import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
-import { getJevLabelStatsPage, type JevLabelGroupCount } from './views/jevLabelStats';
+import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -16763,18 +16763,13 @@ app.get('/jev-label-stats', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   try {
-    const groupRows = await c.env.DB.prepare(
-      `SELECT g.name AS name, COUNT(l.id) AS cnt
-       FROM jev_label_groups g
-       LEFT JOIN jev_labels l ON l.jev_group_id = g.id
-       GROUP BY g.id, g.name
-       ORDER BY g.id`
-    ).all<{ name: string; cnt: number }>();
-    const keywordRow = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS cnt FROM jev_country_keyword_labels'
-    ).first<{ cnt: number }>();
+    const [groupRows, labelRows, keywordRow] = await Promise.all([
+      c.env.DB.prepare('SELECT id, name FROM jev_label_groups ORDER BY id').all<{ id: number; name: string }>(),
+      c.env.DB.prepare('SELECT id, question_text, jev_group_id FROM jev_labels ORDER BY id').all<{ id: number; question_text: string; jev_group_id: number }>(),
+      c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_country_keyword_labels').first<{ cnt: number }>(),
+    ]);
 
-    const groups: JevLabelGroupCount[] = (groupRows.results ?? []).map((r) => ({ groupName: r.name, labelCount: r.cnt }));
+    const groups: JevLabelGroupCount[] = buildJevLabelGroupCounts(groupRows.results ?? [], labelRows.results ?? []);
     const totalAnswerLabels = groups.reduce((sum, g) => sum + g.labelCount, 0);
     const keywordLabelCount = keywordRow?.cnt ?? 0;
 
