@@ -14095,6 +14095,147 @@ app.post('/api/aichat/jev-stats-external', async (c) => {
   }
 });
 
+type JevScoreBoardExternalAuthResult =
+  | { ok: true; email: string; login: string | null }
+  | { ok: false; status: 401 | 403 | 500 | 503; error: string };
+
+/**
+ * dynamicnekoの/jev-scoresページ(jev-score-board-externalの各エンドポイント)
+ * 共通の認可処理。jev-score-external等と同じ「Bearer認証はルート側で確認済み
+ * →userTokenのsubからemailを検証→dynamicneko_aichat_allowed_usersで許可確認」
+ * までを1箇所にまとめ、4エンドポイントへのコピペを避ける。
+ * requireLogin=falseの場合(例: label-names、ユーザースコープのデータでは
+ * ないため)はgithub_login解決をスキップし、許可チェックのみ行う。
+ */
+async function resolveJevScoreBoardExternalAuth(
+  db: D1Database,
+  userTokenSecret: string | undefined,
+  userToken: string | undefined,
+  requireLogin: boolean,
+): Promise<JevScoreBoardExternalAuthResult> {
+  const tokenResult = await resolveJevUserTokenEmail(userTokenSecret, userToken);
+  if (!tokenResult.ok) {
+    return { ok: false, status: tokenResult.status, error: tokenResult.error };
+  }
+  const email = tokenResult.email;
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(db, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] 権限確認クエリ失敗', { email, error: message });
+    return { ok: false, status: 500, error: '権限確認でサーバーエラーが発生しました: ' + message };
+  }
+  if (!allowed) {
+    logger.warn('[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return { ok: false, status: 403, error: 'このメールアドレスはAI応答ログ検索を許可されていません' };
+  }
+
+  if (!requireLogin) {
+    return { ok: true, email, login: null };
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(db, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] login解決クエリ失敗', { email, error: message });
+    return { ok: false, status: 500, error: 'login解決でサーバーエラーが発生しました: ' + message };
+  }
+  if (!login) {
+    logger.error('[jev-score-board-external] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return { ok: false, status: 500, error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' };
+  }
+  return { ok: true, email, login };
+}
+
+function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Variables: Variables }>): boolean {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  return !!expected && auth === expected;
+}
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/rowsのexternal版。 */
+app.post('/api/aichat/jev-score-board-rows-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; keyword?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, auth.login as string, body?.keyword ?? '');
+    return jsonUtf8({ hitCount, rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] rows取得に失敗', { error: message });
+    return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/top-by-labelのexternal版。 */
+app.post('/api/aichat/jev-score-board-top-by-label-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; labelId?: number }>().catch(() => null);
+  const labelIdParam = Number(body?.labelId);
+  if (!isValidJevScoreBoardLabelId(labelIdParam)) {
+    return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
+  }
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const result = await fetchJevScoreBoardTopByLabel(c.env.DB, auth.login as string, labelIdParam);
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] top-by-label取得に失敗', { labelId: labelIdParam, error: message });
+    return jsonUtf8({ error: 'top-by-label取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/answerのexternal版。 */
+app.post('/api/aichat/jev-score-board-answer-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; shareId?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const row = await fetchJevScoreBoardAnswer(c.env.DB, auth.login as string, shareId);
+    if (!row) return jsonUtf8({ error: '指定されたshareIdは見つかりません' }, 404);
+    return jsonUtf8({ question: row.question, answer: row.answer });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] answer取得に失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'answer取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/jev-scoresページ用。/api/jev-score-board/label-namesのexternal
+ * 版。jev_labelsはユーザースコープのデータではないため、login解決はスキップし
+ * 許可チェックのみ行う(resolveJevScoreBoardExternalAuthのrequireLogin=false)。
+ */
+app.post('/api/aichat/jev-score-board-label-names-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const labels = await fetchJevScoreBoardLabelNames(c.env.DB);
+    return jsonUtf8({ labels });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] label-names取得に失敗', { error: message });
+    return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 /**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
@@ -16609,19 +16750,28 @@ app.get('/api/jev-score-board/rows', authMiddleware, async (c) => {
 });
 
 /**
+ * jev_labels(id=1〜20)のquestion_textをまとめて返す。内部版(Cookie認証)・
+ * external版(dynamicnekoからのService Binding経由)の両方から呼ばれる共通
+ * ロジック。行が無いidはオブジェクトのキーごと含めない(黙って空文字にしない)。
+ */
+async function fetchJevScoreBoardLabelNames(db: D1Database): Promise<Record<string, string>> {
+  const rows = await db.prepare(
+    `SELECT id, question_text FROM jev_labels WHERE id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}`
+  ).all<{ id: number; question_text: string }>();
+  const labels: Record<string, string> = {};
+  for (const row of rows.results ?? []) labels[String(row.id)] = row.question_text;
+  return labels;
+}
+
+/**
  * /jev-score-boardのth表記切替(現行のL1〜L20 / 日本語ラベル名)用。
- * jev_labels(id=1〜20)のquestion_textをまとめて返す。クライアント側は
- * 初回切替時にこれを取得し、以降はオブジェクトへのキャッシュ参照で賄うため
- * 切替のたびに叩かれるエンドポイントではない。
+ * クライアント側は初回切替時にこれを取得し、以降はオブジェクトへのキャッシュ
+ * 参照で賄うため切替のたびに叩かれるエンドポイントではない。
  */
 app.get('/api/jev-score-board/label-names', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   try {
-    const rows = await c.env.DB.prepare(
-      `SELECT id, question_text FROM jev_labels WHERE id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}`
-    ).all<{ id: number; question_text: string }>();
-    const labels: Record<string, string> = {};
-    for (const row of rows.results ?? []) labels[String(row.id)] = row.question_text;
+    const labels = await fetchJevScoreBoardLabelNames(c.env.DB);
     return jsonUtf8({ labels });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -16629,6 +16779,32 @@ app.get('/api/jev-score-board/label-names', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
+
+export type JevScoreBoardTopByLabelResult = {
+  rows: { shareId: string; question: string; model: string | null; value: number }[];
+  labelText: string | null;
+};
+
+/**
+ * 表示中の20件に限らず、userIdの全評価データからそのラベル(jev_label_id)の
+ * スコアが高い順に上位JEV_SCORE_BOARD_LIMIT件を返す。内部版・external版の
+ * 両方から呼ばれる共通ロジック。
+ */
+async function fetchJevScoreBoardTopByLabel(db: D1Database, userId: string, labelId: number): Promise<JevScoreBoardTopByLabelResult> {
+  const [rows, labelRow] = await Promise.all([
+    db.prepare(
+      `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
+       FROM jev_evaluations je
+       JOIN ai_chat_shares s ON s.id = je.share_id
+       WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
+       ORDER BY je.value DESC
+       LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+    ).bind(userId, labelId).all<{ share_id: string; question: string; model: string | null; value: number }>(),
+    db.prepare('SELECT question_text FROM jev_labels WHERE id = ?').bind(labelId).first<{ question_text: string }>(),
+  ]);
+  const results = (rows.results ?? []).map((r) => ({ shareId: r.share_id, question: r.question, model: r.model, value: r.value }));
+  return { rows: results, labelText: labelRow?.question_text ?? null };
+}
 
 /**
  * /jev-score-boardのラベル列(th)タップ用。表示中の20件に限らず、ユーザーの
@@ -16642,19 +16818,8 @@ app.get('/api/jev-score-board/top-by-label', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
   }
   try {
-    const [rows, labelRow] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
-         FROM jev_evaluations je
-         JOIN ai_chat_shares s ON s.id = je.share_id
-         WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
-         ORDER BY je.value DESC
-         LIMIT ${JEV_SCORE_BOARD_LIMIT}`
-      ).bind(user.sub, labelIdParam).all<{ share_id: string; question: string; model: string | null; value: number }>(),
-      c.env.DB.prepare('SELECT question_text FROM jev_labels WHERE id = ?').bind(labelIdParam).first<{ question_text: string }>(),
-    ]);
-    const results = (rows.results ?? []).map((r) => ({ shareId: r.share_id, question: r.question, model: r.model, value: r.value }));
-    return jsonUtf8({ rows: results, labelText: labelRow?.question_text ?? null });
+    const result = await fetchJevScoreBoardTopByLabel(c.env.DB, user.sub, labelIdParam);
+    return jsonUtf8(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score-board] top-by-label取得に失敗', { labelId: labelIdParam, error: message });
@@ -16662,16 +16827,25 @@ app.get('/api/jev-score-board/top-by-label', authMiddleware, async (c) => {
   }
 });
 
-/** /jev-score-boardの質問IDリンクタップ用。質問文・回答文を返す(他ユーザーのshareは404)。 */
+/**
+ * shareIdの質問文・回答文を返す(userIdのshareでない場合、または論理削除済みの
+ * 場合はnull)。内部版・external版の両方から呼ばれる共通ロジック。
+ */
+async function fetchJevScoreBoardAnswer(db: D1Database, userId: string, shareId: string): Promise<{ question: string; answer: string } | null> {
+  const row = await db.prepare(
+    `SELECT question, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(shareId, userId).first<{ question: string; answer: string }>();
+  return row ?? null;
+}
+
+/** /jev-score-boardの質問文リンクタップ用。質問文・回答文を返す(他ユーザーのshareは404)。 */
 app.get('/api/jev-score-board/answer', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const shareId = (c.req.query('shareId') ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   try {
-    const row = await c.env.DB.prepare(
-      `SELECT question, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
-    ).bind(shareId, user.sub).first<{ question: string; answer: string }>();
+    const row = await fetchJevScoreBoardAnswer(c.env.DB, user.sub, shareId);
     if (!row) return jsonUtf8({ error: '指定されたshareIdは見つかりません' }, 404);
     return jsonUtf8({ question: row.question, answer: row.answer });
   } catch (err) {
