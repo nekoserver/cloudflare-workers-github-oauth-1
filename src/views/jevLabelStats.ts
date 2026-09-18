@@ -9,7 +9,9 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
-export type JevLabelGroupCount = { groupName: string; labelCount: number };
+export type JevLabelDetail = { id: number; questionText: string };
+
+export type JevLabelGroupCount = { groupName: string; labelCount: number; labels: JevLabelDetail[] };
 
 export type JevLabelStatsData = {
   groups: JevLabelGroupCount[];
@@ -17,13 +19,41 @@ export type JevLabelStatsData = {
   keywordLabelCount: number;
 };
 
+export type JevLabelGroupRow = { id: number; name: string };
+export type JevLabelRow = { id: number; question_text: string; jev_group_id: number };
+
+/**
+ * jev_label_groups(表示グループ)とjev_labels(個別質問項目)の生の行を、
+ * グループごとの件数・個別項目一覧にまとめる(DBアクセスを含まない純粋関数、
+ * CLAUDE.mdルール15)。
+ */
+export function buildJevLabelGroupCounts(groupRows: JevLabelGroupRow[], labelRows: JevLabelRow[]): JevLabelGroupCount[] {
+  return groupRows.map((g) => {
+    const labels = labelRows
+      .filter((l) => l.jev_group_id === g.id)
+      .map((l) => ({ id: l.id, questionText: l.question_text }));
+    return { groupName: g.name, labelCount: labels.length, labels };
+  });
+}
+
 export function getJevLabelStatsPage(user: { name?: string; username: string }, data: JevLabelStatsData): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
 
   const groupRows = data.groups.length === 0
     ? '<tr class="empty-row"><td colspan="2">グループが登録されていません</td></tr>'
-    : data.groups.map((g) => `<tr><td>${escapeHtml(g.groupName)}</td><td class="num">${g.labelCount}</td></tr>`).join('');
+    : data.groups.map((g, i) => {
+      const detailItems = g.labels.length === 0
+        ? '<li class="detail-empty">質問項目がありません</li>'
+        : g.labels.map((l) => `<li>${escapeHtml(l.questionText)}</li>`).join('');
+      return `<tr class="group-row" onclick="toggleGroupDetail(${i})" tabindex="0" role="button" aria-expanded="false" aria-controls="groupDetail-${i}">` +
+        `<td><span class="group-arrow" id="groupArrow-${i}">▶</span> ${escapeHtml(g.groupName)}</td>` +
+        `<td class="num">${g.labelCount}</td>` +
+        `</tr>` +
+        `<tr class="group-detail-row" id="groupDetail-${i}" style="display:none;">` +
+        `<td colspan="2"><ul class="detail-list">${detailItems}</ul></td>` +
+        `</tr>`;
+    }).join('');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -85,6 +115,13 @@ export function getJevLabelStatsPage(user: { name?: string; username: string }, 
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     tfoot td { font-weight: 700; color: var(--text-primary); border-top: 2px solid var(--border-color); border-bottom: none; }
     .empty-row td { text-align: center; color: var(--text-muted); padding: 20px; }
+    .group-row { cursor: pointer; }
+    .group-row:hover { background: var(--bg-secondary); }
+    .group-arrow { display: inline-block; font-size: 10px; color: var(--text-muted); width: 12px; }
+    .group-detail-row td { padding: 8px 12px 14px 34px; border-bottom: 1px solid var(--border-color); }
+    .detail-list { list-style: disc; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+    .detail-list li { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
+    .detail-list li.detail-empty { list-style: none; margin-left: -18px; color: var(--text-muted); }
     .stat-tile {
       display: flex; align-items: baseline; justify-content: space-between;
       background: var(--bg-secondary); border-radius: 8px; padding: 14px 16px; margin-top: 4px;
@@ -160,6 +197,25 @@ export function getJevLabelStatsPage(user: { name?: string; username: string }, 
     function toggleDropdown() {
       document.getElementById('dropdownMenu').classList.toggle('show');
     }
+    // グループ行タップで、そのグループ内の個別質問項目一覧を開閉する。
+    function toggleGroupDetail(i) {
+      var row = document.getElementById('groupDetail-' + i);
+      var arrow = document.getElementById('groupArrow-' + i);
+      var groupRow = arrow.closest('tr');
+      if (!row) return;
+      var opening = row.style.display === 'none';
+      row.style.display = opening ? 'table-row' : 'none';
+      arrow.textContent = opening ? '▼' : '▶';
+      if (groupRow) groupRow.setAttribute('aria-expanded', opening ? 'true' : 'false');
+    }
+    document.querySelectorAll('.group-row').forEach(function(row) {
+      row.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          row.click();
+        }
+      });
+    });
     window.addEventListener('click', function(e) {
       var icon = document.querySelector('.user-icon');
       var dd = document.getElementById('dropdownMenu');
