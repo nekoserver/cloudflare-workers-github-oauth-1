@@ -126,11 +126,10 @@ describe('/neko j <キーワード> は実際にjev_evaluationsのデータを�
     const body = (await res.json()) as { response?: string };
     expect(body.response).toContain('1件');
     expect(body.response).not.toContain('未登録');
-    // 検索キーワード→質問ID→1〜20の個別スコアがビジネスロジック側で解決されている
-    expect(body.response).toContain('| 質問ID | 質問文 | モデル | ラベルID | スコア |');
-    expect(body.response).toContain('| s1 | フランスの首都は? | gpt | 1 | 0.9 |');
-    // 値が無いラベルID(2〜20)も黙って除外せず-として表に残る
-    expect(body.response).toContain('| s1 | フランスの首都は? | gpt | 2 | - |');
+    // 検索キーワード→質問ID→1〜20の個別スコアがビジネスロジック側で解決されている。
+    // 質問ID1件=1行、ラベル1〜20は横方向の列(縦にラベル数だけ行を積まない)
+    expect(body.response).toContain('| 質問ID | 質問文 | モデル | L1 | L2 |');
+    expect(body.response).toContain('| s1 | フランスの首都は? | gpt | 0.9 | - |');
   });
 
   it('他ユーザーのjev_evaluationsは含めない', async () => {
