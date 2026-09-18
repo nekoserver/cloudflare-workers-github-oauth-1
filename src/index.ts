@@ -25,6 +25,7 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -371,6 +372,7 @@ import { F1_CIRCUITS } from './data/f1Circuits';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
 import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
+import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
@@ -16490,6 +16492,146 @@ app.get('/function-changelog', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render function-changelog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * /jev-score-boardページ・/api/jev-score-board/rows共通の絞り込みロジック。
+ * keyword未指定時はtarget_type='answer'のshareを最新評価日時順に、指定時は
+ * ai_chat_shares.question/answerへのキーワード部分一致(/neko jと同じ検索キー
+ * の意味論だが、コードは独立)で絞り込む。どちらもJEV_SCORE_BOARD_LIMIT件まで。
+ * このページは/neko jスラッシュコマンド(jevKeywordLookup)とは意図的に
+ * 別実装にしている(スラッシュコマンド経由の機能ではなく独立ページのため)。
+ */
+async function fetchJevScoreBoardData(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+): Promise<{ hitCount: number; rows: ReturnType<typeof groupJevScoreRowsByShare> }> {
+  const trimmed = keyword.trim();
+  const normalized = trimmed.replace(/[・･]/g, '・');
+  const matchCondition = trimmed
+    ? `s.deleted_at IS NULL AND (
+         INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+         OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+       )`
+    : 's.deleted_at IS NULL';
+  const bindArgs = trimmed ? [userId, normalized, normalized] : [userId];
+
+  const countRow = await db.prepare(
+    `SELECT COUNT(DISTINCT je.share_id) AS cnt
+     FROM jev_evaluations je
+     JOIN ai_chat_shares s ON s.id = je.share_id
+     WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}`
+  ).bind(...bindArgs).first<{ cnt: number }>();
+  const hitCount = countRow?.cnt ?? 0;
+  if (hitCount === 0) return { hitCount: 0, rows: [] };
+
+  const shareRowsResult = await db.prepare(
+    `SELECT DISTINCT je.share_id AS share_id, s.question AS question, s.created_at AS created_at
+     FROM jev_evaluations je
+     JOIN ai_chat_shares s ON s.id = je.share_id
+     WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}
+     ORDER BY s.created_at DESC
+     LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+  ).bind(...bindArgs).all<{ share_id: string; question: string; created_at: string }>();
+  const shareRows = shareRowsResult.results ?? [];
+  if (shareRows.length === 0) return { hitCount, rows: [] };
+
+  const shareIds = shareRows.map((r) => r.share_id);
+  const placeholders = shareIds.map(() => '?').join(',');
+  const scoreRowsResult = await db.prepare(
+    `SELECT share_id, model, jev_label_id, value
+     FROM jev_evaluations
+     WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+  ).bind(userId, ...shareIds).all<JevScoreBoardScoreRow>();
+
+  const questionByShareId = new Map(shareRows.map((r) => [r.share_id, r.question]));
+  const rows = groupJevScoreRowsByShare(scoreRowsResult.results ?? [], questionByShareId, shareIds);
+  return { hitCount, rows };
+}
+
+/**
+ * 質問ID(share)1件=1行、jev_label_id=1〜20(ループA)を横列(L1〜L20)に並べる
+ * 専用ページ。/neko jスラッシュコマンドとは独立(スラッシュコマンドから
+ * 呼び出す機能ではなく、こちらが主動線という要望のため)。
+ * キーワード未指定時は評価済みshareを最新順に最大20件表示する。
+ */
+app.get('/jev-score-board', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const keyword = c.req.query('keyword') ?? '';
+    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, user.sub, keyword);
+    const html = renderJevScoreBoardPage({ keyword, hitCount, rows });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] ページ描画に失敗', { error: message });
+    return new Response('Failed to render jev-score-board', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/** /jev-score-boardのキーワード検索ボックス用JSON API。ページ全体を再読み込みしない。 */
+app.get('/api/jev-score-board/rows', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const keyword = c.req.query('keyword') ?? '';
+    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, user.sub, keyword);
+    return jsonUtf8({ hitCount, rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] rows取得に失敗', { error: message });
+    return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /jev-score-boardのラベル列(th)タップ用。表示中の20件に限らず、ユーザーの
+ * 全評価データからそのラベル(jev_label_id)のスコアが高い順に上位20件を返す。
+ */
+app.get('/api/jev-score-board/top-by-label', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const labelIdParam = Number(c.req.query('labelId'));
+  if (!isValidJevScoreBoardLabelId(labelIdParam)) {
+    return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
+  }
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
+       FROM jev_evaluations je
+       JOIN ai_chat_shares s ON s.id = je.share_id
+       WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
+       ORDER BY je.value DESC
+       LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+    ).bind(user.sub, labelIdParam).all<{ share_id: string; question: string; model: string | null; value: number }>();
+    const results = (rows.results ?? []).map((r) => ({ shareId: r.share_id, question: r.question, model: r.model, value: r.value }));
+    return jsonUtf8({ rows: results });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] top-by-label取得に失敗', { labelId: labelIdParam, error: message });
+    return jsonUtf8({ error: 'top-by-label取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/** /jev-score-boardの質問IDリンクタップ用。質問文・回答文を返す(他ユーザーのshareは404)。 */
+app.get('/api/jev-score-board/answer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT question, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+    ).bind(shareId, user.sub).first<{ question: string; answer: string }>();
+    if (!row) return jsonUtf8({ error: '指定されたshareIdは見つかりません' }, 404);
+    return jsonUtf8({ question: row.question, answer: row.answer });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] answer取得に失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'answer取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
