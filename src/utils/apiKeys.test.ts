@@ -177,7 +177,7 @@ describe('evaluateApiKeyRow', () => {
 
   it('expires_atが未来の場合は有効', () => {
     const result = evaluateApiKeyRow({ ...baseRow, expires_at: '2026-09-15T00:00:00.000Z' }, now, false);
-    expect(result).toEqual({ valid: true, userId: 'user1' });
+    expect(result).toEqual({ valid: true, userId: 'user1', keyId: 'key1' });
   });
 
   it('キー自体は有効でもアカウント側がrevoked済みならaccount_revokedで無効', () => {
@@ -187,7 +187,7 @@ describe('evaluateApiKeyRow', () => {
 
   it('無期限・未revoke・アカウントも無効化されていない場合は有効', () => {
     const result = evaluateApiKeyRow(baseRow, now, false);
-    expect(result).toEqual({ valid: true, userId: 'user1' });
+    expect(result).toEqual({ valid: true, userId: 'user1', keyId: 'key1' });
   });
 });
 
@@ -236,7 +236,7 @@ describe('checkApiKeyAuth', () => {
       { revoked_at: null },
     ]);
     const result = await checkApiKeyAuth(db, 'nkapi_valid', now);
-    expect(result).toEqual({ valid: true, userId: 'user1' });
+    expect(result).toEqual({ valid: true, userId: 'user1', keyId: 'k1' });
   });
 
   it('api_keys行は有効でもuser_sessions.revoked_atが設定されていればaccount_revokedで無効', async () => {

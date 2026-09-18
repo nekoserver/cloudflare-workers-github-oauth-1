@@ -83,7 +83,7 @@ export type ApiKeyRow = {
 };
 
 export type ApiKeyCheckResult =
-  | { valid: true; userId: string }
+  | { valid: true; userId: string; keyId: string }
   | { valid: false; reason: 'not_found' | 'revoked' | 'expired' | 'account_revoked' };
 
 /**
@@ -103,7 +103,7 @@ export function evaluateApiKeyRow(
     return { valid: false, reason: 'expired' };
   }
   if (accountRevoked) return { valid: false, reason: 'account_revoked' };
-  return { valid: true, userId: row.user_id };
+  return { valid: true, userId: row.user_id, keyId: row.id };
 }
 
 /**

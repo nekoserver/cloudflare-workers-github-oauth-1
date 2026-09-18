@@ -10,6 +10,7 @@ import { postSlackMessage } from '../utils/slack';
 import { getSessionDurationSeconds } from '../utils/session';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables } from '../types';
 import { isApiKeyToken, checkApiKeyAuth, touchApiKeyLastUsed, type ApiKeyDb } from '../utils/apiKeys';
+import { recordApiKeyEndpointAccess, type ApiKeyStatsDb } from '../utils/apiKeyStats';
 
 // Contextに認証ユーザー情報を追加
 export interface AuthContext {
@@ -252,10 +253,15 @@ export async function aichatAuthMiddleware(c: Context<{ Bindings: Bindings; Vari
     }
     const nowSeconds = Math.floor(Date.now() / 1000);
     c.set('user', { sub: result.userId, iat: nowSeconds, exp: nowSeconds + 60 });
+    c.set('apiKeyId', result.keyId);
     c.executionCtx.waitUntil(
       touchApiKeyLastUsed(db as unknown as ApiKeyDb, bearerToken).catch(() => {})
     );
     await next();
+    c.executionCtx.waitUntil(
+      recordApiKeyEndpointAccess(db as unknown as ApiKeyStatsDb, result.keyId, c.req.method, c.req.routePath, c.res.status)
+        .catch(() => {})
+    );
     return;
   }
   return authMiddleware(c, next);
