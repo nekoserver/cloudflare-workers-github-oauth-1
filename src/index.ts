@@ -16552,6 +16552,24 @@ async function fetchJevScoreBoardData(
 }
 
 /**
+ * /jev-score-boardの質問文左の色丸用。aichat_model_colorsからmodel_id->colorの
+ * 対応を取得するだけの読み取り専用ヘルパー(/aichatページのように新規モデルへ
+ * 自動で色を割り当てる書き込みは行わない。一覧表示のための補助情報のため)。
+ */
+async function fetchJevScoreBoardModelColors(db: D1Database): Promise<Record<string, string>> {
+  try {
+    const rows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+    const colors: Record<string, string> = {};
+    for (const row of rows.results ?? []) colors[row.model_id] = row.color;
+    return colors;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('[jev-score-board] aichat_model_colors取得に失敗、色丸なしで表示', { error: message });
+    return {};
+  }
+}
+
+/**
  * 質問ID(share)1件=1行、jev_label_id=1〜20(ループA)を横列(L1〜L20)に並べる
  * 専用ページ。/neko jスラッシュコマンドとは独立(スラッシュコマンドから
  * 呼び出す機能ではなく、こちらが主動線という要望のため)。
@@ -16562,8 +16580,11 @@ app.get('/jev-score-board', authMiddleware, async (c) => {
   if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   try {
     const keyword = c.req.query('keyword') ?? '';
-    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, user.sub, keyword);
-    const html = renderJevScoreBoardPage({ keyword, hitCount, rows });
+    const [{ hitCount, rows }, modelColors] = await Promise.all([
+      fetchJevScoreBoardData(c.env.DB, user.sub, keyword),
+      fetchJevScoreBoardModelColors(c.env.DB),
+    ]);
+    const html = renderJevScoreBoardPage({ keyword, hitCount, rows, modelColors });
     return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -16599,16 +16620,19 @@ app.get('/api/jev-score-board/top-by-label', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
   }
   try {
-    const rows = await c.env.DB.prepare(
-      `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
-       FROM jev_evaluations je
-       JOIN ai_chat_shares s ON s.id = je.share_id
-       WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
-       ORDER BY je.value DESC
-       LIMIT ${JEV_SCORE_BOARD_LIMIT}`
-    ).bind(user.sub, labelIdParam).all<{ share_id: string; question: string; model: string | null; value: number }>();
+    const [rows, labelRow] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
+         FROM jev_evaluations je
+         JOIN ai_chat_shares s ON s.id = je.share_id
+         WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
+         ORDER BY je.value DESC
+         LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+      ).bind(user.sub, labelIdParam).all<{ share_id: string; question: string; model: string | null; value: number }>(),
+      c.env.DB.prepare('SELECT question_text FROM jev_labels WHERE id = ?').bind(labelIdParam).first<{ question_text: string }>(),
+    ]);
     const results = (rows.results ?? []).map((r) => ({ shareId: r.share_id, question: r.question, model: r.model, value: r.value }));
-    return jsonUtf8({ rows: results });
+    return jsonUtf8({ rows: results, labelText: labelRow?.question_text ?? null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score-board] top-by-label取得に失敗', { labelId: labelIdParam, error: message });

@@ -6,6 +6,8 @@ export type JevScoreBoardPageInput = {
   keyword: string;
   hitCount: number;
   rows: JevScoreBoardShare[];
+  /** aichat_model_colors.model_id -> color。無いモデルは輪郭だけの丸で表示する。 */
+  modelColors: Record<string, string>;
 };
 
 const LABEL_IDS = Array.from({ length: 20 }, (_, i) => i + 1);
@@ -15,25 +17,40 @@ function renderScoreCell(value: number | null): string {
 }
 
 /**
+ * モデル名の代わりに質問文の左に置く色丸。aichat_model_colors由来の色は
+ * DBに保存された任意色でありCLAUDE.CSS.mdのテーマトークン対象外のため、
+ * そのまま埋め込む(モデルごとに割り当てられる固定色という点でPK/FKバッジの
+ * 固定色と同じ性質)。色が未割り当てのモデルはvar(--border-color)の
+ * 輪郭だけの丸にする。
+ */
+function renderModelDot(model: string | null, modelColors: Record<string, string>): string {
+  const color = model ? modelColors[model] : undefined;
+  const title = escapeHtml(model ?? '(不明)');
+  const style = color
+    ? `background:${escapeHtml(color)};border-color:${escapeHtml(color)};`
+    : 'background:transparent;border-color:var(--border-color);';
+  return `<span class="model-dot" style="${style}" title="${title}"></span>`;
+}
+
+/**
  * /jev-score-board ページ本体を描画する。質問ID(share)1件=1行、
  * jev_label_id=1〜20(ループA)を横列(L1〜L20)に並べる。/neko jスラッシュ
  * コマンドとは独立したページとして実装しており、そちらのコードは参照しない。
  */
 export function renderJevScoreBoardPage(input: JevScoreBoardPageInput): string {
-  const { keyword, hitCount, rows } = input;
+  const { keyword, hitCount, rows, modelColors } = input;
   const labelHeaderCells = LABEL_IDS.map(
     (id) => `<th class="col-label sortable-th" data-label-id="${id}" title="タップでラベル${id}のスコア上位20件を表示">L${id}</th>`
   ).join('\n');
 
   const bodyRows = rows.length === 0
-    ? `<tr><td colspan="${3 + LABEL_IDS.length}" class="empty-cell">${hitCount === 0 ? '該当データがありません' : '読み込み中...'}</td></tr>`
+    ? `<tr><td colspan="${2 + LABEL_IDS.length}" class="empty-cell">${hitCount === 0 ? '該当データがありません' : '読み込み中...'}</td></tr>`
     : rows.map((r) => {
         const valueByLabelId = new Map(r.values.map((v) => [v.jevLabelId, v.value]));
         const scoreCells = LABEL_IDS.map((id) => `<td class="col-score">${renderScoreCell(valueByLabelId.get(id) ?? null)}</td>`).join('\n');
         return `<tr>
           <td class="col-share-id"><a href="#" class="share-id-link" data-share-id="${escapeHtml(r.shareId)}">${escapeHtml(r.shareId)}</a></td>
-          <td class="col-question">${escapeHtml(r.question)}</td>
-          <td class="col-model">${escapeHtml(r.model ?? '(不明)')}</td>
+          <td class="col-question">${renderModelDot(r.model, modelColors)}${escapeHtml(r.question)}</td>
           ${scoreCells}
         </tr>`;
       }).join('\n');
@@ -94,6 +111,9 @@ ${getThemeInitScript()}
   th { background: var(--bg-secondary); color: var(--text-muted); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
   td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
   .col-question { white-space: normal; max-width: 320px; }
+  .model-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1px solid; margin-right: 6px; vertical-align: middle; }
+  .top-row .model-dot { margin-right: 8px; }
+  .top-label-text { color: var(--text-secondary); font-size: 12px; margin-bottom: 10px; }
   th.sortable-th { cursor: pointer; user-select: none; }
   th.sortable-th:hover { color: var(--accent-color); }
   .score-empty { color: var(--text-faint); }
@@ -145,7 +165,6 @@ ${getThemeInitScript()}
         <tr>
           <th>質問ID</th>
           <th>質問文</th>
-          <th>モデル</th>
           ${labelHeaderCells}
         </tr>
       </thead>
@@ -175,6 +194,7 @@ ${getThemeInitScript()}
     <div class="modal-box">
       <button class="modal-close" id="topModalClose">&times;</button>
       <h2 id="topModalTitle">上位20件</h2>
+      <div id="topModalLabelText" class="top-label-text"></div>
       <div id="topModalBody"></div>
     </div>
   </div>
@@ -196,12 +216,22 @@ function getNextZ() {
 }
 
 var LABEL_IDS = ${JSON.stringify(LABEL_IDS)};
+var MODEL_COLORS = ${JSON.stringify(input.modelColors)};
+
+function modelDotHtml(model) {
+  var color = model ? MODEL_COLORS[model] : undefined;
+  var title = escHtml(model || '(不明)');
+  var style = color
+    ? 'background:' + escHtml(color) + ';border-color:' + escHtml(color) + ';'
+    : 'background:transparent;border-color:var(--border-color);';
+  return '<span class="model-dot" style="' + style + '" title="' + title + '"></span>';
+}
 
 function renderRows(hitCount, rows) {
   document.getElementById('hitCountLabel').textContent = hitCount + '件';
   var tbody = document.getElementById('boardTableBody');
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="' + (3 + LABEL_IDS.length) + '" class="empty-cell">' + (hitCount === 0 ? '該当データがありません' : '読み込み中...') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + (2 + LABEL_IDS.length) + '" class="empty-cell">' + (hitCount === 0 ? '該当データがありません' : '読み込み中...') + '</td></tr>';
   } else {
     tbody.innerHTML = rows.map(function(r) {
       var valueByLabelId = {};
@@ -212,8 +242,7 @@ function renderRows(hitCount, rows) {
       }).join('');
       return '<tr>' +
         '<td class="col-share-id"><a href="#" class="share-id-link" data-share-id="' + escHtml(r.shareId) + '">' + escHtml(r.shareId) + '</a></td>' +
-        '<td class="col-question">' + escHtml(r.question) + '</td>' +
-        '<td class="col-model">' + escHtml(r.model || '(不明)') + '</td>' +
+        '<td class="col-question">' + modelDotHtml(r.model) + escHtml(r.question) + '</td>' +
         scoreCells +
         '</tr>';
     }).join('');
@@ -276,15 +305,18 @@ answerModalBackdrop.addEventListener('click', function(e) {
 
 var topModalBackdrop = document.getElementById('topModalBackdrop');
 var topModalTitle = document.getElementById('topModalTitle');
+var topModalLabelText = document.getElementById('topModalLabelText');
 var topModalBody = document.getElementById('topModalBody');
 function openTopModal(labelId) {
   topModalTitle.textContent = 'L' + labelId + ' スコア上位20件';
+  topModalLabelText.textContent = '';
   topModalBody.innerHTML = '読み込み中...';
   topModalBackdrop.style.zIndex = String(getNextZ());
   topModalBackdrop.classList.add('open');
   fetch('/api/jev-score-board/top-by-label?labelId=' + encodeURIComponent(labelId), { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      topModalLabelText.textContent = d.labelText ? ('このラベルの内容: ' + d.labelText) : 'このラベルの内容: (未登録)';
       var rows = d.rows || [];
       if (rows.length === 0) {
         topModalBody.innerHTML = '<div class="empty-cell">データがありません</div>';
@@ -292,7 +324,7 @@ function openTopModal(labelId) {
       }
       topModalBody.innerHTML = rows.map(function(r) {
         return '<div class="top-row">' +
-          '<a href="#" class="share-id-link" data-share-id="' + escHtml(r.shareId) + '">' + escHtml(r.shareId) + ' - ' + escHtml(r.question) + '</a>' +
+          '<a href="#" class="share-id-link" data-share-id="' + escHtml(r.shareId) + '">' + modelDotHtml(r.model) + escHtml(r.shareId) + ' - ' + escHtml(r.question) + '</a>' +
           '<span class="top-value">' + escHtml(String(r.value)) + '</span>' +
           '</div>';
       }).join('');
