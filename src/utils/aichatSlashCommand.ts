@@ -555,7 +555,8 @@ export type AichatJevKeywordLookupOutcome = {
 /**
  * `/neko j <キーワード>` の結果を表示する。jev_evaluations(dynamicnekoの
  * /ai-cacheページの一括評価ボタンが書き込む、share_id/modelで引く通常の
- * Jev評価結果)をai_chat_shares.questionのキーワード部分一致で絞り込み、
+ * Jev評価結果)を、ai_chat_shares.question・answerのどちらかにキーワードが
+ * 部分一致するかで絞り込み(searchAiChatSharesが使う検索キーと同じ意味論)、
  * 該当する評価済みshare件数が何件あるかを表示するだけで、値の中身
  * (criteria判定結果)は表示しない。0件のときは「未登録」と明示し、
  * 「0件」だけでは判別しづらい表示にならないようにする。

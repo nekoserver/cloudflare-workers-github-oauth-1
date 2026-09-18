@@ -5,8 +5,14 @@
  * 背景: 以前は誰も書き込まないjev_country_keyword_evaluationsテーブルを
  * 見ていたため常に0件になっていた。dynamicnekoの/ai-cacheページの
  * 一括評価ボタンが実際に書き込むのはjev_evaluations(share_id/modelキー)
- * なので、これをai_chat_shares.questionのキーワード部分一致で
- * 絞り込んで件数を返すよう修正した。このテストはその接続を保証する。
+ * なので、これをai_chat_shares.question・answerのキーワード部分一致
+ * (searchAiChatSharesと同じ検索キーの意味論)で絞り込んで件数を返すよう
+ * 修正した。このテストはその接続を保証する。
+ *
+ * (実データ確認済み: jev_evaluations.modelにはCloudflare Workers AIの
+ * モデルID(例: @cf/google/gemma-4-26b-a4b-it)が入り、「ChatGPT」という
+ * モデルは存在しない。/neko jのキーワードはモデル名ではなく、/ai-cacheの
+ * 検索ボックスで使う検索キー=question/answer中の文字列を指す)
  *
  * 故障シナリオ:
  *   (1) jev_evaluationsに実データがあっても0件のまま(テーブル参照ミス)
@@ -14,6 +20,7 @@
  *   (3) target_type='source_question'(質問文自体の評価)まで誤ってカウントする
  *   (4) 同じshareに複数ラベル分の行があると重複カウントする
  *   (5) 論理削除済み(ai_chat_shares.deleted_at IS NOT NULL)のshareを含めてしまう
+ *   (6) 検索キーがquestionではなくanswer側にしか出てこない場合にヒットしない
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -172,6 +179,36 @@ describe('/neko j <キーワード> は実際にjev_evaluationsのデータを�
     ).run();
 
     const res = await postSlashJ(db, 'フランス');
+    const body = (await res.json()) as { response?: string };
+    expect(body.response).toContain('0件(未登録)');
+  });
+
+  it('キーワードがquestionではなくanswer側にしか出てこなくてもヒットする(検索キーの意味論はsearchAiChatSharesと同じ)', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ai_chat_shares (id, user_id, question, answer, model, created_at) VALUES ('s1', 'test-user', '首都はどこ?', '日本の首都は東京です', 'gemma-4-26b-a4b-it', datetime('now'))`
+    ).run();
+    db.prepare(
+      `INSERT INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES ('answer', 's1', 'test-user', 'gemma-4-26b-a4b-it', 1, 0.9)`
+    ).run();
+
+    const res = await postSlashJ(db, '東京');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { response?: string };
+    expect(body.response).toContain('1件');
+    expect(body.response).not.toContain('未登録');
+  });
+
+  it('実データに存在しないキーワード(例: モデルとして存在しない「ChatGPT」)は0件(未登録)を返す', async () => {
+    const db = setupDb();
+    db.prepare(
+      `INSERT INTO ai_chat_shares (id, user_id, question, answer, model, created_at) VALUES ('s1', 'test-user', '「Few-shot」って何ですか', '...', 'gemma-4-26b-a4b-it', datetime('now'))`
+    ).run();
+    db.prepare(
+      `INSERT INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES ('answer', 's1', 'test-user', 'gemma-4-26b-a4b-it', 1, 0.9)`
+    ).run();
+
+    const res = await postSlashJ(db, 'ChatGPT');
     const body = (await res.json()) as { response?: string };
     expect(body.response).toContain('0件(未登録)');
   });
