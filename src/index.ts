@@ -372,7 +372,7 @@ import { F1_CIRCUITS } from './data/f1Circuits';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
 import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
-import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
+import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
@@ -16605,6 +16605,28 @@ app.get('/api/jev-score-board/rows', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score-board] rows取得に失敗', { error: message });
     return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * /jev-score-boardのth表記切替(現行のL1〜L20 / 日本語ラベル名)用。
+ * jev_labels(id=1〜20)のquestion_textをまとめて返す。クライアント側は
+ * 初回切替時にこれを取得し、以降はオブジェクトへのキャッシュ参照で賄うため
+ * 切替のたびに叩かれるエンドポイントではない。
+ */
+app.get('/api/jev-score-board/label-names', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, question_text FROM jev_labels WHERE id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}`
+    ).all<{ id: number; question_text: string }>();
+    const labels: Record<string, string> = {};
+    for (const row of rows.results ?? []) labels[String(row.id)] = row.question_text;
+    return jsonUtf8({ labels });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] label-names取得に失敗', { error: message });
+    return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 

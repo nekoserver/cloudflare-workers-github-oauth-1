@@ -90,10 +90,22 @@ ${getThemeInitScript()}
     padding: 0 12px;
   }
   #topbar h1 { font-size: 14px; margin: 0; flex-shrink: 0; }
-  #topbar .theme-toggle { width: 30px; height: 30px; }
+  #topbar .theme-toggle { width: 30px; height: 30px; margin-left: auto; }
   #topbar .theme-toggle svg { width: 15px; height: 15px; }
   main { padding: 16px; max-width: 100%; overflow-x: auto; }
-  .search-bar { display: flex; gap: 8px; margin-bottom: 12px; max-width: 480px; }
+  .search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; max-width: 560px; }
+  .th-mode-toggle { display: flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+  .th-mode-btn {
+    background: var(--input-bg);
+    color: var(--text-muted);
+    border: none;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .th-mode-btn + .th-mode-btn { border-left: 1px solid var(--input-border); }
+  .th-mode-btn.active { background: var(--accent-color); color: #fff; }
   .search-bar input[type="text"] {
     flex: 1;
     background: var(--input-bg);
@@ -167,6 +179,10 @@ ${getThemeInitScript()}
     <div class="search-bar">
       <input type="text" id="keywordInput" placeholder="検索キーワード(質問文・回答文)" value="${escapeHtml(keyword)}">
       <button id="searchBtn">検索</button>
+      <div class="th-mode-toggle" role="group" aria-label="ラベル列見出しの表記切替">
+        <button type="button" id="thModeCurrent" class="th-mode-btn active">現行</button>
+        <button type="button" id="thModeJapanese" class="th-mode-btn">日本語</button>
+      </div>
     </div>
     <div id="hitCountLabel" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${hitCount}件</div>
     <table id="boardTable">
@@ -368,6 +384,48 @@ document.querySelectorAll('th.sortable-th').forEach(function(th) {
     openTopModal(th.getAttribute('data-label-id'));
   });
 });
+
+// ===== th見出しの表記切替(現行のL1〜L20 / 日本語ラベル名) =====
+// 日本語ラベル名は初回切替時だけ取得し、以降は配列(オブジェクト)への
+// キャッシュ参照で賄う(切替のたびに再フェッチしない)。
+var thMode = 'current';
+var labelNameCache = null;
+var thModeCurrentBtn = document.getElementById('thModeCurrent');
+var thModeJapaneseBtn = document.getElementById('thModeJapanese');
+
+function applyThMode() {
+  document.querySelectorAll('th.sortable-th').forEach(function(th) {
+    var id = th.getAttribute('data-label-id');
+    if (thMode === 'japanese' && labelNameCache && labelNameCache[id]) {
+      th.textContent = labelNameCache[id];
+    } else {
+      th.textContent = 'L' + id;
+    }
+  });
+}
+
+function setThMode(mode) {
+  thMode = mode;
+  thModeCurrentBtn.classList.toggle('active', mode === 'current');
+  thModeJapaneseBtn.classList.toggle('active', mode === 'japanese');
+  if (mode === 'japanese' && !labelNameCache) {
+    applyThMode();
+    fetch('/api/jev-score-board/label-names', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        labelNameCache = d.labels || {};
+        applyThMode();
+      })
+      .catch(function() {
+        labelNameCache = {};
+      });
+  } else {
+    applyThMode();
+  }
+}
+
+thModeCurrentBtn.addEventListener('click', function() { setThMode('current'); });
+thModeJapaneseBtn.addEventListener('click', function() { setThMode('japanese'); });
 
 bindQuestionLinks();
 ${getThemeToggleScript()}

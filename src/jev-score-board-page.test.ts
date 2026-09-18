@@ -1,7 +1,7 @@
 /**
- * 対象: /jev-score-board ページと、その3つのJSON API
+ * 対象: /jev-score-board ページと、そのJSON API
  * (/api/jev-score-board/rows, /api/jev-score-board/top-by-label,
- * /api/jev-score-board/answer)。
+ * /api/jev-score-board/answer, /api/jev-score-board/label-names)。
  *
  * 背景: /neko jスラッシュコマンドとは独立した専用ページとして、質問ID
  * (share)1件=1行・jev_label_id=1〜20(ループA)を横列に並べる一覧を提供する。
@@ -28,6 +28,10 @@
  *        出ない、またはjev_labelsに行が無い場合に黙って空文字を返してしまう
  *   (12) ID欄が質問IDそのものを露出してしまう、またはID欄がモーダルを開く
  *        リンクのままになっている(質問文側のリンクに変更されていない)
+ *   (13) label-namesがjev_labelsに行が無いidまで空文字で埋めて返してしまう、
+ *        またはid=21以降(範囲外)まで含めてしまう
+ *   (14) th表記切替トグルが検索ボタンの右に無い、またはテーマ切替ボタンが
+ *        topbar右端に寄っていない(margin-left:autoが外れている)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -149,14 +153,20 @@ async function getAnswer(db: DatabaseSync, shareId: string, sub = 'test-user'): 
   return app.request(`/api/jev-score-board/answer?shareId=${encodeURIComponent(shareId)}`, { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: wrapD1(db) });
 }
 
+async function getLabelNames(db: DatabaseSync, sub = 'test-user'): Promise<Response> {
+  const authHeader = await makeAuthHeader(sub);
+  return app.request('/api/jev-score-board/label-names', { headers: { Authorization: authHeader } }, { JWT_SECRET, DB: wrapD1(db) });
+}
+
 describe('GET /jev-score-board, /api/jev-score-board/*: 未認証は401', () => {
-  it('ページ・rows・top-by-label・answerすべて未認証だと401', async () => {
+  it('ページ・rows・top-by-label・answer・label-namesすべて未認証だと401', async () => {
     const db = setupDb();
     const noAuth = { JWT_SECRET, DB: wrapD1(db) };
     expect((await app.request('/jev-score-board', {}, noAuth)).status).toBe(401);
     expect((await app.request('/api/jev-score-board/rows?keyword=x', {}, noAuth)).status).toBe(401);
     expect((await app.request('/api/jev-score-board/top-by-label?labelId=1', {}, noAuth)).status).toBe(401);
     expect((await app.request('/api/jev-score-board/answer?shareId=s1', {}, noAuth)).status).toBe(401);
+    expect((await app.request('/api/jev-score-board/label-names', {}, noAuth)).status).toBe(401);
   });
 });
 
@@ -437,5 +447,71 @@ describe('GET /jev-score-board: XSS対策', () => {
     const html = await res.text();
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+});
+
+describe('GET /api/jev-score-board/label-names', () => {
+  it('jev_labels(id=1〜20)のquestion_textをid文字列キーのオブジェクトで返す', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text) VALUES (1, 'scale', '正確度は高いか')`).run();
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text) VALUES (2, 'scale', '新しさは十分か')`).run();
+
+    const res = await getLabelNames(db);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { labels: Record<string, string> };
+    expect(body.labels['1']).toBe('正確度は高いか');
+    expect(body.labels['2']).toBe('新しさは十分か');
+  });
+
+  it('jev_labelsに行が無いidはlabelsオブジェクトに含めない(黙って空文字にしない)', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text) VALUES (1, 'scale', '正確度は高いか')`).run();
+
+    const res = await getLabelNames(db);
+    const body = (await res.json()) as { labels: Record<string, string> };
+    expect(body.labels['1']).toBe('正確度は高いか');
+    expect(Object.prototype.hasOwnProperty.call(body.labels, '2')).toBe(false);
+  });
+
+  it('id=21以降(範囲外)のjev_labelsは含めない', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text) VALUES (21, 'scale', '範囲外ラベル')`).run();
+
+    const res = await getLabelNames(db);
+    const body = (await res.json()) as { labels: Record<string, string> };
+    expect(Object.prototype.hasOwnProperty.call(body.labels, '21')).toBe(false);
+  });
+});
+
+describe('GET /jev-score-board: th表記切替トグルとテーマボタンの配置', () => {
+  it('検索ボタンの右に「現行/日本語」のトグルボタンが置かれている', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const searchBtnIdx = html.indexOf('id="searchBtn"');
+    const toggleIdx = html.indexOf('class="th-mode-toggle"');
+    expect(searchBtnIdx).toBeGreaterThan(-1);
+    expect(toggleIdx).toBeGreaterThan(searchBtnIdx);
+    expect(html).toContain('id="thModeCurrent" class="th-mode-btn active">現行</button>');
+    expect(html).toContain('id="thModeJapanese" class="th-mode-btn">日本語</button>');
+  });
+
+  it('テーマ切替ボタンをtopbarの右端に寄せるCSS(margin-left:auto)が設定されている', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('#topbar .theme-toggle { width: 30px; height: 30px; margin-left: auto; }');
+  });
+
+  it('埋め込まれた<script>ブロック(th表記切替を含む)に構文エラーがない', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+    const scriptStart = html.indexOf('function escHtml(s) {');
+    const scriptEnd = html.indexOf('</script>', scriptStart);
+    const scriptBody = html.slice(scriptStart, scriptEnd);
+    expect(scriptBody).toContain("setThMode('japanese')");
+    expect(scriptBody).toContain('/api/jev-score-board/label-names');
+    expect(() => new Function(scriptBody)).not.toThrow();
   });
 });
