@@ -23,3 +23,28 @@ export function buildJevValuesForLoop(rows: JevValueRow[]): JevLoopValue[] {
   }
   return result;
 }
+
+export type JevButtonState = 'pink' | 'yellow' | 'green';
+
+/**
+ * AIチャット詳細プレビューモーダルの📔ボタンの背景色を決める3状態:
+ * - pink: 通常のjevテーブル(jev_labels/jev_evaluations)自体がDBに存在しない(未作成・エラー状態)
+ * - yellow: テーブルはあるが、この質問+モデルについて評価データが1件も無い(未評価)
+ * - green: 1件でも評価データがあれば合格扱い(20件全部揃っている必要はない)
+ */
+export function computeJevButtonState(values: JevLoopValue[], tableMissing: boolean): JevButtonState {
+  if (tableMissing) return 'pink';
+  const hasAny = values.some((v) => v.value !== null);
+  return hasAny ? 'green' : 'yellow';
+}
+
+/**
+ * D1/SQLiteのエラーメッセージから「テーブル自体が存在しない」ケースを
+ * 判別する(「no such table: jev_evaluations」等)。この文字列判定結果は
+ * ユーザーへの表示や成否判定には使わず、computeJevButtonStateへ渡す
+ * tableMissingフラグの算出にのみ使う(ルール32の趣旨に反しないよう、
+ * 用途をこの1箇所の分類に限定する)。
+ */
+export function isMissingTableError(message: string): boolean {
+  return /no such table/i.test(message);
+}
