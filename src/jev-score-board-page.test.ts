@@ -5,15 +5,16 @@
  *
  * 背景: /neko jスラッシュコマンドとは独立した専用ページとして、質問ID
  * (share)1件=1行・jev_label_id=1〜20(ループA)を横列に並べる一覧を提供する。
- * ラベル列(th)タップで表示中の20件に限らず全データから上位20件を再取得し、
- * 質問IDタップで質問文+回答文をモーダル用に返す。
+ * ラベル列(th)タップで表示中の50件に限らず全データから上位50件を再取得し、
+ * 質問文タップで質問文+回答文をモーダル用に返す。ID欄は質問IDそのものでは
+ * なくゼロ埋め3桁の通し番号を表示するだけで、モーダルを開くリンクにはならない。
  *
  * 故障シナリオ:
  *   (1) 未認証はすべて401
- *   (2) keyword未指定でも評価済みshareが最新順に最大20件返る(21件目は含まれない)
+ *   (2) keyword未指定でも評価済みshareが最新順に最大50件返る(51件目は含まれない)
  *   (3) keyword指定でquestion/answer部分一致が効く、他ユーザーは混ざらない
  *   (4) 論理削除済みshareは全エンドポイントから除外される
- *   (5) top-by-labelが表示中の20件に含まれないshareでもスコアが高ければ
+ *   (5) top-by-labelが表示中の50件に含まれないshareでもスコアが高ければ
  *       上位に出てくる(「全データから再取得」であることの証明)
  *   (6) top-by-labelのlabelIdが範囲外(0, 21, 非数値)は400
  *   (7) answerエンドポイントは他ユーザーのshareIdでは404
@@ -25,6 +26,8 @@
  *        (aichat_model_colorsの色が一覧に反映されない)
  *   (11) top-by-labelモーダルにそのラベルの内容(jev_labels.question_text)が
  *        出ない、またはjev_labelsに行が無い場合に黙って空文字を返してしまう
+ *   (12) ID欄が質問IDそのものを露出してしまう、またはID欄がモーダルを開く
+ *        リンクのままになっている(質問文側のリンクに変更されていない)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -158,19 +161,44 @@ describe('GET /jev-score-board, /api/jev-score-board/*: 未認証は401', () => 
 });
 
 describe('GET /jev-score-board: keyword未指定時の初期表示', () => {
-  it('評価済みshareを最新順に最大20件表示し、21件目は含めない', async () => {
+  it('評価済みshareを最新順に最大50件表示し、51件目は含めない', async () => {
     const db = setupDb();
-    for (let i = 1; i <= 21; i++) {
+    for (let i = 1; i <= 51; i++) {
       insertShare(db, `s${i}`, 'test-user', `質問その${i}`, '回答', 'gemma', i);
       insertEval(db, `s${i}`, 'test-user', 'gemma', 1, 0.5);
     }
     const res = await getPage(db);
     expect(res.status).toBe(200);
     const html = await res.text();
-    // 最新(オフセット最大=s21)が含まれ、最も古い(s1)は上限からあふれて含まれない
-    expect(html).toContain('s21');
+    // 最新(オフセット最大=s51)が含まれ、最も古い(s1)は上限からあふれて含まれない
+    expect(html).toContain('data-share-id="s51"');
     expect(html).not.toContain('data-share-id="s1"');
-    expect(html).toContain('先頭20件のみ表示。全21件');
+    expect(html).toContain('先頭50件のみ表示。全51件');
+  });
+
+  it('ID欄には質問IDそのものではなく、ゼロ埋め3桁の通し番号を表示する', async () => {
+    const db = setupDb();
+    insertShare(db, 'some-long-hash-id', 'test-user', '質問その1', '回答', 'gemma', 1);
+    insertEval(db, 'some-long-hash-id', 'test-user', 'gemma', 1, 0.5);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('<th>No.</th>');
+    expect(html).not.toContain('<th>質問ID</th>');
+    expect(html).toContain('<td class="col-no">001</td>');
+    // 質問ID(生の値)はリンクのdata属性には残るが、セル本文としては露出しない
+    expect(html).not.toMatch(/<td class="col-no">[^<]*some-long-hash-id/);
+  });
+
+  it('モーダルを開くリンクは質問文側にある(ID欄はリンクにならない)', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'test-user', 'フランスの首都は?', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 1, 0.5);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('class="question-link" data-share-id="s1">フランスの首都は?</a>');
+    expect(html).not.toContain('class="col-no"><a');
   });
 
   it('モデル名カラムは表示せず、代わりに質問文の左にaichat_model_colors由来の色丸を出す', async () => {
@@ -202,6 +230,36 @@ describe('GET /jev-score-board: keyword未指定時の初期表示', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('0件');
+  });
+
+  it('モーダルの質問文・回答文はMarkdownとしてinnerHTMLで描画する(textContentでエスケープ表示しない)', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'test-user', '質問', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 1, 0.9);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('answerModalQuestion.innerHTML = parseMd(');
+    expect(html).toContain('answerModalAnswer.innerHTML = parseMd(');
+    expect(html).toContain('class="qa-body preview-area" id="answerModalQuestion"');
+  });
+
+  it('埋め込まれた<script>ブロックに構文エラーがない(CLAUDE.mdルール29: エスケープシーケンス事故の再発防止)', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'test-user', '質問', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 1, 0.9);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    // ページには<head>のgetThemeInitScript()由来の<script>も別途あるため、
+    // メインスクリプト(escHtmlの定義から始まる方)だけを取り出す
+    const scriptStart = html.indexOf('function escHtml(s) {');
+    expect(scriptStart).toBeGreaterThan(-1);
+    const scriptEnd = html.indexOf('</script>', scriptStart);
+    expect(scriptEnd).toBeGreaterThan(scriptStart);
+    const scriptBody = html.slice(scriptStart, scriptEnd);
+    // 実行はせず(document等のDOM APIが無いため)、構文としてパース可能かだけ確認する
+    expect(() => new Function(scriptBody)).not.toThrow();
   });
 
   it('getThemeCSSのCSS変数定義は<style>タグの中に入っており、生テキストとして<head>に露出しない', async () => {
@@ -283,14 +341,14 @@ describe('GET /api/jev-score-board/rows: キーワード検索', () => {
 });
 
 describe('GET /api/jev-score-board/top-by-label', () => {
-  it('表示中の20件に含まれないshareでも、そのラベルのスコアが高ければ上位に出てくる', async () => {
+  it('表示中の50件に含まれないshareでも、そのラベルのスコアが高ければ上位に出てくる', async () => {
     const db = setupDb();
-    // 最新20件(s2〜s21)に、あふれて表示されないs1が「ラベル5」だけ最高スコアを持つ
-    for (let i = 1; i <= 21; i++) {
+    // 最新50件(s2〜s51)に、あふれて表示されないs1が「ラベル5」だけ最高スコアを持つ
+    for (let i = 1; i <= 51; i++) {
       insertShare(db, `s${i}`, 'test-user', `質問${i}`, '回答', 'gemma', i);
       insertEval(db, `s${i}`, 'test-user', 'gemma', 5, i === 1 ? 0.99 : 0.1);
     }
-    // s1は最も古く(オフセット最小)、最新20件表示からは除外されるはず
+    // s1は最も古く(オフセット最小)、最新50件表示からは除外されるはず
     const boardRes = await getRows(db, '');
     const boardBody = (await boardRes.json()) as { rows: { shareId: string }[] };
     expect(boardBody.rows.map((r) => r.shareId)).not.toContain('s1');
