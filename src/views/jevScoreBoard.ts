@@ -1,6 +1,12 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import type { JevScoreBoardShare } from '../utils/jevScoreBoard';
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+import { JEV_SCORE_BOARD_LIMIT, type JevScoreBoardShare } from '../utils/jevScoreBoard';
+
+/** 通し番号をゼロ埋め3桁にする(1 -> "001")。質問IDそのものは表に出さない。 */
+function padSerialNumber(n: number): string {
+  return String(n).padStart(3, '0');
+}
 
 export type JevScoreBoardPageInput = {
   keyword: string;
@@ -40,17 +46,17 @@ function renderModelDot(model: string | null, modelColors: Record<string, string
 export function renderJevScoreBoardPage(input: JevScoreBoardPageInput): string {
   const { keyword, hitCount, rows, modelColors } = input;
   const labelHeaderCells = LABEL_IDS.map(
-    (id) => `<th class="col-label sortable-th" data-label-id="${id}" title="タップでラベル${id}のスコア上位20件を表示">L${id}</th>`
+    (id) => `<th class="col-label sortable-th" data-label-id="${id}" title="タップでラベル${id}のスコア上位${JEV_SCORE_BOARD_LIMIT}件を表示">L${id}</th>`
   ).join('\n');
 
   const bodyRows = rows.length === 0
     ? `<tr><td colspan="${2 + LABEL_IDS.length}" class="empty-cell">${hitCount === 0 ? '該当データがありません' : '読み込み中...'}</td></tr>`
-    : rows.map((r) => {
+    : rows.map((r, i) => {
         const valueByLabelId = new Map(r.values.map((v) => [v.jevLabelId, v.value]));
         const scoreCells = LABEL_IDS.map((id) => `<td class="col-score">${renderScoreCell(valueByLabelId.get(id) ?? null)}</td>`).join('\n');
         return `<tr>
-          <td class="col-share-id"><a href="#" class="share-id-link" data-share-id="${escapeHtml(r.shareId)}">${escapeHtml(r.shareId)}</a></td>
-          <td class="col-question">${renderModelDot(r.model, modelColors)}${escapeHtml(r.question)}</td>
+          <td class="col-no">${padSerialNumber(i + 1)}</td>
+          <td class="col-question">${renderModelDot(r.model, modelColors)}<a href="#" class="question-link" data-share-id="${escapeHtml(r.shareId)}">${escapeHtml(r.question)}</a></td>
           ${scoreCells}
         </tr>`;
       }).join('\n');
@@ -110,6 +116,7 @@ ${getThemeInitScript()}
   table { border-collapse: collapse; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; font-size: 12px; }
   th { background: var(--bg-secondary); color: var(--text-muted); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
   td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
+  .col-no { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
   .col-question { white-space: normal; max-width: 320px; }
   .model-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1px solid; margin-right: 6px; vertical-align: middle; }
   .top-row .model-dot { margin-right: 8px; }
@@ -119,8 +126,8 @@ ${getThemeInitScript()}
   .score-empty { color: var(--text-faint); }
   .empty-cell { text-align: center; color: var(--text-muted); padding: 32px; white-space: normal; }
   .limit-note { color: var(--text-muted); font-size: 12px; }
-  .share-id-link { color: var(--accent-color); text-decoration: none; cursor: pointer; }
-  .share-id-link:hover { text-decoration: underline; }
+  .question-link { color: var(--accent-color); text-decoration: none; cursor: pointer; }
+  .question-link:hover { text-decoration: underline; }
   .modal-backdrop {
     display: none;
     position: fixed; inset: 0;
@@ -143,10 +150,12 @@ ${getThemeInitScript()}
   .modal-close { float: right; cursor: pointer; color: var(--text-muted); background: none; border: none; font-size: 16px; }
   .qa-block { margin-bottom: 12px; }
   .qa-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-  .qa-body { white-space: pre-wrap; word-break: break-word; color: var(--text-primary); background: var(--bg-secondary); border-radius: 6px; padding: 8px; }
+  .qa-body { word-break: break-word; color: var(--text-primary); background: var(--bg-secondary); border-radius: 6px; padding: 8px; }
   .top-row { padding: 6px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; gap: 8px; }
   .top-row .top-value { color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
   ${getThemeToggleCSS()}
+  ${getMarkdownPreviewCSS()}
+  .qa-body.preview-area { word-break: break-word; }
 </style>
 </head>
 <body>
@@ -163,7 +172,7 @@ ${getThemeInitScript()}
     <table id="boardTable">
       <thead>
         <tr>
-          <th>質問ID</th>
+          <th>No.</th>
           <th>質問文</th>
           ${labelHeaderCells}
         </tr>
@@ -181,11 +190,11 @@ ${getThemeInitScript()}
       <h2>質問・回答詳細</h2>
       <div class="qa-block">
         <div class="qa-label">質問文</div>
-        <div class="qa-body" id="answerModalQuestion"></div>
+        <div class="qa-body preview-area" id="answerModalQuestion"></div>
       </div>
       <div class="qa-block">
         <div class="qa-label">回答文</div>
-        <div class="qa-body" id="answerModalAnswer"></div>
+        <div class="qa-body preview-area" id="answerModalAnswer"></div>
       </div>
     </div>
   </div>
@@ -215,8 +224,16 @@ function getNextZ() {
   return max + 100;
 }
 
+// ===== Markdownパーサー(モーダル内の質問文・回答文をMarkdownとして描画する) =====
+${getMarkdownParserScript()}
+
+function padSerialNumber(n) {
+  return String(n).padStart(3, '0');
+}
+
 var LABEL_IDS = ${JSON.stringify(LABEL_IDS)};
 var MODEL_COLORS = ${JSON.stringify(input.modelColors)};
+var LABEL_TOP_LIMIT = ${JEV_SCORE_BOARD_LIMIT};
 
 function modelDotHtml(model) {
   var color = model ? MODEL_COLORS[model] : undefined;
@@ -233,7 +250,7 @@ function renderRows(hitCount, rows) {
   if (!rows || rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="' + (2 + LABEL_IDS.length) + '" class="empty-cell">' + (hitCount === 0 ? '該当データがありません' : '読み込み中...') + '</td></tr>';
   } else {
-    tbody.innerHTML = rows.map(function(r) {
+    tbody.innerHTML = rows.map(function(r, i) {
       var valueByLabelId = {};
       (r.values || []).forEach(function(v) { valueByLabelId[v.jevLabelId] = v.value; });
       var scoreCells = LABEL_IDS.map(function(id) {
@@ -241,19 +258,19 @@ function renderRows(hitCount, rows) {
         return '<td class="col-score">' + (v === null || v === undefined ? '<span class="score-empty">-</span>' : escHtml(String(v))) + '</td>';
       }).join('');
       return '<tr>' +
-        '<td class="col-share-id"><a href="#" class="share-id-link" data-share-id="' + escHtml(r.shareId) + '">' + escHtml(r.shareId) + '</a></td>' +
-        '<td class="col-question">' + modelDotHtml(r.model) + escHtml(r.question) + '</td>' +
+        '<td class="col-no">' + padSerialNumber(i + 1) + '</td>' +
+        '<td class="col-question">' + modelDotHtml(r.model) + '<a href="#" class="question-link" data-share-id="' + escHtml(r.shareId) + '">' + escHtml(r.question) + '</a></td>' +
         scoreCells +
         '</tr>';
     }).join('');
   }
   var limitNoteContainer = document.getElementById('limitNoteContainer');
   limitNoteContainer.innerHTML = hitCount > rows.length ? ('<p class="limit-note">先頭' + rows.length + '件のみ表示。全' + hitCount + '件</p>') : '';
-  bindShareIdLinks();
+  bindQuestionLinks();
 }
 
-function bindShareIdLinks() {
-  document.querySelectorAll('.share-id-link').forEach(function(el) {
+function bindQuestionLinks() {
+  document.querySelectorAll('.question-link').forEach(function(el) {
     el.addEventListener('click', function(e) {
       e.preventDefault();
       openAnswerModal(el.getAttribute('data-share-id'));
@@ -278,8 +295,8 @@ var answerModalBackdrop = document.getElementById('answerModalBackdrop');
 var answerModalQuestion = document.getElementById('answerModalQuestion');
 var answerModalAnswer = document.getElementById('answerModalAnswer');
 function openAnswerModal(shareId) {
-  answerModalQuestion.textContent = '読み込み中...';
-  answerModalAnswer.textContent = '';
+  answerModalQuestion.innerHTML = '読み込み中...';
+  answerModalAnswer.innerHTML = '';
   answerModalBackdrop.style.zIndex = String(getNextZ());
   answerModalBackdrop.classList.add('open');
   fetch('/api/jev-score-board/answer?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
@@ -288,8 +305,8 @@ function openAnswerModal(shareId) {
       return r.json();
     })
     .then(function(d) {
-      answerModalQuestion.textContent = d.question || '';
-      answerModalAnswer.textContent = d.answer || '';
+      answerModalQuestion.innerHTML = parseMd(d.question || '');
+      answerModalAnswer.innerHTML = parseMd(d.answer || '');
     })
     .catch(function() {
       answerModalQuestion.textContent = '取得に失敗しました';
@@ -308,7 +325,7 @@ var topModalTitle = document.getElementById('topModalTitle');
 var topModalLabelText = document.getElementById('topModalLabelText');
 var topModalBody = document.getElementById('topModalBody');
 function openTopModal(labelId) {
-  topModalTitle.textContent = 'L' + labelId + ' スコア上位20件';
+  topModalTitle.textContent = 'L' + labelId + ' スコア上位' + LABEL_TOP_LIMIT + '件';
   topModalLabelText.textContent = '';
   topModalBody.innerHTML = '読み込み中...';
   topModalBackdrop.style.zIndex = String(getNextZ());
@@ -324,12 +341,11 @@ function openTopModal(labelId) {
       }
       topModalBody.innerHTML = rows.map(function(r) {
         return '<div class="top-row">' +
-          '<a href="#" class="share-id-link" data-share-id="' + escHtml(r.shareId) + '">' + modelDotHtml(r.model) + escHtml(r.shareId) + ' - ' + escHtml(r.question) + '</a>' +
+          '<a href="#" class="question-link" data-share-id="' + escHtml(r.shareId) + '">' + modelDotHtml(r.model) + escHtml(r.question) + '</a>' +
           '<span class="top-value">' + escHtml(String(r.value)) + '</span>' +
           '</div>';
       }).join('');
-      bindShareIdLinks();
-      document.querySelectorAll('#topModalBody .share-id-link').forEach(function(el) {
+      document.querySelectorAll('#topModalBody .question-link').forEach(function(el) {
         el.addEventListener('click', function(e) {
           e.preventDefault();
           openAnswerModal(el.getAttribute('data-share-id'));
@@ -353,7 +369,7 @@ document.querySelectorAll('th.sortable-th').forEach(function(th) {
   });
 });
 
-bindShareIdLinks();
+bindQuestionLinks();
 ${getThemeToggleScript()}
 </script>
 </body>
