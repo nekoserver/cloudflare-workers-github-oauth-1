@@ -4740,7 +4740,8 @@ export function getAiChatPage(user: {
 
     historyModalJevValuesBtn.addEventListener('click', function() {
       if (!historyModalCurrentId) return;
-      if (historyModalJevValuesBtn.dataset.jevState === 'pink') {
+      var state = historyModalJevValuesBtn.dataset.jevState;
+      if (state === 'pink' || state === 'yellow') {
         showJevAddConfirm();
       } else {
         openJevValuesModal();
