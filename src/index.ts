@@ -370,6 +370,7 @@ import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
+import { buildJevValuesForLoop } from './utils/jevAnswerValues';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -7757,6 +7758,33 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
        LIMIT 50`
     ).bind(shareId, user.sub).all<{ keyword: string; count: number }>();
     return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ keyword: r.keyword, count: r.count, is_classified: false })) });
+  }
+});
+
+/**
+ * AIチャットの詳細プレビューモーダル(📔ボタン)向け。表示中の回答バブルの
+ * share_idについて、jev_label_id=1〜20(ループA)の評価値(jev_evaluations.value)を
+ * 順番に並べて返す。該当行が無いIDはnullを返す(黙って除外しない)。
+ */
+app.get('/api/aichat/jev-values', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const modelParam = c.req.query('model') ?? '';
+  const model = modelParam.trim() === '' ? null : modelParam;
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind('answer', user.sub, shareId, model, model)
+      .all<{ jev_label_id: number; value: number }>();
+    const values = buildJevValuesForLoop(rows.results ?? []);
+    return jsonUtf8({ values });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-values] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 

@@ -994,6 +994,19 @@ export function getAiChatPage(user: {
       </div>
     </div>
 
+    <!-- Jev評価値(jev_label_id 1〜20)モーダル -->
+    <div class="search-log-overlay" id="jevValuesModal" aria-hidden="true" style="z-index:820;">
+      <div class="search-log-modal" style="max-width:720px;">
+        <div class="search-log-head">
+          <span class="search-log-title">📔 Jev評価値</span>
+          <button class="search-log-close" id="jevValuesClose" aria-label="閉じる">✕</button>
+        </div>
+        <div class="search-log-body" id="jevValuesBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
+          <div class="search-log-loading">読み込み中...</div>
+        </div>
+      </div>
+    </div>
+
     <!-- 日ごとキーワード数・質問数グラフモーダル -->
     <div class="search-log-overlay" id="dailyStatsModal" aria-hidden="true" style="z-index:820;">
       <div class="search-log-modal" style="max-width:720px;">
@@ -1458,6 +1471,7 @@ export function getAiChatPage(user: {
         <span id="historyModalMeta"></span>
         <span id="historyModalTokens" style="font-size:11px;color:var(--text-muted);"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
+        <button type="button" class="search-hist-btn" id="historyModalJevValuesBtn" style="padding:3px 6px;font-size:13px;" title="Jev評価値(jev_label_id 1〜20)を表示">📔</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
       <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
@@ -3064,6 +3078,10 @@ export function getAiChatPage(user: {
     var historyModalMeta = document.getElementById('historyModalMeta');
     var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
+    var historyModalJevValuesBtn = document.getElementById('historyModalJevValuesBtn');
+    var jevValuesModal = document.getElementById('jevValuesModal');
+    var jevValuesBody = document.getElementById('jevValuesBody');
+    var jevValuesClose = document.getElementById('jevValuesClose');
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalFullscreenBtn = document.getElementById('historyModalFullscreenBtn');
     var historyModal = document.querySelector('.history-modal');
@@ -3709,6 +3727,7 @@ export function getAiChatPage(user: {
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
         canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
         ztKeywordSharesModal: 920, cursorAgentAnswerModal: 700, qsearchAnswerModal: 700,
+        jevValuesModal: 820,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4595,6 +4614,49 @@ export function getAiChatPage(user: {
           }
         })
         .catch(function() { addSubqueryMsg.textContent = '通信エラーが発生しました'; });
+    });
+
+    function renderJevValuesBody(values) {
+      if (!values || values.length === 0) {
+        jevValuesBody.innerHTML = '<div class="search-log-loading">評価データがありません</div>';
+        return;
+      }
+      var itemsHtml = values.map(function(v) {
+        var text = v.value === null || v.value === undefined ? '—' : String(v.value);
+        return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);min-width:44px;">'
+          + '<span style="font-size:10px;color:var(--text-muted);">' + escHtml(String(v.jevLabelId)) + '</span>'
+          + '<span style="font-size:14px;color:var(--text-primary);font-weight:600;">' + escHtml(text) + '</span>'
+          + '</span>';
+      }).join('');
+      jevValuesBody.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + itemsHtml + '</div>';
+    }
+
+    function openJevValuesModal() {
+      if (!historyModalCurrentId) return;
+      jevValuesModal.style.zIndex = String(getNextZ());
+      jevValuesModal.classList.add('open');
+      jevValuesModal.setAttribute('aria-hidden', 'false');
+      jevValuesBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch(
+        '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(historyModalCurrentId)) + '&model=' + encodeURIComponent(historyModalCurrentModel || ''),
+        { credentials: 'same-origin' }
+      )
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderJevValuesBody(data && data.values); })
+        .catch(function() {
+          jevValuesBody.innerHTML = '<div class="search-log-loading">読み込みに失敗しました</div>';
+        });
+    }
+
+    function closeJevValuesModal() {
+      jevValuesModal.classList.remove('open');
+      jevValuesModal.setAttribute('aria-hidden', 'true');
+    }
+
+    historyModalJevValuesBtn.addEventListener('click', openJevValuesModal);
+    jevValuesClose.addEventListener('click', closeJevValuesModal);
+    jevValuesModal.addEventListener('click', function(e) {
+      if (e.target === jevValuesModal) closeJevValuesModal();
     });
 
     historyModalClose.addEventListener('click', function() {
