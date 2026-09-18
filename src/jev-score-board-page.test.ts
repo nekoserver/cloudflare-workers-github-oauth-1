@@ -21,6 +21,10 @@
  *   (9) getThemeCSS()の戻り値(生のCSSテキスト)を<style>タグで囲まずに
  *       <head>直下へ埋め込んでしまい、CSS変数定義が生テキストとして
  *       画面に表示されてしまう(実際に発生した回帰)
+ *   (10) モデル名カラムを廃止したのに、質問文の左にモデル色丸が出ない
+ *        (aichat_model_colorsの色が一覧に反映されない)
+ *   (11) top-by-labelモーダルにそのラベルの内容(jev_labels.question_text)が
+ *        出ない、またはjev_labelsに行が無い場合に黙って空文字を返してしまう
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -92,6 +96,18 @@ function setupDb(): DatabaseSync {
       jev_label_id INTEGER NOT NULL,
       value REAL NOT NULL
     );
+    CREATE TABLE jev_labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      question_type TEXT NOT NULL,
+      question_text TEXT NOT NULL,
+      options_json TEXT,
+      jev_group_id INTEGER
+    );
+    CREATE TABLE aichat_model_colors (
+      model_id TEXT PRIMARY KEY,
+      color TEXT NOT NULL,
+      label TEXT NOT NULL
+    );
   `);
   db.prepare(`INSERT INTO user_sessions (user_id, last_activity_at, revoked_at) VALUES ('test-user', datetime('now'), NULL)`).run();
   return db;
@@ -155,6 +171,29 @@ describe('GET /jev-score-board: keyword未指定時の初期表示', () => {
     expect(html).toContain('s21');
     expect(html).not.toContain('data-share-id="s1"');
     expect(html).toContain('先頭20件のみ表示。全21件');
+  });
+
+  it('モデル名カラムは表示せず、代わりに質問文の左にaichat_model_colors由来の色丸を出す', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO aichat_model_colors (model_id, color, label) VALUES ('gemma', '#ff8800', 'gemma')`).run();
+    insertShare(db, 's1', 'test-user', 'フランスの首都は?', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 1, 0.9);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).not.toContain('<th>モデル</th>');
+    expect(html).toContain('class="model-dot"');
+    expect(html).toContain('#ff8800');
+  });
+
+  it('色未登録のモデルは輪郭だけの丸になる(固定色を書かない)', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'test-user', 'フランスの首都は?', '回答', 'unknown-model', 1);
+    insertEval(db, 's1', 'test-user', 'unknown-model', 1, 0.9);
+
+    const res = await getPage(db);
+    const html = await res.text();
+    expect(html).toContain('border-color:var(--border-color)');
   });
 
   it('評価データが無ければ0件表示になる', async () => {
@@ -261,6 +300,27 @@ describe('GET /api/jev-score-board/top-by-label', () => {
     const topBody = (await topRes.json()) as { rows: { shareId: string; value: number }[] };
     expect(topBody.rows[0].shareId).toBe('s1');
     expect(topBody.rows[0].value).toBeCloseTo(0.99);
+  });
+
+  it('そのラベルの内容(jev_labels.question_text)をlabelTextとして返す', async () => {
+    const db = setupDb();
+    db.prepare(`INSERT INTO jev_labels (id, question_type, question_text) VALUES (5, 'scale', '回答の正確度は高いか')`).run();
+    insertShare(db, 's1', 'test-user', '質問', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 5, 0.9);
+
+    const res = await getTopByLabel(db, '5');
+    const body = (await res.json()) as { labelText: string | null };
+    expect(body.labelText).toBe('回答の正確度は高いか');
+  });
+
+  it('jev_labelsに対応行が無いlabelIdはlabelText=nullを返す(黙って空文字にしない)', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'test-user', '質問', '回答', 'gemma', 1);
+    insertEval(db, 's1', 'test-user', 'gemma', 5, 0.9);
+
+    const res = await getTopByLabel(db, '5');
+    const body = (await res.json()) as { labelText: string | null };
+    expect(body.labelText).toBeNull();
   });
 
   it('labelIdが範囲外(0, 21, 非数値)は400', async () => {
