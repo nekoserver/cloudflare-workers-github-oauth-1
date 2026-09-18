@@ -7,6 +7,7 @@ import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript
 import { getCountdownQuickAddModalCSS, getCountdownQuickAddModalHTML, getCountdownQuickAddModalScript } from '../utils/countdownQuickAdd';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getKeywordHighlightScript } from '../utils/keywordHighlight';
+import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -3295,6 +3296,7 @@ export function getAiChatPage(user: {
 
     // ===== キーワードハイライト(画像添付会話プレビュー等と共通) =====
     ${getKeywordHighlightScript()}
+    ${getVectorizeAndBulkRegisterScript()}
 
     function buildAllKeywords() {
       var all = [];
@@ -4630,6 +4632,7 @@ export function getAiChatPage(user: {
       var body = config.body;
       var closeBtn = config.closeBtn;
       var getContext = config.getContext;
+      var onJevComplete = config.onJevComplete;
 
       // 固定色を使う(CLAUDE.CSS.mdの例外: バッジ・ステータス表示で意味的に
       // 色が固定されているもの、PK/FK/UK/IDXバッジと同じ扱い)。
@@ -4735,6 +4738,7 @@ export function getAiChatPage(user: {
               result.data.state,
               '<div style="margin-top:10px;text-align:center;color:var(--text-primary);font-weight:600;">完了</div>'
             );
+            if (typeof onJevComplete === 'function') onJevComplete(shareIdAtRequest, modelAtRequest);
           })
           .catch(function() {
             if (getContext().shareId !== shareIdAtRequest) return;
@@ -7220,6 +7224,71 @@ export function getAiChatPage(user: {
         var tokRow = document.createElement('div');
         tokRow.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;';
         if (shareId) {
+          // 「切り取り」(ベクタ化+予備知識キーワード抽出+未登録キーワード一括登録)を
+          // トークン表示の左に置く。埋め込みテーブル(aichat_answer_vectors)に
+          // まだ登録されていない場合は背景を黄色にし、隣のチェックボックスがONの
+          // 状態でJev判定が完了したタイミング(runJevScoreAndShow成功時)に
+          // 自動でこの処理一式を実行する。
+          var scissorsBtn = document.createElement('button');
+          scissorsBtn.type = 'button';
+          scissorsBtn.className = 'search-hist-btn';
+          scissorsBtn.style.cssText = 'padding:2px 5px;font-size:11px;line-height:1;';
+          scissorsBtn.textContent = '✂️';
+          scissorsBtn.title = 'この回答をベクタ化してキーワードを一括登録する';
+          tokRow.appendChild(scissorsBtn);
+
+          var autoVectorizeLabel = document.createElement('label');
+          autoVectorizeLabel.style.cssText = 'display:inline-flex;align-items:center;gap:2px;font-size:10px;color:var(--text-muted);cursor:pointer;';
+          var autoVectorizeCheckbox = document.createElement('input');
+          autoVectorizeCheckbox.type = 'checkbox';
+          autoVectorizeCheckbox.style.cssText = 'width:12px;height:12px;margin:0;';
+          var AUTO_VECTORIZE_COOKIE = 'aichat_auto_vectorize_after_jev';
+          var autoVectorizeCookieMatch = document.cookie.match(/(?:^|;\s*)aichat_auto_vectorize_after_jev=([^;]*)/);
+          autoVectorizeCheckbox.checked = !!(autoVectorizeCookieMatch && autoVectorizeCookieMatch[1] === 'on');
+          autoVectorizeCheckbox.addEventListener('change', function() {
+            document.cookie = AUTO_VECTORIZE_COOKIE + '=' + (autoVectorizeCheckbox.checked ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          });
+          autoVectorizeLabel.appendChild(autoVectorizeCheckbox);
+          tokRow.appendChild(autoVectorizeLabel);
+
+          var isAnswerVectorizedForScissors = false;
+          function applyScissorsState() {
+            scissorsBtn.style.background = isAnswerVectorizedForScissors ? '' : '#fff8c5';
+          }
+          applyScissorsState();
+          fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              isAnswerVectorizedForScissors = !!(data && data.vectorized);
+              applyScissorsState();
+            })
+            .catch(function() {});
+
+          function runVectorizeAndBulkRegisterChain() {
+            scissorsBtn.disabled = true;
+            scissorsBtn.title = '処理中...';
+            vectorizeAnswerAndExtractKeywords(shareId, model)
+              .then(function(result) {
+                if (result.status < 200 || result.status >= 300 || !result.data) {
+                  throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');
+                }
+                isAnswerVectorizedForScissors = true;
+                applyScissorsState();
+                var keywords = result.data.keywords || [];
+                if (!keywords.length) return;
+                return bulkRegisterUnregisteredKeywords(shareId, keywords, {});
+              })
+              .catch(function() {})
+              .then(function() {
+                scissorsBtn.disabled = false;
+                scissorsBtn.title = 'この回答をベクタ化してキーワードを一括登録する';
+              });
+          }
+          scissorsBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            runVectorizeAndBulkRegisterChain();
+          });
+
           // トークン出力の左側にJev評価値ボタンを置く(通常のAI応答バブル画面での動作確認用)。
           // historyModal専用ではなく、createJevValuesWidgetをここでも呼び出して
           // 同じ挙動(状態色・確認モーダル・Jev問い合わせ・DB登録)を再現する。
@@ -7234,7 +7303,12 @@ export function getAiChatPage(user: {
             modal: jevValuesModal,
             body: jevValuesBody,
             closeBtn: jevValuesClose,
-            getContext: function() { return { shareId: shareId, model: model }; }
+            getContext: function() { return { shareId: shareId, model: model }; },
+            onJevComplete: function() {
+              if (autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors) {
+                runVectorizeAndBulkRegisterChain();
+              }
+            }
           });
           bubbleJevWidget.refresh();
         }
