@@ -420,6 +420,16 @@ const APIS = [
     { method:'POST',   path:'/api/ai-summary/:id/resolve', desc:'解決ステータス更新', path_params:['id'], pp:{id:'1'}, body:[{n:'resolved',req:true,s:true},{n:'resolution_note',s:'対応済み'}],
       res:{ok:true} },
   ]},
+  { group: 'Jevスコアボード', endpoints: [
+    { method:'GET',  path:'/api/jev-score-board/rows', desc:'質問ID(share)1件=1行・ラベルL1〜L20を横列に並べた一覧(評価済み最大50件、keywordで質問文/回答文を部分一致検索)', query:[{n:'keyword',s:'cloudflare'}],
+      res:{hitCount:1,rows:[{shareId:'a1b2c3d4',question:'Cloudflare Workersとは?',model:'@cf/google/gemma-4-26b-a4b-it',values:[{jevLabelId:1,value:0.9},{jevLabelId:2,value:null}]}]} },
+    { method:'GET',  path:'/api/jev-score-board/top-by-label', desc:'表示中の50件に限らず、指定ラベル(jev_label_id)のスコアが高い順に全データから上位20件を再取得', query:[{n:'labelId',req:true,s:'1'}],
+      res:{rows:[{shareId:'a1b2c3d4',question:'Cloudflare Workersとは?',model:'@cf/google/gemma-4-26b-a4b-it',value:0.95}],labelText:'正確度は高いか'} },
+    { method:'GET',  path:'/api/jev-score-board/answer', desc:'質問文タップ用。shareIdの質問文・回答文を取得(他ユーザーのshareIdは404)', query:[{n:'shareId',req:true,s:'a1b2c3d4'}],
+      res:{question:'Cloudflare Workersとは?',answer:'エッジで動くサーバーレス実行環境です。'} },
+    { method:'GET',  path:'/api/jev-score-board/label-names', desc:'th見出し表記切替(現行のL1〜L20/日本語)用。jev_labels(id=1〜20)の質問文をまとめて取得(初回切替時のみ呼ばれ、以降はクライアント側でキャッシュ)',
+      res:{labels:{'1':'正確度は高いか','2':'具体性はあるか'}} },
+  ]},
   { group: 'リポジトリ', endpoints: [
     { method:'POST',   path:'/api/repositories', desc:'リポジトリ作成', body:[{n:'name',req:true,s:'my-test-repo'},{n:'isPrivate',s:false},{n:'description',s:'テスト用リポジトリ'}],
       res:{ok:true,id:'nekoserver/my-test-repo',url:'https://github.com/nekoserver/my-test-repo'} },
