@@ -1473,6 +1473,7 @@ export function getAiChatPage(user: {
         <span id="historyModalTokens" style="font-size:11px;color:var(--text-muted);"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
         <button type="button" class="search-hist-btn" id="historyModalJevValuesBtn" style="padding:3px 6px;font-size:13px;" title="Jev評価値(jev_label_id 1〜20)を表示">📔</button>
+        <button type="button" class="search-hist-btn" id="historyModalScissorsBtn" style="padding:3px 6px;font-size:13px;" title="この回答をベクタ化してキーワードを一括登録する">✂️</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
       <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
@@ -3080,6 +3081,7 @@ export function getAiChatPage(user: {
     var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalJevValuesBtn = document.getElementById('historyModalJevValuesBtn');
+    var historyModalScissorsBtn = document.getElementById('historyModalScissorsBtn');
     var jevValuesModal = document.getElementById('jevValuesModal');
     var jevValuesBody = document.getElementById('jevValuesBody');
     var jevValuesClose = document.getElementById('jevValuesClose');
@@ -4796,7 +4798,64 @@ export function getAiChatPage(user: {
       closeBtn: jevValuesClose,
       getContext: function() { return { shareId: historyModalCurrentId, model: historyModalCurrentModel }; }
     });
-    function refreshJevValuesButtonState() { historyModalJevValuesWidget.refresh(); }
+
+    // Jev評価値ボタンの右に置く✂️ボタン。クリックされたら
+    // (1) GET /api/aichat/shares/:idで既にベクタ化済み(登録済み)かどうかを
+    //     確認し、ボタンの黄色/通常表示に反映する(「既登録チェック」)
+    // (2) vectorizeAnswerAndExtractKeywordsでPlaMo埋め込みモデルによる
+    //     ベクタ化+予備知識キーワード抽出を行う
+    // (3) 抽出できたキーワードがあればbulkRegisterUnregisteredKeywordsで
+    //     一括登録する
+    var HISTORY_MODAL_SCISSORS_DEFAULT_TITLE = 'この回答をベクタ化してキーワードを一括登録する';
+    function applyHistoryModalScissorsState(vectorized) {
+      historyModalScissorsBtn.style.background = vectorized ? '' : '#fff8c5';
+    }
+    function refreshHistoryModalScissorsState() {
+      if (!historyModalCurrentId) return;
+      var shareIdAtRequest = historyModalCurrentId;
+      fetch('/api/aichat/shares/' + encodeURIComponent(String(shareIdAtRequest)), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (historyModalCurrentId !== shareIdAtRequest) return;
+          applyHistoryModalScissorsState(!!(data && data.vectorized));
+        })
+        .catch(function() {});
+    }
+    historyModalScissorsBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var shareId = historyModalCurrentId;
+      var model = historyModalCurrentModel;
+      if (!shareId) return;
+      historyModalScissorsBtn.disabled = true;
+      historyModalScissorsBtn.title = '既登録チェック中...';
+      fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          applyHistoryModalScissorsState(!!(data && data.vectorized));
+          historyModalScissorsBtn.title = 'ベクタ化中...';
+          return vectorizeAnswerAndExtractKeywords(shareId, model);
+        })
+        .then(function(result) {
+          if (result.status < 200 || result.status >= 300 || !result.data) {
+            throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');
+          }
+          applyHistoryModalScissorsState(true);
+          var keywords = result.data.keywords || [];
+          if (!keywords.length) return;
+          historyModalScissorsBtn.title = 'キーワード一括登録中...';
+          return bulkRegisterUnregisteredKeywords(shareId, keywords, {});
+        })
+        .catch(function() {})
+        .then(function() {
+          historyModalScissorsBtn.disabled = false;
+          historyModalScissorsBtn.title = HISTORY_MODAL_SCISSORS_DEFAULT_TITLE;
+        });
+    });
+
+    function refreshJevValuesButtonState() {
+      historyModalJevValuesWidget.refresh();
+      refreshHistoryModalScissorsState();
+    }
 
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
@@ -7332,6 +7391,18 @@ export function getAiChatPage(user: {
               // 自動化し、✂️側の自動実行はしない(onJevComplete側で判定)。
               if (autoJevCheckbox.checked && (state === 'pink' || state === 'yellow')) {
                 bubbleJevWidget.runJevScoreAndShow();
+                return;
+              }
+              // 根本原因: onJevCompleteはrunJevScoreAndShow(Jevへの新規問い合わせ)
+              // が成功した時にしか発火しない。そのため、このバブルの回答が
+              // 過去に既にJev評価済み(state==='green')だった場合は
+              // runJevScoreAndShowが一度も呼ばれず、✂️チェックボックスと
+              // jev自動化チェックボックスを両方ONにしていても✂️の自動連携が
+              // 永久に発火しない不具合になっていた。既に評価済みの場合は
+              // ここで直接同じ条件判定を行い、その場で切り取りチェーンを
+              // 自動実行する。
+              if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && state === 'green' && !isAnswerVectorizedForScissors) {
+                runVectorizeAndBulkRegisterChain();
               }
             },
             onJevComplete: function() {

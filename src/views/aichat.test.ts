@@ -1348,7 +1348,7 @@ describe('回答バブル コピーボタン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 9500);
+    const fn = html.slice(idx, idx + 11500);
     const usageGuardIdx = fn.indexOf("usage.input_tokens != null || usage.total_tokens != null");
     const shareIdGuardIdx = fn.indexOf('if (shareId) {');
     const widgetCallIdx = fn.indexOf('createJevValuesWidget({');

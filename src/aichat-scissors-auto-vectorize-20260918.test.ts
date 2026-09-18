@@ -53,7 +53,7 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
   it('createJevValuesWidgetにonJevCompleteコールバックを渡す', () => {
     const html = buildPage();
     const idx = html.indexOf('function buildAssistantBubble(');
-    const snippet = html.slice(idx, idx + 9000);
+    const snippet = html.slice(idx, idx + 10000);
     expect(snippet).toContain('onJevComplete: function()');
   });
 
@@ -79,6 +79,15 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain("if (autoJevCheckbox.checked && (state === 'pink' || state === 'yellow'))");
     expect(snippet).toContain('bubbleJevWidget.runJevScoreAndShow();');
+  });
+
+  it('onStateLoaded内はJev評価が既に完了済み(green)の場合も両方ONかつ未ベクタ化なら✂️チェーンを自動実行する(不具合修正)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('onStateLoaded: function(state)');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 1300);
+    expect(snippet).toContain("if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && state === 'green' && !isAnswerVectorizedForScissors)");
+    expect(snippet).toContain('runVectorizeAndBulkRegisterChain();');
   });
 
   it('createJevValuesWidgetがonStateLoadedをrefresh成功時・失敗時の両方で呼び出す', () => {
