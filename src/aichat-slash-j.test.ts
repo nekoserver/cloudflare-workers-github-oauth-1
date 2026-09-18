@@ -8,8 +8,11 @@ import {
 
 // 対象: AIチャットの入力窓 `/neko j <キーワード>` サブコマンド。
 // jev_evaluations(dynamicnekoの/ai-cacheページの一括評価ボタンが書き込む、
-// share_id/modelで引く通常のJev評価結果)をai_chat_shares.questionの
-// キーワード部分一致で絞り込み、該当する評価済みshare件数を返す。
+// share_id/modelで引く通常のJev評価結果)をai_chat_shares.question・answerの
+// キーワード部分一致で絞り込み、該当する評価済みshare件数と、各share
+// (先頭AICHAT_JEV_KEYWORD_SCORE_LIMIT件)のjev_label_id=1〜20(ループA)の
+// 個別スコアをMarkdown表で返す。ビジネスロジック(1〜20スコアの解決)は
+// index.ts側のjevKeywordLookupが担い、このファイルはdeps注入で検証する。
 // (jev_country_keyword_evaluationsという別系統のテーブルも存在するが、
 // 書き込み経路が無く実データが入らないため、/neko jはこちらを見ない)
 //
@@ -20,30 +23,67 @@ import {
 //   (4) DB問い合わせが例外を投げた場合に、エラーメッセージを返さず
 //       握りつぶしてしまう(CLAUDE.mdルール8: 記録・通知の義務)
 //   (5) 0件の場合に「未登録」であることが分かる表示にならない
+//   (6) 1〜20スコアの表示に罫線・ツリー文字(CLAUDE.mdルール16違反)を使う
+//   (7) 値が無いラベルIDを黙って表から除外してしまう(欠落が分からなくなる)
 
 describe('formatJevKeywordLookup', () => {
   it('キーワード未指定は案内を返す', () => {
-    expect(formatJevKeywordLookup('', { hitCount: 0 })).toBe('❌ キーワードを指定してください: /neko j <キーワード>');
-  });
-
-  it('ヒット件数を表示する', () => {
-    expect(formatJevKeywordLookup('フランス', { hitCount: 5 })).toBe('「フランス」のJev評価データ: 5件');
+    expect(formatJevKeywordLookup('', { hitCount: 0, results: [] })).toBe('❌ キーワードを指定してください: /neko j <キーワード>');
   });
 
   it('0件のときは未登録であることが分かる表示にする', () => {
-    expect(formatJevKeywordLookup('パスタ', { hitCount: 0 })).toBe('「パスタ」のJev評価データ: 0件(未登録)');
+    expect(formatJevKeywordLookup('パスタ', { hitCount: 0, results: [] })).toBe('「パスタ」のJev評価データ: 0件(未登録)');
+  });
+
+  it('ヒットしたshareの質問ID・質問文・モデル・ラベルID・スコアをMarkdown表で表示する', () => {
+    const outcome: AichatJevKeywordLookupOutcome = {
+      hitCount: 1,
+      results: [
+        {
+          shareId: 's1',
+          question: 'フランスの首都は?',
+          model: 'gemma-4-26b-a4b-it',
+          values: [
+            { jevLabelId: 1, value: 0.9 },
+            { jevLabelId: 2, value: null },
+          ],
+        },
+      ],
+    };
+    const response = formatJevKeywordLookup('フランス', outcome);
+    expect(response).toContain('「フランス」のJev評価データ: 1件');
+    expect(response).toContain('| 質問ID | 質問文 | モデル | ラベルID | スコア |');
+    expect(response).toContain('| s1 | フランスの首都は? | gemma-4-26b-a4b-it | 1 | 0.9 |');
+    // 値が無いラベルIDも黙って除外せず、-として表に残す
+    expect(response).toContain('| s1 | フランスの首都は? | gemma-4-26b-a4b-it | 2 | - |');
+  });
+
+  it('表示上限(AICHAT_JEV_KEYWORD_SCORE_LIMIT)より多くヒットした場合は残数を案内する', () => {
+    const outcome: AichatJevKeywordLookupOutcome = {
+      hitCount: 8,
+      results: [{ shareId: 's1', question: 'q', model: 'm', values: [{ jevLabelId: 1, value: 0.5 }] }],
+    };
+    const response = formatJevKeywordLookup('タイ', outcome);
+    expect(response).toContain('先頭1件のみ表示。全8件');
   });
 
   it('罫線・ツリー文字を使わない(CLAUDE.mdルール16)', () => {
-    expect(formatJevKeywordLookup('タイ', { hitCount: 3 })).not.toMatch(/[├└│─┼]/);
+    const outcome: AichatJevKeywordLookupOutcome = {
+      hitCount: 1,
+      results: [{ shareId: 's1', question: 'q', model: 'm', values: [{ jevLabelId: 1, value: 0.5 }] }],
+    };
+    expect(formatJevKeywordLookup('タイ', outcome)).not.toMatch(/[├└│─┼]/);
   });
 });
 
 describe('interpretAichatSlashCommand: /neko j', () => {
   const now = new Date('2026-07-15T00:00:00.000Z');
 
-  it('/neko j <キーワード> はdepsのjevKeywordLookupを呼び、ヒット件数を整形して返す', async () => {
-    const outcome: AichatJevKeywordLookupOutcome = { hitCount: 5 };
+  it('/neko j <キーワード> はdepsのjevKeywordLookupを呼び、ヒット件数とスコア表を整形して返す', async () => {
+    const outcome: AichatJevKeywordLookupOutcome = {
+      hitCount: 1,
+      results: [{ shareId: 's1', question: 'フランスの首都は?', model: 'gemma', values: [{ jevLabelId: 1, value: 0.9 }] }],
+    };
     const lookupFn = vi.fn().mockResolvedValue(outcome);
     const result = await interpretAichatSlashCommand('/neko j フランス', now, {
       fetchLatestCommitAgentLog: async () => null,
@@ -60,7 +100,7 @@ describe('interpretAichatSlashCommand: /neko j', () => {
       jevKeywordLookup: lookupFn,
     });
     expect(lookupFn).not.toHaveBeenCalled();
-    expect(result).toEqual({ handled: true, response: formatJevKeywordLookup('', { hitCount: 0 }) });
+    expect(result).toEqual({ handled: true, response: formatJevKeywordLookup('', { hitCount: 0, results: [] }) });
   });
 
   it('depsにjevKeywordLookupが無い場合は現在利用できない旨を返す(例外にならない)', async () => {
@@ -113,9 +153,12 @@ describe('interpretAichatSlashCommand: /neko j のタイムアウト・エラー
     expect(result.response).toContain('/neko j');
   });
 
-  it('タイムアウト時間より前に応答すれば、通常どおりヒット件数を返す', async () => {
+  it('タイムアウト時間より前に応答すれば、通常どおりヒット件数・スコア表を返す', async () => {
     vi.useFakeTimers();
-    const outcome: AichatJevKeywordLookupOutcome = { hitCount: 2 };
+    const outcome: AichatJevKeywordLookupOutcome = {
+      hitCount: 1,
+      results: [{ shareId: 's1', question: 'q', model: 'm', values: [{ jevLabelId: 1, value: 0.5 }] }],
+    };
     const lookupFn = vi.fn().mockResolvedValue(outcome);
 
     const resultPromise = interpretAichatSlashCommand('/neko j タイ', now, {

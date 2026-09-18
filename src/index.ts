@@ -421,7 +421,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
@@ -5583,24 +5583,79 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
     jevKeywordLookup: async (keyword) => {
-      if (!c.env.DB) return { hitCount: 0 };
+      if (!c.env.DB) return { hitCount: 0, results: [] };
       // 「キーワード」はモデル名ではなく、/ai-cacheの検索ボックスで使う検索キー
       // (searchAiChatSharesがquestion/answerの両方をINSTRで見ているのと同じもの)。
       // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
       // "LIKE or GLOB pattern too complex" になるため、searchAiChatSharesと
       // 同じくINSTRを使う(中黒の表記ゆれもREPLACEで正規化)。
       const normalized = keyword.replace(/[・･]/g, '・');
-      const row = await c.env.DB.prepare(
+      const matchCondition = `s.deleted_at IS NULL AND (
+             INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+             OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+           )`;
+      const countRow = await c.env.DB.prepare(
         `SELECT COUNT(DISTINCT je.share_id) AS cnt
          FROM jev_evaluations je
          JOIN ai_chat_shares s ON s.id = je.share_id
-         WHERE je.user_id = ? AND je.target_type = 'answer' AND s.deleted_at IS NULL
-           AND (
-             INSTR(REPLACE(s.question, '･', '・'), ?) > 0
-             OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
-           )`
+         WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}`
       ).bind(user.sub, normalized, normalized).first<{ cnt: number }>();
-      return { hitCount: row?.cnt ?? 0 };
+      const hitCount = countRow?.cnt ?? 0;
+      if (hitCount === 0) return { hitCount: 0, results: [] };
+
+      // 検索ロジック側(business logic)で「検索キーワード→質問ID→jev_label_id=1〜20
+      // (ループA)の個別スコア」まで解決する。表示件数が青天井にならないよう、
+      // 該当share自体は最新順にAICHAT_JEV_KEYWORD_SCORE_LIMIT件までに絞る。
+      const matchedShares = await c.env.DB.prepare(
+        `SELECT DISTINCT je.share_id AS share_id, s.question AS question, s.created_at AS created_at
+         FROM jev_evaluations je
+         JOIN ai_chat_shares s ON s.id = je.share_id
+         WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}
+         ORDER BY s.created_at DESC
+         LIMIT ${AICHAT_JEV_KEYWORD_SCORE_LIMIT}`
+      ).bind(user.sub, normalized, normalized).all<{ share_id: string; question: string; created_at: string }>();
+      const shareRows = matchedShares.results ?? [];
+      if (shareRows.length === 0) return { hitCount, results: [] };
+
+      const shareIds = shareRows.map((r) => r.share_id);
+      const placeholders = shareIds.map(() => '?').join(',');
+      const scoreRows = await c.env.DB.prepare(
+        `SELECT share_id, model, jev_label_id, value
+         FROM jev_evaluations
+         WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+      ).bind(user.sub, ...shareIds).all<{ share_id: string; model: string | null; jev_label_id: number; value: number }>();
+
+      const groupKey = (shareId: string, model: string | null) => `${shareId} ${model ?? ''}`;
+      const rowsByGroup = new Map<string, { jev_label_id: number; value: number }[]>();
+      const modelByGroup = new Map<string, string | null>();
+      const groupOrder: string[] = [];
+      for (const row of scoreRows.results ?? []) {
+        const key = groupKey(row.share_id, row.model);
+        if (!rowsByGroup.has(key)) {
+          rowsByGroup.set(key, []);
+          modelByGroup.set(key, row.model);
+          groupOrder.push(key);
+        }
+        rowsByGroup.get(key)!.push({ jev_label_id: row.jev_label_id, value: row.value });
+      }
+      const questionByShareId = new Map(shareRows.map((r) => [r.share_id, r.question]));
+      const shareOrder = new Map(shareIds.map((id, i) => [id, i]));
+      groupOrder.sort((a, b) => {
+        const shareIdA = a.split(' ')[0];
+        const shareIdB = b.split(' ')[0];
+        return (shareOrder.get(shareIdA) ?? 0) - (shareOrder.get(shareIdB) ?? 0);
+      });
+
+      const results = groupOrder.map((key) => {
+        const shareId = key.split(' ')[0];
+        return {
+          shareId,
+          question: questionByShareId.get(shareId) ?? '',
+          model: modelByGroup.get(key) ?? null,
+          values: buildJevValuesForLoop(rowsByGroup.get(key) ?? []),
+        };
+      });
+      return { hitCount, results };
     },
     generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),
     hourlyTokenUsage: async () => {

@@ -1525,7 +1525,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5900);
+    const fn = src.slice(idx, idx + 8600);
     expect(fn).toContain('sha256ViaWasm:');
     // 静的importにするとVite/vitestの.wasmインポートがWebAssembly.Moduleでは
     // なくアセットパス文字列を返すため、index.tsを読み込む全テストが壊れる。

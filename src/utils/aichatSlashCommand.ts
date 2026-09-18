@@ -548,18 +548,34 @@ export function formatVectorizedAnswerCount(count: number, totalCount: number): 
   return `ベクタ化済みの回答文: ${count}件 / ${totalCount}件　(${percent}%)`;
 }
 
+/** jev_label_id=1〜20(ループA)1件分。値が無いIDはnull(黙って除外しない)。 */
+export type AichatJevKeywordScoreValue = { jevLabelId: number; value: number | null };
+
+/** キーワードに一致したshare1件分のJev評価詳細(質問ID・質問文・モデル・1〜20の各スコア)。 */
+export type AichatJevKeywordScoreShare = {
+  shareId: string;
+  question: string;
+  model: string | null;
+  values: AichatJevKeywordScoreValue[];
+};
+
 export type AichatJevKeywordLookupOutcome = {
   hitCount: number;
+  /** ヒットしたshareのうち、先頭から最大AICHAT_JEV_KEYWORD_SCORE_LIMIT件のスコア詳細。 */
+  results: AichatJevKeywordScoreShare[];
 };
+
+export const AICHAT_JEV_KEYWORD_SCORE_LIMIT = 5;
 
 /**
  * `/neko j <キーワード>` の結果を表示する。jev_evaluations(dynamicnekoの
  * /ai-cacheページの一括評価ボタンが書き込む、share_id/modelで引く通常の
  * Jev評価結果)を、ai_chat_shares.question・answerのどちらかにキーワードが
  * 部分一致するかで絞り込み(searchAiChatSharesが使う検索キーと同じ意味論)、
- * 該当する評価済みshare件数が何件あるかを表示するだけで、値の中身
- * (criteria判定結果)は表示しない。0件のときは「未登録」と明示し、
- * 「0件」だけでは判別しづらい表示にならないようにする。
+ * 該当する評価済みshare件数と、各shareのjev_label_id=1〜20(ループA)の
+ * 個別スコアをMarkdown表で表示する(罫線・ツリー文字は使わない、CLAUDE.md
+ * ルール16)。0件のときは「未登録」と明示し、「0件」だけでは判別しづらい
+ * 表示にならないようにする。
  */
 export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywordLookupOutcome): string {
   if (!keyword) {
@@ -568,7 +584,24 @@ export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywor
   if (outcome.hitCount === 0) {
     return `「${keyword}」のJev評価データ: 0件(未登録)`;
   }
-  return `「${keyword}」のJev評価データ: ${outcome.hitCount}件`;
+  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const lines = [
+    `「${keyword}」のJev評価データ: ${outcome.hitCount}件`,
+    '',
+    '| 質問ID | 質問文 | モデル | ラベルID | スコア |',
+    '|---|---|---|---|---|',
+  ];
+  for (const share of outcome.results) {
+    for (const v of share.values) {
+      lines.push(
+        `| ${escapeCell(share.shareId)} | ${escapeCell(share.question)} | ${escapeCell(share.model ?? '(不明)')} | ${v.jevLabelId} | ${v.value === null ? '-' : v.value} |`
+      );
+    }
+  }
+  if (outcome.hitCount > outcome.results.length) {
+    lines.push('', `(先頭${outcome.results.length}件のみ表示。全${outcome.hitCount}件)`);
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -899,7 +932,7 @@ export type AichatSlashCommandDeps = {
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
   /** `/neko vlink <キーワード>` 用。Googleに「YouTube <キーワード>」で検索をかけ、www.youtube.comのリンクのみを抽出して返す */
   searchYoutubeLinks?: (keyword: string) => Promise<string[]>;
-  /** `/neko j <キーワード>` 用。jev_country_keyword_evaluationsにそのキーワードの評価データが何件登録されているかを返す */
+  /** `/neko j <キーワード>` 用。jev_evaluationsをquestion/answerのキーワード部分一致で絞り込み、ヒット件数と各share(先頭AICHAT_JEV_KEYWORD_SCORE_LIMIT件)の1〜20ラベル個別スコアを返す */
   jevKeywordLookup?: (keyword: string) => Promise<AichatJevKeywordLookupOutcome>;
 };
 
@@ -1384,7 +1417,7 @@ export async function interpretAichatSlashCommand(
   if (subcommand === 'j') {
     const keyword = parts.slice(2).join(' ').trim();
     if (!keyword) {
-      return { handled: true, response: formatJevKeywordLookup('', { hitCount: 0 }) };
+      return { handled: true, response: formatJevKeywordLookup('', { hitCount: 0, results: [] }) };
     }
     if (!deps.jevKeywordLookup) {
       return { handled: true, response: '❌ /neko j は現在利用できません(Jevキーワード検索API未設定)' };

@@ -21,6 +21,11 @@
  *   (4) 同じshareに複数ラベル分の行があると重複カウントする
  *   (5) 論理削除済み(ai_chat_shares.deleted_at IS NOT NULL)のshareを含めてしまう
  *   (6) 検索キーがquestionではなくanswer側にしか出てこない場合にヒットしない
+ *   (7) ヒットしたshareのjev_label_id=1〜20(ループA)個別スコアが返らない
+ *       (件数だけで終わり、ビジネスロジック側でスコアまで解決していない)
+ *   (8) 値が無いラベルIDが黙って表から消える
+ *   (9) ヒット件数が表示上限(AICHAT_JEV_KEYWORD_SCORE_LIMIT)を超えても
+ *       全件クエリしてしまう(無制限に重くなる)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -107,7 +112,7 @@ async function postSlashJ(db: DatabaseSync, keyword: string, sub = 'test-user'):
 }
 
 describe('/neko j <キーワード> は実際にjev_evaluationsのデータを読む', () => {
-  it('jev_evaluationsに評価済みデータがあればヒット件数として返す', async () => {
+  it('jev_evaluationsに評価済みデータがあればヒット件数とラベル1〜20の個別スコア表を返す', async () => {
     const db = setupDb();
     db.prepare(
       `INSERT INTO ai_chat_shares (id, user_id, question, answer, model, created_at) VALUES ('s1', 'test-user', 'フランスの首都は?', '...', 'gpt', datetime('now'))`
@@ -121,6 +126,11 @@ describe('/neko j <キーワード> は実際にjev_evaluationsのデータを�
     const body = (await res.json()) as { response?: string };
     expect(body.response).toContain('1件');
     expect(body.response).not.toContain('未登録');
+    // 検索キーワード→質問ID→1〜20の個別スコアがビジネスロジック側で解決されている
+    expect(body.response).toContain('| 質問ID | 質問文 | モデル | ラベルID | スコア |');
+    expect(body.response).toContain('| s1 | フランスの首都は? | gpt | 1 | 0.9 |');
+    // 値が無いラベルID(2〜20)も黙って除外せず-として表に残る
+    expect(body.response).toContain('| s1 | フランスの首都は? | gpt | 2 | - |');
   });
 
   it('他ユーザーのjev_evaluationsは含めない', async () => {
@@ -211,5 +221,24 @@ describe('/neko j <キーワード> は実際にjev_evaluationsのデータを�
     const res = await postSlashJ(db, 'ChatGPT');
     const body = (await res.json()) as { response?: string };
     expect(body.response).toContain('0件(未登録)');
+  });
+
+  it('表示上限(5件)を超えてヒットしても、上限件数だけスコアを解決し残数を案内する', async () => {
+    const db = setupDb();
+    for (let i = 1; i <= 7; i++) {
+      db.prepare(
+        `INSERT INTO ai_chat_shares (id, user_id, question, answer, model, created_at) VALUES (?, 'test-user', 'フランスの話その' || ?, '...', 'gpt', datetime('now', '+' || ? || ' seconds'))`
+      ).run(`s${i}`, i, i);
+      db.prepare(
+        `INSERT INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES ('answer', ?, 'test-user', 'gpt', 1, 0.5)`
+      ).run(`s${i}`);
+    }
+
+    const res = await postSlashJ(db, 'フランス');
+    const body = (await res.json()) as { response?: string };
+    expect(body.response).toContain('7件');
+    expect(body.response).toContain('先頭5件のみ表示。全7件');
+    // 最新順(created_at DESC)でLIMITされるため、最も古いs1はスコア表に出てこない
+    expect(body.response).not.toContain('| s1 |');
   });
 });
