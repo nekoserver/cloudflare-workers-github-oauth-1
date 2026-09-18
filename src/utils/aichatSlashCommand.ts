@@ -166,6 +166,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko csearch <キーワード> | Cursor VMの過去ログを検索し、ヒットした質問文を表で表示します。各行の先頭は作成時刻(JST)です。「表示」リンクから最上位モーダルでキャッシュを読みます |',
     '| /neko s [--enable-logging] <検索語 ...> | 最大20個の検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます。--enable-loggingを付けると検索キーワード履歴に記録します |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko j <キーワード> | 通常のJevデータベース(jev_country_keyword_evaluations)にそのキーワードの評価データが登録されているかを確認し、ヒット件数を表示します |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
@@ -547,6 +548,27 @@ export function formatVectorizedAnswerCount(count: number, totalCount: number): 
   return `ベクタ化済みの回答文: ${count}件 / ${totalCount}件　(${percent}%)`;
 }
 
+export type AichatJevKeywordLookupOutcome = {
+  hitCount: number;
+};
+
+/**
+ * `/neko j <キーワード>` の結果を表示する。jev_country_keyword_evaluations
+ * (通常のjev_evaluationsとは別系統、keyword文字列で引く国名専用の評価結果、
+ * migrations/0145)にそのキーワードの評価データが何件登録されているかを
+ * 表示するだけで、値の中身(criteria判定結果)は表示しない。0件のときは
+ * 「未登録」と明示し、「0件」だけでは判別しづらい表示にならないようにする。
+ */
+export function formatJevKeywordLookup(keyword: string, outcome: AichatJevKeywordLookupOutcome): string {
+  if (!keyword) {
+    return '❌ キーワードを指定してください: /neko j <キーワード>';
+  }
+  if (outcome.hitCount === 0) {
+    return `「${keyword}」のJev評価データ: 0件(未登録)`;
+  }
+  return `「${keyword}」のJev評価データ: ${outcome.hitCount}件`;
+}
+
 /**
  * `/neko 256 <文字列>` の計算結果を表示する。入力にバッククォート等が
  * 含まれても崩れないよう、コードブロックではなく1行のプレーンテキストで
@@ -875,6 +897,8 @@ export type AichatSlashCommandDeps = {
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
   /** `/neko vlink <キーワード>` 用。Googleに「YouTube <キーワード>」で検索をかけ、www.youtube.comのリンクのみを抽出して返す */
   searchYoutubeLinks?: (keyword: string) => Promise<string[]>;
+  /** `/neko j <キーワード>` 用。jev_country_keyword_evaluationsにそのキーワードの評価データが何件登録されているかを返す */
+  jevKeywordLookup?: (keyword: string) => Promise<AichatJevKeywordLookupOutcome>;
 };
 
 export type SqlImpactCatalogRow = {
@@ -1355,6 +1379,27 @@ export async function interpretAichatSlashCommand(
     };
   }
 
+  if (subcommand === 'j') {
+    const keyword = parts.slice(2).join(' ').trim();
+    if (!keyword) {
+      return { handled: true, response: formatJevKeywordLookup('', { hitCount: 0 }) };
+    }
+    if (!deps.jevKeywordLookup) {
+      return { handled: true, response: '❌ /neko j は現在利用できません(Jevキーワード検索API未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.jevKeywordLookup(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko j がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko j でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatJevKeywordLookup(keyword, outcome.value) };
+  }
+
   if (subcommand === '256') {
     const target = parts.slice(2).join(' ').trim();
     if (!target) {
@@ -1715,6 +1760,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }

@@ -5572,6 +5572,13 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub).all<{ id: string; question: string }>();
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
+    jevKeywordLookup: async (keyword) => {
+      if (!c.env.DB) return { hitCount: 0 };
+      const row = await c.env.DB.prepare(
+        'SELECT COUNT(*) AS cnt FROM jev_country_keyword_evaluations WHERE keyword = ? AND user_id = ?'
+      ).bind(keyword, user.sub).first<{ cnt: number }>();
+      return { hitCount: row?.cnt ?? 0 };
+    },
     generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),
     hourlyTokenUsage: async () => {
       if (!c.env.DB) return [];
