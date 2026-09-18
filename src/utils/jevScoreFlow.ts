@@ -1,5 +1,6 @@
 import { parseLabelCriteria, computeJevEvaluationPlan, callJevApi, type JevLabel, type JevFetch } from './jevEvaluation';
 import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError, type JevLoopValue, type JevButtonState } from './jevAnswerValues';
+import { parseCountryKeywordLabelRows, type JevCountryKeywordLabelRow } from './jevCountryKeyword';
 
 // AIチャット詳細プレビューモーダルの📔ボタン(アイコン設置→状態判定→
 // 「追加しますか」モーダル→Jev問い合わせ→jev_evaluations書き込み→
@@ -131,4 +132,122 @@ export async function runJevScoreForShare(input: JevScoreFlowInput): Promise<Jev
 
   const values = buildJevValuesForLoop(verifyResult.rows);
   return { ok: true, values, state: computeJevButtonState(values, false), verified: true };
+}
+
+// ここから先は、jev_country_keyword_labels/jev_country_keyword_evaluations
+// (migrations/0145、jev_labels/jev_evaluationsとは別テーブル。share_id/model
+// ではなくkeyword文字列で引く)向けの書き込み処理。ラベル定義(15〜28件)は
+// migrations/0145・COUNTRY_LEVEL_JEV_LABELSで既にあるが、実際にJev APIを
+// 呼んでjev_country_keyword_evaluationsへ書き込むエンドポイントが
+// 存在しなかった(jevCountryKeyword.tsのコメント参照)ため、
+// runJevScoreForShareと同じ設計(未評価分のみ送信・書き込み後ベリファイ)で
+// ここに実装する。
+
+export type JevKeywordScoreInput = {
+  db: JevScoreDb;
+  jevApiKey: string;
+  fetchImpl: JevFetch;
+  userId: string;
+  keyword: string;
+};
+
+export type JevKeywordScoreValue = { labelId: number; questionText: string; value: number | null };
+
+export type JevKeywordScoreResult =
+  | { ok: true; keyword: string; results: JevKeywordScoreValue[]; verified: true }
+  | { ok: false; status: 500; error: string }
+  | { ok: false; status: 502; error: string };
+
+async function fetchCountryKeywordLabels(db: JevScoreDb): Promise<{ ok: true; labels: JevLabel[] } | { ok: false; error: string }> {
+  try {
+    const rows = await db
+      .prepare('SELECT id, question_text, options_json FROM jev_country_keyword_labels')
+      .bind()
+      .all<JevCountryKeywordLabelRow>();
+    const parsed = parseCountryKeywordLabelRows(rows.results ?? []);
+    if (!parsed.ok) {
+      return { ok: false, error: `ラベル(id=${parsed.invalidLabelId})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` };
+    }
+    return { ok: true, labels: parsed.labels };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      return { ok: false, error: 'jev_country_keyword_labelsテーブルが存在しません(マイグレーション未適用の可能性があります)' };
+    }
+    return { ok: false, error: 'jev_country_keyword_labels取得でサーバーエラーが発生しました: ' + message };
+  }
+}
+
+async function fetchKeywordEvaluatedRows(
+  db: JevScoreDb,
+  userId: string,
+  keyword: string,
+): Promise<{ ok: true; rows: { jev_label_id: number; value: number }[] } | { ok: false; error: string }> {
+  try {
+    const rows = await db
+      .prepare('SELECT jev_country_keyword_label_id AS jev_label_id, value FROM jev_country_keyword_evaluations WHERE user_id = ? AND keyword = ?')
+      .bind(userId, keyword)
+      .all<{ jev_label_id: number; value: number }>();
+    return { ok: true, rows: rows.results ?? [] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      return { ok: false, error: 'jev_country_keyword_evaluationsテーブルが存在しません(マイグレーション未適用の可能性があります)' };
+    }
+    return { ok: false, error: 'jev_country_keyword_evaluations取得でサーバーエラーが発生しました: ' + message };
+  }
+}
+
+/**
+ * キーワード自体をstate(評価対象の文章)としてJevへ送り、未評価ラベル
+ * (jev_country_keyword_labels)だけを問い合わせてjev_country_keyword_evaluations
+ * へ書き込む。書き込み後は実際にDBから読み戻して検証(ベリファイ)する
+ * (runJevScoreForShareと同じ方針)。
+ */
+export async function runJevScoreForKeyword(input: JevKeywordScoreInput): Promise<JevKeywordScoreResult> {
+  const { db, jevApiKey, fetchImpl, userId, keyword } = input;
+
+  const labelsResult = await fetchCountryKeywordLabels(db);
+  if (!labelsResult.ok) return { ok: false, status: 500, error: labelsResult.error };
+  const allLabels = labelsResult.labels;
+  if (allLabels.length === 0) {
+    return { ok: false, status: 500, error: 'jev_country_keyword_labelsが1件も登録されていません' };
+  }
+
+  const evaluatedResult = await fetchKeywordEvaluatedRows(db, userId, keyword);
+  if (!evaluatedResult.ok) return { ok: false, status: 500, error: evaluatedResult.error };
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedResult.rows);
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({ apiKey: jevApiKey, state: keyword, labels: plan.pending, fetchImpl });
+    if (!jevResult.ok) {
+      return { ok: false, status: 502, error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` };
+    }
+    try {
+      for (const score of jevResult.scores) {
+        await db
+          .prepare('INSERT OR IGNORE INTO jev_country_keyword_evaluations (keyword, user_id, jev_country_keyword_label_id, value) VALUES (?, ?, ?, ?)')
+          .bind(keyword, userId, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, status: 500, error: 'jev_country_keyword_evaluations保存でサーバーエラーが発生しました: ' + message };
+    }
+  }
+
+  const verifyResult = await fetchKeywordEvaluatedRows(db, userId, keyword);
+  if (!verifyResult.ok) return { ok: false, status: 500, error: verifyResult.error };
+  const verifiedMap = new Map(verifyResult.rows.map((r) => [r.jev_label_id, r.value]));
+  const missingAfterWrite = plan.pending.filter((label) => !verifiedMap.has(label.id));
+  if (missingAfterWrite.length > 0) {
+    return { ok: false, status: 500, error: 'jev_country_keyword_evaluationsへの書き込みをベリファイできませんでした(一部ラベルが未反映です)' };
+  }
+
+  const results: JevKeywordScoreValue[] = allLabels.map((label) => ({
+    labelId: label.id,
+    questionText: label.question_text,
+    value: verifiedMap.get(label.id) ?? null,
+  }));
+  return { ok: true, keyword, results, verified: true };
 }
