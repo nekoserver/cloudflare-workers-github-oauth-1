@@ -4824,7 +4824,6 @@ export function getAiChatPage(user: {
     historyModalScissorsBtn.addEventListener('click', function(e) {
       e.stopPropagation();
       var shareId = historyModalCurrentId;
-      var model = historyModalCurrentModel;
       if (!shareId) return;
       historyModalScissorsBtn.disabled = true;
       historyModalScissorsBtn.title = '既登録チェック中...';
@@ -4833,7 +4832,7 @@ export function getAiChatPage(user: {
         .then(function(data) {
           applyHistoryModalScissorsState(!!(data && data.vectorized));
           historyModalScissorsBtn.title = 'ベクタ化中...';
-          return vectorizeAnswerAndExtractKeywords(shareId, model);
+          return vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL);
         })
         .then(function(result) {
           if (result.status < 200 || result.status >= 300 || !result.data) {
@@ -7231,6 +7230,17 @@ export function getAiChatPage(user: {
       heading.appendChild(btn);
     }
 
+    // ✂️(切り取り)ボタンが呼ぶvectorizeAnswerAndExtractKeywordsへ渡す埋め込み
+    // モデル名。buildAssistantBubbleの引数modelはAIチャットの応答生成に
+    // 使われたモデル(例: @cf/meta/llama-3.3-70b-instruct-fp8-fast)であり、
+    // サーバー側のKEYWORD_EMBEDDING_MODELS一覧に含まれない埋め込み非対応の
+    // モデル名なので、誤ってこれをそのまま渡すと
+    // 「不明な埋め込みモデルです」という400エラーになりベクタ化が常に
+    // 失敗していた(✂️ボタンが手動でも自動でも一切動かない不具合の原因)。
+    // ✂️は常にPlaMo埋め込みモデルで実行する仕様のため、チャットモデル名とは
+    // 独立した固定のモデル名を使い、空欄にもならないようにする。
+    var AICHAT_SCISSORS_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
+
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
@@ -7330,7 +7340,7 @@ export function getAiChatPage(user: {
           function runVectorizeAndBulkRegisterChain() {
             scissorsBtn.disabled = true;
             scissorsBtn.title = '処理中...';
-            vectorizeAnswerAndExtractKeywords(shareId, model)
+            vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)
               .then(function(result) {
                 if (result.status < 200 || result.status >= 300 || !result.data) {
                   throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');

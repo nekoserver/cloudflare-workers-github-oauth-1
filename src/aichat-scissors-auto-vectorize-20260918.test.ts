@@ -118,8 +118,16 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 900);
-    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, model)');
+    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)');
     expect(snippet).toContain('bulkRegisterUnregisteredKeywords(shareId, keywords, {})');
+  });
+
+  it('埋め込みモデルはチャットモデル(buildAssistantBubbleのmodel引数)ではなく固定のPlaMoモデルを使う(空欄/不明モデルによる400エラー防止)', () => {
+    const html = buildPage();
+    expect(html).toContain("var AICHAT_SCISSORS_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';");
+    const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
+    const snippet = html.slice(idx, idx + 900);
+    expect(snippet).not.toContain('vectorizeAnswerAndExtractKeywords(shareId, model)');
   });
 
   it('script タグ内の JS に構文エラーがない', () => {

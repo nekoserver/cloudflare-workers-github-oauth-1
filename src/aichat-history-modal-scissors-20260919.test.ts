@@ -44,9 +44,18 @@ describe('詳細プレビューモーダル: Jev評価値ボタン右の✂️�
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 1200);
     const checkIdx = snippet.indexOf("fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId))");
-    const vectorizeIdx = snippet.indexOf('vectorizeAnswerAndExtractKeywords(shareId, model)');
+    const vectorizeIdx = snippet.indexOf('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)');
     expect(checkIdx).toBeGreaterThan(-1);
     expect(vectorizeIdx).toBeGreaterThan(checkIdx);
+  });
+
+  it('埋め込みモデルはチャットモデル(historyModalCurrentModel)ではなく固定のPlaMoモデルを使う(空欄/不明モデルによる400エラー防止)', () => {
+    const html = buildPage();
+    expect(html).toContain("var AICHAT_SCISSORS_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';");
+    const idx = html.indexOf("historyModalScissorsBtn.addEventListener('click'");
+    const snippet = html.slice(idx, idx + 1200);
+    expect(snippet).not.toContain('vectorizeAnswerAndExtractKeywords(shareId, model)');
+    expect(snippet).not.toContain('vectorizeAnswerAndExtractKeywords(shareId, historyModalCurrentModel)');
   });
 
   it('ベクタ化成功時、抽出キーワードがあれば bulkRegisterUnregisteredKeywords を呼ぶ', () => {
