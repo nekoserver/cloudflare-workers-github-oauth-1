@@ -111,9 +111,11 @@ export function getPublicKeysPage(user: { name?: string; username: string }): st
       border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; line-height: 1.6;
     }
     .registration-result {
-      display: none; margin: -12px 0 24px; padding: 12px 14px; border-radius: 8px;
+      display: none; position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      max-width: calc(100vw - 32px); width: 420px; padding: 12px 14px; border-radius: 8px;
       font-size: 13px; line-height: 1.6; border: 1px solid var(--border-color);
       background: var(--bg-secondary); color: var(--text-secondary);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22); z-index: 9999;
     }
     .registration-result.show { display: block; }
     .registration-result.success { border-color: var(--success-color); }
