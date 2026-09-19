@@ -2,38 +2,31 @@
  * POST /api/commit-summary-external のテスト
  *
  * 対象: dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用API。
- * まずPRマージ時のWebhookパイプラインが既に生成済みの日本語要約
- * (commit_agent_log.commit_sha → ai_summary_log.summary)を優先して返す。
- * そこに見つからない場合だけ、GitHub Commit APIへ直接問い合わせて
- * (repo_commit_indexという手動同期のミラーテーブルには依存しない。
- * 直近マージされたコミットがまだ反映されておらず「存在しない」と
- * 誤判定される不具合があったため2026-09-19に変更)commit_messageとdiffを
- * 取得し、既存のPR要約パイプライン(runSummaryPipeline)を再利用して
- * 新規に日本語要約を生成し、commit_summary_cache(全ユーザー共有、
- * user_id列を持たない)にキャッシュする。
+ * PRマージ時のWebhookパイプラインが既にcommit_agent_log/ai_summary_logへ
+ * 保存している日本語要約を読み出して返すだけの、読み出し専用API。新しく
+ * AIを呼んで要約を生成することはしない(2026-09-19: 当初は見つからない場合に
+ * GitHub Commit API+AIで新規生成し専用の新テーブルcommit_summary_cacheへ
+ * キャッシュする実装にしていたが、そもそも対象のコミットは全てWebhookで
+ * 要約済みのため不要な複雑化だった。既存の記録箇所を正しく参照する方に倒した)。
  *
  * 故障シナリオ:
  *   (1) Bearer secretが一致しないリクエストが素通りしてしまう
  *   (2) 未許可メールアドレスがD1クエリまで到達してしまう
  *   (3) repoNameがcommit-summary-externalの対象外リポジトリでも
- *       受け付けてしまう(任意のリポジトリのコミットを要約できてしまう)
- *   (4) 既にai_summary_logに要約済みのコミットに対して、それを使わず
- *       無駄にGitHub/AIを再度呼んでしまう(二重コスト・記録との不一致)
- *   (5) GitHub上に実在しないcommitHashに対して任意の内容でAIを呼んでしまう
- *       (commitMessageをボディから信用しない)
- *   (6) 既にcommit_summary_cacheにキャッシュ済みのコミットに対して再度
- *       AI/diff取得を行ってしまう(二重コスト)
- *   (7) 1時間あたりの新規要約生成数に上限が無く、無制限にAIを呼べてしまう
- *   (8) AI要約パイプライン失敗時に握りつぶしてキャッシュへ保存してしまう
+ *       受け付けてしまう(任意のリポジトリのコミットを要約として読み出せてしまう)
+ *   (4) commit_agent_log.repo_full_nameを見ずにcommit_shaだけで照合し、
+ *       他リポジトリの同名shaの要約を誤って返してしまう
+ *   (5) ai_summary_log.summaryがNULL/空文字の行(要約生成に失敗した記録)を
+ *       「要約済み」として返してしまう
+ *   (6) 見つからない場合にエラーで終わらず、握りつぶして200を返してしまう
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import app from './index';
 import { createJWT } from './utils/jwt';
 
 const SECRET = 'test-aichat-external-secret';
 const USER_TOKEN_SECRET = 'test-user-token-secret';
-const GITHUB_TOKEN = 'test-github-token';
 const REPO_NAME = 'nekoserver/dynamicneko';
 
 function makeUserToken(email: string, secret: string = USER_TOKEN_SECRET, expiresIn = 60): Promise<string> {
@@ -70,13 +63,6 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec(`
     CREATE TABLE dynamicneko_aichat_allowed_users (email TEXT PRIMARY KEY, github_login TEXT);
-    CREATE TABLE commit_summary_cache (
-      commit_hash TEXT PRIMARY KEY,
-      repo_name TEXT NOT NULL,
-      summary TEXT NOT NULL,
-      model TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
     CREATE TABLE ai_summary_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       request_id TEXT NOT NULL UNIQUE,
@@ -102,15 +88,15 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
 }
 
 // PRマージ時のWebhookパイプラインが既に残した記録(commit_agent_log +
-// ai_summary_log)を模す。commit-summary-externalはまずここを優先して見る。
+// ai_summary_log)を模す。
 function insertExistingAiSummary(
   db: DatabaseSync,
   requestId: string,
   repoName: string,
   prNumber: number,
   commitSha: string,
-  summary: string,
-  model: string
+  summary: string | null,
+  model: string | null
 ): void {
   db.prepare(`INSERT INTO ai_summary_log (request_id, repo_full_name, pr_number, model, summary) VALUES (?, ?, ?, ?, ?)`)
     .run(requestId, repoName, prNumber, model, summary);
@@ -118,58 +104,16 @@ function insertExistingAiSummary(
     .run(requestId, repoName, prNumber, commitSha);
 }
 
-function insertCachedSummary(db: DatabaseSync, hash: string, repoName: string, summary: string, model: string, createdAt?: string): void {
-  if (createdAt) {
-    db.prepare(`INSERT INTO commit_summary_cache (commit_hash, repo_name, summary, model, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .run(hash, repoName, summary, model, createdAt);
-  } else {
-    db.prepare(`INSERT INTO commit_summary_cache (commit_hash, repo_name, summary, model) VALUES (?, ?, ?, ?)`)
-      .run(hash, repoName, summary, model);
-  }
-}
+const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET };
 
-const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET, GITHUB_TOKEN };
-
-// GitHub Commit API(https://api.github.com/repos/{repo}/commits/{sha})は
-// JSON(メタデータ取得用、Accept: application/vnd.github+json)とdiff
-// (Accept: application/vnd.github.v3.diff)の両方でこのendpointが叩くため、
-// Acceptヘッダで振り分けるfetchモックを共通ヘルパーとして用意する。
-function makeGithubFetchMock(opts: { exists?: boolean; message?: string; diff?: string } = {}) {
-  const exists = opts.exists ?? true;
-  const message = opts.message ?? 'fix: バグ修正';
-  const diff = opts.diff ?? 'diff --git a/foo.ts b/foo.ts\n+fixed';
-  const calls: { url: string; accept: string }[] = [];
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    const accept = (init?.headers as Record<string, string> | undefined)?.Accept ?? '';
-    calls.push({ url, accept });
-    if (!exists) return { ok: false, status: 404, text: async () => 'Not Found' } as Response;
-    if (accept === 'application/vnd.github.v3.diff') {
-      return { ok: true, status: 200, text: async () => diff } as Response;
-    }
-    return { ok: true, status: 200, json: async () => ({ commit: { message } }) } as Response;
-  });
-  return { fetchMock, calls };
-}
-
-async function postSummary(
-  db: DatabaseSync,
-  email: string,
-  commitHash: string,
-  repoName: string,
-  aiRun: (...args: unknown[]) => Promise<unknown>,
-  extraEnv: Record<string, unknown> = {}
-): Promise<Response> {
+async function postSummary(db: DatabaseSync, email: string, commitHash: string, repoName: string): Promise<Response> {
   const userToken = await makeUserToken(email);
   return app.request(
     '/api/commit-summary-external',
     { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, commitHash, repoName }) },
-    { ...BASE_ENV, DB: wrapD1(db), AI: { run: aiRun }, ...extraEnv }
+    { ...BASE_ENV, DB: wrapD1(db) }
   );
 }
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe('POST /api/commit-summary-external', () => {
   it('Bearer secretが一致しない場合は401', async () => {
@@ -185,144 +129,60 @@ describe('POST /api/commit-summary-external', () => {
 
   it('commitHashが空の場合は400', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res = await postSummary(db, 'ok@example.com', '', REPO_NAME, vi.fn());
+    const res = await postSummary(db, 'ok@example.com', '', REPO_NAME);
     expect(res.status).toBe(400);
   });
 
-  it('対象外のrepoNameは400で拒否され、GitHub API/AIは呼ばれない', async () => {
+  it('対象外のrepoNameは400で拒否される', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
-    const res = await postSummary(db, 'ok@example.com', 'h1', 'someone/unrelated-repo', aiRun);
+    const res = await postSummary(db, 'ok@example.com', 'h1', 'someone/unrelated-repo');
     expect(res.status).toBe(400);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(aiRun).not.toHaveBeenCalled();
   });
 
-  it('未許可メールアドレスは403で拒否され、GitHub API/AIは呼ばれない', async () => {
+  it('未許可メールアドレスは403で拒否される', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
-    const res = await postSummary(db, 'ng@example.com', 'h1', REPO_NAME, aiRun);
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 1, 'h1', '- 概要\n要約済み', 'test-model');
+    const res = await postSummary(db, 'ng@example.com', 'h1', REPO_NAME);
     expect(res.status).toBe(403);
-    expect(aiRun).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('GitHub上に実在しないcommitHashは404で、AIは呼ばれない', async () => {
-    const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock } = makeGithubFetchMock({ exists: false });
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
-    const res = await postSummary(db, 'ok@example.com', 'does-not-exist', REPO_NAME, aiRun);
-    expect(res.status).toBe(404);
-    expect(aiRun).not.toHaveBeenCalled();
-  });
-
-  it('PRマージ時のWebhookで既に要約済み(ai_summary_log)のコミットは、それを優先して返しGitHub/AIは呼ばない', async () => {
+  it('正常系: ai_summary_logに記録済みの要約をそのまま返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'h1', '- 概要\nWebhookで生成済みの要約', 'existing-model');
-    const { fetchMock } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
 
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { summary: string; model: string; cached: boolean; source?: string };
     expect(body.summary).toBe('- 概要\nWebhookで生成済みの要約');
     expect(body.model).toBe('existing-model');
     expect(body.cached).toBe(true);
     expect(body.source).toBe('ai_summary_log');
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(aiRun).not.toHaveBeenCalled();
   });
 
-  it('ai_summary_logに見つからない場合は通常どおりGitHub直接参照+新規AI生成にフォールバックする', async () => {
+  it('記録が見つからない場合は404で、握りつぶしてok扱いにしない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock } = makeGithubFetchMock({ message: 'fix: 別のバグ修正' });
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn(async () => ({ response: '- 概要\n新規生成した要約' }));
-
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { summary: string; cached: boolean };
-    expect(body.summary).toBe('- 概要\n新規生成した要約');
-    expect(body.cached).toBe(false);
-    expect(fetchMock).toHaveBeenCalled();
-    expect(aiRun).toHaveBeenCalled();
+    const res = await postSummary(db, 'ok@example.com', 'does-not-exist', REPO_NAME);
+    expect(res.status).toBe(404);
   });
 
-  it('既にキャッシュ済みのコミットはAI/diff取得を呼ばず、キャッシュ内容をそのまま返す(cached:true)', async () => {
+  it('summaryがNULL(要約生成に失敗した記録)の場合は404扱いにする(要約済みとして返さない)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    insertCachedSummary(db, 'h1', REPO_NAME, '- 概要\nバグを修正した', 'test-model');
-    const { fetchMock, calls } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
-
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { summary: string; model: string; cached: boolean };
-    expect(body.summary).toBe('- 概要\nバグを修正した');
-    expect(body.model).toBe('test-model');
-    expect(body.cached).toBe(true);
-    expect(aiRun).not.toHaveBeenCalled();
-    // メタデータ確認(json)は1回呼ぶが、diff取得は呼ばない。
-    expect(calls.filter((c) => c.accept === 'application/vnd.github.v3.diff').length).toBe(0);
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 1, 'h1', null, null);
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
+    expect(res.status).toBe(404);
   });
 
-  it('正常系: GitHubからcommit_messageとdiffを取得してAI要約を生成し、commit_summary_cacheへ保存してcached:falseで返す', async () => {
+  it('summaryが空文字の記録も404扱いにする', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock, calls } = makeGithubFetchMock({ message: 'fix: SQLインジェクションの修正\n\n詳細な説明文' });
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn(async () => ({ response: '- 概要\nSQLインジェクションを修正した' }));
-
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
-    expect(res.status).toBe(200);
-    expect(calls.every((c) => c.url === `https://api.github.com/repos/${REPO_NAME}/commits/h1`)).toBe(true);
-    expect(calls.some((c) => c.accept === 'application/vnd.github.v3.diff')).toBe(true);
-    const body = (await res.json()) as { summary: string; model: string; cached: boolean };
-    expect(body.summary).toBe('- 概要\nSQLインジェクションを修正した');
-    expect(body.cached).toBe(false);
-
-    const savedRow = db.prepare('SELECT summary, repo_name FROM commit_summary_cache WHERE commit_hash = ?').get('h1') as
-      | { summary: string; repo_name: string }
-      | undefined;
-    expect(savedRow?.summary).toBe('- 概要\nSQLインジェクションを修正した');
-    expect(savedRow?.repo_name).toBe(REPO_NAME);
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 1, 'h1', '', 'test-model');
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
+    expect(res.status).toBe(404);
   });
 
-  it('AI要約パイプラインが失敗した場合は502で、commit_summary_cacheへは保存しない(握りつぶさない)', async () => {
+  it('同じcommit_shaでも別リポジトリの記録は返さない(repo_full_nameも照合する)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const { fetchMock } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn(async () => ({ response: '' }));
-
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
-    expect(res.status).toBe(502);
-    const savedRow = db.prepare('SELECT * FROM commit_summary_cache WHERE commit_hash = ?').get('h1');
-    expect(savedRow).toBeUndefined();
-  });
-
-  it('1時間あたりの新規要約生成数の上限に達している場合は429で拒否し、diff取得/AIは呼ばれない', async () => {
-    const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    for (let i = 0; i < 30; i++) {
-      insertCachedSummary(db, `h-old-${i}`, REPO_NAME, '既存の要約', 'test-model');
-    }
-    const { fetchMock, calls } = makeGithubFetchMock();
-    vi.stubGlobal('fetch', fetchMock);
-    const aiRun = vi.fn();
-
-    const res = await postSummary(db, 'ok@example.com', 'h-new', REPO_NAME, aiRun);
-    expect(res.status).toBe(429);
-    expect(aiRun).not.toHaveBeenCalled();
-    expect(calls.filter((c) => c.accept === 'application/vnd.github.v3.diff').length).toBe(0);
-  });
-
-  it('GITHUB_TOKEN未設定の場合は503', async () => {
-    const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, vi.fn(), { GITHUB_TOKEN: undefined });
-    expect(res.status).toBe(503);
+    insertExistingAiSummary(db, 'req-1', 'nekoserver/cf-auth', 1, 'h1', '- 概要\n別リポジトリの要約', 'test-model');
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
+    expect(res.status).toBe(404);
   });
 });

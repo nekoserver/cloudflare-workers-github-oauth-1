@@ -637,7 +637,6 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_vuln_label_groups', migration: '0150', description: '脆弱性判定チェックリスト(jev_vuln_labels)の表示グループ(脆弱性の成立可否/到達可能性・攻撃経路/認証/認可・権限等の18分類)のマスター', syncPolicy: 'manual' },
   { name: 'jev_vuln_labels', migration: '0150', description: '脆弱性を「Yes=危険側」に統一した二値判定文でJevに評価させるためのラベルのマスター。各question_textの先頭に[外部]/[内部]/[共通]/[除外]の脅威分類タグを付与している。jev_labelsと同じく追記専用', syncPolicy: 'manual' },
   { name: 'jev_vuln_evaluations', migration: '0150', description: '任意の対象(target_id、PR番号やfinding ID等の文字列)をjev_vuln_labelsの各ラベルでJevに評価させた結果。share_id/modelで引くjev_evaluationsに対し、対象がAIチャット回答に限らない汎用的な脆弱性判定のため独立したテーブルにしている', syncPolicy: 'auto' },
-  { name: 'commit_summary_cache', migration: '0151', description: 'dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。commit_hash単位でAI要約(Workers AI)をキャッシュし、同じコミットへの再問い合わせでAIを再実行しない', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2363,14 +2362,6 @@ CREATE TABLE IF NOT EXISTS jev_vuln_evaluations (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_unique ON jev_vuln_evaluations(user_id, target_id, model, jev_vuln_label_id);
 CREATE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_target ON jev_vuln_evaluations(target_id);`,
-  '0151': `CREATE TABLE IF NOT EXISTS commit_summary_cache (
-  commit_hash TEXT PRIMARY KEY,
-  repo_name TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  model TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_commit_summary_cache_repo ON commit_summary_cache(repo_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2635,7 +2626,6 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_vuln_label_groups: { id: 'pk' },
   jev_vuln_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_vuln_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_vuln_label_id: 'fk' },
-  commit_summary_cache: { commit_hash: 'pk', repo_name: 'idx' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
@@ -2779,7 +2769,6 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_vuln_label_groups: 'ai',
   jev_vuln_labels: 'ai',
   jev_vuln_evaluations: 'ai',
-  commit_summary_cache: 'ai',
   jev_keyword_evaluation_locks: 'ai',
   api_key_endpoint_stats: 'system',
 };
@@ -2946,7 +2935,6 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
-  commit_summary_cache: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -14576,13 +14564,6 @@ app.post('/api/jev-vuln-score-external', async (c) => {
   });
 });
 
-// commit_summary_cacheは特定ユーザーに紐付かない共有キャッシュ(同じコミットの
-// 要約は誰が見ても同じ内容でよいため、jev_vuln_evaluationsと違いuser_id列を
-// 持たない)。新規のAI要約生成(キャッシュヒット時は含まない)を1時間あたり
-// 全ユーザー合計でこの件数までに制限し、コストを抑える。
-const COMMIT_SUMMARY_RATE_LIMIT_WINDOW_SQL = '-1 hour';
-const COMMIT_SUMMARY_RATE_LIMIT_MAX = 30;
-
 // commit-summary-externalが要約対象として受け付けるリポジトリ(SPEC.COMMITDB.md/
 // CLAUDE.mdルール24で repo_commit_index の対象として挙げている3repoと同じ)。
 // repoNameはリクエストボディから受け取るが、この一覧に無い値は拒否する。
@@ -14594,16 +14575,16 @@ const COMMIT_SUMMARY_ALLOWED_REPOS = [
 
 /**
  * dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。
- * commitHashの実在確認とcommit_messageの取得はGitHub Commit APIへ直接
- * 問い合わせて行う(本文をリクエストボディから信用しない。
- * jev-vuln-score-externalと同じ方針)。2026-09-19: 当初はrepo_commit_index
- * (手動同期のミラーテーブル)に照合していたが、直近マージされたコミットが
- * まだ反映されておらず「存在しない」と誤判定される問題があったため、
- * GitHub側を都度直接参照する方式に変更した。
- * GitHub Commit APIからその1コミットぶんのdiffも取得したうえで、既存の
- * PR要約パイプライン(runSummaryPipeline、aiSummary.ts)を再利用して日本語
- * 要約を生成する。commit_summary_cacheに保存し、同じコミットへの再問い合わせ
- * ではAIを再実行せずキャッシュを返す(全ユーザー共有)。
+ * PRマージ時のWebhookパイプラインが既にcommit_agent_log/ai_summary_logへ
+ * 保存している日本語要約を読み出して返すだけの、読み出し専用API。
+ * 新しくAIを呼んで要約を生成することはしない(2026-09-19: 当初は
+ * 見つからない場合にGitHub Commit API+AIで新規生成し専用の新テーブル
+ * commit_summary_cacheへキャッシュする実装にしていたが、そもそも対象の
+ * コミットは全てWebhookで要約済みのため不要な複雑化だった。既存の
+ * 記録箇所を正しく参照する方に倒した)。
+ * commit_agent_logはPRの最新コミットのshaをrequest_id(ai_summary_log)に
+ * 紐付けて記録しているため、これをJOINして引く。見つからなければ
+ * 「Webhookでまだ要約されていない」ことを示す404を返す。
  */
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
@@ -14619,11 +14600,6 @@ app.post('/api/commit-summary-external', async (c) => {
     return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
   }
 
-  // PRマージ時のWebhook(commit_agent_log/ai_summary_log)で、このコミットが
-  // 既に日本語要約済みであれば、AIを新規に呼ばずそれをそのまま返す。
-  // commit_agent_logはPRの最新コミットのshaをrequest_id(ai_summary_log)に
-  // 紐付けて記録しているため、まずここを確認するのが正のデータソース。
-  // ここで見つからない場合だけ、以下のGitHub直接参照+新規AI生成にフォールバックする。
   try {
     const existing = await c.env.DB.prepare(
       `SELECT l.summary, l.model FROM commit_agent_log c
@@ -14631,111 +14607,15 @@ app.post('/api/commit-summary-external', async (c) => {
        WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
     ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
-    if (existing) {
-      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
+    if (!existing) {
+      return jsonUtf8({ error: 'このコミットはまだPRマージ時のWebhookで要約されていません(commit_agent_log/ai_summary_logに記録がありません)' }, 404);
     }
+    return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-external] ai_summary_log照合クエリ失敗', { commitHash, repoName, error: message });
     return jsonUtf8({ error: 'ai_summary_log照合でサーバーエラーが発生しました: ' + message }, 500);
   }
-
-  if (!c.env.GITHUB_TOKEN) {
-    return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
-  }
-
-  let commitMessage: string;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${repoName}/commits/${commitHash}`, {
-      headers: {
-        Authorization: `Bearer ${c.env.GITHUB_TOKEN}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'cloudflare-workers-github-oauth-1',
-      },
-    });
-    if (res.status === 404) return jsonUtf8({ error: '指定されたcommitHashはGitHub上に存在しません' }, 404);
-    if (!res.ok) {
-      const errorBody = await res.text().catch(() => '');
-      return jsonUtf8({ error: `GitHubからのコミット取得に失敗しました(HTTP ${res.status}): ${errorBody.slice(0, 300)}` }, 502);
-    }
-    const commitJson = await res.json<{ commit?: { message?: string } }>().catch(() => null);
-    if (!commitJson?.commit?.message) {
-      return jsonUtf8({ error: 'GitHubのコミット応答にmessageが含まれていません' }, 502);
-    }
-    commitMessage = commitJson.commit.message;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] GitHubコミット取得に失敗', { commitHash, repoName, error: message });
-    return jsonUtf8({ error: 'GitHubからのコミット取得でエラーが発生しました: ' + message }, 502);
-  }
-
-  try {
-    const cached = await c.env.DB.prepare(
-      'SELECT summary, model FROM commit_summary_cache WHERE commit_hash = ?'
-    ).bind(commitHash).first<{ summary: string; model: string }>();
-    if (cached) {
-      return jsonUtf8({ commitHash, summary: cached.summary, model: cached.model, cached: true });
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] commit_summary_cache取得クエリ失敗', { commitHash, error: message });
-    return jsonUtf8({ error: 'commit_summary_cache取得でサーバーエラーが発生しました: ' + message }, 500);
-  }
-
-  try {
-    const rateRow = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS cnt FROM commit_summary_cache WHERE created_at >= datetime('now', ?)`
-    ).bind(COMMIT_SUMMARY_RATE_LIMIT_WINDOW_SQL).first<{ cnt: number }>();
-    if ((rateRow?.cnt ?? 0) >= COMMIT_SUMMARY_RATE_LIMIT_MAX) {
-      return jsonUtf8({ error: `1時間あたりに新規生成できる要約数の上限(${COMMIT_SUMMARY_RATE_LIMIT_MAX}件)に達しました。しばらく待ってから再試行してください` }, 429);
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] レート制限クエリ失敗', { commitHash, error: message });
-    return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
-  }
-
-  let trimmedDiff = '';
-  try {
-    const diffResult = await fetchPrDiff({
-      diffUrl: `https://api.github.com/repos/${repoName}/commits/${commitHash}`,
-      githubToken: c.env.GITHUB_TOKEN,
-    });
-    trimmedDiff = diffResult.trimmedDiff;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] diff取得に失敗', { commitHash, repoName, error: message });
-    return jsonUtf8({ error: 'コミットのdiff取得に失敗しました: ' + message }, 502);
-  }
-
-  const messageLines = commitMessage.split('\n');
-  const title = messageLines[0] ?? commitMessage;
-  const description = messageLines.slice(1).join('\n').trim();
-  const aiModel = resolveAiModel(c.env.AI_MODEL);
-  const pipelineResult = await runSummaryPipeline({
-    ai: c.env.AI ?? null,
-    model: aiModel,
-    fallbackModel: FALLBACK_AI_MODEL,
-    title,
-    description,
-    trimmedDiff,
-  });
-  if (!pipelineResult.success) {
-    logger.warn('[commit-summary-external] AI要約パイプライン失敗', { commitHash, summary: pipelineResult.summary });
-    return jsonUtf8({ error: `AI要約に失敗しました: ${pipelineResult.summary}` }, 502);
-  }
-
-  try {
-    await c.env.DB.prepare(
-      'INSERT OR IGNORE INTO commit_summary_cache (commit_hash, repo_name, summary, model) VALUES (?, ?, ?, ?)'
-    ).bind(commitHash, repoName, pipelineResult.summary, pipelineResult.usedModel).run();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] commit_summary_cache保存クエリ失敗', { commitHash, error: message });
-    return jsonUtf8({ error: 'commit_summary_cache保存でサーバーエラーが発生しました: ' + message }, 500);
-  }
-
-  return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false });
 });
 
 /**
