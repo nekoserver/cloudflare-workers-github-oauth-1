@@ -22,9 +22,11 @@ describe('Workerエントリポイントがworkerdの起動時named-export検証
     expect(toml).toMatch(/^main\s*=\s*"src\/worker-entry\.ts"/m);
   });
 
-  it('src/worker-entry.ts は default のみを re-export し、他の named export を持たない', () => {
-    const src = readFileSync('src/worker-entry.ts', 'utf8').trim();
-    expect(src).toBe(`export { default } from './index';`);
+  it('src/worker-entry.ts は default export のみを持ち、他の named export を持たない', () => {
+    const src = readFileSync('src/worker-entry.ts', 'utf8');
+    const namedExportRe = /^export\s+(?!default\b)(const|function|class|let|var|\{|interface|type|enum)/gm;
+    expect(src.match(namedExportRe)).toBeNull();
+    expect(src).toContain('export default {');
   });
 
   it('src/index.ts は default export(Honoアプリ本体)を持つ', () => {
