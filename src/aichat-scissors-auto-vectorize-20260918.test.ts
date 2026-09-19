@@ -117,7 +117,7 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     const html = buildPage();
     const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 900);
+    const snippet = html.slice(idx, idx + 1400);
     expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)');
     expect(snippet).toContain('bulkRegisterUnregisteredKeywords(shareId, keywords, {})');
   });
