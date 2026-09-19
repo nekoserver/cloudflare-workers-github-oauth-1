@@ -14583,38 +14583,69 @@ app.post('/api/jev-vuln-score-external', async (c) => {
 const COMMIT_SUMMARY_RATE_LIMIT_WINDOW_SQL = '-1 hour';
 const COMMIT_SUMMARY_RATE_LIMIT_MAX = 30;
 
+// commit-summary-externalが要約対象として受け付けるリポジトリ(SPEC.COMMITDB.md/
+// CLAUDE.mdルール24で repo_commit_index の対象として挙げている3repoと同じ)。
+// repoNameはリクエストボディから受け取るが、この一覧に無い値は拒否する。
+const COMMIT_SUMMARY_ALLOWED_REPOS = [
+  'nekoserver/cloudflare-workers-github-oauth-1',
+  'nekoserver/dynamicneko',
+  'nekoserver/cf-auth',
+] as const;
+
 /**
  * dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。
- * commitHashをrepo_commit_indexに照合して実在する保存済み本文を取得し
- * (本文をリクエストボディから信用しない。jev-vuln-score-externalと同じ方針)、
- * GitHub Commit APIからその1コミットぶんのdiffを取得したうえで、
- * 既存のPR要約パイプライン(runSummaryPipeline、aiSummary.ts)を再利用して
- * 日本語要約を生成する。commit_summary_cacheに保存し、同じコミットへの
- * 再問い合わせではAIを再実行せずキャッシュを返す(全ユーザー共有)。
+ * commitHashの実在確認とcommit_messageの取得はGitHub Commit APIへ直接
+ * 問い合わせて行う(本文をリクエストボディから信用しない。
+ * jev-vuln-score-externalと同じ方針)。2026-09-19: 当初はrepo_commit_index
+ * (手動同期のミラーテーブル)に照合していたが、直近マージされたコミットが
+ * まだ反映されておらず「存在しない」と誤判定される問題があったため、
+ * GitHub側を都度直接参照する方式に変更した。
+ * GitHub Commit APIからその1コミットぶんのdiffも取得したうえで、既存の
+ * PR要約パイプライン(runSummaryPipeline、aiSummary.ts)を再利用して日本語
+ * 要約を生成する。commit_summary_cacheに保存し、同じコミットへの再問い合わせ
+ * ではAIを再実行せずキャッシュを返す(全ユーザー共有)。
  */
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ userToken?: string; commitHash?: string }>().catch(() => null);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string; repoName?: string }>().catch(() => null);
   const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
   if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
 
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  if (!c.env.GITHUB_TOKEN) {
+    return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
+  }
 
   let commitMessage: string;
-  let repoName: string;
   try {
-    const commitRow = await c.env.DB.prepare(
-      'SELECT commit_message, repo_name FROM repo_commit_index WHERE commit_hash = ?'
-    ).bind(commitHash).first<{ commit_message: string; repo_name: string }>();
-    if (!commitRow) return jsonUtf8({ error: '指定されたcommitHashはrepo_commit_indexに存在しません' }, 404);
-    commitMessage = commitRow.commit_message;
-    repoName = commitRow.repo_name;
+    const res = await fetch(`https://api.github.com/repos/${repoName}/commits/${commitHash}`, {
+      headers: {
+        Authorization: `Bearer ${c.env.GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'cloudflare-workers-github-oauth-1',
+      },
+    });
+    if (res.status === 404) return jsonUtf8({ error: '指定されたcommitHashはGitHub上に存在しません' }, 404);
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '');
+      return jsonUtf8({ error: `GitHubからのコミット取得に失敗しました(HTTP ${res.status}): ${errorBody.slice(0, 300)}` }, 502);
+    }
+    const commitJson = await res.json<{ commit?: { message?: string } }>().catch(() => null);
+    if (!commitJson?.commit?.message) {
+      return jsonUtf8({ error: 'GitHubのコミット応答にmessageが含まれていません' }, 502);
+    }
+    commitMessage = commitJson.commit.message;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('[commit-summary-external] repo_commit_index取得クエリ失敗', { commitHash, error: message });
-    return jsonUtf8({ error: 'repo_commit_index取得でサーバーエラーが発生しました: ' + message }, 500);
+    logger.error('[commit-summary-external] GitHubコミット取得に失敗', { commitHash, repoName, error: message });
+    return jsonUtf8({ error: 'GitHubからのコミット取得でエラーが発生しました: ' + message }, 502);
   }
 
   try {
@@ -14641,10 +14672,6 @@ app.post('/api/commit-summary-external', async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-external] レート制限クエリ失敗', { commitHash, error: message });
     return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
-  }
-
-  if (!c.env.GITHUB_TOKEN) {
-    return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
   }
 
   let trimmedDiff = '';
