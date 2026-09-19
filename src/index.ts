@@ -14619,6 +14619,27 @@ app.post('/api/commit-summary-external', async (c) => {
     return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
   }
 
+  // PRマージ時のWebhook(commit_agent_log/ai_summary_log)で、このコミットが
+  // 既に日本語要約済みであれば、AIを新規に呼ばずそれをそのまま返す。
+  // commit_agent_logはPRの最新コミットのshaをrequest_id(ai_summary_log)に
+  // 紐付けて記録しているため、まずここを確認するのが正のデータソース。
+  // ここで見つからない場合だけ、以下のGitHub直接参照+新規AI生成にフォールバックする。
+  try {
+    const existing = await c.env.DB.prepare(
+      `SELECT l.summary, l.model FROM commit_agent_log c
+       JOIN ai_summary_log l ON l.request_id = c.request_id
+       WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
+       ORDER BY l.id DESC LIMIT 1`
+    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    if (existing) {
+      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-summary-external] ai_summary_log照合クエリ失敗', { commitHash, repoName, error: message });
+    return jsonUtf8({ error: 'ai_summary_log照合でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
   if (!c.env.GITHUB_TOKEN) {
     return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
   }

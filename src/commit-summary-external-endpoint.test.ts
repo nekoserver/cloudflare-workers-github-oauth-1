@@ -2,12 +2,14 @@
  * POST /api/commit-summary-external のテスト
  *
  * 対象: dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用API。
- * commitHashの実在確認とcommit_messageの取得はGitHub Commit APIへ直接
- * 問い合わせて行い(repo_commit_indexという手動同期のミラーテーブルには
- * 依存しない。直近マージされたコミットがまだ反映されておらず「存在しない」
- * と誤判定される不具合があったため2026-09-19に変更)、GitHub Commit APIから
- * diffを取得したうえで既存のPR要約パイプライン(runSummaryPipeline)を
- * 再利用して日本語要約を生成し、commit_summary_cache(全ユーザー共有、
+ * まずPRマージ時のWebhookパイプラインが既に生成済みの日本語要約
+ * (commit_agent_log.commit_sha → ai_summary_log.summary)を優先して返す。
+ * そこに見つからない場合だけ、GitHub Commit APIへ直接問い合わせて
+ * (repo_commit_indexという手動同期のミラーテーブルには依存しない。
+ * 直近マージされたコミットがまだ反映されておらず「存在しない」と
+ * 誤判定される不具合があったため2026-09-19に変更)commit_messageとdiffを
+ * 取得し、既存のPR要約パイプライン(runSummaryPipeline)を再利用して
+ * 新規に日本語要約を生成し、commit_summary_cache(全ユーザー共有、
  * user_id列を持たない)にキャッシュする。
  *
  * 故障シナリオ:
@@ -15,12 +17,14 @@
  *   (2) 未許可メールアドレスがD1クエリまで到達してしまう
  *   (3) repoNameがcommit-summary-externalの対象外リポジトリでも
  *       受け付けてしまう(任意のリポジトリのコミットを要約できてしまう)
- *   (4) GitHub上に実在しないcommitHashに対して任意の内容でAIを呼んでしまう
+ *   (4) 既にai_summary_logに要約済みのコミットに対して、それを使わず
+ *       無駄にGitHub/AIを再度呼んでしまう(二重コスト・記録との不一致)
+ *   (5) GitHub上に実在しないcommitHashに対して任意の内容でAIを呼んでしまう
  *       (commitMessageをボディから信用しない)
- *   (5) 既にキャッシュ済みのコミットに対して再度AI/diff取得を行ってしまう
- *       (二重コスト)
- *   (6) 1時間あたりの新規要約生成数に上限が無く、無制限にAIを呼べてしまう
- *   (7) AI要約パイプライン失敗時に握りつぶしてキャッシュへ保存してしまう
+ *   (6) 既にcommit_summary_cacheにキャッシュ済みのコミットに対して再度
+ *       AI/diff取得を行ってしまう(二重コスト)
+ *   (7) 1時間あたりの新規要約生成数に上限が無く、無制限にAIを呼べてしまう
+ *   (8) AI要約パイプライン失敗時に握りつぶしてキャッシュへ保存してしまう
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -73,11 +77,45 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       model TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE ai_summary_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id TEXT NOT NULL UNIQUE,
+      repo_full_name TEXT,
+      pr_number INTEGER,
+      model TEXT,
+      summary TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE commit_agent_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id TEXT NOT NULL,
+      repo_full_name TEXT NOT NULL,
+      pr_number INTEGER NOT NULL,
+      commit_sha TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
   }
   return db;
+}
+
+// PRマージ時のWebhookパイプラインが既に残した記録(commit_agent_log +
+// ai_summary_log)を模す。commit-summary-externalはまずここを優先して見る。
+function insertExistingAiSummary(
+  db: DatabaseSync,
+  requestId: string,
+  repoName: string,
+  prNumber: number,
+  commitSha: string,
+  summary: string,
+  model: string
+): void {
+  db.prepare(`INSERT INTO ai_summary_log (request_id, repo_full_name, pr_number, model, summary) VALUES (?, ?, ?, ?, ?)`)
+    .run(requestId, repoName, prNumber, model, summary);
+  db.prepare(`INSERT INTO commit_agent_log (request_id, repo_full_name, pr_number, commit_sha) VALUES (?, ?, ?, ?)`)
+    .run(requestId, repoName, prNumber, commitSha);
 }
 
 function insertCachedSummary(db: DatabaseSync, hash: string, repoName: string, summary: string, model: string, createdAt?: string): void {
@@ -181,6 +219,39 @@ describe('POST /api/commit-summary-external', () => {
     const res = await postSummary(db, 'ok@example.com', 'does-not-exist', REPO_NAME, aiRun);
     expect(res.status).toBe(404);
     expect(aiRun).not.toHaveBeenCalled();
+  });
+
+  it('PRマージ時のWebhookで既に要約済み(ai_summary_log)のコミットは、それを優先して返しGitHub/AIは呼ばない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'h1', '- 概要\nWebhookで生成済みの要約', 'existing-model');
+    const { fetchMock } = makeGithubFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+    const aiRun = vi.fn();
+
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { summary: string; model: string; cached: boolean; source?: string };
+    expect(body.summary).toBe('- 概要\nWebhookで生成済みの要約');
+    expect(body.model).toBe('existing-model');
+    expect(body.cached).toBe(true);
+    expect(body.source).toBe('ai_summary_log');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(aiRun).not.toHaveBeenCalled();
+  });
+
+  it('ai_summary_logに見つからない場合は通常どおりGitHub直接参照+新規AI生成にフォールバックする', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const { fetchMock } = makeGithubFetchMock({ message: 'fix: 別のバグ修正' });
+    vi.stubGlobal('fetch', fetchMock);
+    const aiRun = vi.fn(async () => ({ response: '- 概要\n新規生成した要約' }));
+
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiRun);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { summary: string; cached: boolean };
+    expect(body.summary).toBe('- 概要\n新規生成した要約');
+    expect(body.cached).toBe(false);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(aiRun).toHaveBeenCalled();
   });
 
   it('既にキャッシュ済みのコミットはAI/diff取得を呼ばず、キャッシュ内容をそのまま返す(cached:true)', async () => {
