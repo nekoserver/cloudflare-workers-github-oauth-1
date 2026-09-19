@@ -426,7 +426,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
-import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, type JevLabel } from './utils/jevEvaluation';
+import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -3070,6 +3070,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
 
   // ID名が異なる参照先 → 各マスターの id (PK)
   'wine_details.wine_id': 'id',
+  'jev_vuln_labels.jev_group_id': 'id',
+  'jev_vuln_evaluations.jev_vuln_label_id': 'id',
   'public_key_challenges.key_id': 'id',
   'public_key_security_events.key_id': 'id',
   'ruby_wasm_snippet_verifications.snippet_id': 'id',
@@ -14368,6 +14370,162 @@ app.post('/api/aichat/jev-score-board-label-names-external', async (c) => {
     logger.error('[jev-score-board-external] label-names取得に失敗', { error: message });
     return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
   }
+});
+
+// commit-checkerがJev診断結果の保存に使う固定のmodel値。commit_messageは
+// 特定のAIチャットモデルの回答ではなく、どのAIモデルとも無関係な入力
+// (コミットログ)であるため、jev_vuln_evaluations.modelにNULLを入れると
+// SQLiteのUNIQUE制約はNULL同士を別値として扱いINSERT OR IGNOREでの重複
+// 排除が効かなくなる。固定文字列にしてuniqueインデックスを機能させる。
+const JEV_VULN_MODEL = 'commit-checker';
+
+/**
+ * dynamicnekoの/commit-checkerページ用。repo_commit_indexのcommit_messageを
+ * キーワード検索し、各候補についてjev_vuln_labels全件がjev_vuln_evaluations
+ * (target_id=commit_hash, user_id=login, model=JEV_VULN_MODEL)で既に診断済み
+ * かどうかを付けて返す(検索結果一覧で診断済みの選択肢の背景色を変える用途)。
+ */
+app.post('/api/repo-commit-search-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; query?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const query = (body?.query ?? '').trim();
+  const repoName = (body?.repoName ?? '').trim();
+  if (!query) return jsonUtf8({ error: 'query は必須です' }, 400);
+
+  try {
+    const likePattern = '%' + query.replace(/[%_]/g, (ch) => '\\' + ch) + '%';
+    const stmt = repoName
+      ? c.env.DB.prepare(
+          `SELECT commit_hash, repo_name, seq_num, github_pr_number, commit_message FROM repo_commit_index
+           WHERE repo_name = ? AND commit_message LIKE ? ESCAPE '\\' ORDER BY seq_num DESC LIMIT 50`
+        ).bind(repoName, likePattern)
+      : c.env.DB.prepare(
+          `SELECT commit_hash, repo_name, seq_num, github_pr_number, commit_message FROM repo_commit_index
+           WHERE commit_message LIKE ? ESCAPE '\\' ORDER BY seq_num DESC LIMIT 50`
+        ).bind(likePattern);
+    const { results } = await stmt.all<{ commit_hash: string; repo_name: string; seq_num: number; github_pr_number: number | null; commit_message: string }>();
+    const rows = results ?? [];
+    if (rows.length === 0) return jsonUtf8({ results: [] });
+
+    const totalLabelsRow = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_vuln_labels').first<{ cnt: number }>();
+    const totalLabels = totalLabelsRow?.cnt ?? 0;
+
+    const placeholders = rows.map(() => '?').join(',');
+    const diagRows = await c.env.DB.prepare(
+      `SELECT target_id, COUNT(DISTINCT jev_vuln_label_id) AS cnt FROM jev_vuln_evaluations
+       WHERE user_id = ? AND model = ? AND target_id IN (${placeholders}) GROUP BY target_id`
+    ).bind(login, JEV_VULN_MODEL, ...rows.map((r) => r.commit_hash)).all<{ target_id: string; cnt: number }>();
+    const diagnosedCounts = new Map((diagRows.results ?? []).map((r) => [r.target_id, r.cnt]));
+
+    return jsonUtf8({
+      results: rows.map((r) => ({
+        commitHash: r.commit_hash,
+        repoName: r.repo_name,
+        seqNum: r.seq_num,
+        githubPrNumber: r.github_pr_number,
+        commitMessage: r.commit_message,
+        diagnosed: totalLabels > 0 && (diagnosedCounts.get(r.commit_hash) ?? 0) >= totalLabels,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[repo-commit-search-external] 検索クエリ失敗', { error: message });
+    return jsonUtf8({ error: '検索でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/commit-checkerページ用。選択されたコミットログ本文
+ * (commit_message)をjev_vuln_labelsの全ラベルでJevに評価させ、
+ * jev_vuln_evaluationsに保存する。既に評価済みのラベルは再送しない
+ * (computeJevEvaluationPlan、jev-score-externalと同じ仕組み)。
+ * レスポンスのrequestJsonには実際にJevへ送る(送った)リクエストボディを
+ * そのまま含める(全ラベル分。dynamicneko側の「問い合わせJSON」モーダル用)。
+ */
+app.post('/api/jev-vuln-score-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string; commitMessage?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const commitHash = (body?.commitHash ?? '').trim();
+  const commitMessage = (body?.commitMessage ?? '').trim();
+  if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+  if (!commitMessage) return jsonUtf8({ error: 'commitMessage は必須です' }, 400);
+
+  let allLabels: (JevLabel & { groupName: string })[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT jl.id, jl.question_text, jl.options_json, jg.name AS group_name
+       FROM jev_vuln_labels jl JOIN jev_vuln_label_groups jg ON jg.id = jl.jev_group_id
+       ORDER BY jg.id, jl.id`
+    ).all<{ id: number; question_text: string; options_json: string | null; group_name: string }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-vuln-score-external] jev_vuln_labels.options_jsonが不正です', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria, groupName: r.group_name });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] jev_vuln_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_vuln_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) return jsonUtf8({ error: 'jev_vuln_labelsが1件も登録されていません' }, 500);
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_vuln_label_id AS jev_label_id, value FROM jev_vuln_evaluations WHERE user_id = ? AND target_id = ? AND model = ?'
+    ).bind(login, commitHash, JEV_VULN_MODEL).all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] jev_vuln_evaluations取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'jev_vuln_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({ apiKey: c.env.JEV_API_KEY, state: commitMessage, labels: plan.pending, fetchImpl: fetch });
+    if (!jevResult.ok) {
+      logger.error('[jev-vuln-score-external] Jev API呼び出し失敗', { commitHash, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_vuln_evaluations (target_id, user_id, model, jev_vuln_label_id, value) VALUES (?, ?, ?, ?, ?)'
+        ).bind(commitHash, login, JEV_VULN_MODEL, score.labelId, score.value).run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-vuln-score-external] jev_vuln_evaluations保存クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'jev_vuln_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    commitHash,
+    labels: allLabels.map((l) => ({ id: l.id, questionText: l.question_text, groupName: l.groupName })),
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+    requestJson: buildJevRequestBody(commitMessage, allLabels),
+  });
 });
 
 /**
