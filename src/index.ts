@@ -10218,6 +10218,74 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * dynamicnekoの/slack-postページ(React版つぶやき投稿)向け。本体Workerの
+ * 内部版(Cookie認証、POST /api/tsubuyaki)と同じロジックをService Binding
+ * 経由の呼び出し用に公開する。認可はjev-score-external等と同じパターン:
+ * Bearer secret(AICHAT_EXTERNAL_SECRET)で呼び出し元Worker自体を認証した上、
+ * リクエスト本文の生emailは信用せずAICHAT_USER_TOKEN_SECRETで署名された
+ * 短寿命userTokenのsubだけをemailとして扱い、
+ * dynamicneko_aichat_allowed_usersで許可確認する。Slackへの表示名も
+ * 本文のlogin等ではなく、許可済みemailにサーバー側で紐づく
+ * github_loginだけを使う(他ユーザーになりすませないようにするため)。
+ */
+app.post('/api/tsubuyaki-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string; text?: string }>().catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tsubuyaki-external] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[tsubuyaki-external] 未許可メールアドレスからの投稿を拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはSlack投稿を許可されていません' }, 403);
+  }
+
+  const validated = validateFreeText(body?.text);
+  if (!validated.ok) {
+    return jsonUtf8({ ok: false, error: validated.error }, 400);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tsubuyaki-external] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[tsubuyaki-external] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const message = buildFreeTextSlackMessage(login, validated.text);
+  const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
+  const result = await dispatchNotification(notifyConfig, { text: message });
+  if (!result.ok) {
+    // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
+    const status = result.status === undefined ? 503 : 502;
+    return jsonUtf8({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, status);
+  }
+  return jsonUtf8({ ok: true });
+});
+
 app.get('/webgl-faults', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLFaultsPage(user.sub));
