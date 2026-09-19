@@ -717,6 +717,19 @@ export function getAiChatPage(user: {
       to { transform: translateY(0); opacity: 1; }
     }
 
+    /* ======= ✂️切り出し(ベクタ化+キーワード一括登録)の進行トースト ======= */
+    /* ✂️ボタンは押しても見た目の変化が背景色の一瞬の切り替えだけで、
+       「本当に何か起きたのか」が利用者に伝わりにくかった(実際には動作は
+       していたが無反応に見える不具合の原因)。処理の各段階が終わるたびに
+       トーストで明示する。 */
+    .aichat-send-toast.aichat-scissors-toast-cyan { background: #bee3f8; color: #1a365d; }
+    .aichat-send-toast.aichat-scissors-toast-neutral { background: #e2e8f0; color: #2d3748; }
+    @keyframes scissorsBtnSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .scissors-btn-spinning { display: inline-block; animation: scissorsBtnSpin 0.8s linear infinite; }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
@@ -3773,6 +3786,24 @@ export function getAiChatPage(user: {
       }, 4000);
     }
 
+    /**
+     * showAichatSendToastと同じ #aichatSendToastContainer を使う汎用トースト。
+     * ✂️ボタン(切り出し・キーワード登録・ベクタ化完了の各段階)のように、
+     * 固定文言でなく呼び出し元ごとに異なるメッセージ・配色を出したい場合に使う。
+     */
+    function showAichatToast(message, className) {
+      var container = document.getElementById('aichatSendToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      toast.className = 'aichat-send-toast' + (className ? ' ' + className : '');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('aichat-send-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 4000);
+    }
+
     function openQuestionHashModal(hash) {
       if (!hash) return;
       var overlay = document.createElement('div');
@@ -4827,6 +4858,7 @@ export function getAiChatPage(user: {
       if (!shareId) return;
       historyModalScissorsBtn.disabled = true;
       historyModalScissorsBtn.title = '既登録チェック中...';
+      historyModalScissorsBtn.classList.add('scissors-btn-spinning');
       fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -4839,15 +4871,24 @@ export function getAiChatPage(user: {
             throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');
           }
           applyHistoryModalScissorsState(true);
+          showAichatToast('✂️切り出し完了', 'aichat-scissors-toast-cyan');
           var keywords = result.data.keywords || [];
-          if (!keywords.length) return;
+          if (!keywords.length) {
+            showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+            return;
+          }
           historyModalScissorsBtn.title = 'キーワード一括登録中...';
-          return bulkRegisterUnregisteredKeywords(shareId, keywords, {});
+          return bulkRegisterUnregisteredKeywords(shareId, keywords, {})
+            .then(function() {
+              showAichatToast('新規キーワード切り出し完了', 'aichat-scissors-toast-neutral');
+              showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+            });
         })
         .catch(function() {})
         .then(function() {
           historyModalScissorsBtn.disabled = false;
           historyModalScissorsBtn.title = HISTORY_MODAL_SCISSORS_DEFAULT_TITLE;
+          historyModalScissorsBtn.classList.remove('scissors-btn-spinning');
         });
     });
 
@@ -7346,6 +7387,7 @@ export function getAiChatPage(user: {
           function runVectorizeAndBulkRegisterChain() {
             scissorsBtn.disabled = true;
             scissorsBtn.title = '処理中...';
+            scissorsBtn.classList.add('scissors-btn-spinning');
             vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)
               .then(function(result) {
                 if (result.status < 200 || result.status >= 300 || !result.data) {
@@ -7353,14 +7395,23 @@ export function getAiChatPage(user: {
                 }
                 isAnswerVectorizedForScissors = true;
                 applyScissorsState();
+                showAichatToast('✂️切り出し完了', 'aichat-scissors-toast-cyan');
                 var keywords = result.data.keywords || [];
-                if (!keywords.length) return;
-                return bulkRegisterUnregisteredKeywords(shareId, keywords, {});
+                if (!keywords.length) {
+                  showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+                  return;
+                }
+                return bulkRegisterUnregisteredKeywords(shareId, keywords, {})
+                  .then(function() {
+                    showAichatToast('新規キーワード切り出し完了', 'aichat-scissors-toast-neutral');
+                    showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+                  });
               })
               .catch(function() {})
               .then(function() {
                 scissorsBtn.disabled = false;
                 scissorsBtn.title = 'この回答をベクタ化してキーワードを一括登録する';
+                scissorsBtn.classList.remove('scissors-btn-spinning');
               });
           }
           scissorsBtn.addEventListener('click', function(e) {
