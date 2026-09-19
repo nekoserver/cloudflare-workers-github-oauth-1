@@ -17,6 +17,12 @@
  *   (6) スコア: 既に評価済みのラベルを再度Jevへ送ってしまう(二重課金)
  *   (7) スコア: requestJsonが実際にJevへ送る内容と食い違う
  *   (8) スコア: Jev API呼び出し失敗時に握りつぶしてok扱いにしてしまう
+ *   (9) スコア: 本文のcommitMessageを信用してrepo_commit_indexに存在しない
+ *       任意の内容をJevへ送らせてしまう(2026-09-19: repo_commit_index側の
+ *       保存済み本文をサーバー側で取得するよう修正)
+ *   (10) スコア: 1ユーザーが任意の新規commitHashを送り続けて無制限に
+ *       Jev評価とD1行追加を発生させられてしまう(2026-09-19: 1時間あたりの
+ *       新規診断コミット数に上限を設けて修正)
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -131,9 +137,9 @@ async function postSearch(db: DatabaseSync, email: string, query: string, repoNa
   return postExternal('/api/repo-commit-search-external', db, { userToken, query, repoName });
 }
 
-async function postScore(db: DatabaseSync, email: string, commitHash: string, commitMessage: string): Promise<Response> {
+async function postScore(db: DatabaseSync, email: string, commitHash: string): Promise<Response> {
   const userToken = await makeUserToken(email);
-  return postExternal('/api/jev-vuln-score-external', db, { userToken, commitHash, commitMessage });
+  return postExternal('/api/jev-vuln-score-external', db, { userToken, commitHash });
 }
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -225,30 +231,40 @@ describe('POST /api/jev-vuln-score-external', () => {
 
   it('Bearer secretが一致しない場合は401', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res = await postExternal('/api/jev-vuln-score-external', db, { userToken: 'x', commitHash: 'h1', commitMessage: 'msg' }, 'Bearer wrong');
+    const res = await postExternal('/api/jev-vuln-score-external', db, { userToken: 'x', commitHash: 'h1' }, 'Bearer wrong');
     expect(res.status).toBe(401);
   });
 
-  it('commitHash/commitMessageが空の場合は400', async () => {
+  it('commitHashが空の場合は400', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
-    const res1 = await postScore(db, 'ok@example.com', '', 'msg');
+    const res1 = await postScore(db, 'ok@example.com', '');
     expect(res1.status).toBe(400);
-    const res2 = await postScore(db, 'ok@example.com', 'h1', '');
-    expect(res2.status).toBe(400);
   });
 
-  it('未許可メールアドレスは403で拒否され、Jevは呼ばれない', async () => {
+  it('repo_commit_indexに存在しないcommitHashは404で、Jevは呼ばれない(本文を信用して任意の内容をJevへ送らせない)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     seedTwoLabels(db);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const res = await postScore(db, 'ng@example.com', 'h1', 'fix: バグ修正');
+    const res = await postScore(db, 'ok@example.com', 'does-not-exist');
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('未許可メールアドレスは403で拒否され、Jevは呼ばれない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h1', 'nekoserver/dynamicneko', 1, 'fix: バグ修正');
+    seedTwoLabels(db);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await postScore(db, 'ng@example.com', 'h1');
     expect(res.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('正常系: 全ラベル分をJevへ問い合わせ、jev_vuln_evaluationsへ保存し、requestJsonに全ラベル分のquestionsを含める', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h1', 'nekoserver/dynamicneko', 1, 'fix: SQL文へ未検証の入力を組み込んでいた');
     const { label1, label2 } = seedTwoLabels(db);
     let receivedBody: unknown = null;
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
@@ -262,7 +278,7 @@ describe('POST /api/jev-vuln-score-external', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await postScore(db, 'ok@example.com', 'h1', 'fix: SQL文へ未検証の入力を組み込んでいた');
+    const res = await postScore(db, 'ok@example.com', 'h1');
     expect(res.status).toBe(200);
     const body = await res.json() as {
       scores: Array<{ labelId: number; value: number }>;
@@ -285,6 +301,7 @@ describe('POST /api/jev-vuln-score-external', () => {
 
   it('既に評価済みのラベルは再度Jevへ送らない(二重課金の防止)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h1', 'nekoserver/dynamicneko', 1, 'fix: バグ修正');
     const { label1, label2 } = seedTwoLabels(db);
     insertVulnEval(db, 'h1', 'nekoserver', 'commit-checker', label1, 0.9);
 
@@ -296,7 +313,7 @@ describe('POST /api/jev-vuln-score-external', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await postScore(db, 'ok@example.com', 'h1', 'fix: バグ修正');
+    const res = await postScore(db, 'ok@example.com', 'h1');
     const body = await res.json() as { scores: Array<{ labelId: number; value: number }>; newlyEvaluatedCount: number; cachedCount: number };
     expect(sentQuestionIds).toEqual([String(label2)]);
     expect(body.newlyEvaluatedCount).toBe(1);
@@ -306,13 +323,14 @@ describe('POST /api/jev-vuln-score-external', () => {
 
   it('全ラベルが既に評価済みの場合はJevを一切呼ばない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h1', 'nekoserver/dynamicneko', 1, 'fix: バグ修正');
     const { label1, label2 } = seedTwoLabels(db);
     insertVulnEval(db, 'h1', 'nekoserver', 'commit-checker', label1, 0.9);
     insertVulnEval(db, 'h1', 'nekoserver', 'commit-checker', label2, 0.1);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await postScore(db, 'ok@example.com', 'h1', 'fix: バグ修正');
+    const res = await postScore(db, 'ok@example.com', 'h1');
     expect(res.status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
     const body = await res.json() as { newlyEvaluatedCount: number; cachedCount: number };
@@ -322,13 +340,29 @@ describe('POST /api/jev-vuln-score-external', () => {
 
   it('Jev API呼び出し失敗時は502でエラー内容を返し、jev_vuln_evaluationsへは保存しない(握りつぶさない)', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h1', 'nekoserver/dynamicneko', 1, 'fix: バグ修正');
     seedTwoLabels(db);
     const fetchMock = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => 'internal error' }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await postScore(db, 'ok@example.com', 'h1', 'fix: バグ修正');
+    const res = await postScore(db, 'ok@example.com', 'h1');
     expect(res.status).toBe(502);
     const savedRows = db.prepare('SELECT * FROM jev_vuln_evaluations WHERE target_id = ?').all('h1');
     expect(savedRows.length).toBe(0);
+  });
+
+  it('1時間あたりの新規診断コミット数の上限に達している場合は429で拒否し、Jevは呼ばれない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommit(db, 'h-new', 'nekoserver/dynamicneko', 21, 'fix: 21件目のバグ修正');
+    const { label1 } = seedTwoLabels(db);
+    for (let i = 0; i < 20; i++) {
+      insertVulnEval(db, `h-old-${i}`, 'nekoserver', 'commit-checker', label1, 0.1);
+    }
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await postScore(db, 'ok@example.com', 'h-new');
+    expect(res.status).toBe(429);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
