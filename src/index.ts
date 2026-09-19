@@ -14439,6 +14439,12 @@ app.post('/api/repo-commit-search-external', async (c) => {
   }
 });
 
+// commit-checkerが1ユーザーあたり許可する新規診断(Jevへの新規問い合わせが
+// 発生するコミット数)の上限。任意のcommitHashを送り続けて約180ラベル分の
+// Jev評価とD1行追加を無制限に発生させられる問題への対処(2026-09-19)。
+const JEV_VULN_RATE_LIMIT_WINDOW_SQL = '-1 hour';
+const JEV_VULN_RATE_LIMIT_MAX_COMMITS = 20;
+
 /**
  * dynamicnekoの/commit-checkerページ用。選択されたコミットログ本文
  * (commit_message)をjev_vuln_labelsの全ラベルでJevに評価させ、
@@ -14446,20 +14452,35 @@ app.post('/api/repo-commit-search-external', async (c) => {
  * (computeJevEvaluationPlan、jev-score-externalと同じ仕組み)。
  * レスポンスのrequestJsonには実際にJevへ送る(送った)リクエストボディを
  * そのまま含める(全ラベル分。dynamicneko側の「問い合わせJSON」モーダル用)。
+ *
+ * commit_messageはリクエストボディの値をそのまま信用せず、repo_commit_index
+ * に実在するcommitHashの保存済み本文をサーバー側で取得して使う
+ * (2026-09-19: 任意の本文を送り込んで無制限にJev評価を発生させられる問題を修正)。
  */
 app.post('/api/jev-vuln-score-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
-  const body = await c.req.json<{ userToken?: string; commitHash?: string; commitMessage?: string }>().catch(() => null);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string }>().catch(() => null);
   const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
   if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
   const login = auth.login as string;
 
   const commitHash = (body?.commitHash ?? '').trim();
-  const commitMessage = (body?.commitMessage ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
-  if (!commitMessage) return jsonUtf8({ error: 'commitMessage は必須です' }, 400);
+
+  let commitMessage: string;
+  try {
+    const commitRow = await c.env.DB.prepare(
+      'SELECT commit_message FROM repo_commit_index WHERE commit_hash = ?'
+    ).bind(commitHash).first<{ commit_message: string }>();
+    if (!commitRow) return jsonUtf8({ error: '指定されたcommitHashはrepo_commit_indexに存在しません' }, 404);
+    commitMessage = commitRow.commit_message;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] repo_commit_index取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'repo_commit_index取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
 
   let allLabels: (JevLabel & { groupName: string })[] = [];
   try {
@@ -14498,6 +14519,21 @@ app.post('/api/jev-vuln-score-external', async (c) => {
   const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
   let newScores: { labelId: number; value: number }[] = [];
   if (plan.pending.length > 0) {
+    let recentCommitCount = 0;
+    try {
+      const rateRow = await c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT target_id) AS cnt FROM jev_vuln_evaluations
+         WHERE user_id = ? AND model = ? AND computed_at >= datetime('now', ?) AND target_id != ?`
+      ).bind(login, JEV_VULN_MODEL, JEV_VULN_RATE_LIMIT_WINDOW_SQL, commitHash).first<{ cnt: number }>();
+      recentCommitCount = rateRow?.cnt ?? 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-vuln-score-external] レート制限クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+    }
+    if (recentCommitCount >= JEV_VULN_RATE_LIMIT_MAX_COMMITS) {
+      return jsonUtf8({ error: `1時間あたりに新規診断できるコミット数の上限(${JEV_VULN_RATE_LIMIT_MAX_COMMITS}件)に達しました。しばらく待ってから再試行してください` }, 429);
+    }
     const jevResult = await callJevApi({ apiKey: c.env.JEV_API_KEY, state: commitMessage, labels: plan.pending, fetchImpl: fetch });
     if (!jevResult.ok) {
       logger.error('[jev-vuln-score-external] Jev API呼び出し失敗', { commitHash, errorCode: jevResult.errorCode, detail: jevResult.detail });
