@@ -14576,12 +14576,11 @@ const COMMIT_SUMMARY_ALLOWED_REPOS = [
 /**
  * dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。
  * PRマージ時のWebhookパイプラインが既にcommit_agent_log/ai_summary_logへ
- * 保存している日本語要約を読み出して返すだけの、読み出し専用API。
- * 新しくAIを呼んで要約を生成することはしない(2026-09-19: 当初は
+ * 保存している日本語要約を優先して読み出す(2026-09-19: 当初は
  * 見つからない場合にGitHub Commit API+AIで新規生成し専用の新テーブル
  * commit_summary_cacheへキャッシュする実装にしていたが、そもそも対象の
- * コミットは全てWebhookで要約済みのため不要な複雑化だった。既存の
- * 記録箇所を正しく参照する方に倒した)。
+ * コミットは(一部の記録漏れ期間を除き)全てWebhookで要約済みのため
+ * 不要な複雑化だった。既存の記録箇所を正しく参照する方に倒した)。
  * commit_agent_logはPRの最新コミットのsha(PRブランチ先端、
  * fetchLatestPrCommitInfoがpr.commits_urlから取るもの)をrequest_id
  * (ai_summary_log)に紐付けて記録している。これは非squashマージの場合、
@@ -14596,8 +14595,13 @@ const COMMIT_SUMMARY_ALLOWED_REPOS = [
  * repo_commit_index.github_pr_number に既にそのNが入っている)。
  * そこでcommit_sha直接一致で見つからない場合は、repo_commit_indexで
  * そのcommitHashのgithub_pr_numberを引き、repo_full_name+pr_numberで
- * ai_summary_logを直接引くフォールバックを行う。それでも見つからなければ
- * 「Webhookでまだ要約されていない」ことを示す404を返す。
+ * ai_summary_logを直接引くフォールバックを行う。
+ * それでも見つからない場合(2026-09-19、ユーザー指摘: 過去にWebhook側の
+ * commit_agent_log記録が一時的に欠落していた期間があり、そのため実際には
+ * 一度も要約されていないコミットが存在しうる)は、GitHub Commit APIから
+ * 直接diffとコミットメッセージを取得してrunSummaryPipelineで新規に要約を
+ * 生成し、ai_summary_log/commit_agent_logへ書き込んでから返す。次回以降は
+ * commit_agent_logの直接一致で見つかるようになる。
  */
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
@@ -14637,13 +14641,116 @@ app.post('/api/commit-summary-external', async (c) => {
       return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index' });
     }
 
-    return jsonUtf8({ error: 'このコミットはまだPRマージ時のWebhookで要約されていません(commit_agent_log/ai_summary_logに記録がありません)' }, 404);
+    return await generateAndRecordCommitSummary(c.env, c.env.DB, commitHash, repoName);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-external] ai_summary_log照合クエリ失敗', { commitHash, repoName, error: message });
     return jsonUtf8({ error: 'ai_summary_log照合でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
+
+/**
+ * commit_agent_log/ai_summary_log/repo_commit_indexのいずれからも
+ * 見つからなかったコミット(Webhookの記録漏れ期間に紛れ込んだもの等)向けに、
+ * GitHub Commit APIからdiff・コミットメッセージを取得し、既存のPR要約と
+ * 同じrunSummaryPipelineで新規に日本語要約を生成する。生成に成功したら
+ * ai_summary_log/commit_agent_logへ書き込み、以後は直接一致で読み出せる
+ * ようにする(同じコミットへの2回目以降のリクエストでAIを再度呼ばない)。
+ */
+async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, commitHash: string, repoName: string): Promise<Response> {
+  const githubToken = env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return jsonUtf8({ error: 'このコミットの要約記録が見つからず、GITHUB_TOKEN未設定のため新規生成もできません' }, 404);
+  }
+  if (!env.AI) {
+    return jsonUtf8({ error: 'このコミットの要約記録が見つからず、AIバインディング未設定のため新規生成もできません' }, 404);
+  }
+
+  const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
+  const commitRes = await fetch(commitApiUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    },
+  });
+  if (commitRes.status === 404) {
+    return jsonUtf8({ error: `指定されたcommitHashは${repoName}に存在しません` }, 404);
+  }
+  if (!commitRes.ok) {
+    const errBody = await commitRes.text().catch(() => '');
+    return jsonUtf8({ error: `GitHub Commit APIの取得に失敗しました: ${commitRes.status} ${errBody.slice(0, 300)}` }, 502);
+  }
+  const commitData = await commitRes.json() as { commit?: { message?: string; author?: { name?: string; email?: string } } };
+  const commitMessage = commitData.commit?.message ?? '';
+  if (!commitMessage) {
+    return jsonUtf8({ error: 'GitHub Commit APIのレスポンスにコミットメッセージがありません' }, 502);
+  }
+
+  const diffResult = await fetchPrDiff({ diffUrl: commitApiUrl, githubToken });
+  const aiModel = resolveAiModel(env.AI_MODEL);
+  const title = commitMessage.split('\n')[0].slice(0, 200);
+  const pipelineResult = await runSummaryPipeline({
+    ai: env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> },
+    model: aiModel,
+    fallbackModel: FALLBACK_AI_MODEL,
+    title,
+    description: commitMessage,
+    trimmedDiff: diffResult.trimmedDiff,
+  });
+  if (!pipelineResult.success) {
+    logger.error('[commit-summary-external] 新規要約生成に失敗', { commitHash, repoName, summary: pipelineResult.summary, errorCode: pipelineResult.errorCode });
+    return jsonUtf8({ error: '要約の新規生成に失敗しました: ' + pipelineResult.summary }, 502);
+  }
+
+  const now = new Date();
+  const eventDate = now.toISOString().slice(0, 10);
+  const requestId = crypto.randomUUID();
+  const mergeMatch = commitMessage.match(/Merge pull request #(\d+)/);
+  const prNumber = mergeMatch ? Number(mergeMatch[1]) : null;
+
+  let dailySeq = 1;
+  try {
+    const countResult = await db.prepare(
+      'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
+    ).bind(eventDate).first<{ cnt: number }>();
+    dailySeq = (countResult?.cnt ?? 0) + 1;
+  } catch (error) {
+    logger.warn('[commit-summary-external] daily_seq取得に失敗', { error: error instanceof Error ? error.message : String(error) });
+  }
+
+  try {
+    await db.prepare(
+      `INSERT INTO ai_summary_log
+        (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      requestId, dailySeq, eventDate, 'commit_summary_backfill', repoName, prNumber, null, null,
+      pipelineResult.usedModel, pipelineResult.summary, diffResult.diffLength, 0, now.toISOString()
+    ).run();
+
+    // commit_agent_log.pr_numberはNOT NULLのため、PRに紐付かないコミットは
+    // 0を「PR不明」のセンチネル値として使う(直接一致の検索はcommit_sha+
+    // repo_full_nameのみで行っており、pr_numberは見ないため実害はない)。
+    await db.prepare(
+      `INSERT INTO commit_agent_log
+        (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      requestId, repoName, prNumber ?? 0, commitHash, commitMessage,
+      commitData.commit?.author?.name ?? null, commitData.commit?.author?.email ?? null,
+      null, null, null, now.toISOString()
+    ).run();
+  } catch (error) {
+    logger.error('[commit-summary-external] 新規生成した要約の保存に失敗', {
+      commitHash, repoName, error: error instanceof Error ? error.message : String(error),
+    });
+    // 保存に失敗しても、せっかく生成できた要約自体はこのレスポンスで返す
+    // (次回同じコミットが再度リクエストされた場合は再生成される)。
+  }
+
+  return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false, source: 'generated' });
+}
 
 /**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
