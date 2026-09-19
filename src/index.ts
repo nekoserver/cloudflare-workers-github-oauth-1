@@ -14935,6 +14935,72 @@ app.post('/api/jev-test-score-external', async (c) => {
 });
 
 /**
+ * dynamicnekoの/tree-viewコミット履歴モーダルの「テスト評価の推移」表示用。
+ * 1コミットのdiffは不変なので、同じコミットを再評価しても結果は変わらない
+ * (jev_test_evaluationsはtarget_id=commit_hash単位でキャッシュされる)。
+ * 「コードの改変でテスト品質が良くなった」ことを見るには、時間的に異なる
+ * 複数コミットの評価結果をrepo_commit_index.seq_num(コミット順序)で並べて
+ * 推移として見る必要がある(2026-09-19、ユーザー指摘)。
+ * このAPIは、そのユーザーが「テスト評価」ボタンを押して実際に評価済みの
+ * コミットだけをseq_num昇順で返す(全コミットを自動評価するわけではない
+ * ため、ボタンを押した分だけの疎なデータになる。既存のコスト方針と一貫)。
+ */
+app.post('/api/jev-test-score-trend-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  try {
+    const totalLabelsRow = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_test_labels').first<{ cnt: number }>();
+    const totalLabels = totalLabelsRow?.cnt ?? 0;
+
+    const rows = await c.env.DB.prepare(
+      `SELECT i.commit_hash AS commit_hash, i.seq_num AS seq_num, i.commit_message AS commit_message,
+              COUNT(*) AS evaluated_count,
+              SUM(CASE WHEN e.value >= 2.0/3.0 THEN 1 ELSE 0 END) AS bad_count,
+              MAX(e.computed_at) AS computed_at
+       FROM jev_test_evaluations e
+       JOIN repo_commit_index i ON i.commit_hash = e.target_id AND i.repo_name = ?
+       WHERE e.user_id = ? AND e.model = ?
+       GROUP BY i.commit_hash, i.seq_num, i.commit_message
+       ORDER BY i.seq_num ASC`
+    ).bind(repoName, login, JEV_TEST_MODEL).all<{
+      commit_hash: string;
+      seq_num: number;
+      commit_message: string;
+      evaluated_count: number;
+      bad_count: number;
+      computed_at: string;
+    }>();
+
+    return jsonUtf8({
+      repoName,
+      totalLabels,
+      commits: (rows.results ?? []).map((r) => ({
+        commitHash: r.commit_hash,
+        seqNum: r.seq_num,
+        commitMessage: r.commit_message,
+        evaluatedCount: r.evaluated_count,
+        badCount: r.bad_count,
+        computedAt: r.computed_at,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-trend-external] 推移取得クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: '推移取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
  * パネルの検索(target=kimi-gemma)から後で読み出せる。
