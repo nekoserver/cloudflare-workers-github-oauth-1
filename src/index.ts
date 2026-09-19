@@ -427,6 +427,7 @@ import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynam
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
+import { fetchRepoTreeSnapshot, type TreeViewSnapshotNode } from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -640,6 +641,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_test_label_groups', migration: '0151', description: 'テストコード品質判定チェックリスト(jev_test_labels)の表示グループ(カバレッジ・正常系異常系バランス・モック妥当性・独立性再現性・アサーション品質・命名可読性・回帰防止力・実行コスト保守性の8分類)のマスター', syncPolicy: 'manual' },
   { name: 'jev_test_labels', migration: '0151', description: 'テストコードの問題を「Yes=危険側(問題あり)」に統一した二値判定文でJevに評価させるためのラベルのマスター。jev_vuln_labelsと同じ構造で、対象はコミットの差分/テストコードの品質。追記専用', syncPolicy: 'manual' },
   { name: 'jev_test_evaluations', migration: '0151', description: '任意の対象(target_id、commitHash等)をjev_test_labelsの各ラベルでJevに評価させた結果。tree-viewの「テスト評価」ボタン等から使う', syncPolicy: 'auto' },
+  { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
+  { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2390,6 +2393,19 @@ CREATE TABLE IF NOT EXISTS jev_test_evaluations (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_test_evaluations_unique ON jev_test_evaluations(user_id, target_id, model, jev_test_label_id);
 CREATE INDEX IF NOT EXISTS idx_jev_test_evaluations_target ON jev_test_evaluations(target_id);`,
+  '0152': `CREATE TABLE IF NOT EXISTS tree_view_snapshots (
+  repo_name TEXT PRIMARY KEY,
+  tree_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_snapshots_updated ON tree_view_snapshots(updated_at);
+CREATE TABLE IF NOT EXISTS tree_view_snapshot_refresh_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  repo_name TEXT NOT NULL,
+  requested_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_snapshot_refresh_log_user ON tree_view_snapshot_refresh_log(user_id, requested_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2657,6 +2673,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_test_label_groups: { id: 'pk' },
   jev_test_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_test_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_test_label_id: 'fk' },
+  tree_view_snapshots: { repo_name: 'pk', updated_at: 'idx' },
+  tree_view_snapshot_refresh_log: { id: 'pk', user_id: 'idx' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
@@ -2803,6 +2821,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_test_label_groups: 'ai',
   jev_test_labels: 'ai',
   jev_test_evaluations: 'ai',
+  tree_view_snapshots: 'commit',
+  tree_view_snapshot_refresh_log: 'commit',
   jev_keyword_evaluation_locks: 'ai',
   api_key_endpoint_stats: 'system',
 };
@@ -2969,6 +2989,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
+  tree_view_snapshots: { repo_name: 'installation_permissions' },
+  tree_view_snapshot_refresh_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -15000,6 +15022,205 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   }
 });
 
+// tree-view-snapshot系エンドポイントが受け付けるrepoNameの形式。
+// commit-summary-external等のCOMMIT_SUMMARY_ALLOWED_REPOS(固定3件)とは
+// 意図的に分離している。/tree-viewは「新しいリポジトリが増えたら自動的に
+// 反映される」ことが目的(2026-09-19、ユーザー要望)なので、固定リストでは
+// 目的を果たせない。nekoserver組織配下という条件だけに緩め、実際にどの
+// リポジトリが一覧に出るかはtree_view_snapshotsに実際に同期済みのものだけ
+// (installation_permissionsにGitHub Appがアクセスできると記録されている
+// リポジトリだけがcronで同期される)に絞られる。
+const TREE_VIEW_SNAPSHOT_REPO_RE = /^nekoserver\/[A-Za-z0-9._-]+$/;
+
+/**
+ * tree_view_snapshotsへ書き込む前に、既存の内容と完全一致するかを比較し、
+ * 変わっていなければ書き込みをスキップする(ユーザー指摘: 「変更する必要が
+ * なければスキップさせるだけ」)。cron・手動更新のどちらからも呼ばれる
+ * 共通の書き込み経路として1箇所にまとめている。
+ */
+async function upsertTreeViewSnapshotIfChanged(
+  db: D1Database,
+  repoName: string,
+  snapshot: TreeViewSnapshotNode,
+  nowIso: string
+): Promise<boolean> {
+  const nextJson = JSON.stringify(snapshot);
+  const existing = await db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
+  if (existing && existing.tree_json === nextJson) {
+    return false;
+  }
+  await db.prepare(
+    `INSERT INTO tree_view_snapshots (repo_name, tree_json, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(repo_name) DO UPDATE SET tree_json = excluded.tree_json, updated_at = excluded.updated_at`
+  ).bind(repoName, nextJson, nowIso).run();
+  return true;
+}
+
+/**
+ * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、全リポジトリ分の
+ * 同期処理本体。installation_permissionsに記録されている(=GitHub Appが
+ * アクセスできる)nekoserver組織配下のリポジトリだけを対象にする。新しい
+ * リポジトリへGitHub Appをインストールすれば、installation_permissionsは
+ * 既存のWebhookで自動的に更新されるため、次回のcron実行時に自動的に
+ * tree_view_snapshotsへも追加される(手動でのコード変更・再デプロイ不要)。
+ */
+async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
+  const synced: string[] = [];
+  const skipped: string[] = [];
+  const failed: { repoName: string; error: string }[] = [];
+
+  if (!env.DB || !env.GITHUB_TOKEN) {
+    return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name LIKE 'nekoserver/%' ORDER BY repo_name`
+  ).all<{ repo_name: string }>();
+  const repoNames = (rows.results ?? []).map((r) => r.repo_name).filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name));
+
+  for (const repoName of repoNames) {
+    const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN, fetchImpl: fetch });
+    if (!result.ok) {
+      logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+      failed.push({ repoName, error: result.detail });
+      continue;
+    }
+    try {
+      const changed = await upsertTreeViewSnapshotIfChanged(env.DB, repoName, result.snapshot, new Date().toISOString());
+      if (changed) synced.push(repoName);
+      else skipped.push(repoName);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[tree-view-snapshot-sync] D1保存失敗', { repoName, error: message });
+      failed.push({ repoName, error: message });
+    }
+  }
+
+  return { synced, skipped, failed };
+}
+
+/**
+ * dynamicnekoの/tree-viewページ起動時用。tree_view_snapshotsに実際に
+ * 同期済みのリポジトリ一覧を返す(cronトリガーがinstallation_permissions
+ * から自動的に追加していくため、新しいリポジトリへのGitHub Appインストール
+ * が反映されれば、次回cron実行後に自動的にこの一覧にも増える)。
+ */
+app.post('/api/tree-view-repos-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT repo_name, updated_at FROM tree_view_snapshots ORDER BY repo_name ASC'
+    ).all<{ repo_name: string; updated_at: string }>();
+    return jsonUtf8({
+      repos: (rows.results ?? []).map((r) => ({ repoName: r.repo_name, updatedAt: r.updated_at })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-repos-external] 一覧取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: '一覧取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/tree-viewページ用。指定したリポジトリの、cronが最後に
+ * 同期したツリースナップショット(JSON)をそのまま返す。まだ一度も
+ * 同期されていないリポジトリ(tree_view_snapshotsに行が無い)は404。
+ */
+app.post('/api/tree-view-snapshot-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName)) {
+    return jsonUtf8({ error: 'repoNameはnekoserver組織配下のリポジトリ名である必要があります' }, 400);
+  }
+
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT tree_json, updated_at FROM tree_view_snapshots WHERE repo_name = ?'
+    ).bind(repoName).first<{ tree_json: string; updated_at: string }>();
+    if (!row) {
+      return jsonUtf8({ error: `${repoName}はまだ同期されていません(次回cron実行、または手動更新をお試しください)` }, 404);
+    }
+    return jsonUtf8({ repoName, updatedAt: row.updated_at, tree: JSON.parse(row.tree_json) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-external] 取得クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'スナップショット取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+// 手動更新(ライブ再取得)のレート制限。cronによる定期更新とは別に、
+// ユーザーが「今すぐ更新」を押したときにGitHub APIを無制限に叩けて
+// しまわないようにする(commit-summary-external等と同じ方針)。
+const TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_WINDOW_SQL = '-10 minutes';
+const TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX = 5;
+
+/**
+ * dynamicnekoの/tree-viewページの「今すぐ更新」ボタン用。cronの定期実行を
+ * 待たず、その場でGitHub Trees APIから最新のツリーを取得してD1へ反映する
+ * (ユーザー要望: 「ライブ方式も併用して」)。内容が前回と変わっていない
+ * 場合はupdated_atを含め書き込みをスキップする(不要なD1書き込みを避ける)。
+ */
+app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.GITHUB_TOKEN) return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName)) {
+    return jsonUtf8({ error: 'repoNameはnekoserver組織配下のリポジトリ名である必要があります' }, 400);
+  }
+
+  let recentRefreshCount = 0;
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM tree_view_snapshot_refresh_log
+       WHERE user_id = ? AND requested_at >= datetime('now', ?)`
+    ).bind(login, TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_WINDOW_SQL).first<{ cnt: number }>();
+    recentRefreshCount = row?.cnt ?? 0;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] レート制限クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (recentRefreshCount >= TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX) {
+    return jsonUtf8({ error: `手動更新の上限(10分あたり${TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX}回)に達しました。しばらく待ってから再試行するか、次回のcron同期をお待ちください` }, 429);
+  }
+
+  const result = await fetchRepoTreeSnapshot({ repoName, githubToken: c.env.GITHUB_TOKEN, fetchImpl: fetch });
+  if (!result.ok) {
+    logger.error('[tree-view-snapshot-refresh-external] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+    return jsonUtf8({ error: `GitHub Trees APIの取得に失敗しました(${result.errorCode}): ${result.detail}` }, 502);
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO tree_view_snapshot_refresh_log (user_id, repo_name, requested_at) VALUES (?, ?, ?)'
+    ).bind(login, repoName, now).run();
+    await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] D1保存失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'スナップショット保存でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  return jsonUtf8({ repoName, updatedAt: now, tree: result.snapshot });
+});
+
 /**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
  * 結果をkimi_gemma_reviewsへ保存するAPI。保存した内容はAIチャット左サイド
@@ -23751,5 +23972,8 @@ app.onError((err, c) => {
 
   return jsonUtf8({ error: 'サーバーエラーが発生しました' }, 500);
 });
+
+// worker-entry.tsのscheduled()ハンドラ(cronトリガー)から呼ばれる。
+export { syncAllTreeViewSnapshots };
 
 export default app;

@@ -99,3 +99,10 @@ enabled = true
 [[analytics_engine_datasets]]
 binding = "ANALYTICS"
 dataset = "github_oauth_metrics"
+
+# /tree-view（dynamicneko）のサイドバーツリー用スナップショット（tree_view_snapshots）を
+# 6時間ごとに再同期する（src/worker-entry.tsのscheduled()、installation_permissionsに
+# 記録済みのnekoserver組織配下リポジトリが対象。新しいリポジトリへのGitHub App
+# インストールも次回実行時に自動反映される）。
+[triggers]
+crons = ["0 */6 * * *"]
