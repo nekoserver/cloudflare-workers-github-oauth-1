@@ -15184,6 +15184,24 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
     return jsonUtf8({ error: 'repoNameはnekoserver組織配下のリポジトリ名である必要があります' }, 400);
   }
 
+  // 正規表現による形式チェックだけでは、GITHUB_TOKENが読めるnekoserver
+  // 配下の任意のリポジトリ(GitHub Appがアクセス許可されていないものも
+  // 含む)を許可ユーザーが自由にD1へ保存・一覧公開できてしまう
+  // (セキュリティレビュー指摘、PR #1925マージ後)。cronの同期対象と同じく
+  // installation_permissionsに存在することを必須条件にする。
+  try {
+    const permitted = await c.env.DB.prepare(
+      'SELECT 1 FROM installation_permissions WHERE repo_name = ? LIMIT 1'
+    ).bind(repoName).first();
+    if (!permitted) {
+      return jsonUtf8({ error: `${repoName}はGitHub Appのアクセス許可対象に含まれていません` }, 403);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] installation_permissions照合失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'アクセス権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
   let recentRefreshCount = 0;
   try {
     const row = await c.env.DB.prepare(

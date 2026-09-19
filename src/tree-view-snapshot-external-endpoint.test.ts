@@ -171,8 +171,19 @@ describe('POST /api/tree-view-snapshot-refresh-external', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('installation_permissionsに存在しないリポジトリは403で、GitHubは呼ばれない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postExternal('/api/tree-view-snapshot-refresh-external', db, { userToken, repoName: 'nekoserver/dynamicneko' });
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('正常系: GitHub Trees APIから取得してD1へ保存し、そのままレスポンスで返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'README.md', type: 'blob' }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const userToken = await makeUserToken('ok@example.com');
@@ -186,6 +197,7 @@ describe('POST /api/tree-view-snapshot-refresh-external', () => {
 
   it('GitHub API呼び出し失敗時は502を返し、jev同様に握りつぶさない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
     vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-snapshot-refresh-external', db, { userToken, repoName: 'nekoserver/dynamicneko' });
@@ -194,6 +206,7 @@ describe('POST /api/tree-view-snapshot-refresh-external', () => {
 
   it('10分あたり5回の上限に達すると429で拒否し、GitHubは呼ばれない', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
     const now = new Date().toISOString();
     for (let i = 0; i < 5; i++) {
       db.prepare('INSERT INTO tree_view_snapshot_refresh_log (user_id, repo_name, requested_at) VALUES (?, ?, ?)')
