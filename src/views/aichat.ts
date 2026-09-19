@@ -4832,7 +4832,7 @@ export function getAiChatPage(user: {
         .then(function(data) {
           applyHistoryModalScissorsState(!!(data && data.vectorized));
           historyModalScissorsBtn.title = 'ベクタ化中...';
-          return vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL);
+          return vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true);
         })
         .then(function(result) {
           if (result.status < 200 || result.status >= 300 || !result.data) {
@@ -7239,6 +7239,12 @@ export function getAiChatPage(user: {
     // 失敗していた(✂️ボタンが手動でも自動でも一切動かない不具合の原因)。
     // ✂️は常にPlaMo埋め込みモデルで実行する仕様のため、チャットモデル名とは
     // 独立した固定のモデル名を使い、空欄にもならないようにする。
+    // さらに、vectorizeAnswerAndExtractKeywordsの第3引数にforcePlamo=trueを
+    // 渡すことで、サーバー側(/api/aichat/vectorize-answer)にもここで送る
+    // モデル名を問答無用でPLAMO_EMBEDDING_MODELへ上書きさせる。クライアント側の
+    // 修正が未デプロイのまま旧フロントエンドがチャットモデル名を送ってきても
+    // サーバー側だけで確実にPlaMo固定になる二重の安全策(answer-graph側の
+    // モデル選択ボタンはforcePlamoを渡さないため、この上書きの影響を受けない)。
     var AICHAT_SCISSORS_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
 
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
@@ -7340,7 +7346,7 @@ export function getAiChatPage(user: {
           function runVectorizeAndBulkRegisterChain() {
             scissorsBtn.disabled = true;
             scissorsBtn.title = '処理中...';
-            vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)
+            vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)
               .then(function(result) {
                 if (result.status < 200 || result.status >= 300 || !result.data) {
                   throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');

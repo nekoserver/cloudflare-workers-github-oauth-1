@@ -109,7 +109,7 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
 
   it('共有スクリプト(vectorizeAnswerAndExtractKeywords/bulkRegisterUnregisteredKeywords)が埋め込まれている', () => {
     const html = buildPage();
-    expect(html).toContain('function vectorizeAnswerAndExtractKeywords(shareId, model)');
+    expect(html).toContain('function vectorizeAnswerAndExtractKeywords(shareId, model, forcePlamo)');
     expect(html).toContain('function bulkRegisterUnregisteredKeywords(originShareId, keywords, callbacks)');
   });
 
@@ -118,7 +118,7 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 900);
-    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)');
+    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)');
     expect(snippet).toContain('bulkRegisterUnregisteredKeywords(shareId, keywords, {})');
   });
 
@@ -128,6 +128,13 @@ describe('AIチャット回答バブル: ✂️ベクタ化+自動一括登録',
     const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
     const snippet = html.slice(idx, idx + 900);
     expect(snippet).not.toContain('vectorizeAnswerAndExtractKeywords(shareId, model)');
+  });
+
+  it('forcePlamo=trueを渡し、サーバー側でも旧デプロイのチャットモデル名混入に対して強制的にPlaMoへ上書きしてもらう(二重の安全策)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function runVectorizeAndBulkRegisterChain()');
+    const snippet = html.slice(idx, idx + 900);
+    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)');
   });
 
   it('script タグ内の JS に構文エラーがない', () => {
