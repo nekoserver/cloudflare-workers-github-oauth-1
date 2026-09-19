@@ -881,6 +881,17 @@ input[type=search]:focus { border-color:var(--accent); }
     return keywordCountMap[keyword] > 0;
   }
 
+  // keywords(文字列配列)から、keywordCountMap基準でまだ未登録のものだけを
+  // 抽出する純関数。renderPrereqModal(「再チェック」ボタン・ベクタ化ボタン
+  // 共通の予備知識モーダル)のDOM生成からこの判定ロジックを切り離すことで、
+  // DOM無しで単体テストできるようにする(CLAUDE.mdルール15: テストしたい
+  // ロジックはまず純粋関数として切り出す)。「再チェック」ボタンは、
+  // openPrereqModal経由でこの関数が1件でも返す場合にrunBulkRegisterを
+  // 自動実行する。
+  function selectUnregisteredKeywords(keywords) {
+    return (keywords || []).filter(function(kw) { return !isKeywordRegisteredInBarCache(kw); });
+  }
+
   // 「この回答文を理解するのに必要な予備知識」モーダル(最上位レイヤー、
   // 回答モーダルよりさらに前面)。ベクタ化ボタンから抽出されたキーワードを
   // ここに列挙する。各キーワードが未登録(isKeywordRegisteredInBarCacheがfalse)
@@ -902,9 +913,11 @@ input[type=search]:focus { border-color:var(--accent); }
       if (empty.textContent) prereqModalBody.appendChild(empty);
       return { chips: chips, unregistered: unregistered };
     }
+    var unregisteredKeywordSet = {};
+    selectUnregisteredKeywords(keywords).forEach(function(kw) { unregisteredKeywordSet[kw] = true; });
     keywords.forEach(function(kw) {
       var chip = document.createElement('span');
-      var registered = isKeywordRegisteredInBarCache(kw);
+      var registered = !unregisteredKeywordSet[kw];
       chip.className = 'prereq-modal-chip' + (registered ? '' : ' chip-unregistered');
       chip.textContent = kw;
       prereqModalBody.appendChild(chip);
@@ -932,6 +945,17 @@ input[type=search]:focus { border-color:var(--accent); }
   // 付けない。出現回数が1件以上ある場合のみ、分類済みならそのカテゴリ色、
   // 未分類なら未分類色で外枠(中抜き)を塗る。出現回数0件のバッジは既定の
   // 枠線のまま(色指定なし)。
+  // keywordOccurrences(出現回数countを含む配列)から、まだ登録されていない
+  // (count=0の)ものだけを抽出する純関数。DOM生成(renderPrereqKeywordOccurrenceList)
+  // からこの判定ロジックを切り離すことで、DOM無しで単体テストできるように
+  // する(CLAUDE.mdルール15: テストしたいロジックはまず純粋関数として切り出す)。
+  // 「再チェック」ボタンは、この関数が1件でも返す場合にrunBulkRegisterを
+  // 自動実行する(判定基準はisKeywordRegisteredInBarCacheと同じ「1件以上の
+  // 出現回数があるか」)。
+  function selectUnregisteredKeywordOccurrences(keywordOccurrences) {
+    return (keywordOccurrences || []).filter(function(item) { return !(item.count > 0); });
+  }
+
   function renderPrereqKeywordOccurrenceList(keywordOccurrences) {
     prereqModalBody.innerHTML = '';
     if (!keywordOccurrences || !keywordOccurrences.length) {
@@ -944,6 +968,10 @@ input[type=search]:focus { border-color:var(--accent); }
     var uncColor = getUncClassifiedColor();
     var list = document.createElement('div');
     list.className = 'prereq-kw-badge-list';
+    var unregisteredKeys = {};
+    selectUnregisteredKeywordOccurrences(keywordOccurrences).forEach(function(item) {
+      unregisteredKeys[item.keyword] = true;
+    });
     var unregistered = [];
     keywordOccurrences.forEach(function(item) {
       var badge = document.createElement('span');
@@ -953,7 +981,7 @@ input[type=search]:focus { border-color:var(--accent); }
         var color = item.classified ? (item.categoryColor || '#6366f1') : uncColor;
         badge.style.borderColor = color;
         badge.style.color = color;
-      } else {
+      } else if (unregisteredKeys[item.keyword]) {
         unregistered.push({ keyword: item.keyword, badge: badge });
       }
       list.appendChild(badge);
@@ -1210,6 +1238,16 @@ input[type=search]:focus { border-color:var(--accent); }
     return items;
   }
 
+  // /api/aichat/answer-keywords のレスポンス(d)から、失敗時にアラート表示
+  // する文言を組み立てる純関数。「キーワード一覧」「再チェック」の両ボタンで
+  // 同じ形のエラー処理(dが無い、またはd.errorがある場合に失敗として扱う)を
+  // 共有する(CLAUDE.mdルール15: テストしたいロジックはまず純粋関数として
+  // 切り出す)。成功時(エラーなし)はnullを返す。
+  function buildAnswerKeywordsFetchErrorMessage(d, actionLabel) {
+    if (d && !d.error) return null;
+    return actionLabel + 'に失敗しました: ' + ((d && d.error) || '不明なエラー');
+  }
+
   // 「キーワード一覧」ボタン: 既に回答文に紐付けて登録済みの予備知識
   // キーワードを一覧表示するだけで、ベクタ化ループ演出・結果モーダルは
   // 出さない(新規登録が発生しないため)。
@@ -1221,7 +1259,8 @@ input[type=search]:focus { border-color:var(--accent); }
     fetch('/api/aichat/answer-keywords?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        if (!d || d.error) { alert('キーワード一覧の取得に失敗しました: ' + ((d && d.error) || '不明なエラー')); return; }
+        var errorMessage = buildAnswerKeywordsFetchErrorMessage(d, 'キーワード一覧の取得');
+        if (errorMessage) { alert(errorMessage); return; }
         openPrereqKeywordListModal(d.keywordOccurrences);
       })
       .catch(function() { alert('キーワード一覧の取得に失敗しました（通信エラー）'); });
@@ -1243,7 +1282,8 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(d) {
         answerModalKeywordRecheckBtn.disabled = false;
         answerModalKeywordRecheckBtn.textContent = '再チェック';
-        if (!d || d.error) { alert('再チェックに失敗しました: ' + ((d && d.error) || '不明なエラー')); return; }
+        var errorMessage = buildAnswerKeywordsFetchErrorMessage(d, '再チェック');
+        if (errorMessage) { alert(errorMessage); return; }
         openPrereqModal(d.keywords || [], null, null);
         if (prereqUnregisteredItems.length > 0) runBulkRegister();
       })
