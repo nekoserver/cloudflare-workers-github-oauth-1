@@ -9996,7 +9996,7 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
 
-  let body: { shareId?: string; model?: string };
+  let body: { shareId?: string; model?: string; forcePlamo?: boolean };
   try {
     body = await c.req.json();
   } catch {
@@ -10005,11 +10005,22 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const shareId = (body.shareId ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
 
-  const requestedModel = (body.model ?? '').trim();
-  if (requestedModel && !KEYWORD_EMBEDDING_MODELS.includes(requestedModel)) {
-    return jsonUtf8({ error: '不明な埋め込みモデルです: ' + requestedModel }, 400);
+  // forcePlamo: AIチャットの✂️ボタン専用フラグ。✂️は常にPlaMo埋め込みモデルで
+  // 実行する仕様(src/utils/vectorizeAndBulkRegister.tsのコメント参照)のため、
+  // modelに何が入っていても(旧デプロイのフロントエンドがチャットモデル名を
+  // 誤って送ってくる場合を含む)バリデーションで弾かず常にPLAMO_EMBEDDING_MODELへ
+  // 強制上書きする。answer-graphのモデル選択ボタンはforcePlamoを渡さないため、
+  // 従来通りKEYWORD_EMBEDDING_MODELSによるバリデーションを経由する。
+  let embeddingModel: string;
+  if (body.forcePlamo === true) {
+    embeddingModel = PLAMO_EMBEDDING_MODEL;
+  } else {
+    const requestedModel = (body.model ?? '').trim();
+    if (requestedModel && !KEYWORD_EMBEDDING_MODELS.includes(requestedModel)) {
+      return jsonUtf8({ error: '不明な埋め込みモデルです: ' + requestedModel }, 400);
+    }
+    embeddingModel = requestedModel || PLAMO_EMBEDDING_MODEL;
   }
-  const embeddingModel = requestedModel || PLAMO_EMBEDDING_MODEL;
 
   const share = await c.env.DB.prepare(
     `SELECT id, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`

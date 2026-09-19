@@ -5,9 +5,14 @@
  * 他のページ(画像ギャラリー等)からも同じ処理を再利用できるよう抽象化した。
  *
  * <script>ブロック内に埋め込むと、以下の2関数が使えるようになる:
- *   - vectorizeAnswerAndExtractKeywords(shareId, model): /api/aichat/vectorize-answer
+ *   - vectorizeAnswerAndExtractKeywords(shareId, model, forcePlamo): /api/aichat/vectorize-answer
  *     を呼び、{ status, data } を返すPromiseを返す。modelは埋め込みモデル名
  *     (省略時はサーバー側のデフォルト(plamo-embedding-1b)が使われる)。
+ *     forcePlamo=trueを渡すと、リクエストボディに forcePlamo:true が含まれ、
+ *     サーバー側はmodelに何が入っていても(空欄・チャットモデル名・旧デプロイの
+ *     取り違え等)常にPlaMo埋め込みモデルへ強制上書きする(呼び出し元は
+ *     ✂️ボタン専用。answer-graphのモデル選択ボタンはforcePlamoを渡さず
+ *     従来通りmodelバリデーション経由で選択モデルを使う)。
  *     サーバー無応答が長時間続く場合に画面が固まって見える不具合を防ぐため、
  *     クライアント側でも一定時間(VECTORIZE_FETCH_TIMEOUT_MS)で打ち切り、
  *     タイムアウトを明示するエラーとして返す。
@@ -21,12 +26,13 @@ export function getVectorizeAndBulkRegisterScript(): string {
   return `
     var VECTORIZE_FETCH_TIMEOUT_MS = 30000;
 
-    function vectorizeAnswerAndExtractKeywords(shareId, model) {
+    function vectorizeAnswerAndExtractKeywords(shareId, model, forcePlamo) {
       var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
       var timedOut = false;
       var timer = controller ? setTimeout(function() { timedOut = true; controller.abort(); }, VECTORIZE_FETCH_TIMEOUT_MS) : null;
       var body = { shareId: shareId };
       if (model) body.model = model;
+      if (forcePlamo) body.forcePlamo = true;
       return fetch('/api/aichat/vectorize-answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

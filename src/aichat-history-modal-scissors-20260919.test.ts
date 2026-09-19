@@ -44,9 +44,16 @@ describe('詳細プレビューモーダル: Jev評価値ボタン右の✂️�
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 1200);
     const checkIdx = snippet.indexOf("fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId))");
-    const vectorizeIdx = snippet.indexOf('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL)');
+    const vectorizeIdx = snippet.indexOf('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)');
     expect(checkIdx).toBeGreaterThan(-1);
     expect(vectorizeIdx).toBeGreaterThan(checkIdx);
+  });
+
+  it('vectorizeAnswerAndExtractKeywordsにforcePlamo=trueを渡し、サーバー側でも強制的にPlaMoへ上書きしてもらう(二重の安全策)', () => {
+    const html = buildPage();
+    const idx = html.indexOf("historyModalScissorsBtn.addEventListener('click'");
+    const snippet = html.slice(idx, idx + 1200);
+    expect(snippet).toContain('vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)');
   });
 
   it('埋め込みモデルはチャットモデル(historyModalCurrentModel)ではなく固定のPlaMoモデルを使う(空欄/不明モデルによる400エラー防止)', () => {
