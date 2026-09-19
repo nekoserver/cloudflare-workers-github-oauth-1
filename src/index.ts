@@ -14582,8 +14582,21 @@ const COMMIT_SUMMARY_ALLOWED_REPOS = [
  * commit_summary_cacheへキャッシュする実装にしていたが、そもそも対象の
  * コミットは全てWebhookで要約済みのため不要な複雑化だった。既存の
  * 記録箇所を正しく参照する方に倒した)。
- * commit_agent_logはPRの最新コミットのshaをrequest_id(ai_summary_log)に
- * 紐付けて記録しているため、これをJOINして引く。見つからなければ
+ * commit_agent_logはPRの最新コミットのsha(PRブランチ先端、
+ * fetchLatestPrCommitInfoがpr.commits_urlから取るもの)をrequest_id
+ * (ai_summary_log)に紐付けて記録している。これは非squashマージの場合、
+ * mainに残る実コミットオブジェクトとしては存在するが、"Merge pull
+ * request #N from ..." のマージコミット自体は別の新規SHAになり
+ * commit_agent_logには記録されない。/tree-viewのコミット一覧はGitHub
+ * Commits APIでmainの全履歴(マージコミット含む)を返すため、ユーザーが
+ * マージコミットをクリックすると commit_sha 完全一致では見つからず、
+ * 実際には要約済みのPRなのに404になっていた
+ * (2026-09-19、実データ(repo_commit_index)で確認: マージコミットの
+ * commit_message は "Merge pull request #N from ..." 形式で、
+ * repo_commit_index.github_pr_number に既にそのNが入っている)。
+ * そこでcommit_sha直接一致で見つからない場合は、repo_commit_indexで
+ * そのcommitHashのgithub_pr_numberを引き、repo_full_name+pr_numberで
+ * ai_summary_logを直接引くフォールバックを行う。それでも見つからなければ
  * 「Webhookでまだ要約されていない」ことを示す404を返す。
  */
 app.post('/api/commit-summary-external', async (c) => {
@@ -14607,10 +14620,24 @@ app.post('/api/commit-summary-external', async (c) => {
        WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
     ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
-    if (!existing) {
-      return jsonUtf8({ error: 'このコミットはまだPRマージ時のWebhookで要約されていません(commit_agent_log/ai_summary_logに記録がありません)' }, 404);
+    if (existing) {
+      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
     }
-    return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
+
+    // commit_shaの直接一致で見つからない場合、マージコミットの可能性を
+    // 考えてrepo_commit_index.github_pr_number経由でai_summary_logを引く。
+    const viaMergeCommit = await c.env.DB.prepare(
+      `SELECT l.summary, l.model FROM repo_commit_index i
+       JOIN ai_summary_log l ON l.repo_full_name = i.repo_name AND l.pr_number = i.github_pr_number
+       WHERE i.commit_hash = ? AND i.repo_name = ? AND i.github_pr_number IS NOT NULL
+         AND l.summary IS NOT NULL AND l.summary != ''
+       ORDER BY l.id DESC LIMIT 1`
+    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    if (viaMergeCommit) {
+      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index' });
+    }
+
+    return jsonUtf8({ error: 'このコミットはまだPRマージ時のWebhookで要約されていません(commit_agent_log/ai_summary_logに記録がありません)' }, 404);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-external] ai_summary_log照合クエリ失敗', { commitHash, repoName, error: message });

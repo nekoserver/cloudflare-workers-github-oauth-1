@@ -19,6 +19,12 @@
  *   (5) ai_summary_log.summaryがNULL/空文字の行(要約生成に失敗した記録)を
  *       「要約済み」として返してしまう
  *   (6) 見つからない場合にエラーで終わらず、握りつぶして200を返してしまう
+ *   (7) commit_agent_logにはPRブランチ先端のshaしか記録されないため、
+ *       /tree-viewのコミット一覧(GitHub Commits API、main全履歴)で
+ *       マージコミット自体をクリックした場合にcommit_sha直接一致では
+ *       見つからず、実際には要約済みなのに404を返してしまう
+ *       (2026-09-19に実際にユーザーから報告された不具合。
+ *       repo_commit_index.github_pr_number経由のフォールバックで解消する)
  */
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -80,6 +86,13 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       commit_sha TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE repo_commit_index (
+      commit_hash TEXT PRIMARY KEY,
+      seq_num INTEGER NOT NULL,
+      github_pr_number INTEGER,
+      commit_message TEXT NOT NULL,
+      repo_name TEXT NOT NULL
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
@@ -102,6 +115,20 @@ function insertExistingAiSummary(
     .run(requestId, repoName, prNumber, model, summary);
   db.prepare(`INSERT INTO commit_agent_log (request_id, repo_full_name, pr_number, commit_sha) VALUES (?, ?, ?, ?)`)
     .run(requestId, repoName, prNumber, commitSha);
+}
+
+// repo_commit_indexに、mainブランチのマージコミット(commit_agent_logには
+// 記録されないshaを持つ)を模した行を挿入する。
+function insertMergeCommitIndexRow(
+  db: DatabaseSync,
+  commitHash: string,
+  repoName: string,
+  seqNum: number,
+  prNumber: number | null
+): void {
+  db.prepare(
+    `INSERT INTO repo_commit_index (commit_hash, seq_num, github_pr_number, commit_message, repo_name) VALUES (?, ?, ?, ?, ?)`
+  ).run(commitHash, seqNum, prNumber, prNumber !== null ? `Merge pull request #${prNumber} from example/branch` : 'docs: 更新', repoName);
 }
 
 const BASE_ENV = { AICHAT_EXTERNAL_SECRET: SECRET, AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET };
@@ -183,6 +210,36 @@ describe('POST /api/commit-summary-external', () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     insertExistingAiSummary(db, 'req-1', 'nekoserver/cf-auth', 1, 'h1', '- 概要\n別リポジトリの要約', 'test-model');
     const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
+    expect(res.status).toBe(404);
+  });
+
+  it('マージコミット(commit_agent_logにはブランチ先端shaしか無く直接一致しない)でも、repo_commit_index.github_pr_number経由でai_summary_logの要約を返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    // PRブランチ先端sha(branch-tip-sha)がcommit_agent_logに記録されている。
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'branch-tip-sha', '- 概要\nWebhookで生成済みの要約', 'existing-model');
+    // マージコミット自体は別sha(merge-commit-sha)で、repo_commit_indexに
+    // github_pr_number=42として記録されている(commit_agent_logには無い)。
+    insertMergeCommitIndexRow(db, 'merge-commit-sha', REPO_NAME, 1, 42);
+
+    const res = await postSummary(db, 'ok@example.com', 'merge-commit-sha', REPO_NAME);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { summary: string; model: string; source?: string };
+    expect(body.summary).toBe('- 概要\nWebhookで生成済みの要約');
+    expect(body.source).toBe('repo_commit_index');
+  });
+
+  it('repo_commit_indexにgithub_pr_numberが無い(PRに紐付かない直接コミット)場合はフォールバックせず404のまま', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertMergeCommitIndexRow(db, 'direct-commit-sha', REPO_NAME, 1, null);
+    const res = await postSummary(db, 'ok@example.com', 'direct-commit-sha', REPO_NAME);
+    expect(res.status).toBe(404);
+  });
+
+  it('repo_commit_index経由でも別リポジトリのpr_numberの要約は返さない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', 'nekoserver/cf-auth', 42, 'branch-tip-sha', '- 概要\n別リポジトリの要約', 'test-model');
+    insertMergeCommitIndexRow(db, 'merge-commit-sha', REPO_NAME, 1, 42);
+    const res = await postSummary(db, 'ok@example.com', 'merge-commit-sha', REPO_NAME);
     expect(res.status).toBe(404);
   });
 });
