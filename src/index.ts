@@ -634,6 +634,9 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_country_keyword_evaluations', migration: '0145', description: 'カタカナ国名キーワードをjev_country_keyword_labelsの各ラベルでJevに評価させた結果。share_id/modelではなくkeyword文字列で引く点がjev_evaluationsと異なる', syncPolicy: 'auto' },
   { name: 'jev_keyword_evaluation_locks', migration: '0148', description: 'runJevScoreForKeywordの多重実行防止用の一時ロック行(user_id+keyword単位)。一定時間で失効し、処理完了後は削除される', syncPolicy: 'auto' },
   { name: 'api_key_endpoint_stats', migration: '0149', description: 'APIキー(nkapi_...)単位のエンドポイント別・日別(JST)アクセス集計。🔑キー管理ページの使用統計表示で使う', syncPolicy: 'auto' },
+  { name: 'jev_vuln_label_groups', migration: '0150', description: '脆弱性判定チェックリスト(jev_vuln_labels)の表示グループ(脆弱性の成立可否/到達可能性・攻撃経路/認証/認可・権限等の18分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_vuln_labels', migration: '0150', description: '脆弱性を「Yes=危険側」に統一した二値判定文でJevに評価させるためのラベルのマスター。各question_textの先頭に[外部]/[内部]/[共通]/[除外]の脅威分類タグを付与している。jev_labelsと同じく追記専用', syncPolicy: 'manual' },
+  { name: 'jev_vuln_evaluations', migration: '0150', description: '任意の対象(target_id、PR番号やfinding ID等の文字列)をjev_vuln_labelsの各ラベルでJevに評価させた結果。share_id/modelで引くjev_evaluationsに対し、対象がAIチャット回答に限らない汎用的な脆弱性判定のため独立したテーブルにしている', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2334,6 +2337,31 @@ INSERT OR IGNORE INTO jev_country_keyword_labels (question_text, options_json) V
   PRIMARY KEY (key_id, day, endpoint, status_code)
 );
 CREATE INDEX IF NOT EXISTS idx_api_key_endpoint_stats_key_id ON api_key_endpoint_stats(key_id);`,
+  '0150': `CREATE TABLE IF NOT EXISTS jev_vuln_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_label_groups_name ON jev_vuln_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_vuln_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_vuln_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_vuln_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_vuln_label_id INTEGER NOT NULL REFERENCES jev_vuln_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_unique ON jev_vuln_evaluations(user_id, target_id, model, jev_vuln_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_target ON jev_vuln_evaluations(target_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2595,6 +2623,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
   jev_country_keyword_labels: { id: 'pk' },
   jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
+  jev_vuln_label_groups: { id: 'pk' },
+  jev_vuln_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_vuln_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_vuln_label_id: 'fk' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
@@ -2735,6 +2766,9 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_evaluations: 'ai',
   jev_country_keyword_labels: 'ai',
   jev_country_keyword_evaluations: 'ai',
+  jev_vuln_label_groups: 'ai',
+  jev_vuln_labels: 'ai',
+  jev_vuln_evaluations: 'ai',
   jev_keyword_evaluation_locks: 'ai',
   api_key_endpoint_stats: 'system',
 };
@@ -2947,6 +2981,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   jev_labels: { jev_group_id: 'jev_label_groups' },
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
+  jev_vuln_labels: { jev_group_id: 'jev_vuln_label_groups' },
+  jev_vuln_evaluations: { user_id: 'user_sessions', jev_vuln_label_id: 'jev_vuln_labels' },
   jev_keyword_evaluation_locks: { user_id: 'user_sessions' },
   api_key_endpoint_stats: { key_id: 'api_keys' },
 
