@@ -637,6 +637,9 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_vuln_label_groups', migration: '0150', description: '脆弱性判定チェックリスト(jev_vuln_labels)の表示グループ(脆弱性の成立可否/到達可能性・攻撃経路/認証/認可・権限等の18分類)のマスター', syncPolicy: 'manual' },
   { name: 'jev_vuln_labels', migration: '0150', description: '脆弱性を「Yes=危険側」に統一した二値判定文でJevに評価させるためのラベルのマスター。各question_textの先頭に[外部]/[内部]/[共通]/[除外]の脅威分類タグを付与している。jev_labelsと同じく追記専用', syncPolicy: 'manual' },
   { name: 'jev_vuln_evaluations', migration: '0150', description: '任意の対象(target_id、PR番号やfinding ID等の文字列)をjev_vuln_labelsの各ラベルでJevに評価させた結果。share_id/modelで引くjev_evaluationsに対し、対象がAIチャット回答に限らない汎用的な脆弱性判定のため独立したテーブルにしている', syncPolicy: 'auto' },
+  { name: 'jev_test_label_groups', migration: '0151', description: 'テストコード品質判定チェックリスト(jev_test_labels)の表示グループ(カバレッジ・正常系異常系バランス・モック妥当性・独立性再現性・アサーション品質・命名可読性・回帰防止力・実行コスト保守性の8分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_test_labels', migration: '0151', description: 'テストコードの問題を「Yes=危険側(問題あり)」に統一した二値判定文でJevに評価させるためのラベルのマスター。jev_vuln_labelsと同じ構造で、対象はコミットの差分/テストコードの品質。追記専用', syncPolicy: 'manual' },
+  { name: 'jev_test_evaluations', migration: '0151', description: '任意の対象(target_id、commitHash等)をjev_test_labelsの各ラベルでJevに評価させた結果。tree-viewの「テスト評価」ボタン等から使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2362,6 +2365,31 @@ CREATE TABLE IF NOT EXISTS jev_vuln_evaluations (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_unique ON jev_vuln_evaluations(user_id, target_id, model, jev_vuln_label_id);
 CREATE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_target ON jev_vuln_evaluations(target_id);`,
+  '0151': `CREATE TABLE IF NOT EXISTS jev_test_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_test_label_groups_name ON jev_test_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_test_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_test_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_test_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_test_label_id INTEGER NOT NULL REFERENCES jev_test_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_test_evaluations_unique ON jev_test_evaluations(user_id, target_id, model, jev_test_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_test_evaluations_target ON jev_test_evaluations(target_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2626,6 +2654,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_vuln_label_groups: { id: 'pk' },
   jev_vuln_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_vuln_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_vuln_label_id: 'fk' },
+  jev_test_label_groups: { id: 'pk' },
+  jev_test_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_test_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_test_label_id: 'fk' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
@@ -2769,6 +2800,9 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_vuln_label_groups: 'ai',
   jev_vuln_labels: 'ai',
   jev_vuln_evaluations: 'ai',
+  jev_test_label_groups: 'ai',
+  jev_test_labels: 'ai',
+  jev_test_evaluations: 'ai',
   jev_keyword_evaluation_locks: 'ai',
   api_key_endpoint_stats: 'system',
 };
@@ -2983,6 +3017,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
   jev_vuln_labels: { jev_group_id: 'jev_vuln_label_groups' },
   jev_vuln_evaluations: { user_id: 'user_sessions', jev_vuln_label_id: 'jev_vuln_labels' },
+  jev_test_labels: { jev_group_id: 'jev_test_label_groups' },
+  jev_test_evaluations: { user_id: 'user_sessions', jev_test_label_id: 'jev_test_labels' },
   jev_keyword_evaluation_locks: { user_id: 'user_sessions' },
   api_key_endpoint_stats: { key_id: 'api_keys' },
 
@@ -3072,6 +3108,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'wine_details.wine_id': 'id',
   'jev_vuln_labels.jev_group_id': 'id',
   'jev_vuln_evaluations.jev_vuln_label_id': 'id',
+  'jev_test_labels.jev_group_id': 'id',
+  'jev_test_evaluations.jev_test_label_id': 'id',
   'public_key_challenges.key_id': 'id',
   'public_key_security_events.key_id': 'id',
   'ruby_wasm_snippet_verifications.snippet_id': 'id',
@@ -14751,6 +14789,150 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
 
   return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false, source: 'generated' });
 }
+
+// tree-viewの「テスト評価」ボタンがJev診断結果の保存に使う固定のmodel値
+// (JEV_VULN_MODELと同じ理由。target_idはcommitHash)。
+const JEV_TEST_MODEL = 'tree-view-test-eval';
+
+// jev-vuln-score-externalと同じ理由(任意のcommitHashを送り続けて大量の
+// Jev評価とD1行追加を無制限に発生させられる問題への対処)。
+const JEV_TEST_RATE_LIMIT_WINDOW_SQL = '-1 hour';
+const JEV_TEST_RATE_LIMIT_MAX_COMMITS = 20;
+
+/**
+ * dynamicnekoの/tree-viewコミット履歴モーダルの「テスト評価」ボタン用。
+ * commit-summary-externalと同じくGitHub Commit APIから対象コミットのdiffを
+ * 取得し、jev_test_labels(テストコード品質チェックリスト、8グループ78問)
+ * 全件でJevに評価させ、jev_test_evaluationsに保存する。既に評価済みの
+ * ラベルは再送しない(jev-vuln-score-externalと同じcomputeJevEvaluationPlan)。
+ * セキュリティ脆弱性判定(jev_vuln_*)とはドメインが異なるため、テーブル・
+ * エンドポイントを完全に分離している(同じ204/78問を混在させない)。
+ */
+app.post('/api/jev-test-score-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+  if (!c.env.GITHUB_TOKEN) return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const commitHash = (body?.commitHash ?? '').trim();
+  if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
+  const existsRes = await fetch(commitApiUrl, {
+    headers: {
+      Authorization: `Bearer ${c.env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    },
+  });
+  if (existsRes.status === 404) {
+    return jsonUtf8({ error: `指定されたcommitHashは${repoName}に存在しません` }, 404);
+  }
+  if (!existsRes.ok) {
+    const errBody = await existsRes.text().catch(() => '');
+    logger.error('[jev-test-score-external] GitHub Commit API取得失敗', { commitHash, repoName, status: existsRes.status });
+    return jsonUtf8({ error: `GitHub Commit APIの取得に失敗しました: ${existsRes.status} ${errBody.slice(0, 300)}` }, 502);
+  }
+
+  let diffText: string;
+  try {
+    const diffResult = await fetchPrDiff({ diffUrl: commitApiUrl, githubToken: c.env.GITHUB_TOKEN });
+    diffText = diffResult.trimmedDiff;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] diff取得失敗', { commitHash, repoName, error: message });
+    return jsonUtf8({ error: 'GitHubからdiffの取得に失敗しました: ' + message }, 502);
+  }
+  if (!diffText) return jsonUtf8({ error: '指定されたcommitHashのdiffが取得できませんでした(差分が空です)' }, 404);
+
+  let allLabels: (JevLabel & { groupName: string })[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT jl.id, jl.question_text, jl.options_json, jg.name AS group_name
+       FROM jev_test_labels jl JOIN jev_test_label_groups jg ON jg.id = jl.jev_group_id
+       ORDER BY jg.id, jl.id`
+    ).all<{ id: number; question_text: string; options_json: string | null; group_name: string }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-test-score-external] jev_test_labels.options_jsonが不正です', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria, groupName: r.group_name });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] jev_test_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_test_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) return jsonUtf8({ error: 'jev_test_labelsが1件も登録されていません' }, 500);
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_test_label_id AS jev_label_id, value FROM jev_test_evaluations WHERE user_id = ? AND target_id = ? AND model = ?'
+    ).bind(login, commitHash, JEV_TEST_MODEL).all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] jev_test_evaluations取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'jev_test_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    let recentCommitCount = 0;
+    try {
+      const rateRow = await c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT target_id) AS cnt FROM jev_test_evaluations
+         WHERE user_id = ? AND model = ? AND computed_at >= datetime('now', ?) AND target_id != ?`
+      ).bind(login, JEV_TEST_MODEL, JEV_TEST_RATE_LIMIT_WINDOW_SQL, commitHash).first<{ cnt: number }>();
+      recentCommitCount = rateRow?.cnt ?? 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-test-score-external] レート制限クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+    }
+    if (recentCommitCount >= JEV_TEST_RATE_LIMIT_MAX_COMMITS) {
+      return jsonUtf8({ error: `1時間あたりに新規診断できるコミット数の上限(${JEV_TEST_RATE_LIMIT_MAX_COMMITS}件)に達しました。しばらく待ってから再試行してください` }, 429);
+    }
+    const jevResult = await callJevApi({ apiKey: c.env.JEV_API_KEY, state: diffText, labels: plan.pending, fetchImpl: fetch });
+    if (!jevResult.ok) {
+      logger.error('[jev-test-score-external] Jev API呼び出し失敗', { commitHash, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_test_evaluations (target_id, user_id, model, jev_test_label_id, value) VALUES (?, ?, ?, ?, ?)'
+        ).bind(commitHash, login, JEV_TEST_MODEL, score.labelId, score.value).run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-test-score-external] jev_test_evaluations保存クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'jev_test_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    commitHash,
+    labels: allLabels.map((l) => ({ id: l.id, questionText: l.question_text, groupName: l.groupName })),
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
+});
 
 /**
  * /kimi-codeページで生成したコードをgemma-4-26b-a4b-itにレビューさせ、
