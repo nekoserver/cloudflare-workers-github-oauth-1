@@ -117,6 +117,12 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
 にもエントリを追加すること。
 
+アプリ固有モジュールだけでなく、実行時にWASMを直接読み込むCLI依存も一覧の
+対象にする。現在は`wrangler`がアセットの内容ハッシュ生成に利用する
+`blake3-wasm`を登録している。外部依存のソースはリポジトリに含めないため、
+一覧のソース表示は導入バージョンと完全性ハッシュを確認できる`package-lock.json`
+を参照する。
+
 ## gh-wasm移植プロトタイプ
 
 `gh-wasm/`には、Go製GitHub CLIをWorkers向けに移植できるか検証する最小の
