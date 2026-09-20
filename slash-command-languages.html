@@ -222,7 +222,7 @@
         <tr data-tags="WASM,API"><td class="cmd"><code>/neko dig</code></td><td class="tags"></td><td>DNSクエリの組み立て/応答パースはRust(WASM)、DoHへのHTTPS通信はTypeScriptのfetch</td></tr>
         <tr data-tags="WASM"><td class="cmd"><code>/neko ls</code></td><td class="tags"></td><td><code>ls.wasm</code>(Rust)でWASMモジュール一覧を整形</td></tr>
         <tr data-tags="WASM,API"><td class="cmd"><code>/neko gh pr list</code></td><td class="tags"></td><td>リポジトリ名検証・Markdown整形は<code>gh.wasm</code>(Rust)、GitHub APIへの通信はTypeScript</td></tr>
-        <tr data-tags="WASM,API"><td class="cmd"><code>/neko tree</code></td><td class="tags"></td><td>GitHub Repository/Trees APIへのHTTPS通信はTypeScript、ディレクトリツリーの整形・フィルタ(<code>--depth</code>・<code>--pattern</code>等)は<code>tree.wasm</code>(Rust)</td></tr>
+        <tr data-tags="TypeScript,API"><td class="cmd"><code>/neko tree</code></td><td class="tags"></td><td>GitHub Repository/Trees APIへのHTTPS通信とツリー整形・フィルタ(<code>--depth</code>・<code>--pattern</code>等)はいずれもTypeScript。Rust版<code>tree-wasm</code>はソースのみで未ビルド</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko clog</code></td><td class="tags"></td><td>D1から直近のコミットエージェントログを取得</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sessions</code></td><td class="tags"></td><td>D1からユーザーセッションのログイン時刻を取得</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sql impact</code></td><td class="tags"></td><td>D1のクエリカタログテーブルを参照</td></tr>
