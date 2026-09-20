@@ -119,6 +119,31 @@ git switch -c feat/<task-name>
 git push -u origin feat/<task-name>
 ```
 
+#### `origin` が未設定で Git コマンドが失敗する場合
+
+`git fetch origin` や `git push` が `fatal: 'origin' does not appear to be a git repository`
+で失敗する場合は、まずリモート設定を確認してください。
+
+```bash
+git remote -v
+```
+
+何も表示されなければ、このリポジトリの `origin` を追加してから接続を確認します。
+
+```bash
+git remote add origin https://github.com/nekoserver/cloudflare-workers-github-oauth-1.git
+git ls-remote --heads origin main
+```
+
+すでに誤った `origin` が登録されている場合は、追加ではなく URL を修正します。
+
+```bash
+git remote set-url origin https://github.com/nekoserver/cloudflare-workers-github-oauth-1.git
+```
+
+なお、`CONNECT tunnel failed` などが表示される場合は Git の設定ではなく、実行環境の
+プロキシーまたはネットワーク制限を確認してください。
+
 さらに GitHub 側で以下を有効化してください。
 
 - `main` への直接 push を禁止（Branch protection rule）
