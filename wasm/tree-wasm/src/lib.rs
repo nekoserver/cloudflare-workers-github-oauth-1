@@ -19,6 +19,13 @@ struct Options<'a> {
 }
 
 fn wildcard_matches(pattern: &str, value: &str) -> bool {
+    // `/neko tree --pattern MCP` is also used as a case-insensitive keyword
+    // filter.  Keep the tree(1)-style whole-name matching only when an actual
+    // wildcard was supplied (the TypeScript parity adapter follows the same
+    // contract).
+    if !pattern.as_bytes().iter().any(|byte| matches!(byte, b'*' | b'?')) {
+        return value.to_lowercase().contains(&pattern.to_lowercase());
+    }
     let (p, v) = (pattern.as_bytes(), value.as_bytes());
     let (mut pi, mut vi, mut star, mut retry) = (0, 0, None, 0);
     while vi < v.len() {
@@ -259,5 +266,32 @@ mod tests {
         assert!(tree_format_impl(input, "repo", 2, &options)
             .unwrap()
             .contains(".env"));
+    }
+
+    #[test]
+    fn ワイルドカードなしのパターンは大文字小文字を無視して部分一致する() {
+        let input = "docs\ttree\ndocs/MCP-guide.md\tblob\ndocs/other.md\tblob";
+        let options = Options {
+            pattern: Some("mcp"),
+            files_only: true,
+            ..Options::default()
+        };
+        assert_eq!(
+            tree_format_impl(input, "repo", 3, &options).unwrap(),
+            "- repo/\n  - docs/\n    - MCP-guide.md"
+        );
+    }
+
+    #[test]
+    fn 不正入力と排他的オプションを拒否する() {
+        for input in ["../secret\tblob", "a//b\tblob", "file\tunknown", "file\tblob\tnow"] {
+            assert!(tree_format_impl(input, "repo", 2, &Options::default()).is_err());
+        }
+        let options = Options {
+            files_only: true,
+            directories_only: true,
+            ..Options::default()
+        };
+        assert!(tree_format_impl("file\tblob", "repo", 2, &options).is_err());
     }
 }

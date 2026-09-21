@@ -101,6 +101,12 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   リポジトリへ含めるまでは、`src/utils/treeWasmServer.ts`の互換アダプターが
   `tree_format`と同じTSV契約・出力規則を提供し、未生成ファイルのimportでWorker全体を
   ビルド不能にしない。両実装の同一性はRust/TypeScript双方のテストで固定する
+
+  ビルドはリポジトリルートで`npm run wasm:build:tree`を実行する。スクリプトはRustテストを
+  先に実行し、クレートと同じ`wasm-bindgen-cli 0.2.127`だけを受け付けて
+  `public/wasm/tree.js`・`tree_bg.wasm`を再現可能に生成する。ツールチェーン不足時には必要な
+  導入コマンドを表示して失敗するため、古いwasm-bindgenで互換性のないグルーコードを誤って
+  コミットしない。
 - `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
   一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
   `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
