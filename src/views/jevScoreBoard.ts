@@ -150,22 +150,40 @@ ${getThemeInitScript()}
     display: none;
     position: fixed; inset: 0;
     background: var(--modal-overlay);
-    align-items: flex-start; justify-content: center;
-    padding-top: 60px;
   }
-  .modal-backdrop.open { display: flex; }
+  .modal-backdrop.open { display: block; }
   .modal-box {
+    position: fixed;
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    padding: 16px;
-    max-width: 640px;
-    width: 92%;
-    max-height: 80vh;
-    overflow-y: auto;
+    width: min(92vw, 640px);
+    min-width: min(300px, calc(100vw - 16px));
+    min-height: 180px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    overflow: hidden;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
   }
-  .modal-box h2 { font-size: 14px; margin: 0 0 8px; color: var(--text-primary); }
-  .modal-close { float: right; cursor: pointer; color: var(--text-muted); background: none; border: none; font-size: 16px; }
+  .modal-titlebar {
+    min-height: 44px;
+    padding: 12px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: move; cursor: grab; user-select: none; touch-action: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .modal-titlebar:active { cursor: grabbing; }
+  .modal-box h2 { font-size: 14px; margin: 0; color: var(--text-primary); }
+  .modal-close { cursor: pointer; color: var(--text-muted); background: none; border: none; font-size: 20px; line-height: 1; padding: 2px 5px; }
+  .modal-content { height: calc(100% - 44px); overflow: auto; padding: 14px; }
+  .modal-resize-handle {
+    position: absolute; width: 60px; height: 60px; z-index: 2;
+    border-radius: 50%; touch-action: none;
+  }
+  .modal-resize-handle[data-dir="nw"] { left: -30px; top: -30px; cursor: nwse-resize; }
+  .modal-resize-handle[data-dir="ne"] { right: -30px; top: -30px; cursor: nesw-resize; }
+  .modal-resize-handle[data-dir="sw"] { left: -30px; bottom: -30px; cursor: nesw-resize; }
+  .modal-resize-handle[data-dir="se"] { right: -30px; bottom: -30px; cursor: nwse-resize; }
   .qa-block { margin-bottom: 12px; }
   .qa-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
   .qa-body { word-break: break-word; color: var(--text-primary); background: var(--bg-secondary); border-radius: 6px; padding: 8px; }
@@ -212,25 +230,28 @@ ${getThemeInitScript()}
 
   <div class="modal-backdrop" id="answerModalBackdrop" data-overlay>
     <div class="modal-box">
-      <button class="modal-close" id="answerModalClose">&times;</button>
-      <h2>質問・回答詳細</h2>
-      <div class="qa-block">
-        <div class="qa-label">質問文</div>
-        <div class="qa-body preview-area" id="answerModalQuestion"></div>
+      <div class="modal-titlebar"><h2>質問・回答詳細</h2><button class="modal-close" id="answerModalClose" aria-label="閉じる">&times;</button></div>
+      <div class="modal-content">
+        <div class="qa-block">
+          <div class="qa-label">質問文</div>
+          <div class="qa-body preview-area" id="answerModalQuestion"></div>
+        </div>
+        <div class="qa-block">
+          <div class="qa-label">回答文</div>
+          <div class="qa-body preview-area" id="answerModalAnswer"></div>
+        </div>
       </div>
-      <div class="qa-block">
-        <div class="qa-label">回答文</div>
-        <div class="qa-body preview-area" id="answerModalAnswer"></div>
-      </div>
+      <span class="modal-resize-handle" data-dir="nw"></span><span class="modal-resize-handle" data-dir="ne"></span>
+      <span class="modal-resize-handle" data-dir="sw"></span><span class="modal-resize-handle" data-dir="se"></span>
     </div>
   </div>
 
   <div class="modal-backdrop" id="topModalBackdrop" data-overlay>
     <div class="modal-box">
-      <button class="modal-close" id="topModalClose">&times;</button>
-      <h2 id="topModalTitle">上位20件</h2>
-      <div id="topModalLabelText" class="top-label-text"></div>
-      <div id="topModalBody"></div>
+      <div class="modal-titlebar"><h2 id="topModalTitle">上位20件</h2><button class="modal-close" id="topModalClose" aria-label="閉じる">&times;</button></div>
+      <div class="modal-content"><div id="topModalLabelText" class="top-label-text"></div><div id="topModalBody"></div></div>
+      <span class="modal-resize-handle" data-dir="nw"></span><span class="modal-resize-handle" data-dir="ne"></span>
+      <span class="modal-resize-handle" data-dir="sw"></span><span class="modal-resize-handle" data-dir="se"></span>
     </div>
   </div>
 
@@ -248,6 +269,67 @@ function getNextZ() {
     if (z > max && z < 9000) max = z;
   });
   return max + 100;
+}
+
+// 表の横幅を基準に初期サイズを決め、タイトルバー移動と四隅30px範囲の
+// Pointer Eventsによるリサイズを各モーダルへ追加する。
+function prepareModal(backdrop) {
+  var box = backdrop.querySelector('.modal-box');
+  var maxWidth = Math.max(300, window.innerWidth - 16);
+  var tableWidth = document.getElementById('boardTable').scrollWidth;
+  var width = Math.min(maxWidth, Math.max(300, tableWidth));
+  box.style.width = width + 'px';
+  box.style.height = Math.min(Math.max(240, box.scrollHeight), window.innerHeight - 16) + 'px';
+  box.style.left = Math.max(8, (window.innerWidth - width) / 2) + 'px';
+  box.style.top = Math.max(8, Math.min(60, window.innerHeight - box.offsetHeight - 8)) + 'px';
+}
+
+function makeModalInteractive(backdrop) {
+  var box = backdrop.querySelector('.modal-box');
+  var titlebar = box.querySelector('.modal-titlebar');
+  var action = null;
+
+  function start(e, mode, dir) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (mode === 'move' && e.target.closest('.modal-close')) return;
+    var rect = box.getBoundingClientRect();
+    action = { mode: mode, dir: dir || '', x: e.clientX, y: e.clientY,
+      left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+
+  titlebar.addEventListener('pointerdown', function(e) { start(e, 'move', ''); });
+  box.querySelectorAll('.modal-resize-handle').forEach(function(handle) {
+    handle.addEventListener('pointerdown', function(e) { start(e, 'resize', handle.getAttribute('data-dir')); });
+  });
+
+  box.addEventListener('pointermove', function(e) {
+    if (!action) return;
+    var dx = e.clientX - action.x;
+    var dy = e.clientY - action.y;
+    if (action.mode === 'move') {
+      box.style.left = Math.min(window.innerWidth - 40, Math.max(40 - action.width, action.left + dx)) + 'px';
+      box.style.top = Math.min(window.innerHeight - 40, Math.max(0, action.top + dy)) + 'px';
+      return;
+    }
+    var left = action.left, top = action.top, width = action.width, height = action.height;
+    if (action.dir.indexOf('e') !== -1) width += dx;
+    if (action.dir.indexOf('s') !== -1) height += dy;
+    if (action.dir.indexOf('w') !== -1) { width -= dx; left += dx; }
+    if (action.dir.indexOf('n') !== -1) { height -= dy; top += dy; }
+    var minWidth = Math.min(300, window.innerWidth - 16), minHeight = 180;
+    if (width < minWidth) { if (action.dir.indexOf('w') !== -1) left -= minWidth - width; width = minWidth; }
+    if (height < minHeight) { if (action.dir.indexOf('n') !== -1) top -= minHeight - height; height = minHeight; }
+    width = Math.min(width, window.innerWidth - 16);
+    height = Math.min(height, window.innerHeight - 16);
+    left = Math.min(window.innerWidth - width - 8, Math.max(8, left));
+    top = Math.min(window.innerHeight - height - 8, Math.max(8, top));
+    box.style.left = left + 'px'; box.style.top = top + 'px';
+    box.style.width = width + 'px'; box.style.height = height + 'px';
+  });
+  box.addEventListener('pointerup', function() { action = null; });
+  box.addEventListener('pointercancel', function() { action = null; });
 }
 
 // ===== Markdownパーサー(モーダル内の質問文・回答文をMarkdownとして描画する) =====
@@ -336,6 +418,7 @@ document.getElementById('keywordInput').addEventListener('keydown', function(e) 
 });
 
 var answerModalBackdrop = document.getElementById('answerModalBackdrop');
+makeModalInteractive(answerModalBackdrop);
 var answerModalQuestion = document.getElementById('answerModalQuestion');
 var answerModalAnswer = document.getElementById('answerModalAnswer');
 function openAnswerModal(shareId) {
@@ -343,6 +426,7 @@ function openAnswerModal(shareId) {
   answerModalAnswer.innerHTML = '';
   answerModalBackdrop.style.zIndex = String(getNextZ());
   answerModalBackdrop.classList.add('open');
+  prepareModal(answerModalBackdrop);
   fetch('/api/jev-score-board/answer?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
     .then(function(r) {
       if (!r.ok) throw new Error('not found');
@@ -365,6 +449,7 @@ answerModalBackdrop.addEventListener('click', function(e) {
 });
 
 var topModalBackdrop = document.getElementById('topModalBackdrop');
+makeModalInteractive(topModalBackdrop);
 var topModalTitle = document.getElementById('topModalTitle');
 var topModalLabelText = document.getElementById('topModalLabelText');
 var topModalBody = document.getElementById('topModalBody');
@@ -374,6 +459,7 @@ function openTopModal(labelId) {
   topModalBody.innerHTML = '読み込み中...';
   topModalBackdrop.style.zIndex = String(getNextZ());
   topModalBackdrop.classList.add('open');
+  prepareModal(topModalBackdrop);
   fetch('/api/jev-score-board/top-by-label?labelId=' + encodeURIComponent(labelId), { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(d) {

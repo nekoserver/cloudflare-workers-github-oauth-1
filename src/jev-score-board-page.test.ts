@@ -517,6 +517,22 @@ describe('GET /jev-score-board: th表記切替トグルとテーマボタンの�
   });
 });
 
+describe('GET /jev-score-board: モーダルの移動・リサイズ', () => {
+  it('表幅に合わせる初期化とドラッグ可能なタイトルバー・四隅30pxのハンドルを備える', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    const html = await res.text();
+
+    expect(html).toContain("document.getElementById('boardTable').scrollWidth");
+    expect(html).toContain('function makeModalInteractive(backdrop)');
+    expect(html).toContain("titlebar.addEventListener('pointerdown'");
+    expect(html.match(/class="modal-resize-handle"/g)).toHaveLength(8);
+    expect(html).toContain('position: absolute; width: 60px; height: 60px;');
+    expect(html).toContain('border-radius: 50%; touch-action: none;');
+    expect(html).toContain('.modal-resize-handle[data-dir="se"]');
+  });
+});
+
 // 故障シナリオ(15): th表記切替の状態がCookieに保存されず、ページ再訪の
 // たびに選択がリセットされてしまう(特にデフォルトが「現行」のままだと、
 // 過去に「日本語」を選んだユーザーの意図に反する)。
