@@ -75,7 +75,7 @@ export function getSqlcWasmPage(username: string): string {
     .dropdown-item:hover { background: var(--bg-secondary); }
     .dropdown-item.logout { color: #e53e3e; }
     .dropdown-item.switch-account { color: var(--accent-color, #667eea); }
-    .container { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
     .card {
       background: var(--card-bg);
       border-radius: 16px;
@@ -94,6 +94,11 @@ export function getSqlcWasmPage(username: string): string {
     .wasm-status.loading { background: var(--bg-secondary); color: var(--text-muted); }
     .wasm-status.ready { background: #dcfce7; color: #166534; }
     .wasm-status.error { background: #fee2e2; color: #991b1b; }
+    .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+    .editor-pane { min-width: 0; }
+    .pane-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .pane-title { color: var(--text-primary); font-size: 13px; font-weight: 700; }
+    .live-state { color: var(--text-muted); font-size: 12px; }
     textarea {
       width: 100%;
       min-height: 220px;
@@ -104,7 +109,7 @@ export function getSqlcWasmPage(username: string): string {
       color: var(--text-primary);
       font-size: 13px;
       font-family: 'Monaco', 'Courier New', monospace;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       resize: vertical;
     }
     .hint { font-size: 12px; color: var(--text-muted); margin: -10px 0 16px; }
@@ -120,7 +125,7 @@ export function getSqlcWasmPage(username: string): string {
     }
     .parse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .parse-btn:hover:not(:disabled) { background: #5568d3; }
-    .result-block { margin-top: 20px; }
+    .result-block { min-height: 100%; }
     .result-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
     .result-value {
       font-family: 'Monaco', 'Courier New', monospace;
@@ -134,6 +139,12 @@ export function getSqlcWasmPage(username: string): string {
       border: 1px solid var(--border-color);
     }
     .result-value.error { color: #991b1b; }
+    @media (max-width: 760px) {
+      .navbar { padding: 14px 18px; }
+      .user-name { display: none; }
+      .card { padding: 22px 18px; }
+      .editor-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -167,12 +178,24 @@ export function getSqlcWasmPage(username: string): string {
       <div class="title">sqlc クエリアノテーション パーサー (WASM)</div>
       <div class="subtitle">sqlc(https://sqlc.dev/)の <code>-- name: GetAuthor :one</code> 形式のクエリアノテーションをGo実装(js/wasmビルド)でパースし、ブラウザ上のWebAssemblyで実行します。SQL方言の構文解析やコード生成は含まれません。</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
-      <textarea id="inputSql" spellcheck="false">${escapeHtml(SAMPLE_SQL)}</textarea>
-      <div class="hint">1行 <code>-- name: &lt;クエリ名&gt; :&lt;コマンド&gt;</code> でクエリを区切ります。対応コマンド: one, many, exec, execrows, execlastid, execresult, batchexec, batchmany, batchone, copyfrom</div>
-      <button class="parse-btn" id="parseBtn" disabled>アノテーションを解析する</button>
-      <div class="result-block" id="resultBlock" style="display:none;">
-        <div class="result-label">結果 (Markdown)</div>
-        <div class="result-value" id="resultValue"></div>
+      <div class="editor-grid">
+        <div class="editor-pane">
+          <div class="pane-heading">
+            <span class="pane-title">SQL</span>
+            <span class="live-state" id="liveState" aria-live="polite">WASMの準備待ち</span>
+          </div>
+          <textarea id="inputSql" spellcheck="false" aria-label="sqlc形式のSQL">${escapeHtml(SAMPLE_SQL)}</textarea>
+          <div class="hint">入力から250ms後に自動解析します。<code>-- name: &lt;クエリ名&gt; :&lt;コマンド&gt;</code> でクエリを区切ります。</div>
+          <button class="parse-btn" id="parseBtn" disabled>今すぐ解析 <span aria-hidden="true">⌘↵</span></button>
+        </div>
+        <div class="editor-pane">
+          <div class="pane-heading">
+            <span class="pane-title">解析結果 (Markdown)</span>
+          </div>
+          <div class="result-block" id="resultBlock">
+            <div class="result-value" id="resultValue" aria-live="polite">WASMモジュールの読み込み後、ここに結果が表示されます。</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -197,6 +220,29 @@ export function getSqlcWasmPage(username: string): string {
     var inputSql = document.getElementById('inputSql');
     var resultBlock = document.getElementById('resultBlock');
     var resultValue = document.getElementById('resultValue');
+    var liveState = document.getElementById('liveState');
+    var parseTimer = 0;
+
+    function parseInput() {
+      if (typeof sqlcParseQueryAnnotations !== 'function') return;
+      window.clearTimeout(parseTimer);
+      liveState.textContent = '解析中…';
+      try {
+        var md = sqlcParseQueryAnnotations(inputSql.value);
+        if (typeof md === 'string' && md.indexOf('ERROR: ') === 0) {
+          resultValue.textContent = md;
+          resultValue.className = 'result-value error';
+        } else {
+          resultValue.textContent = md;
+          resultValue.className = 'result-value';
+        }
+        liveState.textContent = '解析済み';
+      } catch (err) {
+        resultValue.textContent = (err && err.message) ? err.message : String(err);
+        resultValue.className = 'result-value error';
+        liveState.textContent = '解析エラー';
+      }
+    }
 
     (async function () {
       try {
@@ -207,29 +253,27 @@ export function getSqlcWasmPage(username: string): string {
         wasmStatus.textContent = 'WASMモジュール読み込み完了';
         wasmStatus.className = 'wasm-status ready';
         parseBtn.disabled = false;
+        parseInput();
       } catch (err) {
         wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
         wasmStatus.className = 'wasm-status error';
+        liveState.textContent = 'WASMを利用できません';
       }
     })();
 
-    parseBtn.addEventListener('click', function() {
+    inputSql.addEventListener('input', function() {
       if (typeof sqlcParseQueryAnnotations !== 'function') return;
-      resultBlock.style.display = 'block';
-      try {
-        var md = sqlcParseQueryAnnotations(inputSql.value);
-        if (typeof md === 'string' && md.indexOf('ERROR: ') === 0) {
-          resultValue.textContent = md;
-          resultValue.className = 'result-value error';
-          return;
-        }
-        resultValue.textContent = md;
-        resultValue.className = 'result-value';
-      } catch (err) {
-        resultValue.textContent = (err && err.message) ? err.message : String(err);
-        resultValue.className = 'result-value error';
+      window.clearTimeout(parseTimer);
+      liveState.textContent = '入力待ち…';
+      parseTimer = window.setTimeout(parseInput, 250);
+    });
+    inputSql.addEventListener('keydown', function(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        parseInput();
       }
     });
+    parseBtn.addEventListener('click', parseInput);
   </script>
 </body>
 </html>`;
