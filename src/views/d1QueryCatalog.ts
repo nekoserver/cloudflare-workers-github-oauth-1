@@ -344,6 +344,7 @@ export function getD1QueryCatalogPage(
 ): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
+  const inferredCount = rows.length - confirmedCount;
   const verbOptionsHtml = verbCounts(rows)
     .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
     .join('\n');
@@ -486,6 +487,8 @@ export function getD1QueryCatalogPage(
     .category-chart-percent { min-width: 34px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
     .catalog-main { min-width: 0; }
     .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+    .catalog-verification { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .catalog-verification .sql-detail-status { line-height: 1.5; }
     .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .catalog-filter-toolbar { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; margin-bottom: 8px; }
     .verb-filter-control { flex: 0 1 320px; min-width: 0; }
@@ -806,7 +809,11 @@ export function getD1QueryCatalogPage(
       </div>
 
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
-      <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
+      <div class="summary">カタログ全${rows.length}件 / 実行メソッド確認済み${confirmedCount}件 / SQL動詞からの推定${inferredCount}件</div>
+      <div class="catalog-verification">
+        <button type="button" class="sql-detail-tool" id="verifyAllAnnotationsButton">全${rows.length}件のアノテーションを検査</button>
+        <span class="sql-detail-status" id="catalogVerificationStatus" aria-live="polite">未検査。sqlc/WASMが確認するのは名前・コマンド・重複などのアノテーション形式です。SQL構文・スキーマ・実行結果の検証ではありません。</span>
+      </div>
       ${duplicateAuditHtml}
 
       <div class="band-sort-controls">
@@ -901,6 +908,8 @@ export function getD1QueryCatalogPage(
     var lastSqlDetailTrigger = null;
     var sqlcWasmPromise = null;
     var sqlDetailRequestId = 0;
+    var verifyAllAnnotationsButton = document.getElementById('verifyAllAnnotationsButton');
+    var catalogVerificationStatus = document.getElementById('catalogVerificationStatus');
 
     async function runCurrentSql() {
       var queryName = document.getElementById('sqlDetailName').textContent || '';
@@ -970,6 +979,30 @@ export function getD1QueryCatalogPage(
     function rowText(row, selector) {
       var el = row.querySelector(selector);
       return el ? (el.textContent || '') : '';
+    }
+
+    async function verifyAllAnnotations() {
+      var catalogRows = Array.prototype.slice.call(document.querySelectorAll('#tableBands tbody tr'));
+      var input = catalogRows.map(function(row) {
+        return '-- name: ' + rowText(row, '.query-detail-name') + ' :' + rowText(row, '.query-detail-command') + '\\n' + rowText(row, '.query-detail-sql');
+      }).join('\\n\\n');
+      verifyAllAnnotationsButton.disabled = true;
+      catalogVerificationStatus.textContent = '全' + catalogRows.length + '件のアノテーション形式を検査しています…';
+      catalogVerificationStatus.className = 'sql-detail-status';
+      try {
+        await ensureSqlcWasm();
+        var markdown = globalThis.sqlcParseQueryAnnotations(input);
+        var hasErrors = markdown.indexOf('エラー:') !== -1;
+        catalogVerificationStatus.textContent = hasErrors
+          ? '全' + catalogRows.length + '件のアノテーション形式を検査しました。エラーがあります。SQL構文・スキーマ・実行結果は未検証です。'
+          : '全' + catalogRows.length + '件のアノテーション形式を検査しました。エラーはありません。SQL構文・スキーマ・実行結果の検証ではありません。';
+        catalogVerificationStatus.className = hasErrors ? 'sql-detail-status error' : 'sql-detail-status ready';
+      } catch (error) {
+        catalogVerificationStatus.textContent = '全件検査に失敗しました: ' + (error && error.message ? error.message : String(error));
+        catalogVerificationStatus.className = 'sql-detail-status error';
+      } finally {
+        verifyAllAnnotationsButton.disabled = false;
+      }
     }
 
     async function runD1Parse() {
@@ -1139,6 +1172,7 @@ export function getD1QueryCatalogPage(
     });
     document.getElementById('closeSqlDetailButton').addEventListener('click', function() { sqlDetailDialog.close(); });
     parseD1SqlButton.addEventListener('click', runD1Parse);
+    verifyAllAnnotationsButton.addEventListener('click', verifyAllAnnotations);
     runSqlButton.addEventListener('click', runCurrentSql);
     document.getElementById('comparePostgresButton').addEventListener('click', compareWithPostgres);
     sqlDetailDialog.addEventListener('close', function() {
