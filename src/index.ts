@@ -33,6 +33,7 @@ import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
+import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
@@ -16515,11 +16516,25 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
 
 /**
  * Cloudflare D1 ダッシュボード API
- * Cloudflare REST API経由でD1データベースとテーブルの一覧を返す
+ * D1バインディング、またはCloudflare REST API経由でデータベースとテーブルの一覧を返す
  */
 app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
   if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_KEYまたはCLOUDFLARE_ACCOUNT_IDが未設定です', configured: false }, 200);
+    if (!c.env.DB) {
+      return jsonUtf8({ error: 'DBバインディングが未設定です', configured: false }, 200);
+    }
+    try {
+      const names = await listD1TableNames(c.env.DB);
+      return jsonUtf8({
+        configured: true,
+        databases: [
+          { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
+        ],
+        provider: 'd1-binding',
+      });
+    } catch (err) {
+      return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
+    }
   }
   try {
     const databases = await listCloudflareD1Databases({
@@ -16535,7 +16550,15 @@ app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
 
 app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
   if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: 'Cloudflare API認証情報が未設定です' }, 503);
+    if (!c.env.DB) {
+      return jsonUtf8({ error: 'DBバインディングが未設定です' }, 503);
+    }
+    try {
+      const tables = await loadCfDashboardTables(c.env.DB);
+      return jsonUtf8({ tables, provider: 'd1-binding' });
+    } catch (err) {
+      return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
+    }
   }
   try {
     const tables = await listCloudflareD1Tables({

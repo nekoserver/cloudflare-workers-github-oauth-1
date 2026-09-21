@@ -91,7 +91,7 @@ h1 { font-size: 20px; margin-bottom: 4px; }
 </head>
 <body>
 <h1>Cloudflare D1 ダッシュボード</h1>
-<p class="subtitle">Cloudflare APIでD1を取得し、Wranglerと同じBLAKE3 WASMで結果を検証します</p>
+<p class="subtitle">D1バインディング（Cloudflare API設定時はアカウント全体）からデータベースとテーブルを取得します</p>
 
 <div id="main">
   <p class="loading">読み込み中…</p>
@@ -115,8 +115,9 @@ async function loadDatabases() {
   if (!data.configured) {
     main.innerHTML = \`
       <div class="notice">
-        <strong>Cloudflare APIが未設定です</strong><br>
-        <code>CLOUDFLARE_API_KEY</code> と <code>CLOUDFLARE_ACCOUNT_ID</code> をwrangler secretで設定してください。
+        <strong>D1を参照できません</strong><br>
+        Workerの<code>DB</code>バインディングを設定してください。アカウント内の全D1を表示する場合は、
+        <code>CLOUDFLARE_API_KEY</code> と <code>CLOUDFLARE_ACCOUNT_ID</code> もwrangler secretで設定できます。
       </div>\`;
     return;
   }
@@ -193,11 +194,12 @@ async function loadTables(uuid, body) {
   }
   body.innerHTML = \`
     <table class="table-list">
-      <thead><tr><th>テーブル名</th></tr></thead>
+      <thead><tr><th>テーブル名</th><th class="row-count">行数</th></tr></thead>
       <tbody>
         \${tables.map(t => \`
           <tr>
             <td>\${esc(t.name)}</td>
+            <td class="row-count">\${t.row_count == null ? '–' : t.row_count}</td>
           </tr>\`).join('')}
       </tbody>
     </table>

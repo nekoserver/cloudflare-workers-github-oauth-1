@@ -1,9 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
+import app from './index';
+import { createJWT } from './utils/jwt';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { getCfDashboardPage } from './views/cf-dashboard';
 
 const credentials = { accountId: 'account/id', apiKey: 'secret-token' };
 const response = (result: unknown) => new Response(JSON.stringify({ success: true, result }));
+const jwtSecret = 'test-secret';
+
+function makeBindingDb(tableNames: string[]) {
+  return {
+    prepare: vi.fn().mockImplementation((sql: string) => {
+      if (sql.includes('user_sessions')) {
+        return {
+          bind: vi.fn().mockReturnValue({
+            first: vi.fn().mockResolvedValue(null),
+            run: vi.fn().mockResolvedValue({}),
+          }),
+        };
+      }
+      return {
+        all: vi.fn().mockResolvedValue({ results: tableNames.map((name) => ({ name })) }),
+      };
+    }),
+  };
+}
 
 describe('Cloudflare D1 API client', () => {
   it('Bearer認証でD1一覧を取得する', async () => {
@@ -40,5 +61,46 @@ describe('/cf-dashboard page', () => {
     expect(html).toContain('CLOUDFLARE_ACCOUNT_ID');
     expect(html).toContain('Wrangler BLAKE3/WASM');
     expect(html).not.toContain('secret-token');
+  });
+
+  it('Cloudflare API secretsがなくてもDBバインディングから一覧を返す', async () => {
+    const token = await createJWT({ sub: 'test-user', name: 'Test' }, jwtSecret);
+    const res = await app.request(
+      '/api/cf-dashboard/d1',
+      { headers: { Authorization: `Bearer ${token}` } },
+      {
+        DB: makeBindingDb(['users', 'posts']),
+        GITHUB_CLIENT_ID: 'test',
+        GITHUB_CLIENT_SECRET: 'test',
+        JWT_SECRET: jwtSecret,
+      }
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      configured: true,
+      provider: 'd1-binding',
+      databases: [{ uuid: 'this', num_tables: 2 }],
+    });
+  });
+
+  it('DBバインディングへのフォールバック時もテーブル一覧を返す', async () => {
+    const token = await createJWT({ sub: 'test-user', name: 'Test' }, jwtSecret);
+    const res = await app.request(
+      '/api/cf-dashboard/d1/this/tables',
+      { headers: { Authorization: `Bearer ${token}` } },
+      {
+        DB: makeBindingDb(['users']),
+        GITHUB_CLIENT_ID: 'test',
+        GITHUB_CLIENT_SECRET: 'test',
+        JWT_SECRET: jwtSecret,
+      }
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      provider: 'd1-binding',
+      tables: [{ name: 'users', row_count: null }],
+    });
   });
 });
