@@ -1,6 +1,5 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { getD1BindingCount } from '../utils/d1QueryBindings';
 
 const OWNER_REPO = 'nekoserver/cloudflare-workers-github-oauth-1';
 
@@ -178,7 +177,9 @@ function renderRow(row: D1QueryCatalogRow): string {
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
   const table = row.table_name ? escapeHtml(row.table_name) : '(不明)';
-  const bindingCount = getD1BindingCount(row.sql_text);
+  // カタログ上の「バインド値なし」は、SQL 本文に ? が一つもない行を指す。
+  // 実行時の値検証とは異なり、引用符・コメント内も含めて本文をそのまま確認する。
+  const bindingCount = (row.sql_text.match(/\?/g) ?? []).length;
   const bindingClass = bindingCount === 0 ? 'query-no-bindings' : 'query-with-bindings';
   const bindingLabel = bindingCount === 0 ? '入力不要' : `${bindingCount}個必要`;
   const bindingTitle = bindingCount === 0
@@ -201,7 +202,7 @@ function renderRow(row: D1QueryCatalogRow): string {
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
 function renderTableBand(table: string, rows: D1QueryCatalogRow[], classification?: D1QueryCatalogTableClassification): string {
   const rowsHtml = rows.map(renderRow).join('\n');
-  const noBindingCount = rows.filter(row => getD1BindingCount(row.sql_text) === 0).length;
+  const noBindingCount = rows.filter(row => !row.sql_text.includes('?')).length;
   const withBindingCount = rows.length - noBindingCount;
   const color = classification?.color ?? '#8b949e';
   const groupBadge = classification
@@ -685,9 +686,7 @@ export function getD1QueryCatalogPage(
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
-    tbody tr.query-no-bindings td { background: light-dark(#f0fdf4, #102a1a); border-bottom-color: light-dark(#bbf7d0, #245c36); }
     tbody tr.query-with-bindings td { background: light-dark(#fffbeb, #2d230f); border-bottom-color: light-dark(#fde68a, #66501b); }
-    tbody tr.query-no-bindings td:first-child { box-shadow: inset 4px 0 0 #22c55e; }
     tbody tr.query-with-bindings td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
     .binding-status-cell { white-space: nowrap; }
     .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }

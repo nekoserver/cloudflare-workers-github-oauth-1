@@ -433,7 +433,7 @@ describe('GET /d1-query-catalog', () => {
     expect(countIdx).toBeLessThan(nameIdx);
   });
 
-  it('各テーブル帯のSQLを調べ、バインド値の有無を行の枠色とラベルで区別する', () => {
+  it('各テーブル帯のSQL本文に ? がある行だけ背景色と枠色を変えてラベルで区別する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'ListItems', command: 'many', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT * FROM items', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'FindItem', command: 'one', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 2, sql_text: "SELECT * FROM items WHERE id = ? AND note = '?'", migration_file: null, last_commit_hash: null, last_commit_at: null },
@@ -442,22 +442,23 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('<span class="binding-summary-no">入力不要 1</span>');
     expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
     expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
-    expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="1">');
+    expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="2">');
     expect(html).toContain('このSQLにはバインド値がなく、そのまま実行できます');
-    expect(html).toContain('このSQLの実行には1個のバインド値が必要です');
-    expect(html).toMatch(/tbody tr\.query-no-bindings td\s*\{[^}]*background:/);
+    expect(html).toContain('このSQLの実行には2個のバインド値が必要です');
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings td\s*\{[^}]*background:/);
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings td:first-child\s*\{[^}]*box-shadow:/);
     expect(html).toMatch(/tbody tr\.query-with-bindings td\s*\{[^}]*background:/);
   });
 
-  it('文字列・コメント中の疑問符はバインド値として数えず入力不要に分類する', () => {
+  it('文字列・コメント中であってもSQL本文に ? があれば入力必要に分類する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'QuestionText', command: 'many', command_confirmed: 1, table_name: 'messages', source_file: 'src/index.ts', source_line: 3, sql_text: "SELECT '?' AS mark FROM messages -- ? is documentation", migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
 
-    expect(html).toContain('<span class="binding-summary-no">入力不要 1</span>');
-    expect(html).toContain('<span class="binding-summary-required">入力必要 0</span>');
-    expect(html).toContain('data-binding-count="0"');
-    expect(html).not.toContain('data-binding-count="1"');
+    expect(html).toContain('<span class="binding-summary-no">入力不要 0</span>');
+    expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
+    expect(html).toContain('data-binding-count="2"');
+    expect(html).not.toContain('data-binding-count="0"');
   });
 
   it('「コマンド」と「SQL」の間に「最終コミット日時」列がありYMD HMS形式で表示される', () => {
