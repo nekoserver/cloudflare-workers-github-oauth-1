@@ -56,6 +56,8 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #                       # API TokenまたはGlobal API Key（secretで管理）
 #   CLOUDFLARE_ACCOUNT_ID  # 上記API利用時にD1を列挙するアカウントID
 #   CLOUDFLARE_API_EMAIL  # Global API Key利用時のみ必要（API Tokenでは不要）
+#   CF_DASHBOARD_ADMIN_GITHUB_IDS  # /cf-dashboardを許可するGitHub numeric ID（カンマ区切り）
+#     GitHubプロフィールAPIのid値を設定する。未設定・不正な値の場合は全員を拒否する。
 #   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
 #   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
 #     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、
