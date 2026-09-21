@@ -18,6 +18,33 @@ export interface AuthContext {
 }
 
 /**
+ * GitHubの変更可能なlogin名ではなく、不変なnumeric IDでダッシュボード管理者を判定する。
+ * 設定ミスで一般ユーザーへ権限が開かないよう、空要素や数値以外を含む設定もfail closedにする。
+ */
+export function isCfDashboardAdmin(githubId: number | undefined, configuredIds: string | undefined): boolean {
+  if (!Number.isSafeInteger(githubId) || !configuredIds?.trim()) return false;
+  const entries = configuredIds.split(',').map((entry) => entry.trim());
+  if (entries.some((entry) => !/^[1-9]\d*$/.test(entry))) return false;
+  return entries.some((entry) => Number(entry) === githubId);
+}
+
+/** authMiddlewareの後に使用する、/cf-dashboard専用の管理者認可。 */
+export async function cfDashboardAdminMiddleware(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  next: Next
+) {
+  const configuredIds = c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS;
+  const headers = { 'Cache-Control': 'no-store' };
+  if (!configuredIds?.trim()) {
+    return c.json({ error: '管理者設定が未構成です' }, 503, headers);
+  }
+  if (!isCfDashboardAdmin(c.get('user').github_id, configuredIds)) {
+    return c.json({ error: 'この操作には管理者権限が必要です' }, 403, headers);
+  }
+  await next();
+}
+
+/**
  * AuthorizationヘッダーまたはCookieからトークンを取得する
  */
 function getToken(c: Context): { token: string; source: 'header' | 'cookie' } | null {

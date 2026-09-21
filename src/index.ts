@@ -9,7 +9,7 @@ import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jw
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
-import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware } from './middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware, cfDashboardAdminMiddleware } from './middleware/auth';
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
@@ -16518,7 +16518,7 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
  * Cloudflare D1 ダッシュボード API
  * D1バインディング、またはCloudflare REST API経由でデータベースとテーブルの一覧を返す
  */
-app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
+app.get('/api/cf-dashboard/d1', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     if (!c.env.DB) {
       return jsonUtf8({ error: 'DBバインディングが未設定です', configured: false }, 200);
@@ -16548,7 +16548,7 @@ app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
   }
 });
 
-app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
+app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     if (!c.env.DB) {
       return jsonUtf8({ error: 'DBバインディングが未設定です' }, 503);
@@ -16575,9 +16575,9 @@ app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
 });
 
 /**
- * Cloudflare D1 ダッシュボードページ（認証が必要）
+ * Cloudflare D1 ダッシュボードページ（管理者認証が必要）
  */
-app.get('/cf-dashboard', authMiddleware, async (c) => {
+app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {

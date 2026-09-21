@@ -168,7 +168,16 @@ git config core.hooksPath .githooks
 ### D1ダッシュボード
 
 `/cf-dashboard` では、標準でこのWorkerの`DB`バインディングに接続されたD1データベースと
-テーブルを一覧表示します。この表示にはCloudflare APIのsecretは不要です。
+テーブルを一覧表示します。ページと配下APIは、`CF_DASHBOARD_ADMIN_GITHUB_IDS`に
+GitHub numeric IDが登録された管理者だけが利用できます。未設定または不正な設定では
+全ユーザーを拒否します（GitHubの変更可能なlogin名ではなく、プロフィールAPIの`id`値を使用します）。
+
+```bash
+wrangler secret put CF_DASHBOARD_ADMIN_GITHUB_IDS
+```
+
+複数の管理者を許可する場合は、numeric IDをカンマ区切りで設定してください。この表示には
+Cloudflare APIのsecretは不要です。
 
 アカウント内の全D1データベースを一覧表示する場合のみ、D1の読み取り権限を付与した
 API Tokenと次のsecretを設定してください。

@@ -81,6 +81,8 @@ export type Bindings = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   /** Global API Keyを使う場合のメールアドレス。API Tokenの場合は未設定にする */
   CLOUDFLARE_API_EMAIL?: string;
+  /** /cf-dashboard とそのAPIへのアクセスを許可するGitHub numeric ID（カンマ区切り）。未設定・不正時はアクセスを拒否する */
+  CF_DASHBOARD_ADMIN_GITHUB_IDS?: string;
 };
 
 /** Hono コンテキスト変数 */

@@ -64,7 +64,7 @@ describe('/cf-dashboard page', () => {
   });
 
   it('Cloudflare API secretsがなくてもDBバインディングから一覧を返す', async () => {
-    const token = await createJWT({ sub: 'test-user', name: 'Test' }, jwtSecret);
+    const token = await createJWT({ sub: 'test-user', name: 'Test', github_id: 12345 }, jwtSecret);
     const res = await app.request(
       '/api/cf-dashboard/d1',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -73,6 +73,7 @@ describe('/cf-dashboard page', () => {
         GITHUB_CLIENT_ID: 'test',
         GITHUB_CLIENT_SECRET: 'test',
         JWT_SECRET: jwtSecret,
+        CF_DASHBOARD_ADMIN_GITHUB_IDS: '12345',
       }
     );
 
@@ -85,7 +86,7 @@ describe('/cf-dashboard page', () => {
   });
 
   it('DBバインディングへのフォールバック時もテーブル一覧を返す', async () => {
-    const token = await createJWT({ sub: 'test-user', name: 'Test' }, jwtSecret);
+    const token = await createJWT({ sub: 'test-user', name: 'Test', github_id: 12345 }, jwtSecret);
     const res = await app.request(
       '/api/cf-dashboard/d1/this/tables',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -94,6 +95,7 @@ describe('/cf-dashboard page', () => {
         GITHUB_CLIENT_ID: 'test',
         GITHUB_CLIENT_SECRET: 'test',
         JWT_SECRET: jwtSecret,
+        CF_DASHBOARD_ADMIN_GITHUB_IDS: '12345',
       }
     );
 
@@ -102,5 +104,44 @@ describe('/cf-dashboard page', () => {
       provider: 'd1-binding',
       tables: [{ name: 'users', row_count: null }],
     });
+  });
+
+  it('管理者以外にはD1 APIを公開しない', async () => {
+    const token = await createJWT({ sub: 'regular-user', github_id: 99999 }, jwtSecret);
+    const db = makeBindingDb(['users']);
+    const res = await app.request(
+      '/api/cf-dashboard/d1',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { DB: db, JWT_SECRET: jwtSecret, CF_DASHBOARD_ADMIN_GITHUB_IDS: '12345, 67890' }
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    await expect(res.json()).resolves.toEqual({ error: 'この操作には管理者権限が必要です' });
+    expect(db.prepare).toHaveBeenCalledTimes(1);
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining('user_sessions'));
+  });
+
+  it('管理者設定がない場合はfail closedで拒否する', async () => {
+    const token = await createJWT({ sub: 'user', github_id: 12345 }, jwtSecret);
+    const res = await app.request(
+      '/cf-dashboard',
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'text/html' } },
+      { DB: makeBindingDb([]), JWT_SECRET: jwtSecret }
+    );
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: '管理者設定が未構成です' });
+  });
+
+  it('login名が一致してもnumeric IDがなければ拒否する', async () => {
+    const token = await createJWT({ sub: '12345' }, jwtSecret);
+    const res = await app.request(
+      '/api/cf-dashboard/d1/this/tables',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { DB: makeBindingDb([]), JWT_SECRET: jwtSecret, CF_DASHBOARD_ADMIN_GITHUB_IDS: '12345' }
+    );
+
+    expect(res.status).toBe(403);
   });
 });
