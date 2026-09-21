@@ -688,6 +688,11 @@ export function getD1QueryCatalogPage(
     .sql-detail-meta dd { color: var(--text-primary); word-break: break-word; }
     .sql-detail-section { margin-top: 16px; }
     .sql-detail-section-title { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .sql-detail-code-wrap { position: relative; }
+    .sql-detail-code-wrap .sql-detail-code { padding-right: 78px; }
+    .sql-run-button { position: absolute; top: 8px; right: 8px; z-index: 1; border: 1px solid var(--success-color); border-radius: 7px; padding: 6px 9px; background: var(--card-bg); color: var(--success-color); cursor: pointer; font: 700 12px/1.4 'Monaco', 'Courier New', monospace; }
+    .sql-run-button:hover, .sql-run-button:focus-visible { background: var(--success-color); color: white; }
+    .sql-run-button:disabled { cursor: wait; opacity: 0.65; }
     .sql-detail-help { font-size: 12px; line-height: 1.6; color: var(--text-muted); margin-bottom: 8px; }
     .sql-detail-code { margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--code-bg); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font: 12px/1.6 'Monaco', 'Courier New', monospace; }
     .sql-detail-status { font-size: 13px; color: var(--text-muted); }
@@ -819,7 +824,12 @@ export function getD1QueryCatalogPage(
       </dl>
       <div class="sql-detail-section">
         <div class="sql-detail-section-title">SQL全文</div>
-        <pre class="sql-detail-code" id="sqlDetailSql"></pre>
+        <div class="sql-detail-code-wrap">
+          <pre class="sql-detail-code" id="sqlDetailSql"></pre>
+          <button type="button" class="sql-run-button" id="runSqlButton" title="このSQLをD1で実行する">Run▶︎</button>
+        </div>
+        <div class="sql-detail-status" id="sqlRunStatus" aria-live="polite"></div>
+        <pre class="sql-detail-code" id="sqlRunResult" hidden></pre>
       </div>
       <div class="sql-detail-section">
         <div class="sql-detail-section-title">sqlc parse・方言比較</div>
@@ -864,12 +874,42 @@ export function getD1QueryCatalogPage(
     var sqlDetailWasmStatus = document.getElementById('sqlDetailWasmStatus');
     var sqlDetailResult = document.getElementById('sqlDetailResult');
     var parseD1SqlButton = document.getElementById('parseD1SqlButton');
+    var runSqlButton = document.getElementById('runSqlButton');
+    var sqlRunStatus = document.getElementById('sqlRunStatus');
+    var sqlRunResult = document.getElementById('sqlRunResult');
     var postgresComparison = document.getElementById('postgresComparison');
     var currentSql = '';
     var currentSqlcInput = '';
     var lastSqlDetailTrigger = null;
     var sqlcWasmPromise = null;
     var sqlDetailRequestId = 0;
+
+    async function runCurrentSql() {
+      var queryName = document.getElementById('sqlDetailName').textContent || '';
+      if (!queryName || !currentSql) return;
+      runSqlButton.disabled = true;
+      sqlRunResult.hidden = true;
+      sqlRunStatus.textContent = 'D1でSQLを実行しています…';
+      sqlRunStatus.className = 'sql-detail-status';
+      try {
+        var response = await fetch('/api/d1-query-catalog/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queryName: queryName })
+        });
+        var payload = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(payload.error || ('HTTP ' + response.status));
+        sqlRunResult.textContent = JSON.stringify(payload.result, null, 2);
+        sqlRunResult.hidden = false;
+        sqlRunStatus.textContent = 'SQLを実行しました。';
+        sqlRunStatus.className = 'sql-detail-status ready';
+      } catch (error) {
+        sqlRunStatus.textContent = 'SQLを実行できませんでした: ' + (error && error.message ? error.message : String(error));
+        sqlRunStatus.className = 'sql-detail-status error';
+      } finally {
+        runSqlButton.disabled = false;
+      }
+    }
 
     function getNextZ() {
       var staticZDefaults = { sqlDetailDialog: 1000 };
@@ -1058,6 +1098,11 @@ export function getD1QueryCatalogPage(
       document.getElementById('sqlDetailSql').innerHTML = highlightedSql ? highlightedSql.innerHTML : '';
       sqlDetailResult.hidden = true;
       sqlDetailResult.textContent = '';
+      sqlRunResult.hidden = true;
+      sqlRunResult.textContent = '';
+      sqlRunStatus.textContent = '';
+      sqlRunStatus.className = 'sql-detail-status';
+      runSqlButton.disabled = false;
       postgresComparison.hidden = true;
       document.getElementById('postgresSql').textContent = '';
       document.getElementById('postgresDifferences').replaceChildren();
@@ -1073,6 +1118,7 @@ export function getD1QueryCatalogPage(
     });
     document.getElementById('closeSqlDetailButton').addEventListener('click', function() { sqlDetailDialog.close(); });
     parseD1SqlButton.addEventListener('click', runD1Parse);
+    runSqlButton.addEventListener('click', runCurrentSql);
     document.getElementById('comparePostgresButton').addEventListener('click', compareWithPostgres);
     sqlDetailDialog.addEventListener('close', function() {
       if (lastSqlDetailTrigger) lastSqlDetailTrigger.focus();
