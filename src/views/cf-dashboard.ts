@@ -91,7 +91,7 @@ h1 { font-size: 20px; margin-bottom: 4px; }
 </head>
 <body>
 <h1>Cloudflare D1 ダッシュボード</h1>
-<p class="subtitle">このWorkerが使っているD1データベースのテーブル一覧と行数を表示します</p>
+<p class="subtitle">Cloudflare APIでD1を取得し、Wranglerと同じBLAKE3 WASMで結果を検証します</p>
 
 <div id="main">
   <p class="loading">読み込み中…</p>
@@ -115,8 +115,8 @@ async function loadDatabases() {
   if (!data.configured) {
     main.innerHTML = \`
       <div class="notice">
-        <strong>D1データベースが未設定です</strong><br>
-        wrangler.tomlの[[d1_databases]]設定とデプロイ環境のバインディングを確認してください。
+        <strong>Cloudflare APIが未設定です</strong><br>
+        <code>CLOUDFLARE_API_KEY</code> と <code>CLOUDFLARE_ACCOUNT_ID</code> をwrangler secretで設定してください。
       </div>\`;
     return;
   }
@@ -187,20 +187,21 @@ async function loadTables(uuid, body) {
   }
   const tables = data.tables ?? [];
   if (tables.length === 0) {
-    body.innerHTML = '<p class="loading">テーブルなし</p>';
+    body.innerHTML = '<p class="loading">テーブルなし · Wrangler BLAKE3/WASM: <code>'
+      + esc(data.wasm?.digest ?? '–') + '</code></p>';
     return;
   }
   body.innerHTML = \`
     <table class="table-list">
-      <thead><tr><th>テーブル名</th><th class="row-count">行数</th></tr></thead>
+      <thead><tr><th>テーブル名</th></tr></thead>
       <tbody>
         \${tables.map(t => \`
           <tr>
             <td>\${esc(t.name)}</td>
-            <td class="row-count">\${t.row_count != null ? t.row_count.toLocaleString() : '–'}</td>
           </tr>\`).join('')}
       </tbody>
-    </table>\`;
+    </table>
+    <p class="loading">Wrangler BLAKE3/WASM: <code>\${esc(data.wasm?.digest ?? '–')}</code></p>\`;
 }
 
 function formatBytes(bytes) {

@@ -165,6 +165,20 @@ git config core.hooksPath .githooks
 
 ## セットアップ
 
+### D1ダッシュボード
+
+`/cf-dashboard` でアカウント内のD1データベースとテーブルを一覧表示できます。
+API Tokenを使う場合は、D1の読み取り権限を付与して次のsecretを設定してください。
+
+```bash
+wrangler secret put CLOUDFLARE_API_KEY
+wrangler secret put CLOUDFLARE_ACCOUNT_ID
+```
+
+Global API Keyを使う場合は、さらに `wrangler secret put CLOUDFLARE_API_EMAIL` を実行します。
+APIキーはブラウザへ送信されずWorkerからCloudflare APIを呼び出します。テーブル一覧には、
+Wranglerが依存するBLAKE3 WASMで算出したダイジェストも表示されます。
+
 ### 1. 依存パッケージのインストール
 
 ```bash

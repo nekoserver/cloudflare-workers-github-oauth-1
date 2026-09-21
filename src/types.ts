@@ -75,6 +75,12 @@ export type Bindings = {
   GOOGLE_CSE_CX?: string;
   /** /cursor-agent ページが使うCursor Background Agent APIのAPIキー。未設定時は/cursor-agentからの起動を無効化する */
   CURSOR_API_KEY?: string;
+  /** Cloudflare D1 REST APIのAPI Token、またはGlobal API Key。必ずwrangler secretで管理する */
+  CLOUDFLARE_API_KEY?: string;
+  /** D1を列挙するCloudflareアカウントID */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  /** Global API Keyを使う場合のメールアドレス。API Tokenの場合は未設定にする */
+  CLOUDFLARE_API_EMAIL?: string;
 };
 
 /** Hono コンテキスト変数 */
