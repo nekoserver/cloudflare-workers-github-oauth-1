@@ -283,12 +283,14 @@ function findDuplicateCatalogGroups(rows: D1QueryCatalogRow[]): DuplicateCatalog
 
 function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
   const groups = findDuplicateCatalogGroups(rows);
+  if (groups.length === 0) return '';
+
   const required = groups.filter(group => group.kind !== 'sql');
   const candidates = groups.filter(group => group.kind === 'sql');
-  const statusClass = required.length > 0 ? 'duplicate-status-error' : candidates.length > 0 ? 'duplicate-status-warning' : 'duplicate-status-ok';
+  const statusClass = required.length > 0 ? 'duplicate-status-error' : 'duplicate-status-warning';
   const statusText = required.length > 0
     ? `修正必須 ${required.length}グループ / 要確認 ${candidates.length}グループ`
-    : candidates.length > 0 ? `修正必須 0グループ / 要確認 ${candidates.length}グループ` : '重複は検出されませんでした';
+    : `修正必須 0グループ / 要確認 ${candidates.length}グループ`;
   const kindLabels: Record<DuplicateCatalogGroup['kind'], string> = {
     source: '登録位置の重複',
     name: 'クエリ名の重複',
@@ -309,7 +311,7 @@ function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
       <h2 id="duplicateAuditTitle">重複登録監査</h2>
       <span class="duplicate-status ${statusClass}">${statusText}</span>
     </div>
-    ${details ? `<ul class="duplicate-list">${details}</ul>` : '<p class="duplicate-empty">登録位置・クエリ名・正規化SQLの重複はありません。</p>'}
+    <ul class="duplicate-list">${details}</ul>
     <div class="duplicate-plan">
       <h3>修正プラン</h3>
       <ol>
@@ -588,10 +590,8 @@ export function getD1QueryCatalogPage(
     .duplicate-audit h2 { font-size: 15px; }
     .duplicate-audit h3 { font-size: 13px; margin-bottom: 4px; }
     .duplicate-status { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
-    .duplicate-status-ok { color: light-dark(#176b3a, #70e09b); background: light-dark(#e8f8ee, #173c27); }
     .duplicate-status-warning { color: light-dark(#8a5300, #ffd27a); background: light-dark(#fff5dc, #3d3015); }
     .duplicate-status-error { color: light-dark(#a12622, #ff928c); background: light-dark(#ffebe9, #461d1b); }
-    .duplicate-empty { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
     .duplicate-list { margin: 9px 0 0 20px; font-size: 12px; }
     .duplicate-list li { margin-bottom: 7px; }
     .duplicate-list code { margin: 0 6px; color: var(--text-primary); }
