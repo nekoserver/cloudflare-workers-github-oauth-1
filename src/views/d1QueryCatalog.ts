@@ -658,8 +658,8 @@ export function getD1QueryCatalogPage(
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
     .band-binding-summary { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; font-weight: 800; white-space: nowrap; }
     .band-binding-summary span { padding: 2px 7px; border: 1px solid; border-radius: 999px; }
-    .binding-summary-no { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
-    .binding-summary-required { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
+    .binding-summary-no { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
+    .binding-summary-required { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
     .table-group-badge, .table-fk-badge {
       border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
     }
@@ -686,12 +686,10 @@ export function getD1QueryCatalogPage(
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
-    tbody tr.query-with-bindings td { background: light-dark(#fffbeb, #2d230f); border-bottom-color: light-dark(#fde68a, #66501b); }
-    tbody tr.query-with-bindings td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
     .binding-status-cell { white-space: nowrap; }
     .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }
-    .query-no-bindings .binding-status { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
-    .query-with-bindings .binding-status { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
+    .query-no-bindings .binding-status { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
+    .query-with-bindings .binding-status { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-token { font-weight: 600; }
     .sql-keyword { color: #7c3aed; font-weight: 800; }
