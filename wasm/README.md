@@ -281,3 +281,34 @@ PostgreSQL/MySQL/SQLite文法のパーサーが必要でこのプロトタイプ
 大きく超えるため未着手。将来必要になった場合は、公式が構文解析器の
 WASMビルドを配布していないか先に確認すること
 (`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`の教訓と同じ)。
+
+## sqlc CodegenRequest共通IR・差分判定
+
+`scripts/sqlc-codegen-ir.js`はSQLや`-- name:`を独自解析せず、sqlcのJSON
+generatorまたはcodegen pluginへ渡される`CodegenRequest`を入力にする。
+sqlcがスキーマとSQLから確定したquery名、command、parameter、result column、
+DB型、nullabilityを小さなバージョン付きIRへ正規化する境界である。sqlc parseの
+betaなAST形式そのものをアプリケーション各所へ漏らさず、生成・文書化・CI判定が
+同じ入力を利用できるようにする。
+
+```bash
+npm run sqlc:ir -- --input codegen_request.json --format json
+npm run sqlc:ir -- --input codegen_request.json --format markdown
+npm run sqlc:ir -- --baseline main-codegen_request.json --input codegen_request.json
+```
+
+baselineを指定した場合は、query削除、command変更、必須parameter追加、parameter
+型・必須性変更、result shape・型・nullability変更を破壊的変更としてJSONに出力し、
+1件以上あれば終了コード`2`を返す。query追加とnullable parameter追加は非破壊的変更
+として分離するため、CIでは次のようにgateとして利用できる。
+
+```bash
+npm run sqlc:ir -- \
+  --baseline artifacts/main/codegen_request.json \
+  --input artifacts/pr/codegen_request.json > sqlc-ir-diff.json
+```
+
+このIRはHTTP path、認証、404/403、rate limitなどを推測しない。それらは別の
+Application/Service metadataと組み合わせてAPI IRを作る責務とし、DB operation IRを
+直接OpenAPIへ変換しない。またCRUD、read/write set、column lineage、WHEREの有無など
+ASTが必要な情報も推測せず、将来sqlc AST用adapterを追加するまで未定義のまま扱う。
