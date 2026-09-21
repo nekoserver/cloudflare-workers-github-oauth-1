@@ -287,6 +287,7 @@ function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
 
   const required = groups.filter(group => group.kind !== 'sql');
   const candidates = groups.filter(group => group.kind === 'sql');
+  const initiallyExpanded = required.length > 0;
   const statusClass = required.length > 0 ? 'duplicate-status-error' : 'duplicate-status-warning';
   const statusText = required.length > 0
     ? `修正必須 ${required.length}グループ / 要確認 ${candidates.length}グループ`
@@ -309,17 +310,25 @@ function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
   return `<section class="duplicate-audit" aria-labelledby="duplicateAuditTitle">
     <div class="duplicate-audit-heading">
       <h2 id="duplicateAuditTitle">重複登録監査</h2>
-      <span class="duplicate-status ${statusClass}">${statusText}</span>
+      <div class="duplicate-audit-heading-actions">
+        <span class="duplicate-status ${statusClass}">${statusText}</span>
+        <button type="button" class="duplicate-audit-toggle" id="duplicateAuditToggle" aria-controls="duplicateAuditContent" aria-expanded="${initiallyExpanded}">
+          <span class="duplicate-audit-toggle-label">${initiallyExpanded ? '折り畳む' : '詳細を表示'}</span>
+          <span class="duplicate-audit-toggle-arrow" aria-hidden="true">▾</span>
+        </button>
+      </div>
     </div>
-    <ul class="duplicate-list">${details}</ul>
-    <div class="duplicate-plan">
-      <h3>修正プラン</h3>
-      <ol>
-        <li><strong>既存DB</strong>へmigration 0154を適用し、同名の旧行を情報量と更新日時で1件へ統合する。</li>
-        <li><strong>クエリ名</strong>の重複は用途を表す一意な名前へ変更し、世代ID付きの同期SQLを再生成する。</li>
-        <li><strong>同一SQL</strong>は呼び出し元を確認し、共通化できるものだけ実装を統合する（意図的な再利用は維持する）。</li>
-        <li>同期SQLで今回の世代にない旧行を削除し、この監査の修正必須が0件であることを確認する。</li>
-      </ol>
+    <div id="duplicateAuditContent"${initiallyExpanded ? '' : ' hidden'}>
+      <ul class="duplicate-list">${details}</ul>
+      <div class="duplicate-plan">
+        <h3>修正プラン</h3>
+        <ol>
+          <li><strong>既存DB</strong>へmigration 0154を適用し、同名の旧行を情報量と更新日時で1件へ統合する。</li>
+          <li><strong>クエリ名</strong>の重複は用途を表す一意な名前へ変更し、世代ID付きの同期SQLを再生成する。</li>
+          <li><strong>同一SQL</strong>は呼び出し元を確認し、共通化できるものだけ実装を統合する（意図的な再利用は維持する）。</li>
+          <li>同期SQLで今回の世代にない旧行を削除し、この監査の修正必須が0件であることを確認する。</li>
+        </ol>
+      </div>
     </div>
   </section>`;
 }
@@ -587,11 +596,16 @@ export function getD1QueryCatalogPage(
     .filter-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
     .duplicate-audit { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
     .duplicate-audit-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .duplicate-audit-heading-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .duplicate-audit h2 { font-size: 15px; }
     .duplicate-audit h3 { font-size: 13px; margin-bottom: 4px; }
     .duplicate-status { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
     .duplicate-status-warning { color: light-dark(#8a5300, #ffd27a); background: light-dark(#fff5dc, #3d3015); }
     .duplicate-status-error { color: light-dark(#a12622, #ff928c); background: light-dark(#ffebe9, #461d1b); }
+    .duplicate-audit-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); color: var(--text-primary); font: 700 11px/1.4 inherit; cursor: pointer; }
+    .duplicate-audit-toggle:hover, .duplicate-audit-toggle:focus-visible { border-color: var(--accent-color); outline: none; }
+    .duplicate-audit-toggle-arrow { transition: transform 0.15s ease; }
+    .duplicate-audit-toggle[aria-expanded="true"] .duplicate-audit-toggle-arrow { transform: rotate(180deg); }
     .duplicate-list { margin: 9px 0 0 20px; font-size: 12px; }
     .duplicate-list li { margin-bottom: 7px; }
     .duplicate-list code { margin: 0 6px; color: var(--text-primary); }
@@ -1143,6 +1157,17 @@ export function getD1QueryCatalogPage(
     }
     document.getElementById('copySqlButton').addEventListener('click', function() { copySqlDetail(currentSql, 'SQL'); });
     document.getElementById('copySqlcButton').addEventListener('click', function() { copySqlDetail(currentSqlcInput, 'sqlc形式'); });
+
+    var duplicateAuditToggle = document.getElementById('duplicateAuditToggle');
+    var duplicateAuditContent = document.getElementById('duplicateAuditContent');
+    if (duplicateAuditToggle && duplicateAuditContent) {
+      duplicateAuditToggle.addEventListener('click', function() {
+        var expanded = duplicateAuditToggle.getAttribute('aria-expanded') === 'true';
+        duplicateAuditContent.hidden = expanded;
+        duplicateAuditToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        duplicateAuditToggle.querySelector('.duplicate-audit-toggle-label').textContent = expanded ? '詳細を表示' : '折り畳む';
+      });
+    }
 
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');

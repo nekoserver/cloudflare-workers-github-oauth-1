@@ -199,6 +199,22 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('修正必須 0グループ / 要確認 1グループ');
     expect(html).toContain('同一SQL（要確認）');
     expect(html).toContain('意図的な再利用は維持する');
+    expect(html).toContain('id="duplicateAuditToggle"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('id="duplicateAuditContent" hidden');
+    expect(html).toContain("duplicateAuditContent.hidden = expanded;");
+  });
+
+  it('修正必須の重複がある場合は監査内容を初期表示する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'DuplicateName', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'duplicatename', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT name FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('id="duplicateAuditToggle"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('id="duplicateAuditContent">');
+    expect(html).not.toContain('id="duplicateAuditContent" hidden');
   });
 
   it('重複がない場合は重複登録監査を表示しない', () => {
