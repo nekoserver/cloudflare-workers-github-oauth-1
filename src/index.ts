@@ -2444,7 +2444,21 @@ FROM (
 WHERE duplicate_rank = 1;
 DROP TABLE d1_query_catalog_legacy;
 CREATE INDEX idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
-CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);`,
+CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);
+INSERT INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order)
+VALUES ('d1_query_catalog', 'config', 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', '0154', 'manual', 0)
+ON CONFLICT(table_name) DO UPDATE SET
+  group_name = excluded.group_name,
+  description = excluded.description,
+  migration = excluded.migration,
+  sync_policy = excluded.sync_policy;
+DELETE FROM table_column_keys WHERE table_name = 'd1_query_catalog';
+INSERT INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+  ('d1_query_catalog', 'id', 'pk', NULL),
+  ('d1_query_catalog', 'query_name', 'uk', NULL),
+  ('d1_query_catalog', 'table_name', 'idx', NULL),
+  ('d1_query_catalog', 'source_file', 'idx', NULL),
+  ('d1_query_catalog', 'source_line', 'idx', NULL);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -16670,6 +16684,7 @@ app.get('/status', authMiddleware, async (c) => {
     { migration: '0060', table: 'user_sessions', column: 'idle_timeout_seconds', sql: 'ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;' },
     { migration: '0028', table: 'ai_summary_log', column: 'fallback_used',       sql: 'ALTER TABLE ai_summary_log ADD COLUMN fallback_used INTEGER DEFAULT 0;' },
     { migration: '0028', table: 'ai_summary_log', column: 'primary_model',      sql: 'ALTER TABLE ai_summary_log ADD COLUMN primary_model TEXT;' },
+    { migration: '0154', table: 'd1_query_catalog', column: 'sync_generation', sql: STATUS_MIGRATION_SQL['0154'] },
   ];
 
   const data: CacheStatusData = {
