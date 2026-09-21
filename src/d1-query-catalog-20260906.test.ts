@@ -176,6 +176,41 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('2件中、コマンド種別確定済み1件');
   });
 
+  it('登録位置・クエリ名の重複を修正必須として検出し、修正プランを表示する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'DuplicateName', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'duplicatename', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT name FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('重複登録監査');
+    expect(html).toContain('修正必須 2グループ / 要確認 0グループ');
+    expect(html).toContain('登録位置の重複');
+    expect(html).toContain('クエリ名の重複');
+    expect(html).toContain('修正プラン');
+    expect(html).toContain('source_file + source_line');
+  });
+
+  it('空白と大文字小文字だけが異なる同一SQLは、自動削除せず要確認候補にする', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'FindUserA', command: 'one', command_confirmed: 1, table_name: 'users', source_file: 'src/a.ts', source_line: 1, sql_text: 'SELECT id FROM users WHERE id = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'FindUserB', command: 'one', command_confirmed: 1, table_name: 'users', source_file: 'src/b.ts', source_line: 2, sql_text: ' select ID   from USERS where ID = ? ', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('修正必須 0グループ / 要確認 1グループ');
+    expect(html).toContain('同一SQL（要確認）');
+    expect(html).toContain('意図的な再利用は維持する');
+  });
+
+  it('重複がない場合は監査済みであることを明示する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/a.ts', source_line: 1, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'users', source_file: 'src/b.ts', source_line: 2, sql_text: 'UPDATE users SET name = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('重複は検出されませんでした');
+    expect(html).toContain('登録位置・クエリ名・正規化SQLの重複はありません。');
+  });
+
   it('発行SQL種別の複数選択セレクトボックスが、出現回数の多い順で表示される', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 't1', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO t1 VALUES (1)', migration_file: null, last_commit_hash: null, last_commit_at: null },
