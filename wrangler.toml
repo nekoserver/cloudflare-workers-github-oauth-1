@@ -14,6 +14,9 @@ assets = { directory = "./public" }
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
 AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# GitHubのnumeric IDは公開情報であり、デプロイ直後から管理者認可が機能するよう
+# このWorkerの管理者を明示する。複数人の場合はカンマ区切りで追加する。
+CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 # 通知（GitHub Webhook通知・/pts等）の送信先スイッチ。"worker" にすると
 # 外部Workerへの送信に切り替わる。未設定・それ以外の値は従来どおり "slack"
 # NOTIFY_TARGET = "worker"
@@ -57,7 +60,8 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #   CLOUDFLARE_ACCOUNT_ID  # 上記API利用時にD1を列挙するアカウントID
 #   CLOUDFLARE_API_EMAIL  # Global API Key利用時のみ必要（API Tokenでは不要）
 #   CF_DASHBOARD_ADMIN_GITHUB_IDS  # /cf-dashboardを許可するGitHub numeric ID（カンマ区切り）
-#     GitHubプロフィールAPIのid値を設定する。未設定・不正な値の場合は全員を拒否する。
+#     GitHubプロフィールAPIのid値を[vars]に設定する（公開情報なのでsecretでなくてよい）。
+#     未設定・不正な値の場合は全員を拒否する。
 #   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
 #   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
 #     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
@@ -55,6 +56,11 @@ describe('Cloudflare D1 API client', () => {
 });
 
 describe('/cf-dashboard page', () => {
+  it('デプロイ設定に管理者GitHub IDの既定値がある', () => {
+    const wranglerConfig = readFileSync('wrangler.toml', 'utf8');
+    expect(wranglerConfig).toMatch(/^CF_DASHBOARD_ADMIN_GITHUB_IDS\s*=\s*"[1-9]\d*"$/m);
+  });
+
   it('Cloudflare APIとWrangler BLAKE3/WASMの設定を表示する', () => {
     const html = getCfDashboardPage();
     expect(html).toContain('CLOUDFLARE_API_KEY');

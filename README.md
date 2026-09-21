@@ -172,8 +172,12 @@ git config core.hooksPath .githooks
 GitHub numeric IDが登録された管理者だけが利用できます。未設定または不正な設定では
 全ユーザーを拒否します（GitHubの変更可能なlogin名ではなく、プロフィールAPIの`id`値を使用します）。
 
-```bash
-wrangler secret put CF_DASHBOARD_ADMIN_GITHUB_IDS
+このリポジトリの`wrangler.toml`には、デプロイ直後に管理者設定が未構成とならないよう
+リポジトリ管理者のnumeric IDを既定値として設定しています。別の管理者へ変更する場合は
+`[vars]`の値を変更してください。GitHub numeric IDは公開情報なのでsecretにする必要はありません。
+
+```toml
+CF_DASHBOARD_ADMIN_GITHUB_IDS = "12345,67890"
 ```
 
 複数の管理者を許可する場合は、numeric IDをカンマ区切りで設定してください。この表示には
