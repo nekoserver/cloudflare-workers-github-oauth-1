@@ -11892,6 +11892,36 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
   return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications, expandCategoryTables));
 });
 
+// SQL本文をクライアントから受け取らず、カタログに登録済みのクエリ名から再取得して
+// 実行する。これによりRunボタンを任意SQL実行APIとして転用できないようにする。
+app.post('/api/d1-query-catalog/run', authMiddleware, async (c) => {
+  if (!c.env.DB) return c.json({ error: 'DB未設定のためSQLを実行できません。' }, 503);
+  const body = await c.req.json<{ queryName?: string }>().catch(() => null);
+  const queryName = body?.queryName?.trim();
+  if (!queryName || queryName.length > 200) {
+    return c.json({ error: '有効なクエリ名を指定してください。' }, 400);
+  }
+
+  try {
+    const catalogRow = await c.env.DB.prepare(
+      `SELECT sql_text, command FROM d1_query_catalog WHERE query_name = ? LIMIT 1`
+    ).bind(queryName).first<{ sql_text: string; command: string }>();
+    if (!catalogRow?.sql_text) return c.json({ error: '指定されたSQLはカタログにありません。' }, 404);
+
+    const statement = c.env.DB.prepare(catalogRow.sql_text);
+    if (catalogRow.command === 'exec') {
+      const result = await statement.run();
+      return c.json({ ok: true, result });
+    }
+    const result = await statement.all();
+    return c.json({ ok: true, result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('d1-query-catalog: run failed', { queryName, error: message });
+    return c.json({ error: `SQLの実行に失敗しました: ${message}` }, 400);
+  }
+});
+
 /**
  * ブラウザに現在保存されているCookie/localStorageの値を、
  * どのページの設定なのか・D1(user_preferences)への移行先がすでにあるか

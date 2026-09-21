@@ -445,6 +445,16 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('DBへの問い合わせ、スキーマ照合、完全なsqlc構文解析は行いません。');
   });
 
+  it('SQL全文コードブロック右側のRunボタンから登録済みSQLを実行できる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('class="sql-detail-code-wrap"');
+    expect(html).toContain('id="runSqlButton"');
+    expect(html).toContain('Run▶︎');
+    expect(html).toContain("fetch('/api/d1-query-catalog/run'");
+    expect(html).toContain("runSqlButton.addEventListener('click', runCurrentSql)");
+    expect(html).toContain('id="sqlRunResult"');
+  });
+
   it('詳細モーダルからSQLite(D1)検査を明示的に実行できる', () => {
     const html = getD1QueryCatalogPage('tester', []);
     expect(html).toContain('id="parseD1SqlButton"');
@@ -528,6 +538,42 @@ describe('GET /d1-query-catalog', () => {
     expect(html).not.toContain('d1_query_catalog_sort=');
     expect(html).not.toContain('localStorage.setItem');
     expect(html).not.toContain('localStorage.getItem');
+  });
+});
+
+describe('POST /api/d1-query-catalog/run', () => {
+  it('クライアントのSQLではなくカタログから取得したSQLを実行して結果を返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const all = vi.fn().mockResolvedValue({ results: [{ value: 1 }], success: true });
+    const first = vi.fn().mockResolvedValue({ sql_text: 'SELECT 1 AS value', command: 'one' });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        bind: vi.fn().mockReturnValue({ first, all: vi.fn(), run: vi.fn() }),
+        first: vi.fn().mockImplementation(() => sql.includes('user_sessions') ? Promise.resolve({ revoked_at: null }) : Promise.resolve(null)),
+        all: sql === 'SELECT 1 AS value' ? all : vi.fn(),
+        run: vi.fn(),
+      })),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'SelectOne', sql: 'DROP TABLE users' }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(200);
+    expect(db.prepare).toHaveBeenCalledWith('SELECT 1 AS value');
+    expect(all).toHaveBeenCalledOnce();
+    expect(await res.json()).toEqual({ ok: true, result: { results: [{ value: 1 }], success: true } });
+  });
+
+  it('カタログに存在しないクエリは実行しない', async () => {
+    const authHeader = await makeAuthHeader();
+    const db = createMockDb();
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'Missing' }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(404);
   });
 });
 
