@@ -14,6 +14,24 @@ const generator = fs.readFileSync(
 const worker = fs.readFileSync(path.join(repoRoot, 'src/index.ts'), 'utf8');
 
 describe('D1 query catalog snapshot synchronization', () => {
+  it('0154はコピー完了まで元テーブルを保持してから入れ替える', () => {
+    for (const sql of [migration, worker]) {
+      const createStaging = sql.indexOf('CREATE TABLE d1_query_catalog_0154_new');
+      const copyRows = sql.indexOf('INSERT INTO d1_query_catalog_0154_new');
+      const dropOriginal = sql.indexOf('DROP TABLE d1_query_catalog;');
+      const promoteStaging = sql.indexOf(
+        'ALTER TABLE d1_query_catalog_0154_new RENAME TO d1_query_catalog;',
+      );
+
+      expect(createStaging).toBeGreaterThan(-1);
+      expect(copyRows).toBeGreaterThan(createStaging);
+      expect(dropOriginal).toBeGreaterThan(copyRows);
+      expect(promoteStaging).toBeGreaterThan(dropOriginal);
+      expect(sql).toContain('DROP TABLE IF EXISTS d1_query_catalog_0154_new;');
+      expect(sql).not.toContain('RENAME TO d1_query_catalog_legacy');
+    }
+  });
+
   it('既存DBでは同名行から情報量が多く新しい1件を残す', () => {
     expect(migration).toContain('PARTITION BY lower(trim(query_name))');
     expect(migration).toContain('(table_name IS NOT NULL)');
