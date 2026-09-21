@@ -1,6 +1,3 @@
--- d1_query_catalog はソースから再生成するスナップショットであり、行番号は
--- コード編集のたびに変わる。旧来のソース位置一意制約では行移動を
--- UPDATE と認識できず、古い(NULLを含む)行が残るため、論理名を一意キーにする。
 ALTER TABLE d1_query_catalog RENAME TO d1_query_catalog_legacy;
 
 CREATE TABLE d1_query_catalog (
@@ -19,8 +16,6 @@ CREATE TABLE d1_query_catalog (
   sync_generation TEXT
 );
 
--- 同名の既存行は、情報が最も多く、新しい行を1件だけ引き継ぐ。
--- これにより「更新版が別行に入り、NULLを含む旧行も残る」状態を解消する。
 INSERT INTO d1_query_catalog (
   query_name, command, command_confirmed, table_name, source_file, source_line,
   sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
@@ -45,3 +40,18 @@ DROP TABLE d1_query_catalog_legacy;
 
 CREATE INDEX idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
 CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);
+
+INSERT INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order)
+VALUES ('d1_query_catalog', 'config', 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', '0154', 'manual', 0)
+ON CONFLICT(table_name) DO UPDATE SET
+  group_name = excluded.group_name,
+  description = excluded.description,
+  migration = excluded.migration,
+  sync_policy = excluded.sync_policy;
+DELETE FROM table_column_keys WHERE table_name = 'd1_query_catalog';
+INSERT INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+  ('d1_query_catalog', 'id', 'pk', NULL),
+  ('d1_query_catalog', 'query_name', 'uk', NULL),
+  ('d1_query_catalog', 'table_name', 'idx', NULL),
+  ('d1_query_catalog', 'source_file', 'idx', NULL),
+  ('d1_query_catalog', 'source_line', 'idx', NULL);

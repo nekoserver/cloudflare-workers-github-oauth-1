@@ -11,6 +11,7 @@ const generator = fs.readFileSync(
   path.join(repoRoot, 'scripts/generate-d1-query-catalog-inserts.js'),
   'utf8',
 );
+const worker = fs.readFileSync(path.join(repoRoot, 'src/index.ts'), 'utf8');
 
 describe('D1 query catalog snapshot synchronization', () => {
   it('既存DBでは同名行から情報量が多く新しい1件を残す', () => {
@@ -37,5 +38,23 @@ describe('D1 query catalog snapshot synchronization', () => {
     expect(generator).toContain('if (matches.length === 0)');
     expect(generator).toContain('refusing to generate a destructive synchronization file');
     expect(generator).toContain('Duplicate catalog query names');
+  });
+
+  it('0154適用後はD1内のテーブル・カラムカタログも新スキーマへ移行する', () => {
+    for (const sql of [migration, worker]) {
+      expect(sql).toContain("VALUES ('d1_query_catalog', 'config'");
+      expect(sql).toContain('ON CONFLICT(table_name) DO UPDATE SET');
+      expect(sql).toContain("DELETE FROM table_column_keys WHERE table_name = 'd1_query_catalog'");
+      expect(sql).toContain("('d1_query_catalog', 'query_name', 'uk', NULL)");
+      expect(sql).toContain("('d1_query_catalog', 'table_name', 'idx', NULL)");
+    }
+  });
+
+  it('/statusはsync_generationの欠落を0154未適用として検出する', () => {
+    const requiredColumnsStart = worker.indexOf('const REQUIRED_COLUMNS:');
+    const requiredColumnsEnd = worker.indexOf('];', requiredColumnsStart);
+    const requiredColumns = worker.slice(requiredColumnsStart, requiredColumnsEnd);
+    expect(requiredColumns).toContain("migration: '0154', table: 'd1_query_catalog', column: 'sync_generation'");
+    expect(requiredColumns).toContain("sql: STATUS_MIGRATION_SQL['0154']");
   });
 });
