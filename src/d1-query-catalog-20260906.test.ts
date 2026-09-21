@@ -168,12 +168,30 @@ describe('GET /d1-query-catalog', () => {
     expect(sqlCellRule![0]).toContain('white-space: nowrap');
   });
 
-  it('コマンド確定件数がサマリに表示される', () => {
+  it('全件検査と実行メソッド確認済み件数を混同せずに表示する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
-    expect(html).toContain('2件中、コマンド種別確定済み1件');
+    expect(html).toContain('カタログ全2件');
+    expect(html).toContain('実行メソッド確認済み1件');
+    expect(html).toContain('SQL動詞からの推定1件');
+    expect(html).not.toContain('コマンド種別確定済み1件(sqlcパーサーで検証済み)');
+  });
+
+  it('推定分を含むカタログ全件をsqlcアノテーションパーサーで一括検査できる', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('id="verifyAllAnnotationsButton"');
+    expect(html).toContain('全2件のアノテーションを検査');
+    expect(html).toContain('id="catalogVerificationStatus"');
+    expect(html).toContain("document.querySelectorAll('#tableBands tbody tr')");
+    expect(html).toContain("globalThis.sqlcParseQueryAnnotations(input)");
+    expect(html).toContain("'全' + catalogRows.length + '件のアノテーション形式を検査しました");
+    expect(html).toContain('SQL構文・スキーマ・実行結果の検証ではありません');
   });
 
   it('登録位置・クエリ名の重複を修正必須として検出し、修正プランを表示する', () => {
