@@ -240,6 +240,88 @@ function groupByTable(rows: D1QueryCatalogRow[]): [string, D1QueryCatalogRow[]][
   return [...byTable.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+type DuplicateCatalogGroup = {
+  kind: 'source' | 'name' | 'sql';
+  key: string;
+  rows: D1QueryCatalogRow[];
+};
+
+/**
+ * カタログ登録の一意性を監査する。
+ *
+ * source_file + source_line と query_name の衝突は修正必須、SQL本文の一致は別の
+ * 呼び出し元で同じSQLを意図的に使う場合もあるため確認候補として分ける。
+ */
+function findDuplicateCatalogGroups(rows: D1QueryCatalogRow[]): DuplicateCatalogGroup[] {
+  const definitions: Array<{
+    kind: DuplicateCatalogGroup['kind'];
+    keyFor: (row: D1QueryCatalogRow) => string;
+  }> = [
+    { kind: 'source', keyFor: row => `${row.source_file}:${row.source_line}` },
+    { kind: 'name', keyFor: row => row.query_name.trim().toLocaleLowerCase() },
+    {
+      kind: 'sql',
+      keyFor: row => `${row.table_name ?? '(不明)'}\u0000${row.sql_text.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}`,
+    },
+  ];
+
+  const groups: DuplicateCatalogGroup[] = [];
+  for (const definition of definitions) {
+    const indexed = new Map<string, D1QueryCatalogRow[]>();
+    for (const row of rows) {
+      const key = definition.keyFor(row);
+      const matches = indexed.get(key) ?? [];
+      matches.push(row);
+      indexed.set(key, matches);
+    }
+    for (const [key, matches] of indexed) {
+      if (matches.length > 1) groups.push({ kind: definition.kind, key, rows: matches });
+    }
+  }
+  return groups;
+}
+
+function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
+  const groups = findDuplicateCatalogGroups(rows);
+  const required = groups.filter(group => group.kind !== 'sql');
+  const candidates = groups.filter(group => group.kind === 'sql');
+  const statusClass = required.length > 0 ? 'duplicate-status-error' : candidates.length > 0 ? 'duplicate-status-warning' : 'duplicate-status-ok';
+  const statusText = required.length > 0
+    ? `修正必須 ${required.length}グループ / 要確認 ${candidates.length}グループ`
+    : candidates.length > 0 ? `修正必須 0グループ / 要確認 ${candidates.length}グループ` : '重複は検出されませんでした';
+  const kindLabels: Record<DuplicateCatalogGroup['kind'], string> = {
+    source: '登録位置の重複',
+    name: 'クエリ名の重複',
+    sql: '同一SQL（要確認）',
+  };
+  const details = groups.map(group => {
+    const locations = group.rows
+      .map(row => `${escapeHtml(row.query_name)} (${escapeHtml(row.source_file)}:${row.source_line})`)
+      .join(' / ');
+    const visibleKey = group.kind === 'sql'
+      ? group.rows[0].sql_text.replace(/\s+/g, ' ').trim().slice(0, 120)
+      : group.key;
+    return `<li><strong>${kindLabels[group.kind]}</strong><code>${escapeHtml(visibleKey)}</code><span>${locations}</span></li>`;
+  }).join('\n');
+
+  return `<section class="duplicate-audit" aria-labelledby="duplicateAuditTitle">
+    <div class="duplicate-audit-heading">
+      <h2 id="duplicateAuditTitle">重複登録監査</h2>
+      <span class="duplicate-status ${statusClass}">${statusText}</span>
+    </div>
+    ${details ? `<ul class="duplicate-list">${details}</ul>` : '<p class="duplicate-empty">登録位置・クエリ名・正規化SQLの重複はありません。</p>'}
+    <div class="duplicate-plan">
+      <h3>修正プラン</h3>
+      <ol>
+        <li><strong>登録位置</strong>の重複は、生成前に同じ source_file + source_line を1件へ統合する。</li>
+        <li><strong>クエリ名</strong>の重複は、用途を表す一意な名前へ変更してカタログを再生成する。</li>
+        <li><strong>同一SQL</strong>は呼び出し元を確認し、共通化できるものだけ実装を統合する（意図的な再利用は維持する）。</li>
+        <li>再生成後にこの監査を再実行し、修正必須が0件であることを確認してから反映する。</li>
+      </ol>
+    </div>
+  </section>`;
+}
+
 export function getD1QueryCatalogPage(
   username: string,
   rows: D1QueryCatalogRow[],
@@ -294,6 +376,7 @@ export function getD1QueryCatalogPage(
   const nameSortPressed = initialSort === 'name' ? 'true' : 'false';
   const countSortPressed = initialSort === 'count' ? 'true' : 'false';
   const tableSelectionMode = singleTableSelection ? 'single' : 'multiple';
+  const duplicateAuditHtml = renderDuplicateAudit(rows);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -500,6 +583,21 @@ export function getD1QueryCatalogPage(
     }
     select#verbFilter option { padding: 4px 6px; }
     .filter-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+    .duplicate-audit { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
+    .duplicate-audit-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .duplicate-audit h2 { font-size: 15px; }
+    .duplicate-audit h3 { font-size: 13px; margin-bottom: 4px; }
+    .duplicate-status { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .duplicate-status-ok { color: light-dark(#176b3a, #70e09b); background: light-dark(#e8f8ee, #173c27); }
+    .duplicate-status-warning { color: light-dark(#8a5300, #ffd27a); background: light-dark(#fff5dc, #3d3015); }
+    .duplicate-status-error { color: light-dark(#a12622, #ff928c); background: light-dark(#ffebe9, #461d1b); }
+    .duplicate-empty { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
+    .duplicate-list { margin: 9px 0 0 20px; font-size: 12px; }
+    .duplicate-list li { margin-bottom: 7px; }
+    .duplicate-list code { margin: 0 6px; color: var(--text-primary); }
+    .duplicate-list span { color: var(--text-muted); }
+    .duplicate-plan { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-color); }
+    .duplicate-plan ol { margin-left: 20px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
     .band-sort-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .sort-btn {
       padding: 4px 10px;
@@ -689,6 +787,7 @@ export function getD1QueryCatalogPage(
 
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
       <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
+      ${duplicateAuditHtml}
 
       <div class="band-sort-controls">
         <span class="filter-label">並び替え:</span>
