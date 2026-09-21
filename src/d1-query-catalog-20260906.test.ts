@@ -187,7 +187,7 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('登録位置の重複');
     expect(html).toContain('クエリ名の重複');
     expect(html).toContain('修正プラン');
-    expect(html).toContain('source_file + source_line');
+    expect(html).toContain('migration 0154');
   });
 
   it('空白と大文字小文字だけが異なる同一SQLは、自動削除せず要確認候補にする', () => {

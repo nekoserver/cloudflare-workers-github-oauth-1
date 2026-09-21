@@ -313,10 +313,10 @@ function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
     <div class="duplicate-plan">
       <h3>修正プラン</h3>
       <ol>
-        <li><strong>登録位置</strong>の重複は、生成前に同じ source_file + source_line を1件へ統合する。</li>
-        <li><strong>クエリ名</strong>の重複は、用途を表す一意な名前へ変更してカタログを再生成する。</li>
+        <li><strong>既存DB</strong>へmigration 0154を適用し、同名の旧行を情報量と更新日時で1件へ統合する。</li>
+        <li><strong>クエリ名</strong>の重複は用途を表す一意な名前へ変更し、世代ID付きの同期SQLを再生成する。</li>
         <li><strong>同一SQL</strong>は呼び出し元を確認し、共通化できるものだけ実装を統合する（意図的な再利用は維持する）。</li>
-        <li>再生成後にこの監査を再実行し、修正必須が0件であることを確認してから反映する。</li>
+        <li>同期SQLで今回の世代にない旧行を削除し、この監査の修正必須が0件であることを確認する。</li>
       </ol>
     </div>
   </section>`;

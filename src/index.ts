@@ -2407,6 +2407,44 @@ CREATE TABLE IF NOT EXISTS tree_view_snapshot_refresh_log (
   requested_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tree_view_snapshot_refresh_log_user ON tree_view_snapshot_refresh_log(user_id, requested_at);`,
+  '0154': `ALTER TABLE d1_query_catalog RENAME TO d1_query_catalog_legacy;
+CREATE TABLE d1_query_catalog (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  command TEXT NOT NULL,
+  command_confirmed INTEGER NOT NULL DEFAULT 0,
+  table_name TEXT,
+  source_file TEXT NOT NULL DEFAULT 'src/index.ts',
+  source_line INTEGER NOT NULL,
+  sql_text TEXT NOT NULL,
+  migration_file TEXT,
+  last_commit_hash TEXT,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_commit_at TEXT,
+  sync_generation TEXT
+);
+INSERT INTO d1_query_catalog (
+  query_name, command, command_confirmed, table_name, source_file, source_line,
+  sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
+)
+SELECT query_name, command, command_confirmed, table_name, source_file, source_line,
+       sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
+FROM (
+  SELECT d.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY lower(trim(query_name))
+           ORDER BY
+             ((table_name IS NOT NULL) + (migration_file IS NOT NULL) +
+              (last_commit_hash IS NOT NULL) + (last_commit_at IS NOT NULL)) DESC,
+             COALESCE(last_commit_at, recorded_at) DESC,
+             id DESC
+         ) AS duplicate_rank
+  FROM d1_query_catalog_legacy d
+)
+WHERE duplicate_rank = 1;
+DROP TABLE d1_query_catalog_legacy;
+CREATE INDEX idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
+CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2550,7 +2588,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   login_history: { id: 'pk', user_id: 'fk+idx' },
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
-  d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
+  d1_query_catalog: { id: 'pk', query_name: 'uk', table_name: 'idx' },
   alt_notify_ingest_log: { id: 'pk', received_at: 'idx', linked_request_id: 'idx' },
   dynamicneko_aichat_allowed_users: { id: 'pk', email: 'uk' },
   user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
