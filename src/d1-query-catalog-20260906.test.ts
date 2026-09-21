@@ -471,6 +471,29 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="1">');
   });
 
+  it('バインド値なしのSQLはアコーディオン内で行全体を中抜きの注意色枠にする', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      {
+        query_name: 'ListHeritageCities',
+        command: 'many',
+        command_confirmed: 1,
+        table_name: 'heritage_cities',
+        source_file: 'src/index.ts',
+        source_line: 1,
+        sql_text: 'SELECT city_name, country_code, ROUND(AVG(city_lat), 4) AS city_lat, ROUND(AVG(city_lon), 4) AS city_lon, MAX(population) AS population FROM heritage_cities GROUP BY city_name, country_code',
+        migration_file: null,
+        last_commit_hash: null,
+        last_commit_at: null,
+      },
+      { query_name: 'FindHeritageCity', command: 'one', command_confirmed: 1, table_name: 'heritage_cities', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT * FROM heritage_cities WHERE city_name = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
+    expect(html).toMatch(/tbody tr\.query-no-bindings\s*\{[^}]*outline: 2px solid #d97706;[^}]*outline-offset: -2px;/);
+    expect(html).not.toMatch(/tbody tr\.query-with-bindings\s*\{[^}]*outline:/);
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings\s*\{[^}]*background:/);
+  });
+
   it('文字列・コメント中であってもSQL本文に ? があれば入力必要に分類する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'QuestionText', command: 'many', command_confirmed: 1, table_name: 'messages', source_file: 'src/index.ts', source_line: 3, sql_text: "SELECT '?' AS mark FROM messages -- ? is documentation", migration_file: null, last_commit_hash: null, last_commit_at: null },
