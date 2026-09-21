@@ -694,6 +694,7 @@ export function getD1QueryCatalogPage(
     .sql-run-button:hover, .sql-run-button:focus-visible { background: var(--success-color); color: white; }
     .sql-run-button:disabled { cursor: wait; opacity: 0.65; }
     .sql-detail-help { font-size: 12px; line-height: 1.6; color: var(--text-muted); margin-bottom: 8px; }
+    #sqlBindingsInput { width: 100%; box-sizing: border-box; margin: 4px 0 10px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); background: var(--bg-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .sql-detail-code { margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--code-bg); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font: 12px/1.6 'Monaco', 'Courier New', monospace; }
     .sql-detail-status { font-size: 13px; color: var(--text-muted); }
     .sql-detail-status.ready { color: var(--success-color); }
@@ -829,6 +830,8 @@ export function getD1QueryCatalogPage(
           <button type="button" class="sql-run-button" id="runSqlButton" title="このSQLをD1で実行する">Run▶︎</button>
         </div>
         <div class="sql-detail-status" id="sqlRunStatus" aria-live="polite"></div>
+        <label class="sql-detail-help" for="sqlBindingsInput">バインド値（SQL内の ? の順序に合わせたJSON配列）</label>
+        <input type="text" id="sqlBindingsInput" value="[]" spellcheck="false" autocomplete="off">
         <pre class="sql-detail-code" id="sqlRunResult" hidden></pre>
       </div>
       <div class="sql-detail-section">
@@ -877,6 +880,7 @@ export function getD1QueryCatalogPage(
     var runSqlButton = document.getElementById('runSqlButton');
     var sqlRunStatus = document.getElementById('sqlRunStatus');
     var sqlRunResult = document.getElementById('sqlRunResult');
+    var sqlBindingsInput = document.getElementById('sqlBindingsInput');
     var postgresComparison = document.getElementById('postgresComparison');
     var currentSql = '';
     var currentSqlcInput = '';
@@ -892,10 +896,12 @@ export function getD1QueryCatalogPage(
       sqlRunStatus.textContent = 'D1でSQLを実行しています…';
       sqlRunStatus.className = 'sql-detail-status';
       try {
+        var bindings = JSON.parse(sqlBindingsInput.value || '[]');
+        if (!Array.isArray(bindings)) throw new Error('バインド値はJSON配列で指定してください。');
         var response = await fetch('/api/d1-query-catalog/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ queryName: queryName })
+          body: JSON.stringify({ queryName: queryName, bindings: bindings })
         });
         var payload = await response.json().catch(function() { return {}; });
         if (!response.ok) throw new Error(payload.error || ('HTTP ' + response.status));
@@ -1100,6 +1106,7 @@ export function getD1QueryCatalogPage(
       sqlDetailResult.textContent = '';
       sqlRunResult.hidden = true;
       sqlRunResult.textContent = '';
+      sqlBindingsInput.value = '[]';
       sqlRunStatus.textContent = '';
       sqlRunStatus.className = 'sql-detail-status';
       runSqlButton.disabled = false;
