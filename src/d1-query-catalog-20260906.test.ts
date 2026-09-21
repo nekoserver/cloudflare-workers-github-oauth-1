@@ -454,6 +454,8 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain("fetch('/api/d1-query-catalog/run'");
     expect(html).toContain("runSqlButton.addEventListener('click', runCurrentSql)");
     expect(html).toContain('id="sqlRunResult"');
+    expect(html).toContain('id="sqlBindingsInput"');
+    expect(html).toContain('JSON.stringify({ queryName: queryName, bindings: bindings })');
   });
 
   it('詳細モーダルからSQLite(D1)検査を明示的に実行できる', () => {
@@ -575,6 +577,55 @@ describe('POST /api/d1-query-catalog/run', () => {
       body: JSON.stringify({ queryName: 'Missing' }),
     }, { JWT_SECRET, DB: db });
     expect(res.status).toBe(404);
+  });
+
+  it('カタログSQLのプレースホルダーへリクエストの値をバインドして実行する', async () => {
+    const authHeader = await makeAuthHeader();
+    const all = vi.fn().mockResolvedValue({ results: [{ id: 7 }], success: true });
+    const executionBind = vi.fn().mockReturnValue({ all });
+    const catalogFirst = vi.fn().mockResolvedValue({
+      sql_text: 'SELECT id FROM items WHERE user_id = ? AND score >= ?',
+      command: 'many',
+    });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('user_sessions')) {
+          return { bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }) };
+        }
+        if (sql.includes('FROM d1_query_catalog')) {
+          return { bind: vi.fn().mockReturnValue({ first: catalogFirst }) };
+        }
+        return { bind: executionBind, all, run: vi.fn() };
+      }),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'ItemsByScore', bindings: ['user-1', 80] }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(200);
+    expect(executionBind).toHaveBeenCalledWith('user-1', 80);
+    expect(all).toHaveBeenCalledOnce();
+  });
+
+  it('必要なバインド値が不足するとD1実行前に必要数を返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const catalogFirst = vi.fn().mockResolvedValue({ sql_text: 'SELECT * FROM items WHERE user_id = ?', command: 'many' });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('user_sessions')) {
+          return { bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }) };
+        }
+        return { bind: vi.fn().mockReturnValue({ first: catalogFirst }) };
+      }),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'Items', bindings: [] }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'このSQLには1個のバインド値が必要です（受信: 0個）。', bindingCount: 1 });
   });
 });
 

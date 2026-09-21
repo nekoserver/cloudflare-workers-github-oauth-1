@@ -74,6 +74,7 @@ import {
   stripHtmlTags,
 } from './utils/ghAttach';
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+import { getD1BindingCount, validateD1BindingValues } from './utils/d1QueryBindings';
 import {
   buildGithubRepositoryApiUrl,
   buildGithubTreeApiUrl,
@@ -11896,7 +11897,7 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
 // 実行する。これによりRunボタンを任意SQL実行APIとして転用できないようにする。
 app.post('/api/d1-query-catalog/run', authMiddleware, async (c) => {
   if (!c.env.DB) return c.json({ error: 'DB未設定のためSQLを実行できません。' }, 503);
-  const body = await c.req.json<{ queryName?: string }>().catch(() => null);
+  const body = await c.req.json<{ queryName?: string; bindings?: unknown }>().catch(() => null);
   const queryName = body?.queryName?.trim();
   if (!queryName || queryName.length > 200) {
     return c.json({ error: '有効なクエリ名を指定してください。' }, 400);
@@ -11908,7 +11909,12 @@ app.post('/api/d1-query-catalog/run', authMiddleware, async (c) => {
     ).bind(queryName).first<{ sql_text: string; command: string }>();
     if (!catalogRow?.sql_text) return c.json({ error: '指定されたSQLはカタログにありません。' }, 404);
 
-    const statement = c.env.DB.prepare(catalogRow.sql_text);
+    const bindingCount = getD1BindingCount(catalogRow.sql_text);
+    const validation = validateD1BindingValues(body?.bindings, bindingCount);
+    if (!validation.ok) return c.json({ error: validation.error, bindingCount }, 400);
+
+    const prepared = c.env.DB.prepare(catalogRow.sql_text);
+    const statement = bindingCount > 0 ? prepared.bind(...validation.values) : prepared;
     if (catalogRow.command === 'exec') {
       const result = await statement.run();
       return c.json({ ok: true, result });
