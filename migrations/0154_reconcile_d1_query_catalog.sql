@@ -1,6 +1,6 @@
-ALTER TABLE d1_query_catalog RENAME TO d1_query_catalog_legacy;
+DROP TABLE IF EXISTS d1_query_catalog_0154_new;
 
-CREATE TABLE d1_query_catalog (
+CREATE TABLE d1_query_catalog_0154_new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   query_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
   command TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE d1_query_catalog (
   sync_generation TEXT
 );
 
-INSERT INTO d1_query_catalog (
+INSERT INTO d1_query_catalog_0154_new (
   query_name, command, command_confirmed, table_name, source_file, source_line,
   sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
 )
@@ -32,11 +32,12 @@ FROM (
              COALESCE(last_commit_at, recorded_at) DESC,
              id DESC
          ) AS duplicate_rank
-  FROM d1_query_catalog_legacy d
+  FROM d1_query_catalog d
 )
 WHERE duplicate_rank = 1;
 
-DROP TABLE d1_query_catalog_legacy;
+DROP TABLE d1_query_catalog;
+ALTER TABLE d1_query_catalog_0154_new RENAME TO d1_query_catalog;
 
 CREATE INDEX idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
 CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);
