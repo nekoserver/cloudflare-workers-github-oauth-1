@@ -46,4 +46,13 @@ describe('getTsubuyakiPage', () => {
     expect(html).toContain('0 / 3000');
     expect(html).toContain('MAX_LEN = 3000');
   });
+
+  it('多数のBlock Kitテンプレートを選択して投稿できる', () => {
+    const cardCount = (html.match(/class="template-card/g) || []).length;
+    expect(cardCount).toBeGreaterThanOrEqual(25);
+    expect(html).toContain('Block Kit テンプレート');
+    expect(html).toContain('data-template="incident"');
+    expect(html).toContain('data-template="approval"');
+    expect(html).toContain('template: selectedTemplate');
+  });
 });

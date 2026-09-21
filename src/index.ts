@@ -368,7 +368,7 @@ import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } fr
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
 import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
-import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
+import { validateFreeText, buildFreeTextSlackMessage, buildFreeTextSlackBlocks, isSlackPostTemplateId, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
 import { F1_CIRCUITS } from './data/f1Circuits';
@@ -10359,7 +10359,7 @@ app.get('/tsubuyaki', authMiddleware, async (c) => {
 
 app.post('/api/tsubuyaki', authMiddleware, async (c) => {
   const user = c.get('user');
-  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const body = await c.req.json<{ text?: string; template?: string }>().catch(() => null);
   const validated = validateFreeText(body?.text);
   if (!validated.ok) {
     return c.json({ ok: false, error: validated.error }, 400);
@@ -10367,8 +10367,10 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
 
   const displayName = user.name || user.sub;
   const message = buildFreeTextSlackMessage(displayName, validated.text);
+  const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
+  const blocks = buildFreeTextSlackBlocks(displayName, validated.text, template);
   const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
-  const result = await dispatchNotification(notifyConfig, { text: message });
+  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
     const status = result.status === undefined ? 503 : 502;
@@ -10396,7 +10398,7 @@ app.post('/api/tsubuyaki-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ userToken?: string; text?: string }>().catch(() => null);
+  const body = await c.req.json<{ userToken?: string; text?: string; template?: string }>().catch(() => null);
   const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
   if (!tokenResult.ok) {
     return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
@@ -10435,8 +10437,10 @@ app.post('/api/tsubuyaki-external', async (c) => {
   }
 
   const message = buildFreeTextSlackMessage(login, validated.text);
+  const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
+  const blocks = buildFreeTextSlackBlocks(login, validated.text, template);
   const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
-  const result = await dispatchNotification(notifyConfig, { text: message });
+  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
     const status = result.status === undefined ? 503 : 502;
