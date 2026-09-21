@@ -686,6 +686,8 @@ export function getD1QueryCatalogPage(
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
+    /* 入力不要のクエリは、表の背景を塗らずに行全体の中抜き枠で見分けられるようにする。 */
+    tbody tr.query-no-bindings { outline: 2px solid #d97706; outline-offset: -2px; }
     .binding-status-cell { white-space: nowrap; }
     .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }
     .query-no-bindings .binding-status { border-color: #d97706; background: transparent; color: light-dark(#92400e, #fcd34d); }
