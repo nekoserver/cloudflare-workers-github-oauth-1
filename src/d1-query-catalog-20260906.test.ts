@@ -201,14 +201,15 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('意図的な再利用は維持する');
   });
 
-  it('重複がない場合は監査済みであることを明示する', () => {
+  it('重複がない場合は重複登録監査を表示しない', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/a.ts', source_line: 1, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'users', source_file: 'src/b.ts', source_line: 2, sql_text: 'UPDATE users SET name = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
 
-    expect(html).toContain('重複は検出されませんでした');
-    expect(html).toContain('登録位置・クエリ名・正規化SQLの重複はありません。');
+    expect(html).not.toContain('重複登録監査');
+    expect(html).not.toContain('<section class="duplicate-audit"');
+    expect(html).not.toContain('修正プラン');
   });
 
   it('発行SQL種別の複数選択セレクトボックスが、出現回数の多い順で表示される', () => {
