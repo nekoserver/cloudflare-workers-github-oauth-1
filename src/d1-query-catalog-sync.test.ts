@@ -52,6 +52,16 @@ describe('D1 query catalog snapshot synchronization', () => {
     expect(generator).toContain('DELETE FROM d1_query_catalog WHERE sync_generation IS NULL OR sync_generation <>');
   });
 
+  it('同一SQLの各用途は明示した安定クエリ名で同期する', () => {
+    expect(generator).toContain('explicitQueryName(q.offset)');
+    expect(worker).toContain('// d1-query-name: AutoRegisterTableColumns');
+    expect(worker).toContain('// d1-query-name: StatusTablePreviewColumns');
+    expect(worker).toContain('// d1-query-name: InsertWebhookAiSummaryReview');
+    expect(worker).toContain('// d1-query-name: InsertAiSummaryFeedbackReview');
+    expect(worker).toContain('// d1-query-name: SelectBulkRegisterExistingWines');
+    expect(worker).toContain('// d1-query-name: SelectWineSeedConsistencyNames');
+  });
+
   it('抽出失敗時は全削除につながる同期SQLを生成しない', () => {
     expect(generator).toContain('if (matches.length === 0)');
     expect(generator).toContain('refusing to generate a destructive synchronization file');

@@ -4037,6 +4037,7 @@ async function autoRegisterTablesFromSqliteMaster(
     let previewSql = `SELECT * FROM ${tableName} LIMIT 20`;
     let pkColumn: string | null = null;
     try {
+      // d1-query-name: AutoRegisterTableColumns
       const pragma = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string; pk: number }>();
       const cols = (pragma.results ?? []).map((c) => c.name);
       pkColumn = (pragma.results ?? []).find((c) => c.pk > 0)?.name ?? null;
@@ -8317,6 +8318,7 @@ app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (
   const catId = Number(body.category_id);
   if (!catId || isNaN(catId)) return jsonUtf8({ error: 'category_id は必須です' }, 400);
   try {
+    // d1-query-name: SelectCategoryGroupForAdd
     const row = await c.env.DB.prepare(
       `SELECT category_ids FROM aichat_category_groups WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
     ).bind(groupId, user.sub).first<{ category_ids: string }>();
@@ -8327,6 +8329,7 @@ app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (
       ids.push(catId);
       ids.sort((a, b) => a - b);
     }
+    // d1-query-name: UpdateCategoryGroupAfterAdd
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
@@ -8352,6 +8355,7 @@ app.post('/api/aichat/category-groups/:id/remove-category', authMiddleware, asyn
   const catId = Number(body.category_id);
   if (!catId || isNaN(catId)) return jsonUtf8({ error: 'category_id は必須です' }, 400);
   try {
+    // d1-query-name: SelectCategoryGroupForRemove
     const row = await c.env.DB.prepare(
       `SELECT category_ids FROM aichat_category_groups WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
     ).bind(groupId, user.sub).first<{ category_ids: string }>();
@@ -8359,6 +8363,7 @@ app.post('/api/aichat/category-groups/:id/remove-category', authMiddleware, asyn
     let ids: number[] = [];
     try { ids = JSON.parse(row.category_ids); } catch { /* ignore */ }
     ids = ids.filter((id) => id !== catId);
+    // d1-query-name: UpdateCategoryGroupAfterRemove
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
@@ -12299,6 +12304,7 @@ export async function bulkRegisterWines(
   seeds: WineSeedRow[],
   limit?: number,
 ): Promise<WineBulkRegisterResult> {
+  // d1-query-name: SelectBulkRegisterExistingWines
   const existingRows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
   const existingSet = new Set((existingRows.results ?? []).map((r) => r.wine_name));
   const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
@@ -12314,6 +12320,7 @@ export async function bulkRegisterWines(
         errors.push({ wine: w.wine, error: '埋め込みが空でした(AI呼び出し失敗の可能性があります)' });
         continue;
       }
+      // d1-query-name: SelectBulkRegisterWineId
       const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(w.wine).first<{ id: number }>();
       if (!idRow) {
         errors.push({ wine: w.wine, error: '埋め込み保存後にIDが取得できませんでした' });
@@ -12567,6 +12574,7 @@ export async function checkWineSeedConsistency(
   db: D1Database,
   seeds: WineSeedRow[],
 ): Promise<WineSeedConsistencyResult> {
+  // d1-query-name: SelectWineSeedConsistencyNames
   const rows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
   const embeddedSet = new Set((rows.results ?? []).map((r) => r.wine_name));
   const missing = seeds.filter((s) => !embeddedSet.has(s.wine)).map((s) => s.wine);
@@ -12631,6 +12639,7 @@ export async function bulkRegisterWineMetadata(
 
   for (const row of seeds) {
     try {
+      // d1-query-name: SelectWineMetadataEmbeddingId
       const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(row.wine_name).first<{ id: number }>();
       if (!idRow) {
         skipped++;
@@ -17183,6 +17192,7 @@ app.get('/status', authMiddleware, async (c) => {
 
       if (groupRows.results && groupRows.results.length > 0) {
         const groupIds = groupRows.results.map(g => g.id);
+        // d1-query-name: SelectStatusRepoGroupMembers
         const memberRows = await db.prepare(
           `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
         ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
@@ -17291,6 +17301,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: StatusTablePreviewColumns
     const columnsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
     const pragmaColumns = (columnsResult.results ?? []).map((column) => column.name);
     const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
@@ -17330,6 +17341,7 @@ app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: StatusYearMonthSummaryColumns
     const colsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
     const cols = (colsResult.results ?? []).map((r) => r.name);
     if (!cols.includes('last_updated_at')) {
@@ -17418,6 +17430,7 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
 
     for (const tName of tableNames) {
       const colsResult = await db
+        // d1-query-name: StatusSchemaTableColumns
         .prepare(`PRAGMA table_info(${tName})`)
         .all<{ name: string; type: string; pk: number; notnull: number }>();
       const cols = (colsResult.results ?? []).map((col) => {
@@ -17446,6 +17459,7 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
       }
 
       const fkResult = await db
+        // d1-query-name: StatusSchemaForeignKeys
         .prepare(`PRAGMA foreign_key_list(${tName})`)
         .all<{ table: string; from: string; to: string }>();
       for (const fk of fkResult.results ?? []) {
@@ -17519,6 +17533,7 @@ async function loadSchemaRelations(db: D1Database): Promise<{
 
   for (const tName of tableNames) {
     const colsResult = await db
+      // d1-query-name: SchemaRelationsTableColumns
       .prepare(`PRAGMA table_info(${tName})`)
       .all<{ name: string; type: string }>();
     const cols = (colsResult.results ?? []).map((col) => ({
@@ -17528,6 +17543,7 @@ async function loadSchemaRelations(db: D1Database): Promise<{
     }));
 
     const fkResult = await db
+      // d1-query-name: SchemaRelationsForeignKeys
       .prepare(`PRAGMA foreign_key_list(${tName})`)
       .all<{ table: string; from: string; to: string }>();
     for (const fk of fkResult.results ?? []) {
@@ -18575,6 +18591,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   }> = [];
   if (c.env.DB) {
     try {
+      // d1-query-name: SelectRepositoryPageCloudflareSetupPending
       const pendingRows = await c.env.DB.prepare(`
         SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
         FROM cloudflare_setup_pending
@@ -18815,6 +18832,7 @@ app.post('/webhook/github', async (c) => {
     if (db && repo && senderLogin) {
       const now = new Date().toISOString();
       try {
+        // d1-query-name: InsertWebhookCloudflareSetupPending
         await db.prepare(`
           INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
@@ -19081,6 +19099,7 @@ app.post('/webhook/github', async (c) => {
               // 要約結果を自動診断してフィードバックを記録
               const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
               try {
+                // d1-query-name: InsertWebhookAiSummaryReview
                 await db.prepare(`
                   INSERT INTO ai_summary_reviews
                     (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -19106,6 +19125,7 @@ app.post('/webhook/github', async (c) => {
               if (commitAgentFetchError !== null) {
                 const commitFetchDiagnosis = classifyCommitAgentFetchError(commitAgentFetchError);
                 try {
+                  // d1-query-name: InsertWebhookAiSummaryReviewFallback
                   await db.prepare(`
                     INSERT INTO ai_summary_reviews
                       (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -20035,6 +20055,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     const classifyDebugEnabled = cookieValsSearch['keyword_classify_debug'] === 'on';
 
     try {
+      // d1-query-name: InsertCommitSearchLabel
       const labelInsert = await c.env.DB.prepare(
         `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
       ).bind(user.sub, q).run();
@@ -20047,6 +20068,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     // classify_status='ai_success' の場合はAI正常終了済みとみなし再分類しない。
     if (!isNewKeyword && searchLabelMode === 'auto-classify') {
       try {
+        // d1-query-name: SelectCommitSearchLabelStatus
         const existingRow = await c.env.DB.prepare(
           `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
         ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
@@ -20056,6 +20078,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       } catch {
         // classify_status カラム未作成（マイグレーション0038未実行）の場合は旧来チェックにフォールバック
         try {
+          // d1-query-name: SelectCommitSearchLabel
           const existingRowLegacy = await c.env.DB.prepare(
             `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
           ).bind(user.sub, q).first<{ label: string }>();
@@ -20095,11 +20118,13 @@ app.get('/api/repositories/search/keyword-classify-check', authMiddleware, async
   try {
     let row: { label: string; classify_status: string | null } | null = null;
     try {
+      // d1-query-name: SelectKeywordClassifyCheckLabelStatus
       row = await db.prepare(
         `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
       ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
     } catch {
       try {
+        // d1-query-name: SelectKeywordClassifyCheckLabel
         const legacy = await db.prepare(
           `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
         ).bind(user.sub, q).first<{ label: string }>();
@@ -20114,6 +20139,7 @@ app.get('/api/repositories/search/keyword-classify-check', authMiddleware, async
     }
     if (!registered) {
       try {
+        // d1-query-name: InsertKeywordClassifyCheckLabel
         await db.prepare(
           `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
         ).bind(user.sub, q).run();
@@ -22882,6 +22908,7 @@ app.get('/api/repo-groups', authMiddleware, async (c) => {
     }
 
     const groupIds = groups.map(g => g.id);
+    // d1-query-name: SelectApiRepoGroupMembers
     const memberRows = await db.prepare(
       `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
     ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
@@ -23576,6 +23603,7 @@ app.post('/api/ai-summary/:id/feedback', authMiddleware, async (c) => {
   const now = new Date().toISOString();
   const reviewerType = body.reviewer_type || 'human';
 
+  // d1-query-name: InsertAiSummaryFeedbackReview
   await db.prepare(`
     INSERT INTO ai_summary_reviews
       (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -23869,6 +23897,7 @@ app.get('/api/cloudflare-setup-pending', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: SelectCloudflareSetupPendingApi
     const rows = await db.prepare(`
       SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
       FROM cloudflare_setup_pending
@@ -23998,6 +24027,7 @@ app.post('/api/repositories', authMiddleware, async (c) => {
       const now = new Date().toISOString();
       const repoFullName = `${user.sub}/${result.repository.name}`;
       try {
+        // d1-query-name: InsertRepositoryCloudflareSetupPending
         const insertResult = await db.prepare(`
           INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
