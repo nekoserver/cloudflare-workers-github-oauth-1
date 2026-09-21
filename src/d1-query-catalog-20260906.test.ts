@@ -433,7 +433,7 @@ describe('GET /d1-query-catalog', () => {
     expect(countIdx).toBeLessThan(nameIdx);
   });
 
-  it('バインド値なしを注意色、入力必要を安全色のラベルで示し、行の背景色は変えない', () => {
+  it('バインド値なしを注意色、入力必要を安全色の中抜き枠で示し、行の背景色は変えない', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'ListItems', command: 'many', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT * FROM items', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'FindItem', command: 'one', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 2, sql_text: "SELECT * FROM items WHERE id = ? AND note = '?'", migration_file: null, last_commit_hash: null, last_commit_at: null },
@@ -453,6 +453,22 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toMatch(/\.binding-summary-required\s*\{[^}]*border-color: #16a34a;/);
     expect(html).toMatch(/\.query-no-bindings \.binding-status\s*\{[^}]*border-color: #d97706;/);
     expect(html).toMatch(/\.query-with-bindings \.binding-status\s*\{[^}]*border-color: #16a34a;/);
+    expect(html).toMatch(/\.binding-summary-no\s*\{[^}]*background: transparent;/);
+    expect(html).toMatch(/\.binding-summary-required\s*\{[^}]*background: transparent;/);
+    expect(html).toMatch(/\.query-no-bindings \.binding-status\s*\{[^}]*background: transparent;/);
+    expect(html).toMatch(/\.query-with-bindings \.binding-status\s*\{[^}]*background: transparent;/);
+  });
+
+  it('SQL本文に ? も $ も無い場合だけバインド値なしに分類する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'WineNames', command: 'many', command_confirmed: 1, table_name: 'wine_embeddings', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT wine_name FROM wine_embeddings', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'WineByName', command: 'one', command_confirmed: 1, table_name: 'wine_embeddings', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT wine_name FROM wine_embeddings WHERE wine_name = $wine_name', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<span class="binding-summary-no">入力不要 1</span>');
+    expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
+    expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
+    expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="1">');
   });
 
   it('文字列・コメント中であってもSQL本文に ? があれば入力必要に分類する', () => {

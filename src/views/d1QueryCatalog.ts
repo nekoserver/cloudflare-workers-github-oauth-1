@@ -177,9 +177,9 @@ function renderRow(row: D1QueryCatalogRow): string {
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
   const table = row.table_name ? escapeHtml(row.table_name) : '(不明)';
-  // カタログ上の「バインド値なし」は、SQL 本文に ? が一つもない行を指す。
+  // カタログ上の「バインド値なし」は、SQL 本文に ? も $ も一つもない行を指す。
   // 実行時の値検証とは異なり、引用符・コメント内も含めて本文をそのまま確認する。
-  const bindingCount = (row.sql_text.match(/\?/g) ?? []).length;
+  const bindingCount = (row.sql_text.match(/[?$]/g) ?? []).length;
   const bindingClass = bindingCount === 0 ? 'query-no-bindings' : 'query-with-bindings';
   const bindingLabel = bindingCount === 0 ? '入力不要' : `${bindingCount}個必要`;
   const bindingTitle = bindingCount === 0
@@ -202,7 +202,7 @@ function renderRow(row: D1QueryCatalogRow): string {
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
 function renderTableBand(table: string, rows: D1QueryCatalogRow[], classification?: D1QueryCatalogTableClassification): string {
   const rowsHtml = rows.map(renderRow).join('\n');
-  const noBindingCount = rows.filter(row => !row.sql_text.includes('?')).length;
+  const noBindingCount = rows.filter(row => !/[?$]/.test(row.sql_text)).length;
   const withBindingCount = rows.length - noBindingCount;
   const color = classification?.color ?? '#8b949e';
   const groupBadge = classification
@@ -658,8 +658,8 @@ export function getD1QueryCatalogPage(
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
     .band-binding-summary { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; font-weight: 800; white-space: nowrap; }
     .band-binding-summary span { padding: 2px 7px; border: 1px solid; border-radius: 999px; }
-    .binding-summary-no { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
-    .binding-summary-required { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
+    .binding-summary-no { border-color: #d97706; background: transparent; color: light-dark(#92400e, #fcd34d); }
+    .binding-summary-required { border-color: #16a34a; background: transparent; color: light-dark(#166534, #86efac); }
     .table-group-badge, .table-fk-badge {
       border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
     }
@@ -688,8 +688,8 @@ export function getD1QueryCatalogPage(
     td { color: var(--text-primary); }
     .binding-status-cell { white-space: nowrap; }
     .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }
-    .query-no-bindings .binding-status { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
-    .query-with-bindings .binding-status { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
+    .query-no-bindings .binding-status { border-color: #d97706; background: transparent; color: light-dark(#92400e, #fcd34d); }
+    .query-with-bindings .binding-status { border-color: #16a34a; background: transparent; color: light-dark(#166534, #86efac); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-token { font-weight: 600; }
     .sql-keyword { color: #7c3aed; font-weight: 800; }
