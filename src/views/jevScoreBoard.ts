@@ -94,6 +94,12 @@ ${getThemeInitScript()}
   #topbar .theme-toggle svg { width: 15px; height: 15px; }
   main { padding: 16px; max-width: 100%; overflow-x: auto; }
   .search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; max-width: 560px; }
+  .live-pulse { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); max-width: 900px; }
+  .live-pulse-head { display: flex; align-items: center; gap: 7px; color: var(--text-muted); font-size: 12px; margin-bottom: 7px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.16); }
+  .pulse-items { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pulse-chip { font-size: 12px; padding: 5px 8px; border-radius: 999px; background: var(--bg-secondary); }
+  .pulse-up { color: #16a34a; } .pulse-down { color: #dc2626; } .pulse-new { color: var(--text-muted); }
   .th-mode-toggle { display: flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
   .th-mode-btn {
     background: var(--input-bg);
@@ -176,6 +182,10 @@ ${getThemeInitScript()}
     ${getThemeToggleHTML()}
   </div>
   <main>
+    <section class="live-pulse" aria-live="polite">
+      <div class="live-pulse-head"><span class="live-dot"></span><strong>Jev Live Pulse</strong><span id="pulseUpdated">接続中...</span></div>
+      <div id="pulseItems" class="pulse-items">直近1時間の評価を集計しています</div>
+    </section>
     <div class="search-bar">
       <input type="text" id="keywordInput" placeholder="検索キーワード(質問文・回答文)" value="${escapeHtml(keyword)}">
       <button id="searchBtn">検索</button>
@@ -301,6 +311,24 @@ function runSearch() {
     .then(function(d) { renderRows(d.hitCount || 0, d.rows || []); })
     .catch(function() { renderRows(0, []); });
 }
+
+function refreshLivePulse() {
+  fetch('/api/jev-score-board/live-pulse', { credentials: 'same-origin' })
+    .then(function(r) { if (!r.ok) throw new Error('pulse'); return r.json(); })
+    .then(function(d) {
+      document.getElementById('pulseUpdated').textContent = '直近1時間 / ' + new Date(d.generatedAt).toLocaleTimeString() + '更新';
+      var items = d.items || [];
+      document.getElementById('pulseItems').innerHTML = items.length ? items.map(function(item) {
+        var deltaText = item.delta === null ? 'NEW' : ((item.delta >= 0 ? '+' : '') + item.delta.toFixed(2));
+        var deltaClass = item.delta === null ? 'pulse-new' : (item.delta >= 0 ? 'pulse-up' : 'pulse-down');
+        return '<span class="pulse-chip">' + escHtml(item.label) + ' <b>' + item.average.toFixed(2) + '</b> <span class="' + deltaClass + '">' + deltaText + '</span> · ' + item.sampleCount + '件</span>';
+      }).join('') : '<span class="pulse-new">直近1時間の評価はまだありません</span>';
+    })
+    .catch(function() { document.getElementById('pulseUpdated').textContent = '再接続待ち'; });
+}
+
+refreshLivePulse();
+setInterval(refreshLivePulse, 10000);
 
 document.getElementById('searchBtn').addEventListener('click', runSearch);
 document.getElementById('keywordInput').addEventListener('keydown', function(e) {

@@ -377,6 +377,7 @@ import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type R
 import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
 import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
 import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
+import { buildJevLivePulse, type JevLivePulseRow } from './utils/jevLivePulse';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
@@ -17912,6 +17913,39 @@ app.get('/api/jev-score-board/rows', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-score-board] rows取得に失敗', { error: message });
     return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * 直近1時間のJev評価を、直前24時間の平均との差が大きい順に返すライブ指標。
+ * 保存済みの評価を再利用するためJev APIへの追加課金はなく、ページ側が10秒ごとに
+ * 再取得することで、新しい評価が入るたびに品質の動きを可視化できる。
+ */
+app.get('/api/jev-score-board/live-pulse', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT l.id AS jev_label_id, l.question_text AS label_text,
+         AVG(CASE WHEN je.computed_at >= datetime('now', '-1 hour') THEN je.value END) AS recent_average,
+         AVG(CASE WHEN je.computed_at < datetime('now', '-1 hour')
+                   AND je.computed_at >= datetime('now', '-25 hours') THEN je.value END) AS baseline_average,
+         SUM(CASE WHEN je.computed_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) AS recent_count
+       FROM jev_labels l
+       LEFT JOIN jev_evaluations je ON je.jev_label_id = l.id
+         AND je.user_id = ? AND je.target_type = 'answer'
+       WHERE l.id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}
+       GROUP BY l.id, l.question_text`
+    ).bind(user.sub).all<JevLivePulseRow>();
+    return jsonUtf8({
+      generatedAt: new Date().toISOString(),
+      windowMinutes: 60,
+      items: buildJevLivePulse(result.results ?? []),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] live-pulse取得に失敗', { error: message });
+    return jsonUtf8({ error: 'live-pulse取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
