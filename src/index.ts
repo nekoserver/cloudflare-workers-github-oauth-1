@@ -32,6 +32,7 @@ import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, 
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
@@ -472,7 +473,6 @@ import {
   LOGIN_METHOD_PUBLIC_KEY,
   type LoginMethod,
 } from './utils/loginHistory';
-import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
@@ -16515,32 +16515,37 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
 
 /**
  * Cloudflare D1 ダッシュボード API
- * D1 データベース一覧と各テーブルの行数を返す
+ * Cloudflare REST API経由でD1データベースとテーブルの一覧を返す
  */
 app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
-  if (!c.env.DB) {
-    return jsonUtf8({ error: 'DB未設定です', configured: false }, 200);
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_KEYまたはCLOUDFLARE_ACCOUNT_IDが未設定です', configured: false }, 200);
   }
   try {
-    const names = await listD1TableNames(c.env.DB);
-    return jsonUtf8({
-      configured: true,
-      databases: [
-        { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
-      ],
+    const databases = await listCloudflareD1Databases({
+      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
+      apiKey: c.env.CLOUDFLARE_API_KEY,
+      apiEmail: c.env.CLOUDFLARE_API_EMAIL,
     });
+    return jsonUtf8({ configured: true, databases, provider: 'cloudflare-api' });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
   }
 });
 
 app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
-  if (!c.env.DB) {
-    return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'Cloudflare API認証情報が未設定です' }, 503);
   }
   try {
-    const tables = await loadCfDashboardTables(c.env.DB);
-    return jsonUtf8({ tables });
+    const tables = await listCloudflareD1Tables({
+      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
+      apiKey: c.env.CLOUDFLARE_API_KEY,
+      apiEmail: c.env.CLOUDFLARE_API_EMAIL,
+    }, c.req.param('dbId'));
+    const { wranglerBlake3Hex } = await import('./utils/wranglerBlake3Server');
+    const digest = await wranglerBlake3Hex(JSON.stringify(tables));
+    return jsonUtf8({ tables, wasm: { module: 'wrangler/blake3-wasm', digest } });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
