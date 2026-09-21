@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getD1BindingCount } from '../utils/d1QueryBindings';
 
 const OWNER_REPO = 'nekoserver/cloudflare-workers-github-oauth-1';
 
@@ -177,7 +178,13 @@ function renderRow(row: D1QueryCatalogRow): string {
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
   const table = row.table_name ? escapeHtml(row.table_name) : '(不明)';
-  return `<tr data-verb="${verb}">
+  const bindingCount = getD1BindingCount(row.sql_text);
+  const bindingClass = bindingCount === 0 ? 'query-no-bindings' : 'query-with-bindings';
+  const bindingLabel = bindingCount === 0 ? '入力不要' : `${bindingCount}個必要`;
+  const bindingTitle = bindingCount === 0
+    ? 'このSQLにはバインド値がなく、そのまま実行できます'
+    : `このSQLの実行には${bindingCount}個のバインド値が必要です`;
+  return `<tr class="${bindingClass}" data-verb="${verb}" data-binding-count="${bindingCount}">
     <td><span class="query-detail-name">${escapeHtml(row.query_name)}</span></td>
     <td>:<span class="query-detail-command">${escapeHtml(row.command)}</span> ${badge}<span class="query-detail-confirmed" hidden>${row.command_confirmed ? '確定' : '推測'}</span></td>
     <td class="commit-at-cell"><code>${commitAt}</code></td>
@@ -185,6 +192,7 @@ function renderRow(row: D1QueryCatalogRow): string {
     <td><span class="query-detail-migration">${migration}</span></td>
     <td>${commit}</td>
     <td><span class="query-detail-source">${escapeHtml(row.source_file)}:${row.source_line}</span><span class="query-detail-table" hidden>${table}</span><span class="query-detail-commit-at" hidden>${commitAt}</span></td>
+    <td class="binding-status-cell"><span class="binding-status" title="${bindingTitle}">${bindingLabel}</span></td>
   </tr>`;
 }
 
@@ -193,6 +201,8 @@ function renderRow(row: D1QueryCatalogRow): string {
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
 function renderTableBand(table: string, rows: D1QueryCatalogRow[], classification?: D1QueryCatalogTableClassification): string {
   const rowsHtml = rows.map(renderRow).join('\n');
+  const noBindingCount = rows.filter(row => getD1BindingCount(row.sql_text) === 0).length;
+  const withBindingCount = rows.length - noBindingCount;
   const color = classification?.color ?? '#8b949e';
   const groupBadge = classification
     ? `<span class="table-group-badge" data-group="${escapeHtml(classification.group)}">${escapeHtml(classification.groupLabel)}</span>`
@@ -207,6 +217,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
       <span class="band-count">${rows.length}件</span>
       <span class="band-name">${escapeHtml(table)}</span>
       ${groupBadge}${fkBadge}
+      <span class="band-binding-summary" aria-label="バインド値の内訳"><span class="binding-summary-no">入力不要 ${noBindingCount}</span><span class="binding-summary-required">入力必要 ${withBindingCount}</span></span>
       <span class="band-toggle-arrow">▾</span>
     </button>
     <div class="table-wrap" hidden>
@@ -220,6 +231,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
             <th>migration</th>
             <th>最終変更コミット</th>
             <th>位置</th>
+            <th>バインド</th>
           </tr>
         </thead>
         <tbody>
@@ -643,6 +655,10 @@ export function getD1QueryCatalogPage(
     .band-header:hover { background: var(--border-color); }
     .band-header[aria-expanded="true"] { border-radius: 8px 8px 0 0; }
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
+    .band-binding-summary { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; font-weight: 800; white-space: nowrap; }
+    .band-binding-summary span { padding: 2px 7px; border: 1px solid; border-radius: 999px; }
+    .binding-summary-no { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
+    .binding-summary-required { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
     .table-group-badge, .table-fk-badge {
       border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
     }
@@ -657,7 +673,7 @@ export function getD1QueryCatalogPage(
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
-    .band-toggle-arrow { margin-left: auto; color: var(--text-muted); transition: transform 0.15s; }
+    .band-toggle-arrow { color: var(--text-muted); transition: transform 0.15s; }
     .band-header[aria-expanded="true"] .band-toggle-arrow { transform: rotate(180deg); }
     .table-band .table-wrap {
       border: 1px solid var(--border-color);
@@ -669,6 +685,14 @@ export function getD1QueryCatalogPage(
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
+    tbody tr.query-no-bindings td { background: light-dark(#f0fdf4, #102a1a); border-bottom-color: light-dark(#bbf7d0, #245c36); }
+    tbody tr.query-with-bindings td { background: light-dark(#fffbeb, #2d230f); border-bottom-color: light-dark(#fde68a, #66501b); }
+    tbody tr.query-no-bindings td:first-child { box-shadow: inset 4px 0 0 #22c55e; }
+    tbody tr.query-with-bindings td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
+    .binding-status-cell { white-space: nowrap; }
+    .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }
+    .query-no-bindings .binding-status { border-color: #16a34a; background: light-dark(#dcfce7, #12351f); color: light-dark(#166534, #86efac); }
+    .query-with-bindings .binding-status { border-color: #d97706; background: light-dark(#fef3c7, #3c2a0d); color: light-dark(#92400e, #fcd34d); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-token { font-weight: 600; }
     .sql-keyword { color: #7c3aed; font-weight: 800; }
