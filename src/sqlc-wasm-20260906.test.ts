@@ -83,6 +83,15 @@ describe('GET /sqlc-wasm', () => {
     expect(m![1]).toContain('sqlcParseQueryAnnotations');
   });
 
+  it('入力をデバウンスしてWASM解析結果をライブ更新する', () => {
+    const html = getSqlcWasmPage('tester');
+    expect(html).toContain('class="editor-grid"');
+    expect(html).toContain("inputSql.addEventListener('input'");
+    expect(html).toContain('window.setTimeout(parseInput, 250)');
+    expect(html).toContain("parseBtn.addEventListener('click', parseInput)");
+    expect(html).toContain('aria-live="polite"');
+  });
+
   it('script タグ内に不正なエスケープシーケンスが含まれない(単引用符エスケープ)', () => {
     const html = getSqlcWasmPage('tester');
     const scriptRe = /<script type="module">([\s\S]*?)<\/script>/;
