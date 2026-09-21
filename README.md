@@ -167,8 +167,11 @@ git config core.hooksPath .githooks
 
 ### D1ダッシュボード
 
-`/cf-dashboard` でアカウント内のD1データベースとテーブルを一覧表示できます。
-API Tokenを使う場合は、D1の読み取り権限を付与して次のsecretを設定してください。
+`/cf-dashboard` では、標準でこのWorkerの`DB`バインディングに接続されたD1データベースと
+テーブルを一覧表示します。この表示にはCloudflare APIのsecretは不要です。
+
+アカウント内の全D1データベースを一覧表示する場合のみ、D1の読み取り権限を付与した
+API Tokenと次のsecretを設定してください。
 
 ```bash
 wrangler secret put CLOUDFLARE_API_KEY
