@@ -218,7 +218,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
       <span class="band-count">${rows.length}件</span>
       <span class="band-name">${escapeHtml(table)}</span>
       ${groupBadge}${fkBadge}
-      <span class="band-binding-summary" aria-label="バインド値の内訳"><span class="binding-summary-no">入力不要 ${noBindingCount}</span><span class="binding-summary-required">入力必要 ${withBindingCount}</span></span>
+      <span class="band-binding-summary" aria-label="バインド値の内訳"><span class="binding-summary-no${noBindingCount > 0 ? ' has-items' : ''}">入力不要 ${noBindingCount}</span><span class="binding-summary-required">入力必要 ${withBindingCount}</span></span>
       <span class="band-toggle-arrow">▾</span>
     </button>
     <div class="table-wrap" hidden>
@@ -658,8 +658,9 @@ export function getD1QueryCatalogPage(
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
     .band-binding-summary { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; font-weight: 800; white-space: nowrap; }
     .band-binding-summary span { padding: 2px 7px; border: 1px solid; border-radius: 999px; }
-    .binding-summary-no { border-color: #d97706; background: transparent; color: light-dark(#92400e, #fcd34d); }
-    .binding-summary-required { border-color: #16a34a; background: transparent; color: light-dark(#166534, #86efac); }
+    .binding-summary-no { border-color: var(--border-color); background: transparent; color: var(--text-muted); }
+    .binding-summary-no.has-items { border-color: #16a34a; background: light-dark(#dcfce7, #143d24); color: light-dark(#166534, #86efac); }
+    .binding-summary-required { border-color: #dc2626; background: transparent; color: light-dark(#991b1b, #fca5a5); }
     .table-group-badge, .table-fk-badge {
       border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
     }
