@@ -1,5 +1,5 @@
 /**
- * migrations/0129_create_d1_query_catalog.sql・0130_add_last_commit_at_to_d1_query_catalog.sql の
+ * migrations/0129・0130・0154 適用後の
  * d1_query_catalog テーブルへ、src/index.ts の db.prepare(`SQL`) 呼び出し一覧をINSERTするSQLを生成する。
  *
  * scripts/build-d1-query-catalog.js と同じ抽出ロジック(重複実装、リポジトリの
@@ -7,9 +7,11 @@
  *
  * 実行例:
  *   node scripts/generate-d1-query-catalog-inserts.js > /tmp/d1-query-catalog-inserts.sql
+ *   npx wrangler d1 execute workers-github-oauth --remote --file=/tmp/d1-query-catalog-inserts.sql
  */
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 const REPO = path.resolve(__dirname, "..");
@@ -88,6 +90,16 @@ for (const q of matches) {
   q.table = q.tables[0] || null;
 }
 
+if (matches.length === 0) {
+  throw new Error("No catalog queries were extracted; refusing to generate a destructive synchronization file");
+}
+const duplicateNames = matches
+  .map(q => q.name.toLowerCase())
+  .filter((name, index, names) => names.indexOf(name) !== index);
+if (duplicateNames.length > 0) {
+  throw new Error(`Duplicate catalog query names: ${[...new Set(duplicateNames)].join(", ")}`);
+}
+
 // --- migration cross-reference (first matching migration file only) ---
 const migDir = path.join(REPO, "migrations");
 const migFiles = fs.readdirSync(migDir).filter(f => f.endsWith(".sql")).sort();
@@ -147,16 +159,24 @@ function sqlValue(s) {
 
 const BATCH_SIZE = 40;
 let out = [];
+// 同じ生成結果は同じ世代IDになる。各行へ世代IDを書き込み、最後に今回の抽出結果へ
+// 含まれない旧行を削除することで、行番号変更・クエリ削除・NULLを含む旧レコードを
+// 次回同期まで残さない。
+const syncGeneration = crypto.createHash("sha256")
+  .update(JSON.stringify(matches.map(q => [q.name, q.sourceLine, q.sql])))
+  .digest("hex");
 for (let i = 0; i < matches.length; i += BATCH_SIZE) {
   const batch = matches.slice(i, i + BATCH_SIZE);
   out.push(
-    "INSERT INTO d1_query_catalog (query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash, last_commit_at) VALUES\n" +
+    "INSERT INTO d1_query_catalog (query_name, command, command_confirmed, table_name, source_file, source_line, sql_text, migration_file, last_commit_hash, last_commit_at, sync_generation) VALUES\n" +
     batch.map(q =>
-      `(${sqlValue(q.name)}, ${sqlValue(q.cmd)}, ${q.confirmed ? 1 : 0}, ${sqlValue(q.table)}, 'src/index.ts', ${q.startLine}, ${sqlValue(q.sql)}, ${sqlValue(q.migrationFile)}, ${sqlValue(q.lastCommit)}, ${sqlValue(q.lastCommitAt)})`
+      `(${sqlValue(q.name)}, ${sqlValue(q.cmd)}, ${q.confirmed ? 1 : 0}, ${sqlValue(q.table)}, 'src/index.ts', ${q.startLine}, ${sqlValue(q.sql)}, ${sqlValue(q.migrationFile)}, ${sqlValue(q.lastCommit)}, ${sqlValue(q.lastCommitAt)}, ${sqlValue(syncGeneration)})`
     ).join(",\n") +
-    "\nON CONFLICT(source_file, source_line) DO UPDATE SET query_name = excluded.query_name, command = excluded.command, command_confirmed = excluded.command_confirmed, table_name = excluded.table_name, sql_text = excluded.sql_text, migration_file = excluded.migration_file, last_commit_hash = excluded.last_commit_hash, last_commit_at = excluded.last_commit_at;"
+    "\nON CONFLICT(query_name) DO UPDATE SET command = excluded.command, command_confirmed = excluded.command_confirmed, table_name = excluded.table_name, source_file = excluded.source_file, source_line = excluded.source_line, sql_text = excluded.sql_text, migration_file = excluded.migration_file, last_commit_hash = excluded.last_commit_hash, last_commit_at = excluded.last_commit_at, sync_generation = excluded.sync_generation, recorded_at = datetime('now');"
   );
 }
 
+out.push(`DELETE FROM d1_query_catalog WHERE sync_generation IS NULL OR sync_generation <> ${sqlValue(syncGeneration)};`);
+
 process.stdout.write(out.join("\n\n") + "\n");
-console.error(`wrote ${matches.length} rows in ${out.length} batched INSERT statements`);
+console.error(`wrote ${matches.length} rows in ${Math.ceil(matches.length / BATCH_SIZE)} batched INSERT statements`);
