@@ -60,6 +60,14 @@ function isDynamicTableRef(sql) {
   return /\$\{[^}]*\}/.test(sql);
 }
 
+function explicitQueryName(offset) {
+  const before = src.slice(Math.max(0, offset - 500), offset);
+  const markers = [...before.matchAll(/\/\/\s*d1-query-name:\s*([A-Za-z][A-Za-z0-9]*)/g)];
+  const marker = markers[markers.length - 1];
+  if (!marker || /\.prepare\s*\(/.test(before.slice((marker.index || 0) + marker[0].length))) return null;
+  return marker[1];
+}
+
 function pascal(s) {
   return s.split(/[_\s]+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
 }
@@ -77,7 +85,7 @@ while ((m = prepareRe.exec(src))) {
   const method = methodMatch ? methodMatch[1] : null;
   const confirmed = !!method;
   const cmd = confirmed ? cmdByMethod[method] : (inferVerb(sql) === "SELECT" ? "many" : "exec");
-  matches.push({ sql, startLine, confirmed, cmd, verb: inferVerb(sql), tables: tableNames(sql) });
+  matches.push({ sql, startLine, offset: m.index, confirmed, cmd, verb: inferVerb(sql), tables: tableNames(sql) });
 }
 
 const seen = new Map();
@@ -86,7 +94,7 @@ for (const q of matches) {
   const base = pascal(q.verb.toLowerCase()) + pascal(table);
   const c = (seen.get(base) || 0) + 1;
   seen.set(base, c);
-  q.name = c > 1 ? `${base}${c}` : base;
+  q.name = explicitQueryName(q.offset) || (c > 1 ? `${base}${c}` : base);
   q.table = q.tables[0] || null;
 }
 
