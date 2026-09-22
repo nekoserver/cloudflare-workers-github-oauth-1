@@ -1023,6 +1023,10 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
   return lines.join('\n');
 }
 
+function formatTreeViewUpdateElapsedTime(elapsedMs: number): string {
+  return `実行時間: ${(Math.max(0, elapsedMs) / 1000).toFixed(3)}秒`;
+}
+
 export type SqlImpactCatalogRow = {
   queryName: string;
   command: string;
@@ -1337,10 +1341,14 @@ export async function interpretAichatSlashCommand(
     if (repoName !== undefined && !/^nekoserver\/[A-Za-z0-9_.-]+$/.test(repoName)) {
       return { handled: true, response: '❌ -R のリポジトリ名は nekoserver/リポジトリ名 の形式で指定してください' };
     }
+    const startedAt = Date.now();
     try {
       return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(force, repoName)) };
     } catch (err) {
-      return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        handled: true,
+        response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}\n${formatTreeViewUpdateElapsedTime(Date.now() - startedAt)}`,
+      };
     }
   }
 

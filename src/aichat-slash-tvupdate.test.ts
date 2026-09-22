@@ -22,6 +22,32 @@ describe('/neko tvupdate', () => {
     expect(result.handled && result.response).toContain('変更なし: 1件');
   });
 
+  it('手動更新にかかった時間を応答に表示する', async () => {
+    vi.useFakeTimers();
+    try {
+      const updateTreeView = vi.fn().mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1234));
+        return {
+          status: 'updated' as const,
+          updated: [],
+          unchanged: [],
+          failed: [],
+        };
+      });
+
+      const resultPromise = interpretAichatSlashCommand('/neko tvupdate', new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        updateTreeView,
+      });
+      await vi.advanceTimersByTimeAsync(1234);
+      const result = await resultPromise;
+
+      expect(result.handled && result.response).toContain('実行時間: 1.234秒');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('必要なD1テーブルがない場合と直近1時間に実行済みの場合は更新しない', async () => {
     const missing = await interpretAichatSlashCommand('/neko tvupdate', new Date(), {
       fetchLatestCommitAgentLog: async () => null,
@@ -79,6 +105,34 @@ describe('/neko tvupdate', () => {
       expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
     }
   );
+
+  it('変換された--forceでも強制更新の結果と実行時間を表示する', async () => {
+    vi.useFakeTimers();
+    try {
+      const updateTreeView = vi.fn().mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return {
+          status: 'updated' as const,
+          updated: ['nekoserver/repo-a'],
+          unchanged: [],
+          failed: [],
+        };
+      });
+
+      const resultPromise = interpretAichatSlashCommand('/neko tvupdate —force', new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        updateTreeView,
+      });
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
+
+      expect(updateTreeView).toHaveBeenCalledWith(true);
+      expect(result.handled && result.response).toContain('更新あり: 1件');
+      expect(result.handled && result.response).toContain('実行時間: 0.250秒');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('未知のオプションを拒否する', async () => {
     const updateTreeView = vi.fn();
