@@ -106,6 +106,34 @@ describe('/neko tvupdate', () => {
     }
   );
 
+  it('変換された--forceでも強制更新の結果と実行時間を表示する', async () => {
+    vi.useFakeTimers();
+    try {
+      const updateTreeView = vi.fn().mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return {
+          status: 'updated' as const,
+          updated: ['nekoserver/repo-a'],
+          unchanged: [],
+          failed: [],
+        };
+      });
+
+      const resultPromise = interpretAichatSlashCommand('/neko tvupdate —force', new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        updateTreeView,
+      });
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
+
+      expect(updateTreeView).toHaveBeenCalledWith(true);
+      expect(result.handled && result.response).toContain('更新あり: 1件');
+      expect(result.handled && result.response).toContain('実行時間: 0.250秒');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('未知のオプションを拒否する', async () => {
     const updateTreeView = vi.fn();
     const result = await interpretAichatSlashCommand('/neko tvupdate --unknown', new Date(), {
