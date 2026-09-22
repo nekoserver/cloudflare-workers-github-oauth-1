@@ -40,6 +40,8 @@ export type Bindings = {
   AICHAT_EXTERNAL_SECRET?: string;
   /** Jev(TypeSafe AI System One Model, https://api.typesafe.ai/v1/systemone)のAPIキー。wrangler secret putで設定する(平文で[vars]に書かない) */
   JEV_API_KEY?: string;
+  /** dynamicnekoのJev Playgroundだけに使用するBearer認証シークレット。他のexternal APIと共有しない */
+  JEV_PLAYGROUND_EXTERNAL_SECRET?: string;
   /**
    * jev-score-external・jev-stats-externalが受け取るuserToken(短寿命JWT、sub=email)の
    * 検証用シークレット。dynamicneko側の同名シークレットと同じ値をwrangler secret putで設定する。

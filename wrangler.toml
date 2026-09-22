@@ -51,6 +51,9 @@ CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 #   KIMI_CODE_EXTERNAL_SECRET  # dynamicnekoのNew SnippetウィジェットがPOST
 #                               # /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。
 #                               # dynamicneko側も同じ変数名(KIMI_CODE_EXTERNAL_SECRET)・同じ値で設定する
+#   JEV_PLAYGROUND_EXTERNAL_SECRET  # dynamicnekoのJev Playground専用Bearer認証シークレット。
+#     JEV_API_KEYの代理利用経路を他のexternal APIから分離するため、AICHAT_EXTERNAL_SECRETとは
+#     必ず異なる値をsecretで設定し、dynamicneko側にも同じ値を設定する。
 #   CURSOR_API_KEY  # /cursor-agent が使うCursor Background Agent APIのAPIキー
 #     未設定の場合、/cursor-agentからの起動は実行前に拒否される(Cursor APIへは
 #     リクエストしない)。secretで管理し、[vars]には平文で書かないこと。
