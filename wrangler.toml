@@ -89,6 +89,15 @@ binding = "DB"
 database_name = "workers-github-oauth"
 database_id = "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf"
 
+# `/neko tvupdate --force` は本番DBを変更せず、別D1へ最新スナップショットを
+# 強制保存して差分を表示する。レプリカ作成後、そのdatabase_idを指定した
+# DB_REPLICAバインディングをCloudflareのデプロイ設定へ追加し、本番DBと同じ
+# マイグレーションを適用すること（同じdatabase_idを指定してはならない）。
+# [[d1_databases]]
+# binding = "DB_REPLICA"
+# database_name = "workers-github-oauth-replica"
+# database_id = "<REPLICA_DATABASE_ID>"
+
 # Workers AI バインディング（PR要約に使用）
 [ai]
 binding = "AI"
