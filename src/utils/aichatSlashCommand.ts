@@ -971,7 +971,7 @@ export type AichatSlashCommandDeps = {
 };
 
 export type TreeViewUpdateOutcome = {
-  status: 'updated' | 'recent' | 'table_missing';
+  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
@@ -983,6 +983,13 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
   }
   if (outcome.status === 'recent') {
     return '## tree-view 手動更新\n過去1時間以内に更新された記録があるため、手動更新をスキップしました。';
+  }
+  if (outcome.status === 'no_repositories') {
+    return [
+      '## tree-view 手動更新',
+      '❌ 更新対象のリポジトリが0件のため、手動更新を実行できませんでした。',
+      'GitHub Appのinstallation_permissions同期状態を確認してください。',
+    ].join('\n');
   }
   const lines = [
     '## tree-view 手動更新',

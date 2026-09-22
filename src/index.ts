@@ -15253,7 +15253,7 @@ async function syncTreeViewSnapshots(
 }
 
 type TreeViewManualRefreshOutcome = {
-  status: 'updated' | 'recent' | 'table_missing';
+  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
@@ -15280,6 +15280,12 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date()):
   if (recent) return { status: 'recent', ...empty };
 
   const result = await syncTreeViewSnapshots(env, 'manual', now);
+  // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
+  // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
+  // ため、成功として扱わず設定不備を利用者に明示する。
+  if (result.synced.length === 0 && result.skipped.length === 0 && result.failed.length === 0) {
+    return { status: 'no_repositories', ...empty };
+  }
   return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed };
 }
 
