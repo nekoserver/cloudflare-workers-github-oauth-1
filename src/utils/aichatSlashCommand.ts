@@ -157,6 +157,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
+    '| /neko tvlog | tree-view更新の最新10件を表示します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -860,6 +861,32 @@ export type HourlyTokenUsageRow = {
   request_count: number;
 };
 
+export type TreeViewUpdateLogRow = {
+  id: number;
+  repo_name: string;
+  update_source: 'scheduled' | 'manual';
+  status: 'succeeded' | 'failed';
+  changed: number | null;
+  error_detail: string | null;
+  executed_at: string;
+};
+
+/** tree-view更新の直近10件を、実行元と実際の変更有無が分かる表にする。 */
+export function formatTreeViewUpdateLogs(rows: TreeViewUpdateLogRow[]): string {
+  if (rows.length === 0) return '## tree-view 更新履歴\n更新履歴はありません。';
+  const tableCell = (value: string): string => value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+  return [
+    '## tree-view 更新履歴（最新10件）',
+    '| 実行日時(UTC) | リポジトリ | 実行元 | 結果 |',
+    '|---|---|---|---|',
+    ...rows.map((row) =>
+      `| ${row.executed_at} | ${row.repo_name} | ${row.update_source === 'scheduled' ? 'cron' : '手動'} | ${
+        row.status === 'failed' ? `失敗: ${tableCell(row.error_detail || '詳細なし')}` : row.changed ? '更新あり' : '変更なし'
+      } |`
+    ),
+  ].join('\n');
+}
+
 /**
  * `/neko tokens` の結果を、時間帯(hour)ごとにMarkdownテーブルで表示する。
  * 罫線・ツリー文字は使わずMarkdownテーブルで表現する(CLAUDE.mdルール16)。
@@ -919,6 +946,7 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
+  fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -1223,6 +1251,17 @@ export async function interpretAichatSlashCommand(
   if (subcommand === 'clog') {
     const row = await deps.fetchLatestCommitAgentLog();
     return { handled: true, response: formatCommitAgentLogEntry(row) };
+  }
+
+  if (subcommand === 'tvlog') {
+    if (!deps.fetchTreeViewUpdateLogs) {
+      return { handled: true, response: '❌ /neko tvlog は現在利用できません(DB未設定)' };
+    }
+    try {
+      return { handled: true, response: formatTreeViewUpdateLogs(await deps.fetchTreeViewUpdateLogs()) };
+    } catch (err) {
+      return { handled: true, response: `❌ /neko tvlog でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
+    }
   }
 
   if (subcommand === 'sessions') {
