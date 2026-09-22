@@ -269,6 +269,35 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(result.failed.map((f) => f.repoName)).toEqual(['nekoserver/repo-a']);
     expect(result.synced).toEqual(['nekoserver/repo-b']);
   });
+
+  it('複数リポジトリを上限5件で並列同期し、tvupdateの直列待ちを避ける', async () => {
+    const db = setupDb({});
+    for (let i = 1; i <= 6; i += 1) insertInstallationRepo(db, `nekoserver/repo-${i}`);
+
+    const releases: Array<() => void> = [];
+    let active = 0;
+    let maxActive = 0;
+    const fetchMock = vi.fn(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      active -= 1;
+      return new Response(JSON.stringify({ tree: [{ path: 'index.ts', type: 'blob' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
+    expect(maxActive).toBe(5);
+
+    releases.splice(0).forEach((release) => release());
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
+    releases.splice(0).forEach((release) => release());
+
+    const result = await pending;
+    expect(result.synced).toEqual(Array.from({ length: 6 }, (_, i) => `nekoserver/repo-${i + 1}`));
+    expect(result.failed).toEqual([]);
+  });
 });
 
 describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
