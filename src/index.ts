@@ -5981,6 +5981,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).all<TreeViewUpdateLogRow>();
       return rows.results ?? [];
     },
+    updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
+      ? () => refreshTreeViewSnapshotsIfStale(c.env)
+      : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
     searchYoutubeLinks: (c.env.GOOGLE_CSE_API_KEY && c.env.GOOGLE_CSE_CX)
@@ -15205,6 +15208,14 @@ async function recordTreeViewUpdate(
  * tree_view_snapshotsへも追加される(手動でのコード変更・再デプロイ不要)。
  */
 async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
+  return syncTreeViewSnapshots(env, 'scheduled', new Date());
+}
+
+async function syncTreeViewSnapshots(
+  env: Bindings,
+  source: 'scheduled' | 'manual',
+  now: Date
+): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
   const failed: { repoName: string; error: string }[] = [];
@@ -15226,9 +15237,9 @@ async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string
       continue;
     }
     try {
-      const executedAt = new Date().toISOString();
+      const executedAt = now.toISOString();
       const changed = await upsertTreeViewSnapshotIfChanged(env.DB, repoName, result.snapshot, executedAt);
-      await recordTreeViewUpdate(env.DB, repoName, 'scheduled', changed, executedAt);
+      await recordTreeViewUpdate(env.DB, repoName, source, changed, executedAt);
       if (changed) synced.push(repoName);
       else skipped.push(repoName);
     } catch (err) {
@@ -15239,6 +15250,37 @@ async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string
   }
 
   return { synced, skipped, failed };
+}
+
+type TreeViewManualRefreshOutcome = {
+  status: 'updated' | 'recent' | 'table_missing';
+  updated: string[];
+  unchanged: string[];
+  failed: { repoName: string; error: string }[];
+};
+
+/** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
+async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date()): Promise<TreeViewManualRefreshOutcome> {
+  const empty = { updated: [], unchanged: [], failed: [] };
+  if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
+
+  const requiredTables = ['installation_permissions', 'tree_view_snapshots', 'tree_view_update_log'];
+  const tableRows = await env.DB.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)`
+  ).bind(...requiredTables).all<{ name: string }>();
+  const existingTables = new Set((tableRows.results ?? []).map((row) => row.name));
+  if (requiredTables.some((table) => !existingTables.has(table))) {
+    return { status: 'table_missing', ...empty };
+  }
+
+  const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare(
+    'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
+  ).bind(cutoff).first<{ found: number }>();
+  if (recent) return { status: 'recent', ...empty };
+
+  const result = await syncTreeViewSnapshots(env, 'manual', now);
+  return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed };
 }
 
 /**
@@ -24217,6 +24259,6 @@ app.onError((err, c) => {
 });
 
 // worker-entry.tsのscheduled()ハンドラ(cronトリガー)から呼ばれる。
-export { syncAllTreeViewSnapshots };
+export { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots };
 
 export default app;

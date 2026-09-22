@@ -158,6 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
+    '| /neko tvupdate | D1に必要なテーブルがあり、過去1時間に更新履歴がなければtree-viewを手動更新します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -942,6 +943,7 @@ export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
+  updateTreeView?: () => Promise<TreeViewUpdateOutcome>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -967,6 +969,33 @@ export type AichatSlashCommandDeps = {
   /** `/neko j <キーワード>` 用。jev_evaluationsをquestion/answerのキーワード部分一致で絞り込み、ヒット件数と各share(先頭AICHAT_JEV_KEYWORD_SCORE_LIMIT件)の1〜20ラベル個別スコアを返す */
   jevKeywordLookup?: (keyword: string) => Promise<AichatJevKeywordLookupOutcome>;
 };
+
+export type TreeViewUpdateOutcome = {
+  status: 'updated' | 'recent' | 'table_missing';
+  updated: string[];
+  unchanged: string[];
+  failed: { repoName: string; error: string }[];
+};
+
+export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): string {
+  if (outcome.status === 'table_missing') {
+    return '❌ tree-viewの手動更新に必要なD1テーブルがありません。マイグレーションを確認してください。';
+  }
+  if (outcome.status === 'recent') {
+    return '## tree-view 手動更新\n過去1時間以内に更新された記録があるため、手動更新をスキップしました。';
+  }
+  const lines = [
+    '## tree-view 手動更新',
+    '手動更新を実行しました。',
+    `- 更新あり: ${outcome.updated.length}件`,
+    `- 変更なし: ${outcome.unchanged.length}件`,
+    `- 失敗: ${outcome.failed.length}件`,
+  ];
+  if (outcome.failed.length > 0) {
+    lines.push('', '| リポジトリ | エラー |', '|---|---|', ...outcome.failed.map((item) => `| ${item.repoName} | ${item.error} |`));
+  }
+  return lines.join('\n');
+}
 
 export type SqlImpactCatalogRow = {
   queryName: string;
@@ -1256,6 +1285,17 @@ export async function interpretAichatSlashCommand(
       return { handled: true, response: formatTreeViewUpdateLogs(await deps.fetchTreeViewUpdateLogs()) };
     } catch (err) {
       return { handled: true, response: `❌ /neko tvlog でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  if (subcommand === 'tvupdate') {
+    if (!deps.updateTreeView) {
+      return { handled: true, response: '❌ /neko tvupdate は現在利用できません(DBまたはGitHub設定が未設定)' };
+    }
+    try {
+      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView()) };
+    } catch (err) {
+      return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
