@@ -133,13 +133,16 @@ describe('POST /api/tree-view-repos-external', () => {
     expect(body.repos.map((r) => r.repoName)).toEqual(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/dynamicneko']);
   });
 
-  it('D1が空でも組み込みのcloudflare-workers-github-oauth-1を一覧に返す', async () => {
+  it('D1が空でも組み込みの2リポジトリを一覧に返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
     expect(res.status).toBe(200);
     const body = await res.json() as { repos: Array<{ repoName: string }> };
-    expect(body.repos.map((r) => r.repoName)).toEqual(['nekoserver/cloudflare-workers-github-oauth-1']);
+    expect(body.repos.map((r) => r.repoName)).toEqual([
+      'nekoserver/cloudflare-workers-github-oauth-1',
+      'nekoserver/dynamicneko',
+    ]);
   });
 });
 
@@ -151,11 +154,13 @@ describe('POST /api/tree-view-snapshot-external', () => {
     expect(res.status).toBe(400);
   });
 
-  it('未同期のリポジトリは404で、握りつぶして空データを返さない', async () => {
+  it('D1未同期のdynamicnekoは組み込みスナップショットを返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-snapshot-external', db, { userToken, repoName: 'nekoserver/dynamicneko' });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { tree: { name: string } };
+    expect(body.tree.name).toBe('nekoserver/dynamicneko');
   });
 
   it('D1未同期でも組み込みの/neko tree結果をJSONとして返す', async () => {
