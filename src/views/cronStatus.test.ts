@@ -58,7 +58,7 @@ describe('cron status page', () => {
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
-  it('shows row checkboxes with the check-mark control and sorts checked rows first', () => {
+  it('shows row checkboxes with the check-mark control and sorts unchecked rows first', () => {
     const dom = new JSDOM(getCronStatusPage(interactivePageInput), {
       runScripts: 'dangerously',
       url: 'https://example.com/cron-status',
@@ -77,8 +77,13 @@ describe('cron status page', () => {
     checkboxes[2].click();
     checkboxes[1].click();
     expect(Array.from(table.tBodies[0].rows).map((row) => row.dataset.snapshotRepo))
-      .toEqual(['nekoserver/second', 'nekoserver/third', 'nekoserver/first']);
+      .toEqual(['nekoserver/first', 'nekoserver/second', 'nekoserver/third']);
     expect(checkboxes[1].closest('tr')!.classList.contains('is-checked')).toBe(true);
+
+    toggle.click();
+    expect(table.classList.contains('is-selecting')).toBe(false);
+    expect(dom.window.getComputedStyle(checkboxes[1].closest('tr')!).display).toBe('none');
+    expect(dom.window.getComputedStyle(checkboxes[0].closest('tr')!).display).not.toBe('none');
     dom.window.close();
   });
 
@@ -98,11 +103,11 @@ describe('cron status page', () => {
       repo: row.dataset.snapshotRepo,
       checked: row.querySelector<HTMLInputElement>('.snapshot-checkbox')!.checked,
     }))).toEqual([
-      { repo: 'nekoserver/third', checked: true },
       { repo: 'nekoserver/first', checked: false },
       { repo: 'nekoserver/second', checked: false },
+      { repo: 'nekoserver/third', checked: true },
     ]);
-    expect(document.querySelector('tbody tr')!.getAttribute('data-snapshot-repo')).toBe('nekoserver/third');
+    expect(document.querySelector('tbody tr')!.getAttribute('data-snapshot-repo')).toBe('nekoserver/first');
     expect(cookieJar.getCookieStringSync('https://example.com/cron-status')).toContain('cron_snapshot_check_state=');
     secondLoad.window.close();
   });
