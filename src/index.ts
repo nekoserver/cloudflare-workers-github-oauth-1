@@ -4854,8 +4854,7 @@ app.get('/jev-playground', authMiddleware, (c) => {
 });
 
 /**
- * /jev-playground(本体ページ)・POST /api/jev-playground-external
- * (dynamicnekoの/jev-pg-reactページ用)で共通のリクエストボディ検証。
+ * /jev-playground(本体ページ)用のリクエストボディ検証。
  * 検証に失敗した場合はエラーメッセージを、成功した場合は検証済みの
  * payloadを返す(CLAUDE.mdルール32相当の判別可能な戻り値)。
  */
@@ -4886,7 +4885,7 @@ function validateJevPlaygroundPayload(body: unknown): JevPlaygroundValidationRes
 
 /**
  * 検証済みpayloadをJev API(api.typesafe.ai)へそのまま転送し、レスポンスを
- * 素通しする(/jev-playground・/api/jev-playground-externalの共通処理)。
+ * 素通しする(/jev-playground用)。
  */
 async function callJevPlaygroundApi(jevApiKey: string, payload: Record<string, unknown>): Promise<Response> {
   try {
@@ -4916,28 +4915,6 @@ app.post('/api/jev-playground', authMiddleware, async (c) => {
   }
   const validation = validateJevPlaygroundPayload(body);
   if (!validation.ok) return c.json({ error: validation.error }, 400);
-
-  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
-});
-
-/**
- * dynamicnekoの/jev-pg-reactページ用。POST /api/jev-playgroundと同じ検証・
- * Jev API転送ロジックを、他のexternal API群と同じBearer secret+userToken
- * 認可で提供する(cookie session が無いdynamicnekoから利用するため)。
- */
-app.post('/api/jev-playground-external', async (c) => {
-  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
-  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
-
-  const body = await c.req.json<{ userToken?: string } & Record<string, unknown>>().catch(() => null);
-  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
-  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
-
-  if (!body) return jsonUtf8({ error: 'リクエストは有効なJSONで指定してください' }, 400);
-  const { userToken: _userToken, ...rest } = body;
-  const validation = validateJevPlaygroundPayload(rest);
-  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
 
   return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
 });
