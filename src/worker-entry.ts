@@ -1,5 +1,6 @@
 import app, { syncAllTreeViewSnapshots } from './index';
 import type { Bindings } from './types';
+import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
 
 export default {
   fetch: app.fetch,
@@ -11,11 +12,16 @@ export default {
   // 自動的に対象へ加わる(2026-09-19、ユーザー要望への対応)。
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
-      syncAllTreeViewSnapshots(env).then((result) => {
+      Promise.all([
+        syncAllTreeViewSnapshots(env),
+        registerNextTreeViewCronCountdown(env.DB),
+      ]).then(([result, countdown]) => {
         console.log('[scheduled] tree-view-snapshot sync', {
           synced: result.synced.length,
           skipped: result.skipped.length,
           failed: result.failed,
+          nextUpdateAt: countdown.targetAt,
+          countdownsRegistered: countdown.registered,
         });
       })
     );
