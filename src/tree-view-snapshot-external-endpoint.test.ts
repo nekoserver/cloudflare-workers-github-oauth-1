@@ -68,6 +68,7 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
     CREATE TABLE dynamicneko_aichat_allowed_users (email TEXT PRIMARY KEY, github_login TEXT);
     CREATE TABLE tree_view_snapshots (repo_name TEXT PRIMARY KEY, tree_json TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE tree_view_snapshot_refresh_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, repo_name TEXT NOT NULL, requested_at TEXT NOT NULL);
+    CREATE TABLE tree_view_update_log (id INTEGER PRIMARY KEY AUTOINCREMENT, repo_name TEXT NOT NULL, update_source TEXT NOT NULL, changed INTEGER NOT NULL, executed_at TEXT NOT NULL);
     CREATE TABLE installation_permissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       installation_id INTEGER NOT NULL,
@@ -193,6 +194,9 @@ describe('POST /api/tree-view-snapshot-refresh-external', () => {
     expect(body.tree.children?.map((c) => c.name)).toEqual(['README.md']);
     const saved = db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').get('nekoserver/dynamicneko') as { tree_json: string } | undefined;
     expect(saved).toBeDefined();
+    expect(db.prepare('SELECT repo_name, update_source, changed FROM tree_view_update_log').get()).toEqual({
+      repo_name: 'nekoserver/dynamicneko', update_source: 'manual', changed: 1,
+    });
   });
 
   it('GitHub API呼び出し失敗時は502を返し、jev同様に握りつぶさない', async () => {
@@ -233,6 +237,7 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(result.synced).toEqual(['nekoserver/dynamicneko']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('nekoserver/dynamicneko');
+    expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 1 });
   });
 
   it('内容が前回と変わっていないリポジトリはD1へ書き込まない(skippedに入る)', async () => {
@@ -247,6 +252,7 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(result.synced).toEqual([]);
     const row = db.prepare('SELECT updated_at FROM tree_view_snapshots WHERE repo_name = ?').get('nekoserver/dynamicneko') as { updated_at: string };
     expect(row.updated_at).toBe('2026-09-18T00:00:00.000Z');
+    expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 0 });
   });
 
   it('1つのリポジトリの取得が失敗しても、残りのリポジトリの同期は継続する', async () => {
