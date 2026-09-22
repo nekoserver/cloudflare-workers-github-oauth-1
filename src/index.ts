@@ -5983,7 +5983,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return rows.results ?? [];
     },
     updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
-      ? (force) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force)
+      ? (force, repoFullName) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force, repoFullName)
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15267,7 +15267,8 @@ async function syncTreeViewSnapshots(
   now: Date,
   includeSavedSnapshots = false,
   targetDb: D1Database | undefined = env.DB,
-  dryRun = false
+  dryRun = false,
+  targetRepo?: string
 ): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
@@ -15308,7 +15309,7 @@ async function syncTreeViewSnapshots(
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
   // manual refresh repairs itself immediately, while new webhook deliveries below store
   // the canonical owner/name form. Set removes duplicates during the transition.
-  let repoNames = Array.from(new Set((rows.results ?? [])
+  let repoNames = targetRepo ? [targetRepo] : Array.from(new Set((rows.results ?? [])
     .map((row) => row.repo_name.includes('/') ? row.repo_name : `nekoserver/${row.repo_name}`)
     .filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name))));
 
@@ -15316,7 +15317,7 @@ async function syncTreeViewSnapshots(
   // どちらも空の場合はPATでアクセス可能な一覧をGitHubから復旧する。
   // installation_permissionsの同期だけに依存すると、まさに初回更新が永久に
   // 対象0件となるため、GITHUB_TOKENを最終的な発見元として利用する。
-  if (repoNames.length === 0) {
+  if (!targetRepo && repoNames.length === 0) {
     const discovered = await fetchTreeViewRepositoryNames(env.GITHUB_TOKEN);
     if (discovered.error) {
       failed.push({ repoName: '(repository discovery)', error: discovered.error });
@@ -15385,7 +15386,7 @@ type TreeViewManualRefreshOutcome = {
 };
 
 /** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
-async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), force = false): Promise<TreeViewManualRefreshOutcome> {
+async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), force = false, targetRepo?: string): Promise<TreeViewManualRefreshOutcome> {
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
 
@@ -15412,7 +15413,7 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), 
 
   // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
   // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
-  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force);
+  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force, targetRepo);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。
