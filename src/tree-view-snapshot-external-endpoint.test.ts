@@ -481,4 +481,27 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     });
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 1 });
   });
+
+  it('--forceのリポジトリ指定なら許可一覧にないowner/repoだけを取得して本番DBと比較する', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'nekoserver/unrelated');
+    insertSnapshot(db, 'other/example', { name: 'other/example', type: 'dir' });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      tree: [{ path: 'changed.ts', type: 'blob' }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+      true,
+      'other/example',
+    );
+
+    expect(result.updated).toEqual(['other/example']);
+    expect(result.differences).toEqual([{ repoName: 'other/example', status: 'changed' }]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/repos/other/example/');
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
+  });
 });

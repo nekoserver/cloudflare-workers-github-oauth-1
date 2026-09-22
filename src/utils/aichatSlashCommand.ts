@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します |',
+    '| /neko tvupdate [<owner>/<repo>] [--force] | tree-viewを手動更新します。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します。リポジトリ指定は--forceと併用します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -943,7 +943,7 @@ export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
-  updateTreeView?: (force?: boolean) => Promise<TreeViewUpdateOutcome>;
+  updateTreeView?: (force?: boolean, repoName?: string) => Promise<TreeViewUpdateOutcome>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -1324,11 +1324,19 @@ export async function interpretAichatSlashCommand(
     const options = parts.slice(2).map((part) =>
       part.normalize('NFKC').toLowerCase().replace(/^[—–]/, '--')
     );
-    if (options.some((option) => option !== '--force') || options.length > 1) {
-      return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
+    const force = options.includes('--force');
+    const repoNames = options.filter((option) => option !== '--force');
+    const repoName = repoNames[0];
+    if (options.filter((option) => option === '--force').length > 1
+      || repoNames.length > 1
+      || (repoName !== undefined && !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(repoName))) {
+      return { handled: true, response: '❌ 使用方法: /neko tvupdate [<owner>/<repo>] [--force]' };
+    }
+    if (repoName && !force) {
+      return { handled: true, response: '❌ リポジトリを指定する場合は --force を併用してください' };
     }
     try {
-      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(options[0] === '--force')) };
+      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(force, repoName)) };
     } catch (err) {
       return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
     }

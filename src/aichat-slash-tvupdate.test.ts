@@ -16,7 +16,7 @@ describe('/neko tvupdate', () => {
     });
 
     expect(updateTreeView).toHaveBeenCalledOnce();
-    expect(updateTreeView).toHaveBeenCalledWith(false);
+    expect(updateTreeView).toHaveBeenCalledWith(false, undefined);
     expect(result.handled && result.response).toContain('手動更新を実行しました');
     expect(result.handled && result.response).toContain('更新あり: 1件');
     expect(result.handled && result.response).toContain('変更なし: 1件');
@@ -48,7 +48,7 @@ describe('/neko tvupdate', () => {
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [<owner>/<repo>] [--force] |');
   });
 
   it('--forceを強制更新フラグとして渡す', async () => {
@@ -61,7 +61,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true);
+    expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
   });
 
   it.each(['—force', '–force', '－－force'])(
@@ -76,7 +76,7 @@ describe('/neko tvupdate', () => {
         updateTreeView,
       });
 
-      expect(updateTreeView).toHaveBeenCalledWith(true);
+      expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
     }
   );
 
@@ -107,5 +107,30 @@ describe('/neko tvupdate', () => {
     expect(result.handled && result.response).toContain('本番DBを更新せずに差分を確認しました');
     expect(result.handled && result.response).toContain('| nekoserver/changed | 内容変更 |');
     expect(result.handled && result.response).toContain('一致: 1件');
+  });
+
+  it('owner/repoと--forceを指定して特定リポジトリだけの差分取得を依頼する', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated' as const, updated: ['other/example'], unchanged: [], failed: [],
+      differences: [{ repoName: 'other/example', status: 'added' as const }],
+    });
+
+    await interpretAichatSlashCommand('/neko tvupdate other/example --force', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).toHaveBeenCalledWith(true, 'other/example');
+  });
+
+  it('リポジトリ指定には--forceを必須とする', async () => {
+    const updateTreeView = vi.fn();
+    const result = await interpretAichatSlashCommand('/neko tvupdate owner/repo', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).not.toHaveBeenCalled();
+    expect(result.handled && result.response).toContain('--force');
   });
 });
