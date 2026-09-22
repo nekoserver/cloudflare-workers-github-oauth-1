@@ -391,6 +391,23 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
   });
 
+  it('installation_permissionsが空でも保存済みリポジトリを手動更新する', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'nekoserver/dynamicneko', type: 'dir' });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'recovered.ts', type: 'blob' }] }), { status: 200 })));
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+    );
+
+    expect(result.status).toBe('updated');
+    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
+    expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({
+      update_source: 'manual', changed: 1,
+    });
+  });
+
   it('旧Webhook形式のリポジトリ名でも手動更新を実行する', async () => {
     const db = setupDb({});
     insertInstallationRepo(db, 'dynamicneko');
