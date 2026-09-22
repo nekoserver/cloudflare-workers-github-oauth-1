@@ -16,7 +16,7 @@ describe('/neko tvupdate', () => {
     });
 
     expect(updateTreeView).toHaveBeenCalledOnce();
-    expect(updateTreeView).toHaveBeenCalledWith(false);
+    expect(updateTreeView).toHaveBeenCalledWith(false, undefined);
     expect(result.handled && result.response).toContain('手動更新を実行しました');
     expect(result.handled && result.response).toContain('更新あり: 1件');
     expect(result.handled && result.response).toContain('変更なし: 1件');
@@ -48,7 +48,7 @@ describe('/neko tvupdate', () => {
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] [-R owner/repo] |');
   });
 
   it('--forceを強制更新フラグとして渡す', async () => {
@@ -61,7 +61,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true);
+    expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
   });
 
   it.each(['—force', '–force', '－－force'])(
@@ -76,7 +76,7 @@ describe('/neko tvupdate', () => {
         updateTreeView,
       });
 
-      expect(updateTreeView).toHaveBeenCalledWith(true);
+      expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
     }
   );
 
@@ -89,6 +89,33 @@ describe('/neko tvupdate', () => {
 
     expect(updateTreeView).not.toHaveBeenCalled();
     expect(result.handled && result.response).toContain('--force');
+  });
+
+  it('-Rの直後の引数を対象リポジトリ名として渡す', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated' as const, updated: ['nekoserver/repo-a'], unchanged: [], failed: [],
+    });
+
+    await interpretAichatSlashCommand('/neko tvupdate --force -R nekoserver/repo-a', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).toHaveBeenCalledWith(true, 'nekoserver/repo-a');
+  });
+
+  it('-Rの引数欠落と不正なリポジトリ名を拒否する', async () => {
+    const updateTreeView = vi.fn();
+    const missing = await interpretAichatSlashCommand('/neko tvupdate -R', new Date(), {
+      fetchLatestCommitAgentLog: async () => null, updateTreeView,
+    });
+    const invalid = await interpretAichatSlashCommand('/neko tvupdate -R other/repo', new Date(), {
+      fetchLatestCommitAgentLog: async () => null, updateTreeView,
+    });
+
+    expect(missing.handled && missing.response).toContain('-R owner/repo');
+    expect(invalid.handled && invalid.response).toContain('nekoserver/');
+    expect(updateTreeView).not.toHaveBeenCalled();
   });
 
   it('--forceのGitHub最新状態と本番DBの差分を報告する', async () => {

@@ -5983,7 +5983,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return rows.results ?? [];
     },
     updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
-      ? (force) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force)
+      ? (force, repoName) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force, repoName)
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15267,7 +15267,8 @@ async function syncTreeViewSnapshots(
   now: Date,
   includeSavedSnapshots = false,
   targetDb: D1Database | undefined = env.DB,
-  dryRun = false
+  dryRun = false,
+  requestedRepoName?: string
 ): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
@@ -15285,7 +15286,9 @@ async function syncTreeViewSnapshots(
   // 止めない。保存済みsnapshotだけでも実行でき、どちらもなければGitHubから発見する。
   // 通常同期ではマイグレーション済みの両テーブルを従来どおり利用する。
   let repositoryQuery: string;
-  if (includeSavedSnapshots) {
+  if (requestedRepoName) {
+    repositoryQuery = 'SELECT ? AS repo_name';
+  } else if (includeSavedSnapshots) {
     const sourceTables = await env.DB.prepare(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('installation_permissions', 'tree_view_snapshots')`
     ).all<{ name: string }>();
@@ -15303,7 +15306,8 @@ async function syncTreeViewSnapshots(
            AND NOT EXISTS (SELECT 1 FROM installation_permissions WHERE repo_name IS NOT NULL)
          ORDER BY repo_name`;
   }
-  const rows = await env.DB.prepare(repositoryQuery).all<{ repo_name: string }>();
+  const statement = env.DB.prepare(repositoryQuery);
+  const rows = await (requestedRepoName ? statement.bind(requestedRepoName) : statement).all<{ repo_name: string }>();
   // installation webhook used to persist repository.name (for example "dynamicneko")
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
   // manual refresh repairs itself immediately, while new webhook deliveries below store
@@ -15316,7 +15320,7 @@ async function syncTreeViewSnapshots(
   // どちらも空の場合はPATでアクセス可能な一覧をGitHubから復旧する。
   // installation_permissionsの同期だけに依存すると、まさに初回更新が永久に
   // 対象0件となるため、GITHUB_TOKENを最終的な発見元として利用する。
-  if (repoNames.length === 0) {
+  if (repoNames.length === 0 && !requestedRepoName) {
     const discovered = await fetchTreeViewRepositoryNames(env.GITHUB_TOKEN);
     if (discovered.error) {
       failed.push({ repoName: '(repository discovery)', error: discovered.error });
@@ -15385,7 +15389,12 @@ type TreeViewManualRefreshOutcome = {
 };
 
 /** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
-async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), force = false): Promise<TreeViewManualRefreshOutcome> {
+async function refreshTreeViewSnapshotsIfStale(
+  env: Bindings,
+  now = new Date(),
+  force = false,
+  repoName?: string,
+): Promise<TreeViewManualRefreshOutcome> {
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
 
@@ -15404,15 +15413,19 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), 
 
   if (!force) {
     const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-    const recent = await env.DB.prepare(
-      'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
-    ).bind(cutoff).first<{ found: number }>();
+    const recent = repoName
+      ? await env.DB.prepare(
+        'SELECT 1 AS found FROM tree_view_update_log WHERE repo_name = ? AND datetime(executed_at) >= datetime(?) LIMIT 1'
+      ).bind(repoName, cutoff).first<{ found: number }>()
+      : await env.DB.prepare(
+        'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
+      ).bind(cutoff).first<{ found: number }>();
     if (recent) return { status: 'recent', ...empty };
   }
 
   // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
   // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
-  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force);
+  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force, repoName);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。
