@@ -132,6 +132,15 @@ describe('POST /api/tree-view-repos-external', () => {
     const body = await res.json() as { repos: Array<{ repoName: string }> };
     expect(body.repos.map((r) => r.repoName)).toEqual(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/dynamicneko']);
   });
+
+  it('D1が空でも組み込みのcloudflare-workers-github-oauth-1を一覧に返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { repos: Array<{ repoName: string }> };
+    expect(body.repos.map((r) => r.repoName)).toEqual(['nekoserver/cloudflare-workers-github-oauth-1']);
+  });
 });
 
 describe('POST /api/tree-view-snapshot-external', () => {
@@ -147,6 +156,20 @@ describe('POST /api/tree-view-snapshot-external', () => {
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-snapshot-external', db, { userToken, repoName: 'nekoserver/dynamicneko' });
     expect(res.status).toBe(404);
+  });
+
+  it('D1未同期でも組み込みの/neko tree結果をJSONとして返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const repoName = 'nekoserver/cloudflare-workers-github-oauth-1';
+    const res = await postExternal('/api/tree-view-snapshot-external', db, { userToken, repoName });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { repoName: string; tree: { name: string; type: string; children: Array<{ name: string }> } };
+    expect(body.repoName).toBe(repoName);
+    expect(body.tree.name).toBe(repoName);
+    expect(body.tree.type).toBe('dir');
+    expect(body.tree.children.some((node) => node.name === 'src')).toBe(true);
+    expect(body.tree.children.some((node) => node.name === '.github')).toBe(false);
   });
 
   it('正常系: 保存済みのツリーJSONをそのまま返す', async () => {

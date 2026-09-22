@@ -1,0 +1,3592 @@
+{
+  "name": "nekoserver/cloudflare-workers-github-oauth-1",
+  "type": "dir",
+  "children": [
+    {
+      "name": "AGENTS.md",
+      "type": "file"
+    },
+    {
+      "name": "API.cloudflare-workers-github-oauth-1.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "CAUTION.cloudflare-workers-github-oauth-1.AI_MODEL.md",
+      "type": "file"
+    },
+    {
+      "name": "CHANGELOG.md",
+      "type": "file"
+    },
+    {
+      "name": "CLAUDE.CSS.md",
+      "type": "file"
+    },
+    {
+      "name": "CLAUDE.cloudflare-workers-github-oauth-1.TESTPOLICY.md",
+      "type": "file"
+    },
+    {
+      "name": "CLAUDE.md",
+      "type": "file"
+    },
+    {
+      "name": "CLONE_JOBS.cloudflare-workers-github-oauth.html",
+      "type": "file"
+    },
+    {
+      "name": "CLONE_JOBS.cloudflare-workers-github-oauth.md",
+      "type": "file"
+    },
+    {
+      "name": "DRAFT.SPEC.cloudflare-workers-github-oauth-1.adminmode.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260313.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260316.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260828.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260914.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.PR1812.20260914.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.ai-chat.20270917.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.ai-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.code-review.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.public-keys.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "HISTORY.cloudflare-workers-github-oauth-1.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "INVESTIGATION.0025-status-missing.2026-04-01.md",
+      "type": "file"
+    },
+    {
+      "name": "INVESTIGATION.rust-supply-chain.20260821.md",
+      "type": "file"
+    },
+    {
+      "name": "ISSUE.cloudflare-workers-github-oauth-1.295.md",
+      "type": "file"
+    },
+    {
+      "name": "ISSUES.cloudflare-workers-github-oauth-1.20260525.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.API.20260525.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260316.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260318.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260323.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260324.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260330.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260404.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260405.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260412.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260413.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260601.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260605.Gemma4.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260606.TypeAnnotations.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260607.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260622.UUID.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260728.ZIndex.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260801.BgeM3.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260806.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260809.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260810.ViewportUnits.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260818.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260831.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260902.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260906.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260913.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260914.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260915.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260918.jev-react.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.COMMITDB.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.Fable.20260711.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.HERITAGE.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.Jev.20260917.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.PRCOUNT.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.WC2026.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.aichat.20260808.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.cursorops.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.jev-question-types.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.kw-category-group.20260531.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.mtest.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.new-repo-setup.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.pwa.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.ruby-4.20260917.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.tree-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20260313.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20260909.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20260917.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.tree-wasm-next.md",
+      "type": "file"
+    },
+    {
+      "name": "POLICY.cloudflare-workers-github-oauth-1.login-session.md",
+      "type": "file"
+    },
+    {
+      "name": "QA.cloudflare-workers-github-oauth-1.md",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.AICHAT.20260609.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.REPOSITORIES.20260609.md",
+      "type": "file"
+    },
+    {
+      "name": "RULES.cloudflare-workers-github-oauth-N.md",
+      "type": "file"
+    },
+    {
+      "name": "SMOKETEST.cloudflare-workers-github-oauth-1.20260317.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260313.diff.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260313.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260316.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260317.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260325.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260328.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260518.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260728.Harness.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260827.heritage-journey.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260829.gh-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260831.ruby-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260904.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260904.public-keys.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260906.sqlc-go-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260907.user-preferences.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260913.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260914.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260915.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260919.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.ADDTABLE.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.AICHAT_SUBQUERY_WORKFLOW.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.AICHAT_SWIPE.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.AI_MODEL.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.ANSWER-GRAPH.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.AltSlackWorker.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.EVP.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.FUNCTIONS.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.FUNCTIONS.sql",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.NEWTABLE_CHECK.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.VECTORIZE.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.ai-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.answer-graph.20260808.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.code-review-kimi.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.commit-summary-merge-sha.20260919.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.table-catalog-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.table-catalog.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.tvcron-countdown.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cursor-agent.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.slack.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "STATS.COMMIT.203.-20250528.md",
+      "type": "file"
+    },
+    {
+      "name": "TESTPLAN.md",
+      "type": "file"
+    },
+    {
+      "name": "TEST_LESSONS.cloudflare-workers-github-oauth-1.20260330.md",
+      "type": "file"
+    },
+    {
+      "name": "ZANZIBAR.cloudflare-workers-github-oauth-1.md",
+      "type": "file"
+    },
+    {
+      "name": "auth-flow.html",
+      "type": "file"
+    },
+    {
+      "name": "berlin-london-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "call-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "chess-tsume-17te.md",
+      "type": "file"
+    },
+    {
+      "name": "dynamicneko-aichat-flow.html",
+      "type": "file"
+    },
+    {
+      "name": "er-diagram.html",
+      "type": "file"
+    },
+    {
+      "name": "examples",
+      "type": "dir",
+      "children": [
+        {
+          "name": "fetch-text-stream",
+          "type": "dir"
+        },
+        {
+          "name": "http-query-method",
+          "type": "dir"
+        }
+      ]
+    },
+    {
+      "name": "gh-repository-feature-map.html",
+      "type": "file"
+    },
+    {
+      "name": "kw-architecture.html",
+      "type": "file"
+    },
+    {
+      "name": "kw-drilldown.html",
+      "type": "file"
+    },
+    {
+      "name": "migrations",
+      "type": "dir",
+      "children": [
+        {
+          "name": "0001_create_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0002_add_display_name.sql",
+          "type": "file"
+        },
+        {
+          "name": "0003_add_github_access_token.sql",
+          "type": "file"
+        },
+        {
+          "name": "0004_create_installation_permissions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0005_create_commit_calendar_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0006_add_user_id_to_commit_calendar_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0007_create_teams_and_workspaces.sql",
+          "type": "file"
+        },
+        {
+          "name": "0008_create_commit_list_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0009_create_cache_stats.sql",
+          "type": "file"
+        },
+        {
+          "name": "0010_create_cloudflare_setup_pending.sql",
+          "type": "file"
+        },
+        {
+          "name": "0011_create_commit_search_history.sql",
+          "type": "file"
+        },
+        {
+          "name": "0012_create_ai_summary_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0013_create_repo_color_settings.sql",
+          "type": "file"
+        },
+        {
+          "name": "0014_create_repo_groups.sql",
+          "type": "file"
+        },
+        {
+          "name": "0015_alter_ai_summary_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0016_create_ai_summary_reviews.sql",
+          "type": "file"
+        },
+        {
+          "name": "0017_create_resend_webhook_sources.sql",
+          "type": "file"
+        },
+        {
+          "name": "0018_create_email_send_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0019_create_resend_webhook_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0020_create_email_suppression_list.sql",
+          "type": "file"
+        },
+        {
+          "name": "0021_create_email_mfa_challenges.sql",
+          "type": "file"
+        },
+        {
+          "name": "0022_create_email_audit_anomalies.sql",
+          "type": "file"
+        },
+        {
+          "name": "0023_add_webhook_secret_to_sources.sql",
+          "type": "file"
+        },
+        {
+          "name": "0024_create_slack_interaction_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0025_create_commit_agent_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0026_create_table_catalog.sql",
+          "type": "file"
+        },
+        {
+          "name": "0027_create_group_oauth_apps.sql",
+          "type": "file"
+        },
+        {
+          "name": "0028_add_model_switch_columns.sql",
+          "type": "file"
+        },
+        {
+          "name": "0029_create_ai_summary_link_access_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0030_create_commit_stats_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0031_add_total_count_to_commit_calendar_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0032_create_commit_search_hit_details.sql",
+          "type": "file"
+        },
+        {
+          "name": "0033_sync_table_column_keys.sql",
+          "type": "file"
+        },
+        {
+          "name": "0034_create_repo_commit_index.sql",
+          "type": "file"
+        },
+        {
+          "name": "0035_create_commit_search_keyword_labels.sql",
+          "type": "file"
+        },
+        {
+          "name": "0036_add_ai_model_to_keyword_labels.sql",
+          "type": "file"
+        },
+        {
+          "name": "0040_create_aichat_search_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0041_create_aichat_search_history.sql",
+          "type": "file"
+        },
+        {
+          "name": "0042_alter_aichat_search_log_add_columns.sql",
+          "type": "file"
+        },
+        {
+          "name": "0043_alter_aichat_search_history_add_result_count.sql",
+          "type": "file"
+        },
+        {
+          "name": "0044_create_aichat_search_impressions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0045_create_aichat_subqueries.sql",
+          "type": "file"
+        },
+        {
+          "name": "0046_create_aichat_share_subquery_links.sql",
+          "type": "file"
+        },
+        {
+          "name": "0047_add_conversation_hash.sql",
+          "type": "file"
+        },
+        {
+          "name": "0048_add_aichat_model_colors.sql",
+          "type": "file"
+        },
+        {
+          "name": "0053_alter_ts_function_catalog_add_callers.sql",
+          "type": "file"
+        },
+        {
+          "name": "0054_alter_user_sessions_add_last_activity_at.sql",
+          "type": "file"
+        },
+        {
+          "name": "0055_create_aichat_rate_limit.sql",
+          "type": "file"
+        },
+        {
+          "name": "0056_create_api_endpoint_stats.sql",
+          "type": "file"
+        },
+        {
+          "name": "0057_create_api_search_keywords.sql",
+          "type": "file"
+        },
+        {
+          "name": "0058_create_api_search_keyword_sections.sql",
+          "type": "file"
+        },
+        {
+          "name": "0059_add_revoked_at_to_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0060_add_idle_timeout_to_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0062_create_uuid_history.sql",
+          "type": "file"
+        },
+        {
+          "name": "0063_create_heritage_cities.sql",
+          "type": "file"
+        },
+        {
+          "name": "0064_add_country_code_to_heritage_cities.sql",
+          "type": "file"
+        },
+        {
+          "name": "0065_create_heritage_ai_question_masters.sql",
+          "type": "file"
+        },
+        {
+          "name": "0066_create_heritage_question_view_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0067_create_rail_station_cities.sql",
+          "type": "file"
+        },
+        {
+          "name": "0068_create_cf_auth_access_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0069_create_rail_line_stations.sql",
+          "type": "file"
+        },
+        {
+          "name": "0070_create_rail_station_nearby_points.sql",
+          "type": "file"
+        },
+        {
+          "name": "0072_create_heritage_area_boxes.sql",
+          "type": "file"
+        },
+        {
+          "name": "0073_create_heritage_area_items.sql",
+          "type": "file"
+        },
+        {
+          "name": "0074_add_deleted_at_to_ai_chat_shares.sql",
+          "type": "file"
+        },
+        {
+          "name": "0075_create_notification_settings.sql",
+          "type": "file"
+        },
+        {
+          "name": "0076_create_email_confirm_tokens.sql",
+          "type": "file"
+        },
+        {
+          "name": "0077_add_email_confirm_login_enabled.sql",
+          "type": "file"
+        },
+        {
+          "name": "0078_create_airport_nearby_heritage.sql",
+          "type": "file"
+        },
+        {
+          "name": "0079_create_airport_nearby_airport.sql",
+          "type": "file"
+        },
+        {
+          "name": "0080_create_unresolved_airport_keywords.sql",
+          "type": "file"
+        },
+        {
+          "name": "0081_create_unresolved_castle_keywords.sql",
+          "type": "file"
+        },
+        {
+          "name": "0082_create_unresolved_station_keywords.sql",
+          "type": "file"
+        },
+        {
+          "name": "0083_create_harness_hook_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0084_create_aichat_keyword_categories.sql",
+          "type": "file"
+        },
+        {
+          "name": "0085_create_aichat_keyword_category_map.sql",
+          "type": "file"
+        },
+        {
+          "name": "0086_create_aichat_category_audit_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0087_create_aichat_keyword_embeddings.sql",
+          "type": "file"
+        },
+        {
+          "name": "0088_create_aichat_keyword_category_suggestions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0089_create_aichat_answer_category_scores.sql",
+          "type": "file"
+        },
+        {
+          "name": "0090_alter_aichat_keyword_embeddings_add_plamo_columns.sql",
+          "type": "file"
+        },
+        {
+          "name": "0091_alter_aichat_keyword_embeddings_add_plamo_model.sql",
+          "type": "file"
+        },
+        {
+          "name": "0092_alter_aichat_keyword_embeddings_add_source.sql",
+          "type": "file"
+        },
+        {
+          "name": "0093_alter_aichat_keyword_embeddings_add_gemma_columns.sql",
+          "type": "file"
+        },
+        {
+          "name": "0094_create_aichat_answer_vectors.sql",
+          "type": "file"
+        },
+        {
+          "name": "0096_create_moondream_analyze_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0097_add_image_data_url_to_moondream_analyze_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0098_add_image_data_url_to_ai_chat_shares.sql",
+          "type": "file"
+        },
+        {
+          "name": "0104_create_wasm_module_startup_config.sql",
+          "type": "file"
+        },
+        {
+          "name": "0105_create_ts_file_dependencies.sql",
+          "type": "file"
+        },
+        {
+          "name": "0106_add_answer_graph_query_indexes.sql",
+          "type": "file"
+        },
+        {
+          "name": "0107_create_cheese_fr.sql",
+          "type": "file"
+        },
+        {
+          "name": "0108_add_pairing_to_cheese_fr.sql",
+          "type": "file"
+        },
+        {
+          "name": "0109_create_workflow_registry.sql",
+          "type": "file"
+        },
+        {
+          "name": "0110_create_workflow_hierarchy.sql",
+          "type": "file"
+        },
+        {
+          "name": "0111_create_heritage_journey_registered_routes.sql",
+          "type": "file"
+        },
+        {
+          "name": "0112_create_heritage_master.sql",
+          "type": "file"
+        },
+        {
+          "name": "0113_create_heritage_journey_waypoint_sets.sql",
+          "type": "file"
+        },
+        {
+          "name": "0114_add_heritage_tour_country_filter_to_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0115_create_countdown_events.sql",
+          "type": "file"
+        },
+        {
+          "name": "0116_add_group_id_to_countdown_events.sql",
+          "type": "file"
+        },
+        {
+          "name": "0117_create_kimi_gemma_reviews.sql",
+          "type": "file"
+        },
+        {
+          "name": "0118_create_kimi_code_generate_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0119_add_gemma_tokens_to_kimi_gemma_reviews.sql",
+          "type": "file"
+        },
+        {
+          "name": "0120_add_indent_level_to_workflow_steps.sql",
+          "type": "file"
+        },
+        {
+          "name": "0121_create_user_public_keys.sql",
+          "type": "file"
+        },
+        {
+          "name": "0122_create_public_key_challenges.sql",
+          "type": "file"
+        },
+        {
+          "name": "0123_add_last_login_method_to_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0124_create_login_history.sql",
+          "type": "file"
+        },
+        {
+          "name": "0125_create_wine_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0126_create_wine_metadata.sql",
+          "type": "file"
+        },
+        {
+          "name": "0127_add_expires_at_to_user_public_keys.sql",
+          "type": "file"
+        },
+        {
+          "name": "0128_create_public_key_security_events.sql",
+          "type": "file"
+        },
+        {
+          "name": "0129_create_d1_query_catalog.sql",
+          "type": "file"
+        },
+        {
+          "name": "0130_add_last_commit_at_to_d1_query_catalog.sql",
+          "type": "file"
+        },
+        {
+          "name": "0131_create_user_preferences.sql",
+          "type": "file"
+        },
+        {
+          "name": "0132_create_alt_notify_ingest_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0133_create_dynamicneko_aichat_allowed_users.sql",
+          "type": "file"
+        },
+        {
+          "name": "0134_create_ruby_wasm_snippets.sql",
+          "type": "file"
+        },
+        {
+          "name": "0135_add_ruby_version_and_verifications.sql",
+          "type": "file"
+        },
+        {
+          "name": "0136_create_kimi_code_markdown_snippets.sql",
+          "type": "file"
+        },
+        {
+          "name": "0137_create_cursor_agent_launch_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0138_cursor_agent_launch_log_columns_and_status_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0139_create_cursor_agent_answer_cache.sql",
+          "type": "file"
+        },
+        {
+          "name": "0140_create_cursor_agent_search_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0141_add_github_login_to_dynamicneko_aichat_allowed_users.sql",
+          "type": "file"
+        },
+        {
+          "name": "0142_register_public_key_countdown_workflow.sql",
+          "type": "file"
+        },
+        {
+          "name": "0143_register_answer_keyword_bulk_workflow.sql",
+          "type": "file"
+        },
+        {
+          "name": "0144_create_jev_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0145_create_jev_country_keyword_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0146_add_country_keyword_labels_from_travel_checklist.sql",
+          "type": "file"
+        },
+        {
+          "name": "0147_register_tree_view_regen_workflow.sql",
+          "type": "file"
+        },
+        {
+          "name": "0148_create_jev_keyword_evaluation_locks.sql",
+          "type": "file"
+        },
+        {
+          "name": "0150_create_jev_vuln_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0151_create_jev_test_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0152_create_tree_view_snapshots.sql",
+          "type": "file"
+        },
+        {
+          "name": "0153_reconcile_jev_test_and_tree_view_snapshots.sql",
+          "type": "file"
+        },
+        {
+          "name": "0154_reconcile_d1_query_catalog.sql",
+          "type": "file"
+        },
+        {
+          "name": "0155_create_tree_view_update_log.sql",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "page-keyword-classification.html",
+      "type": "file"
+    },
+    {
+      "name": "paris-berlin-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "paris-prague-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "paris-rome-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "pedigree-chart.efforia-daringtact.html",
+      "type": "file"
+    },
+    {
+      "name": "pentagon-kaleidoscope.html",
+      "type": "file"
+    },
+    {
+      "name": "pr-summary-saas-map.html",
+      "type": "file"
+    },
+    {
+      "name": "public",
+      "type": "dir",
+      "children": [
+        {
+          "name": "earth.jpg",
+          "type": "file"
+        },
+        {
+          "name": "google5746df312f022a10.html",
+          "type": "file"
+        },
+        {
+          "name": "manifest-earth-composer-2.5.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest-wasm-modules.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest-workflow.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest.json",
+          "type": "file"
+        },
+        {
+          "name": "pentagon-kaleidoscope.html",
+          "type": "file"
+        },
+        {
+          "name": "sw-earth-composer-2.5.js",
+          "type": "file"
+        },
+        {
+          "name": "sw-workflow.js",
+          "type": "file"
+        },
+        {
+          "name": "sw.js",
+          "type": "file"
+        },
+        {
+          "name": "wasm",
+          "type": "dir"
+        },
+        {
+          "name": "wasm-modules-icon.svg",
+          "type": "file"
+        },
+        {
+          "name": "workflow-icon.svg",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "rome-barcelona-graph.html",
+      "type": "file"
+    },
+    {
+      "name": "scripts",
+      "type": "dir",
+      "children": [
+        {
+          "name": "audit-local-branches.sh",
+          "type": "file"
+        },
+        {
+          "name": "audit-local-branches.test.sh",
+          "type": "file"
+        },
+        {
+          "name": "build-d1-query-catalog.js",
+          "type": "file"
+        },
+        {
+          "name": "build-tree-wasm.sh",
+          "type": "file"
+        },
+        {
+          "name": "check-migration-table-registry.js",
+          "type": "file"
+        },
+        {
+          "name": "data",
+          "type": "dir"
+        },
+        {
+          "name": "generate-d1-query-catalog-inserts.js",
+          "type": "file"
+        },
+        {
+          "name": "generate-equal-earth-map-data.ts",
+          "type": "file"
+        },
+        {
+          "name": "generate-heritage-master-seed.ts",
+          "type": "file"
+        },
+        {
+          "name": "generate-table-page-map.ts",
+          "type": "file"
+        },
+        {
+          "name": "index-file-deps.mjs",
+          "type": "file"
+        },
+        {
+          "name": "index-functions.ts",
+          "type": "file"
+        },
+        {
+          "name": "render-harness-hook-log-report.js",
+          "type": "file"
+        },
+        {
+          "name": "sqlc-codegen-ir.d.ts",
+          "type": "file"
+        },
+        {
+          "name": "sqlc-codegen-ir.js",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "seeds",
+      "type": "dir",
+      "children": [
+        {
+          "name": "wine_616_individual_metadata_researched_v2.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_initial_vectors_v83.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_metadata_added_617_621.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_metadata_added_622_659.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_metadata_added_660_680.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_vectors_added_617_621_v83.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_vectors_added_622_659_v83.csv",
+          "type": "file"
+        },
+        {
+          "name": "wine_vectors_added_660_680_v83.csv",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "slash-command-languages.html",
+      "type": "file"
+    },
+    {
+      "name": "src",
+      "type": "dir",
+      "children": [
+        {
+          "name": "ai-timeout.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-answer-graph-category-colors.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-answer-graph-category-scores.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-answer-propagation-graph.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-answer-vectorize.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-auto-vectorize-settings.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-calendar-visible.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-cat-badge-highlight.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-cat-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-category-audit-log-20260729.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-classify-input-keyboard.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-daily-stats-classify.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-daily-stats-group-chart.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-daily-stats.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-db-keyword-highlight.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-glm-5-2-removal-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-highlight-all-keywords-bugfix.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-highlight-all-keywords.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-highlight-btn-position.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-highlight-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-e2e.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-fullscreen-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-image.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-kw-edit.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-scissors-20260919.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-attach.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-gallery-branch-border-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-gallery-branch-canvas-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-gallery-branch-overview-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-gallery-search-target-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-gallery-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-image-register-dedupe.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-category-color-patch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-category-map-replace-bugfix.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-chips-v2.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-chips-v3.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-classify-v2.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-classify.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-cache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-endpoint-error-surface.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-model-counts.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-model-switch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-register-lookup.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-similar.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embedding-vectormath.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyword-embeddings-schema-20260801.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-cat-badge-dimmed.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-cat-groups.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-cat-summary-badge-color.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-classify-badge.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-classify-color-decide-flow.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-classify-decide-newcat.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-classify-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-classify-state.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-badge-click.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-new-register.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-remove.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-summary.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-mid-category-solo-select-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-modal-models.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-multi-category.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-palette.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-linked-questions-sort.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-linked-questions.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-modal-search-to-sidebar.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-colors.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-display.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-dot-dropdown.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-select-cache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-swipe.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-update.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-moondream-analysis-client-trigger.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-moondream-analysis-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-moondream-analysis-save.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-moondream-analysis.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-navbar-visibility.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-neko-cal-highlight.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-neko-csearch-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-neko-qsearch-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-neko-qsearch-table.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-neko-results-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-photo-attach.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-prefer-moondream-setting.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-prefer-moondream-wiring.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-qsearch-latest-answer.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-qwen3-8-model.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-rate-limit.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-reask-bubble-unify.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-reask-model-list.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-scissors-auto-vectorize-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-scissors-progress-toast-20260919.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-search-history.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-search-impressions.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-search-log-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-search-nakaguro.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-search-result-keyword-count.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-shares-token-display.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-sidebar-search-moondream-target-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-sidebar-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slack-log-preview-freeze.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-csearch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-fymd.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-gh-pr-list.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-hellodw.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-j-integration.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-j.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-limit.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-qsearch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-rubyver.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-s.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-sessions.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-sql-impact.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-tcheck.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-tokens.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-tree.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-tvlog.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-tvupdate.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-uuid.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-vcount.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-vlink.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subqueries-cat-badge-color-20260817.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subqueries.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subquery-color-dot.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subquery-kw-classify.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subquery-multi-cat.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-swipe-highlight-bugfix.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-swipe-text-selection.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-tlist-register-button.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-token-usage.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-user-bubble-markdown-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-zt-embedding-model-ui.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichatHistoryModalUserMarkdown-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-list-data-consistency.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-list-italy-alias-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-list-madrid-barajas-alias-20260714.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-list-unresolved-batch-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-nearby-db-error-handling.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "airport-nearby-heritage-ranking.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-answer-keywords-bar.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-category-quick-nav.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-first-person-chip-color.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-first-person-forward.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-first-person-mode.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-first-person-position-highlight.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-hide-empty-rows-setting.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-hide-empty-rows.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-keyword-bar-category-filter.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-keyword-list-cache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-keyword-recheck-button.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-keyword-recheck-pure.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-load-error-visibility.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-loading-spinner.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-narrow-keywords.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-node-radius.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-prereq-chip-vectorizing-color.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-prereq-unregistered-cache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-query-index-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-search-result-path.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-search-results-sort.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-seed-modal-moondream-target-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-seed-modal-target-dom-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-seed-modal-target-dom-llama4-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-seed-search-moondream-target-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-selection-trail.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-tooltip-and-answer-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-trail-session-storage-setting.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-trail-session-storage.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-vectorize-button.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-vectorize-model-select-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-vectorized-question-highlight.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-graph-zero-keyword-row.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answerGraphModalScroll-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "api-endpoint-stats.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apiKeyStats-endpoint-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apiKeyUsageStats-ui-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apiKeys-countdown-deadline.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apiKeys-feature-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-api-keys-docs-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-gh-attach-20260902.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-gh-pr-list-20260902.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-jev-score-board-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-key-availability-20260915.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-neko-desc-20260912.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-preferences-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-query-method.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-slack-tab-20260912.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "apis-page-workflow-link-20260819.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "base64-page-20260729.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "bin-hex-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "brushJjaemuLogic.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "brushJjaemuLogic.ts",
+          "type": "file"
+        },
+        {
+          "name": "build-ai-messages.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "build-preview-query.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "call-graph-builder-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "call-graph-route-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-dashboard-cloudflare-api.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "check-migration-table-registry-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cheese-fr-api-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cheese-search-page-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-endgame-2n-20260721.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-move-visualization-20260723.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-qxg7-candidate-marks-20260724.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-qxg7-speed-slider-20260724.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-tsume17te.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "chess-board-visibility-speed-size-20260722.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "column-fk-targets-completeness-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-checker-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-summary-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "conversation-hash.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "countdown-20260828.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "countdown-eventlist-date-filter.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "countdown-picker-bulk-register.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cursor-agent-answer-modal-e2e.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cursor-agent-history-answer-search-e2e.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cursor-agent-launch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cursor-agent-past-log-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "d1-query-catalog-20260906.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "d1-query-catalog-selection-settings-20260908.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "d1-query-catalog-sync.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "data",
+          "type": "dir"
+        },
+        {
+          "name": "db-table-registry-completeness-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dig-wasm-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dynamicneko-ai-share-save.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dynamicneko-aichat-external-endpoints.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dynamicneko-aichat-model-colors-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dynamicneko-aichat-qsearch-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "dynamicneko-cursor-cache-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "eclipse-tilt-lesson.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "email-confirm-login-gate.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "email-confirm-login-setting-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "email-verify-test-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "equal-earth-map-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "er-diagram-consistency.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "factor-wasm-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "file-deps-api-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "file-history-20260826.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "flyBrainLogic.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "flyBrainLogic.ts",
+          "type": "file"
+        },
+        {
+          "name": "flyBrainMahjongLogic.ts",
+          "type": "file"
+        },
+        {
+          "name": "function-history-api.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-attach-routes.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-attach-upload-token.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-attach-wasm-csp.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-attach.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-pr-list-hide-author.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gh-pr-list-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "harnessLog-page-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-ai-country-context.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-airport-ranking-format.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-answered-btn.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-city-dist-menu.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-city-dist-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-detail-kw-classify.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-emoji-and-kw-label.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-history-sidebar.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-nearby-cities.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-access-rail-ranking.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-accordion-cache-badge-behavior.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-airport-list-additions.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-box-delete.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-density-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-error-detail.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-flag-modal-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-max-seq-and-browse-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-mitokoro-cache-icons.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-new-layout.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-numbered-columns-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-point-airport-fallback.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-reset-and-area-browse-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-result-flag-20260714.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-search-area-geo-rematch-20260718.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-search-instr.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-search-query-method.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-search-topics.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-table-right-align-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-unresolved-airport-keywords.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-unresolved-castle-keywords-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-area-unresolved-station-keywords-20260718.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-cache-link-badge.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-cache-lookup-country-prefix-realdb-20260724.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-cache-lookup-d1-like-limit-20260724.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-chatlog-link.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-cities-sync.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-journey-registered-starts-for-destination-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-keyword-badge-consistency.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-2026-italy-france-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-algeria.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-aljaferia.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-barcelona-columbus-monument-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-bosnia-denmark.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-castle-batch-20260714.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-chile-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-egypt.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-f1-circuits.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-finland-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-gulf.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-guyana-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-heidelberg-castle-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-herrenchiemsee.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-india-sarnath-20260725.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-iran-pakistan.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-italy-domus-de-janas.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-italy-remaining-gaps.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-kenya-ngong.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-kenya.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-kyrgyzstan.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-le-corbusier.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-madagascar.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-madrid-metropolis.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-maretsch-castle-20260825.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-mongolia.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-montenegro-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-niger-20260725.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-norway-henningsvaer.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-norway-remaining.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-registration-md.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-schachen.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-south-africa-20260725.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-suriname-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-uganda.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-venezuela-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-wartburg-alias-20260713.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-list-wharariki-beach-20260805.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-mitokoro-gemma-model-request.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-mitokoro-keyword-hits.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-mitokoro-llama-batch-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-polyline-dday-20260726.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-question-batch-chunk.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-question-view-log.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-tooltip-country-prefix-strip-20260724.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritage-topic-badge-orphan-cache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-add-heritage-search-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-airport-data-20260823.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-airport-flight-lines-20260824.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-castle-toggle-20260823.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-departure-registered-indicator-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-dest-filter-followups-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-dist-chip-no-autoscroll-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-dist-country-filter-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-airport-connectivity-20260825.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-airport-flag-filter-20260825.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-cand-buttons-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-flag-column-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-end-city-picker-search-20260825.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-itinerary-import-20260829.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-lodging-recommend-modal-20260823.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-register-route-button-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-registered-routes-modal-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-apply-button-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-line-country-filter-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-line-flag-order-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-line-no-endpoint-checkbox-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-line-tour-skip-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-side-panel-checkbox-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-side-panel-numbering-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-route-side-panel-tap-locate-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-save-waypoint-set-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-start-city-picker-modal-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-start-end-cookie-scope-radius-20260824.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-airport-summary-20260823.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-country-filter-launch-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-day-lodging-label-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-globe-country-dim-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-globe-country-outline-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-globe-heritage-icons-20260822.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-globe-transport-icons-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-lodging-tap-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-mitokoro-tooltip-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-plan-summary-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-route-side-panel-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-route-side-panel-country-dim-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-scope-route-label-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-tour-test-modal-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-transport-toggle-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "heritageJourney-visit-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "index.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-country-keyword.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-evaluation-core.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-live-pulse.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-rev-viewer-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-board-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-board-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-internal-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-keyword-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-stats-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-test-score-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-test-score-trend-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-values-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jevLabelStats-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "json-explorer-utils.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "keyword-classification-prompt.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "keyword-classify-check.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "keyword-multi-labels.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-code-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-code-markdown-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-code-markdown-routes.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-code-token-usage.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-code.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "kimi-gemma-review.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "legacy-storage-inventory-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "legacyKeypairMigration-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "loginHistory-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ls-wasm-20260826.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "mahjongDiscardLogic.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "mahjongDiscardLogic.ts",
+          "type": "file"
+        },
+        {
+          "name": "mahjongShanten.ts",
+          "type": "file"
+        },
+        {
+          "name": "markdown-code-blocks.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "markdown-parser-script-shared.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "markdownPreviewText2md-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "megaminx-engine.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "megaminx-geometry.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "megaminx-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "merge-fk-targets.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "middleware",
+          "type": "dir"
+        },
+        {
+          "name": "notification-settings.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "passkeyLogin-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "pending-login-db.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "publicKey-countdown-deadline.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "publicKey-registration-toast-layout-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "publicKeyAuth-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "publicKeyExpiry-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "publicKeySecurityEvents-20260904.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-line-bernina-express.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-line-frecciarossa-extended.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-line-munich-athens-corridor-20260720.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-lines-unresolved-confirmed-20260723.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-station-cities-sync.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rail-station-nearby-dedup.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "repositories-toast-z.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "resend-webhook-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "revoked-key-visibility-20260915.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "routeCities-europe-min5-2kadre.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "routeCities-italy-additions-20260823.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "routes",
+          "type": "dir"
+        },
+        {
+          "name": "ruby-code-detector.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-csp-20260831.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-loader.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-page-20260831.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-snippet-modal-20260911.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-snippet-swipe-delete-20260911.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-snippets.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-version-info.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "session-72h.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "session-duration-countdown-policy.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "session-expired-return-to-20260816.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "session-idle-timeout.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "session-revoke.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "settings-d1-numeric.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "sha256-wasm-csp-20260817.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "sha256-wasm-page-20260817.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-ai-share-save.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-event-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-interactions-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-notify-setting-endpoints.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-oauth-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "sqlc-codegen-ir.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "sqlc-wasm-20260906.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "status-migration-consistency.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "table-page-map-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "test-setup-heritage-journey-city-cookies.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-cron-countdown.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-snapshot-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ts-function-indexer.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tsubuyaki-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tsubuyaki-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "types.ts",
+          "type": "file"
+        },
+        {
+          "name": "user-preferences-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "utils",
+          "type": "dir"
+        },
+        {
+          "name": "views",
+          "type": "dir"
+        },
+        {
+          "name": "wasm-module.d.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-modules-api-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-modules-page-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-modules-pwa-hide-20260902.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-modules-source-viewer-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-modules-view-mode-setting-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-tree-registry-20260916.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-wrangler-registry-20260920.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wc2026-venue.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-area-tour-vol-tooltip-align.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-areazoom-interaction-fixes-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-fault-tooltip-pinch-guard-20260814.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-fault-tooltip-position-20260814.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-indonesia-20260814.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-japan-volcanoes-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-kyushu-kumamoto-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-mediterranean-north-africa.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-nepal-vicinity-20260826.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-northmaluku-20260814.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-pinned-tooltip-button-overlap.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-sidebar-zindex-tooltip-block-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-toolbar-zindex-drag-sens-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-tooltip-close-zoom-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-tooltip-name-flyto-link.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglFaults-vol-mk-tap-target-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-airport-deeplink.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-latitude-sort.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-menu-width.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-tour-airport-icon-order.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-tour-bounds-precision.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-tour-icons.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-tour-item-focus.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-tour-side-collapse.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-area-zoom-bounds.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-city-fly-tooltip-position.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-country-border-20260714.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-heritage-deeplink.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-journey-tour-replay.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-land-tap-country-20260815.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-landing-autorot-restore.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-mitokoro-country-prefix-strip-20260725.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-mitokoro-gemma-icon.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-mitokoro-markdown-render.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-pin-name-flyto-link.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-pin-tooltip-overlap.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-rail-summary-linebreak.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-saved-area-swipe-delete.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webglHeritage-tooltip-toggle.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-cf-auth-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-cf-wh1-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-github-pr-slack-independence.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "welcome-navbar-pwa-20260909.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "welcomeExpiryCountdown-20260903.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wf-browser-page-20260819.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wine-search-row-tap-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wine-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "worker-entry-config.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "worker-entry.ts",
+          "type": "file"
+        },
+        {
+          "name": "workflow-answer-keyword-bulk-20260916.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "workflow-page-20260819.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "workflow-public-key-countdown-20260916.test.ts",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "tdf2026-route.html",
+      "type": "file"
+    },
+    {
+      "name": "tdf2026-schedule.html",
+      "type": "file"
+    },
+    {
+      "name": "tsconfig.json",
+      "type": "file"
+    },
+    {
+      "name": "vitest.config.ts",
+      "type": "file"
+    },
+    {
+      "name": "wasm",
+      "type": "dir",
+      "children": [
+        {
+          "name": "README.md",
+          "type": "file"
+        },
+        {
+          "name": "dig-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "factor-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "gh-attach-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "gh-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "jev-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "ls-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "sha256-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "sqlc-wasm",
+          "type": "dir"
+        },
+        {
+          "name": "tree-wasm",
+          "type": "dir"
+        }
+      ]
+    },
+    {
+      "name": "wc2026-r32.html",
+      "type": "file"
+    },
+    {
+      "name": "wrangler.toml",
+      "type": "file"
+    }
+  ]
+}

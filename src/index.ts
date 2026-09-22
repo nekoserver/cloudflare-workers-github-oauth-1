@@ -432,7 +432,12 @@ import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynam
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
-import { fetchRepoTreeSnapshot, type TreeViewSnapshotNode } from './utils/treeViewSnapshot';
+import {
+  EMBEDDED_TREE_VIEW_SNAPSHOTS,
+  EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
+  fetchRepoTreeSnapshot,
+  type TreeViewSnapshotNode,
+} from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -15455,9 +15460,16 @@ app.post('/api/tree-view-repos-external', async (c) => {
     const rows = await c.env.DB.prepare(
       'SELECT repo_name, updated_at FROM tree_view_snapshots ORDER BY repo_name ASC'
     ).all<{ repo_name: string; updated_at: string }>();
-    return jsonUtf8({
-      repos: (rows.results ?? []).map((r) => ({ repoName: r.repo_name, updatedAt: r.updated_at })),
-    });
+    const repos = new Map(
+      Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS).map((repoName) => [
+        repoName,
+        { repoName, updatedAt: EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT },
+      ]),
+    );
+    for (const row of rows.results ?? []) {
+      repos.set(row.repo_name, { repoName: row.repo_name, updatedAt: row.updated_at });
+    }
+    return jsonUtf8({ repos: [...repos.values()].sort((a, b) => a.repoName.localeCompare(b.repoName)) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[tree-view-repos-external] 一覧取得クエリ失敗', { error: message });
@@ -15487,6 +15499,14 @@ app.post('/api/tree-view-snapshot-external', async (c) => {
       'SELECT tree_json, updated_at FROM tree_view_snapshots WHERE repo_name = ?'
     ).bind(repoName).first<{ tree_json: string; updated_at: string }>();
     if (!row) {
+      const embeddedTree = EMBEDDED_TREE_VIEW_SNAPSHOTS[repoName];
+      if (embeddedTree) {
+        return jsonUtf8({
+          repoName,
+          updatedAt: EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
+          tree: embeddedTree,
+        });
+      }
       return jsonUtf8({ error: `${repoName}はまだ同期されていません(次回cron実行、または手動更新をお試しください)` }, 404);
     }
     return jsonUtf8({ repoName, updatedAt: row.updated_at, tree: JSON.parse(row.tree_json) });
