@@ -15229,25 +15229,45 @@ async function syncTreeViewSnapshots(
   ).all<{ repo_name: string }>();
   const repoNames = (rows.results ?? []).map((r) => r.repo_name).filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name));
 
-  for (const repoName of repoNames) {
-    const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN, fetchImpl: fetch });
-    if (!result.ok) {
-      logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
-      failed.push({ repoName, error: result.detail });
-      continue;
+  // リポジトリごとに直列でGitHub APIを待つと、対象数に比例して/neko tvupdateの
+  // HTTP応答が遅れ、チャット側では送信中のまま(未処理)になる。GitHub/D1への
+  // 同時アクセス数は抑えつつ並列化し、結果はrepoNamesの順序で集約する。
+  const concurrency = 5;
+  type RepoSyncResult = { kind: 'synced' } | { kind: 'skipped' } | { kind: 'failed'; error: string };
+  const results: RepoSyncResult[] = new Array(repoNames.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < repoNames.length) {
+      const index = nextIndex++;
+      const repoName = repoNames[index];
+      try {
+        const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN!, fetchImpl: fetch });
+        if (!result.ok) {
+          logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+          results[index] = { kind: 'failed', error: result.detail };
+          continue;
+        }
+        const executedAt = now.toISOString();
+        const changed = await upsertTreeViewSnapshotIfChanged(env.DB!, repoName, result.snapshot, executedAt);
+        await recordTreeViewUpdate(env.DB!, repoName, source, changed, executedAt);
+        results[index] = { kind: changed ? 'synced' : 'skipped' };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[tree-view-snapshot-sync] リポジトリ同期失敗', { repoName, error: message });
+        results[index] = { kind: 'failed', error: message };
+      }
     }
-    try {
-      const executedAt = now.toISOString();
-      const changed = await upsertTreeViewSnapshotIfChanged(env.DB, repoName, result.snapshot, executedAt);
-      await recordTreeViewUpdate(env.DB, repoName, source, changed, executedAt);
-      if (changed) synced.push(repoName);
-      else skipped.push(repoName);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('[tree-view-snapshot-sync] D1保存失敗', { repoName, error: message });
-      failed.push({ repoName, error: message });
-    }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, repoNames.length) }, () => worker()));
+
+  results.forEach((result, index) => {
+    const repoName = repoNames[index];
+    if (result.kind === 'synced') synced.push(repoName);
+    else if (result.kind === 'skipped') skipped.push(repoName);
+    else failed.push({ repoName, error: result.error });
+  });
 
   return { synced, skipped, failed };
 }
