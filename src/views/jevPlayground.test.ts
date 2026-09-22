@@ -15,11 +15,21 @@ describe('getJevPlaygroundPage', () => {
   });
 
   it('noulに判定基準、choiceに選択肢、scoreに両端の基準を設定する', () => {
-    const html = getJevPlaygroundPage();
+    const dom = new JSDOM(getJevPlaygroundPage());
+    const getBody = (type: string) => JSON.parse(dom.window.document.querySelector<HTMLTextAreaElement>(`[data-type="${type}"] textarea`)!.value);
 
-    expect(html).toContain('"criteria": "質問の条件が state の内容から成立すると判断できる"');
-    expect(html).toContain('"authentication"');
-    expect(html).toContain('"まったく満たしていない"');
+    expect(getBody('noul').questions.condition.criteria).toEqual({
+      yes: 'state の内容から質問の条件が成立すると判断できる',
+      no: 'state の内容から質問の条件が成立しないと判断できる',
+    });
+    expect(getBody('choice').questions.category.criteria).toEqual({
+      authentication: '利用者が誰であるかを確認する処理',
+      authorization: '利用者に操作の権限があるかを確認する処理',
+      'data-processing': 'データの変換、集計、または加工を行う処理',
+      observability: 'システムの状態を計測、記録、または通知する機能',
+      'user-interface': '利用者が直接操作する画面や入力体験の変更',
+    });
+    expect(getBody('score').questions.quality.criteria).toEqual(['まったく満たしていない', '十分に満たしている']);
   });
 
   it('各質問タイプに複数のstateを用意し、選択時にJSONを更新する', () => {
@@ -66,6 +76,17 @@ describe('getJevPlaygroundPage', () => {
     const html = getJevPlaygroundPage();
     expect(html).toContain('.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)');
     expect(html).toContain('.actions{display:flex;align-items:center;justify-content:flex-end');
+  });
+
+  it('stateドロップダウンをIN表記より上に表示する', () => {
+    const dom = new JSDOM(getJevPlaygroundPage());
+
+    for (const card of dom.window.document.querySelectorAll('.card')) {
+      const picker = card.querySelector('.state-picker')!;
+      const ioGrid = card.querySelector('.io-grid')!;
+      expect(picker.compareDocumentPosition(ioGrid) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(card.querySelector('.input-panel .state-select')).toBeNull();
+    }
   });
 
   it('実行時間をミリ秒単位で表示し、不要な説明文を表示しない', () => {
