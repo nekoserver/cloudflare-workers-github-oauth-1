@@ -338,6 +338,7 @@ npm run deploy
 | `npm run dev` | ローカル開発サーバー起動 |
 | `npm run deploy` | Cloudflare Workers へデプロイ |
 | `npm run typecheck` | TypeScript 型チェック（`tsc --noEmit`） |
+| `npm run test:tvupdate` | `/neko tvupdate` の手動実行経路（コマンド解釈・D1更新・並列同期）だけを検証 |
 | `npm run db:migrate:local` | D1 ローカルマイグレーション |
 | `npm run db:migrate:remote` | D1 リモートマイグレーション |
 
