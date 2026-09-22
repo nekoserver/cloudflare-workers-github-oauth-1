@@ -21,8 +21,45 @@ import {
   EMBEDDED_TREE_VIEW_SNAPSHOTS,
   buildTreeViewSnapshotFromGithubItems,
   fetchRepoTreeSnapshot,
+  mergeMissingTreeViewNodes,
   type GithubTreeItem,
 } from './treeViewSnapshot';
+
+describe('mergeMissingTreeViewNodes', () => {
+  it('既存データを保持して最新ツリーにだけあるノードを名前順で追加する', () => {
+    const existing = buildTreeViewSnapshotFromGithubItems([
+      { path: 'legacy.ts', type: 'blob' },
+      { path: 'src/kept.ts', type: 'blob' },
+    ], 'nekoserver/example');
+    const latest = buildTreeViewSnapshotFromGithubItems([
+      { path: 'README.md', type: 'blob' },
+      { path: 'src/added.ts', type: 'blob' },
+    ], 'nekoserver/example');
+
+    expect(mergeMissingTreeViewNodes(existing, latest)).toEqual({
+      name: 'nekoserver/example',
+      type: 'dir',
+      children: [
+        { name: 'README.md', type: 'file' },
+        { name: 'legacy.ts', type: 'file' },
+        {
+          name: 'src',
+          type: 'dir',
+          children: [
+            { name: 'added.ts', type: 'file' },
+            { name: 'kept.ts', type: 'file' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('同名ノードの種別が異なる場合は保存済みデータを上書きしない', () => {
+    const existing = buildTreeViewSnapshotFromGithubItems([{ path: 'entry', type: 'blob' }], 'root');
+    const latest = buildTreeViewSnapshotFromGithubItems([{ path: 'entry/new.ts', type: 'blob' }], 'root');
+    expect(mergeMissingTreeViewNodes(existing, latest)).toEqual(existing);
+  });
+});
 
 describe('EMBEDDED_TREE_VIEW_SNAPSHOTS', () => {
   it('/neko treeで採取した2リポジトリだけをシードとして持つ', () => {

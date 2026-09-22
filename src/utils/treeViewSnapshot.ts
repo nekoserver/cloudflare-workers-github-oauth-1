@@ -19,6 +19,31 @@ export type TreeViewSnapshotNode = {
 export type GithubTreeItem = { path: string; type: 'blob' | 'tree' | 'commit' };
 
 /**
+ * D1 に保存済みのツリーを基準に、GitHub の最新ツリーにだけ存在するノードを
+ * 追加する。保存済みノードは削除も上書きもしないため、部分的な Trees API
+ * レスポンスや一時的な取得漏れで既存データを失わない。
+ */
+export function mergeMissingTreeViewNodes(
+  existing: TreeViewSnapshotNode,
+  latest: TreeViewSnapshotNode,
+): TreeViewSnapshotNode {
+  if (existing.type !== 'dir' || latest.type !== 'dir') return existing;
+
+  const latestChildren = latest.children ?? [];
+  const existingChildren = existing.children ?? [];
+  const latestByName = new Map(latestChildren.map((child) => [child.name, child]));
+  const merged = existingChildren.map((child) => {
+    const latestChild = latestByName.get(child.name);
+    latestByName.delete(child.name);
+    return latestChild ? mergeMissingTreeViewNodes(child, latestChild) : child;
+  });
+
+  merged.push(...latestByName.values());
+  merged.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return merged.length > 0 ? { ...existing, children: merged } : existing;
+}
+
+/**
  * `/neko tree` で採取した初期対象2リポジトリの組み込みスナップショット。
  * cronがまだ一度も動いていない環境でも、dynamicnekoの/tree-viewから
  * これらのリポジトリを開けるようにする。
