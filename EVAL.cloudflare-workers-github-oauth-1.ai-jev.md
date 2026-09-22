@@ -1,9 +1,15 @@
 # Jev連携: 計画(PLAN)と実装結果の評価・今後の推奨事項
 
+> **再評価日: 2026-09-22**
+>
+> **結論: 当時の実装評価は概ね妥当。ただし「今後の課題」の一部は実装済みになり、
+> Jevの利用範囲もAI回答評価だけではなくなったため、現在の全体像として読むには更新が必要。**
+
 **対象**: `PLAN.cloudflare-workers-github-oauth-1.20260917.md`に対する実装結果の
 振り返り。cloudflare-workers-github-oauth-1側(Jevテーブル・API)とdynamicneko側
-(`/ai-cache`のUI)の両方を対象とする。詳細な最終仕様は
+(`/ai-cache`のUI)の両方を対象とする。当時の詳細仕様は
 [`SPEC.cloudflare-workers-github-oauth-1.ai-jev.md`](SPEC.cloudflare-workers-github-oauth-1.ai-jev.md)参照。
+以下の1〜5節は2026-09-18時点の振り返りとして残し、現在との差分は6節にまとめる。
 
 ## 1. 計画通りに実装できた点
 
@@ -97,3 +103,34 @@
 6. **Jev分析ダッシュボードの3階層目(モデル別平均scoreからさらに個別回答へドリルダウンする
    画面)は未着手**。優先度が上がった場合は、`/ai-summary/{id}`と同じパターンで
    元のキャッシュ本文へリンクする設計(PLAN 5節)をそのまま踏襲できる
+
+## 6. 2026-09-22時点の再評価
+
+### 6.1 判定
+
+| 元の評価・推奨 | 現在の判定 | 根拠・更新内容 |
+|---|---|---|
+| `share_id`を起点にし、評価済みラベルを再送しない | **引き続き妥当** | `jev-score-external`は現在も`share_id`・`model`・`jev_label_id`単位で既存行を読み、`computeJevEvaluationPlan`で未評価分だけを送る。DBの一意インデックスも維持されている |
+| ラベルマスターは追記専用、AI回答評価はオンデマンド、過去分を一括バックフィルしない | **引き続き妥当** | `jev_labels`を更新・削除する処理や、`jev_evaluations`を埋めるcronは追加されていない。個々の回答評価は引き続き`jev-score-external`の呼び出し起点 |
+| `userToken`をJevの2エンドポイント以外にも展開する | **一部実施済み** | Jevスコアボード4 API、コミット検索・脆弱性診断、コミット要約、テスト品質診断にも、同じ署名付き`userToken`検証が展開された。一方、`permission-external`、`query-external`、`qsearch-external`、`latest-answer`、`model-colors-external`、`cursor-agent/query-external`は現在も本文の`email`を受け取るため、残課題そのものは有効。ユーザー別データを扱わない`kimi-code/generate-external`はこの移行対象から外す |
+| 分析ダッシュボードから個別回答へドリルダウンする画面は未着手 | **実装済みのため失効** | `/jev-score-board`に一覧、ラベル別上位、個別回答、ラベル名のAPIが追加され、dynamicneko向けにも4つのexternal APIが追加された。したがって5節6項は、現在の推奨事項ではなく当時の未着手項目としてのみ有効 |
+| 引用評価は未着手で、`jev_evaluations`とは分離する | **引き続き妥当** | 引用評価用の実装・テーブルは現時点でも見当たらない。着手時に別テーブルとする設計判断も変更されていない |
+| Jev連携はAI回答の20ラベル評価が中心 | **現在の全体像としては不足** | その後、脆弱性診断用`jev_vuln_*`、テストコード品質診断用`jev_test_*`、国名キーワード評価用`jev_country_keyword_*`が別テーブルで追加された。また、低スコアの枝だけを掘る再帰ドリルダウンの再利用可能コアも追加された |
+
+### 6.2 現在の推奨事項
+
+1. **外部APIはPLAN段階で実機の最小リクエストを確認する**、**常設UIは固定位置を選ぶ**、
+   **D1命名を着手前に合意する**という5節1・3・4項は、そのまま有効。
+2. `userToken`展開は「未着手」ではなく**段階的に進行中**と扱う。次の対象は、本文の
+   `email`をまだ識別情報として受け取る`permission-external`、`query-external`、`qsearch-external`、
+   `qsearch-external/latest-answer`、`model-colors-external`、
+   `cursor-agent/query-external`とする。移行時はdynamicneko側と同時に切り替え、
+   生`email`へフォールバックしない回帰テストを追加する。
+3. 旧5節6項は完了扱いとし、今後のダッシュボード改善は「ドリルダウンの新設」ではなく、
+   既存`/jev-score-board`とdynamicneko向けexternal APIの保守・認可回帰テストとして管理する。
+4. 再帰ドリルダウンは現在、D1や外部APIへ未接続のコア実装に留まる。画面へ接続する場合は
+   [`SPEC.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.md`](SPEC.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.md)
+   に従い、実行ID・親質問ID・深さを保存して評価経路を再現可能にする。
+5. 今後「Jev連携全体」を評価するときは、AI回答評価の`jev_*`だけでなく、用途ごとに分離された
+   `jev_vuln_*`、`jev_test_*`、`jev_country_keyword_*`も対象に含める。この文書の1〜5節は
+   **AI回答評価導入時の履歴評価**として扱い、現行機能一覧とは区別する。
