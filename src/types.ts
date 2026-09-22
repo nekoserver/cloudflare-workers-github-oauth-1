@@ -10,6 +10,8 @@ export type Bindings = {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   DB?: D1Database;
+  /** `/neko tvupdate --force` の検証用。最新スナップショットを書き込む、本番DBとは別のD1データベース。 */
+  DB_REPLICA?: D1Database;
   ANALYTICS?: AnalyticsEngineDataset;
   RESEND_WEBHOOK_SECRET?: string;
   SLACK_SIGNING_SECRET?: string;

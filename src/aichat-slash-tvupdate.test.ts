@@ -90,4 +90,21 @@ describe('/neko tvupdate', () => {
     expect(updateTreeView).not.toHaveBeenCalled();
     expect(result.handled && result.response).toContain('--force');
   });
+
+  it('--forceのレプリカDBと本番DBの差分を報告する', async () => {
+    const result = await interpretAichatSlashCommand('/neko tvupdate --force', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView: async () => ({
+        status: 'updated', updated: ['nekoserver/changed'], unchanged: [], failed: [],
+        differences: [
+          { repoName: 'nekoserver/changed', status: 'changed' },
+          { repoName: 'nekoserver/same', status: 'unchanged' },
+        ],
+      }),
+    });
+
+    expect(result.handled && result.response).toContain('レプリカDBと本番DBの差分');
+    expect(result.handled && result.response).toContain('| nekoserver/changed | 内容変更 |');
+    expect(result.handled && result.response).toContain('一致: 1件');
+  });
 });

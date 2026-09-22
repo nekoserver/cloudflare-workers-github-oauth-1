@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceで1時間の待機とinstallation_permissionsの対象制限を越え、保存済みスナップショットも強制更新します |',
+    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceは最新データをレプリカDBへ強制保存し、現在の本番DBとの差分を報告します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -971,10 +971,11 @@ export type AichatSlashCommandDeps = {
 };
 
 export type TreeViewUpdateOutcome = {
-  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
+  status: 'updated' | 'recent' | 'table_missing' | 'replica_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
+  differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[];
 };
 
 export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): string {
@@ -983,6 +984,9 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
   }
   if (outcome.status === 'recent') {
     return '## tree-view 手動更新\n過去1時間以内に更新された記録があるため、手動更新をスキップしました。';
+  }
+  if (outcome.status === 'replica_missing') {
+    return '❌ --forceの実行に必要なレプリカD1バインディング(DB_REPLICA)がありません。本番DBへは書き込んでいません。';
   }
   if (outcome.status === 'no_repositories') {
     return [
@@ -998,6 +1002,18 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
     `- 変更なし: ${outcome.unchanged.length}件`,
     `- 失敗: ${outcome.failed.length}件`,
   ];
+  if (outcome.differences) {
+    const differences = outcome.differences.filter((item) => item.status !== 'unchanged');
+    lines.push(
+      '',
+      '### レプリカDBと本番DBの差分',
+      `- 差分あり: ${differences.length}件`,
+      `- 一致: ${outcome.differences.length - differences.length}件`,
+    );
+    if (differences.length > 0) {
+      lines.push('', '| リポジトリ | 差分 |', '|---|---|', ...differences.map((item) => `| ${item.repoName} | ${item.status === 'added' ? '本番DBに未登録' : '内容変更'} |`));
+    }
+  }
   if (outcome.failed.length > 0) {
     lines.push('', '| リポジトリ | エラー |', '|---|---|', ...outcome.failed.map((item) => `| ${item.repoName} | ${item.error} |`));
   }
