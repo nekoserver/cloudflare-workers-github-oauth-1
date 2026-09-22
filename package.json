@@ -15,6 +15,7 @@
     "test:branches": "bash scripts/audit-local-branches.test.sh",
     "sqlc:ir": "node scripts/sqlc-codegen-ir.js",
     "typecheck": "tsc --noEmit",
+    "test:tvupdate": "vitest run src/aichat-slash-tvupdate.test.ts src/tree-view-snapshot-external-endpoint.test.ts",
     "test": "vitest run"
   },
   "dependencies": {
