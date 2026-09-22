@@ -15223,6 +15223,44 @@ async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string
   return syncTreeViewSnapshots(env, 'scheduled', new Date());
 }
 
+async function fetchTreeViewRepositoryNames(githubToken: string): Promise<{ repoNames: string[]; error?: string }> {
+  const repoNames: string[] = [];
+  for (let page = 1; ; page++) {
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=${page}`,
+        {
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'cloudflare-workers-github-oauth-1',
+          },
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { repoNames: [], error: `GitHubリポジトリ一覧の取得に失敗しました: ${message}` };
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      return { repoNames: [], error: `GitHubリポジトリ一覧APIがステータス${response.status}を返しました: ${detail.slice(0, 500)}` };
+    }
+    const json = await response.json().catch(() => null) as unknown;
+    if (!Array.isArray(json)) {
+      return { repoNames: [], error: 'GitHubリポジトリ一覧APIのレスポンスが配列ではありません' };
+    }
+    repoNames.push(...json.flatMap((repo) => {
+      const fullName = repo && typeof repo === 'object' && typeof (repo as { full_name?: unknown }).full_name === 'string'
+        ? (repo as { full_name: string }).full_name
+        : '';
+      return TREE_VIEW_SNAPSHOT_REPO_RE.test(fullName) ? [fullName] : [];
+    }));
+    if (json.length < 100) break;
+  }
+  return { repoNames: Array.from(new Set(repoNames)) };
+}
+
 async function syncTreeViewSnapshots(
   env: Bindings,
   source: 'scheduled' | 'manual',
@@ -15260,9 +15298,22 @@ async function syncTreeViewSnapshots(
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
   // manual refresh repairs itself immediately, while new webhook deliveries below store
   // the canonical owner/name form. Set removes duplicates during the transition.
-  const repoNames = Array.from(new Set((rows.results ?? [])
+  let repoNames = Array.from(new Set((rows.results ?? [])
     .map((row) => row.repo_name.includes('/') ? row.repo_name : `nekoserver/${row.repo_name}`)
     .filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name))));
+
+  // Webhook未着・初回導入直後など、D1の許可情報と保存済みスナップショットが
+  // どちらも空の場合はPATでアクセス可能な一覧をGitHubから復旧する。
+  // installation_permissionsの同期だけに依存すると、まさに初回更新が永久に
+  // 対象0件となるため、GITHUB_TOKENを最終的な発見元として利用する。
+  if (repoNames.length === 0) {
+    const discovered = await fetchTreeViewRepositoryNames(env.GITHUB_TOKEN);
+    if (discovered.error) {
+      failed.push({ repoName: '(repository discovery)', error: discovered.error });
+    } else {
+      repoNames = discovered.repoNames;
+    }
+  }
 
   // リポジトリごとに直列でGitHub APIを待つと、対象数に比例して/neko tvupdateの
   // HTTP応答が遅れ、チャット側では送信中のまま(未処理)になる。GitHub/D1への
