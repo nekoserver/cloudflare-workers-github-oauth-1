@@ -49,6 +49,13 @@ describe('getCountdownWidgetScript', () => {
     expect(getCountdownWidgetScript()).toContain("fetch('/api/countdown/next')");
   });
 
+  it('cron更新を再描画するたびにhealthリンク付きツールチップを生成する', () => {
+    const script = getCountdownWidgetScript({ state: 'healthy', label: '正常稼働' });
+    expect(script).toContain("health.href = '/cron-status'");
+    expect(script).toContain('var cronHealthState = "healthy"');
+    expect(script).toContain('var cronHealthLabel = "正常稼働"');
+  });
+
   it('スクリプトとして構文エラーが無い', () => {
     expect(() => new Function(getCountdownWidgetScript())).not.toThrow();
   });
