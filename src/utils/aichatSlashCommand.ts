@@ -1318,17 +1318,18 @@ export async function interpretAichatSlashCommand(
     if (!deps.updateTreeView) {
       return { handled: true, response: '❌ /neko tvupdate は現在利用できません(DBまたはGitHub設定が未設定)' };
     }
-    // チャットや日本語IMEを経由すると `--force` の2本のハイフンが、1文字の
-    // em/en dashや全角ハイフンに置き換わることがある。見た目が同じ強制更新
-    // オプションを誤って拒否しないよう、検証前にASCII表記へ揃える。
+    // チャットや日本語IMEを経由すると、ハイフンが別の文字に置き換わったり、
+    // `force` だけが入力されたりする。強制更新の意図が明白な表記は受け入れ、
+    // 同じ指定が重複しても冪等なフラグとして扱う。
     const options = parts.slice(2).map((part) =>
-      part.normalize('NFKC').toLowerCase().replace(/^[—–]/, '--')
+      part.normalize('NFKC').toLowerCase().replace(/^[\u2010-\u2015\u2212]+/, '--')
     );
-    if (options.some((option) => option !== '--force') || options.length > 1) {
-      return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
+    const forceAliases = new Set(['--force', '-force', 'force', '-f', '強制']);
+    if (options.some((option) => !forceAliases.has(option))) {
+      return { handled: true, response: '❌ /neko tvupdate に指定できるのは --force (force / -f / 強制 も可) だけです' };
     }
     try {
-      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(options[0] === '--force')) };
+      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(options.length > 0)) };
     } catch (err) {
       return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
     }
