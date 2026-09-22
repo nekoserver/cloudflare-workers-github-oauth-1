@@ -11314,6 +11314,9 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
+  const generatedAt = new Date().toISOString();
+  let latestScheduledAt: string | null = null;
+  let cronDataAvailable = false;
   if (c.env.DB) {
     try {
       await ensureTreeViewCronCountdownForUser(c.env.DB, user.sub);
@@ -11323,8 +11326,28 @@ app.get('/countdown', authMiddleware, async (c) => {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
+    try {
+      const latestExecution = await c.env.DB.prepare(
+        `SELECT executed_at
+         FROM tree_view_update_log
+         WHERE update_source = 'scheduled'
+         ORDER BY datetime(executed_at) DESC, id DESC
+         LIMIT 1`
+      ).first<{ executed_at: string }>();
+      latestScheduledAt = latestExecution?.executed_at ?? null;
+      cronDataAvailable = true;
+    } catch (err) {
+      logger.warn('tree-view cron status lookup failed', {
+        userId: user.sub,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
   }
-  return c.html(getCountdownPage(user.sub));
+  return c.html(getCountdownPage(user.sub, {
+    generatedAt,
+    latestScheduledAt,
+    dataAvailable: cronDataAvailable,
+  }));
 });
 
 app.get('/api/countdown', authMiddleware, async (c) => {

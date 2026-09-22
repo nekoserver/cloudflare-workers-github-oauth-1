@@ -1,14 +1,30 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
+import { getCronHealthStatus } from './cronStatus';
+
+export interface CountdownCronStatusInput {
+  generatedAt: string;
+  latestScheduledAt: string | null;
+  dataAvailable: boolean;
+}
 
 /**
  * /countdownページ: カレンダーの日付タップから予定日時(ラベル・目標日時)を登録し、
  * ログイン中は画面右下に常時表示するカウントダウンウィジェットで残り時間を確認できる。
  * 実データはD1のcountdown_eventsテーブル(migration 0115)。
  */
-export function getCountdownPage(username: string): string {
+export function getCountdownPage(username: string, cronStatusInput: CountdownCronStatusInput = {
+  generatedAt: new Date().toISOString(),
+  latestScheduledAt: null,
+  dataAvailable: false,
+}): string {
   const safeUsername = escapeHtml(username);
+  const cronStatus = getCronHealthStatus(
+    cronStatusInput.generatedAt,
+    cronStatusInput.latestScheduledAt,
+    cronStatusInput.dataAvailable,
+  );
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -191,6 +207,25 @@ export function getCountdownPage(username: string): string {
       pointer-events: none;
       transition: opacity .15s ease;
     }
+    .cron-tooltip-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+    .cron-tooltip-status::before {
+      content: "";
+      flex: 0 0 auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .cron-tooltip-status-healthy { color: #3fb950; }
+    .cron-tooltip-status-warning,
+    .cron-tooltip-status-unknown { color: #d29922; }
+    .cron-tooltip-description { color: var(--card-bg); }
     .cron-tooltip:hover .cron-tooltip-text,
     .cron-tooltip:focus .cron-tooltip-text { visibility: visible; opacity: 1; }
     .save-btn {
@@ -302,7 +337,10 @@ export function getCountdownPage(username: string): string {
         <div class="picker-date-label">
           <span id="pickerDateLabel"></span>
           <button type="button" class="cron-tooltip" aria-label="tree-view cron更新について" aria-describedby="treeViewCronTooltipText">?
-            <span class="cron-tooltip-text" role="tooltip" id="treeViewCronTooltipText"></span>
+            <span class="cron-tooltip-text" role="tooltip" id="treeViewCronTooltipText">
+              <span class="cron-tooltip-status cron-tooltip-status-${cronStatus.state}">ステータス: ${cronStatus.label}</span>
+              <span class="cron-tooltip-description" id="treeViewCronTooltipDescription"></span>
+            </span>
           </button>
         </div>
         <div id="pickerRows"></div>
@@ -355,7 +393,7 @@ export function getCountdownPage(username: string): string {
     var eventListFilterBar = document.getElementById('eventListFilterBar');
     var eventListFilterLabel = document.getElementById('eventListFilterLabel');
     var eventListFilterClearBtn = document.getElementById('eventListFilterClearBtn');
-    var treeViewCronTooltipText = document.getElementById('treeViewCronTooltipText');
+    var treeViewCronTooltipDescription = document.getElementById('treeViewCronTooltipDescription');
 
     var today = new Date();
     var viewYear = today.getFullYear();
@@ -378,9 +416,9 @@ export function getCountdownPage(username: string): string {
       next.setUTCHours(Math.floor(now.getUTCHours() / 6) * 6 + 6);
       return next;
     }
-    if (treeViewCronTooltipText) {
+    if (treeViewCronTooltipDescription) {
       var nextTreeViewUpdate = nextTreeViewCronAt(new Date());
-      treeViewCronTooltipText.textContent = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に更新されます。次回: '
+      treeViewCronTooltipDescription.textContent = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に更新されます。次回: '
         + nextTreeViewUpdate.toLocaleString() + '（' + nextTreeViewUpdate.toISOString() + '）';
     }
 

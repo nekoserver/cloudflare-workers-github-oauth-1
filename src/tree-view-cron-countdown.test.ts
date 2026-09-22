@@ -57,11 +57,27 @@ describe('tree-view cron countdown', () => {
   });
 
   it('編集パネルに次回更新日時とcron周期を示すツールチップを置く', () => {
-    const html = getCountdownPage('tester');
+    const html = getCountdownPage('tester', {
+      generatedAt: '2026-09-22T07:00:00.000Z',
+      latestScheduledAt: '2026-09-22T06:00:05.000Z',
+      dataAvailable: true,
+    });
     expect(html).toContain('aria-label="tree-view cron更新について"');
     expect(html).toContain('role="tooltip"');
+    expect(html).toContain('cron-tooltip-status-healthy');
+    expect(html).toContain('ステータス: 正常稼働');
     expect(html).toContain('UTC 00:00 / 06:00 / 12:00 / 18:00');
     expect(html).toContain('nextTreeViewCronAt(new Date())');
     expect(html).toContain('この日時は次回cronの開始予定です');
+  });
+
+  it('cronの最終実行が古い場合はツールチップのランプを警告表示にする', () => {
+    const html = getCountdownPage('tester', {
+      generatedAt: '2026-09-22T14:30:00.000Z',
+      latestScheduledAt: '2026-09-22T06:00:00.000Z',
+      dataAvailable: true,
+    });
+    expect(html).toContain('cron-tooltip-status-warning');
+    expect(html).toContain('ステータス: 実行遅延');
   });
 });
