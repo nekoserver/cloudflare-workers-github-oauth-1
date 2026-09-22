@@ -155,6 +155,44 @@ export function getCountdownPage(username: string): string {
     }
     .picker-add-row-btn:hover { color: var(--accent-color, #667eea); border-color: var(--accent-color, #667eea); }
     .picker-date-label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+    .cron-tooltip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin-left: 6px;
+      border: 1px solid var(--border-color);
+      border-radius: 50%;
+      color: var(--accent-color, #667eea);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: help;
+      vertical-align: middle;
+    }
+    .cron-tooltip-text {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      z-index: 20;
+      width: min(280px, 75vw);
+      padding: 9px 11px;
+      transform: translateX(-50%);
+      border-radius: 8px;
+      background: var(--text-primary);
+      color: var(--card-bg);
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+      text-align: left;
+      pointer-events: none;
+      transition: opacity .15s ease;
+    }
+    .cron-tooltip:hover .cron-tooltip-text,
+    .cron-tooltip:focus .cron-tooltip-text { visibility: visible; opacity: 1; }
     .save-btn {
       background: #667eea;
       color: white;
@@ -260,7 +298,12 @@ export function getCountdownPage(username: string): string {
       </div>
 
       <div class="picker-panel" id="pickerPanel">
-        <div class="picker-date-label" id="pickerDateLabel"></div>
+        <div class="picker-date-label">
+          <span id="pickerDateLabel"></span>
+          <button type="button" class="cron-tooltip" aria-label="tree-view cron更新について" aria-describedby="treeViewCronTooltipText">?
+            <span class="cron-tooltip-text" role="tooltip" id="treeViewCronTooltipText"></span>
+          </button>
+        </div>
         <div id="pickerRows"></div>
         <button type="button" class="picker-add-row-btn" id="pickerAddRowBtn">+ この日にもう1件追加</button>
         <button type="button" class="save-btn" id="pickerSaveBtn">この日時で登録する</button>
@@ -311,6 +354,7 @@ export function getCountdownPage(username: string): string {
     var eventListFilterBar = document.getElementById('eventListFilterBar');
     var eventListFilterLabel = document.getElementById('eventListFilterLabel');
     var eventListFilterClearBtn = document.getElementById('eventListFilterClearBtn');
+    var treeViewCronTooltipText = document.getElementById('treeViewCronTooltipText');
 
     var today = new Date();
     var viewYear = today.getFullYear();
@@ -324,6 +368,20 @@ export function getCountdownPage(username: string): string {
 
     function pad2(n) { return String(n).padStart(2, '0'); }
     function dateKey(y, m, d) { return y + '-' + pad2(m + 1) + '-' + pad2(d); }
+
+    // Workerの6時間ごとのcronと同じ次回UTC境界を表示する。
+    // カウントダウン予定はcron実行のたびに同じ日時へ自動更新される。
+    function nextTreeViewCronAt(now) {
+      var next = new Date(now.getTime());
+      next.setUTCMinutes(0, 0, 0);
+      next.setUTCHours(Math.floor(now.getUTCHours() / 6) * 6 + 6);
+      return next;
+    }
+    if (treeViewCronTooltipText) {
+      var nextTreeViewUpdate = nextTreeViewCronAt(new Date());
+      treeViewCronTooltipText.textContent = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に更新されます。次回: '
+        + nextTreeViewUpdate.toLocaleString() + '（' + nextTreeViewUpdate.toISOString() + '）';
+    }
 
     // カレンダーで選択した日付(dateKey形式)でイベント一覧を絞り込む純粋関数。
     // dateStrがnullなら絞り込まず全件を返す(「すべて表示」状態)。
