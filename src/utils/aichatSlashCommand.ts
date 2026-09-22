@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate | D1に必要なテーブルがあり、過去1時間に更新履歴がなければtree-viewを手動更新します |',
+    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceで1時間の待機とinstallation_permissionsの対象制限を越え、保存済みスナップショットも強制更新します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -943,7 +943,7 @@ export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
-  updateTreeView?: () => Promise<TreeViewUpdateOutcome>;
+  updateTreeView?: (force?: boolean) => Promise<TreeViewUpdateOutcome>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -1299,8 +1299,12 @@ export async function interpretAichatSlashCommand(
     if (!deps.updateTreeView) {
       return { handled: true, response: '❌ /neko tvupdate は現在利用できません(DBまたはGitHub設定が未設定)' };
     }
+    const options = parts.slice(2).map((part) => part.toLowerCase());
+    if (options.some((option) => option !== '--force') || options.length > 1) {
+      return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
+    }
     try {
-      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView()) };
+      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(options[0] === '--force')) };
     } catch (err) {
       return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
     }

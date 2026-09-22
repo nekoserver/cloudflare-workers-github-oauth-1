@@ -16,6 +16,7 @@ describe('/neko tvupdate', () => {
     });
 
     expect(updateTreeView).toHaveBeenCalledOnce();
+    expect(updateTreeView).toHaveBeenCalledWith(false);
     expect(result.handled && result.response).toContain('手動更新を実行しました');
     expect(result.handled && result.response).toContain('更新あり: 1件');
     expect(result.handled && result.response).toContain('変更なし: 1件');
@@ -47,6 +48,30 @@ describe('/neko tvupdate', () => {
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] |');
+  });
+
+  it('--forceを強制更新フラグとして渡す', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated' as const, updated: [], unchanged: ['nekoserver/repo-a'], failed: [],
+    });
+
+    await interpretAichatSlashCommand('/neko tvupdate --force', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).toHaveBeenCalledWith(true);
+  });
+
+  it('未知のオプションを拒否する', async () => {
+    const updateTreeView = vi.fn();
+    const result = await interpretAichatSlashCommand('/neko tvupdate --unknown', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).not.toHaveBeenCalled();
+    expect(result.handled && result.response).toContain('--force');
   });
 });
