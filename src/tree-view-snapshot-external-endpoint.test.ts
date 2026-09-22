@@ -298,6 +298,32 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(row.updated_at).toBe('2026-09-18T00:00:00.000Z');
     expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 0 });
   });
+
+  it('GitHubの最新状態から不足ノードだけをD1へ追加し、既存ノードは保持する', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', {
+      name: 'nekoserver/dynamicneko',
+      type: 'dir',
+      children: [{ name: 'database-only.ts', type: 'file' }],
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      tree: [{ path: 'latest-only.ts', type: 'blob' }],
+    }), { status: 200 })));
+
+    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
+
+    expect(result.synced).toEqual(['nekoserver/dynamicneko']);
+    const row = db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?')
+      .get('nekoserver/dynamicneko') as { tree_json: string };
+    expect(JSON.parse(row.tree_json)).toEqual({
+      name: 'nekoserver/dynamicneko',
+      type: 'dir',
+      children: [
+        { name: 'database-only.ts', type: 'file' },
+        { name: 'latest-only.ts', type: 'file' },
+      ],
+    });
+  });
 });
 
 describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
