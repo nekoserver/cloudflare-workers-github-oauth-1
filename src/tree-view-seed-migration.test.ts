@@ -8,8 +8,8 @@ const migrationSql = readFileSync(
   'utf8',
 );
 
-describe('migration 0156 tree-view seed reset', () => {
-  it('既存データと更新履歴を白紙に戻し、指定された2リポジトリだけを投入する', () => {
+describe('migration 0156 tree-view seed', () => {
+  it('既存データと更新履歴を保持し、指定された2リポジトリを不足分だけ投入する', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(`
       CREATE TABLE tree_view_snapshots (
@@ -43,14 +43,16 @@ describe('migration 0156 tree-view seed reset', () => {
       'SELECT repo_name, tree_json FROM tree_view_snapshots ORDER BY repo_name',
     ).all() as Array<{ repo_name: string; tree_json: string }>;
     expect(snapshots.map((row) => row.repo_name)).toEqual([
+      'nekoserver/broken',
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
     ]);
-    for (const row of snapshots) {
+    expect(JSON.parse(snapshots[0].tree_json)).toEqual({});
+    for (const row of snapshots.slice(1)) {
       expect(JSON.parse(row.tree_json)).toMatchObject({ name: row.repo_name, type: 'dir' });
     }
-    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_snapshot_refresh_log').get()).toEqual({ count: 0 });
-    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_snapshot_refresh_log').get()).toEqual({ count: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 1 });
   });
 
   it('再実行しても同じ2件に収束する', () => {
