@@ -15229,11 +15229,12 @@ async function syncTreeViewSnapshots(
   now: Date,
   includeSavedSnapshots = false,
   targetDb: D1Database | undefined = env.DB,
-  forceWrite = false
-): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
+  dryRun = false
+): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
   const failed: { repoName: string; error: string }[] = [];
+  const differences: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] = [];
 
   if (!env.DB || !targetDb || !env.GITHUB_TOKEN) {
     return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
@@ -15284,18 +15285,15 @@ async function syncTreeViewSnapshots(
         }
         const executedAt = now.toISOString();
         let changed: boolean;
-        if (forceWrite) {
+        if (dryRun) {
           const nextJson = JSON.stringify(result.snapshot);
           const existing = await targetDb.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
           changed = !existing || existing.tree_json !== nextJson;
-          await targetDb.prepare(
-            `INSERT INTO tree_view_snapshots (repo_name, tree_json, updated_at) VALUES (?, ?, ?)
-             ON CONFLICT(repo_name) DO UPDATE SET tree_json = excluded.tree_json, updated_at = excluded.updated_at`
-          ).bind(repoName, nextJson, executedAt).run();
+          differences[index] = { repoName, status: !existing ? 'added' : changed ? 'changed' : 'unchanged' };
         } else {
           changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt);
+          await recordTreeViewUpdate(targetDb, repoName, source, changed, executedAt);
         }
-        await recordTreeViewUpdate(targetDb, repoName, source, changed, executedAt);
         results[index] = { kind: changed ? 'synced' : 'skipped' };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -15314,11 +15312,11 @@ async function syncTreeViewSnapshots(
     else failed.push({ repoName, error: result.error });
   });
 
-  return { synced, skipped, failed };
+  return { synced, skipped, failed, ...(dryRun ? { differences: differences.filter(Boolean) } : {}) };
 }
 
 type TreeViewManualRefreshOutcome = {
-  status: 'updated' | 'recent' | 'table_missing' | 'replica_missing' | 'no_repositories';
+  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
@@ -15329,7 +15327,6 @@ type TreeViewManualRefreshOutcome = {
 async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), force = false): Promise<TreeViewManualRefreshOutcome> {
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
-  if (force && !env.DB_REPLICA) return { status: 'replica_missing', ...empty };
 
   const requiredTables = ['installation_permissions', 'tree_view_snapshots', 'tree_view_update_log'];
   const tableRows = await env.DB.prepare(
@@ -15340,23 +15337,15 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), 
     return { status: 'table_missing', ...empty };
   }
 
-  if (force) {
-    const replicaTables = await env.DB_REPLICA!.prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)`
-    ).bind(...requiredTables).all<{ name: string }>();
-    const existingReplicaTables = new Set((replicaTables.results ?? []).map((row) => row.name));
-    if (requiredTables.some((table) => !existingReplicaTables.has(table))) {
-      return { status: 'table_missing', ...empty };
-    }
-  }
-
   const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const recent = await env.DB.prepare(
     'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
   ).bind(cutoff).first<{ found: number }>();
   if (recent && !force) return { status: 'recent', ...empty };
 
-  const result = await syncTreeViewSnapshots(env, 'manual', now, force, force ? env.DB_REPLICA : env.DB, force);
+  // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
+  // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
+  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。
@@ -15364,18 +15353,7 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), 
     return { status: 'no_repositories', ...empty };
   }
   if (force) {
-    const comparedRepos = [...result.synced, ...result.skipped];
-    const differences = await Promise.all(comparedRepos.map(async (repoName) => {
-      const [production, replica] = await Promise.all([
-        env.DB!.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>(),
-        env.DB_REPLICA!.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>(),
-      ]);
-      return {
-        repoName,
-        status: (!production ? 'added' : production.tree_json === replica?.tree_json ? 'unchanged' : 'changed') as 'added' | 'changed' | 'unchanged',
-      };
-    }));
-    return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed, differences };
+    return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed, differences: result.differences };
   }
   return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed };
 }

@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceは最新データをレプリカDBへ強制保存し、現在の本番DBとの差分を報告します |',
+    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -971,7 +971,7 @@ export type AichatSlashCommandDeps = {
 };
 
 export type TreeViewUpdateOutcome = {
-  status: 'updated' | 'recent' | 'table_missing' | 'replica_missing' | 'no_repositories';
+  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
@@ -985,9 +985,6 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
   if (outcome.status === 'recent') {
     return '## tree-view 手動更新\n過去1時間以内に更新された記録があるため、手動更新をスキップしました。';
   }
-  if (outcome.status === 'replica_missing') {
-    return '❌ --forceの実行に必要なレプリカD1バインディング(DB_REPLICA)がありません。本番DBへは書き込んでいません。';
-  }
   if (outcome.status === 'no_repositories') {
     return [
       '## tree-view 手動更新',
@@ -995,7 +992,13 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
       'GitHub Appのinstallation_permissions同期状態を確認してください。',
     ].join('\n');
   }
-  const lines = [
+  const lines = outcome.differences ? [
+    '## tree-view 差分確認',
+    'GitHubの最新状態を取得し、本番DBを更新せずに差分を確認しました。',
+    `- 差分あり: ${outcome.updated.length}件`,
+    `- 一致: ${outcome.unchanged.length}件`,
+    `- 失敗: ${outcome.failed.length}件`,
+  ] : [
     '## tree-view 手動更新',
     '手動更新を実行しました。',
     `- 更新あり: ${outcome.updated.length}件`,
@@ -1006,7 +1009,7 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
     const differences = outcome.differences.filter((item) => item.status !== 'unchanged');
     lines.push(
       '',
-      '### レプリカDBと本番DBの差分',
+      '### GitHub最新状態と本番DBの差分',
       `- 差分あり: ${differences.length}件`,
       `- 一致: ${outcome.differences.length - differences.length}件`,
     );

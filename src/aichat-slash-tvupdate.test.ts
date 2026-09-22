@@ -91,7 +91,7 @@ describe('/neko tvupdate', () => {
     expect(result.handled && result.response).toContain('--force');
   });
 
-  it('--forceのレプリカDBと本番DBの差分を報告する', async () => {
+  it('--forceのGitHub最新状態と本番DBの差分を報告する', async () => {
     const result = await interpretAichatSlashCommand('/neko tvupdate --force', new Date(), {
       fetchLatestCommitAgentLog: async () => null,
       updateTreeView: async () => ({
@@ -103,7 +103,8 @@ describe('/neko tvupdate', () => {
       }),
     });
 
-    expect(result.handled && result.response).toContain('レプリカDBと本番DBの差分');
+    expect(result.handled && result.response).toContain('GitHub最新状態と本番DBの差分');
+    expect(result.handled && result.response).toContain('本番DBを更新せずに差分を確認しました');
     expect(result.handled && result.response).toContain('| nekoserver/changed | 内容変更 |');
     expect(result.handled && result.response).toContain('一致: 1件');
   });

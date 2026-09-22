@@ -433,37 +433,12 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('--forceなら直近の更新履歴とinstallation_permissions欠落を無視して保存済みリポジトリを更新する', async () => {
+  it('--forceなら直近の更新履歴とinstallation_permissions欠落を無視して本番DBとの差分を確認する', async () => {
     const db = setupDb({});
-    const replicaDb = setupDb({});
     insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'nekoserver/dynamicneko', type: 'dir' });
     db.prepare(`INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at) VALUES (?, 'scheduled', 0, ?)`)
       .run('nekoserver/dynamicneko', '2026-09-22T02:30:00.000Z');
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'forced.ts', type: 'blob' }] }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await refreshTreeViewSnapshotsIfStale(
-      { ...BASE_ENV, DB: wrapD1(db), DB_REPLICA: wrapD1(replicaDb) } as never,
-      new Date('2026-09-22T03:00:00.000Z'),
-      true,
-    );
-
-    expect(result.status).toBe('updated');
-    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
-    expect(result.differences).toEqual([{ repoName: 'nekoserver/dynamicneko', status: 'changed' }]);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(JSON.parse((replicaDb.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({
-      name: 'nekoserver/dynamicneko', type: 'dir', children: [{ name: 'forced.ts', type: 'file' }],
-    });
-    expect(JSON.parse((db.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({
-      name: 'nekoserver/dynamicneko', type: 'dir',
-    });
-  });
-
-  it('--forceでレプリカDBが未設定なら本番DBを更新せず設定エラーを返す', async () => {
-    const db = setupDb({});
-    insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'production' });
-    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await refreshTreeViewSnapshotsIfStale(
@@ -472,8 +447,13 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
       true,
     );
 
-    expect(result.status).toBe('replica_missing');
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(JSON.parse((db.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({ name: 'production' });
+    expect(result.status).toBe('updated');
+    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
+    expect(result.differences).toEqual([{ repoName: 'nekoserver/dynamicneko', status: 'changed' }]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse((db.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({
+      name: 'nekoserver/dynamicneko', type: 'dir',
+    });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 1 });
   });
 });
