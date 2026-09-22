@@ -98,12 +98,17 @@ describe('getJevPlaygroundPage', () => {
 
     expect(header.querySelector('h1')?.textContent).toBe('Jev API Playground');
     expect(Array.from(header.querySelectorAll<HTMLAnchorElement>('.jump-links a')).map((link) => [link.textContent, link.hash])).toEqual([
-      ['noul — Yes / No 判定', '#noul'],
-      ['choice — 選択肢から分類', '#choice'],
-      ['score — 程度を評価', '#score'],
+      ['noul — Yes / No 判定', '#state-label-noul'],
+      ['choice — 選択肢から分類', '#state-label-choice'],
+      ['score — 程度を評価', '#state-label-score'],
     ]);
+    for (const link of header.querySelectorAll<HTMLAnchorElement>('.jump-links a')) {
+      expect(dom.window.document.querySelector(link.hash)?.textContent).toBe('state');
+    }
     expect(dom.window.document.querySelector('a[href=\"/\"]')).toBeNull();
     expect(getJevPlaygroundPage()).toContain('.page-header{position:sticky;top:0');
+    expect(getJevPlaygroundPage()).toContain('.jump-links a:hover,.jump-links a:focus-visible');
+    expect(getJevPlaygroundPage()).toContain('text-decoration:none');
   });
 
   it('stateドロップダウンをIN表記より上に表示する', () => {
@@ -124,5 +129,15 @@ describe('getJevPlaygroundPage', () => {
     expect(html).toContain("+' ms'");
     expect(html).not.toContain('Worker に設定済みの');
     expect(html).not.toContain('3つの質問タイプは同時に独立して試せます。');
+  });
+
+  it('レスポンスの200を緑、それ以外のステータスを赤のバッジで表示する', () => {
+    const html = getJevPlaygroundPage();
+
+    expect(html.match(/class="response-status-badge" hidden/g)).toHaveLength(3);
+    expect(html).toContain("response.status===200?'is-success':'is-error'");
+    expect(html).toContain("statusBadge.textContent=String(response.status)");
+    expect(html).toContain('.response-status-badge.is-success{background:#1a7f37}');
+    expect(html).toContain('.response-status-badge.is-error{background:#cf222e}');
   });
 });
