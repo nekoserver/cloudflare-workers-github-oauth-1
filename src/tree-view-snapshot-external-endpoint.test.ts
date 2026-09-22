@@ -298,6 +298,18 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     });
   });
 
+  it('更新対象リポジトリが0件なら成功扱いにしない', async () => {
+    const db = setupDb({});
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
+
+    expect(result.status).toBe('no_repositories');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
+  });
+
   it('過去1時間以内の更新履歴があればGitHub APIを呼ばない', async () => {
     const db = setupDb({});
     insertInstallationRepo(db, 'nekoserver/dynamicneko');

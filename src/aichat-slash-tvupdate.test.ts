@@ -35,6 +35,17 @@ describe('/neko tvupdate', () => {
     expect(recent.handled && recent.response).toContain('過去1時間以内');
   });
 
+  it('更新対象が0件なら実行成功と表示せず、設定確認を促す', async () => {
+    const result = await interpretAichatSlashCommand('/neko tvupdate', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView: async () => ({ status: 'no_repositories', updated: [], unchanged: [], failed: [] }),
+    });
+
+    expect(result.handled && result.response).toContain('更新対象のリポジトリが0件');
+    expect(result.handled && result.response).toContain('installation_permissions');
+    expect(result.handled && result.response).not.toContain('手動更新を実行しました');
+  });
+
   it('ヘルプにコマンドを掲載する', () => {
     expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate |');
   });
