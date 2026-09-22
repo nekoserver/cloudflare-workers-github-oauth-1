@@ -46,7 +46,10 @@ export function getCronStatusPage(input: CronStatusPageInput): string {
   const nextAt = getNextTreeViewCronAt(now).toISOString();
 
   const snapshotRows = input.snapshots.map((row) => `
-    <tr><td><code>${escapeHtml(row.repo_name)}</code></td><td>${escapeHtml(formatUtc(row.updated_at))}</td></tr>`).join('');
+    <tr data-snapshot-repo="${escapeHtml(row.repo_name)}">
+      <td class="snapshot-select-cell"><input class="snapshot-checkbox" type="checkbox" aria-label="${escapeHtml(row.repo_name)}をチェック"></td>
+      <td><code>${escapeHtml(row.repo_name)}</code></td><td>${escapeHtml(formatUtc(row.updated_at))}</td>
+    </tr>`).join('');
   const historyRows = input.executions.map((row) => `
     <tr>
       <td>${escapeHtml(formatUtc(row.executed_at))}</td>
@@ -81,8 +84,11 @@ export function getCronStatusPage(input: CronStatusPageInput): string {
     .status-healthy { color:var(--ok); background:var(--ok-bg); } .status-warning,.status-unknown { color:var(--warn); background:var(--warn-bg); }
     .job { margin-bottom:22px; } .job-grid { display:grid; grid-template-columns:160px 1fr; gap:9px 18px; margin:0; }
     dt { color:var(--muted); } dd { margin:0; } code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
-    .section { margin-top:22px; } .table-wrap { overflow:auto; border:1px solid var(--border); border-radius:10px; }
+    .section { margin-top:22px; } .section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; } .section-heading h2 { margin:0; }
+    .snapshot-toggle { width:32px; height:32px; padding:0; border:1px solid var(--border); border-radius:7px; color:var(--muted); background:var(--panel); cursor:pointer; font:700 17px/1 sans-serif; } .snapshot-toggle:hover { color:var(--accent); border-color:var(--accent); } .snapshot-toggle[aria-pressed="true"] { color:var(--ok); background:var(--ok-bg); }
+    .table-wrap { overflow:auto; border:1px solid var(--border); border-radius:10px; }
     table { width:100%; border-collapse:collapse; min-width:640px; background:var(--panel); } th,td { text-align:left; padding:10px 13px; border-bottom:1px solid var(--border); } th { color:var(--muted); font-size:12px; background:color-mix(in srgb,var(--panel) 88%,var(--border)); } tr:last-child td { border-bottom:0; }
+    .snapshot-select-cell { display:none; width:42px; padding-right:0; } .snapshot-table.is-selecting .snapshot-select-cell { display:table-cell; } .snapshot-checkbox { width:16px; height:16px; margin:0; accent-color:var(--ok); cursor:pointer; } .snapshot-table tbody tr { transition:opacity .15s ease,background-color .15s ease; } .snapshot-table tbody tr.is-checked { opacity:.5; background:color-mix(in srgb,var(--panel) 72%,var(--border)); }
     .source,.change { display:inline-block; border-radius:999px; padding:2px 8px; font-size:12px; background:var(--bg); } .change-yes { color:var(--ok); }
     .empty { padding:28px; text-align:center; color:var(--muted); background:var(--panel); }
     .notice { border-left:4px solid var(--warn); margin-bottom:20px; }
@@ -110,11 +116,29 @@ export function getCronStatusPage(input: CronStatusPageInput): string {
         <dt>正常判定</dt><dd>直近7時間以内にcron由来の実行履歴があること</dd>
       </dl>
     </section>
-    <section class="section"><h2>対象スナップショット</h2>${input.snapshots.length ? `<div class="table-wrap"><table><thead><tr><th>リポジトリ</th><th>最終更新</th></tr></thead><tbody>${snapshotRows}</tbody></table></div>` : '<div class="empty">スナップショット情報がありません。</div>'}</section>
+    <section class="section" id="snapshot-section"><div class="section-heading"><h2>対象スナップショット</h2>${input.snapshots.length ? '<button class="snapshot-toggle" id="snapshot-toggle" type="button" aria-label="スナップショットのチェック欄を切り替える" aria-controls="snapshot-table" aria-pressed="false">✔︎</button>' : ''}</div>${input.snapshots.length ? `<div class="table-wrap"><table class="snapshot-table" id="snapshot-table"><thead><tr><th class="snapshot-select-cell" aria-label="チェック"></th><th>リポジトリ</th><th>最終更新</th></tr></thead><tbody>${snapshotRows}</tbody></table></div>` : '<div class="empty">スナップショット情報がありません。</div>'}</section>
     <section class="section"><h2>直近の実行履歴（最大50件）</h2>${input.executions.length ? `<div class="table-wrap"><table><thead><tr><th>実行日時</th><th>リポジトリ</th><th>実行元</th><th>結果</th></tr></thead><tbody>${historyRows}</tbody></table></div>` : '<div class="empty">実行履歴がありません。</div>'}</section>
   </main>
   <script>
     (function(){var el=document.getElementById('next-run'),out=document.getElementById('countdown');if(!el||!out)return;var target=new Date(el.dataset.nextAt).getTime();function tick(){var d=Math.max(0,target-Date.now()),h=Math.floor(d/3600000),m=Math.floor(d%3600000/60000),s=Math.floor(d%60000/1000);out.textContent='あと '+h+'時間 '+m+'分 '+s+'秒';}tick();setInterval(tick,1000);})();
+    (function(){
+      var COOKIE_NAME='cron_snapshot_check_state',table=document.getElementById('snapshot-table'),toggle=document.getElementById('snapshot-toggle');
+      if(!table||!toggle)return;
+      var body=table.tBodies[0],rows=Array.prototype.slice.call(body.rows);
+      function readState(){
+        var prefix=COOKIE_NAME+'=',parts=document.cookie.split(';');
+        for(var i=0;i<parts.length;i++){var part=parts[i].trim();if(part.indexOf(prefix)===0){try{var value=JSON.parse(decodeURIComponent(part.slice(prefix.length)));return value&&Array.isArray(value.checked)?value:null;}catch(_error){return null;}}}
+        return null;
+      }
+      function currentState(){return {selecting:table.classList.contains('is-selecting'),checked:rows.filter(function(row){return row.querySelector('.snapshot-checkbox').checked;}).map(function(row){return row.dataset.snapshotRepo;})};}
+      function saveState(){document.cookie=COOKIE_NAME+'='+encodeURIComponent(JSON.stringify(currentState()))+'; Max-Age=31536000; Path=/cron-status; Secure; SameSite=Lax';}
+      function setSelecting(enabled){table.classList.toggle('is-selecting',enabled);toggle.setAttribute('aria-pressed',enabled?'true':'false');}
+      function sortRows(){rows.filter(function(row){return row.querySelector('.snapshot-checkbox').checked;}).concat(rows.filter(function(row){return !row.querySelector('.snapshot-checkbox').checked;})).forEach(function(row){body.appendChild(row);});}
+      var saved=readState(),checked=saved?saved.checked:[];
+      rows.forEach(function(row){var checkbox=row.querySelector('.snapshot-checkbox'),isChecked=checked.indexOf(row.dataset.snapshotRepo)>=0;checkbox.checked=isChecked;row.classList.toggle('is-checked',isChecked);checkbox.addEventListener('change',function(){row.classList.toggle('is-checked',checkbox.checked);sortRows();saveState();});});
+      setSelecting(!!(saved&&saved.selecting));sortRows();
+      toggle.addEventListener('click',function(){setSelecting(!table.classList.contains('is-selecting'));saveState();});
+    })();
   </script>
 </body>
 </html>`;
