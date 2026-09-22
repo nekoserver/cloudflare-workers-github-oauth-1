@@ -226,8 +226,16 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     .cron-tooltip-status-warning,
     .cron-tooltip-status-unknown { color: #d29922; }
     .cron-tooltip-description { color: var(--card-bg); }
+    .cron-health-button {
+      display: inline-flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 3px 8px;
+      border-radius: 999px; color: #fff; text-decoration: none; font-weight: 700; pointer-events: auto;
+    }
+    .cron-health-button::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .cron-health-button-healthy { background: #1a7f37; }
+    .cron-health-button-warning, .cron-health-button-unknown { background: #9a6700; }
     .cron-tooltip:hover .cron-tooltip-text,
-    .cron-tooltip:focus .cron-tooltip-text { visibility: visible; opacity: 1; }
+    .cron-tooltip:focus .cron-tooltip-text,
+    .cron-tooltip:focus-within .cron-tooltip-text { visibility: visible; opacity: 1; pointer-events: auto; }
     .save-btn {
       background: #667eea;
       color: white;
@@ -336,12 +344,12 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
       <div class="picker-panel" id="pickerPanel">
         <div class="picker-date-label">
           <span id="pickerDateLabel"></span>
-          <button type="button" class="cron-tooltip" aria-label="tree-view cron更新について" aria-describedby="treeViewCronTooltipText">?
+          <span class="cron-tooltip" tabindex="0" aria-label="tree-view cron更新について" aria-describedby="treeViewCronTooltipText">?
             <span class="cron-tooltip-text" role="tooltip" id="treeViewCronTooltipText">
-              <span class="cron-tooltip-status cron-tooltip-status-${cronStatus.state}">ステータス: ${cronStatus.label}</span>
+              <a class="cron-health-button cron-health-button-${cronStatus.state}" href="/cron-status">Health: ${cronStatus.label}</a>
               <span class="cron-tooltip-description" id="treeViewCronTooltipDescription"></span>
             </span>
-          </button>
+          </span>
         </div>
         <div id="pickerRows"></div>
         <button type="button" class="picker-add-row-btn" id="pickerAddRowBtn">+ この日にもう1件追加</button>
@@ -394,6 +402,8 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     var eventListFilterLabel = document.getElementById('eventListFilterLabel');
     var eventListFilterClearBtn = document.getElementById('eventListFilterClearBtn');
     var treeViewCronTooltipDescription = document.getElementById('treeViewCronTooltipDescription');
+    var cronHealthState = ${JSON.stringify(cronStatus.state)};
+    var cronHealthLabel = ${JSON.stringify(cronStatus.label)};
 
     var today = new Date();
     var viewYear = today.getFullYear();
@@ -621,10 +631,14 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
         var isPast = at.getTime() < now;
         var label = String(ev.label).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var cronTooltip = ev.label === 'tree-view cron更新'
-          ? ' title="tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に自動更新されます。この日時は次回cronの開始予定です。" tabindex="0"'
+          ? '<span class="cron-tooltip" tabindex="0" aria-label="tree-view cron更新について">?'
+            + '<span class="cron-tooltip-text" role="tooltip">'
+            + '<a class="cron-health-button cron-health-button-' + cronHealthState + '" href="/cron-status">Health: ' + cronHealthLabel + '</a>'
+            + '<span class="cron-tooltip-description">tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に自動更新されます。この日時は次回cronの開始予定です。</span>'
+            + '</span></span>'
           : '';
         return '<div class="event-row' + (isPast ? ' past' : '') + '">'
-          + '<div class="event-info"><span class="event-label"' + cronTooltip + '>' + label + '</span>'
+          + '<div class="event-info"><span class="event-label">' + label + '</span>' + cronTooltip
           + '<span class="event-at">' + at.getFullYear() + '/' + pad2(at.getMonth() + 1) + '/' + pad2(at.getDate()) + ' ' + pad2(at.getHours()) + ':' + pad2(at.getMinutes()) + '</span></div>'
           + '<button type="button" class="event-delete-btn" data-id="' + ev.id + '">削除</button></div>';
       }).join('');
@@ -650,7 +664,7 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     loadEvents();
 
     // ===== 画面右下の常時カウントダウンウィジェット =====
-    ${getCountdownWidgetScript()}
+    ${getCountdownWidgetScript(cronStatus)}
   </script>
 </body>
 </html>`;

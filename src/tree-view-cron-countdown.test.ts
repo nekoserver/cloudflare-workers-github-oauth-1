@@ -64,8 +64,8 @@ describe('tree-view cron countdown', () => {
     });
     expect(html).toContain('aria-label="tree-view cron更新について"');
     expect(html).toContain('role="tooltip"');
-    expect(html).toContain('cron-tooltip-status-healthy');
-    expect(html).toContain('ステータス: 正常稼働');
+    expect(html).toContain('cron-health-button-healthy');
+    expect(html).toContain('href="/cron-status">Health: 正常稼働');
     expect(html).toContain('UTC 00:00 / 06:00 / 12:00 / 18:00');
     expect(html).toContain('nextTreeViewCronAt(new Date())');
     expect(html).toContain('この日時は次回cronの開始予定です');
@@ -77,7 +77,19 @@ describe('tree-view cron countdown', () => {
       latestScheduledAt: '2026-09-22T06:00:00.000Z',
       dataAvailable: true,
     });
-    expect(html).toContain('cron-tooltip-status-warning');
-    expect(html).toContain('ステータス: 実行遅延');
+    expect(html).toContain('cron-health-button-warning');
+    expect(html).toContain('href="/cron-status">Health: 実行遅延');
+  });
+
+  it('現在の予定一覧と更新後のウィジェットにもhealthボタン付きツールチップを作る', () => {
+    const html = getCountdownPage('tester', {
+      generatedAt: '2026-09-22T07:00:00.000Z',
+      latestScheduledAt: '2026-09-22T06:00:05.000Z',
+      dataAvailable: true,
+    });
+    expect(html).toContain("ev.label === 'tree-view cron更新'");
+    expect(html).toContain('cron-health-button cron-health-button-\' + cronHealthState');
+    expect(html).toContain("health.href = '/cron-status'");
+    expect(html).toContain("health.textContent = 'Health: ' + cronHealthLabel");
   });
 });
