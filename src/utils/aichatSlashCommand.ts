@@ -1023,6 +1023,10 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
   return lines.join('\n');
 }
 
+function formatTreeViewUpdateElapsedTime(elapsedMs: number): string {
+  return `実行時間: ${(Math.max(0, elapsedMs) / 1000).toFixed(3)}秒`;
+}
+
 export type SqlImpactCatalogRow = {
   queryName: string;
   command: string;
@@ -1327,10 +1331,18 @@ export async function interpretAichatSlashCommand(
     if (options.some((option) => option !== '--force') || options.length > 1) {
       return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
     }
+    const startedAt = Date.now();
     try {
-      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(options[0] === '--force')) };
+      const outcome = await deps.updateTreeView(options[0] === '--force');
+      return {
+        handled: true,
+        response: `${formatTreeViewUpdateOutcome(outcome)}\n${formatTreeViewUpdateElapsedTime(Date.now() - startedAt)}`,
+      };
     } catch (err) {
-      return { handled: true, response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        handled: true,
+        response: `❌ /neko tvupdate でエラーが発生しました: ${err instanceof Error ? err.message : String(err)}\n${formatTreeViewUpdateElapsedTime(Date.now() - startedAt)}`,
+      };
     }
   }
 
