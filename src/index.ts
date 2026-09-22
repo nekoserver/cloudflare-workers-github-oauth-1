@@ -15281,19 +15281,29 @@ async function syncTreeViewSnapshots(
   // installation_permissionsが1件でもあれば従来どおり許可リストとして扱う。
   // 空の場合だけ保存済みスナップショットへフォールバックし、一時的なWebhook
   // 同期漏れによって/neko tvupdateが対象0件になることを避ける。
-  const rows = await env.DB.prepare(
-    includeSavedSnapshots
-      ? `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
-         UNION
-         SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL
-         ORDER BY repo_name`
-      : `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
+  // 強制差分確認はDBを書き換えないため、更新ログや権限キャッシュの欠落を理由に
+  // 止めない。保存済みsnapshotだけでも実行でき、どちらもなければGitHubから発見する。
+  // 通常同期ではマイグレーション済みの両テーブルを従来どおり利用する。
+  let repositoryQuery: string;
+  if (includeSavedSnapshots) {
+    const sourceTables = await env.DB.prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('installation_permissions', 'tree_view_snapshots')`
+    ).all<{ name: string }>();
+    const names = new Set((sourceTables.results ?? []).map((row) => row.name));
+    const sources = [
+      names.has('installation_permissions') ? 'SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL' : '',
+      names.has('tree_view_snapshots') ? 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL' : '',
+    ].filter(Boolean);
+    repositoryQuery = sources.length > 0 ? `${sources.join('\nUNION\n')}\nORDER BY repo_name` : "SELECT NULL AS repo_name WHERE 0";
+  } else {
+    repositoryQuery = `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
          UNION
          SELECT repo_name FROM tree_view_snapshots
          WHERE repo_name IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM installation_permissions WHERE repo_name IS NOT NULL)
-         ORDER BY repo_name`
-  ).all<{ repo_name: string }>();
+         ORDER BY repo_name`;
+  }
+  const rows = await env.DB.prepare(repositoryQuery).all<{ repo_name: string }>();
   // installation webhook used to persist repository.name (for example "dynamicneko")
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
   // manual refresh repairs itself immediately, while new webhook deliveries below store
@@ -15379,20 +15389,26 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), 
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
 
-  const requiredTables = ['installation_permissions', 'tree_view_snapshots', 'tree_view_update_log'];
+  // --force は読み取り専用の差分確認であり、更新ログも権限キャッシュも書かない。
+  // 比較先のsnapshotさえあれば、不必要なテーブル検査で強制実行を制止しない。
+  const requiredTables = force
+    ? ['tree_view_snapshots']
+    : ['installation_permissions', 'tree_view_snapshots', 'tree_view_update_log'];
   const tableRows = await env.DB.prepare(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)`
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => '?').join(', ')})`
   ).bind(...requiredTables).all<{ name: string }>();
   const existingTables = new Set((tableRows.results ?? []).map((row) => row.name));
   if (requiredTables.some((table) => !existingTables.has(table))) {
     return { status: 'table_missing', ...empty };
   }
 
-  const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-  const recent = await env.DB.prepare(
-    'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
-  ).bind(cutoff).first<{ found: number }>();
-  if (recent && !force) return { status: 'recent', ...empty };
+  if (!force) {
+    const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    const recent = await env.DB.prepare(
+      'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
+    ).bind(cutoff).first<{ found: number }>();
+    if (recent) return { status: 'recent', ...empty };
+  }
 
   // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
   // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
