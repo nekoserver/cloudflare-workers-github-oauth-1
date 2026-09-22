@@ -5982,7 +5982,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return rows.results ?? [];
     },
     updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
-      ? () => refreshTreeViewSnapshotsIfStale(c.env)
+      ? (force) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force)
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15214,7 +15214,8 @@ async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string
 async function syncTreeViewSnapshots(
   env: Bindings,
   source: 'scheduled' | 'manual',
-  now: Date
+  now: Date,
+  includeSavedSnapshots = false
 ): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
@@ -15225,7 +15226,12 @@ async function syncTreeViewSnapshots(
   }
 
   const rows = await env.DB.prepare(
-    `SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL ORDER BY repo_name`
+    includeSavedSnapshots
+      ? `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
+         UNION
+         SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL
+         ORDER BY repo_name`
+      : `SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL ORDER BY repo_name`
   ).all<{ repo_name: string }>();
   // installation webhook used to persist repository.name (for example "dynamicneko")
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
@@ -15286,7 +15292,7 @@ type TreeViewManualRefreshOutcome = {
 };
 
 /** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
-async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date()): Promise<TreeViewManualRefreshOutcome> {
+async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date(), force = false): Promise<TreeViewManualRefreshOutcome> {
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
 
@@ -15303,9 +15309,9 @@ async function refreshTreeViewSnapshotsIfStale(env: Bindings, now = new Date()):
   const recent = await env.DB.prepare(
     'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
   ).bind(cutoff).first<{ found: number }>();
-  if (recent) return { status: 'recent', ...empty };
+  if (recent && !force) return { status: 'recent', ...empty };
 
-  const result = await syncTreeViewSnapshots(env, 'manual', now);
+  const result = await syncTreeViewSnapshots(env, 'manual', now, force);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。

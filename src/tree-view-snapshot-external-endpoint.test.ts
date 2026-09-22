@@ -415,4 +415,23 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(result.status).toBe('recent');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('--forceなら直近の更新履歴とinstallation_permissions欠落を無視して保存済みリポジトリを更新する', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'nekoserver/dynamicneko', type: 'dir' });
+    db.prepare(`INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at) VALUES (?, 'scheduled', 0, ?)`)
+      .run('nekoserver/dynamicneko', '2026-09-22T02:30:00.000Z');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'forced.ts', type: 'blob' }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+      true,
+    );
+
+    expect(result.status).toBe('updated');
+    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });
