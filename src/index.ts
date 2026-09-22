@@ -4853,6 +4853,58 @@ app.get('/jev-playground', authMiddleware, (c) => {
   return c.html(getJevPlaygroundPage());
 });
 
+/**
+ * /jev-playground(本体ページ)・POST /api/jev-playground-external
+ * (dynamicnekoの/jev-pg-reactページ用)で共通のリクエストボディ検証。
+ * 検証に失敗した場合はエラーメッセージを、成功した場合は検証済みの
+ * payloadを返す(CLAUDE.mdルール32相当の判別可能な戻り値)。
+ */
+type JevPlaygroundValidationResult =
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; error: string };
+
+function validateJevPlaygroundPayload(body: unknown): JevPlaygroundValidationResult {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, error: 'リクエストJSONはオブジェクトで指定してください' };
+  }
+  const payload = body as Record<string, unknown>;
+  if (typeof payload.state !== 'string' || payload.state.trim() === '' || payload.state.length > 20_000) {
+    return { ok: false, error: 'stateは1〜20000文字の文字列で指定してください' };
+  }
+  if (!payload.questions || typeof payload.questions !== 'object' || Array.isArray(payload.questions)) {
+    return { ok: false, error: 'questionsは質問IDをキーにしたオブジェクトで指定してください' };
+  }
+  const questions = Object.values(payload.questions as Record<string, unknown>);
+  if (questions.length < 1 || questions.length > 20) {
+    return { ok: false, error: 'questionsは1〜20件で指定してください' };
+  }
+  if (questions.some((question) => !question || typeof question !== 'object' || !['noul', 'choice', 'score'].includes(String((question as Record<string, unknown>).type)))) {
+    return { ok: false, error: '質問のtypeはnoul、choice、scoreのいずれかで指定してください' };
+  }
+  return { ok: true, payload };
+}
+
+/**
+ * 検証済みpayloadをJev API(api.typesafe.ai)へそのまま転送し、レスポンスを
+ * 素通しする(/jev-playground・/api/jev-playground-externalの共通処理)。
+ */
+async function callJevPlaygroundApi(jevApiKey: string, payload: Record<string, unknown>): Promise<Response> {
+  try {
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jevApiKey}` },
+      body: JSON.stringify({ ...payload, model: typeof payload.model === 'string' ? payload.model : 'jev-latest' }),
+    });
+    return new Response(await response.text(), {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('jev-playground request failed', { error: error instanceof Error ? error.message : String(error) });
+    return jsonUtf8({ error: 'Jev APIへの接続に失敗しました' }, 502);
+  }
+}
+
 app.post('/api/jev-playground', authMiddleware, async (c) => {
   if (!c.env.JEV_API_KEY) return c.json({ error: 'JEV_API_KEYが未設定です' }, 503);
 
@@ -4862,38 +4914,32 @@ app.post('/api/jev-playground', authMiddleware, async (c) => {
   } catch {
     return c.json({ error: 'リクエストは有効なJSONで指定してください' }, 400);
   }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return c.json({ error: 'リクエストJSONはオブジェクトで指定してください' }, 400);
-  }
-  const payload = body as Record<string, unknown>;
-  if (typeof payload.state !== 'string' || payload.state.trim() === '' || payload.state.length > 20_000) {
-    return c.json({ error: 'stateは1〜20000文字の文字列で指定してください' }, 400);
-  }
-  if (!payload.questions || typeof payload.questions !== 'object' || Array.isArray(payload.questions)) {
-    return c.json({ error: 'questionsは質問IDをキーにしたオブジェクトで指定してください' }, 400);
-  }
-  const questions = Object.values(payload.questions as Record<string, unknown>);
-  if (questions.length < 1 || questions.length > 20) {
-    return c.json({ error: 'questionsは1〜20件で指定してください' }, 400);
-  }
-  if (questions.some((question) => !question || typeof question !== 'object' || !['noul', 'choice', 'score'].includes(String((question as Record<string, unknown>).type)))) {
-    return c.json({ error: '質問のtypeはnoul、choice、scoreのいずれかで指定してください' }, 400);
-  }
+  const validation = validateJevPlaygroundPayload(body);
+  if (!validation.ok) return c.json({ error: validation.error }, 400);
 
-  try {
-    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.env.JEV_API_KEY}` },
-      body: JSON.stringify({ ...payload, model: typeof payload.model === 'string' ? payload.model : 'jev-latest' }),
-    });
-    return new Response(await response.text(), {
-      status: response.status,
-      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json; charset=utf-8' },
-    });
-  } catch (error) {
-    logger.warn('jev-playground request failed', { error: error instanceof Error ? error.message : String(error) });
-    return c.json({ error: 'Jev APIへの接続に失敗しました' }, 502);
-  }
+  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
+});
+
+/**
+ * dynamicnekoの/jev-pg-reactページ用。POST /api/jev-playgroundと同じ検証・
+ * Jev API転送ロジックを、他のexternal API群と同じBearer secret+userToken
+ * 認可で提供する(cookie session が無いdynamicnekoから利用するため)。
+ */
+app.post('/api/jev-playground-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string } & Record<string, unknown>>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  if (!body) return jsonUtf8({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  const { userToken: _userToken, ...rest } = body;
+  const validation = validateJevPlaygroundPayload(rest);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
 });
 
 // =====================================================
