@@ -12,4 +12,13 @@ describe('getJevPlaygroundPage', () => {
     expect(html).toContain("fetch('/api/jev-playground'");
     expect(html).not.toContain('Bearer');
   });
+
+  it('noulに判定基準、choiceに選択肢としてcriteriaを設定する', () => {
+    const html = getJevPlaygroundPage();
+
+    expect(html).toContain('"criteria": "認証エラーの場合に処理を停止');
+    expect(html).toContain('"criteria": [');
+    expect(html).toContain('"authentication"');
+    expect(html).not.toContain('"choices"');
+  });
 });
