@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import app, { syncAllTreeViewSnapshots } from './index';
+import app, { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots } from './index';
 import { createJWT } from './utils/jwt';
 
 const SECRET = 'test-aichat-external-secret';
@@ -268,5 +268,47 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
     expect(result.failed.map((f) => f.repoName)).toEqual(['nekoserver/repo-a']);
     expect(result.synced).toEqual(['nekoserver/repo-b']);
+  });
+});
+
+describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
+  it('必要なD1テーブルがなければGitHub APIを呼ばない', async () => {
+    const db = setupDb({});
+    db.exec('DROP TABLE tree_view_update_log');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never);
+
+    expect(result.status).toBe('table_missing');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('必要なテーブルがあり過去1時間の更新履歴がなければmanualとして同期する', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'manual.ts', type: 'blob' }] }), { status: 200 })));
+
+    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
+
+    expect(result.status).toBe('updated');
+    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
+    expect(db.prepare('SELECT update_source, executed_at FROM tree_view_update_log').get()).toEqual({
+      update_source: 'manual', executed_at: '2026-09-22T03:00:00.000Z',
+    });
+  });
+
+  it('過去1時間以内の更新履歴があればGitHub APIを呼ばない', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
+    db.prepare(`INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at) VALUES (?, 'scheduled', 0, ?)`)
+      .run('nekoserver/dynamicneko', '2026-09-22T02:30:00.000Z');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
+
+    expect(result.status).toBe('recent');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
