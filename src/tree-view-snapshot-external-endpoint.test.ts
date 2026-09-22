@@ -26,6 +26,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import app, { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots } from './index';
+import { interpretAichatSlashCommand } from './utils/aichatSlashCommand';
 import { createJWT } from './utils/jwt';
 
 const SECRET = 'test-aichat-external-secret';
@@ -313,6 +314,45 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
 });
 
 describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
+  it('コマンド入力からGitHub取得・snapshot保存・manual監査ログ・完了応答までを一気通貫で証明する', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'nekoserver/dynamicneko');
+    const fetchMock = vi.fn(async (_input: string | URL | Request) => new Response(JSON.stringify({
+      tree: [{ path: 'manually-refreshed.ts', type: 'blob', sha: 'manual-sha' }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const executedAt = new Date('2026-09-22T03:00:00.000Z');
+
+    const result = await interpretAichatSlashCommand('/neko tvupdate', executedAt, {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView: () => refreshTreeViewSnapshotsIfStale(
+        { ...BASE_ENV, DB: wrapD1(db) } as never,
+        executedAt,
+      ),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.handled && result.response).toContain('手動更新を実行しました');
+    expect(result.handled && result.response).toContain('更新あり: 1件');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/repos/nekoserver/dynamicneko/git/trees/main?recursive=1');
+    expect(db.prepare('SELECT repo_name, tree_json, updated_at FROM tree_view_snapshots').get()).toEqual({
+      repo_name: 'nekoserver/dynamicneko',
+      tree_json: JSON.stringify({
+        name: 'nekoserver/dynamicneko',
+        type: 'dir',
+        children: [{ name: 'manually-refreshed.ts', type: 'file' }],
+      }),
+      updated_at: executedAt.toISOString(),
+    });
+    expect(db.prepare('SELECT repo_name, update_source, changed, executed_at FROM tree_view_update_log').get()).toEqual({
+      repo_name: 'nekoserver/dynamicneko',
+      update_source: 'manual',
+      changed: 1,
+      executed_at: executedAt.toISOString(),
+    });
+  });
+
   it('必要なD1テーブルがなければGitHub APIを呼ばない', async () => {
     const db = setupDb({});
     db.exec('DROP TABLE tree_view_update_log');
