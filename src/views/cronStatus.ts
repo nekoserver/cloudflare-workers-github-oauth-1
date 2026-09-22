@@ -23,6 +23,27 @@ export interface CronStatusPageInput {
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 const STALE_AFTER_MS = 7 * 60 * 60 * 1000;
 
+export interface CronHealthStatus {
+  state: 'healthy' | 'warning' | 'unknown';
+  label: '正常稼働' | '実行遅延' | '実行待ち' | '確認できません';
+}
+
+/** cron-status と他画面で同じ稼働判定・表示文言を使うための共通判定。 */
+export function getCronHealthStatus(
+  generatedAt: string,
+  latestScheduledAt: string | null,
+  dataAvailable: boolean,
+): CronHealthStatus {
+  const now = new Date(generatedAt).getTime();
+  const latestTime = latestScheduledAt ? new Date(latestScheduledAt).getTime() : Number.NaN;
+  const age = now - latestTime;
+  const healthy = dataAvailable && Number.isFinite(age) && age >= 0 && age <= STALE_AFTER_MS;
+  return {
+    state: !dataAvailable ? 'unknown' : healthy ? 'healthy' : 'warning',
+    label: !dataAvailable ? '確認できません' : healthy ? '正常稼働' : latestScheduledAt ? '実行遅延' : '実行待ち',
+  };
+}
+
 export function getNextTreeViewCronAt(now: Date): Date {
   return new Date(Math.floor(now.getTime() / SIX_HOURS_MS) * SIX_HOURS_MS + SIX_HOURS_MS);
 }
@@ -38,11 +59,7 @@ export function getCronStatusPage(input: CronStatusPageInput): string {
   const now = new Date(input.generatedAt);
   const scheduledExecutions = input.executions.filter((row) => row.update_source === 'scheduled');
   const latestScheduledAt = scheduledExecutions[0]?.executed_at ?? null;
-  const latestTime = latestScheduledAt ? new Date(latestScheduledAt).getTime() : Number.NaN;
-  const age = now.getTime() - latestTime;
-  const healthy = input.dataAvailable && Number.isFinite(age) && age >= 0 && age <= STALE_AFTER_MS;
-  const state = !input.dataAvailable ? 'unknown' : healthy ? 'healthy' : 'warning';
-  const stateLabel = !input.dataAvailable ? '確認できません' : healthy ? '正常稼働' : latestScheduledAt ? '実行遅延' : '実行待ち';
+  const { state, label: stateLabel } = getCronHealthStatus(input.generatedAt, latestScheduledAt, input.dataAvailable);
   const nextAt = getNextTreeViewCronAt(now).toISOString();
 
   const snapshotRows = input.snapshots.map((row) => `
