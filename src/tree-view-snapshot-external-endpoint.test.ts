@@ -240,6 +240,18 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 1 });
   });
 
+  it('ownerなしの旧Webhookデータから所属組織を推測しない', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'dynamicneko');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'legacy.ts', type: 'blob' }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
+
+    expect(result).toEqual({ synced: [], skipped: [], failed: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('内容が前回と変わっていないリポジトリはD1へ書き込まない(skippedに入る)', async () => {
     const db = setupDb({});
     insertInstallationRepo(db, 'nekoserver/dynamicneko');
@@ -337,6 +349,17 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(result.status).toBe('no_repositories');
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
+  });
+
+  it('手動更新でもownerなしの旧Webhookデータを勝手に補完しない', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'dynamicneko');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'manual.ts', type: 'blob' }] }), { status: 200 })));
+
+    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
+
+    expect(result.status).toBe('no_repositories');
+    expect(result.updated).toEqual([]);
   });
 
   it('過去1時間以内の更新履歴があればGitHub APIを呼ばない', async () => {

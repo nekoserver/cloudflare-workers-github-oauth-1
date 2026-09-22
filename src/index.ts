@@ -15227,7 +15227,11 @@ async function syncTreeViewSnapshots(
   const rows = await env.DB.prepare(
     `SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name LIKE 'nekoserver/%' ORDER BY repo_name`
   ).all<{ repo_name: string }>();
-  const repoNames = (rows.results ?? []).map((r) => r.repo_name).filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name));
+  // ownerが記録されていない旧形式の行から所属先を推測しない。Webhookが通知した
+  // full_nameだけを同期対象とし、対象組織の検証にも通ったリポジトリに限定する。
+  const repoNames = (rows.results ?? [])
+    .map((row) => row.repo_name)
+    .filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name));
 
   // リポジトリごとに直列でGitHub APIを待つと、対象数に比例して/neko tvupdateの
   // HTTP応答が遅れ、チャット側では送信中のまま(未処理)になる。GitHub/D1への
@@ -18929,7 +18933,9 @@ app.post('/webhook/github', async (c) => {
             const repos = payload?.repositories ?? payload?.repositories_added ?? [];
             if (Array.isArray(repos)) {
               for (const repo of repos) {
-                const repoName = repo.name ?? repo.full_name?.split('/').pop();
+                // tree-view同期を含む利用側はowner/name形式で照合するため、
+                // 短いnameではなくfull_nameを優先して正規形を保存する。
+                const repoName = repo.full_name;
                 if (!repoName) continue;
                 await db.prepare(`
                   INSERT INTO installation_permissions (installation_id, repo_name, repository_selection, permissions, updated_at)
@@ -18947,11 +18953,15 @@ app.post('/webhook/github', async (c) => {
           const removedRepos = payload?.repositories_removed ?? [];
           if (Array.isArray(removedRepos)) {
             for (const repo of removedRepos) {
-              const repoName = repo.name ?? repo.full_name?.split('/').pop();
-              if (!repoName) continue;
+              // full_nameは正規形、nameは過去に保存された値そのもの。ownerを
+              // 推測した値は作らず、Webhookから明示された識別子だけを削除する。
+              const repoName = repo.full_name;
+              const legacyRepoName = repo.name;
+              if (!repoName && !legacyRepoName) continue;
               await db.prepare(
-                'DELETE FROM installation_permissions WHERE installation_id = ? AND repo_name = ?'
-              ).bind(installationId, repoName).run();
+                `DELETE FROM installation_permissions
+                 WHERE installation_id = ? AND (repo_name = ? OR repo_name = ?)`
+              ).bind(installationId, repoName ?? '', legacyRepoName ?? '').run();
             }
           }
 
