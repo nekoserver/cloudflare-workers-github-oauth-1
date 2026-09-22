@@ -381,14 +381,39 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
 
   it('更新対象リポジトリが0件なら成功扱いにしない', async () => {
     const db = setupDb({});
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
 
     expect(result.status).toBe('no_repositories');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
+  });
+
+  it('D1に更新対象がなくてもGitHubのアクセス可能リポジトリ一覧から初回同期する', async () => {
+    const db = setupDb({});
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/user/repos?')) {
+        return new Response(JSON.stringify([
+          { full_name: 'nekoserver/dynamicneko' },
+          { full_name: 'someone-else/unrelated' },
+        ]), { status: 200 });
+      }
+      return new Response(JSON.stringify({ tree: [{ path: 'first-sync.ts', type: 'blob' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+    );
+
+    expect(result.status).toBe('updated');
+    expect(result.updated).toEqual(['nekoserver/dynamicneko']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(db.prepare('SELECT repo_name FROM tree_view_snapshots').get()).toEqual({ repo_name: 'nekoserver/dynamicneko' });
   });
 
   it('installation_permissionsが空でも保存済みリポジトリを手動更新する', async () => {
