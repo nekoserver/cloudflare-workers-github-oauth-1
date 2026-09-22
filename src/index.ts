@@ -15201,11 +15201,12 @@ async function recordTreeViewUpdate(
 
 /**
  * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、全リポジトリ分の
- * 同期処理本体。installation_permissionsに記録されている(=GitHub Appが
- * アクセスできる)nekoserver組織配下のリポジトリだけを対象にする。新しい
- * リポジトリへGitHub Appをインストールすれば、installation_permissionsは
- * 既存のWebhookで自動的に更新されるため、次回のcron実行時に自動的に
- * tree_view_snapshotsへも追加される(手動でのコード変更・再デプロイ不要)。
+ * 同期処理本体。通常はinstallation_permissionsに記録されている(=GitHub Appが
+ * アクセスできる)nekoserver組織配下のリポジトリを対象にする。ただしこの
+ * テーブルはinstallation系Webhookが届くまで空のことがあるため、全件空なら
+ * 保存済みtree_view_snapshotsを対象にして既存の同期が停止しないようにする。
+ * 新しいリポジトリへGitHub AppをインストールしてWebhookが届けば、次回のcron
+ * 実行時にtree_view_snapshotsへも自動的に追加される。
  */
 async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
   return syncTreeViewSnapshots(env, 'scheduled', new Date());
@@ -15225,13 +15226,21 @@ async function syncTreeViewSnapshots(
     return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
   }
 
+  // installation_permissionsが1件でもあれば従来どおり許可リストとして扱う。
+  // 空の場合だけ保存済みスナップショットへフォールバックし、一時的なWebhook
+  // 同期漏れによって/neko tvupdateが対象0件になることを避ける。
   const rows = await env.DB.prepare(
     includeSavedSnapshots
       ? `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
          UNION
          SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL
          ORDER BY repo_name`
-      : `SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL ORDER BY repo_name`
+      : `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
+         UNION
+         SELECT repo_name FROM tree_view_snapshots
+         WHERE repo_name IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM installation_permissions WHERE repo_name IS NOT NULL)
+         ORDER BY repo_name`
   ).all<{ repo_name: string }>();
   // installation webhook used to persist repository.name (for example "dynamicneko")
   // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
