@@ -17,7 +17,25 @@
  *   (7) レスポンスのtreeが配列でない不正な形式を握りつぶしてしまう
  */
 import { describe, it, expect, vi } from 'vitest';
-import { buildTreeViewSnapshotFromGithubItems, fetchRepoTreeSnapshot, type GithubTreeItem } from './treeViewSnapshot';
+import {
+  EMBEDDED_TREE_VIEW_SNAPSHOTS,
+  buildTreeViewSnapshotFromGithubItems,
+  fetchRepoTreeSnapshot,
+  type GithubTreeItem,
+} from './treeViewSnapshot';
+
+describe('EMBEDDED_TREE_VIEW_SNAPSHOTS', () => {
+  it('/neko treeで採取した2リポジトリだけをシードとして持つ', () => {
+    expect(Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS).sort()).toEqual([
+      'nekoserver/cloudflare-workers-github-oauth-1',
+      'nekoserver/dynamicneko',
+    ]);
+    for (const [repoName, tree] of Object.entries(EMBEDDED_TREE_VIEW_SNAPSHOTS)) {
+      expect(tree).toMatchObject({ name: repoName, type: 'dir' });
+      expect(tree.children?.length).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe('buildTreeViewSnapshotFromGithubItems', () => {
   it('隠しファイル・隠しディレクトリ配下は除外する', () => {

@@ -1,4 +1,5 @@
 import cloudflareWorkersGithubOauth1TreeJson from '../data/cloudflare-workers-github-oauth-1.tree.json';
+import dynamicnekoTreeJson from '../data/dynamicneko.tree.json';
 
 // /tree-view(dynamicneko)のサイドバーツリーを、GitHub Trees APIの結果から
 // 構築するための純粋関数群。以前はdynamicneko側にgit ls-treeの結果を
@@ -18,15 +19,16 @@ export type TreeViewSnapshotNode = {
 export type GithubTreeItem = { path: string; type: 'blob' | 'tree' | 'commit' };
 
 /**
- * `/neko tree nekoserver/cloudflare-workers-github-oauth-1` の結果をJSON化した
- * 組み込みスナップショット。cronがまだ一度も動いていない環境でも、
- * dynamicnekoの/tree-viewからこのリポジトリを開けるようにする。
+ * `/neko tree` で採取した初期対象2リポジトリの組み込みスナップショット。
+ * cronがまだ一度も動いていない環境でも、dynamicnekoの/tree-viewから
+ * これらのリポジトリを開けるようにする。
  */
 export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnapshotNode>> = {
   'nekoserver/cloudflare-workers-github-oauth-1': cloudflareWorkersGithubOauth1TreeJson as TreeViewSnapshotNode,
+  'nekoserver/dynamicneko': dynamicnekoTreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-09-22T06:41:16.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-09-22T09:20:00.000Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
 
