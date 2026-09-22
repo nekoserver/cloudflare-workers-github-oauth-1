@@ -54,6 +54,7 @@ export function getCountdownWidgetCSS(): string {
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .widget-label[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
     .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     #countdownToast {
       position: fixed;
@@ -224,6 +225,10 @@ export function getCountdownWidgetScript(): string {
           var label = document.createElement('div');
           label.className = 'widget-label';
           label.textContent = event.label;
+          if (event.label === 'tree-view cron更新') {
+            label.title = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に自動更新されます。表示中の残り時間は次回cron開始までです。';
+            label.setAttribute('aria-label', label.textContent + '。' + label.title);
+          }
           var clock = document.createElement('div');
           clock.className = 'widget-clock';
           timer.appendChild(label);

@@ -13,6 +13,7 @@ import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware, cfDashboa
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
+import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
@@ -11306,6 +11307,16 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
+  if (c.env.DB) {
+    try {
+      await ensureTreeViewCronCountdownForUser(c.env.DB, user.sub);
+    } catch (err) {
+      logger.error('tree-view cron countdown ensure failed', {
+        userId: user.sub,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
   return c.html(getCountdownPage(user.sub));
 });
 

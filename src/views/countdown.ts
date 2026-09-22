@@ -230,6 +230,7 @@ export function getCountdownPage(username: string): string {
     }
     .event-list-filter-clear-btn:hover { background: var(--card-bg); }
     .event-list { margin-top: 8px; }
+    .event-label[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
     .event-row {
       display: flex;
       align-items: center;
@@ -581,8 +582,11 @@ export function getCountdownPage(username: string): string {
         var at = new Date(ev.target_at);
         var isPast = at.getTime() < now;
         var label = String(ev.label).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var cronTooltip = ev.label === 'tree-view cron更新'
+          ? ' title="tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に自動更新されます。この日時は次回cronの開始予定です。" tabindex="0"'
+          : '';
         return '<div class="event-row' + (isPast ? ' past' : '') + '">'
-          + '<div class="event-info"><span class="event-label">' + label + '</span>'
+          + '<div class="event-info"><span class="event-label"' + cronTooltip + '>' + label + '</span>'
           + '<span class="event-at">' + at.getFullYear() + '/' + pad2(at.getMonth() + 1) + '/' + pad2(at.getDate()) + ' ' + pad2(at.getHours()) + ':' + pad2(at.getMinutes()) + '</span></div>'
           + '<button type="button" class="event-delete-btn" data-id="' + ev.id + '">削除</button></div>';
       }).join('');

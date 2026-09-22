@@ -27,9 +27,30 @@ export async function registerNextTreeViewCronCountdown(
     .bind(TREE_VIEW_CRON_COUNTDOWN_LABEL);
   const insertNext = db.prepare(
     `INSERT INTO countdown_events (user_id, label, target_at, group_id)
-     SELECT user_id, ?, ?, NULL FROM user_sessions WHERE revoked_at IS NULL`
+     SELECT user_id, ?, ?, NULL FROM user_sessions`
   ).bind(TREE_VIEW_CRON_COUNTDOWN_LABEL, targetAt);
   const [, result] = await db.batch([deleteExisting, insertNext]);
 
   return { registered: Number(result.meta?.changes ?? 0), targetAt };
+}
+
+/**
+ * /countdown を開いたユーザーについても次回予定を保証する。
+ * デプロイ直後（次の scheduled 実行前）でも表示でき、過去の予定は増殖させない。
+ */
+export async function ensureTreeViewCronCountdownForUser(
+  db: D1Database,
+  userId: string,
+  now = new Date()
+): Promise<{ targetAt: string }> {
+  const targetAt = getNextTreeViewCronAt(now);
+  await db.prepare(
+    `DELETE FROM countdown_events
+     WHERE user_id = ? AND label = ?`
+  ).bind(userId, TREE_VIEW_CRON_COUNTDOWN_LABEL).run();
+  await db.prepare(
+    `INSERT INTO countdown_events (user_id, label, target_at, group_id)
+     VALUES (?, ?, ?, NULL)`
+  ).bind(userId, TREE_VIEW_CRON_COUNTDOWN_LABEL, targetAt).run();
+  return { targetAt };
 }
