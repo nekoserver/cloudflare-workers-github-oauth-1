@@ -38,6 +38,7 @@ import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
+import { getJevPlaygroundPage } from './views/jevPlayground';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getEarthComposer25Page } from './views/earthComposer25';
@@ -4846,6 +4847,53 @@ app.get('/health', (c) => {
 
 app.get('/fetch-text-stream-demo', (c) => {
   return c.html(getFetchTextStreamDemoPage());
+});
+
+app.get('/jev-playground', authMiddleware, (c) => {
+  return c.html(getJevPlaygroundPage());
+});
+
+app.post('/api/jev-playground', authMiddleware, async (c) => {
+  if (!c.env.JEV_API_KEY) return c.json({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return c.json({ error: 'リクエストJSONはオブジェクトで指定してください' }, 400);
+  }
+  const payload = body as Record<string, unknown>;
+  if (typeof payload.state !== 'string' || payload.state.trim() === '' || payload.state.length > 20_000) {
+    return c.json({ error: 'stateは1〜20000文字の文字列で指定してください' }, 400);
+  }
+  if (!payload.questions || typeof payload.questions !== 'object' || Array.isArray(payload.questions)) {
+    return c.json({ error: 'questionsは質問IDをキーにしたオブジェクトで指定してください' }, 400);
+  }
+  const questions = Object.values(payload.questions as Record<string, unknown>);
+  if (questions.length < 1 || questions.length > 20) {
+    return c.json({ error: 'questionsは1〜20件で指定してください' }, 400);
+  }
+  if (questions.some((question) => !question || typeof question !== 'object' || !['noul', 'choice', 'score'].includes(String((question as Record<string, unknown>).type)))) {
+    return c.json({ error: '質問のtypeはnoul、choice、scoreのいずれかで指定してください' }, 400);
+  }
+
+  try {
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.env.JEV_API_KEY}` },
+      body: JSON.stringify({ ...payload, model: typeof payload.model === 'string' ? payload.model : 'jev-latest' }),
+    });
+    return new Response(await response.text(), {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('jev-playground request failed', { error: error instanceof Error ? error.message : String(error) });
+    return c.json({ error: 'Jev APIへの接続に失敗しました' }, 502);
+  }
 });
 
 // =====================================================
