@@ -11,10 +11,7 @@ const TEMPLATES = [
     type: 'noul',
     title: 'noul — Yes / No 判定',
     help: '条件が成立する確率を 0〜1 で返します。ゲート判定に向いています。',
-    criteria: {
-      yes: 'state の内容から質問の条件が成立すると判断できる',
-      no: 'state の内容から質問の条件が成立しないと判断できる',
-    },
+    instructions: 'state の内容を根拠に、質問の条件が成立するなら yes、成立しないなら no と判定する',
     samples: [
       ['認証エラーで停止', 'この変更では、認証エラー時に処理を停止し、エラーを利用者へ返します。', 'この変更はフェイルクローズになっているか？'],
       ['テスト成功', '全 328 件の自動テストが成功し、失敗とスキップは 0 件でした。', 'すべての自動テストは成功したか？'],
@@ -74,12 +71,13 @@ export function getJevPlaygroundPage(): string {
       model: 'jev-latest',
       state,
       questions: { [questionId]: {
-        type: template.type, question, criteria: template.criteria,
+        type: template.type, question,
+        ...(template.type === 'noul' ? { instructions: template.instructions } : { criteria: template.criteria }),
       } },
     };
     const options = template.samples.map((sample, index) => `<button type="button" class="state-option" data-index="${index}"><strong>${escapeHtml(sample[0])}</strong><span>${escapeHtml(sample[1])}</span></button>`).join('');
     return `
-    <section class="card" data-type="${template.type}">
+    <section id="${template.type}" class="card" data-type="${template.type}">
       <div class="card-heading"><div><h2>${template.title}</h2><p>${template.help}</p></div><span>${template.type}</span></div>
       <div class="state-picker">
         <label for="state-${template.type}">state</label>
@@ -87,9 +85,8 @@ export function getJevPlaygroundPage(): string {
       </div>
       <dialog class="state-dialog" aria-labelledby="state-title-${template.type}"><div class="dialog-head"><h3 id="state-title-${template.type}">state を選択</h3><button type="button" class="dialog-close" aria-label="閉じる">×</button></div><div class="state-options">${options}</div></dialog>
       <div class="io-grid">
-        <div class="io-panel input-panel"><div class="io-heading"><span>IN</span></div>
-          <label for="request-${template.type}">リクエスト JSON</label>
-          <textarea id="request-${template.type}" spellcheck="false">${escapeJsonForHtml(body)}</textarea>
+        <div class="io-panel input-panel"><div class="io-heading"><span>IN <label for="request-${template.type}">リクエスト JSON</label></span></div>
+          <div class="request-editor"><textarea id="request-${template.type}" spellcheck="false">${escapeJsonForHtml(body)}</textarea><span class="state-value-flash" aria-hidden="true"></span></div>
         </div>
         <div class="io-panel output-panel"><div class="io-heading"><span>OUT</span><div class="actions"><span class="status" aria-live="polite">未実行</span><button type="button" class="run">Run</button></div></div>
           <pre id="response-${template.type}">Run を押すと結果を表示します。</pre>
@@ -104,13 +101,13 @@ export function getJevPlaygroundPage(): string {
 <title>Jev API Playground</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f8fa;--panel:#fff;--text:#1f2328;--muted:#59636e;--border:#d0d7de;--accent:#8250df;--code:#f0f3f6} @media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--text:#e6edf3;--muted:#9198a1;--border:#30363d;--accent:#a371f7;--code:#0d1117}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,sans-serif}.page{max-width:1180px;margin:auto;padding:32px 20px 64px}h1{margin:0 0 20px;font-size:28px}.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}.card{width:100%;min-width:0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}.card-heading{display:flex;justify-content:space-between;gap:12px}.card-heading h2{font-size:17px;margin:0 0 5px}.card-heading p{margin:0;color:var(--muted)}.card-heading>span{height:25px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);font:600 12px/21px ui-monospace,monospace}.state-picker{margin-top:16px}.state-picker label{margin-top:0}.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:10px}.io-panel{min-width:0}.io-heading{min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.io-heading>span{font:700 12px/1 ui-monospace,monospace;letter-spacing:.08em;color:var(--muted)}label,.field-label{display:block;margin:13px 0 6px;font-weight:650}.input-panel label:first-of-type{margin-top:0}textarea,pre{width:100%;border:1px solid var(--border);border-radius:7px;background:var(--code);color:var(--text)}textarea,pre{min-height:300px;margin:0;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow:auto}textarea{resize:vertical}.actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0}button{border:0;border-radius:7px;padding:8px 22px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.status{color:var(--muted);font-size:12px}pre{height:100%;min-height:390px;max-height:520px}.back{color:var(--accent)}.state-select{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border);font:inherit}.state-select b{color:var(--muted);font-size:18px}.state-dialog{width:min(720px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 32px));padding:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:0 24px 80px #0008}.state-dialog::backdrop{background:#05070ab8;backdrop-filter:blur(2px)}.dialog-head{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel)}.dialog-head h3{margin:0;font-size:17px}.dialog-close{padding:3px 11px;background:transparent;color:var(--muted);font-size:24px}.state-options{display:grid;gap:8px;padding:12px}.state-option{display:grid;gap:3px;width:100%;padding:12px 14px;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border)}.state-option:hover,.state-option:focus-visible{border-color:var(--accent)}.state-option span{color:var(--muted);font-weight:400}@media(max-width:760px){.io-grid{grid-template-columns:minmax(0,1fr)}pre{min-height:240px}}
-</style></head><body><main class="page"><a class="back" href="/">← Home</a><h1>Jev API Playground</h1>
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:84px}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,sans-serif}.page{max-width:1180px;margin:auto;padding:0 20px 64px}.page-header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px 0 16px;background:var(--bg);border-bottom:1px solid var(--border)}h1{margin:0;font-size:28px;white-space:nowrap}.jump-links{display:flex;justify-content:flex-end;gap:18px;flex-wrap:wrap}.jump-links a{color:var(--accent);font-weight:650;text-decoration:none}.jump-links a:hover{text-decoration:underline}.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding-top:20px}.card{width:100%;min-width:0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel);scroll-margin-top:84px}.card-heading{display:flex;justify-content:space-between;gap:12px}.card-heading h2{font-size:17px;margin:0 0 5px}.card-heading p{margin:0;color:var(--muted)}.card-heading>span{height:25px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);font:600 12px/21px ui-monospace,monospace}.state-picker{margin-top:16px}.state-picker label{margin-top:0}.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch;gap:16px;margin-top:10px}.io-panel{min-width:0;display:flex;flex-direction:column}.io-heading{min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.io-heading>span{display:flex;align-items:center;gap:1ch;font:700 12px/1 ui-monospace,monospace;letter-spacing:.08em;color:var(--muted)}.io-heading label{margin:0;font:650 14px/1.55 system-ui,sans-serif;letter-spacing:normal;color:var(--text)}label,.field-label{display:block;margin:13px 0 6px;font-weight:650}.request-editor{position:relative;display:flex;flex:1;min-height:390px}.request-editor textarea,pre{width:100%;height:390px;border:1px solid var(--border);border-radius:7px;background:var(--code);color:var(--text)}textarea,pre{min-height:300px;margin:0;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow:auto}textarea{resize:vertical}.state-value-flash{position:absolute;top:calc(12px + 2 * 1.55em);left:calc(12px + 11ch);max-width:calc(100% - 24px - 11ch);overflow:hidden;white-space:pre;color:var(--text);font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;pointer-events:none;opacity:0}.state-value-flash.is-flashing{animation:state-value-flash .35s ease-in-out 3}@keyframes state-value-flash{0%,100%{opacity:0}50%{opacity:1;background:#ffd33d;color:#1f2328}}.actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0}button{border:0;border-radius:7px;padding:8px 22px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.status{color:var(--muted);font-size:12px}pre{flex:1;max-height:none}.state-select{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border);font:inherit}.state-select b{color:var(--muted);font-size:18px}.state-dialog{width:min(720px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 32px));padding:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:0 24px 80px #0008}.state-dialog::backdrop{background:#05070ab8;backdrop-filter:blur(2px)}.dialog-head{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel)}.dialog-head h3{margin:0;font-size:17px}.dialog-close{padding:3px 11px;background:transparent;color:var(--muted);font-size:24px}.state-options{display:grid;gap:8px;padding:12px}.state-option{display:grid;gap:3px;width:100%;padding:12px 14px;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border)}.state-option:hover,.state-option:focus-visible{border-color:var(--accent)}.state-option span{color:var(--muted);font-weight:400}@media(max-width:760px){.page-header{align-items:flex-start;flex-direction:column;gap:8px}.jump-links{justify-content:flex-start;gap:8px 14px}.io-grid{grid-template-columns:minmax(0,1fr)}pre{min-height:240px}}
+</style></head><body><main class="page"><header class="page-header"><h1>Jev API Playground</h1><nav class="jump-links" aria-label="質問タイプへ移動"><a href="#noul">noul — Yes / No 判定</a><a href="#choice">choice — 選択肢から分類</a><a href="#score">score — 程度を評価</a></nav></header>
 <div class="grid">${cards}</div></main>
 <script>
 var samples=${escapeJsonForHtml(samples)};
 document.querySelectorAll('.card').forEach(function(card){
-  var type=card.dataset.type, select=card.querySelector('.state-select'), dialog=card.querySelector('.state-dialog'), button=card.querySelector('.run'), textarea=card.querySelector('textarea'), output=card.querySelector('pre'), status=card.querySelector('.status');
+  var type=card.dataset.type, select=card.querySelector('.state-select'), dialog=card.querySelector('.state-dialog'), button=card.querySelector('.run'), textarea=card.querySelector('textarea'), flash=card.querySelector('.state-value-flash'), output=card.querySelector('pre'), status=card.querySelector('.status');
   select.addEventListener('click',function(){dialog.showModal()});
   dialog.querySelector('.dialog-close').addEventListener('click',function(){dialog.close()});
   dialog.addEventListener('click',function(event){if(event.target===dialog)dialog.close()});
@@ -121,6 +118,10 @@ document.querySelectorAll('.card').forEach(function(card){
     var questionKey=Object.keys(body.questions)[0];
     if(questionKey){body.questions[questionKey].question=sample.question}
     textarea.value=JSON.stringify(body,null,2);
+    flash.textContent=JSON.stringify(sample.state);
+    flash.classList.remove('is-flashing');
+    void flash.offsetWidth;
+    flash.classList.add('is-flashing');
     select.querySelector('span').textContent=option.querySelector('strong').textContent;
     dialog.close();
   })});

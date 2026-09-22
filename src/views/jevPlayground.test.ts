@@ -14,14 +14,14 @@ describe('getJevPlaygroundPage', () => {
     expect(html).not.toContain('Bearer');
   });
 
-  it('noulに判定基準、choiceに選択肢、scoreに両端の基準を設定する', () => {
+  it('noulにinstructions、choiceに選択肢、scoreに両端の基準を設定する', () => {
     const dom = new JSDOM(getJevPlaygroundPage());
     const getBody = (type: string) => JSON.parse(dom.window.document.querySelector<HTMLTextAreaElement>(`[data-type="${type}"] textarea`)!.value);
 
-    expect(getBody('noul').questions.condition.criteria).toEqual({
-      yes: 'state の内容から質問の条件が成立すると判断できる',
-      no: 'state の内容から質問の条件が成立しないと判断できる',
-    });
+    expect(getBody('noul').questions.condition.instructions).toBe(
+      'state の内容を根拠に、質問の条件が成立するなら yes、成立しないなら no と判定する',
+    );
+    expect(getBody('noul').questions.condition).not.toHaveProperty('criteria');
     expect(getBody('choice').questions.category.criteria).toEqual({
       authentication: '利用者が誰であるかを確認する処理',
       authorization: '利用者に操作の権限があるかを確認する処理',
@@ -69,13 +69,41 @@ describe('getJevPlaygroundPage', () => {
     for (const card of dom.window.document.querySelectorAll('.card')) {
       const panels = card.querySelectorAll('.io-grid > .io-panel');
       expect(panels).toHaveLength(2);
-      expect(panels[0].querySelector('.io-heading')?.textContent).toBe('IN');
+      expect(panels[0].querySelector('.io-heading')?.textContent).toBe('IN リクエスト JSON');
       expect(panels[1].querySelector('.io-heading > span')?.textContent).toBe('OUT');
       expect(panels[1].querySelector('.io-heading .run')).not.toBeNull();
     }
     const html = getJevPlaygroundPage();
     expect(html).toContain('.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)');
     expect(html).toContain('.actions{display:flex;align-items:center;justify-content:flex-end');
+    expect(html).toContain('.io-panel{min-width:0;display:flex;flex-direction:column}');
+    expect(html).not.toContain('pre{height:100%');
+  });
+
+  it('state選択後に更新した文字列を黄色で3回点滅する', () => {
+    const dom = new JSDOM(getJevPlaygroundPage(), { runScripts: 'dangerously' });
+    const card = dom.window.document.querySelector('[data-type=\"noul\"]')!;
+
+    card.querySelectorAll<HTMLButtonElement>('.state-option')[3].click();
+
+    const flash = card.querySelector('.state-value-flash')!;
+    expect(flash.textContent).toBe('\"申請の受信日時は 9 月 18 日 14:20、締切は 9 月 20 日 17:00 です。\"');
+    expect(flash.classList.contains('is-flashing')).toBe(true);
+    expect(getJevPlaygroundPage()).toContain('animation:state-value-flash .35s ease-in-out 3');
+  });
+
+  it('固定ヘッダーに各質問タイプへのジャンプリンクを表示しHomeリンクを表示しない', () => {
+    const dom = new JSDOM(getJevPlaygroundPage());
+    const header = dom.window.document.querySelector('.page-header')!;
+
+    expect(header.querySelector('h1')?.textContent).toBe('Jev API Playground');
+    expect(Array.from(header.querySelectorAll<HTMLAnchorElement>('.jump-links a')).map((link) => [link.textContent, link.hash])).toEqual([
+      ['noul — Yes / No 判定', '#noul'],
+      ['choice — 選択肢から分類', '#choice'],
+      ['score — 程度を評価', '#score'],
+    ]);
+    expect(dom.window.document.querySelector('a[href=\"/\"]')).toBeNull();
+    expect(getJevPlaygroundPage()).toContain('.page-header{position:sticky;top:0');
   });
 
   it('stateドロップダウンをIN表記より上に表示する', () => {
