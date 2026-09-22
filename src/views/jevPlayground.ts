@@ -8,10 +8,10 @@ function escapeHtml(value: string): string {
 
 const TEMPLATES = [
   {
-    type: 'gate',
-    title: 'score — Yes / No 判定',
-    help: 'score の両端を No / Yes として、条件が成立する度合いを返します。',
-    criteria: ['条件を満たしていない', '条件を満たしている'],
+    type: 'noul',
+    title: 'noul — Yes / No 判定',
+    help: '条件が成立する確率を 0〜1 で返します。ゲート判定に向いています。',
+    criteria: '質問の条件が state の内容から成立すると判断できる',
     samples: [
       ['認証エラーで停止', 'この変更では、認証エラー時に処理を停止し、エラーを利用者へ返します。', 'この変更はフェイルクローズになっているか？'],
       ['テスト成功', '全 328 件の自動テストが成功し、失敗とスキップは 0 件でした。', 'すべての自動テストは成功したか？'],
@@ -24,23 +24,23 @@ const TEMPLATES = [
     ],
   },
   {
-    type: 'classification',
-    title: 'score — 分類適合度',
-    help: '候補ごとの score を比較し、分類や処理の振り分けに利用できます。',
-    criteria: ['カテゴリに該当しない', 'カテゴリに該当する'],
+    type: 'choice',
+    title: 'choice — 選択肢から分類',
+    help: '候補から最も適切なものを選びます。分類や処理の振り分けに向いています。',
+    criteria: ['authentication', 'authorization', 'data-processing', 'observability', 'user-interface'],
     samples: [
-      ['未ログイン時の遷移', 'ログインしていない利用者が管理画面を開くと、ログインページへ移動します。', 'この動作は authentication カテゴリにどの程度該当するか？'],
-      ['権限不足を拒否', 'ログイン済みでも管理者権限がない利用者には、設定変更 API が 403 を返します。', 'この制御は authorization カテゴリにどの程度該当するか？'],
-      ['CSV の集計', 'アップロードされた CSV を読み込み、部署別の売上合計を計算します。', 'この処理は data-processing カテゴリにどの程度該当するか？'],
-      ['エラー率の監視', '5 分間の API エラー率を計測し、しきい値を超えると通知します。', 'この機能は observability カテゴリにどの程度該当するか？'],
-      ['入力フォーム改善', '入力欄の横にエラー理由を表示し、キーボード操作時はフォーカス枠を示します。', 'この変更は user-interface カテゴリにどの程度該当するか？'],
-      ['多要素ログイン', 'パスワード確認後、登録済み端末へ送ったワンタイムコードを検証します。', 'この機能は authentication カテゴリにどの程度該当するか？'],
-      ['監査ログ記録', '設定を変更した利用者、時刻、変更前後の値を監査ログへ記録します。', 'この機能は observability カテゴリにどの程度該当するか？'],
-      ['画像のリサイズ', '投稿された画像を読み込み、縦横比を維持してサムネイルを生成します。', 'この処理は data-processing カテゴリにどの程度該当するか？'],
+      ['未ログイン時の遷移', 'ログインしていない利用者が管理画面を開くと、ログインページへ移動します。', 'この動作を最もよく表すカテゴリは？'],
+      ['権限不足を拒否', 'ログイン済みでも管理者権限がない利用者には、設定変更 API が 403 を返します。', 'この制御を最もよく表すカテゴリは？'],
+      ['CSV の集計', 'アップロードされた CSV を読み込み、部署別の売上合計を計算します。', 'この処理を最もよく表すカテゴリは？'],
+      ['エラー率の監視', '5 分間の API エラー率を計測し、しきい値を超えると通知します。', 'この機能を最もよく表すカテゴリは？'],
+      ['入力フォーム改善', '入力欄の横にエラー理由を表示し、キーボード操作時はフォーカス枠を示します。', 'この変更を最もよく表すカテゴリは？'],
+      ['多要素ログイン', 'パスワード確認後、登録済み端末へ送ったワンタイムコードを検証します。', 'この機能を最もよく表すカテゴリは？'],
+      ['監査ログ記録', '設定を変更した利用者、時刻、変更前後の値を監査ログへ記録します。', 'この機能を最もよく表すカテゴリは？'],
+      ['画像のリサイズ', '投稿された画像を読み込み、縦横比を維持してサムネイルを生成します。', 'この処理を最もよく表すカテゴリは？'],
     ],
   },
   {
-    type: 'quality',
+    type: 'score',
     title: 'score — 程度を評価',
     help: '両端の基準の間で程度を数値化します。品質やリスクの評価に向いています。',
     criteria: ['まったく満たしていない', '十分に満たしている'],
@@ -60,26 +60,30 @@ const TEMPLATES = [
 export function getJevPlaygroundPage(): string {
   const cards = TEMPLATES.map((template) => {
     const [, state, question] = template.samples[0];
-    const questionId = template.type === 'gate' ? 'condition' : template.type === 'classification' ? 'category_fit' : 'quality';
+    const questionId = template.type === 'noul' ? 'condition' : template.type === 'choice' ? 'category' : 'quality';
     const body = {
       model: 'jev-latest',
       state,
       questions: { [questionId]: {
-        type: 'score', question, criteria: template.criteria,
+        type: template.type, question, criteria: template.criteria,
       } },
     };
     const options = template.samples.map((sample, index) => `<button type="button" class="state-option" data-index="${index}"><strong>${escapeHtml(sample[0])}</strong><span>${escapeHtml(sample[1])}</span></button>`).join('');
     return `
     <section class="card" data-type="${template.type}">
-      <div class="card-heading"><div><h2>${template.title}</h2><p>${template.help}</p></div><span>score</span></div>
-      <label for="state-${template.type}">state</label>
-      <button id="state-${template.type}" type="button" class="state-select" aria-haspopup="dialog"><span>${escapeHtml(template.samples[0][0])}</span><b aria-hidden="true">⌄</b></button>
-      <dialog class="state-dialog" aria-labelledby="state-title-${template.type}"><div class="dialog-head"><h3 id="state-title-${template.type}">state を選択</h3><button type="button" class="dialog-close" aria-label="閉じる">×</button></div><div class="state-options">${options}</div></dialog>
-      <label for="request-${template.type}">リクエスト JSON</label>
-      <textarea id="request-${template.type}" spellcheck="false">${escapeJsonForHtml(body)}</textarea>
-      <div class="actions"><button type="button" class="run">Run</button><span class="status" aria-live="polite">未実行</span></div>
-      <label for="response-${template.type}">レスポンス</label>
-      <pre id="response-${template.type}">Run を押すと結果を表示します。</pre>
+      <div class="card-heading"><div><h2>${template.title}</h2><p>${template.help}</p></div><span>${template.type}</span></div>
+      <div class="io-grid">
+        <div class="io-panel input-panel"><div class="io-heading"><span>IN</span></div>
+          <label for="state-${template.type}">state</label>
+          <button id="state-${template.type}" type="button" class="state-select" aria-haspopup="dialog"><span>${escapeHtml(template.samples[0][0])}</span><b aria-hidden="true">⌄</b></button>
+          <dialog class="state-dialog" aria-labelledby="state-title-${template.type}"><div class="dialog-head"><h3 id="state-title-${template.type}">state を選択</h3><button type="button" class="dialog-close" aria-label="閉じる">×</button></div><div class="state-options">${options}</div></dialog>
+          <label for="request-${template.type}">リクエスト JSON</label>
+          <textarea id="request-${template.type}" spellcheck="false">${escapeJsonForHtml(body)}</textarea>
+        </div>
+        <div class="io-panel output-panel"><div class="io-heading"><span>OUT</span><div class="actions"><span class="status" aria-live="polite">未実行</span><button type="button" class="run">Run</button></div></div>
+          <pre id="response-${template.type}">Run を押すと結果を表示します。</pre>
+        </div>
+      </div>
     </section>`;
   }).join('');
 
@@ -89,7 +93,7 @@ export function getJevPlaygroundPage(): string {
 <title>Jev API Playground</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f8fa;--panel:#fff;--text:#1f2328;--muted:#59636e;--border:#d0d7de;--accent:#8250df;--code:#f0f3f6} @media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--text:#e6edf3;--muted:#9198a1;--border:#30363d;--accent:#a371f7;--code:#0d1117}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,sans-serif}.page{max-width:1180px;margin:auto;padding:32px 20px 64px}h1{margin:0 0 20px;font-size:28px}.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}.card{width:100%;min-width:0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}.card-heading{display:flex;justify-content:space-between;gap:12px}.card-heading h2{font-size:17px;margin:0 0 5px}.card-heading p{margin:0;color:var(--muted)}.card-heading>span{height:25px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);font:600 12px/21px ui-monospace,monospace}label,.field-label{display:block;margin:13px 0 6px;font-weight:650}textarea,pre{width:100%;border:1px solid var(--border);border-radius:7px;background:var(--code);color:var(--text)}textarea,pre{min-height:240px;margin:0;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow:auto}textarea{resize:vertical}.actions{display:flex;align-items:center;gap:12px;margin:12px 0}button{border:0;border-radius:7px;padding:8px 22px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.status{color:var(--muted);font-size:12px}pre{min-height:150px;max-height:420px}.back{color:var(--accent)}.state-select{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border);font:inherit}.state-select b{color:var(--muted);font-size:18px}.state-dialog{width:min(720px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 32px));padding:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:0 24px 80px #0008}.state-dialog::backdrop{background:#05070ab8;backdrop-filter:blur(2px)}.dialog-head{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel)}.dialog-head h3{margin:0;font-size:17px}.dialog-close{padding:3px 11px;background:transparent;color:var(--muted);font-size:24px}.state-options{display:grid;gap:8px;padding:12px}.state-option{display:grid;gap:3px;width:100%;padding:12px 14px;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border)}.state-option:hover,.state-option:focus-visible{border-color:var(--accent)}.state-option span{color:var(--muted);font-weight:400}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,sans-serif}.page{max-width:1180px;margin:auto;padding:32px 20px 64px}h1{margin:0 0 20px;font-size:28px}.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}.card{width:100%;min-width:0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}.card-heading{display:flex;justify-content:space-between;gap:12px}.card-heading h2{font-size:17px;margin:0 0 5px}.card-heading p{margin:0;color:var(--muted)}.card-heading>span{height:25px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);font:600 12px/21px ui-monospace,monospace}.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px}.io-panel{min-width:0}.io-heading{min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.io-heading>span{font:700 12px/1 ui-monospace,monospace;letter-spacing:.08em;color:var(--muted)}label,.field-label{display:block;margin:13px 0 6px;font-weight:650}.input-panel label:first-of-type{margin-top:0}textarea,pre{width:100%;border:1px solid var(--border);border-radius:7px;background:var(--code);color:var(--text)}textarea,pre{min-height:300px;margin:0;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow:auto}textarea{resize:vertical}.actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0}button{border:0;border-radius:7px;padding:8px 22px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.status{color:var(--muted);font-size:12px}pre{height:100%;min-height:390px;max-height:520px}.back{color:var(--accent)}.state-select{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border);font:inherit}.state-select b{color:var(--muted);font-size:18px}.state-dialog{width:min(720px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 32px));padding:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:0 24px 80px #0008}.state-dialog::backdrop{background:#05070ab8;backdrop-filter:blur(2px)}.dialog-head{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel)}.dialog-head h3{margin:0;font-size:17px}.dialog-close{padding:3px 11px;background:transparent;color:var(--muted);font-size:24px}.state-options{display:grid;gap:8px;padding:12px}.state-option{display:grid;gap:3px;width:100%;padding:12px 14px;text-align:left;background:var(--code);color:var(--text);border:1px solid var(--border)}.state-option:hover,.state-option:focus-visible{border-color:var(--accent)}.state-option span{color:var(--muted);font-weight:400}@media(max-width:760px){.io-grid{grid-template-columns:minmax(0,1fr)}pre{min-height:240px}}
 </style></head><body><main class="page"><a class="back" href="/">← Home</a><h1>Jev API Playground</h1>
 <div class="grid">${cards}</div></main>
 <script>

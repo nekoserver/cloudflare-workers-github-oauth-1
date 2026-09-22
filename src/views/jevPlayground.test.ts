@@ -3,24 +3,22 @@ import { JSDOM } from 'jsdom';
 import { getJevPlaygroundPage } from './jevPlayground';
 
 describe('getJevPlaygroundPage', () => {
-  it('422にならないscore形式の3テンプレートと個別のRunボタンを表示する', () => {
+  it('noul / choice / score のテンプレートと個別のRunボタンを表示する', () => {
     const html = getJevPlaygroundPage();
-    for (const type of ['gate', 'classification', 'quality']) {
+    for (const type of ['noul', 'choice', 'score']) {
       expect(html).toContain(`data-type="${type}"`);
+      expect(html).toContain(`\"type\": \"${type}\"`);
     }
-    expect(html.match(/\"type\": \"score\"/g)).toHaveLength(3);
-    expect(html).not.toContain('"type": "noul"');
-    expect(html).not.toContain('"type": "choice"');
     expect(html.match(/class="run"/g)).toHaveLength(3);
     expect(html).toContain("fetch('/api/jev-playground'");
     expect(html).not.toContain('Bearer');
   });
 
-  it('各score質問に2要素のcriteriaを設定する', () => {
+  it('noulに判定基準、choiceに選択肢、scoreに両端の基準を設定する', () => {
     const html = getJevPlaygroundPage();
 
-    expect(html).toContain('"条件を満たしていない"');
-    expect(html).toContain('"カテゴリに該当しない"');
+    expect(html).toContain('"criteria": "質問の条件が state の内容から成立すると判断できる"');
+    expect(html).toContain('"authentication"');
     expect(html).toContain('"まったく満たしていない"');
   });
 
@@ -37,7 +35,7 @@ describe('getJevPlaygroundPage', () => {
 
   it('stateを選ぶと対応するstateとquestionをJSONへ反映する', () => {
     const dom = new JSDOM(getJevPlaygroundPage(), { runScripts: 'dangerously' });
-    const card = dom.window.document.querySelector('[data-type="gate"]')!;
+    const card = dom.window.document.querySelector('[data-type="noul"]')!;
     const option = card.querySelectorAll<HTMLButtonElement>('.state-option')[3];
     const textarea = card.querySelector<HTMLTextAreaElement>('textarea')!;
 
@@ -53,6 +51,21 @@ describe('getJevPlaygroundPage', () => {
 
     expect(html).toContain('.grid{display:grid;grid-template-columns:minmax(0,1fr)');
     expect(html).toContain('.card{width:100%');
+  });
+
+  it('各セクションのINとOUTを左右に並べ、RunボタンをOUTの右上に表示する', () => {
+    const dom = new JSDOM(getJevPlaygroundPage());
+
+    for (const card of dom.window.document.querySelectorAll('.card')) {
+      const panels = card.querySelectorAll('.io-grid > .io-panel');
+      expect(panels).toHaveLength(2);
+      expect(panels[0].querySelector('.io-heading')?.textContent).toBe('IN');
+      expect(panels[1].querySelector('.io-heading > span')?.textContent).toBe('OUT');
+      expect(panels[1].querySelector('.io-heading .run')).not.toBeNull();
+    }
+    const html = getJevPlaygroundPage();
+    expect(html).toContain('.io-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)');
+    expect(html).toContain('.actions{display:flex;align-items:center;justify-content:flex-end');
   });
 
   it('実行時間をミリ秒単位で表示し、不要な説明文を表示しない', () => {

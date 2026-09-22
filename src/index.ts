@@ -4876,8 +4876,8 @@ app.post('/api/jev-playground', authMiddleware, async (c) => {
   if (questions.length < 1 || questions.length > 20) {
     return c.json({ error: 'questionsは1〜20件で指定してください' }, 400);
   }
-  if (questions.some((question) => !question || typeof question !== 'object' || (question as Record<string, unknown>).type !== 'score')) {
-    return c.json({ error: '現在サポートしている質問のtypeはscoreのみです' }, 400);
+  if (questions.some((question) => !question || typeof question !== 'object' || !['noul', 'choice', 'score'].includes(String((question as Record<string, unknown>).type)))) {
+    return c.json({ error: '質問のtypeはnoul、choice、scoreのいずれかで指定してください' }, 400);
   }
 
   try {
