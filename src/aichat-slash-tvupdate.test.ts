@@ -48,7 +48,26 @@ describe('/neko tvupdate', () => {
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [owner/repo] [--force] |');
+  });
+
+  it('owner/repoをリポジトリ指定として確定してから後続オプションを解釈する', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated' as const, updated: [], unchanged: ['nekoserver/repo-a'], failed: [],
+    });
+    await interpretAichatSlashCommand('/neko tvupdate nekoserver/repo-a --force', new Date(), {
+      fetchLatestCommitAgentLog: async () => null, updateTreeView,
+    });
+    expect(updateTreeView).toHaveBeenCalledWith(true, 'nekoserver/repo-a');
+  });
+
+  it('スラッシュを含む不正な指定はオプション扱いせず形式エラーにする', async () => {
+    const updateTreeView = vi.fn();
+    const result = await interpretAichatSlashCommand('/neko tvupdate owner/repo/extra --force', new Date(), {
+      fetchLatestCommitAgentLog: async () => null, updateTreeView,
+    });
+    expect(updateTreeView).not.toHaveBeenCalled();
+    expect(result.handled && result.response).toContain('owner/repo 形式');
   });
 
   it('--forceを強制更新フラグとして渡す', async () => {
