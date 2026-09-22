@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate [--force] | tree-viewを手動更新します。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します |',
+    '| /neko tvupdate [--force] [-R owner/repo] | tree-viewを手動更新します。-Rの直後に対象リポジトリ名を指定できます。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -943,7 +943,7 @@ export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
-  updateTreeView?: (force?: boolean) => Promise<TreeViewUpdateOutcome>;
+  updateTreeView?: (force?: boolean, repoName?: string) => Promise<TreeViewUpdateOutcome>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -1325,19 +1325,25 @@ export async function interpretAichatSlashCommand(
     // チャットや日本語IMEを経由すると `--force` の2本のハイフンが、1文字の
     // em/en dashや全角ハイフンに置き換わることがある。見た目が同じ強制更新
     // オプションを誤って拒否しないよう、検証前にASCII表記へ揃える。
-    const options = parts.slice(2).map((part) =>
-      part.normalize('NFKC').toLowerCase().replace(/^[—–]/, '--')
-    );
-    if (options.some((option) => option !== '--force') || options.length > 1) {
-      return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
+    const args = parts.slice(2).map((part) => part.normalize('NFKC').replace(/^[—–]/, '--'));
+    let force = false;
+    let repoName: string | undefined;
+    for (let index = 0; index < args.length; index++) {
+      const arg = args[index];
+      if (arg.toLowerCase() === '--force' && !force) {
+        force = true;
+      } else if (arg === '-R' && repoName === undefined && args[index + 1]) {
+        repoName = args[++index];
+      } else {
+        return { handled: true, response: '❌ /neko tvupdate のオプションは --force と -R owner/repo を指定できます' };
+      }
+    }
+    if (repoName !== undefined && !/^nekoserver\/[A-Za-z0-9_.-]+$/.test(repoName)) {
+      return { handled: true, response: '❌ -R のリポジトリ名は nekoserver/リポジトリ名 の形式で指定してください' };
     }
     const startedAt = Date.now();
     try {
-      const outcome = await deps.updateTreeView(options[0] === '--force');
-      return {
-        handled: true,
-        response: `${formatTreeViewUpdateOutcome(outcome)}\n${formatTreeViewUpdateElapsedTime(Date.now() - startedAt)}`,
-      };
+      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(force, repoName)) };
     } catch (err) {
       return {
         handled: true,

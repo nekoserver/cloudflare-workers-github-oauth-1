@@ -379,6 +379,31 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     });
   });
 
+  it('-Rで指定したリポジトリだけを同期する', async () => {
+    const db = setupDb({});
+    insertInstallationRepo(db, 'nekoserver/repo-a');
+    insertInstallationRepo(db, 'nekoserver/repo-b');
+    const fetchMock = vi.fn(async (input: string | URL | Request) => new Response(JSON.stringify({
+      tree: [{ path: `${String(input).includes('repo-a') ? 'a' : 'b'}.ts`, type: 'blob' }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await interpretAichatSlashCommand('/neko tvupdate -R nekoserver/repo-b', new Date('2026-09-22T03:00:00.000Z'), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView: (force, repoName) => refreshTreeViewSnapshotsIfStale(
+        { ...BASE_ENV, DB: wrapD1(db) } as never,
+        new Date('2026-09-22T03:00:00.000Z'),
+        force,
+        repoName,
+      ),
+    });
+
+    expect(result.handled && result.response).toContain('更新あり: 1件');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/repos/nekoserver/repo-b/git/trees/main?recursive=1');
+    expect(db.prepare('SELECT repo_name FROM tree_view_snapshots').all()).toEqual([{ repo_name: 'nekoserver/repo-b' }]);
+  });
+
   it('更新対象リポジトリが0件なら成功扱いにしない', async () => {
     const db = setupDb({});
     const fetchMock = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
