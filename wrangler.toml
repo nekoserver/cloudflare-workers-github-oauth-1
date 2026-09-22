@@ -111,8 +111,7 @@ binding = "ANALYTICS"
 dataset = "github_oauth_metrics"
 
 # /tree-view（dynamicneko）のサイドバーツリー用スナップショット（tree_view_snapshots）を
-# 6時間ごとに再同期する（src/worker-entry.tsのscheduled()、installation_permissionsに
-# 記録済みのnekoserver組織配下リポジトリが対象。新しいリポジトリへのGitHub App
-# インストールも次回実行時に自動反映される）。
+# 6時間ごとに再同期する。対象はdynamicnekoとcloudflare-workers-github-oauth-1の
+# 固定2リポジトリで、GitHubの最新状態と既存DBを照合して不足ノードだけを追加する。
 [triggers]
 crons = ["0 */6 * * *"]

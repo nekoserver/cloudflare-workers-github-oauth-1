@@ -33,4 +33,14 @@ describe('Workerエントリポイントがworkerdの起動時named-export検証
     const src = readFileSync('src/index.ts', 'utf8');
     expect(src).toContain('export default app;');
   });
+
+  it('cronは固定2リポジトリの不足ツリー同期以外を呼び出さない', () => {
+    const src = readFileSync('src/worker-entry.ts', 'utf8');
+    const scheduledBody = src.slice(src.indexOf('async scheduled('));
+
+    expect(scheduledBody).toContain('syncAllTreeViewSnapshots(env)');
+    expect(scheduledBody).not.toContain('registerNextTreeViewCronCountdown');
+    expect(scheduledBody).not.toContain('Promise.all');
+    expect(scheduledBody).not.toContain('console.');
+  });
 });
