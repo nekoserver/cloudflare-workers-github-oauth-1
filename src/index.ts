@@ -4854,7 +4854,8 @@ app.get('/jev-playground', authMiddleware, (c) => {
 });
 
 /**
- * /jev-playground(本体ページ)用のリクエストボディ検証。
+ * /jev-playground(本体ページ)・POST /api/jev-playground-external
+ * (dynamicnekoの/jev-pg-reactページ用)で共通のリクエストボディ検証。
  * 検証に失敗した場合はエラーメッセージを、成功した場合は検証済みの
  * payloadを返す(CLAUDE.mdルール32相当の判別可能な戻り値)。
  */
@@ -4885,7 +4886,7 @@ function validateJevPlaygroundPayload(body: unknown): JevPlaygroundValidationRes
 
 /**
  * 検証済みpayloadをJev API(api.typesafe.ai)へそのまま転送し、レスポンスを
- * 素通しする(/jev-playground用)。
+ * 素通しする(/jev-playground・/api/jev-playground-externalの共通処理)。
  */
 async function callJevPlaygroundApi(jevApiKey: string, payload: Record<string, unknown>): Promise<Response> {
   try {
@@ -4915,6 +4916,34 @@ app.post('/api/jev-playground', authMiddleware, async (c) => {
   }
   const validation = validateJevPlaygroundPayload(body);
   if (!validation.ok) return c.json({ error: validation.error }, 400);
+
+  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
+});
+
+/**
+ * dynamicnekoの/jev-pg-reactページ用。高コストなJEV_API_KEYの代理利用を
+ * 他のexternal API用シークレットから分離するため、このルート専用のBearer
+ * secretに加え、短命userTokenと許可ユーザーDBの両方を必須にする。
+ */
+app.post('/api/jev-playground-external', async (c) => {
+  const authorization = c.req.header('Authorization') ?? '';
+  const expectedAuthorization = c.env.JEV_PLAYGROUND_EXTERNAL_SECRET
+    ? `Bearer ${c.env.JEV_PLAYGROUND_EXTERNAL_SECRET}`
+    : null;
+  if (!expectedAuthorization || authorization !== expectedAuthorization) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string } & Record<string, unknown>>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  if (!body) return jsonUtf8({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  const { userToken: _userToken, ...rest } = body;
+  const validation = validateJevPlaygroundPayload(rest);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
 
   return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
 });
