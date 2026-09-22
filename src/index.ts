@@ -330,6 +330,7 @@ import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './vi
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
+import { getCronStatusPage, type CronExecutionRow, type CronSnapshotRow } from './views/cronStatus';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
@@ -13310,6 +13311,41 @@ app.post('/internal/harness-hook-log', async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'harness_hook_logへの書き込みに失敗しました' }, 500);
+  }
+});
+
+app.get('/cron-status', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const generatedAt = new Date().toISOString();
+  if (!db) {
+    return c.html(getCronStatusPage({ executions: [], snapshots: [], generatedAt, dataAvailable: false }));
+  }
+
+  try {
+    const [executionResult, snapshotResult] = await Promise.all([
+      db.prepare(
+        `SELECT id, repo_name, update_source, changed, executed_at
+         FROM tree_view_update_log
+         ORDER BY datetime(executed_at) DESC, id DESC
+         LIMIT 50`
+      ).all<CronExecutionRow>(),
+      db.prepare(
+        `SELECT repo_name, updated_at
+         FROM tree_view_snapshots
+         ORDER BY repo_name ASC`
+      ).all<CronSnapshotRow>(),
+    ]);
+    return c.html(getCronStatusPage({
+      executions: executionResult.results ?? [],
+      snapshots: snapshotResult.results ?? [],
+      generatedAt,
+      dataAvailable: true,
+    }));
+  } catch (error) {
+    logger.warn('Failed to render cron-status', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.html(getCronStatusPage({ executions: [], snapshots: [], generatedAt, dataAvailable: false }));
   }
 });
 

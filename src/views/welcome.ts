@@ -332,6 +332,7 @@ export function getWelcomePage(user: {
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/function-changelog" class="dropdown-item">🔖 関数辞典</a>
           <a href="/harness-log" class="dropdown-item">🪝 Harnessフックログ</a>
+          <a href="/cron-status" class="dropdown-item">⏱️ Cron稼働状況</a>
           <a href="/base64" class="dropdown-item">🔡 Base64変換</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
