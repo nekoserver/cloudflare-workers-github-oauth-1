@@ -428,7 +428,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { fetchRepoTreeSnapshot, type TreeViewSnapshotNode } from './utils/treeViewSnapshot';
@@ -646,6 +646,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'jev_test_evaluations', migration: '0151', description: '任意の対象(target_id、commitHash等)をjev_test_labelsの各ラベルでJevに評価させた結果。tree-viewの「テスト評価」ボタン等から使う', syncPolicy: 'auto' },
   { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
   { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
+  { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2462,6 +2463,17 @@ INSERT INTO table_column_keys (table_name, column_name, key_type, fk_target_tabl
   ('d1_query_catalog', 'table_name', 'idx', NULL),
   ('d1_query_catalog', 'source_file', 'idx', NULL),
   ('d1_query_catalog', 'source_line', 'idx', NULL);`,
+  '0155': `CREATE TABLE IF NOT EXISTS tree_view_update_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_name TEXT NOT NULL,
+  update_source TEXT NOT NULL CHECK (update_source IN ('scheduled', 'manual')),
+  status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+  changed INTEGER CHECK (changed IN (0, 1)),
+  error_detail TEXT,
+  executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_executed ON tree_view_update_log(executed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_repo ON tree_view_update_log(repo_name, executed_at DESC);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2731,6 +2743,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_test_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_test_label_id: 'fk' },
   tree_view_snapshots: { repo_name: 'pk', updated_at: 'idx' },
   tree_view_snapshot_refresh_log: { id: 'pk', user_id: 'idx' },
+  tree_view_update_log: { id: 'pk', repo_name: 'fk+idx', executed_at: 'idx' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
@@ -2879,6 +2892,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_test_evaluations: 'ai',
   tree_view_snapshots: 'commit',
   tree_view_snapshot_refresh_log: 'commit',
+  tree_view_update_log: 'commit',
   jev_keyword_evaluation_locks: 'ai',
   api_key_endpoint_stats: 'system',
 };
@@ -3047,6 +3061,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   repo_commit_index: { repo_name: 'installation_permissions' },
   tree_view_snapshots: { repo_name: 'installation_permissions' },
   tree_view_snapshot_refresh_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
+  tree_view_update_log: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -5957,6 +5972,16 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         }
       }
       return fetchAndFormatRepositoryTree(c, user.sub, repoFullName, depth, options);
+    },
+    fetchTreeViewUpdateLogs: async () => {
+      if (!c.env.DB) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT id, repo_name, update_source, status, changed, error_detail, executed_at
+         FROM tree_view_update_log
+         ORDER BY executed_at DESC, id DESC
+         LIMIT 10`
+      ).all<TreeViewUpdateLogRow>();
+      return rows.results ?? [];
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15160,6 +15185,27 @@ async function upsertTreeViewSnapshotIfChanged(
   return true;
 }
 
+async function recordTreeViewUpdate(
+  db: D1Database,
+  repoName: string,
+  source: 'scheduled' | 'manual',
+  outcome: { status: 'succeeded'; changed: boolean } | { status: 'failed'; errorDetail: string },
+  executedAt: string,
+): Promise<void> {
+  await db.prepare(
+    `INSERT INTO tree_view_update_log
+       (repo_name, update_source, status, changed, error_detail, executed_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    repoName,
+    source,
+    outcome.status,
+    outcome.status === 'succeeded' ? (outcome.changed ? 1 : 0) : null,
+    outcome.status === 'failed' ? outcome.errorDetail.slice(0, 1000) : null,
+    executedAt,
+  ).run();
+}
+
 /**
  * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、全リポジトリ分の
  * 同期処理本体。installation_permissionsに記録されている(=GitHub Appが
@@ -15186,11 +15232,18 @@ async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string
     const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN, fetchImpl: fetch });
     if (!result.ok) {
       logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+      try {
+        await recordTreeViewUpdate(env.DB, repoName, 'scheduled', { status: 'failed', errorDetail: result.detail }, new Date().toISOString());
+      } catch (logError) {
+        logger.error('[tree-view-snapshot-sync] 失敗履歴のD1保存失敗', { repoName, error: logError instanceof Error ? logError.message : String(logError) });
+      }
       failed.push({ repoName, error: result.detail });
       continue;
     }
     try {
-      const changed = await upsertTreeViewSnapshotIfChanged(env.DB, repoName, result.snapshot, new Date().toISOString());
+      const executedAt = new Date().toISOString();
+      const changed = await upsertTreeViewSnapshotIfChanged(env.DB, repoName, result.snapshot, executedAt);
+      await recordTreeViewUpdate(env.DB, repoName, 'scheduled', { status: 'succeeded', changed }, executedAt);
       if (changed) synced.push(repoName);
       else skipped.push(repoName);
     } catch (err) {
@@ -15325,6 +15378,11 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
   const result = await fetchRepoTreeSnapshot({ repoName, githubToken: c.env.GITHUB_TOKEN, fetchImpl: fetch });
   if (!result.ok) {
     logger.error('[tree-view-snapshot-refresh-external] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+    try {
+      await recordTreeViewUpdate(c.env.DB, repoName, 'manual', { status: 'failed', errorDetail: result.detail }, new Date().toISOString());
+    } catch (logError) {
+      logger.error('[tree-view-snapshot-refresh-external] 失敗履歴のD1保存失敗', { repoName, error: logError instanceof Error ? logError.message : String(logError) });
+    }
     return jsonUtf8({ error: `GitHub Trees APIの取得に失敗しました(${result.errorCode}): ${result.detail}` }, 502);
   }
 
@@ -15333,7 +15391,8 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
     await c.env.DB.prepare(
       'INSERT INTO tree_view_snapshot_refresh_log (user_id, repo_name, requested_at) VALUES (?, ?, ?)'
     ).bind(login, repoName, now).run();
-    await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now);
+    const changed = await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now);
+    await recordTreeViewUpdate(c.env.DB, repoName, 'manual', { status: 'succeeded', changed }, now);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[tree-view-snapshot-refresh-external] D1保存失敗', { repoName, error: message });
