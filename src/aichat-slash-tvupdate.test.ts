@@ -64,6 +64,22 @@ describe('/neko tvupdate', () => {
     expect(updateTreeView).toHaveBeenCalledWith(true);
   });
 
+  it.each(['—force', '–force', '－－force'])(
+    'チャットやIMEでハイフンが変換された%sも強制更新として扱う',
+    async (forceOption) => {
+      const updateTreeView = vi.fn().mockResolvedValue({
+        status: 'updated' as const, updated: [], unchanged: [], failed: [],
+      });
+
+      await interpretAichatSlashCommand(`/neko tvupdate ${forceOption}`, new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        updateTreeView,
+      });
+
+      expect(updateTreeView).toHaveBeenCalledWith(true);
+    }
+  );
+
   it('未知のオプションを拒否する', async () => {
     const updateTreeView = vi.fn();
     const result = await interpretAichatSlashCommand('/neko tvupdate --unknown', new Date(), {
