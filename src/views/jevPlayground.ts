@@ -11,7 +11,11 @@ const TEMPLATES = [
       model: 'jev-latest',
       state: 'この変更では、認証エラー時に処理を停止し、エラーを利用者へ返します。',
       questions: {
-        condition: { type: 'noul', question: 'この変更はフェイルクローズになっているか？' },
+        condition: {
+          type: 'noul',
+          question: 'この変更はフェイルクローズになっているか？',
+          criteria: '認証エラーの場合に処理を停止し、保護対象の操作を実行しない',
+        },
       },
     },
   },
@@ -26,7 +30,7 @@ const TEMPLATES = [
         category: {
           type: 'choice',
           question: 'この動作を最もよく表すカテゴリは？',
-          choices: ['authentication', 'authorization', 'data-processing'],
+          criteria: ['authentication', 'authorization', 'data-processing'],
         },
       },
     },
