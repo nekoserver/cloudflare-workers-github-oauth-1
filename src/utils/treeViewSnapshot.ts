@@ -19,31 +19,6 @@ export type TreeViewSnapshotNode = {
 export type GithubTreeItem = { path: string; type: 'blob' | 'tree' | 'commit' };
 
 /**
- * D1 に保存済みのツリーを基準に、GitHub の最新ツリーにだけ存在するノードを
- * 追加する。保存済みノードは削除も上書きもしないため、部分的な Trees API
- * レスポンスや一時的な取得漏れで既存データを失わない。
- */
-export function mergeMissingTreeViewNodes(
-  existing: TreeViewSnapshotNode,
-  latest: TreeViewSnapshotNode,
-): TreeViewSnapshotNode {
-  if (existing.type !== 'dir' || latest.type !== 'dir') return existing;
-
-  const latestChildren = latest.children ?? [];
-  const existingChildren = existing.children ?? [];
-  const latestByName = new Map(latestChildren.map((child) => [child.name, child]));
-  const merged = existingChildren.map((child) => {
-    const latestChild = latestByName.get(child.name);
-    latestByName.delete(child.name);
-    return latestChild ? mergeMissingTreeViewNodes(child, latestChild) : child;
-  });
-
-  merged.push(...latestByName.values());
-  merged.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return merged.length > 0 ? { ...existing, children: merged } : existing;
-}
-
-/**
  * `/neko tree` で採取した初期対象2リポジトリの組み込みスナップショット。
  * cronがまだ一度も動いていない環境でも、dynamicnekoの/tree-viewから
  * これらのリポジトリを開けるようにする。
@@ -107,7 +82,7 @@ export function buildTreeViewSnapshotFromGithubItems(items: GithubTreeItem[], ro
 
 export type FetchRepoTreeResult =
   | { ok: true; snapshot: TreeViewSnapshotNode }
-  | { ok: false; errorCode: 'http_error' | 'invalid_json'; detail: string };
+  | { ok: false; errorCode: 'http_error' | 'invalid_json' | 'truncated'; detail: string };
 
 /**
  * GitHub Trees API(GET /repos/{repo}/git/trees/main?recursive=1)を実際に
@@ -151,6 +126,9 @@ export async function fetchRepoTreeSnapshot(params: {
   const tree = (json as { tree?: unknown }).tree;
   if (!Array.isArray(tree)) {
     return { ok: false, errorCode: 'invalid_json', detail: 'レスポンスにtree配列がありません' };
+  }
+  if ((json as { truncated?: unknown }).truncated === true) {
+    return { ok: false, errorCode: 'truncated', detail: 'GitHub Trees APIのレスポンスがtruncated=trueのため、既存スナップショットを保持します' };
   }
 
   const items: GithubTreeItem[] = tree.filter(

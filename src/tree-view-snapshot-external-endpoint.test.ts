@@ -299,15 +299,23 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 0 });
   });
 
-  it('GitHubの最新状態から不足ノードだけをD1へ追加し、既存ノードは保持する', async () => {
+  it('完全取得したGitHubの最新状態でD1を置換し、削除・改名を反映する', async () => {
     const db = setupDb({});
     insertSnapshot(db, 'nekoserver/dynamicneko', {
       name: 'nekoserver/dynamicneko',
       type: 'dir',
-      children: [{ name: 'database-only.ts', type: 'file' }],
+      children: [
+        { name: 'deleted.ts', type: 'file' },
+        { name: 'renamed-before.ts', type: 'file' },
+        { name: 'kind-changed', type: 'file' },
+      ],
     });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      tree: [{ path: 'latest-only.ts', type: 'blob' }],
+      tree: [
+        { path: 'renamed-after.ts', type: 'blob' },
+        { path: 'kind-changed', type: 'tree' },
+        { path: 'kind-changed/child.ts', type: 'blob' },
+      ],
     }), { status: 200 })));
 
     const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
@@ -319,10 +327,34 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
       name: 'nekoserver/dynamicneko',
       type: 'dir',
       children: [
-        { name: 'database-only.ts', type: 'file' },
-        { name: 'latest-only.ts', type: 'file' },
+        { name: 'kind-changed', type: 'dir', children: [{ name: 'child.ts', type: 'file' }] },
+        { name: 'renamed-after.ts', type: 'file' },
       ],
     });
+  });
+
+  it('GitHub Trees APIがtruncated=trueなら失敗として既存D1を保持する', async () => {
+    const db = setupDb({});
+    const existingTree = {
+      name: 'nekoserver/dynamicneko', type: 'dir',
+      children: [{ name: 'keep.ts', type: 'file' }],
+    };
+    insertSnapshot(db, 'nekoserver/dynamicneko', existingTree, '2026-09-18T00:00:00.000Z');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      truncated: true,
+      tree: [{ path: 'partial.ts', type: 'blob' }],
+    }), { status: 200 })));
+
+    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
+
+    expect(result.synced).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].error).toContain('truncated=true');
+    expect(db.prepare('SELECT tree_json, updated_at FROM tree_view_snapshots').get()).toEqual({
+      tree_json: JSON.stringify(existingTree),
+      updated_at: '2026-09-18T00:00:00.000Z',
+    });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 0 });
   });
 });
 

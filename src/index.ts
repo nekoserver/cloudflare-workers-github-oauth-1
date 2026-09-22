@@ -437,7 +437,6 @@ import {
   EMBEDDED_TREE_VIEW_SNAPSHOTS,
   EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
   fetchRepoTreeSnapshot,
-  mergeMissingTreeViewNodes,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
@@ -15240,9 +15239,9 @@ function isTreeViewSnapshotRepo(repoName: string): boolean {
 }
 
 /**
- * tree_view_snapshotsへ書き込む前にGitHubの最新状態と突き合わせ、既存JSONに
- * 無いノードだけを追加する。既存データは削除・上書きせず、追加も無ければ
- * 書き込みをスキップする。cron・手動更新の共通書き込み経路。
+ * 完全取得できたGitHubの最新状態でtree_view_snapshotsを置換する。
+ * 内容が同じ場合は書き込みをスキップする。取得失敗やtruncatedレスポンスは
+ * 呼び出し元で拒否されるため、既存データはその場合だけ保持される。
  */
 async function upsertTreeViewSnapshotIfChanged(
   db: D1Database,
@@ -15251,9 +15250,7 @@ async function upsertTreeViewSnapshotIfChanged(
   nowIso: string
 ): Promise<boolean> {
   const existing = await db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
-  const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
-  const nextSnapshot = existingSnapshot ? mergeMissingTreeViewNodes(existingSnapshot, snapshot) : snapshot;
-  const nextJson = JSON.stringify(nextSnapshot);
+  const nextJson = JSON.stringify(snapshot);
   if (existing && existing.tree_json === nextJson) {
     return false;
   }
@@ -15351,9 +15348,7 @@ async function syncTreeViewSnapshots(
         let changed: boolean;
         if (dryRun) {
           const existing = await targetDb.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
-          const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
-          const nextSnapshot = existingSnapshot ? mergeMissingTreeViewNodes(existingSnapshot, result.snapshot) : result.snapshot;
-          changed = !existing || existing.tree_json !== JSON.stringify(nextSnapshot);
+          changed = !existing || existing.tree_json !== JSON.stringify(result.snapshot);
           differences[index] = { repoName, status: !existing ? 'added' : changed ? 'changed' : 'unchanged' };
         } else {
           changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt);
