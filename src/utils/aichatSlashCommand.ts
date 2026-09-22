@@ -1299,7 +1299,12 @@ export async function interpretAichatSlashCommand(
     if (!deps.updateTreeView) {
       return { handled: true, response: '❌ /neko tvupdate は現在利用できません(DBまたはGitHub設定が未設定)' };
     }
-    const options = parts.slice(2).map((part) => part.toLowerCase());
+    // チャットや日本語IMEを経由すると `--force` の2本のハイフンが、1文字の
+    // em/en dashや全角ハイフンに置き換わることがある。見た目が同じ強制更新
+    // オプションを誤って拒否しないよう、検証前にASCII表記へ揃える。
+    const options = parts.slice(2).map((part) =>
+      part.normalize('NFKC').toLowerCase().replace(/^[—–]/, '--')
+    );
     if (options.some((option) => option !== '--force') || options.length > 1) {
       return { handled: true, response: '❌ /neko tvupdate のオプションは --force だけを指定できます' };
     }
