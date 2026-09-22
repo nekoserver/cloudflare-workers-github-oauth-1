@@ -15168,15 +15168,16 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   }
 });
 
-// tree-view-snapshot系エンドポイントが受け付けるrepoNameの形式。
-// commit-summary-external等のCOMMIT_SUMMARY_ALLOWED_REPOS(固定3件)とは
-// 意図的に分離している。/tree-viewは「新しいリポジトリが増えたら自動的に
-// 反映される」ことが目的(2026-09-19、ユーザー要望)なので、固定リストでは
-// 目的を果たせない。nekoserver組織配下という条件だけに緩め、実際にどの
-// リポジトリが一覧に出るかはtree_view_snapshotsに実際に同期済みのものだけ
-// (installation_permissionsにGitHub Appがアクセスできると記録されている
-// リポジトリだけがcronで同期される)に絞られる。
+// dynamicnekoの/tree-viewで公開する対象は、初期JSONを用意したこの2件だけ。
+// installation_permissionsやGitHub tokenに別リポジトリへの権限が増えても、
+// tree-view用データに勝手に取り込まない。
+const TREE_VIEW_SNAPSHOT_REPOS = Object.freeze(Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
+const TREE_VIEW_SNAPSHOT_REPO_SET = new Set(TREE_VIEW_SNAPSHOT_REPOS);
 const TREE_VIEW_SNAPSHOT_REPO_RE = /^nekoserver\/[A-Za-z0-9._-]+$/;
+
+function isTreeViewSnapshotRepo(repoName: string): boolean {
+  return TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName) && TREE_VIEW_SNAPSHOT_REPO_SET.has(repoName);
+}
 
 /**
  * tree_view_snapshotsへ書き込む前に、既存の内容と完全一致するかを比較し、
@@ -15216,61 +15217,19 @@ async function recordTreeViewUpdate(
 }
 
 /**
- * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、全リポジトリ分の
- * 同期処理本体。通常はinstallation_permissionsに記録されている(=GitHub Appが
- * アクセスできる)nekoserver組織配下のリポジトリを対象にする。ただしこの
- * テーブルはinstallation系Webhookが届くまで空のことがあるため、全件空なら
- * 保存済みtree_view_snapshotsを対象にして既存の同期が停止しないようにする。
- * 新しいリポジトリへGitHub AppをインストールしてWebhookが届けば、次回のcron
- * 実行時にtree_view_snapshotsへも自動的に追加される。
+ * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、tree-view対象分の
+ * 同期処理本体。対象は保存済みかつ固定許可リスト内のリポジトリに
+ * 限定する。GitHub Appの権限やPATの参照範囲は、新しいtree-viewデータを
+ * 作成するための発見元としては使用しない。
  */
 async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
   return syncTreeViewSnapshots(env, 'scheduled', new Date());
-}
-
-async function fetchTreeViewRepositoryNames(githubToken: string): Promise<{ repoNames: string[]; error?: string }> {
-  const repoNames: string[] = [];
-  for (let page = 1; ; page++) {
-    let response: Response;
-    try {
-      response = await fetch(
-        `https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=${page}`,
-        {
-          headers: {
-            Authorization: `Bearer ${githubToken}`,
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'cloudflare-workers-github-oauth-1',
-          },
-        }
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { repoNames: [], error: `GitHubリポジトリ一覧の取得に失敗しました: ${message}` };
-    }
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      return { repoNames: [], error: `GitHubリポジトリ一覧APIがステータス${response.status}を返しました: ${detail.slice(0, 500)}` };
-    }
-    const json = await response.json().catch(() => null) as unknown;
-    if (!Array.isArray(json)) {
-      return { repoNames: [], error: 'GitHubリポジトリ一覧APIのレスポンスが配列ではありません' };
-    }
-    repoNames.push(...json.flatMap((repo) => {
-      const fullName = repo && typeof repo === 'object' && typeof (repo as { full_name?: unknown }).full_name === 'string'
-        ? (repo as { full_name: string }).full_name
-        : '';
-      return TREE_VIEW_SNAPSHOT_REPO_RE.test(fullName) ? [fullName] : [];
-    }));
-    if (json.length < 100) break;
-  }
-  return { repoNames: Array.from(new Set(repoNames)) };
 }
 
 async function syncTreeViewSnapshots(
   env: Bindings,
   source: 'scheduled' | 'manual',
   now: Date,
-  includeSavedSnapshots = false,
   targetDb: D1Database | undefined = env.DB,
   dryRun = false,
   requestedRepoName?: string
@@ -15284,32 +15243,19 @@ async function syncTreeViewSnapshots(
     return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
   }
 
-  // installation_permissionsが1件でもあれば従来どおり許可リストとして扱う。
-  // 空の場合だけ保存済みスナップショットへフォールバックし、一時的なWebhook
-  // 同期漏れによって/neko tvupdateが対象0件になることを避ける。
-  // 強制差分確認はDBを書き換えないため、更新ログや権限キャッシュの欠落を理由に
-  // 止めない。保存済みsnapshotだけでも実行でき、どちらもなければGitHubから発見する。
-  // 通常同期ではマイグレーション済みの両テーブルを従来どおり利用する。
+  // 指定更新でも固定許可リスト外は対象にしない。一括更新は
+  // tree_view_snapshotsに現在あるリポジトリだけを読み、cronが新規行を
+  // 追加しないことを保証する。
   let repositoryQuery: string;
   if (requestedRepoName) {
     repositoryQuery = 'SELECT ? AS repo_name';
-  } else if (includeSavedSnapshots) {
-    const sourceTables = await env.DB.prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('installation_permissions', 'tree_view_snapshots')`
-    ).all<{ name: string }>();
-    const names = new Set((sourceTables.results ?? []).map((row) => row.name));
-    const sources = [
-      names.has('installation_permissions') ? 'SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL' : '',
-      names.has('tree_view_snapshots') ? 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL' : '',
-    ].filter(Boolean);
-    repositoryQuery = sources.length > 0 ? `${sources.join('\nUNION\n')}\nORDER BY repo_name` : "SELECT NULL AS repo_name WHERE 0";
-  } else {
+  } else if (source === 'manual' && !dryRun) {
     repositoryQuery = `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
          UNION
-         SELECT repo_name FROM tree_view_snapshots
-         WHERE repo_name IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM installation_permissions WHERE repo_name IS NOT NULL)
+         SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL
          ORDER BY repo_name`;
+  } else {
+    repositoryQuery = 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL ORDER BY repo_name';
   }
   const statement = env.DB.prepare(repositoryQuery);
   const rows = await (requestedRepoName ? statement.bind(requestedRepoName) : statement).all<{ repo_name: string }>();
@@ -15319,20 +15265,7 @@ async function syncTreeViewSnapshots(
   // the canonical owner/name form. Set removes duplicates during the transition.
   let repoNames = Array.from(new Set((rows.results ?? [])
     .map((row) => row.repo_name.includes('/') ? row.repo_name : `nekoserver/${row.repo_name}`)
-    .filter((name) => TREE_VIEW_SNAPSHOT_REPO_RE.test(name))));
-
-  // Webhook未着・初回導入直後など、D1の許可情報と保存済みスナップショットが
-  // どちらも空の場合はPATでアクセス可能な一覧をGitHubから復旧する。
-  // installation_permissionsの同期だけに依存すると、まさに初回更新が永久に
-  // 対象0件となるため、GITHUB_TOKENを最終的な発見元として利用する。
-  if (repoNames.length === 0 && !requestedRepoName) {
-    const discovered = await fetchTreeViewRepositoryNames(env.GITHUB_TOKEN);
-    if (discovered.error) {
-      failed.push({ repoName: '(repository discovery)', error: discovered.error });
-    } else {
-      repoNames = discovered.repoNames;
-    }
-  }
+    .filter(isTreeViewSnapshotRepo)));
 
   // リポジトリごとに直列でGitHub APIを待つと、対象数に比例して/neko tvupdateの
   // HTTP応答が遅れ、チャット側では送信中のまま(未処理)になる。GitHub/D1への
@@ -15430,7 +15363,7 @@ async function refreshTreeViewSnapshotsIfStale(
 
   // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
   // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
-  const result = await syncTreeViewSnapshots(env, 'manual', now, force, env.DB, force, repoName);
+  const result = await syncTreeViewSnapshots(env, 'manual', now, env.DB, force, repoName);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。
@@ -15445,9 +15378,8 @@ async function refreshTreeViewSnapshotsIfStale(
 
 /**
  * dynamicnekoの/tree-viewページ起動時用。tree_view_snapshotsに実際に
- * 同期済みのリポジトリ一覧を返す(cronトリガーがinstallation_permissions
- * から自動的に追加していくため、新しいリポジトリへのGitHub Appインストール
- * が反映されれば、次回cron実行後に自動的にこの一覧にも増える)。
+ * 同期済みの固定2リポジトリ一覧を返す。DBに過去の不要な行が
+ * 残っていても、APIのレスポンスには含めない。
  */
 app.post('/api/tree-view-repos-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
@@ -15467,6 +15399,7 @@ app.post('/api/tree-view-repos-external', async (c) => {
       ]),
     );
     for (const row of rows.results ?? []) {
+      if (!isTreeViewSnapshotRepo(row.repo_name)) continue;
       repos.set(row.repo_name, { repoName: row.repo_name, updatedAt: row.updated_at });
     }
     return jsonUtf8({ repos: [...repos.values()].sort((a, b) => a.repoName.localeCompare(b.repoName)) });
@@ -15490,8 +15423,8 @@ app.post('/api/tree-view-snapshot-external', async (c) => {
   if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
 
   const repoName = (body?.repoName ?? '').trim();
-  if (!TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName)) {
-    return jsonUtf8({ error: 'repoNameはnekoserver組織配下のリポジトリ名である必要があります' }, 400);
+  if (!isTreeViewSnapshotRepo(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
   }
 
   try {
@@ -15539,8 +15472,8 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
   const login = auth.login as string;
 
   const repoName = (body?.repoName ?? '').trim();
-  if (!TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName)) {
-    return jsonUtf8({ error: 'repoNameはnekoserver組織配下のリポジトリ名である必要があります' }, 400);
+  if (!isTreeViewSnapshotRepo(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
   }
 
   // 正規表現による形式チェックだけでは、GITHUB_TOKENが読めるnekoserver
