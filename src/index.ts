@@ -608,7 +608,6 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_answer_category_scores', migration: '0089', description: '回答伝播グラフ(/answer-graph)のノード色分け用: 回答ごとの中分類カテゴリ類似度スコアのキャッシュ', syncPolicy: 'auto' },
   { name: 'aichat_answer_vectors', migration: '0094', description: '回答文(ai_chat_shares)のplamo-embedding-1bベクトルキャッシュ。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
   { name: 'aichat_answer_keyword_vectors', migration: '0095', description: '回答文からgemma-4-26b-a4b-itで抽出した予備知識キーワードのplamo-embedding-1bベクトルキャッシュ(回答文IDごと)。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
-  { name: 'aichat_auto_explore_history', migration: '0160', description: '探索の境界線パネルの自動探索履歴。同じユーザー・キーワードを1週間以内に再探索しないための最終探索日時', syncPolicy: 'auto' },
   { name: 'moondream_analyze_log', migration: '0096', description: '/api/moondream-analyze呼び出しの成否ログ(モデル名・プロンプト長・画像バイト数・失敗時のエラー内容)', syncPolicy: 'auto' },
   { name: 'aichat_images', migration: '0100', description: 'AIチャットの画像添付を正規化して保存するテーブル。同一ユーザー内で同一内容(content_hash)の画像は再登録せず既存行のIDを再利用する(重複保存防止)', syncPolicy: 'auto' },
   { name: 'aichat_moondream_analyses', migration: '0102', description: 'AIチャットの画像添付投稿でMoondream(moondream3.1-9B-A2B)に問い合わせた画像分析結果を、回答文(share_id)・画像(image_id)に紐づけて保存する', syncPolicy: 'auto' },
@@ -2506,14 +2505,6 @@ INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) 
   ('このキーワードをユーザーは理解済みですか?', '["未理解(探索の境界線の外側)","理解済み(探索の境界線の内側)"]');`,
   '0159': `DROP TABLE IF EXISTS jev_keyword_boundary_evaluations;
 DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
-  '0160': `CREATE TABLE IF NOT EXISTS aichat_auto_explore_history (
-  user_id TEXT NOT NULL,
-  keyword TEXT NOT NULL,
-  last_explored_at TEXT NOT NULL,
-  PRIMARY KEY (user_id, keyword)
-);
-CREATE INDEX IF NOT EXISTS idx_aichat_auto_explore_history_recent
-  ON aichat_auto_explore_history(user_id, last_explored_at DESC);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2747,7 +2738,6 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_answer_category_scores: { id: 'pk', user_id: 'uk', share_id: 'uk', category_id: 'fk+idx' },
   aichat_answer_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', model: 'uk' },
   aichat_answer_keyword_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', keyword: 'uk', model: 'uk' },
-  aichat_auto_explore_history: { user_id: 'pk+fk', keyword: 'pk', last_explored_at: 'idx' },
   moondream_analyze_log: { id: 'pk', user_id: 'fk+idx' },
   aichat_images: { id: 'pk', user_id: 'uk', content_hash: 'uk' },
   aichat_moondream_analyses: { id: 'pk', share_id: 'uk', image_id: 'fk+idx', user_id: 'fk+idx' },
@@ -2888,7 +2878,6 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_answer_category_scores: 'ai',
   aichat_answer_vectors: 'ai',
   aichat_answer_keyword_vectors: 'ai',
-  aichat_auto_explore_history: 'ai',
   moondream_analyze_log: 'ai',
   aichat_images: 'ai',
   aichat_moondream_analyses: 'ai',
@@ -3148,7 +3137,6 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_answer_category_scores: { user_id: 'user_sessions', share_id: 'ai_chat_shares', category_id: 'aichat_keyword_categories' },
   aichat_answer_vectors: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_answer_keyword_vectors: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
-  aichat_auto_explore_history: { user_id: 'user_sessions' },
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
@@ -9679,39 +9667,11 @@ export async function listUnclassifiedAnswerKeywords(
      FROM aichat_answer_keyword_vectors v
      LEFT JOIN aichat_keyword_category_map m ON m.keyword = v.keyword AND m.user_id = v.user_id
      WHERE v.user_id = ? AND m.category_id IS NULL
-       AND NOT EXISTS (
-         SELECT 1 FROM aichat_auto_explore_history h
-         WHERE h.user_id = v.user_id AND h.keyword = v.keyword
-           AND h.last_explored_at > datetime('now', '-7 days')
-       )
      GROUP BY v.keyword
      ORDER BY latest DESC
      LIMIT ?`
   ).bind(userId, limit).all<{ keyword: string; latest: string }>();
   return (rows.results ?? []).map((r) => r.keyword);
-}
-
-const AUTO_EXPLORE_COOLDOWN_DAYS = 7;
-
-/**
- * 自動探索の開始をユーザー×キーワード単位で確保する。同時クリックを含め、
- * 最後の探索から7日以内なら更新しない条件付きUPSERTにしている。
- */
-export async function claimAutoExploreKeyword(
-  db: D1Database,
-  userId: string,
-  keyword: string,
-  now = new Date(),
-): Promise<boolean> {
-  const exploredAt = now.toISOString();
-  const cutoff = new Date(now.getTime() - AUTO_EXPLORE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const result = await db.prepare(
-    `INSERT INTO aichat_auto_explore_history (user_id, keyword, last_explored_at)
-     VALUES (?, ?, ?)
-     ON CONFLICT(user_id, keyword) DO UPDATE SET last_explored_at = excluded.last_explored_at
-     WHERE aichat_auto_explore_history.last_explored_at <= ?`
-  ).bind(userId, keyword, exploredAt, cutoff).run();
-  return (result.meta.changes ?? 0) > 0;
 }
 
 export type KeywordBoundaryStats = { classifiedCount: number; unclassifiedCount: number };
@@ -10399,36 +10359,6 @@ app.get('/api/aichat/keyword-boundary/unknown', authMiddleware, async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[keyword-boundary/unknown] listUnclassifiedAnswerKeywords失敗', { error: message });
-    return jsonUtf8({ error: message }, 500);
-  }
-});
-
-/**
- * 自動探索前に呼ぶ履歴確保API。同じキーワードへの高コストなAI問い合わせを
- * 最低1週間は繰り返さない。手入力した開始キーワードにも同じ制約を適用する。
- */
-app.post('/api/aichat/keyword-boundary/auto-explore/claim', authMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  let body: { keyword?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
-  }
-  const keyword = (body.keyword ?? '').trim();
-  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
-  if (keyword.length > 200) return jsonUtf8({ error: 'keyword は200文字以内で入力してください' }, 400);
-
-  try {
-    const claimed = await claimAutoExploreKeyword(c.env.DB, user.sub, keyword);
-    if (!claimed) {
-      return jsonUtf8({ error: 'このキーワードは直近1週間に探索済みです', retryAfterDays: AUTO_EXPLORE_COOLDOWN_DAYS }, 409);
-    }
-    return jsonUtf8({ ok: true, cooldownDays: AUTO_EXPLORE_COOLDOWN_DAYS });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('[keyword-boundary/auto-explore/claim] 探索履歴の記録に失敗', { error: message });
     return jsonUtf8({ error: message }, 500);
   }
 });

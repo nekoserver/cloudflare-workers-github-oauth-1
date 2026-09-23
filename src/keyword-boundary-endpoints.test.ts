@@ -84,12 +84,6 @@ function setupDb(): DatabaseSync {
       keyword TEXT NOT NULL,
       category_id INTEGER NOT NULL
     );
-    CREATE TABLE aichat_auto_explore_history (
-      user_id TEXT NOT NULL,
-      keyword TEXT NOT NULL,
-      last_explored_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, keyword)
-    );
   `);
   db.prepare(`INSERT INTO user_sessions (user_id, last_activity_at, revoked_at) VALUES ('test-user', datetime('now'), NULL)`).run();
   db.prepare(`INSERT INTO user_sessions (user_id, last_activity_at, revoked_at) VALUES ('other-user', datetime('now'), NULL)`).run();
@@ -160,18 +154,6 @@ describe('GET /api/aichat/keyword-boundary/unknown', () => {
     expect(body.keywords).toHaveLength(2);
   });
 
-  it('直近1週間に自動探索したキーワードは候補から除外する', async () => {
-    const db = setupDb();
-    insertAnswerKeyword(db, { shareId: 's1', userId: 'test-user', keyword: 'recent' });
-    insertAnswerKeyword(db, { shareId: 's1', userId: 'test-user', keyword: 'old' });
-    db.prepare(`INSERT INTO aichat_auto_explore_history VALUES ('test-user', 'recent', datetime('now', '-6 days'))`).run();
-    db.prepare(`INSERT INTO aichat_auto_explore_history VALUES ('test-user', 'old', datetime('now', '-8 days'))`).run();
-
-    const res = await requestApi(db, '/api/aichat/keyword-boundary/unknown');
-    const body = (await res.json()) as { keywords: { keyword: string }[] };
-    expect(body.keywords.map((k) => k.keyword)).toEqual(['old']);
-  });
-
   it('DBエラー時は汎用500ではなく実際のエラーメッセージを返す', async () => {
     const db = new DatabaseSync(':memory:');
     db.exec(`CREATE TABLE user_sessions (user_id TEXT PRIMARY KEY, last_activity_at TEXT, revoked_at TEXT, idle_timeout_seconds INTEGER);`);
@@ -182,22 +164,6 @@ describe('GET /api/aichat/keyword-boundary/unknown', () => {
     const body = (await res.json()) as { error?: string };
     expect(body.error).toBeTruthy();
     expect(body.error).not.toBe('サーバーエラーが発生しました');
-  });
-});
-
-describe('POST /api/aichat/keyword-boundary/auto-explore/claim', () => {
-  it('初回は探索権を記録し、1週間以内の再探索は409で拒否する', async () => {
-    const db = setupDb();
-    const authHeader = await makeAuthHeader();
-    const request = () => app.request('/api/aichat/keyword-boundary/auto-explore/claim', {
-      method: 'POST', headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keyword: 'D1' }),
-    }, { JWT_SECRET, DB: wrapD1(db) });
-
-    expect((await request()).status).toBe(200);
-    const second = await request();
-    expect(second.status).toBe(409);
-    expect(await second.json()).toMatchObject({ retryAfterDays: 7 });
   });
 });
 
