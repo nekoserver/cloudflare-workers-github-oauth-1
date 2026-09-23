@@ -7251,8 +7251,18 @@ export function getAiChatPage(user: {
     var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
+    // /jev-score は verified=true を返す前にDBへの保存確認まで終えているため、
+    // Jevの書き込み自体を待ち漏らしているわけではない。ただし、Jev直後に別の
+    // AI処理(キーワード抽出)を間髪入れず開始すると、一時的な負荷・レート制御で
+    // 空応答やタイムアウトになった実例がある。短い安定待ちを挟み、抽出が空または
+    // warningになった場合だけ同じ間隔を置いて1回再試行する。
+    var AUTO_EXPLORE_POST_JEV_DELAY_MS = 1500;
     var autoExploreRunning = false;
     var autoExploreCancelRequested = false;
+
+    function autoExploreDelay(ms) {
+      return new Promise(function(resolve) { setTimeout(resolve, ms); });
+    }
 
     function autoExploreClock() {
       return new Date().toLocaleTimeString('ja-JP', { hour12: false });
@@ -7312,13 +7322,26 @@ export function getAiChatPage(user: {
               if (!result.ok || !result.data || result.data.verified !== true) {
                 throw new Error((result.data && result.data.error) || keyword + 'のJev処理に失敗しました');
               }
-              return answer;
+              return autoExploreDelay(AUTO_EXPLORE_POST_JEV_DELAY_MS).then(function() { return answer; });
             });
         });
       }).then(function(answer) {
         return autoExploreRunStage(keyword, 'キー切り出し', function() {
-          return vectorizeAnswerAndExtractKeywords(answer.shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true).then(function(result) {
-            if (result.status < 200 || result.status >= 300 || !result.data) {
+          function extractOnce() {
+            return vectorizeAnswerAndExtractKeywords(answer.shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true);
+          }
+          function extractionFailed(result) {
+            return !result || result.status < 200 || result.status >= 300 || !result.data
+              || !!result.data._keywordsWarning
+              || !Array.isArray(result.data.keywords)
+              || result.data.keywords.length === 0;
+          }
+          return extractOnce().then(function(firstResult) {
+            if (!extractionFailed(firstResult)) return firstResult;
+            autoExploreLogLine('[' + keyword + '] キー切り出しを再試行します (' + (AUTO_EXPLORE_POST_JEV_DELAY_MS / 1000).toFixed(1) + 's後)');
+            return autoExploreDelay(AUTO_EXPLORE_POST_JEV_DELAY_MS).then(extractOnce);
+          }).then(function(result) {
+            if (!result || result.status < 200 || result.status >= 300 || !result.data) {
               throw new Error((result.data && result.data.error) || keyword + 'のキー切り出しに失敗しました');
             }
             // POST /api/aichat/vectorize-answerは、ベクタ化自体が成功していれば
@@ -7330,6 +7353,9 @@ export function getAiChatPage(user: {
             // 付いている場合は明示的に失敗として扱う。
             if (result.data._keywordsWarning) {
               throw new Error(keyword + 'のキー切り出しに失敗しました: ' + result.data._keywordsWarning);
+            }
+            if (!Array.isArray(result.data.keywords) || result.data.keywords.length === 0) {
+              throw new Error(keyword + 'のキー切り出しに失敗しました: 抽出結果が空でした');
             }
           });
         });

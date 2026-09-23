@@ -186,15 +186,38 @@ describe('探索の境界線パネル: 各キーワードはAI問い合わせ→
     expect(snippet.slice(vecStageIdx, vecStageIdx + 300)).toContain('vectorizeAnswerAndExtractKeywords(answer.shareId');
   });
 
+  it('Jevのverified=true確認後に短い安定待ちを挟んでからキー切り出しへ進む', () => {
+    const html = buildPage();
+    expect(html).toContain('var AUTO_EXPLORE_POST_JEV_DELAY_MS = 1500;');
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 4000);
+    const verifiedIdx = snippet.indexOf('result.data.verified !== true');
+    const delayIdx = snippet.indexOf('autoExploreDelay(AUTO_EXPLORE_POST_JEV_DELAY_MS)', verifiedIdx);
+    const vecIdx = snippet.indexOf("autoExploreRunStage(keyword, 'キー切り出し'");
+    expect(delayIdx).toBeGreaterThan(verifiedIdx);
+    expect(vecIdx).toBeGreaterThan(delayIdx);
+  });
+
   it('POST /api/aichat/vectorize-answerがHTTP 200でも_keywordsWarningを返した場合は失敗として扱う(実際にはキーワードが1件も切り出せていないのを黙って「完了」にしない)', () => {
     const html = buildPage();
     const idx = html.indexOf('function autoExploreProcessKeyword(');
     const snippet = html.slice(idx, idx + 3600);
     const vecStageIdx = snippet.indexOf("autoExploreRunStage(keyword, 'キー切り出し'");
     expect(vecStageIdx).toBeGreaterThan(-1);
-    const vecSnippet = snippet.slice(vecStageIdx, vecStageIdx + 1400);
+    const vecSnippet = snippet.slice(vecStageIdx, vecStageIdx + 2400);
     expect(vecSnippet).toContain('if (result.data._keywordsWarning) {');
     expect(vecSnippet).toContain("throw new Error(keyword + 'のキー切り出しに失敗しました: ' + result.data._keywordsWarning);");
+  });
+
+  it('warning・空配列などの抽出失敗時は待ち時間を置いて1回だけ再試行し、再度空なら明示的に失敗させる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 5200);
+    expect(snippet).toContain('function extractionFailed(result)');
+    expect(snippet).toContain('result.data.keywords.length === 0');
+    expect(snippet).toContain("autoExploreLogLine('[' + keyword + '] キー切り出しを再試行します");
+    expect(snippet).toContain('return autoExploreDelay(AUTO_EXPLORE_POST_JEV_DELAY_MS).then(extractOnce);');
+    expect(snippet).toContain("throw new Error(keyword + 'のキー切り出しに失敗しました: 抽出結果が空でした');");
   });
 });
 
