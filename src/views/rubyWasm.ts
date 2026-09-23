@@ -103,11 +103,12 @@ function highlightRuby(code: string): string {
 function renderRubyReplSnippets(): string {
   return RUBY_REPL_SNIPPETS.map((snippet, index) => {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
+    const categoryIndex = [...new Set(RUBY_REPL_SNIPPETS.map((item) => item.category))].indexOf(snippet.category);
     return `<article class="snippet-card" data-snippet-card="${index}">
-      <div class="snippet-heading"><span class="snippet-category">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
+      <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
       <p>${escapeHtml(snippet.description)}</p>
-      <pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre>
-      <div class="snippet-actions"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><span class="snippet-state">WASMを準備中…</span></div>
+      <div class="snippet-code-wrap"><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button></div>
+      <span class="snippet-state">WASMを準備中…</span>
       <div class="snippet-result" data-snippet-result="${index}" hidden>
         <button type="button" class="snippet-output-close" data-close-snippet="${index}" aria-label="実行結果を折り畳む">close</button>
         <output class="snippet-output" data-snippet-output="${index}"></output>
@@ -118,10 +119,23 @@ function renderRubyReplSnippets(): string {
 }
 
 function renderRubySampleChoices(): string {
-  return RUBY_REPL_SNIPPETS.map((snippet, index) => `<button type="button" class="sample-choice" data-load-sample="${index}">
-    <span class="snippet-category">${escapeHtml(snippet.category)}</span>
+  const categories = [...new Set(RUBY_REPL_SNIPPETS.map((snippet) => snippet.category))];
+  return RUBY_REPL_SNIPPETS.map((snippet, index) => {
+    const categoryIndex = categories.indexOf(snippet.category);
+    const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
+    return `<button type="button" class="sample-choice" data-load-sample="${index}"${firstInCategory ? ` id="sample-category-${categoryIndex}"` : ''}>
+    <span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span>
     <span class="sample-choice-copy"><strong>${escapeHtml(snippet.title)}</strong><span>${escapeHtml(snippet.description)}</span></span>
-  </button>`).join('\n');
+  </button>`;
+  }).join('\n');
+}
+
+function renderRubySampleCategoryLinks(): string {
+  const counts = new Map<string, number>();
+  RUBY_REPL_SNIPPETS.forEach((snippet) => counts.set(snippet.category, (counts.get(snippet.category) || 0) + 1));
+  return [...counts].map(([category, count], index) =>
+    `<a class="sample-category-link" data-category-index="${index}" href="#sample-category-${index}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`
+  ).join('');
 }
 
 export function getRubyWasmPage(username: string): string {
@@ -235,7 +249,7 @@ export function getRubyWasmPage(username: string): string {
     .result-block { margin-top: 20px; }
     .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .result-label { font-size: 12px; color: var(--text-muted); }
-    .output-close { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: underline; }
+    .output-close { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: none; }
     .result-value {
       font-family: 'Monaco', 'Courier New', monospace;
       font-size: 13px;
@@ -280,6 +294,18 @@ export function getRubyWasmPage(username: string): string {
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
     .sample-modal-box { width: min(680px, 92vw); }
+    .sample-modal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+    .sample-modal-header h2 { flex: none; margin: 2px 0 0; }
+    .sample-category-links { display: flex; flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .sample-category-link { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; text-decoration: none; }
+    .sample-category-link strong { min-width: 16px; padding: 1px 4px; border-radius: 999px; background: var(--category-color); color: #fff; text-align: center; }
+    [data-category-index="0"] { --category-color: #e11d48; }
+    [data-category-index="1"] { --category-color: #7c3aed; }
+    [data-category-index="2"] { --category-color: #0284c7; }
+    [data-category-index="3"] { --category-color: #0891b2; }
+    [data-category-index="4"] { --category-color: #059669; }
+    [data-category-index="5"] { --category-color: #d97706; }
+    [data-category-index="6"] { --category-color: #db2777; }
     .sample-choice-list { display: grid; gap: 8px; }
     .sample-choice {
       width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 12px;
@@ -323,22 +349,22 @@ export function getRubyWasmPage(username: string): string {
     .snippet-card { min-width: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; box-shadow: 0 5px 18px rgba(0, 0, 0, .08); }
     .snippet-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
     .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
-    .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, #667eea 15%, var(--bg-secondary)); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+    .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-    .snippet-card pre { max-height: 260px; margin: 12px 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .snippet-code-wrap { position: relative; margin: 12px 0 7px; }
+    .snippet-card pre { max-height: 260px; margin: 0; padding: 48px 14px 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .ruby-keyword { color: #ff7ab2; font-weight: 600; }
     .ruby-string { color: #b4f1a1; }
     .ruby-comment { color: #8290a6; font-style: italic; }
     .ruby-number { color: #ffd580; }
     .ruby-literal { color: #82aaff; font-weight: 600; }
-    .snippet-actions { display: flex; align-items: center; gap: 10px; }
-    .snippet-run { padding: 9px 14px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
+    .snippet-run { position: absolute; top: 9px; right: 9px; padding: 7px 12px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
     .snippet-run:hover:not(:disabled) { background: #5568d3; }
     .snippet-run:disabled { opacity: .5; cursor: not-allowed; }
     .snippet-state { color: var(--text-muted); font-size: 11px; }
     .snippet-result { position: relative; margin-top: 12px; }
     .snippet-result[hidden] { display: none; }
-    .snippet-output-close { display: block; margin: 0 0 5px auto; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; text-decoration: underline; }
+    .snippet-output-close { display: block; margin: 0 0 5px auto; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; text-decoration: none; }
     .snippet-output { display: block; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
     .snippet-output.error { color: #991b1b; border-color: #ef4444; }
     @media (max-width: 760px) {
@@ -410,7 +436,7 @@ export function getRubyWasmPage(username: string): string {
 
   <div class="modal-overlay" id="sampleModalOverlay" role="dialog" aria-modal="true" aria-labelledby="sampleModalTitle">
     <div class="modal-box sample-modal-box">
-      <h2 id="sampleModalTitle">💎 Ruby サンプルを選ぶ <button type="button" class="modal-close" id="sampleModalCloseBtn" aria-label="閉じる">✕</button></h2>
+      <div class="sample-modal-header"><h2 id="sampleModalTitle">💎 Ruby サンプルを選ぶ</h2><nav class="sample-category-links" aria-label="カテゴリー別サンプル">${renderRubySampleCategoryLinks()}</nav><button type="button" class="modal-close" id="sampleModalCloseBtn" aria-label="閉じる">✕</button></div>
       <div class="sample-choice-list">${renderRubySampleChoices()}</div>
     </div>
   </div>
@@ -617,8 +643,9 @@ export function getRubyWasmPage(username: string): string {
         modalRunBtn.disabled = false;
         document.querySelectorAll('[data-run-snippet]').forEach(function(button) {
           button.disabled = false;
-          var state = button.parentElement.querySelector('.snippet-state');
-          if (state) state.textContent = '実行できます';
+          var card = button.closest('.snippet-card');
+          var state = card && card.querySelector('.snippet-state');
+          if (state) state.textContent = '';
         });
       },
       onError: function(err) {

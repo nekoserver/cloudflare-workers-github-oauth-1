@@ -39,6 +39,20 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html.match(/<script type="application\/json" data-snippet-code=/g)).toHaveLength(RUBY_REPL_SNIPPETS.length);
   });
 
+  it('見出しの右に色分けしたカテゴリ別件数と先頭行へのジャンプリンクを表示する', () => {
+    const html = getRubyWasmPage('tester');
+    const categories = [...new Set(RUBY_REPL_SNIPPETS.map((snippet) => snippet.category))];
+
+    expect(html).toContain('class="sample-category-links"');
+    categories.forEach((category, index) => {
+      const count = RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === category).length;
+      expect(html).toContain(`href="#sample-category-${index}"`);
+      expect(html).toContain(`id="sample-category-${index}"`);
+      expect(html).toContain(`<span>${category}</span><strong>${count}</strong>`);
+      expect(html).toContain(`[data-category-index="${index}"]`);
+    });
+  });
+
   it('CSV集計はWASMに同梱されないcsv gemへ依存せず実行できる', () => {
     const csv = RUBY_REPL_SNIPPETS.find((snippet) => snippet.title === 'CSV 集計');
 
