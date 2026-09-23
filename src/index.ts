@@ -21749,6 +21749,7 @@ async function handleResendWebhookCore(
 
     if (resendWebhookDedupCache.has(dedupKey)) {
       logger.warn('Duplicate Resend webhook detected', { sourceId: logSourceLabel, resendEventId });
+      safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', { svixId: resendEventId }, 'Duplicate webhook'));
       return c.json({ error: 'Duplicate webhook' }, 409);
     }
 
@@ -21759,9 +21760,11 @@ async function handleResendWebhookCore(
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch (error) {
+    const parseError = error instanceof Error ? error.message : 'Unknown error';
     logger.warn('Unable to parse Resend webhook payload', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: parseError,
     });
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', resendEventId ? { svixId: resendEventId } : null, `Invalid webhook payload: ${parseError}`));
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
@@ -21770,7 +21773,6 @@ async function handleResendWebhookCore(
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
-  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
@@ -21909,9 +21911,19 @@ async function handleResendWebhookCore(
   }
 
   if (proxyFailed && eventType !== 'email.delivered') {
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'error', {
+      svixId,
+      slackResult: slackResultText,
+      proxyResult: proxyResultText,
+    }, 'Failed to notify proxy target'));
     return c.json({ error: 'Failed to notify proxy target' }, 502);
   }
 
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', {
+    svixId,
+    slackResult: slackResultText,
+    proxyResult: proxyResultText,
+  }));
   return c.json({ success: true, event: eventType }, 200);
 }
 
@@ -21934,12 +21946,14 @@ app.post('/webhook/resend/:sourceId', async (c) => {
 
   if (!sourceRow) {
     logger.warn('Unknown Resend webhook source', { sourceId });
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'rejected', null, 'Unknown webhook source'));
     return c.json({ error: 'Unknown webhook source' }, 404);
   }
 
   const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured', { sourceId });
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'error', null, 'Webhook secret is not configured'));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
@@ -21954,6 +21968,7 @@ app.post('/webhook/resend', async (c) => {
   const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured');
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured'));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
