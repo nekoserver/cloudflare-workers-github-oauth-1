@@ -180,6 +180,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko ls [-l] [-a] | WASMモジュール一覧をGNU coreutilsのls書式でWASM(Rust実装)表示します(-lで長形式、-aで全件) |',
     '| /neko gh pr list <owner/repo> | 指定リポジトリのオープン中プルリクエスト一覧をWASM(Rust実装)でMarkdownテーブル表示します |',
     '| /neko tree <owner/repo> [options] | ツリーを表示します。--depth、--pattern、--files-only、--dirs-only、--hidden、--sort name\|time、--reverseに対応 |',
+    '| /neko msb --help | microsandboxのCLI `msb` のヘルプ一覧をWASM(Rust実装)で表示します(msb本体の実行はできません) |',
     '| /neko tlist | /countdownページに登録した、次の予定一覧をMarkdownテーブルで表示します |',
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
@@ -958,6 +959,8 @@ export type AichatSlashCommandDeps = {
   lsViaWasm?: (long: boolean, all: boolean) => Promise<string>;
   ghPrList?: (repoFullName: string) => Promise<string>;
   repositoryTree?: (repoFullName: string, depth: number, options?: TreeFormatOptions) => Promise<string>;
+  /** `/neko msb --help` 用。microsandboxのCLI `msb` のヘルプ一覧(msb-wasm)をMarkdownで返す。msb本体の実行はできない */
+  msbHelpViaWasm?: (query: string) => Promise<string>;
   generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
   countdownList?: () => Promise<CountdownListItem[]>;
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
@@ -1818,6 +1821,28 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'msb') {
+    const args = parts.slice(2);
+    if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+      if (!deps.msbHelpViaWasm) {
+        return { handled: true, response: '❌ /neko msb --help は現在利用できません(WASM未設定)' };
+      }
+      try {
+        const markdown = await deps.msbHelpViaWasm('');
+        return { handled: true, response: ['## /neko msb --help', markdown].join('\n') };
+      } catch (err) {
+        return {
+          handled: true,
+          response: `❌ /neko msb --help の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
+    return {
+      handled: true,
+      response: '❌ 対応しているコマンドは /neko msb --help のみです(msb本体の実行はできません。KVM等のOS仮想化に依存するためWASMでは動きません)',
+    };
+  }
+
   if (subcommand === 'mlb') {
     const parsed = parseMlbFilterArgs(parts.slice(2));
     if (!parsed) {
@@ -1931,6 +1956,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }

@@ -124,9 +124,10 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   ランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README
   (Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力
   (`msb_help`・`msb_tree`・`msb_command_help`)のみを提供する。実際の
-  サンドボックス起動・イメージ取得・スナップショット等は対象外。ブラウザ
-  ページ・`/neko`サブコマンドからはまだ呼ばれておらず配線は未実施。
-  リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
+  サンドボックス起動・イメージ取得・スナップショット等は対象外。
+  `/neko msb --help`(`msb_help`のみ配線済み。引数無し・`-h`も同じ扱い)の
+  サーバー実行で使用する。`msb_tree`・`msb_command_help`とブラウザページは
+  未配線。リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
   行い、`public/wasm/msb.js`と`public/wasm/msb_bg.wasm`を生成する
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
