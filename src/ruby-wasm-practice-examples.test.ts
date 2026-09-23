@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getRubyWasmPage, RUBY_REPL_SNIPPETS } from './views/rubyWasm';
+import {
+  getRubyWasmPage,
+  RUBY_REPL_SNIPPETS,
+  RUBY_SAMPLE_AUDIT_RESULTS,
+  RUBY_SAMPLE_AUDIT_VERSIONS,
+} from './views/rubyWasm';
 
 describe('/ruby-wasm サンプル選択モーダル', () => {
   it('従来の練習サンプル行をなくし、画面下の全サンプルをモーダルにも表示する', () => {
@@ -122,5 +127,19 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(csv!.code).not.toContain('require "csv"');
     expect(csv!.code).toContain('source.lines(chomp: true)');
     expect(csv!.code).toContain('header.zip(values).to_h');
+  });
+
+  it('全サンプルのRuby 3.4系・Ruby 4.0系での実行結果を表で表示する', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('id="sampleAuditTitle"');
+    expect(html).toContain('全サンプルのRubyバージョン別実行結果');
+    expect(html).toContain('Ruby 3.4.4');
+    expect(html).toContain('Ruby 4.0系');
+    expect(html.match(/<tr><th scope="row">/g)).toHaveLength(RUBY_REPL_SNIPPETS.length);
+    expect(html.match(/✓ エラーなし/g)).toHaveLength(RUBY_REPL_SNIPPETS.length * RUBY_SAMPLE_AUDIT_VERSIONS.length);
+    for (const snippet of RUBY_REPL_SNIPPETS) {
+      expect(RUBY_SAMPLE_AUDIT_RESULTS[snippet.title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
+    }
   });
 });

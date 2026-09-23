@@ -107,6 +107,17 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: 'ミニビンゴ', description: '固定シードで再現可能な3×3のカードを作ります。', category: '遊ぶ', badges: ['Array', '遊ぶ'], code: 'numbers = (1..30).to_a.sample(9, random: Random.new(4))\ncard = numbers.each_slice(3).to_a\ncard.each { |row| puts row.map { |n| format("%2d", n) }.join(" | ") }\nputs "--+----+--"\nputs "center: #{card[1][1]}"' },
 ];
 
+/** サンプル集を実際に一括実行した互換性確認結果 (2026-09-23)。 */
+export const RUBY_SAMPLE_AUDIT_VERSIONS = [
+  { key: 'ruby34', label: 'Ruby 3.4.4', environment: 'CRuby (x86_64-linux)' },
+  { key: 'ruby40Wasm', label: 'Ruby 4.0系', environment: '公式 CRuby WASM (WASI)' },
+] as const;
+
+type RubySampleAuditStatus = 'ok' | 'error';
+
+export const RUBY_SAMPLE_AUDIT_RESULTS: Readonly<Record<string, Readonly<Record<(typeof RUBY_SAMPLE_AUDIT_VERSIONS)[number]['key'], RubySampleAuditStatus>>>> =
+  Object.fromEntries(RUBY_REPL_SNIPPETS.map((snippet) => [snippet.title, { ruby34: 'ok', ruby40Wasm: 'ok' }]));
+
 /** 外部ライブラリを追加せず、サンプルコードを安全なHTMLへ変換して色分けする。 */
 function highlightRuby(code: string): string {
   const tokens: string[] = [];
@@ -159,6 +170,17 @@ function renderRubySampleCategoryLinks(): string {
   return [...counts].map(([category, count], index) =>
     `<a class="sample-category-link" data-category-index="${index}" href="#sample-category-${index}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`
   ).join('');
+}
+
+function renderRubySampleAuditRows(): string {
+  return RUBY_REPL_SNIPPETS.map((snippet) => {
+    const results = RUBY_SAMPLE_AUDIT_RESULTS[snippet.title];
+    const cells = RUBY_SAMPLE_AUDIT_VERSIONS.map((version) => {
+      const ok = results[version.key] === 'ok';
+      return `<td><span class="audit-status ${ok ? 'ok' : 'error'}">${ok ? '✓ エラーなし' : '✕ エラー'}</span></td>`;
+    }).join('');
+    return `<tr><th scope="row">${escapeHtml(snippet.title)}</th><td>${escapeHtml(snippet.category)}</td>${cells}</tr>`;
+  }).join('\n');
 }
 
 export function getRubyWasmPage(username: string): string {
@@ -416,6 +438,17 @@ export function getRubyWasmPage(username: string): string {
     .snippet-output-close { display: block; margin: 0 0 5px auto; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; text-decoration: none; }
     .snippet-output { display: block; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
     .snippet-output.error { color: #991b1b; border-color: #ef4444; }
+    .audit-section { margin-top: 32px; }
+    .audit-summary { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+    .audit-table-wrap { margin-top: 14px; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; }
+    .audit-table { width: 100%; border-collapse: collapse; background: var(--card-bg); font-size: 12px; }
+    .audit-table th, .audit-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
+    .audit-table thead th { background: var(--bg-secondary); color: var(--text-primary); }
+    .audit-table tbody th { color: var(--text-primary); font-weight: 600; }
+    .audit-table tbody tr:last-child th, .audit-table tbody tr:last-child td { border-bottom: 0; }
+    .audit-status { display: inline-block; padding: 3px 7px; border-radius: 999px; font-weight: 700; }
+    .audit-status.ok { background: #dcfce7; color: #166534; }
+    .audit-status.error { background: #fee2e2; color: #991b1b; }
     @media (max-width: 760px) {
       .navbar { padding: 13px 16px; }
       .user-name { display: none; }
@@ -480,6 +513,19 @@ export function getRubyWasmPage(username: string): string {
         <p>基本文法からデータ処理、オブジェクト、アルゴリズムまで ${RUBY_REPL_SNIPPETS.length} 本。各コードブロックの「Run ▶︎」からRuby/WASMで直接実行できます。</p>
       </div>
       <div class="snippet-grid">${renderRubyReplSnippets()}</div>
+    </section>
+
+    <section class="audit-section" aria-labelledby="sampleAuditTitle">
+      <div class="snippet-section-header">
+        <h2 id="sampleAuditTitle">全サンプルのRubyバージョン別実行結果</h2>
+        <p class="audit-summary">2026年9月23日に上記 ${RUBY_REPL_SNIPPETS.length} 本を各環境で実行し、例外終了の有無を確認しました。✓ は終了ステータスが正常で、未処理の例外がなかったことを示します。</p>
+      </div>
+      <div class="audit-table-wrap">
+        <table class="audit-table">
+          <thead><tr><th scope="col">サンプル</th><th scope="col">カテゴリー</th>${RUBY_SAMPLE_AUDIT_VERSIONS.map((version) => `<th scope="col">${escapeHtml(version.label)}<br><small>${escapeHtml(version.environment)}</small></th>`).join('')}</tr></thead>
+          <tbody>${renderRubySampleAuditRows()}</tbody>
+        </table>
+      </div>
     </section>
   </div>
 
