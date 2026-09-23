@@ -49,12 +49,20 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
   it('詳細パネル内から選択したサンプルを実行して結果を表示できる', () => {
     const html = getRubyWasmPage('tester');
 
-    expect(html).toContain('id="sampleRunBtn" disabled>Run ▶︎</button>');
+    expect(html).toContain('class="sample-detail-code-wrap"><button type="button" class="snippet-run" id="sampleRunBtn" disabled>Run ▶︎</button><pre');
     expect(html).toContain("sampleRunBtn.addEventListener('click'");
     expect(html).toContain('var result = runRubyCode(selectedSampleCode)');
     expect(html).toContain('sampleDetailResult.textContent = result.output');
     expect(html).toContain('id="sampleDetailResultCloseBtn">close</button>');
     expect(html).toContain("sampleDetailResultCloseBtn.addEventListener('click'");
+  });
+
+  it('パターンマッチは範囲パターンに一致したpriceを変数にバインドする', () => {
+    const patternMatching = RUBY_REPL_SNIPPETS.find((snippet) => snippet.title === 'パターンマッチ');
+
+    expect(patternMatching).toBeDefined();
+    expect(patternMatching!.code).toContain('price: (2000.. => price)');
+    expect(patternMatching!.code).toContain('#{price}円');
   });
 
   it('詳細モーダルの操作を指定位置に配置し、下部の閉じるボタンも機能する', () => {

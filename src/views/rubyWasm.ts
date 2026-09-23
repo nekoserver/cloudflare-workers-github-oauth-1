@@ -84,7 +84,7 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: 'パスカルの三角形', description: 'each_consで次の行を組み立てます。', category: 'アルゴリズム', code: 'row = [1]\n8.times do\n  puts row.join(" ").center(30)\n  row = [1] + row.each_cons(2).map(&:sum) + [1]\nend' },
   { title: 'メモ化フィボナッチ', description: '再帰とHashのデフォルトブロックを組み合わせます。', category: 'アルゴリズム', code: 'fib = Hash.new { |memo, n| memo[n] = n < 2 ? n : memo[n - 1] + memo[n - 2] }\nputs (0..20).map { |n| fib[n] }.join(", ")\nputs "cached entries: #{fib.size}"' },
   { title: '簡易棒グラフ', description: '数値データをターミナル風に可視化します。', category: '遊ぶ', code: 'visitors = { Mon: 12, Tue: 19, Wed: 8, Thu: 24, Fri: 17 }\nscale = visitors.values.max\nvisitors.each do |day, value|\n  bar = "█" * (value * 20 / scale)\n  puts format("%-3s | %-20s %2d", day, bar, value)\nend' },
-  { title: 'パターンマッチ', description: '配列とHashをcase/inで読みやすく分類します。', category: 'Ruby 4', badges: ['構文', '中級'], code: 'events = [\n  [:login, { user: "Mika" }],\n  [:purchase, { item: "Book", price: 2400 }],\n  [:logout, { user: "Mika" }]\n]\nevents.each do |event|\n  case event\n  in [:login, { user: }]\n    puts "welcome #{user}"\n  in [:purchase, { item:, price: 2000.. }]\n    puts "premium: #{item} (#{price}円)"\n  in [type, payload]\n    puts "#{type}: #{payload}"\n  end\nend' },
+  { title: 'パターンマッチ', description: '配列とHashをcase/inで読みやすく分類します。', category: 'Ruby 4', badges: ['構文', '中級'], code: 'events = [\n  [:login, { user: "Mika" }],\n  [:purchase, { item: "Book", price: 2400 }],\n  [:logout, { user: "Mika" }]\n]\nevents.each do |event|\n  case event\n  in [:login, { user: }]\n    puts "welcome #{user}"\n  in [:purchase, { item:, price: (2000.. => price) }]\n    puts "premium: #{item} (#{price}円)"\n  in [type, payload]\n    puts "#{type}: #{payload}"\n  end\nend' },
   { title: 'Dataで座標計算', description: '不変なDataオブジェクトでベクトルを表現します。', category: 'Ruby 4', badges: ['Data', '中級'], code: 'Point = Data.define(:x, :y) do\n  def +(other) = Point.new(x + other.x, y + other.y)\n  def length = Math.hypot(x, y)\nend\na = Point.new(3, 4)\nb = Point.new(-1, 2)\nc = a + b\nputs "#{a.inspect} length=#{a.length}"\nputs "#{a.inspect} + #{b.inspect} = #{c.inspect}"' },
   { title: '番号付きブロック', description: 'itを使うRuby 3.4+の簡潔な単一ブロック引数です。', category: 'Ruby 4', badges: ['Ruby 3.4+', '初級'], code: 'prices = [120, 350, 80, 640]\ntaxed = prices.map { it * 1.1 }\nputs taxed.map { format("¥%.0f", it) }.join(", ")\nputs "total: ¥#{taxed.sum.round}"' },
   { title: '範囲のステップ', description: 'Range#stepで目盛りと数列を組み立てます。', category: '基本', badges: ['Range', '初級'], code: 'puts "countdown: #{10.step(0, -2).to_a.join(" ")}"\nputs "degrees: #{(-90..90).step(30).to_a.join(", ")}"\nletters = ("a".."z").step(5).to_a\nputs "letters: #{letters.join(" -> ")}"' },
@@ -345,8 +345,8 @@ export function getRubyWasmPage(username: string): string {
     .sample-detail-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
     .sample-detail-heading h2 { margin: 0; }
     .sample-detail-description { margin: 0 0 12px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-    .sample-detail-code { max-height: 46vh; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
-    .sample-detail-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+    .sample-detail-code-wrap { position: relative; }
+    .sample-detail-code { max-height: 46vh; margin: 0; padding: 14px; padding-right: 88px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .sample-load-button { min-width: 42px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-weight: 700; cursor: pointer; }
     .sample-detail-result-wrap { position: relative; margin-top: 10px; padding-top: 24px; }
     .sample-detail-result-wrap[hidden] { display: none; }
@@ -488,10 +488,7 @@ export function getRubyWasmPage(username: string): string {
       <button type="button" class="modal-close sample-detail-corner-close" id="sampleDetailCloseBtn" aria-label="サンプルを閉じる">✕</button>
       <div class="sample-detail-heading"><button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><span class="ruby4-badge">Ruby 4</span></div>
       <p class="sample-detail-description" id="sampleDetailDescription"></p>
-      <pre class="sample-detail-code"><code class="ruby-code" id="sampleDetailCode"></code></pre>
-      <div class="sample-detail-actions">
-        <button type="button" class="run-btn" id="sampleRunBtn" disabled>Run ▶︎</button>
-      </div>
+      <div class="sample-detail-code-wrap"><button type="button" class="snippet-run" id="sampleRunBtn" disabled>Run ▶︎</button><pre class="sample-detail-code"><code class="ruby-code" id="sampleDetailCode"></code></pre></div>
       <div class="sample-detail-result-wrap" id="sampleDetailResultWrap" hidden><button type="button" class="sample-detail-result-close" id="sampleDetailResultCloseBtn">close</button><output class="snippet-output" id="sampleDetailResult"></output></div>
       <div class="sample-detail-footer"><button type="button" class="btn-secondary sample-detail-bottom-close" id="sampleDetailBottomCloseBtn">閉じる</button></div>
     </div>
