@@ -182,6 +182,9 @@ export function getAiChatPage(user: {
     .kb-auto-explore-btn { margin-left:auto; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
     .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
     .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
+    .kb-auto-explore-btn.kb-running { border-color:#dc2626; color:#dc2626; }
+    .kb-progress-log { display:none; max-height:120px; overflow-y:auto; padding:6px 14px; font-family:monospace; font-size:10.5px; line-height:1.5; color:var(--text-muted); background:var(--bg-secondary); border-top:1px solid var(--border-color); white-space:pre; }
+    .kb-progress-log.kb-progress-log-visible { display:block; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -1081,6 +1084,9 @@ export function getAiChatPage(user: {
         <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
         <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
       </div>
+      <!-- 自動探索の途中経過ログ。AI問い合わせ→Jev処理→キー切り出しの
+           各段階の開始・完了時刻と所要時間を、実行中だけ表示する。 -->
+      <div class="kb-progress-log" id="autoExploreProgressLog"></div>
       <div class="chat-form-area">
         <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
           <div class="chat-image-preview-thumb">
@@ -7226,33 +7232,93 @@ export function getAiChatPage(user: {
     // (指摘への対応: 選択されたものだけを問い合わせる)。2階層目以降は、
     // そこから新しく抽出されたキーワードへ自然に掘り下げていく(抽出が
     // 新しい順に並ぶ一覧を取得し、まだこの回で処理していないものを拾う)。
-    // 1件でもAI呼び出し/ベクタ化に失敗したら即座に打ち切り、そこまでの
-    // 結果を報告する(コストは気にしないが、エラーが出たら止める方針のため)。
-    // 分類自体はこの機能では行わず、最後に「分類済み/未分類」の累計を
-    // 表示するだけに留める。
+    // 1件でもAI呼び出し/Jev処理/ベクタ化に失敗したら即座に打ち切り、
+    // そこまでの結果を報告する(コストは気にしないが、エラーが出たら
+    // 止める方針のため)。分類自体はこの機能では行わず、最後に
+    // 「分類済み/未分類」の累計を表示するだけに留める。
+    //
+    // 各キーワードは必ず「AI問い合わせ→Jev処理→キー切り出し」の順で処理する
+    // (✂️ボタンの既存フロー(createJevValuesWidget/onJevComplete)と同じく、
+    // キー切り出し(vectorizeAnswerAndExtractKeywords)はJev処理が完了した
+    // 回答に対してだけ行う設計を守る。Jev処理をすっ飛ばして先にキー切り出し
+    // だけ行うことはしない)。
     var autoExploreBtn = document.getElementById('autoExploreBtn');
+    var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
+    var autoExploreRunning = false;
+    var autoExploreCancelRequested = false;
+
+    function autoExploreClock() {
+      return new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    }
+
+    function autoExploreLogLine(text) {
+      var line = document.createElement('div');
+      line.textContent = text;
+      autoExploreProgressLog.appendChild(line);
+      autoExploreProgressLog.scrollTop = autoExploreProgressLog.scrollHeight;
+    }
+
+    // 1段階ぶん(AI問い合わせ/Jev処理/キー切り出し)を実行し、開始・完了
+    // (または失敗)をそれぞれ時刻・所要秒数つきでログへ出す共通ラッパー。
+    function autoExploreRunStage(keyword, stageLabel, run) {
+      var startedAt = Date.now();
+      autoExploreLogLine('[' + keyword + '] ' + stageLabel + '開始 ' + autoExploreClock());
+      return run().then(
+        function(value) {
+          var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          autoExploreLogLine('[' + keyword + '] ' + stageLabel + '完了 ' + autoExploreClock() + ' (' + elapsed + 's)');
+          return value;
+        },
+        function(err) {
+          var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          autoExploreLogLine('[' + keyword + '] ' + stageLabel + '失敗 ' + autoExploreClock() + ' (' + elapsed + 's)');
+          throw err;
+        }
+      );
+    }
 
     function autoExploreProcessKeyword(keyword) {
-      return fetch('/api/aichat', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: keyword + 'について説明してください', model: lastModel, systemPromptMode: langModeSelect.value, source: 'auto-explore' }),
-      })
-        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
-        .then(function(res) {
-          if (res.status < 200 || res.status >= 300 || res.data.error || !res.data.shareId) {
-            throw new Error((res.data && res.data.error) || keyword + 'への問い合わせに失敗しました');
-          }
-          return vectorizeAnswerAndExtractKeywords(res.data.shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true);
+      return autoExploreRunStage(keyword, 'AI問い合わせ', function() {
+        return fetch('/api/aichat', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: keyword + 'について説明してください', model: lastModel, systemPromptMode: langModeSelect.value, source: 'auto-explore' }),
         })
-        .then(function(result) {
-          if (result.status < 200 || result.status >= 300 || !result.data) {
-            throw new Error((result.data && result.data.error) || keyword + 'のベクタ化に失敗しました');
-          }
+          .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+          .then(function(res) {
+            if (res.status < 200 || res.status >= 300 || res.data.error || !res.data.shareId) {
+              throw new Error((res.data && res.data.error) || keyword + 'への問い合わせに失敗しました');
+            }
+            return { shareId: res.data.shareId, model: res.data.usedModel || lastModel };
+          });
+      }).then(function(answer) {
+        return autoExploreRunStage(keyword, 'Jev処理', function() {
+          return fetch('/api/aichat/jev-score', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shareId: answer.shareId, model: answer.model }),
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+              if (!result.ok || !result.data || result.data.verified !== true) {
+                throw new Error((result.data && result.data.error) || keyword + 'のJev処理に失敗しました');
+              }
+              return answer;
+            });
         });
+      }).then(function(answer) {
+        return autoExploreRunStage(keyword, 'キー切り出し', function() {
+          return vectorizeAnswerAndExtractKeywords(answer.shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true).then(function(result) {
+            if (result.status < 200 || result.status >= 300 || !result.data) {
+              throw new Error((result.data && result.data.error) || keyword + 'のキー切り出しに失敗しました');
+            }
+          });
+        });
+      });
     }
 
     function autoExploreRunCandidates(candidates, processedKeywords) {
@@ -7260,6 +7326,7 @@ export function getAiChatPage(user: {
       candidates.forEach(function(keyword) {
         if (processedKeywords[keyword]) return;
         chain = chain.then(function() {
+          if (autoExploreCancelRequested) return;
           processedKeywords[keyword] = true;
           return autoExploreProcessKeyword(keyword);
         });
@@ -7277,6 +7344,20 @@ export function getAiChatPage(user: {
         });
     }
 
+    function setAutoExploreButtonRunning() {
+      autoExploreBtn.disabled = false;
+      autoExploreBtn.classList.add('kb-running');
+      autoExploreBtn.textContent = '⏹ 停止';
+      autoExploreBtn.title = '自動探索を停止する(今の問い合わせが終わり次第止まります)';
+    }
+
+    function setAutoExploreButtonIdle() {
+      autoExploreBtn.disabled = false;
+      autoExploreBtn.classList.remove('kb-running');
+      autoExploreBtn.textContent = '🧭 自動探索';
+      autoExploreBtn.title = 'チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる';
+    }
+
     function runAutoExplore() {
       var seedKeywords = Object.keys(keywordBoundarySelection);
       if (seedKeywords.length === 0) {
@@ -7284,8 +7365,11 @@ export function getAiChatPage(user: {
         return;
       }
 
-      autoExploreBtn.disabled = true;
-      autoExploreBtn.textContent = '🧭 探索中...';
+      autoExploreRunning = true;
+      autoExploreCancelRequested = false;
+      setAutoExploreButtonRunning();
+      autoExploreProgressLog.innerHTML = '';
+      autoExploreProgressLog.classList.add('kb-progress-log-visible');
       showAichatToast('自動探索を開始します(選択' + seedKeywords.length + '件・最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');
 
       var processedKeywords = {};
@@ -7299,7 +7383,7 @@ export function getAiChatPage(user: {
       // 2階層目以降: 1階層目で新たに抽出されたキーワードへ自然に掘り下げる。
       for (var level = 1; level < AUTO_EXPLORE_MAX_LEVELS; level++) {
         chain = chain.then(function() {
-          if (stoppedByError) return;
+          if (stoppedByError || autoExploreCancelRequested) return;
           return autoExploreNextLevelCandidates(processedKeywords).then(function(candidates) {
             return autoExploreRunCandidates(candidates, processedKeywords);
           });
@@ -7320,17 +7404,28 @@ export function getAiChatPage(user: {
           var summary = stats ? ('分類済み' + stats.classifiedCount + '件 / 未分類' + stats.unclassifiedCount + '件') : '';
           if (stoppedByError) {
             showAichatToast('自動探索を途中で停止しました(' + stoppedByError + ') ' + summary, 'aichat-scissors-toast-neutral');
+          } else if (autoExploreCancelRequested) {
+            showAichatToast('自動探索を停止しました ' + summary, 'aichat-scissors-toast-neutral');
           } else {
             showAichatToast('自動探索完了 ' + summary, 'aichat-send-toast-ok');
           }
         })
         .finally(function() {
-          autoExploreBtn.disabled = false;
-          autoExploreBtn.textContent = '🧭 自動探索';
+          autoExploreRunning = false;
+          autoExploreCancelRequested = false;
+          setAutoExploreButtonIdle();
         });
     }
 
-    autoExploreBtn.addEventListener('click', function() { runAutoExplore(); });
+    autoExploreBtn.addEventListener('click', function() {
+      if (autoExploreRunning) {
+        autoExploreCancelRequested = true;
+        autoExploreBtn.disabled = true;
+        autoExploreBtn.textContent = '⏹ 停止中...';
+        return;
+      }
+      runAutoExplore();
+    });
 
     // ===== 写真添付(＋ボタン) =====
     var MAX_IMAGE_FILE_BYTES = 6 * 1024 * 1024;
