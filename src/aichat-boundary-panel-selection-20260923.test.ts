@@ -81,3 +81,95 @@ describe('探索の境界線パネル: 自動探索は選択されたキーワ�
     expect(snippet).toContain('keywordBoundarySelection = {};');
   });
 });
+
+describe('探索の境界線パネル: 実行中にもう一度押すと停止できる', () => {
+  it('実行中でなければrunAutoExplore()を呼び、実行中ならキャンセル要求を立てる(ボタンは無効化しない=押し直せる)', () => {
+    const html = buildPage();
+    const idx = html.indexOf("autoExploreBtn.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).toContain('if (autoExploreRunning) {');
+    expect(snippet).toContain('autoExploreCancelRequested = true;');
+    expect(snippet).toContain('runAutoExplore();');
+  });
+
+  it('実行中はボタンをdisabledにせず(押し直せる)、⏹ 停止のラベル・kb-runningクラスにする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function setAutoExploreButtonRunning()');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain('autoExploreBtn.disabled = false;');
+    expect(snippet).toContain("autoExploreBtn.classList.add('kb-running');");
+    expect(snippet).toContain("autoExploreBtn.textContent = '⏹ 停止';");
+  });
+
+  it('候補の処理直前にキャンセル要求を確認し、要求済みならそのキーワードを処理しない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreRunCandidates(');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).toContain('if (autoExploreCancelRequested) return;');
+  });
+
+  it('階層の切り替わり時にもキャンセル要求とエラー停止の両方を確認する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function runAutoExplore()');
+    const snippet = html.slice(idx, idx + 2200);
+    expect(snippet).toContain('if (stoppedByError || autoExploreCancelRequested) return;');
+  });
+});
+
+describe('探索の境界線パネル: 各キーワードはAI問い合わせ→Jev処理→キー切り出しの順で処理する', () => {
+  it('autoExploreProcessKeywordはAI問い合わせ→Jev処理→キー切り出しの順にステージを呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 2500);
+    const aiIdx = snippet.indexOf("autoExploreRunStage(keyword, 'AI問い合わせ'");
+    const jevIdx = snippet.indexOf("autoExploreRunStage(keyword, 'Jev処理'");
+    const vecIdx = snippet.indexOf("autoExploreRunStage(keyword, 'キー切り出し'");
+    expect(aiIdx).toBeGreaterThan(-1);
+    expect(jevIdx).toBeGreaterThan(aiIdx);
+    expect(vecIdx).toBeGreaterThan(jevIdx);
+  });
+
+  it('Jev処理は/api/aichat/jev-scoreを呼び、verified!==trueなら失敗としてキー切り出しへ進めない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 2500);
+    expect(snippet).toContain("fetch('/api/aichat/jev-score'");
+    expect(snippet).toContain('if (!result.ok || !result.data || result.data.verified !== true)');
+  });
+
+  it('キー切り出し(vectorizeAnswerAndExtractKeywords)はJev処理の結果(answer)を受け取ってから呼ばれる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 2500);
+    const jevStageIdx = snippet.indexOf("autoExploreRunStage(keyword, 'Jev処理'");
+    const vecStageIdx = snippet.indexOf("autoExploreRunStage(keyword, 'キー切り出し'");
+    const between = snippet.slice(jevStageIdx, vecStageIdx);
+    // Jevステージ呼び出し後、.then(function(answer) {...})を1回挟んでからキー切り出しステージへ渡る。
+    expect(between).toContain('.then(function(answer) {');
+    expect(snippet.slice(vecStageIdx, vecStageIdx + 300)).toContain('vectorizeAnswerAndExtractKeywords(answer.shareId');
+  });
+});
+
+describe('探索の境界線パネル: 各段階の開始・完了時刻と所要時間を進捗ログに表示する', () => {
+  it('autoExploreRunStageは開始時刻・完了(または失敗)時刻と所要秒数をログへ出す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreRunStage(');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 900);
+    expect(snippet).toContain("stageLabel + '開始 ' + autoExploreClock()");
+    expect(snippet).toContain("stageLabel + '完了 ' + autoExploreClock() + ' (' + elapsed + 's)'");
+    expect(snippet).toContain("stageLabel + '失敗 ' + autoExploreClock() + ' (' + elapsed + 's)'");
+  });
+
+  it('自動探索の開始時にログをクリアして表示状態にする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function runAutoExplore()');
+    const snippet = html.slice(idx, idx + 700);
+    expect(snippet).toContain("autoExploreProgressLog.innerHTML = '';");
+    expect(snippet).toContain("autoExploreProgressLog.classList.add('kb-progress-log-visible');");
+  });
+});
