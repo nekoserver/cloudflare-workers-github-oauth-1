@@ -148,7 +148,7 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     id: 'msb',
     name: 'msb --help / --tree (microsandbox CLI, Rust)',
     description:
-      'microsandbox(https://github.com/microsandbox/microsandbox)のCLI `msb` のヘルプ・コマンドツリー表示だけを再実装したもの。msb本体はKVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVMランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README(Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力(msb_help/msb_tree/msb_command_help)のみを提供する。実際のサンドボックス起動・イメージ取得・スナップショット等は対象外。ブラウザページ・/nekoサブコマンドからはまだ呼ばれておらず配線は未実施',
+      'microsandbox(https://github.com/microsandbox/microsandbox)のCLI `msb` のヘルプ・コマンドツリー表示だけを再実装したもの。msb本体はKVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVMランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README(Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力(msb_help/msb_tree/msb_command_help)のみを提供する。実際のサンドボックス起動・イメージ取得・スナップショット等は対象外。`/neko msb --help`のサーバー実行で使用する(msb_helpのみ配線済み。msb_tree/msb_command_helpとブラウザページは未配線)',
     wasmPath: 'public/wasm/msb_bg.wasm',
     sourceDir: 'wasm/msb-wasm',
     sourceFile: 'wasm/msb-wasm/src/lib.rs',
