@@ -44,6 +44,21 @@ describe('/neko msb --help', () => {
     }
   });
 
+  it('IME等でダッシュが置換された—help/–helpも --help と同じ動作になる', async () => {
+    for (const cmd of ['/neko msb —help', '/neko msb –help']) {
+      const msbHelpViaWasm = vi.fn().mockResolvedValue('- `msb run` — ...');
+      const result = await interpretAichatSlashCommand(cmd, new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        msbHelpViaWasm,
+      });
+      expect(result).toEqual({
+        handled: true,
+        response: expect.stringContaining('## /neko msb --help'),
+      });
+      expect(msbHelpViaWasm).toHaveBeenCalledWith('');
+    }
+  });
+
   it('--help/-h 以外の引数はmsb本体を実行できない旨のエラーを返す(握りつぶさない)', async () => {
     const msbHelpViaWasm = vi.fn();
     const result = await interpretAichatSlashCommand('/neko msb run', new Date(), {
