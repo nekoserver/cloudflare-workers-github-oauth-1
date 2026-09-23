@@ -79,7 +79,7 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: 'クラスとメソッド', description: '小さな値オブジェクトを定義します。', category: 'オブジェクト', code: 'class Temperature\n  attr_reader :celsius\n  def initialize(celsius) = @celsius = celsius\n  def fahrenheit = celsius * 9.0 / 5 + 32\n  def to_s = format("%.1f°C / %.1f°F", celsius, fahrenheit)\nend\n[-10, 0, 20, 36.5].each { |n| puts Temperature.new(n) }' },
   { title: 'Structで注文表', description: 'Data指向のオブジェクトと集計を試します。', category: 'オブジェクト', code: 'LineItem = Struct.new(:name, :price, :quantity) do\n  def subtotal = price * quantity\nend\ncart = [LineItem.new("Coffee", 480, 2), LineItem.new("Cake", 620, 1)]\ncart.each { |item| puts "#{item.name.ljust(8)} #{item.quantity} × ¥#{item.price} = ¥#{item.subtotal}" }\nputs "TOTAL: ¥#{cart.sum(&:subtotal)}"' },
   { title: '例外処理', description: '独自例外を定義して入力値を検証します。', category: 'オブジェクト', code: 'class InvalidAge < StandardError; end\ndef ticket_price(age)\n  raise InvalidAge, "age must be positive" if age.negative?\n  age < 12 ? 600 : (age >= 65 ? 800 : 1200)\nend\n[8, 25, 70, -1].each do |age|\n  begin\n    puts "age #{age}: #{ticket_price(age)}円"\n  rescue InvalidAge => e\n    puts "age #{age}: ERROR (#{e.message})"\n  end\nend' },
-  { title: '素数ジェネレーター', description: 'Prime標準ライブラリとEnumeratorを使います。', category: 'アルゴリズム', code: 'require "prime"\nprimes = Prime.each.take(15)\nputs primes.join(", ")\nputs "sum = #{primes.sum}"' },
+  { title: '素数ジェネレーター', description: 'Enumeratorと試し割りで素数を順に生成します。', category: 'アルゴリズム', code: 'prime_numbers = Enumerator.new do |yielder|\n  candidate = 2\n  loop do\n    limit = Math.sqrt(candidate).to_i\n    yielder << candidate if (2..limit).none? { |divisor| (candidate % divisor).zero? }\n    candidate += 1\n  end\nend\n\nprimes = prime_numbers.take(15)\nputs primes.join(", ")\nputs "sum = #{primes.sum}"' },
   { title: 'パスカルの三角形', description: 'each_consで次の行を組み立てます。', category: 'アルゴリズム', code: 'row = [1]\n8.times do\n  puts row.join(" ").center(30)\n  row = [1] + row.each_cons(2).map(&:sum) + [1]\nend' },
   { title: 'メモ化フィボナッチ', description: '再帰とHashのデフォルトブロックを組み合わせます。', category: 'アルゴリズム', code: 'fib = Hash.new { |memo, n| memo[n] = n < 2 ? n : memo[n - 1] + memo[n - 2] }\nputs (0..20).map { |n| fib[n] }.join(", ")\nputs "cached entries: #{fib.size}"' },
   { title: '簡易棒グラフ', description: '数値データをターミナル風に可視化します。', category: '遊ぶ', code: 'visitors = { Mon: 12, Tue: 19, Wed: 8, Thu: 24, Fri: 17 }\nscale = visitors.values.max\nvisitors.each do |day, value|\n  bar = "█" * (value * 20 / scale)\n  puts format("%-3s | %-20s %2d", day, bar, value)\nend' },
@@ -93,7 +93,10 @@ function renderRubyReplSnippets(): string {
       <p>${escapeHtml(snippet.description)}</p>
       <pre><code>${escapeHtml(snippet.code)}</code></pre>
       <div class="snippet-actions"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><span class="snippet-state">WASMを準備中…</span></div>
-      <output class="snippet-output" data-snippet-output="${index}" hidden></output>
+      <div class="snippet-result" data-snippet-result="${index}" hidden>
+        <button type="button" class="snippet-output-close" data-close-snippet="${index}" aria-label="実行結果を折り畳む">close</button>
+        <output class="snippet-output" data-snippet-output="${index}"></output>
+      </div>
       <script type="application/json" data-snippet-code="${index}">${payload}</script>
     </article>`;
   }).join('\n');
@@ -208,7 +211,9 @@ export function getRubyWasmPage(username: string): string {
     .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .run-btn:hover:not(:disabled) { background: #5568d3; }
     .result-block { margin-top: 20px; }
-    .result-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .result-label { font-size: 12px; color: var(--text-muted); }
+    .output-close { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: underline; }
     .result-value {
       font-family: 'Monaco', 'Courier New', monospace;
       font-size: 13px;
@@ -300,8 +305,10 @@ export function getRubyWasmPage(username: string): string {
     .snippet-run:hover:not(:disabled) { background: #5568d3; }
     .snippet-run:disabled { opacity: .5; cursor: not-allowed; }
     .snippet-state { color: var(--text-muted); font-size: 11px; }
-    .snippet-output { display: block; margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
-    .snippet-output[hidden] { display: none; }
+    .snippet-result { position: relative; margin-top: 12px; }
+    .snippet-result[hidden] { display: none; }
+    .snippet-output-close { display: block; margin: 0 0 5px auto; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; text-decoration: underline; }
+    .snippet-output { display: block; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
     .snippet-output.error { color: #991b1b; border-color: #ef4444; }
     @media (max-width: 760px) {
       .navbar { padding: 13px 16px; }
@@ -365,7 +372,7 @@ export function getRubyWasmPage(username: string): string {
       </div>
       <div class="save-note" id="saveNote"></div>
       <div class="result-block" id="resultBlock" style="display:none;">
-        <div class="result-label">実行結果</div>
+        <div class="result-header"><div class="result-label">実行結果</div><button type="button" class="output-close" id="resultCloseBtn" aria-label="実行結果を折り畳む">close</button></div>
         <div class="result-value" id="resultValue"></div>
       </div>
     </div>
@@ -431,6 +438,7 @@ export function getRubyWasmPage(username: string): string {
     var saveNote = document.getElementById('saveNote');
     var inputCode = document.getElementById('inputCode');
     var resultBlock = document.getElementById('resultBlock');
+    var resultCloseBtn = document.getElementById('resultCloseBtn');
     var resultValue = document.getElementById('resultValue');
     var practiceExample = document.getElementById('practiceExample');
     var practiceHint = document.getElementById('practiceHint');
@@ -507,6 +515,10 @@ export function getRubyWasmPage(username: string): string {
       resultBlock.style.display = 'none';
       saveBtn.style.display = 'none';
       saveNote.textContent = '';
+    });
+
+    resultCloseBtn.addEventListener('click', function() {
+      resultBlock.style.display = 'none';
     });
 
     runBtn.addEventListener('click', function() {
@@ -621,17 +633,26 @@ export function getRubyWasmPage(username: string): string {
       button.addEventListener('click', function() {
         var index = button.getAttribute('data-run-snippet');
         var codeNode = document.querySelector('[data-snippet-code="' + index + '"]');
+        var resultPanel = document.querySelector('[data-snippet-result="' + index + '"]');
         var output = document.querySelector('[data-snippet-output="' + index + '"]');
-        if (!codeNode || !output) return;
+        if (!codeNode || !resultPanel || !output) return;
         var code = JSON.parse(codeNode.textContent || '""');
         button.disabled = true;
         button.textContent = '実行中…';
         var result = runRubyCode(code);
-        output.hidden = false;
+        resultPanel.hidden = false;
         output.classList.toggle('error', !result.ok);
         output.textContent = result.output;
         button.textContent = 'Run ▶︎';
         button.disabled = !rubyVM;
+      });
+    });
+
+    document.querySelectorAll('[data-close-snippet]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var index = button.getAttribute('data-close-snippet');
+        var resultPanel = document.querySelector('[data-snippet-result="' + index + '"]');
+        if (resultPanel) resultPanel.hidden = true;
       });
     });
 
