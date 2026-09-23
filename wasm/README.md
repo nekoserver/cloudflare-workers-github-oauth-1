@@ -129,6 +129,18 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   サーバー実行で使用する。`msb_tree`・`msb_command_help`とブラウザページは
   未配線。リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
   行い、`public/wasm/msb.js`と`public/wasm/msb_bg.wasm`を生成する
+- `gron-wasm`: gron(https://github.com/tomnomnom/gron)の中核である
+  JSON⇔代入文(`json.a.b[0] = 1;`)の相互変換だけを移植したもの。HTTP
+  リクエスト実行・ファイル監視・ANSIカラー出力・CLI引数解析は対象外。
+  gh-attach-wasm・sqlc-wasmと同じくGo標準の`wasm_exec.js`グルーコードで
+  動く。`/gron-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは
+  呼ばれない。ビルド手順は下記「gron-wasm / go-diff-wasm ビルド手順」参照
+- `go-diff-wasm`: go-diff(https://github.com/sergi/go-diff、Googleの
+  diff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の
+  差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用
+  (`patch_make`/`patch_apply`)・あいまい一致(`match_main`)は対象外。
+  `/go-diff-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは
+  呼ばれない
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
@@ -298,6 +310,41 @@ PostgreSQL/MySQL/SQLite文法のパーサーが必要でこのプロトタイプ
 大きく超えるため未着手。将来必要になった場合は、公式が構文解析器の
 WASMビルドを配布していないか先に確認すること
 (`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`の教訓と同じ)。
+
+## gron-wasm / go-diff-wasm ビルド手順
+
+`gron-wasm/`は`tomnomnom/gron`のJSON⇔代入文変換ロジックのみ、
+`go-diff-wasm/`は`sergi/go-diff`(外部依存、`go.mod`の`require`で取得)を
+使った行単位テキスト差分のみを移植したもの。どちらもsqlc-wasm・
+gh-attach-wasmと同じ理由(`wasm32-unknown-unknown`のC言語コード生成を
+含むクレートがビルドできないというRust側の制約を受けない)でGo標準の
+`GOOS=js GOARCH=wasm`ターゲット・`wasm_exec.js`グルーコードを使う。
+
+```bash
+cd wasm/gron-wasm
+go test ./...                                        # ネイティブ環境でロジック部分を検証
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/gron.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/gron-wasm_exec.js
+
+cd ../go-diff-wasm
+go test ./...
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/go-diff.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/go-diff-wasm_exec.js
+```
+
+`public/wasm/gron.wasm`・`public/wasm/gron-wasm_exec.js`・
+`public/wasm/go-diff.wasm`・`public/wasm/go-diff-wasm_exec.js`は
+ビルド成果物なのでリポジトリにコミットする。
+
+### ブラウザ側の読み込み
+
+sqlc-wasmと同じ`Go`/`wasm_exec.js`パターン。`/gron-wasm`は
+`window.gronToGron(json)`(JSON→gron)・`window.gronFromGron(gron)`
+(gron→JSON、ungron)、`/go-diff-wasm`は`window.goDiffText(a, b)`
+(2つのテキストの行単位差分をMarkdownで返す)をそれぞれ登録する。
+エラー時はどちらも`"ERROR: "`接頭辞付きの文字列を返す(gh-attach-wasm・
+sqlc-wasmと同じ規約。例外を投げるとjs.FuncOf経由の呼び出し側の
+ハンドリングが煩雑になるため)。
 
 ## sqlc CodegenRequest共通IR・差分判定
 

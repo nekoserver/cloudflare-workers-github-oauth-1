@@ -355,6 +355,8 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
+import { getGronWasmPage } from './views/gronWasm';
+import { getGoDiffWasmPage } from './views/goDiffWasm';
 import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTableClassification } from './views/d1QueryCatalog';
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
@@ -12125,6 +12127,28 @@ app.get('/sqlc-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getSqlcWasmPage(user.sub));
+});
+
+app.get('/gron-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGronWasmPage(user.sub));
+});
+
+app.get('/go-diff-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGoDiffWasmPage(user.sub));
 });
 
 app.get('/d1-query-catalog', authMiddleware, async (c) => {
