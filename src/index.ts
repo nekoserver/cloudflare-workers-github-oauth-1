@@ -2775,7 +2775,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_test_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_test_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_test_label_id: 'fk' },
   tree_view_snapshots: { repo_name: 'pk', updated_at: 'idx' },
-  tree_view_snapshot_refresh_log: { id: 'pk', user_id: 'idx' },
+  tree_view_snapshot_refresh_log: { id: 'pk', user_id: 'idx', repo_name: 'fk' },
   tree_view_update_log: { id: 'pk', repo_name: 'fk+idx', executed_at: 'idx' },
   jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },

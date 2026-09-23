@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   TABLE_COLUMN_KEYS,
   COLUMN_FK_TARGETS,
+  COLUMN_FK_TARGET_COLUMNS,
   resolveLogicalFkTargetCol,
 } from './index';
 
@@ -37,6 +38,25 @@ describe('COLUMN_FK_TARGETS — user_id/share_idカラムの登録漏れが無�
           ? []
           : [`${fromTable}.${fromColumn}->${toTable}.${toColumn}`];
       }));
+    expect(invalid).toEqual([]);
+  });
+
+  it('全ての論理FKが存在する参照元テーブル・カラムに定義されている', () => {
+    const invalid = Object.entries(COLUMN_FK_TARGETS)
+      .flatMap(([fromTable, columns]) => Object.keys(columns)
+        .filter((fromColumn) => !TABLE_COLUMN_KEYS[fromTable]?.[fromColumn])
+        .map((fromColumn) => `${fromTable}.${fromColumn}`));
+    expect(invalid).toEqual([]);
+  });
+
+  it('参照先カラムの上書き定義が存在する論理FKに対応している', () => {
+    const invalid = Object.keys(COLUMN_FK_TARGET_COLUMNS)
+      .filter((source) => {
+        const separator = source.lastIndexOf('.');
+        const fromTable = source.slice(0, separator);
+        const fromColumn = source.slice(separator + 1);
+        return separator < 1 || !COLUMN_FK_TARGETS[fromTable]?.[fromColumn];
+      });
     expect(invalid).toEqual([]);
   });
 
