@@ -58,6 +58,7 @@ type RubyReplSnippet = {
   description: string;
   category: string;
   code: string;
+  badges?: readonly string[];
 };
 
 /**
@@ -83,6 +84,27 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: 'パスカルの三角形', description: 'each_consで次の行を組み立てます。', category: 'アルゴリズム', code: 'row = [1]\n8.times do\n  puts row.join(" ").center(30)\n  row = [1] + row.each_cons(2).map(&:sum) + [1]\nend' },
   { title: 'メモ化フィボナッチ', description: '再帰とHashのデフォルトブロックを組み合わせます。', category: 'アルゴリズム', code: 'fib = Hash.new { |memo, n| memo[n] = n < 2 ? n : memo[n - 1] + memo[n - 2] }\nputs (0..20).map { |n| fib[n] }.join(", ")\nputs "cached entries: #{fib.size}"' },
   { title: '簡易棒グラフ', description: '数値データをターミナル風に可視化します。', category: '遊ぶ', code: 'visitors = { Mon: 12, Tue: 19, Wed: 8, Thu: 24, Fri: 17 }\nscale = visitors.values.max\nvisitors.each do |day, value|\n  bar = "█" * (value * 20 / scale)\n  puts format("%-3s | %-20s %2d", day, bar, value)\nend' },
+  { title: 'パターンマッチ', description: '配列とHashをcase/inで読みやすく分類します。', category: 'Ruby 4', badges: ['構文', '中級'], code: 'events = [\n  [:login, { user: "Mika" }],\n  [:purchase, { item: "Book", price: 2400 }],\n  [:logout, { user: "Mika" }]\n]\nevents.each do |event|\n  case event\n  in [:login, { user: }]\n    puts "welcome #{user}"\n  in [:purchase, { item:, price: 2000.. }]\n    puts "premium: #{item} (#{price}円)"\n  in [type, payload]\n    puts "#{type}: #{payload}"\n  end\nend' },
+  { title: 'Dataで座標計算', description: '不変なDataオブジェクトでベクトルを表現します。', category: 'Ruby 4', badges: ['Data', '中級'], code: 'Point = Data.define(:x, :y) do\n  def +(other) = Point.new(x + other.x, y + other.y)\n  def length = Math.hypot(x, y)\nend\na = Point.new(3, 4)\nb = Point.new(-1, 2)\nc = a + b\nputs "#{a.inspect} length=#{a.length}"\nputs "#{a.inspect} + #{b.inspect} = #{c.inspect}"' },
+  { title: '番号付きブロック', description: 'itを使うRuby 3.4+の簡潔な単一ブロック引数です。', category: 'Ruby 4', badges: ['Ruby 3.4+', '初級'], code: 'prices = [120, 350, 80, 640]\ntaxed = prices.map { it * 1.1 }\nputs taxed.map { format("¥%.0f", it) }.join(", ")\nputs "total: ¥#{taxed.sum.round}"' },
+  { title: '範囲のステップ', description: 'Range#stepで目盛りと数列を組み立てます。', category: '基本', badges: ['Range', '初級'], code: 'puts "countdown: #{10.step(0, -2).to_a.join(" ")}"\nputs "degrees: #{(-90..90).step(30).to_a.join(", ")}"\nletters = ("a".."z").step(5).to_a\nputs "letters: #{letters.join(" -> ")}"' },
+  { title: 'each_sliceでページ分け', description: '一列のデータを指定件数ごとに分割します。', category: 'Enumerable', badges: ['Enumerable', '初級'], code: 'products = %w[apple banana cherry donut eclair fig grape]\nproducts.each_slice(3).with_index(1) do |page, number|\n  puts "page #{number}: #{page.join(", ")}"\nend' },
+  { title: '移動平均', description: 'each_consで連続する値の窓を作って平滑化します。', category: 'Enumerable', badges: ['集計', '実践'], code: 'temperatures = [18.0, 20.5, 19.0, 23.5, 25.0, 24.0]\naverages = temperatures.each_cons(3).map { |window| window.sum / window.size }\nputs averages.map.with_index(3) { |avg, day| "day #{day}: #{avg.round(1)}°C" }' },
+  { title: 'filter_mapで検証', description: '変換とnilの除外を1回のパスで行います。', category: 'Enumerable', badges: ['filter_map', '実践'], code: 'inputs = ["42", "oops", "17", "", "100"]\nnumbers = inputs.filter_map do |text|\n  Integer(text, exception: false)\nend\nputs "valid: #{numbers.join(", ")}"\nputs "average: #{numbers.sum.fdiv(numbers.size).round(2)}"' },
+  { title: 'zipで表を作る', description: '複数の配列を列ごとに組み合わせます。', category: 'Enumerable', badges: ['Array', '初級'], code: 'names = %w[Aoi Ren Kai]\nscores = [88, 95, 73]\ngrades = scores.map { |score| score >= 90 ? "A" : score >= 80 ? "B" : "C" }\nnames.zip(scores, grades).each do |name, score, grade|\n  puts format("%-4s %3d %s", name, score, grade)\nend' },
+  { title: 'Hashの差分', description: '設定値の変更前後をキーごとに比較します。', category: 'データ', badges: ['Hash', '実践'], code: 'before = { theme: "light", locale: "ja", page_size: 20 }\nafter  = { theme: "dark", locale: "ja", page_size: 50, compact: true }\n(before.keys | after.keys).each do |key|\n  next if before[key] == after[key]\n  puts "#{key}: #{before.fetch(key, "(none)")} -> #{after.fetch(key, "(none)")}"\nend' },
+  { title: 'Base64エンコード', description: '標準ライブラリで文字列をBase64に往復変換します。', category: 'データ', badges: ['stdlib', '初級'], code: 'require "base64"\nmessage = "Ruby 4 on WebAssembly 💎"\nencoded = Base64.strict_encode64(message)\ndecoded = Base64.strict_decode64(encoded)\nputs "encoded: #{encoded}"\nputs "decoded: #{decoded}"\nputs "match: #{message == decoded}"' },
+  { title: 'SHA-256ハッシュ', description: '標準ライブラリで再現可能なダイジェストを計算します。', category: 'データ', badges: ['stdlib', '暗号'], code: 'require "digest"\nwords = ["ruby", "wasm", "ruby-wasm"]\nwords.each do |word|\n  puts "#{word.ljust(10)} #{Digest::SHA256.hexdigest(word)[0, 16]}..."\nend' },
+  { title: 'URIを分解', description: 'URLのスキーム、ホスト、パス、クエリを取り出します。', category: 'データ', badges: ['stdlib', 'Web'], code: 'require "uri"\nuri = URI("https://example.com/search?q=ruby%20wasm&page=2")\nputs "scheme: #{uri.scheme}"\nputs "host:   #{uri.host}"\nputs "path:   #{uri.path}"\nputs URI.decode_www_form(uri.query).map { |key, value| "#{key}=#{value}" }' },
+  { title: '文字の統計', description: '文字種を数え、比率を見やすく表示します。', category: '文字列', badges: ['Regexp', '初級'], code: 'text = "Ruby 4: fast, fun & expressive!"\ngroups = { letters: /[A-Za-z]/, digits: /[0-9]/, spaces: /\\s/ }\ngroups.each do |name, pattern|\n  count = text.scan(pattern).size\n  puts format("%-8s %2d %s", name, count, "#" * count)\nend' },
+  { title: 'キャメルケース変換', description: '区切り文字のある名前をlowerCamelCaseに変換します。', category: '文字列', badges: ['変換', '実践'], code: 'def camelize(text)\n  head, *tail = text.downcase.split(/[-_\\s]+/)\n  head.to_s + tail.map(&:capitalize).join\nend\n["ruby_wasm", "Hello-world", "USER display name"].each do |text|\n  puts "#{text.inspect} -> #{camelize(text)}"\nend' },
+  { title: 'モジュールとミックスイン', description: '共通機能をModuleに切り出してクラスで再利用します。', category: 'オブジェクト', badges: ['Module', '中級'], code: 'module Printable\n  def label = "#{self.class}: #{name}"\nend\nclass Book\n  include Printable\n  attr_reader :name\n  def initialize(name) = @name = name\nend\nclass Album\n  include Printable\n  attr_reader :name\n  def initialize(name) = @name = name\nend\nputs [Book.new("Programming Ruby"), Album.new("Ruby")].map(&:label)' },
+  { title: 'キーワード引数', description: 'デフォルト付きキーワード引数で設定を明確に渡します。', category: 'オブジェクト', badges: ['API設計', '初級'], code: 'def card(title:, width: 24, mark: "*")\n  inner = " #{title} ".center(width, mark)\n  [mark * width, inner, mark * width].join("\\n")\nend\nputs card(title: "Ruby 4")\nputs\nputs card(title: "WASM", width: 18, mark: "=")' },
+  { title: 'スタック式計算機', description: '配列をスタックとして使い逆ポーランド記法を計算します。', category: 'アルゴリズム', badges: ['Stack', '中級'], code: 'tokens = %w[5 1 2 + 4 * + 3 -]\nstack = []\ntokens.each do |token|\n  if %w[+ - * /].include?(token)\n    right = stack.pop\n    left = stack.pop\n    stack << left.public_send(token, right)\n  else\n    stack << token.to_i\n  end\n  puts "#{token.ljust(2)} => #{stack.inspect}"\nend\nputs "result: #{stack.first}"' },
+  { title: '二分探索', description: 'ソート済み配列を半分ずつ絞り込んで値を探します。', category: 'アルゴリズム', badges: ['探索', '中級'], code: 'def binary_search(values, target)\n  low = 0\n  high = values.length - 1\n  while low <= high\n    middle = (low + high) / 2\n    return middle if values[middle] == target\n    values[middle] < target ? low = middle + 1 : high = middle - 1\n  end\n  nil\nend\nvalues = [3, 8, 12, 17, 23, 31, 42]\n[17, 9, 42].each { |n| puts "#{n}: #{binary_search(values, n).inspect}" }' },
+  { title: 'シーザー暗号', description: '英字を循環させる小さな暗号化アルゴリズムです。', category: 'アルゴリズム', badges: ['暗号', '遊ぶ'], code: 'def rotate(text, shift)\n  text.chars.map do |char|\n    next char unless char.match?(/[a-z]/i)\n    base = char >= "a" ? "a".ord : "A".ord\n    ((char.ord - base + shift) % 26 + base).chr\n  end.join\nend\nsecret = rotate("Ruby Wasm", 13)\nputs secret\nputs rotate(secret, 13)' },
+  { title: '乱数を固定したサイコロ', description: 'シード付きRandomで毎回同じ結果を再現します。', category: '遊ぶ', badges: ['Random', '入門'], code: 'random = Random.new(40)\nrolls = Array.new(20) { random.rand(1..6) }\nputs "rolls: #{rolls.join(" ")}"\nrolls.tally.sort.each do |face, count|\n  puts "#{face}: #{"●" * count} (#{count})"\nend' },
+  { title: 'ミニビンゴ', description: '固定シードで再現可能な3×3のカードを作ります。', category: '遊ぶ', badges: ['Array', '遊ぶ'], code: 'numbers = (1..30).to_a.sample(9, random: Random.new(4))\ncard = numbers.each_slice(3).to_a\ncard.each { |row| puts row.map { |n| format("%2d", n) }.join(" | ") }\nputs "--+----+--"\nputs "center: #{card[1][1]}"' },
 ];
 
 /** 外部ライブラリを追加せず、サンプルコードを安全なHTMLへ変換して色分けする。 */
@@ -105,10 +127,11 @@ function renderRubyReplSnippets(): string {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
     const categoryIndex = [...new Set(RUBY_REPL_SNIPPETS.map((item) => item.category))].indexOf(snippet.category);
     return `<article class="snippet-card" data-snippet-card="${index}">
-      <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
+      <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3><span class="ruby4-badge">Ruby 4</span></div>
       <p>${escapeHtml(snippet.description)}</p>
-      <div class="snippet-code-wrap"><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre></div>
-      <div class="snippet-actions"><span class="snippet-state">WASMを準備中…</span><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button></div>
+      <div class="snippet-badges">${(snippet.badges || []).map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</div>
+      <div class="snippet-code-wrap"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre></div>
+      <div class="snippet-actions"><span class="snippet-state">WASMを準備中…</span></div>
       <div class="snippet-result" data-snippet-result="${index}" hidden>
         <button type="button" class="snippet-output-close" data-close-snippet="${index}" aria-label="実行結果を折り畳む">close</button>
         <output class="snippet-output" data-snippet-output="${index}"></output>
@@ -125,7 +148,7 @@ function renderRubySampleChoices(): string {
     const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
     return `<button type="button" class="sample-choice" data-open-sample="${index}"${firstInCategory ? ` id="sample-category-${categoryIndex}"` : ''}>
     <span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span>
-    <span class="sample-choice-copy"><strong>${escapeHtml(snippet.title)}</strong><span>${escapeHtml(snippet.description)}</span></span>
+    <span class="sample-choice-copy"><strong><span class="sample-choice-title">${escapeHtml(snippet.title)}</span> <small class="ruby4-badge">Ruby 4</small></strong><span>${escapeHtml(snippet.description)}</span></span>
   </button>`;
   }).join('\n');
 }
@@ -306,6 +329,7 @@ export function getRubyWasmPage(username: string): string {
     [data-category-index="4"] { --category-color: #059669; }
     [data-category-index="5"] { --category-color: #d97706; }
     [data-category-index="6"] { --category-color: #db2777; }
+    [data-category-index="7"] { --category-color: #4f46e5; }
     .sample-choice-list { display: grid; gap: 8px; }
     .sample-choice {
       width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 12px;
@@ -316,14 +340,19 @@ export function getRubyWasmPage(username: string): string {
     .sample-choice-copy { display: grid; gap: 4px; min-width: 0; }
     .sample-choice-copy strong { font-size: 14px; }
     .sample-choice-copy > span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
-    .sample-detail-box { width: min(640px, 92vw); }
+    .sample-detail-box { position: relative; width: min(640px, 92vw); padding-top: 46px; }
+    .sample-detail-corner-close { position: absolute; top: 12px; right: 14px; }
     .sample-detail-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
     .sample-detail-heading h2 { margin: 0; }
     .sample-detail-description { margin: 0 0 12px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
     .sample-detail-code { max-height: 46vh; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .sample-detail-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
     .sample-load-button { min-width: 42px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-weight: 700; cursor: pointer; }
-    .sample-detail-result { margin-top: 10px; }
+    .sample-detail-result-wrap { position: relative; margin-top: 10px; padding-top: 24px; }
+    .sample-detail-result-wrap[hidden] { display: none; }
+    .sample-detail-result-close { position: absolute; top: 0; right: 0; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; text-decoration: none; cursor: pointer; }
+    .sample-detail-footer { display: flex; justify-content: center; margin-top: 18px; }
+    .sample-detail-bottom-close { padding: 9px 28px; }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
     .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
@@ -358,8 +387,12 @@ export function getRubyWasmPage(username: string): string {
     .snippet-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
     .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
     .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; }
+    .ruby4-badge { flex: none; padding: 2px 6px; border: 1px solid #a78bfa; border-radius: 999px; background: #ede9fe; color: #5b21b6; font-size: 9px; font-weight: 800; }
+    .snippet-heading .ruby4-badge { margin-left: auto; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-    .snippet-code-wrap { margin: 10px 0 7px; }
+    .snippet-badges { display: flex; flex-wrap: wrap; gap: 5px; min-height: 19px; margin-top: 7px; }
+    .snippet-badges span { padding: 2px 6px; border-radius: 999px; background: var(--bg-secondary); color: var(--text-muted); font-size: 9px; font-weight: 700; }
+    .snippet-code-wrap { position: relative; margin: 10px 0 7px; }
     .snippet-card pre { max-height: 260px; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .ruby-keyword { color: #ff7ab2; font-weight: 600; }
     .ruby-string { color: #b4f1a1; }
@@ -367,7 +400,7 @@ export function getRubyWasmPage(username: string): string {
     .ruby-number { color: #ffd580; }
     .ruby-literal { color: #82aaff; font-weight: 600; }
     .snippet-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .snippet-run { padding: 7px 12px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
+    .snippet-run { position: absolute; top: 8px; right: 8px; z-index: 1; padding: 6px 10px; border: 0; border-radius: 7px; background: #667eea; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
     .snippet-run:hover:not(:disabled) { background: #5568d3; }
     .snippet-run:disabled { opacity: .5; cursor: not-allowed; }
     .snippet-state { color: var(--text-muted); font-size: 11px; }
@@ -452,14 +485,15 @@ export function getRubyWasmPage(username: string): string {
 
   <div class="modal-overlay" id="sampleDetailOverlay" role="dialog" aria-modal="true" aria-labelledby="sampleDetailTitle">
     <div class="modal-box sample-detail-box">
-      <div class="sample-detail-heading"><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><button type="button" class="modal-close" id="sampleDetailCloseBtn" aria-label="サンプルを閉じる">✕</button></div>
+      <button type="button" class="modal-close sample-detail-corner-close" id="sampleDetailCloseBtn" aria-label="サンプルを閉じる">✕</button>
+      <div class="sample-detail-heading"><button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><span class="ruby4-badge">Ruby 4</span></div>
       <p class="sample-detail-description" id="sampleDetailDescription"></p>
       <pre class="sample-detail-code"><code class="ruby-code" id="sampleDetailCode"></code></pre>
       <div class="sample-detail-actions">
-        <button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button>
         <button type="button" class="run-btn" id="sampleRunBtn" disabled>Run ▶︎</button>
       </div>
-      <output class="snippet-output sample-detail-result" id="sampleDetailResult" hidden></output>
+      <div class="sample-detail-result-wrap" id="sampleDetailResultWrap" hidden><button type="button" class="sample-detail-result-close" id="sampleDetailResultCloseBtn">close</button><output class="snippet-output" id="sampleDetailResult"></output></div>
+      <div class="sample-detail-footer"><button type="button" class="btn-secondary sample-detail-bottom-close" id="sampleDetailBottomCloseBtn">閉じる</button></div>
     </div>
   </div>
 
@@ -643,7 +677,10 @@ export function getRubyWasmPage(username: string): string {
     var sampleDetailTitle = document.getElementById('sampleDetailTitle');
     var sampleDetailDescription = document.getElementById('sampleDetailDescription');
     var sampleDetailCode = document.getElementById('sampleDetailCode');
+    var sampleDetailResultWrap = document.getElementById('sampleDetailResultWrap');
     var sampleDetailResult = document.getElementById('sampleDetailResult');
+    var sampleDetailResultCloseBtn = document.getElementById('sampleDetailResultCloseBtn');
+    var sampleDetailBottomCloseBtn = document.getElementById('sampleDetailBottomCloseBtn');
     var sampleLoadBtn = document.getElementById('sampleLoadBtn');
     var sampleRunBtn = document.getElementById('sampleRunBtn');
     var selectedSampleCode = '';
@@ -741,21 +778,23 @@ export function getRubyWasmPage(username: string): string {
         selectedSampleCode = JSON.parse(codeNode.textContent || '""');
         sampleDetailCategory.textContent = button.querySelector('.snippet-category').textContent;
         sampleDetailCategory.setAttribute('data-category-index', button.querySelector('.snippet-category').getAttribute('data-category-index'));
-        sampleDetailTitle.textContent = button.querySelector('strong').textContent;
+        sampleDetailTitle.textContent = button.querySelector('.sample-choice-title').textContent;
         sampleDetailDescription.textContent = button.querySelector('.sample-choice-copy > span').textContent;
         sampleDetailCode.innerHTML = card.querySelector('.ruby-code').innerHTML;
-        sampleDetailResult.hidden = true;
+        sampleDetailResultWrap.hidden = true;
         sampleDetailResult.textContent = '';
         openModal(sampleDetailOverlay);
       });
     });
     sampleDetailCloseBtn.addEventListener('click', function() { closeModal(sampleDetailOverlay); });
+    sampleDetailBottomCloseBtn.addEventListener('click', function() { closeModal(sampleDetailOverlay); });
+    sampleDetailResultCloseBtn.addEventListener('click', function() { sampleDetailResultWrap.hidden = true; });
     sampleDetailOverlay.addEventListener('click', function(e) {
       if (e.target === sampleDetailOverlay) closeModal(sampleDetailOverlay);
     });
     sampleRunBtn.addEventListener('click', function() {
       var result = runRubyCode(selectedSampleCode);
-      sampleDetailResult.hidden = false;
+      sampleDetailResultWrap.hidden = false;
       sampleDetailResult.classList.toggle('error', !result.ok);
       sampleDetailResult.textContent = result.output;
     });

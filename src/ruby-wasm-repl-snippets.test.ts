@@ -5,7 +5,7 @@ describe('/ruby-wasm REPLスニペット集', () => {
   it('幅広いカテゴリの実行可能なスニペットを十分な数掲載する', () => {
     expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(18);
     expect(new Set(RUBY_REPL_SNIPPETS.map((snippet) => snippet.category))).toEqual(
-      new Set(['基本', 'Enumerable', 'データ', '文字列', 'オブジェクト', 'アルゴリズム', '遊ぶ'])
+      new Set(['基本', 'Enumerable', 'データ', '文字列', 'オブジェクト', 'アルゴリズム', '遊ぶ', 'Ruby 4'])
     );
 
     const html = getRubyWasmPage('tester');
@@ -35,13 +35,13 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).not.toContain("state.textContent = '実行できます'");
   });
 
-  it('Runボタンをコードブロック外に配置してコード内の余白を抑え、closeリンクの下線を表示しない', () => {
+  it('Runボタンをコードブロック右上に配置し、closeリンクの下線を表示しない', () => {
     const html = getRubyWasmPage('tester');
 
-    expect(html).toContain('<div class="snippet-code-wrap"><pre>');
+    expect(html).toContain('<div class="snippet-code-wrap"><button type="button" class="snippet-run"');
     expect(html).toContain('</pre></div>\n      <div class="snippet-actions">');
     expect(html).toContain('.snippet-card pre { max-height: 260px; margin: 0; padding: 14px;');
-    expect(html).not.toContain('.snippet-run { position: absolute;');
+    expect(html).toContain('.snippet-run { position: absolute; top: 8px; right: 8px;');
     expect(html).toContain('.snippet-output-close { display: block;');
     expect(html).toContain('text-decoration: none;');
     expect(html).not.toContain('text-decoration: underline;');
