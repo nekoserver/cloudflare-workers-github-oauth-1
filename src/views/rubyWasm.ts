@@ -53,6 +53,52 @@ export function getRubyWasmVersionInfo(): RubyWasmVersionInfo {
   return info;
 }
 
+type RubyReplSnippet = {
+  title: string;
+  description: string;
+  category: string;
+  code: string;
+};
+
+/**
+ * Ruby/WASM だけで完結するサンプル集。ネットワーク、ファイル、時刻など実行環境に
+ * 依存する例は避け、どのブラウザでも「Run」を押して同じ結果を確認できるようにする。
+ */
+export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
+  { title: 'Hello, Ruby!', description: '文字列展開と配列を使った最初のプログラム。', category: '基本', code: 'language = "Ruby"\nfeatures = ["simple", "expressive", "fun"]\nputs "Hello, #{language}!"\nputs features.join(" · ")' },
+  { title: 'FizzBuzz', description: '条件分岐と範囲を一度に試します。', category: '基本', code: '(1..30).each do |n|\n  word = "Fizz" if (n % 3).zero?\n  word = "#{word}Buzz" if (n % 5).zero?\n  puts word || n\nend' },
+  { title: '配列パイプライン', description: 'select・map・sumをつないで集計します。', category: 'Enumerable', code: 'numbers = (1..12).to_a\nevens = numbers.select(&:even?)\nsquares = evens.map { |n| n ** 2 }\nputs "even squares: #{squares.join(", ")}"\nputs "total: #{squares.sum}"' },
+  { title: '単語の頻度', description: 'scan と tally で文章を数え上げます。', category: 'Enumerable', code: 'text = "Ruby makes programmers happy, and happy programmers make things."\ncounts = text.downcase.scan(/[a-z]+/).tally\ncounts.sort_by { |word, count| [-count, word] }.each do |word, count|\n  puts "#{word.ljust(12)} #{"█" * count} #{count}"\nend' },
+  { title: '成績ランキング', description: 'Hashの配列を複数条件で並べ替えます。', category: 'Enumerable', code: 'scores = [\n  { name: "Mina", score: 92 },\n  { name: "Kai", score: 78 },\n  { name: "Aoi", score: 92 },\n  { name: "Ren", score: 85 }\n]\nscores.sort_by { |row| [-row[:score], row[:name]] }.each_with_index do |row, i|\n  puts "#{i + 1}. #{row[:name]} — #{row[:score]}"\nend' },
+  { title: 'グループ集計', description: '商品データをカテゴリ別に集計します。', category: 'Enumerable', code: 'items = [\n  ["book", 1800], ["food", 650], ["book", 1200],\n  ["tool", 2400], ["food", 480]\n]\nitems.group_by(&:first).sort.each do |category, rows|\n  puts "#{category}: ¥#{rows.sum { |_, price| price }}"\nend' },
+  { title: 'JSON 整形', description: '標準ライブラリでJSONを解析・整形します。', category: 'データ', code: 'require "json"\nraw = %q({"name":"Ruby/WASM","features":["portable","fast"],"ready":true})\ndata = JSON.parse(raw)\ndata["features"] << "interactive"\nputs JSON.pretty_generate(data)' },
+  { title: 'CSV 集計', description: '文字列内のCSVを読み、合計を求めます。', category: 'データ', code: 'require "csv"\nsource = "item,price,qty\\nApple,120,3\\nTea,450,1\\nBread,280,2"\nrows = CSV.parse(source, headers: true)\nrows.each { |row| puts "#{row["item"]}: #{row["price"].to_i * row["qty"].to_i}円" }\nputs "合計: #{rows.sum { |row| row["price"].to_i * row["qty"].to_i }}円"' },
+  { title: '正規表現で抽出', description: 'ログ風テキストからステータスを集計します。', category: '文字列', code: 'log = <<~LOG\n  200 GET /\n  404 GET /missing\n  200 POST /items\n  500 GET /error\n  200 GET /about\nLOG\ncodes = log.scan(/^([0-9]{3})/).flatten.tally\ncodes.sort.each { |code, count| puts "HTTP #{code}: #{count}" }' },
+  { title: '回文チェッカー', description: '日本語や記号を含む文字列を正規化して判定します。', category: '文字列', code: 'def palindrome?(text)\n  normalized = text.downcase.gsub(/[^a-z0-9]/, "")\n  normalized == normalized.reverse\nend\n["Never odd or even", "Ruby", "A man, a plan, a canal: Panama!"].each do |text|\n  puts "#{palindrome?(text) ? "✓" : "×"} #{text}"\nend' },
+  { title: 'テンプレート変換', description: 'gsub のブロックでプレースホルダーを置換します。', category: '文字列', code: 'template = "Hello, {{name}}! Welcome to {{place}}."\nvalues = { "name" => "Rubyist", "place" => "WebAssembly" }\nresult = template.gsub(/{{(\\w+)}}/) { values.fetch($1, "?") }\nputs result' },
+  { title: 'クラスとメソッド', description: '小さな値オブジェクトを定義します。', category: 'オブジェクト', code: 'class Temperature\n  attr_reader :celsius\n  def initialize(celsius) = @celsius = celsius\n  def fahrenheit = celsius * 9.0 / 5 + 32\n  def to_s = format("%.1f°C / %.1f°F", celsius, fahrenheit)\nend\n[-10, 0, 20, 36.5].each { |n| puts Temperature.new(n) }' },
+  { title: 'Structで注文表', description: 'Data指向のオブジェクトと集計を試します。', category: 'オブジェクト', code: 'LineItem = Struct.new(:name, :price, :quantity) do\n  def subtotal = price * quantity\nend\ncart = [LineItem.new("Coffee", 480, 2), LineItem.new("Cake", 620, 1)]\ncart.each { |item| puts "#{item.name.ljust(8)} #{item.quantity} × ¥#{item.price} = ¥#{item.subtotal}" }\nputs "TOTAL: ¥#{cart.sum(&:subtotal)}"' },
+  { title: '例外処理', description: '独自例外を定義して入力値を検証します。', category: 'オブジェクト', code: 'class InvalidAge < StandardError; end\ndef ticket_price(age)\n  raise InvalidAge, "age must be positive" if age.negative?\n  age < 12 ? 600 : (age >= 65 ? 800 : 1200)\nend\n[8, 25, 70, -1].each do |age|\n  begin\n    puts "age #{age}: #{ticket_price(age)}円"\n  rescue InvalidAge => e\n    puts "age #{age}: ERROR (#{e.message})"\n  end\nend' },
+  { title: '素数ジェネレーター', description: 'Prime標準ライブラリとEnumeratorを使います。', category: 'アルゴリズム', code: 'require "prime"\nprimes = Prime.each.take(15)\nputs primes.join(", ")\nputs "sum = #{primes.sum}"' },
+  { title: 'パスカルの三角形', description: 'each_consで次の行を組み立てます。', category: 'アルゴリズム', code: 'row = [1]\n8.times do\n  puts row.join(" ").center(30)\n  row = [1] + row.each_cons(2).map(&:sum) + [1]\nend' },
+  { title: 'メモ化フィボナッチ', description: '再帰とHashのデフォルトブロックを組み合わせます。', category: 'アルゴリズム', code: 'fib = Hash.new { |memo, n| memo[n] = n < 2 ? n : memo[n - 1] + memo[n - 2] }\nputs (0..20).map { |n| fib[n] }.join(", ")\nputs "cached entries: #{fib.size}"' },
+  { title: '簡易棒グラフ', description: '数値データをターミナル風に可視化します。', category: '遊ぶ', code: 'visitors = { Mon: 12, Tue: 19, Wed: 8, Thu: 24, Fri: 17 }\nscale = visitors.values.max\nvisitors.each do |day, value|\n  bar = "█" * (value * 20 / scale)\n  puts format("%-3s | %-20s %2d", day, bar, value)\nend' },
+];
+
+function renderRubyReplSnippets(): string {
+  return RUBY_REPL_SNIPPETS.map((snippet, index) => {
+    const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
+    return `<article class="snippet-card" data-snippet-card="${index}">
+      <div class="snippet-heading"><span class="snippet-category">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
+      <p>${escapeHtml(snippet.description)}</p>
+      <pre><code>${escapeHtml(snippet.code)}</code></pre>
+      <div class="snippet-actions"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><span class="snippet-state">WASMを準備中…</span></div>
+      <output class="snippet-output" data-snippet-output="${index}" hidden></output>
+      <script type="application/json" data-snippet-code="${index}">${payload}</script>
+    </article>`;
+  }).join('\n');
+}
+
 export function getRubyWasmPage(username: string): string {
   const safeUsername = escapeHtml(username);
   const versionInfo = getRubyWasmVersionInfo();
@@ -116,7 +162,7 @@ export function getRubyWasmPage(username: string): string {
     .dropdown-item:hover { background: var(--bg-secondary); }
     .dropdown-item.logout { color: #e53e3e; }
     .dropdown-item.switch-account { color: var(--accent-color, #667eea); }
-    .container { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; }
     .card {
       background: var(--card-bg);
       border-radius: 16px;
@@ -238,6 +284,32 @@ export function getRubyWasmPage(username: string): string {
       padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);
     }
     #modalResultValue.error { color: #991b1b; }
+    .snippet-section { margin-top: 32px; }
+    .snippet-section-header { margin-bottom: 18px; color: var(--text-primary); }
+    .snippet-section-header h2 { font-size: 22px; margin-bottom: 6px; }
+    .snippet-section-header p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+    .snippet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .snippet-card { min-width: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; box-shadow: 0 5px 18px rgba(0, 0, 0, .08); }
+    .snippet-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+    .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
+    .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, #667eea 15%, var(--bg-secondary)); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+    .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+    .snippet-card pre { max-height: 260px; margin: 12px 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .snippet-actions { display: flex; align-items: center; gap: 10px; }
+    .snippet-run { padding: 9px 14px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
+    .snippet-run:hover:not(:disabled) { background: #5568d3; }
+    .snippet-run:disabled { opacity: .5; cursor: not-allowed; }
+    .snippet-state { color: var(--text-muted); font-size: 11px; }
+    .snippet-output { display: block; margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
+    .snippet-output[hidden] { display: none; }
+    .snippet-output.error { color: #991b1b; border-color: #ef4444; }
+    @media (max-width: 760px) {
+      .navbar { padding: 13px 16px; }
+      .user-name { display: none; }
+      .card { padding: 22px 18px; }
+      .snippet-grid { grid-template-columns: 1fr; }
+      .snippet-card > p { min-height: 0; }
+    }
   </style>
 </head>
 <body>
@@ -297,6 +369,14 @@ export function getRubyWasmPage(username: string): string {
         <div class="result-value" id="resultValue"></div>
       </div>
     </div>
+
+    <section class="snippet-section" aria-labelledby="snippetTitle">
+      <div class="snippet-section-header">
+        <h2 id="snippetTitle">そのまま動く Ruby スニペット集</h2>
+        <p>基本文法からデータ処理、オブジェクト、アルゴリズムまで ${RUBY_REPL_SNIPPETS.length} 本。各コードブロックの「Run ▶︎」からRuby/WASMで直接実行できます。</p>
+      </div>
+      <div class="snippet-grid">${renderRubyReplSnippets()}</div>
+    </section>
   </div>
 
   <div class="modal-overlay" id="listModalOverlay">
@@ -522,11 +602,37 @@ export function getRubyWasmPage(username: string): string {
         wasmStatus.className = 'wasm-status ready';
         runBtn.disabled = false;
         modalRunBtn.disabled = false;
+        document.querySelectorAll('[data-run-snippet]').forEach(function(button) {
+          button.disabled = false;
+          var state = button.parentElement.querySelector('.snippet-state');
+          if (state) state.textContent = '実行できます';
+        });
       },
       onError: function(err) {
         wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
         wasmStatus.className = 'wasm-status error';
+        document.querySelectorAll('.snippet-state').forEach(function(state) {
+          state.textContent = 'WASMを読み込めませんでした';
+        });
       }
+    });
+
+    document.querySelectorAll('[data-run-snippet]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var index = button.getAttribute('data-run-snippet');
+        var codeNode = document.querySelector('[data-snippet-code="' + index + '"]');
+        var output = document.querySelector('[data-snippet-output="' + index + '"]');
+        if (!codeNode || !output) return;
+        var code = JSON.parse(codeNode.textContent || '""');
+        button.disabled = true;
+        button.textContent = '実行中…';
+        var result = runRubyCode(code);
+        output.hidden = false;
+        output.classList.toggle('error', !result.ok);
+        output.textContent = result.output;
+        button.textContent = 'Run ▶︎';
+        button.disabled = !rubyVM;
+      });
     });
 
     function openModal(overlay) {
