@@ -122,7 +122,9 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   オプションからなる JSON 実行要求へ変換する純Rust実装。WASMから直接microVMを
   起動することはできないため、デーモン通信・microVMライフサイクル・ファイルI/O・
   ネットワークはホスト側が担当する。`parse_msb_args`はシェル文字列ではなくJSONの
-  文字列配列を受け取り、`--`以降をサンドボックス内コマンドとしてそのまま保持する
+  文字列配列を受け取り、`--`以降をサンドボックス内コマンドとしてそのまま保持する。
+  リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
+  行い、`public/wasm/msb.js`と`public/wasm/msb_bg.wasm`を生成する
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
