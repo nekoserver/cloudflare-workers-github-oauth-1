@@ -93,7 +93,7 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: 'filter_mapで検証', description: '変換とnilの除外を1回のパスで行います。', category: 'Enumerable', badges: ['filter_map', '実践'], code: 'inputs = ["42", "oops", "17", "", "100"]\nnumbers = inputs.filter_map do |text|\n  Integer(text, exception: false)\nend\nputs "valid: #{numbers.join(", ")}"\nputs "average: #{numbers.sum.fdiv(numbers.size).round(2)}"' },
   { title: 'zipで表を作る', description: '複数の配列を列ごとに組み合わせます。', category: 'Enumerable', badges: ['Array', '初級'], code: 'names = %w[Aoi Ren Kai]\nscores = [88, 95, 73]\ngrades = scores.map { |score| score >= 90 ? "A" : score >= 80 ? "B" : "C" }\nnames.zip(scores, grades).each do |name, score, grade|\n  puts format("%-4s %3d %s", name, score, grade)\nend' },
   { title: 'Hashの差分', description: '設定値の変更前後をキーごとに比較します。', category: 'データ', badges: ['Hash', '実践'], code: 'before = { theme: "light", locale: "ja", page_size: 20 }\nafter  = { theme: "dark", locale: "ja", page_size: 50, compact: true }\n(before.keys | after.keys).each do |key|\n  next if before[key] == after[key]\n  puts "#{key}: #{before.fetch(key, "(none)")} -> #{after.fetch(key, "(none)")}"\nend' },
-  { title: 'Base64エンコード', description: '標準ライブラリで文字列をBase64に往復変換します。', category: 'データ', badges: ['stdlib', '初級'], code: 'require "base64"\nmessage = "Ruby 4 on WebAssembly 💎"\nencoded = Base64.strict_encode64(message)\ndecoded = Base64.strict_decode64(encoded)\nputs "encoded: #{encoded}"\nputs "decoded: #{decoded}"\nputs "match: #{message == decoded}"' },
+  { title: 'Base64エンコード', description: 'Ruby/WASMに組み込まれたpack・unpackで文字列をBase64に往復変換します。', category: 'データ', badges: ['pack', '初級'], code: 'message = "Ruby 4 on WebAssembly 💎"\nencoded = [message].pack("m0")\ndecoded = encoded.unpack1("m0").force_encoding("UTF-8")\nputs "encoded: #{encoded}"\nputs "decoded: #{decoded}"\nputs "match: #{message == decoded}"' },
   { title: 'SHA-256ハッシュ', description: '標準ライブラリで再現可能なダイジェストを計算します。', category: 'データ', badges: ['stdlib', '暗号'], code: 'require "digest"\nwords = ["ruby", "wasm", "ruby-wasm"]\nwords.each do |word|\n  puts "#{word.ljust(10)} #{Digest::SHA256.hexdigest(word)[0, 16]}..."\nend' },
   { title: 'URIを分解', description: 'URLのスキーム、ホスト、パス、クエリを取り出します。', category: 'データ', badges: ['stdlib', 'Web'], code: 'require "uri"\nuri = URI("https://example.com/search?q=ruby%20wasm&page=2")\nputs "scheme: #{uri.scheme}"\nputs "host:   #{uri.host}"\nputs "path:   #{uri.path}"\nputs URI.decode_www_form(uri.query).map { |key, value| "#{key}=#{value}" }' },
   { title: '文字の統計', description: '文字種を数え、比率を見やすく表示します。', category: '文字列', badges: ['Regexp', '初級'], code: 'text = "Ruby 4: fast, fun & expressive!"\ngroups = { letters: /[A-Za-z]/, digits: /[0-9]/, spaces: /\\s/ }\ngroups.each do |name, pattern|\n  count = text.scan(pattern).size\n  puts format("%-8s %2d %s", name, count, "#" * count)\nend' },
@@ -170,7 +170,13 @@ export function getRubyWasmPage(username: string): string {
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ruby WASM">
+  <link rel="manifest" href="/manifest-ruby-wasm.json">
   <title>Ruby (WASM) - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
@@ -201,6 +207,7 @@ export function getRubyWasmPage(username: string): string {
       color: white; font-weight: 600; font-size: 16px; cursor: pointer;
     }
     .user-menu-container { position: relative; }
+    @media (display-mode: standalone) { .pwa-hide { display: none !important; } }
     .dropdown-menu {
       display: none;
       position: absolute;
@@ -426,8 +433,8 @@ export function getRubyWasmPage(username: string): string {
     </div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name">${safeUsername}</span>
-      <div class="user-menu-container">
+      <span class="user-name pwa-hide">${safeUsername}</span>
+      <div class="user-menu-container pwa-hide">
         <div class="user-icon" title="${safeUsername}" onclick="toggleDropdown()">
           ${escapeHtml(username.substring(0, 2).toUpperCase())}
         </div>

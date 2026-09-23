@@ -56,6 +56,15 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(snippet?.code).toContain('Math.sqrt(candidate)');
   });
 
+  it('Base64サンプルはWASMに含まれないbase64標準ライブラリに依存しない', () => {
+    const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === 'Base64エンコード');
+
+    expect(snippet).toBeDefined();
+    expect(snippet?.code).not.toContain('require "base64"');
+    expect(snippet?.code).toContain('[message].pack("m0")');
+    expect(snippet?.code).toContain('encoded.unpack1("m0").force_encoding("UTF-8")');
+  });
+
   it('Run後にcloseボタンを表示し、実行結果を折り畳める', () => {
     const html = getRubyWasmPage('tester');
 
