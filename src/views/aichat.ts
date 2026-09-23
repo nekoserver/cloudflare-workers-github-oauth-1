@@ -179,7 +179,8 @@ export function getAiChatPage(user: {
     .kb-chip-check { width:12px; height:12px; margin:0; cursor:pointer; accent-color:var(--accent-color,#667eea); flex-shrink:0; }
     .kb-chip { border:none; background:transparent; color:var(--accent-color,#667eea); font-size:11px; cursor:pointer; padding:0; }
     .kb-chip:hover { text-decoration:underline; }
-    .kb-auto-explore-btn { margin-left:auto; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
+    .kb-auto-explore-input { margin-left:auto; width:140px; padding:3px 8px; border-radius:12px; font-size:11px; border:1.5px solid var(--border-color); background:var(--bg-primary,transparent); color:var(--text-primary); }
+    .kb-auto-explore-btn { padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
     .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
     .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
     .kb-auto-explore-btn.kb-running { border-color:#dc2626; color:#dc2626; }
@@ -1082,7 +1083,8 @@ export function getAiChatPage(user: {
       <div class="kb-panel" id="keywordBoundaryPanel">
         <span class="kb-panel-label">🧭 まだ分類されていないキーワード:</span>
         <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
+        <input type="text" class="kb-auto-explore-input" id="autoExploreManualInput" placeholder="キーワードを入力して探索" title="チェックボックスの一覧に無いキーワードも、ここに入力して自動探索ボタンを押せば起点に追加される">
+        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックした(または入力した)キーワードを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
       </div>
       <!-- 自動探索の途中経過ログ。AI問い合わせ→Jev処理→キー切り出しの
            各段階の開始・完了時刻と所要時間を、実行中だけ表示する。 -->
@@ -7211,7 +7213,9 @@ export function getAiChatPage(user: {
       Object.keys(keywordBoundarySelection).forEach(function(keyword) {
         if (!stillPresent[keyword]) delete keywordBoundarySelection[keyword];
       });
-      keywordBoundaryPanel.classList.toggle('kb-panel-visible', keywords.length > 0);
+      // 未分類キーワードが0件でも、手入力での自動探索(autoExploreManualInput)は
+      // 使えるようにしたいので、一覧が空でもパネル自体は常に表示する。
+      keywordBoundaryPanel.classList.add('kb-panel-visible');
     }
 
     function loadUnknownKeywordBoundaryPanel() {
@@ -7243,6 +7247,7 @@ export function getAiChatPage(user: {
     // 回答に対してだけ行う設計を守る。Jev処理をすっ飛ばして先にキー切り出し
     // だけ行うことはしない)。
     var autoExploreBtn = document.getElementById('autoExploreBtn');
+    var autoExploreManualInput = document.getElementById('autoExploreManualInput');
     var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
@@ -7316,6 +7321,16 @@ export function getAiChatPage(user: {
             if (result.status < 200 || result.status >= 300 || !result.data) {
               throw new Error((result.data && result.data.error) || keyword + 'のキー切り出しに失敗しました');
             }
+            // POST /api/aichat/vectorize-answerは、ベクタ化自体が成功していれば
+            // キーワード抽出(予備知識キーワード抽出)が失敗していても200を返し、
+            // 理由を_keywordsWarningに入れるだけで済ませる(ベクタ化と抽出の
+            // 失敗を独立に扱う仕様)。ここでHTTPステータスだけを見て「完了」と
+            // 扱うと、実際には1件もキーワードが切り出せていないのに気付けない
+            // (「キー切り出しが上手くいっていない」の原因)。_keywordsWarningが
+            // 付いている場合は明示的に失敗として扱う。
+            if (result.data._keywordsWarning) {
+              throw new Error(keyword + 'のキー切り出しに失敗しました: ' + result.data._keywordsWarning);
+            }
           });
         });
       });
@@ -7349,25 +7364,41 @@ export function getAiChatPage(user: {
       autoExploreBtn.classList.add('kb-running');
       autoExploreBtn.textContent = '⏹ 停止';
       autoExploreBtn.title = '自動探索を停止する(今の問い合わせが終わり次第止まります)';
+      autoExploreManualInput.disabled = true;
     }
 
     function setAutoExploreButtonIdle() {
       autoExploreBtn.disabled = false;
       autoExploreBtn.classList.remove('kb-running');
       autoExploreBtn.textContent = '🧭 自動探索';
-      autoExploreBtn.title = 'チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる';
+      autoExploreBtn.title = 'チェックした(または入力した)キーワードを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる';
+      autoExploreManualInput.disabled = false;
     }
 
     function runAutoExplore() {
-      var seedKeywords = Object.keys(keywordBoundarySelection);
+      // 起点は「チェックボックスで選んだキーワード」と「手入力欄
+      // (autoExploreManualInput)に入力したキーワード」の両方を合わせる。
+      // 手入力は一覧に出ていない(=まだベクタ化すらされていない)キーワードも
+      // 探索の起点にできるようにするためのもので、カンマ・読点区切りで
+      // 複数指定できる。
+      var seedSet = {};
+      Object.keys(keywordBoundarySelection).forEach(function(keyword) { seedSet[keyword] = true; });
+      var manualRaw = (autoExploreManualInput.value || '').trim();
+      var manualKeywords = manualRaw.length > 0
+        ? manualRaw.split(/[,、]/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; })
+        : [];
+      manualKeywords.forEach(function(keyword) { seedSet[keyword] = true; });
+      var seedKeywords = Object.keys(seedSet);
+
       if (seedKeywords.length === 0) {
-        showAichatToast('自動探索するキーワードをチェックしてください', 'aichat-scissors-toast-neutral');
+        showAichatToast('自動探索するキーワードをチェックするか、入力してください', 'aichat-scissors-toast-neutral');
         return;
       }
 
       autoExploreRunning = true;
       autoExploreCancelRequested = false;
       setAutoExploreButtonRunning();
+      autoExploreManualInput.value = '';
       autoExploreProgressLog.innerHTML = '';
       autoExploreProgressLog.classList.add('kb-progress-log-visible');
       showAichatToast('自動探索を開始します(選択' + seedKeywords.length + '件・最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');

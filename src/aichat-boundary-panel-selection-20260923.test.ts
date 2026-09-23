@@ -44,40 +44,73 @@ describe('探索の境界線パネル: キーワードのチェックボック�
     const html = buildPage();
     expect(html).toContain("chip.addEventListener('click', function() { fillChatInputWithBoundaryTemplate(entry.keyword); });");
   });
+
+  it('未分類キーワードが0件でも(手入力での探索に使えるよう)パネル自体は常に表示する', () => {
+    const html = buildPage();
+    expect(html).toContain("keywordBoundaryPanel.classList.add('kb-panel-visible');");
+    expect(html).not.toContain("keywordBoundaryPanel.classList.toggle('kb-panel-visible'");
+  });
 });
 
-describe('探索の境界線パネル: 自動探索は選択されたキーワードだけを起点にする', () => {
-  it('未選択(keywordBoundarySelectionが空)で自動探索を押すと、問い合わせず案内を出して終わる', () => {
+describe('探索の境界線パネル: 自動探索ボタンの左の入力欄からも探索を開始できる', () => {
+  it('autoExploreManualInput(id)がボタンの直前(左)に配置されている', () => {
     const html = buildPage();
+    const panelIdx = html.indexOf('id="keywordBoundaryPanel"');
+    expect(panelIdx).toBeGreaterThan(-1);
+    const inputIdx = html.indexOf('id="autoExploreManualInput"', panelIdx);
+    const btnIdx = html.indexOf('id="autoExploreBtn"', panelIdx);
+    expect(inputIdx).toBeGreaterThan(-1);
+    expect(btnIdx).toBeGreaterThan(inputIdx);
+  });
+
+  it('実行中は入力欄もdisabledにし、完了後に有効へ戻す', () => {
+    const html = buildPage();
+    const runningIdx = html.indexOf('function setAutoExploreButtonRunning()');
+    expect(html.slice(runningIdx, runningIdx + 400)).toContain('autoExploreManualInput.disabled = true;');
+    const idleIdx = html.indexOf('function setAutoExploreButtonIdle()');
+    expect(html.slice(idleIdx, idleIdx + 400)).toContain('autoExploreManualInput.disabled = false;');
+  });
+});
+
+describe('探索の境界線パネル: 自動探索は選択(またはチェックボックス外の入力欄)のキーワードだけを起点にする', () => {
+  function autoExploreSnippet(html: string, length = 3000): string {
     const idx = html.indexOf('function runAutoExplore()');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 400);
-    expect(snippet).toContain('var seedKeywords = Object.keys(keywordBoundarySelection);');
+    return html.slice(idx, idx + length);
+  }
+
+  it('未選択・未入力(seedSetが空)で自動探索を押すと、問い合わせず案内を出して終わる', () => {
+    const snippet = autoExploreSnippet(buildPage(), 1000);
+    expect(snippet).toContain('var seedSet = {};');
+    expect(snippet).toContain('Object.keys(keywordBoundarySelection).forEach(function(keyword) { seedSet[keyword] = true; });');
+    expect(snippet).toContain('var seedKeywords = Object.keys(seedSet);');
     expect(snippet).toContain('if (seedKeywords.length === 0)');
-    expect(snippet).toContain("showAichatToast('自動探索するキーワードをチェックしてください'");
+    expect(snippet).toContain("showAichatToast('自動探索するキーワードをチェックするか、入力してください'");
     expect(snippet).toContain('return;');
   });
 
-  it('1階層目はseedKeywords(選択されたキーワード)だけをautoExploreRunCandidatesへ渡す(一覧APIを叩かない)', () => {
-    const html = buildPage();
-    const idx = html.indexOf('function runAutoExplore()');
-    const snippet = html.slice(idx, idx + 1200);
+  it('手入力欄(autoExploreManualInput)の値もカンマ・読点区切りでseedSetへ加え、開始時に入力欄をクリアする', () => {
+    const snippet = autoExploreSnippet(buildPage(), 1800);
+    expect(snippet).toContain("var manualRaw = (autoExploreManualInput.value || '').trim();");
+    expect(snippet).toContain('manualRaw.split(/[,、]/)');
+    expect(snippet).toContain('manualKeywords.forEach(function(keyword) { seedSet[keyword] = true; });');
+    expect(snippet).toContain("autoExploreManualInput.value = '';");
+  });
+
+  it('1階層目はseedKeywords(選択+入力欄)だけをautoExploreRunCandidatesへ渡す(一覧APIを叩かない)', () => {
+    const snippet = autoExploreSnippet(buildPage(), 2000);
     expect(snippet).toContain('var chain = autoExploreRunCandidates(seedKeywords, processedKeywords)');
   });
 
   it('2階層目以降はautoExploreNextLevelCandidates(一覧API経由)で新規抽出分へ掘り下げる', () => {
-    const html = buildPage();
-    const idx = html.indexOf('function runAutoExplore()');
-    const snippet = html.slice(idx, idx + 1600);
+    const snippet = autoExploreSnippet(buildPage(), 2500);
     expect(snippet).toContain('for (var level = 1; level < AUTO_EXPLORE_MAX_LEVELS; level++)');
     expect(snippet).toContain('autoExploreNextLevelCandidates(processedKeywords).then(function(candidates)');
     expect(snippet).toContain('autoExploreRunCandidates(candidates, processedKeywords)');
   });
 
   it('完了後は選択状態をクリアする', () => {
-    const html = buildPage();
-    const idx = html.indexOf('function runAutoExplore()');
-    const snippet = html.slice(idx, idx + 2000);
+    const snippet = autoExploreSnippet(buildPage(), 3000);
     expect(snippet).toContain('keywordBoundarySelection = {};');
   });
 });
@@ -114,7 +147,7 @@ describe('探索の境界線パネル: 実行中にもう一度押すと停止�
   it('階層の切り替わり時にもキャンセル要求とエラー停止の両方を確認する', () => {
     const html = buildPage();
     const idx = html.indexOf('function runAutoExplore()');
-    const snippet = html.slice(idx, idx + 2200);
+    const snippet = html.slice(idx, idx + 3000);
     expect(snippet).toContain('if (stoppedByError || autoExploreCancelRequested) return;');
   });
 });
@@ -152,6 +185,17 @@ describe('探索の境界線パネル: 各キーワードはAI問い合わせ→
     expect(between).toContain('.then(function(answer) {');
     expect(snippet.slice(vecStageIdx, vecStageIdx + 300)).toContain('vectorizeAnswerAndExtractKeywords(answer.shareId');
   });
+
+  it('POST /api/aichat/vectorize-answerがHTTP 200でも_keywordsWarningを返した場合は失敗として扱う(実際にはキーワードが1件も切り出せていないのを黙って「完了」にしない)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 3600);
+    const vecStageIdx = snippet.indexOf("autoExploreRunStage(keyword, 'キー切り出し'");
+    expect(vecStageIdx).toBeGreaterThan(-1);
+    const vecSnippet = snippet.slice(vecStageIdx, vecStageIdx + 1400);
+    expect(vecSnippet).toContain('if (result.data._keywordsWarning) {');
+    expect(vecSnippet).toContain("throw new Error(keyword + 'のキー切り出しに失敗しました: ' + result.data._keywordsWarning);");
+  });
 });
 
 describe('探索の境界線パネル: 各段階の開始・完了時刻と所要時間を進捗ログに表示する', () => {
@@ -168,7 +212,7 @@ describe('探索の境界線パネル: 各段階の開始・完了時刻と所�
   it('自動探索の開始時にログをクリアして表示状態にする', () => {
     const html = buildPage();
     const idx = html.indexOf('function runAutoExplore()');
-    const snippet = html.slice(idx, idx + 700);
+    const snippet = html.slice(idx, idx + 1600);
     expect(snippet).toContain("autoExploreProgressLog.innerHTML = '';");
     expect(snippet).toContain("autoExploreProgressLog.classList.add('kb-progress-log-visible');");
   });
