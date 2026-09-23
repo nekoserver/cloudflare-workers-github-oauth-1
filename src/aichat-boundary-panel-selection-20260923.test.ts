@@ -52,9 +52,10 @@ describe('探索の境界線パネル: 自動探索は選択されたキーワ�
     const idx = html.indexOf('function runAutoExplore()');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 400);
-    expect(snippet).toContain('var seedKeywords = Object.keys(keywordBoundarySelection);');
+    expect(snippet).toContain('var typedKeyword = autoExploreKeywordInput.value.trim();');
+    expect(snippet).toContain('var seedKeywords = typedKeyword ? [typedKeyword] : Object.keys(keywordBoundarySelection);');
     expect(snippet).toContain('if (seedKeywords.length === 0)');
-    expect(snippet).toContain("showAichatToast('自動探索するキーワードをチェックしてください'");
+    expect(snippet).toContain("showAichatToast('キーワードを入力するか、自動探索するキーワードをチェックしてください'");
     expect(snippet).toContain('return;');
   });
 
@@ -79,6 +80,27 @@ describe('探索の境界線パネル: 自動探索は選択されたキーワ�
     const idx = html.indexOf('function runAutoExplore()');
     const snippet = html.slice(idx, idx + 2000);
     expect(snippet).toContain('keywordBoundarySelection = {};');
+  });
+});
+
+describe('探索の境界線パネル: 検索窓と再探索抑止', () => {
+  it('自動探索ボタンの左に検索窓を置き、入力値を最優先の起点にする', () => {
+    const html = buildPage();
+    expect(html.indexOf('id="autoExploreKeywordInput"')).toBeLessThan(html.indexOf('id="autoExploreBtn"'));
+    expect(html).toContain('var seedKeywords = typedKeyword ? [typedKeyword] : Object.keys(keywordBoundarySelection);');
+  });
+
+  it('候補が0件でも手入力できるようパネルを表示する', () => {
+    const html = buildPage();
+    expect(html).toContain("keywordBoundaryPanel.classList.add('kb-panel-visible');");
+  });
+
+  it('各候補のAI問い合わせ前に1週間の探索履歴をclaimする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreProcessKeyword(');
+    const snippet = html.slice(idx, idx + 900);
+    expect(snippet).toContain("fetch('/api/aichat/keyword-boundary/auto-explore/claim'");
+    expect(snippet).toContain("r.status === 409");
   });
 });
 
