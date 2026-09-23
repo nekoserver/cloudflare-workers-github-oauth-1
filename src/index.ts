@@ -382,7 +382,6 @@ import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } fro
 import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
 import { buildJevLivePulse, type JevLivePulseRow } from './utils/jevLivePulse';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
-import { syncKeywordBoundary, toggleKeywordBoundary, listUnknownKeywords } from './utils/jevKeywordBoundary';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -657,8 +656,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
   { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
   { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
-  { name: 'jev_keyword_boundary_labels', migration: '0158', description: '「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスター(常に1件)。jev_country_keyword_labelsと同じ形だが、Jev APIではなくユーザー本人の理解状況(アプリ側で設定する値)を保持する点が異なる', syncPolicy: 'manual' },
-  { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '回答文から切り出したキーワードのうち未理解(value=0)/理解済み(value=1)の状態をkeyword単位で保持する。回答閲覧時に未理解として自動登録され、ユーザーがチップをクリックすると理解済みに切り替わる。次の質問候補(未理解キーワード一覧)の抽出に使う', syncPolicy: 'auto' },
+  { name: 'jev_keyword_boundary_labels', migration: '0158', description: '【非推奨・migration 0159で削除済み】「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスターだったが、自己申告は根拠が曖昧なため、既存のaichat_keyword_category_map(未分類=境界線の外側)を根拠にする方式へ置き換えた', syncPolicy: 'manual' },
+  { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '【非推奨・migration 0159で削除済み】回答文から切り出したキーワードの未理解/理解済み状態を自己申告で保持していたが、既存のaichat_keyword_category_map(分類済みかどうか)を根拠にする方式へ置き換えた', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2504,6 +2503,8 @@ CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_keyword ON jev_k
 CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_unknown ON jev_keyword_boundary_evaluations(user_id, jev_keyword_boundary_label_id, value, computed_at DESC);
 INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) VALUES
   ('このキーワードをユーザーは理解済みですか?', '["未理解(探索の境界線の外側)","理解済み(探索の境界線の内側)"]');`,
+  '0159': `DROP TABLE IF EXISTS jev_keyword_boundary_evaluations;
+DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -9647,6 +9648,54 @@ export async function listAnswerKeywordVectors(
 }
 
 /**
+ * 「探索の境界線」(まだ理解していないキーワード)一覧。ユーザー自己申告の
+ * 状態(jev_keyword_boundary_evaluations、当初案)は根拠が曖昧なため、
+ * 既存のAIチャットキーワード分類(aichat_keyword_category_map。
+ * /answer-graphでカテゴリ分けした・されていないの判定に使っている実データ)
+ * を根拠に流用する: ベクタ化済みの回答から抽出されたキーワード
+ * (aichat_answer_keyword_vectors)のうち、まだどのカテゴリにも分類
+ * されていないもの=「未分類」を「まだ理解していない」とみなす。
+ * 更新(抽出)が新しい順に返す。
+ */
+export async function listUnclassifiedAnswerKeywords(
+  db: D1Database,
+  userId: string,
+  limit: number,
+): Promise<string[]> {
+  const rows = await db.prepare(
+    `SELECT v.keyword, MAX(v.computed_at) AS latest
+     FROM aichat_answer_keyword_vectors v
+     LEFT JOIN aichat_keyword_category_map m ON m.keyword = v.keyword AND m.user_id = v.user_id
+     WHERE v.user_id = ? AND m.category_id IS NULL
+     GROUP BY v.keyword
+     ORDER BY latest DESC
+     LIMIT ?`
+  ).bind(userId, limit).all<{ keyword: string; latest: string }>();
+  return (rows.results ?? []).map((r) => r.keyword);
+}
+
+export type KeywordBoundaryStats = { classifiedCount: number; unclassifiedCount: number };
+
+/**
+ * 「探索の境界線」の累計サマリ。ベクタ化済みの回答から抽出された
+ * (重複除去済みの)キーワードの総数のうち、いくつが既にカテゴリ分類済みか
+ * (classifiedCount)・いくつがまだ未分類か(unclassifiedCount)を数える。
+ * 自動探索ボタン(3階層まで問い合わせを自動で進める機能)の締めくくりに
+ * 表示する、探索の進み具合のゆるい目安。
+ */
+export async function getKeywordBoundaryStats(db: D1Database, userId: string): Promise<KeywordBoundaryStats> {
+  const row = await db.prepare(
+    `SELECT
+       COUNT(DISTINCT CASE WHEN m.category_id IS NOT NULL THEN v.keyword END) AS classified_count,
+       COUNT(DISTINCT CASE WHEN m.category_id IS NULL THEN v.keyword END) AS unclassified_count
+     FROM aichat_answer_keyword_vectors v
+     LEFT JOIN aichat_keyword_category_map m ON m.keyword = v.keyword AND m.user_id = v.user_id
+     WHERE v.user_id = ?`
+  ).bind(userId).first<{ classified_count: number; unclassified_count: number }>();
+  return { classifiedCount: row?.classified_count ?? 0, unclassifiedCount: row?.unclassified_count ?? 0 };
+}
+
+/**
  * キーワード群それぞれについて、AIチャットのキーワードテーブル
  * (aichat_search_log。回答文への紐付け選択ログの集計値select_countの合計)
  * 内で何回出現しているかをまとめて取得する。バインド上限に収まる単位で
@@ -10291,31 +10340,11 @@ app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
 });
 
 /**
- * 「探索の境界線」機能(SPEC参照)のsync API。指定したshareId(回答文を
- * ベクタ化済みで、aichat_answer_keyword_vectorsに予備知識キーワードが
- * 抽出済みであること)のキーワードそれぞれについて、jev_keyword_boundary_evaluations
- * に未登録なら「未理解(unknown)」として新規登録し、最終的な状態
- * (known/unknown)を返す。回答閲覧時に自動で呼ぶ想定。
- */
-app.post('/api/aichat/keyword-boundary/sync', authMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ shareId?: string }>().catch(() => null);
-  const shareId = (body?.shareId ?? '').trim();
-  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
-
-  const keywords = await listAnswerKeywordVectors(c.env.DB, user.sub, shareId);
-  const result = await syncKeywordBoundary(c.env.DB, user.sub, keywords, shareId);
-  if (!result.ok) {
-    logger.error('[keyword-boundary/sync] syncKeywordBoundary失敗', { shareId, error: result.error });
-    return jsonUtf8({ error: result.error }, 500);
-  }
-  return jsonUtf8({ shareId, entries: result.entries });
-});
-
-/**
- * 「探索の境界線」機能の一覧API。まだ「未理解(unknown)」のキーワードを
- * 更新が新しい順に返す(次の質問候補として使う)。limitクエリで件数を
+ * 「探索の境界線」機能の一覧API。ベクタ化済みの回答から抽出されたキーワード
+ * (aichat_answer_keyword_vectors)のうち、まだどのカテゴリにも分類
+ * されていない(aichat_keyword_category_mapに行が無い)ものを、抽出が
+ * 新しい順に返す(次の質問候補として使う)。自己申告のON/OFFではなく、
+ * 既存のキーワード分類という実データを根拠にする。limitクエリで件数を
  * 絞れる(省略時50、最大200)。
  */
 app.get('/api/aichat/keyword-boundary/unknown', authMiddleware, async (c) => {
@@ -10324,33 +10353,32 @@ app.get('/api/aichat/keyword-boundary/unknown', authMiddleware, async (c) => {
   const rawLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
 
-  const result = await listUnknownKeywords(c.env.DB, user.sub, limit);
-  if (!result.ok) {
-    logger.error('[keyword-boundary/unknown] listUnknownKeywords失敗', { error: result.error });
-    return jsonUtf8({ error: result.error }, 500);
+  try {
+    const keywords = await listUnclassifiedAnswerKeywords(c.env.DB, user.sub, limit);
+    return jsonUtf8({ keywords: keywords.map((keyword) => ({ keyword })) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-boundary/unknown] listUnclassifiedAnswerKeywords失敗', { error: message });
+    return jsonUtf8({ error: message }, 500);
   }
-  return jsonUtf8({ keywords: result.keywords });
 });
 
 /**
- * 「探索の境界線」機能の切り替えAPI。ユーザーがキーワードチップを
- * クリックしたときに呼ぶ。knownをtrueにすると理解済み、falseにすると
- * 未理解へ戻せる。
+ * 「探索の境界線」の累計サマリAPI。自動探索(最大3階層、入力待ちを挟まず
+ * 未分類キーワードへ次々に問い合わせる機能)の締めくくりに、分類済み/
+ * 未分類のキーワード数を返す。
  */
-app.post('/api/aichat/keyword-boundary/toggle', authMiddleware, async (c) => {
+app.get('/api/aichat/keyword-boundary/stats', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ keyword?: string; known?: boolean }>().catch(() => null);
-  const keyword = (body?.keyword ?? '').trim();
-  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
-  if (typeof body?.known !== 'boolean') return jsonUtf8({ error: 'known(boolean) は必須です' }, 400);
-
-  const result = await toggleKeywordBoundary(c.env.DB, user.sub, keyword, body.known);
-  if (!result.ok) {
-    logger.error('[keyword-boundary/toggle] toggleKeywordBoundary失敗', { keyword, error: result.error });
-    return jsonUtf8({ error: result.error }, 500);
+  try {
+    const stats = await getKeywordBoundaryStats(c.env.DB, user.sub);
+    return jsonUtf8(stats);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-boundary/stats] getKeywordBoundaryStats失敗', { error: message });
+    return jsonUtf8({ error: message }, 500);
   }
-  return jsonUtf8({ entry: result.entry });
 });
 
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
