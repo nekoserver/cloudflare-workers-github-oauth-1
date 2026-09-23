@@ -118,11 +118,14 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
   gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
   `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
-- `msb-wasm`: microsandbox の `msb` CLI 引数配列を解析し、コマンド・位置引数・
-  オプションからなる JSON 実行要求へ変換する純Rust実装。WASMから直接microVMを
-  起動することはできないため、デーモン通信・microVMライフサイクル・ファイルI/O・
-  ネットワークはホスト側が担当する。`parse_msb_args`はシェル文字列ではなくJSONの
-  文字列配列を受け取り、`--`以降をサンドボックス内コマンドとしてそのまま保持する。
+- `msb-wasm`: microsandbox(https://github.com/microsandbox/microsandbox)の
+  CLI `msb`のヘルプ・コマンドツリー表示だけを再実装したもの。`msb`本体は
+  KVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVM
+  ランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README
+  (Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力
+  (`msb_help`・`msb_tree`・`msb_command_help`)のみを提供する。実際の
+  サンドボックス起動・イメージ取得・スナップショット等は対象外。ブラウザ
+  ページ・`/neko`サブコマンドからはまだ呼ばれておらず配線は未実施。
   リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
   行い、`public/wasm/msb.js`と`public/wasm/msb_bg.wasm`を生成する
 
