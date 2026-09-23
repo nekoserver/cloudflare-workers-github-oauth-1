@@ -101,11 +101,33 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
   });
 
   it('Ruby 4で動く追加サンプルと学習用バッジを豊富に掲載する', () => {
-    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(35);
-    expect(RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === 'Ruby 4').length).toBeGreaterThanOrEqual(3);
+    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(47);
+    expect(RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === 'Ruby 4').length).toBeGreaterThanOrEqual(4);
     expect(RUBY_REPL_SNIPPETS.filter((snippet) => snippet.badges?.length).length).toBeGreaterThanOrEqual(20);
     expect(RUBY_REPL_SNIPPETS.some((snippet) => snippet.title === 'Dataで座標計算')).toBe(true);
     expect(RUBY_REPL_SNIPPETS.some((snippet) => snippet.title === '二分探索')).toBe(true);
+  });
+
+  it('カテゴリごとに足りない学習テーマのサンプルを掲載する', () => {
+    const additions = [
+      ['メソッドと戻り値', '基本'],
+      ['partitionで仕分け', 'Enumerable'],
+      ['ネストしたHashを集計', 'データ'],
+      ['単語のラッピング', '文字列'],
+      ['継承とsuper', 'オブジェクト'],
+      ['幅優先探索', 'アルゴリズム'],
+      ['ドット絵アニメ', '遊ぶ'],
+      ['右代入で分解', 'Ruby 4'],
+    ] as const;
+
+    additions.forEach(([title, category]) => {
+      const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === title);
+      expect(snippet?.category).toBe(category);
+      expect(snippet?.description.length).toBeGreaterThan(0);
+      expect(snippet?.badges?.length).toBeGreaterThan(0);
+      expect(snippet?.code.length).toBeGreaterThan(0);
+      expect(RUBY_SAMPLE_AUDIT_RESULTS[title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
+    });
   });
 
   it('全サンプルのコードをRubyシンタックスハイライトし、実行用の元コードも保持する', () => {
