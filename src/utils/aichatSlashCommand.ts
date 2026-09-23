@@ -1823,7 +1823,9 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'msb') {
     const args = parts.slice(2);
-    if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+    // IMEやスマート入力がASCIIの`--`をem/en dashへ置換しても、helpとして扱う。
+    const firstArg = (args[0] ?? '').replace(/^[—–]/, '--');
+    if (args.length === 0 || firstArg === '--help' || firstArg === '-h') {
       if (!deps.msbHelpViaWasm) {
         return { handled: true, response: '❌ /neko msb --help は現在利用できません(WASM未設定)' };
       }
