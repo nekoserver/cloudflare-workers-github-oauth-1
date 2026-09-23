@@ -4,8 +4,9 @@
  * 対象: dynamicnekoの/jev-pg-reactページ(jev-playgroundのReact移植)向けの
  * external API。既存の POST /api/jev-playground(cookieセッション認証)と
  * 同じ検証(validateJevPlaygroundPayload)・Jev API転送(callJevPlaygroundApi)
- * ロジックを共有しつつ、専用Bearer secret + userToken認可で提供する。JEV_API_KEYの代理利用経路を
- * 他のexternal API用の共有secretから分離する。
+ * ロジックを共有しつつ、専用Bearer secret + userToken認可で提供する。専用secretが
+ * 設定済みなら他のexternal API用secretから分離し、未配備の環境だけ従来secretへ
+ * フォールバックして移行中の画面を停止させない。
  *
  * 故障シナリオ:
  *   (1) Bearer secretが一致しないリクエストが素通りしてしまう
@@ -92,7 +93,22 @@ describe('POST /api/jev-playground-external', () => {
     expect(res.status).toBe(401);
   });
 
-  it('専用Bearer secret未設定時はフェイルクローズする', async () => {
+  it('専用Bearer secret未設定時は従来のAICHAT_EXTERNAL_SECRETへフォールバックする', async () => {
+    const db = setupDb(['ok@example.com']);
+    const userToken = await makeUserToken('ok@example.com');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    const res = await app.request(
+      '/api/jev-playground-external',
+      { method: 'POST', headers: { Authorization: 'Bearer legacy-aichat-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, ...VALID_BODY }) },
+      { AICHAT_EXTERNAL_SECRET: 'legacy-aichat-secret', AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET, JEV_API_KEY, DB: wrapD1(db) },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('専用・従来どちらのBearer secretも未設定ならフェイルクローズする', async () => {
     const db = setupDb(['ok@example.com']);
     const userToken = await makeUserToken('ok@example.com');
     const res = await app.request(

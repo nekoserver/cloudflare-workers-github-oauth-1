@@ -4922,13 +4922,15 @@ app.post('/api/jev-playground', authMiddleware, async (c) => {
 
 /**
  * dynamicnekoの/jev-pg-reactページ用。高コストなJEV_API_KEYの代理利用を
- * 他のexternal API用シークレットから分離するため、このルート専用のBearer
- * secretに加え、短命userTokenと許可ユーザーDBの両方を必須にする。
+ * 原則としてこのルート専用のBearer secretを使い、短命userTokenと許可ユーザーDBの
+ * 両方を必須にする。専用secretの配備前から動いているdynamicnekoを停止させないため、
+ * 専用secretが未設定の環境に限って従来のAICHAT_EXTERNAL_SECRETへフォールバックする。
  */
 app.post('/api/jev-playground-external', async (c) => {
   const authorization = c.req.header('Authorization') ?? '';
-  const expectedAuthorization = c.env.JEV_PLAYGROUND_EXTERNAL_SECRET
-    ? `Bearer ${c.env.JEV_PLAYGROUND_EXTERNAL_SECRET}`
+  const externalSecret = c.env.JEV_PLAYGROUND_EXTERNAL_SECRET || c.env.AICHAT_EXTERNAL_SECRET;
+  const expectedAuthorization = externalSecret
+    ? `Bearer ${externalSecret}`
     : null;
   if (!expectedAuthorization || authorization !== expectedAuthorization) {
     return jsonUtf8({ error: 'Unauthorized' }, 401);
