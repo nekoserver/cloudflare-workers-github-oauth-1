@@ -53,6 +53,34 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html).toContain("sampleRunBtn.addEventListener('click'");
     expect(html).toContain('var result = runRubyCode(selectedSampleCode)');
     expect(html).toContain('sampleDetailResult.textContent = result.output');
+    expect(html).toContain('id="sampleDetailResultCloseBtn">close</button>');
+    expect(html).toContain("sampleDetailResultCloseBtn.addEventListener('click'");
+  });
+
+  it('詳細モーダルの操作を指定位置に配置し、下部の閉じるボタンも機能する', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('class="modal-close sample-detail-corner-close" id="sampleDetailCloseBtn"');
+    const heading = html.match(/<div class="sample-detail-heading">(.+?)<\/div>/)?.[1] || '';
+    expect(heading.indexOf('id="sampleLoadBtn"')).toBeLessThan(heading.indexOf('id="sampleDetailCategory"'));
+    expect(html).toContain('id="sampleDetailBottomCloseBtn">閉じる</button>');
+    expect(html).toContain("sampleDetailBottomCloseBtn.addEventListener('click'");
+  });
+
+  it('各コードブロックのRunボタンを右上に置き、Ruby 4バッジを表示する', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('.snippet-run { position: absolute; top: 8px; right: 8px;');
+    expect(html.match(/class="ruby4-badge">Ruby 4<\/span>/g)).toHaveLength(RUBY_REPL_SNIPPETS.length + 1);
+    expect(html).toContain('<div class="snippet-code-wrap"><button type="button" class="snippet-run"');
+  });
+
+  it('Ruby 4で動く追加サンプルと学習用バッジを豊富に掲載する', () => {
+    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(35);
+    expect(RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === 'Ruby 4').length).toBeGreaterThanOrEqual(3);
+    expect(RUBY_REPL_SNIPPETS.filter((snippet) => snippet.badges?.length).length).toBeGreaterThanOrEqual(20);
+    expect(RUBY_REPL_SNIPPETS.some((snippet) => snippet.title === 'Dataで座標計算')).toBe(true);
+    expect(RUBY_REPL_SNIPPETS.some((snippet) => snippet.title === '二分探索')).toBe(true);
   });
 
   it('全サンプルのコードをRubyシンタックスハイライトし、実行用の元コードも保持する', () => {
