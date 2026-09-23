@@ -72,7 +72,7 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '成績ランキング', description: 'Hashの配列を複数条件で並べ替えます。', category: 'Enumerable', code: 'scores = [\n  { name: "Mina", score: 92 },\n  { name: "Kai", score: 78 },\n  { name: "Aoi", score: 92 },\n  { name: "Ren", score: 85 }\n]\nscores.sort_by { |row| [-row[:score], row[:name]] }.each_with_index do |row, i|\n  puts "#{i + 1}. #{row[:name]} — #{row[:score]}"\nend' },
   { title: 'グループ集計', description: '商品データをカテゴリ別に集計します。', category: 'Enumerable', code: 'items = [\n  ["book", 1800], ["food", 650], ["book", 1200],\n  ["tool", 2400], ["food", 480]\n]\nitems.group_by(&:first).sort.each do |category, rows|\n  puts "#{category}: ¥#{rows.sum { |_, price| price }}"\nend' },
   { title: 'JSON 整形', description: '標準ライブラリでJSONを解析・整形します。', category: 'データ', code: 'require "json"\nraw = %q({"name":"Ruby/WASM","features":["portable","fast"],"ready":true})\ndata = JSON.parse(raw)\ndata["features"] << "interactive"\nputs JSON.pretty_generate(data)' },
-  { title: 'CSV 集計', description: '文字列内のCSVを読み、合計を求めます。', category: 'データ', code: 'require "csv"\nsource = "item,price,qty\\nApple,120,3\\nTea,450,1\\nBread,280,2"\nrows = CSV.parse(source, headers: true)\nrows.each { |row| puts "#{row["item"]}: #{row["price"].to_i * row["qty"].to_i}円" }\nputs "合計: #{rows.sum { |row| row["price"].to_i * row["qty"].to_i }}円"' },
+  { title: 'CSV 集計', description: '文字列内のCSVを読み、合計を求めます。', category: 'データ', code: 'source = "item,price,qty\\nApple,120,3\\nTea,450,1\\nBread,280,2"\nheader, *lines = source.lines(chomp: true).map { |line| line.split(",") }\nrows = lines.map { |values| header.zip(values).to_h }\nrows.each { |row| puts "#{row["item"]}: #{row["price"].to_i * row["qty"].to_i}円" }\nputs "合計: #{rows.sum { |row| row["price"].to_i * row["qty"].to_i }}円"' },
   { title: '正規表現で抽出', description: 'ログ風テキストからステータスを集計します。', category: '文字列', code: 'log = <<~LOG\n  200 GET /\n  404 GET /missing\n  200 POST /items\n  500 GET /error\n  200 GET /about\nLOG\ncodes = log.scan(/^([0-9]{3})/).flatten.tally\ncodes.sort.each { |code, count| puts "HTTP #{code}: #{count}" }' },
   { title: '回文チェッカー', description: '日本語や記号を含む文字列を正規化して判定します。', category: '文字列', code: 'def palindrome?(text)\n  normalized = text.downcase.gsub(/[^a-z0-9]/, "")\n  normalized == normalized.reverse\nend\n["Never odd or even", "Ruby", "A man, a plan, a canal: Panama!"].each do |text|\n  puts "#{palindrome?(text) ? "✓" : "×"} #{text}"\nend' },
   { title: 'テンプレート変換', description: 'gsub のブロックでプレースホルダーを置換します。', category: '文字列', code: 'template = "Hello, {{name}}! Welcome to {{place}}."\nvalues = { "name" => "Rubyist", "place" => "WebAssembly" }\nresult = template.gsub(/{{(\\w+)}}/) { values.fetch($1, "?") }\nputs result' },
@@ -85,13 +85,28 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '簡易棒グラフ', description: '数値データをターミナル風に可視化します。', category: '遊ぶ', code: 'visitors = { Mon: 12, Tue: 19, Wed: 8, Thu: 24, Fri: 17 }\nscale = visitors.values.max\nvisitors.each do |day, value|\n  bar = "█" * (value * 20 / scale)\n  puts format("%-3s | %-20s %2d", day, bar, value)\nend' },
 ];
 
+/** 外部ライブラリを追加せず、サンプルコードを安全なHTMLへ変換して色分けする。 */
+function highlightRuby(code: string): string {
+  const tokens: string[] = [];
+  const protectedCode = code.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#[^\n]*)/g, (token) => {
+    const kind = token.startsWith('#') ? 'comment' : 'string';
+    tokens.push(`<span class="ruby-${kind}">${escapeHtml(token)}</span>`);
+    return `\u0000${tokens.length - 1}\u0000`;
+  });
+  return escapeHtml(protectedCode)
+    .replace(/\b(class|def|do|end|if|else|elsif|unless|begin|rescue|ensure|raise|return|yield|while|until|case|when|then|require|attr_reader)\b/g, '<span class="ruby-keyword">$1</span>')
+    .replace(/\b(true|false|nil)\b/g, '<span class="ruby-literal">$1</span>')
+    .replace(/(?<!\u0000)\b(\d+(?:\.\d+)?)\b(?!\u0000)/g, '<span class="ruby-number">$1</span>')
+    .replace(/\u0000(\d+)\u0000/g, (_match, index) => tokens[Number(index)]);
+}
+
 function renderRubyReplSnippets(): string {
   return RUBY_REPL_SNIPPETS.map((snippet, index) => {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
     return `<article class="snippet-card" data-snippet-card="${index}">
       <div class="snippet-heading"><span class="snippet-category">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
       <p>${escapeHtml(snippet.description)}</p>
-      <pre><code>${escapeHtml(snippet.code)}</code></pre>
+      <pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre>
       <div class="snippet-actions"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><span class="snippet-state">WASMを準備中…</span></div>
       <div class="snippet-result" data-snippet-result="${index}" hidden>
         <button type="button" class="snippet-output-close" data-close-snippet="${index}" aria-label="実行結果を折り畳む">close</button>
@@ -100,6 +115,13 @@ function renderRubyReplSnippets(): string {
       <script type="application/json" data-snippet-code="${index}">${payload}</script>
     </article>`;
   }).join('\n');
+}
+
+function renderRubySampleChoices(): string {
+  return RUBY_REPL_SNIPPETS.map((snippet, index) => `<button type="button" class="sample-choice" data-load-sample="${index}">
+    <span class="snippet-category">${escapeHtml(snippet.category)}</span>
+    <span class="sample-choice-copy"><strong>${escapeHtml(snippet.title)}</strong><span>${escapeHtml(snippet.description)}</span></span>
+  </button>`).join('\n');
 }
 
 export function getRubyWasmPage(username: string): string {
@@ -228,13 +250,6 @@ export function getRubyWasmPage(username: string): string {
     .result-value.error { color: #991b1b; }
     .theme-toggle-inline { display: flex; align-items: center; }
     .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-    .practice-picker { margin-bottom: 12px; }
-    .practice-picker label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
-    .practice-picker select {
-      width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px;
-      background: var(--bg-secondary); color: var(--text-primary); font-size: 14px;
-    }
-    .practice-hint { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
     .btn-secondary {
       background: var(--bg-secondary); color: var(--text-primary);
       border: 1px solid var(--border-color); border-radius: 8px;
@@ -264,6 +279,17 @@ export function getRubyWasmPage(username: string): string {
       display: flex; justify-content: space-between; align-items: center;
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
+    .sample-modal-box { width: min(680px, 92vw); }
+    .sample-choice-list { display: grid; gap: 8px; }
+    .sample-choice {
+      width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 12px;
+      border: 1px solid var(--border-color); border-radius: 9px; background: var(--card-bg);
+      color: var(--text-primary); text-align: left; cursor: pointer;
+    }
+    .sample-choice:hover, .sample-choice:focus-visible { background: var(--bg-secondary); border-color: #667eea; }
+    .sample-choice-copy { display: grid; gap: 4px; min-width: 0; }
+    .sample-choice-copy strong { font-size: 14px; }
+    .sample-choice-copy > span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
     .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
@@ -300,6 +326,11 @@ export function getRubyWasmPage(username: string): string {
     .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, #667eea 15%, var(--bg-secondary)); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
     .snippet-card pre { max-height: 260px; margin: 12px 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .ruby-keyword { color: #ff7ab2; font-weight: 600; }
+    .ruby-string { color: #b4f1a1; }
+    .ruby-comment { color: #8290a6; font-style: italic; }
+    .ruby-number { color: #ffd580; }
+    .ruby-literal { color: #82aaff; font-weight: 600; }
     .snippet-actions { display: flex; align-items: center; gap: 10px; }
     .snippet-run { padding: 9px 14px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
     .snippet-run:hover:not(:disabled) { background: #5568d3; }
@@ -353,16 +384,7 @@ export function getRubyWasmPage(username: string): string {
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
       <div class="toolbar">
         <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
-      </div>
-      <div class="practice-picker">
-        <label for="practiceExample">練習サンプル（選ぶとエディターへ読み込みます）</label>
-        <select id="practiceExample">
-          <option value="">サンプルを選択…</option>
-          <option value="word_count">単語の出現回数を数える</option>
-          <option value="json_format">JSONを読みやすく整形する</option>
-          <option value="expense_total">支出をカテゴリ別に集計する</option>
-        </select>
-        <div class="practice-hint" id="practiceHint">配列・Hash・標準ライブラリなどを、小さな実用品で練習できます。</div>
+        <button type="button" class="btn-secondary" id="openSamplesBtn">💎 サンプルから選ぶ</button>
       </div>
       <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
       <div class="toolbar">
@@ -384,6 +406,13 @@ export function getRubyWasmPage(username: string): string {
       </div>
       <div class="snippet-grid">${renderRubyReplSnippets()}</div>
     </section>
+  </div>
+
+  <div class="modal-overlay" id="sampleModalOverlay" role="dialog" aria-modal="true" aria-labelledby="sampleModalTitle">
+    <div class="modal-box sample-modal-box">
+      <h2 id="sampleModalTitle">💎 Ruby サンプルを選ぶ <button type="button" class="modal-close" id="sampleModalCloseBtn" aria-label="閉じる">✕</button></h2>
+      <div class="sample-choice-list">${renderRubySampleChoices()}</div>
+    </div>
   </div>
 
   <div class="modal-overlay" id="listModalOverlay">
@@ -440,40 +469,7 @@ export function getRubyWasmPage(username: string): string {
     var resultBlock = document.getElementById('resultBlock');
     var resultCloseBtn = document.getElementById('resultCloseBtn');
     var resultValue = document.getElementById('resultValue');
-    var practiceExample = document.getElementById('practiceExample');
-    var practiceHint = document.getElementById('practiceHint');
     var rubyVM = null;
-
-    // 外部通信やファイルアクセスを必要とせず、ブラウザ内だけで完結する題材に
-    // 絞る。完成コードを少しずつ改造し、入力や出力を変えて試せる例にする。
-    var practiceExamples = {
-      word_count: {
-        hint: 'split・map・tallyを使うテキスト集計です。除外語や並び順を追加してみましょう。',
-        code: 'text = "Ruby is fun. Ruby is readable!"\\n\\nwords = text.downcase.scan(/[a-z]+/)\\nwords.tally.sort_by { |word, count| [-count, word] }.each do |word, count|\\n  puts "#{word}: #{count}"\\nend'
-      },
-      json_format: {
-        hint: 'JSON標準ライブラリと例外処理の練習です。キーの追加や値の抽出も試せます。',
-        code: 'require "json"\\n\\nraw = %q({"name":"Ruby","runs_in":"WebAssembly","useful":true})\\n\\nbegin\\n  data = JSON.parse(raw)\\n  puts JSON.pretty_generate(data)\\nrescue JSON::ParserError => error\\n  warn "JSON error: #{error.message}"\\nend'
-      },
-      expense_total: {
-        hint: '配列・Hash・group_by・sumを使う集計です。税率や月別集計を足してみましょう。',
-        code: 'expenses = [\\n  { category: "食費", amount: 850 },\\n  { category: "交通", amount: 420 },\\n  { category: "食費", amount: 630 },\\n  { category: "書籍", amount: 1_500 }\\n]\\n\\nexpenses.group_by { |item| item[:category] }.each do |category, items|\\n  total = items.sum { |item| item[:amount] }\\n  puts "#{category}: #{total}円"\\nend\\n\\nputs "合計: #{expenses.sum { |item| item[:amount] }}円"'
-      }
-    };
-
-    practiceExample.addEventListener('change', function() {
-      var example = practiceExamples[practiceExample.value];
-      if (!example) {
-        practiceHint.textContent = '配列・Hash・標準ライブラリなどを、小さな実用品で練習できます。';
-        return;
-      }
-      inputCode.value = example.code;
-      practiceHint.textContent = example.hint;
-      resultBlock.style.display = 'none';
-      saveBtn.style.display = 'none';
-      saveNote.textContent = '';
-      inputCode.focus();
-    });
 
     // 複数のモーダル・オーバーレイが同時に開いた際、後から開いた方が必ず
     // 手前に来るようz-indexを動的に算出する(固定値は書かない。CLAUDE.mdルール26)。
@@ -589,6 +585,11 @@ export function getRubyWasmPage(username: string): string {
     var modalRunBtn = document.getElementById('modalRunBtn');
     var modalNote = document.getElementById('modalNote');
 
+    // ---- 全サンプル選択モーダル(開くたび、その時点で最上位レイヤーへ置く) ----
+    var openSamplesBtn = document.getElementById('openSamplesBtn');
+    var sampleModalOverlay = document.getElementById('sampleModalOverlay');
+    var sampleModalCloseBtn = document.getElementById('sampleModalCloseBtn');
+
     // ---- 実行結果モーダル(一覧モーダルよりさらに上のレイヤー) ----
     var resultModalOverlay = document.getElementById('resultModalOverlay');
     var resultModalCloseBtn = document.getElementById('resultModalCloseBtn');
@@ -663,6 +664,30 @@ export function getRubyWasmPage(username: string): string {
     function closeModal(overlay) {
       overlay.classList.remove('open');
     }
+
+    openSamplesBtn.addEventListener('click', function() {
+      openModal(sampleModalOverlay);
+    });
+    sampleModalCloseBtn.addEventListener('click', function() { closeModal(sampleModalOverlay); });
+    sampleModalOverlay.addEventListener('click', function(e) {
+      if (e.target === sampleModalOverlay) closeModal(sampleModalOverlay);
+    });
+    document.querySelectorAll('[data-load-sample]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var index = button.getAttribute('data-load-sample');
+        var codeNode = document.querySelector('[data-snippet-code="' + index + '"]');
+        if (!codeNode) return;
+        // 以前の入力と実行状態を一度すべて消してから、選択コードだけを入れる。
+        inputCode.value = '';
+        resultBlock.style.display = 'none';
+        resultValue.textContent = '';
+        saveBtn.style.display = 'none';
+        saveNote.textContent = '';
+        inputCode.value = JSON.parse(codeNode.textContent || '""');
+        closeModal(sampleModalOverlay);
+        inputCode.focus();
+      });
+    });
 
     // 呼び出し側にはモーダル操作を漏らさず、ユーザーの承認結果だけを返す。
     function requestDeleteConfirmation(title) {
