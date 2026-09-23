@@ -33,4 +33,23 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).toContain("document.querySelectorAll('[data-run-snippet]').forEach");
     expect(html).toContain("state.textContent = '実行できます'");
   });
+
+  it('素数ジェネレーターはWASMに含まれないprime標準ライブラリに依存しない', () => {
+    const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === '素数ジェネレーター');
+
+    expect(snippet).toBeDefined();
+    expect(snippet?.code).not.toContain('require "prime"');
+    expect(snippet?.code).toContain('Enumerator.new');
+    expect(snippet?.code).toContain('Math.sqrt(candidate)');
+  });
+
+  it('Run後にcloseボタンを表示し、実行結果を折り畳める', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('data-close-snippet="0"');
+    expect(html).toContain('aria-label="実行結果を折り畳む">close</button>');
+    expect(html).toContain('resultPanel.hidden = false');
+    expect(html).toContain('if (resultPanel) resultPanel.hidden = true');
+    expect(html).toContain("resultCloseBtn.addEventListener('click'");
+  });
 });
