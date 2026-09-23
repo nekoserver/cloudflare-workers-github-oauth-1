@@ -382,6 +382,7 @@ import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } fro
 import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
 import { buildJevLivePulse, type JevLivePulseRow } from './utils/jevLivePulse';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
+import { syncKeywordBoundary, toggleKeywordBoundary, listUnknownKeywords } from './utils/jevKeywordBoundary';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -656,6 +657,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
   { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
   { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
+  { name: 'jev_keyword_boundary_labels', migration: '0158', description: '「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスター(常に1件)。jev_country_keyword_labelsと同じ形だが、Jev APIではなくユーザー本人の理解状況(アプリ側で設定する値)を保持する点が異なる', syncPolicy: 'manual' },
+  { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '回答文から切り出したキーワードのうち未理解(value=0)/理解済み(value=1)の状態をkeyword単位で保持する。回答閲覧時に未理解として自動登録され、ユーザーがチップをクリックすると理解済みに切り替わる。次の質問候補(未理解キーワード一覧)の抽出に使う', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2481,6 +2484,26 @@ INSERT INTO table_column_keys (table_name, column_name, key_type, fk_target_tabl
 );
 CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_executed ON tree_view_update_log(executed_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_repo ON tree_view_update_log(repo_name, executed_at DESC);`,
+  '0158': `CREATE TABLE IF NOT EXISTS jev_keyword_boundary_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_text TEXT NOT NULL,
+  options_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_keyword_boundary_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  jev_keyword_boundary_label_id INTEGER NOT NULL REFERENCES jev_keyword_boundary_labels(id),
+  value REAL NOT NULL,
+  source_share_id TEXT,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_unique ON jev_keyword_boundary_evaluations(user_id, keyword, jev_keyword_boundary_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_keyword ON jev_keyword_boundary_evaluations(keyword);
+CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_unknown ON jev_keyword_boundary_evaluations(user_id, jev_keyword_boundary_label_id, value, computed_at DESC);
+INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) VALUES
+  ('このキーワードをユーザーは理解済みですか?', '["未理解(探索の境界線の外側)","理解済み(探索の境界線の内側)"]');`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2742,6 +2765,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
   jev_country_keyword_labels: { id: 'pk' },
   jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
+  jev_keyword_boundary_labels: { id: 'pk' },
+  jev_keyword_boundary_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_keyword_boundary_label_id: 'fk', source_share_id: 'fk' },
   jev_vuln_label_groups: { id: 'pk' },
   jev_vuln_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_vuln_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_vuln_label_id: 'fk' },
@@ -2891,6 +2916,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_evaluations: 'ai',
   jev_country_keyword_labels: 'ai',
   jev_country_keyword_evaluations: 'ai',
+  jev_keyword_boundary_labels: 'ai',
+  jev_keyword_boundary_evaluations: 'ai',
   jev_vuln_label_groups: 'ai',
   jev_vuln_labels: 'ai',
   jev_vuln_evaluations: 'ai',
@@ -3115,6 +3142,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   jev_labels: { jev_group_id: 'jev_label_groups' },
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
+  jev_keyword_boundary_evaluations: { user_id: 'user_sessions', jev_keyword_boundary_label_id: 'jev_keyword_boundary_labels', source_share_id: 'ai_chat_shares' },
   jev_vuln_labels: { jev_group_id: 'jev_vuln_label_groups' },
   jev_vuln_evaluations: { user_id: 'user_sessions', jev_vuln_label_id: 'jev_vuln_labels' },
   jev_test_labels: { jev_group_id: 'jev_test_label_groups' },
@@ -3230,6 +3258,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'jev_evaluations.share_id': 'id',
   'jev_evaluations.jev_label_id': 'id',
   'jev_country_keyword_evaluations.jev_country_keyword_label_id': 'id',
+  'jev_keyword_boundary_evaluations.jev_keyword_boundary_label_id': 'id',
+  'jev_keyword_boundary_evaluations.source_share_id': 'id',
   'aichat_answer_vectors.share_id': 'id',
   'aichat_answer_keyword_vectors.share_id': 'id',
   'aichat_moondream_analyses.share_id': 'id',
@@ -10258,6 +10288,69 @@ app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
   const categoryInfo = await getKeywordCategoryColors(c.env.DB, user.sub, keywords);
   const keywordOccurrences = mergeKeywordOccurrenceWithCategory(occurrenceList, categoryInfo);
   return jsonUtf8({ shareId, keywords, keywordOccurrences });
+});
+
+/**
+ * 「探索の境界線」機能(SPEC参照)のsync API。指定したshareId(回答文を
+ * ベクタ化済みで、aichat_answer_keyword_vectorsに予備知識キーワードが
+ * 抽出済みであること)のキーワードそれぞれについて、jev_keyword_boundary_evaluations
+ * に未登録なら「未理解(unknown)」として新規登録し、最終的な状態
+ * (known/unknown)を返す。回答閲覧時に自動で呼ぶ想定。
+ */
+app.post('/api/aichat/keyword-boundary/sync', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ shareId?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+
+  const keywords = await listAnswerKeywordVectors(c.env.DB, user.sub, shareId);
+  const result = await syncKeywordBoundary(c.env.DB, user.sub, keywords, shareId);
+  if (!result.ok) {
+    logger.error('[keyword-boundary/sync] syncKeywordBoundary失敗', { shareId, error: result.error });
+    return jsonUtf8({ error: result.error }, 500);
+  }
+  return jsonUtf8({ shareId, entries: result.entries });
+});
+
+/**
+ * 「探索の境界線」機能の一覧API。まだ「未理解(unknown)」のキーワードを
+ * 更新が新しい順に返す(次の質問候補として使う)。limitクエリで件数を
+ * 絞れる(省略時50、最大200)。
+ */
+app.get('/api/aichat/keyword-boundary/unknown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rawLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+
+  const result = await listUnknownKeywords(c.env.DB, user.sub, limit);
+  if (!result.ok) {
+    logger.error('[keyword-boundary/unknown] listUnknownKeywords失敗', { error: result.error });
+    return jsonUtf8({ error: result.error }, 500);
+  }
+  return jsonUtf8({ keywords: result.keywords });
+});
+
+/**
+ * 「探索の境界線」機能の切り替えAPI。ユーザーがキーワードチップを
+ * クリックしたときに呼ぶ。knownをtrueにすると理解済み、falseにすると
+ * 未理解へ戻せる。
+ */
+app.post('/api/aichat/keyword-boundary/toggle', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ keyword?: string; known?: boolean }>().catch(() => null);
+  const keyword = (body?.keyword ?? '').trim();
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+  if (typeof body?.known !== 'boolean') return jsonUtf8({ error: 'known(boolean) は必須です' }, 400);
+
+  const result = await toggleKeywordBoundary(c.env.DB, user.sub, keyword, body.known);
+  if (!result.ok) {
+    logger.error('[keyword-boundary/toggle] toggleKeywordBoundary失敗', { keyword, error: result.error });
+    return jsonUtf8({ error: result.error }, 500);
+  }
+  return jsonUtf8({ entry: result.entry });
 });
 
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
