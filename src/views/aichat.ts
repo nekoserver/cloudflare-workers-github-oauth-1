@@ -169,6 +169,14 @@ export function getAiChatPage(user: {
     .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(0,0,0,0.07)); color:var(--kw-pal-unc-fg,var(--text-secondary,#6b7280)); border:1.5px solid transparent; }
     [data-theme="dark"] .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(255,255,255,0.1)); color:var(--kw-pal-unc-fg,var(--text-secondary,#9ca3af)); }
     .hist-kw-chip-active { background:var(--kw-pal-act,#6366f1) !important; color:#fff !important; border-color:var(--kw-pal-act,#6366f1) !important; }
+    /* 「探索の境界線」パネル(未理解キーワード一覧)。回答をベクタ化する
+       たびに更新され、チップを押すと「〇〇について説明してください」を
+       入力欄へ差し込む(次の探索を境界線上のキーワードへ誘導する)。 */
+    .kb-panel { display:none; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 14px; border-top:1px solid var(--border-color); background:var(--bg-secondary); }
+    .kb-panel.kb-panel-visible { display:flex; }
+    .kb-panel-label { font-size:11px; color:var(--text-muted); white-space:nowrap; }
+    .kb-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; box-sizing:border-box; border:1.5px solid var(--accent-color,#667eea); color:var(--accent-color,#667eea); background:transparent; }
+    .kb-chip:hover { background:var(--accent-color,#667eea); color:#fff; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -1057,6 +1065,13 @@ export function getAiChatPage(user: {
     <!-- チャット本体 -->
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
+      <!-- 「探索の境界線」パネル: まだ理解していないキーワード(jev_keyword_boundary_evaluations
+           でvalue=0のもの)を並べる。チップを押すと「〇〇について説明してください」が
+           入力欄に入り、次の質問がすぐ送れる。回答のベクタ化(✂️)のたびに更新される。 -->
+      <div class="kb-panel" id="keywordBoundaryPanel">
+        <span class="kb-panel-label">🧭 まだ理解していないキーワード:</span>
+        <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
       <div class="chat-form-area">
         <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
           <div class="chat-image-preview-thumb">
@@ -7121,6 +7136,92 @@ export function getAiChatPage(user: {
       }
     });
 
+    // ===== 探索の境界線(未理解キーワード)パネル =====
+    // ある回答に含まれるキーワードのうち、まだ理解していないもの
+    // (jev_keyword_boundary_evaluationsでvalue=0)を一覧表示し、クリックで
+    // 「〇〇について説明してください」を入力欄に差し込んで次の質問へ
+    // つなげる。回答のベクタ化(✂️、runVectorizeAndBulkRegisterChain)が
+    // 成功するたびにsyncKeywordBoundaryForShareを呼んでこのパネルを更新する。
+    var keywordBoundaryPanel = document.getElementById('keywordBoundaryPanel');
+    var keywordBoundaryChips = document.getElementById('keywordBoundaryChips');
+
+    function fillChatInputWithBoundaryTemplate(keyword) {
+      chatInput.value = keyword + 'について説明してください';
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+      chatInput.focus();
+    }
+
+    // キーワードを「理解済み」に切り替える(境界線の内側へ移動)。パネルからは
+    // 即座に取り除き、サーバー側も更新する(失敗時は一覧を再取得して実際の
+    // 状態に戻す=見た目と実データがずれたままにしない)。
+    function markKeywordBoundaryKnown(keyword) {
+      fetch('/api/aichat/keyword-boundary/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ keyword: keyword, known: true }),
+      })
+        .then(function(r) { if (!r.ok) throw new Error('更新に失敗しました'); })
+        .catch(function() {})
+        .then(function() { loadUnknownKeywordBoundaryPanel(); });
+    }
+
+    function renderKeywordBoundaryChips(keywords) {
+      keywordBoundaryChips.innerHTML = '';
+      keywords.forEach(function(entry) {
+        var wrap = document.createElement('span');
+        wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'kb-chip';
+        chip.textContent = entry.keyword;
+        chip.title = entry.keyword + 'について説明してください(クリックで入力欄へ)';
+        chip.addEventListener('click', function() { fillChatInputWithBoundaryTemplate(entry.keyword); });
+        wrap.appendChild(chip);
+
+        var doneBtn = document.createElement('button');
+        doneBtn.type = 'button';
+        doneBtn.className = 'kb-chip';
+        doneBtn.style.cssText = 'padding:3px 6px;';
+        doneBtn.textContent = '✓';
+        doneBtn.title = entry.keyword + 'を理解済みにする(境界線の内側へ)';
+        doneBtn.addEventListener('click', function(e) { e.stopPropagation(); markKeywordBoundaryKnown(entry.keyword); });
+        wrap.appendChild(doneBtn);
+
+        keywordBoundaryChips.appendChild(wrap);
+      });
+      keywordBoundaryPanel.classList.toggle('kb-panel-visible', keywords.length > 0);
+    }
+
+    function loadUnknownKeywordBoundaryPanel() {
+      fetch('/api/aichat/keyword-boundary/unknown?limit=20', { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { keywords: [] }; })
+        .then(function(data) { renderKeywordBoundaryChips(data.keywords || []); })
+        .catch(function() {
+          // 一覧取得の失敗はパネルを非表示のままにするだけで、チャット自体の
+          // 利用は妨げない(探索の境界線はあくまで補助機能のため)。
+        });
+    }
+
+    // 回答をベクタ化(✂️)してキーワード抽出が終わったあと、そのshareIdの
+    // キーワードをjev_keyword_boundary_evaluationsへ同期登録し(未登録分は
+    // 未理解として新規登録)、パネルを最新化する。同期自体の失敗は
+    // ベクタ化結果に影響させない(補助機能のため)。
+    function syncKeywordBoundaryForShare(shareId) {
+      fetch('/api/aichat/keyword-boundary/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ shareId: shareId }),
+      })
+        .then(function() { loadUnknownKeywordBoundaryPanel(); })
+        .catch(function() {});
+    }
+
+    loadUnknownKeywordBoundaryPanel();
+
     // ===== 写真添付(＋ボタン) =====
     var MAX_IMAGE_FILE_BYTES = 6 * 1024 * 1024;
     var ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
@@ -7396,6 +7497,9 @@ export function getAiChatPage(user: {
                 isAnswerVectorizedForScissors = true;
                 applyScissorsState();
                 showAichatToast('✂️切り出し完了', 'aichat-scissors-toast-cyan');
+                // 抽出済みキーワードを「探索の境界線」(jev_keyword_boundary_evaluations)
+                // へ同期登録する。未登録なら未理解として新規登録され、パネルが更新される。
+                syncKeywordBoundaryForShare(shareId);
                 var keywords = result.data.keywords || [];
                 if (!keywords.length) {
                   showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
