@@ -80,12 +80,24 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html).toContain("sampleDetailBottomCloseBtn.addEventListener('click'");
   });
 
-  it('各コードブロックのRunボタンを右上に置き、Ruby 4バッジを表示する', () => {
+  it('各コードブロックのRunボタンを右上に置き、互換Rubyバージョンを薄緑のバッジで表示する', () => {
     const html = getRubyWasmPage('tester');
 
     expect(html).toContain('.snippet-run { position: absolute; top: 8px; right: 8px;');
-    expect(html.match(/class="ruby4-badge">Ruby 4<\/span>/g)).toHaveLength(RUBY_REPL_SNIPPETS.length + 1);
+    expect(html.match(/class="ruby-version-badge">Ruby 3\.4<\/small>/g)).toHaveLength(RUBY_REPL_SNIPPETS.length * 2);
+    expect(html.match(/class="ruby-version-badge">Ruby 4<\/small>/g)).toHaveLength(RUBY_REPL_SNIPPETS.length * 2);
+    expect(html).toContain('.ruby-version-badge { padding: 2px 6px; border: 1px solid #86efac;');
+    expect(html).toContain('.ruby-version-badges { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto;');
+    expect(html).not.toContain('class="ruby4-badge"');
     expect(html).toContain('<div class="snippet-code-wrap"><button type="button" class="snippet-run"');
+  });
+
+  it('詳細モーダルにも選択サンプルの互換バージョンバッジを引き継ぐ', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('id="sampleDetailVersions" aria-label="動作確認済みRubyバージョン"');
+    expect(html).toContain("sampleDetailVersions.innerHTML = button.querySelector('.ruby-version-badges').innerHTML");
+    expect(html).toContain('.ruby-version-badge.ruby4-only { border-color: #93c5fd;');
   });
 
   it('Ruby 4で動く追加サンプルと学習用バッジを豊富に掲載する', () => {

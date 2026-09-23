@@ -133,12 +133,23 @@ function highlightRuby(code: string): string {
     .replace(/\u0000(\d+)\u0000/g, (_match, index) => tokens[Number(index)]);
 }
 
+/** 実行確認済みのRubyだけを、サンプルの互換バージョンとして表示する。 */
+function renderRubyVersionBadges(snippet: RubyReplSnippet): string {
+  const results = RUBY_SAMPLE_AUDIT_RESULTS[snippet.title];
+  const compatibleVersions = RUBY_SAMPLE_AUDIT_VERSIONS.filter((version) => results[version.key] === 'ok');
+  const ruby4Only = compatibleVersions.length === 1 && compatibleVersions[0].key === 'ruby40Wasm';
+  return `<span class="ruby-version-badges" aria-label="動作確認済みRubyバージョン">${compatibleVersions.map((version) => {
+    const shortLabel = version.key === 'ruby34' ? 'Ruby 3.4' : 'Ruby 4';
+    return `<small class="ruby-version-badge${ruby4Only ? ' ruby4-only' : ''}">${shortLabel}</small>`;
+  }).join('')}</span>`;
+}
+
 function renderRubyReplSnippets(): string {
   return RUBY_REPL_SNIPPETS.map((snippet, index) => {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
     const categoryIndex = [...new Set(RUBY_REPL_SNIPPETS.map((item) => item.category))].indexOf(snippet.category);
     return `<article class="snippet-card" data-snippet-card="${index}">
-      <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3><span class="ruby4-badge">Ruby 4</span></div>
+      <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3>${renderRubyVersionBadges(snippet)}</div>
       <p>${escapeHtml(snippet.description)}</p>
       <div class="snippet-badges">${(snippet.badges || []).map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</div>
       <div class="snippet-code-wrap"><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre></div>
@@ -159,7 +170,8 @@ function renderRubySampleChoices(): string {
     const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
     return `<button type="button" class="sample-choice" data-open-sample="${index}"${firstInCategory ? ` id="sample-category-${categoryIndex}"` : ''}>
     <span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span>
-    <span class="sample-choice-copy"><strong><span class="sample-choice-title">${escapeHtml(snippet.title)}</span> <small class="ruby4-badge">Ruby 4</small></strong><span>${escapeHtml(snippet.description)}</span></span>
+    <span class="sample-choice-copy"><strong><span class="sample-choice-title">${escapeHtml(snippet.title)}</span></strong><span>${escapeHtml(snippet.description)}</span></span>
+    ${renderRubyVersionBadges(snippet)}
   </button>`;
   }).join('\n');
 }
@@ -416,8 +428,9 @@ export function getRubyWasmPage(username: string): string {
     .snippet-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
     .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
     .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; }
-    .ruby4-badge { flex: none; padding: 2px 6px; border: 1px solid #a78bfa; border-radius: 999px; background: #ede9fe; color: #5b21b6; font-size: 9px; font-weight: 800; }
-    .snippet-heading .ruby4-badge { margin-left: auto; }
+    .ruby-version-badges { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
+    .ruby-version-badge { padding: 2px 6px; border: 1px solid #86efac; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 9px; font-weight: 800; white-space: nowrap; }
+    .ruby-version-badge.ruby4-only { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
     .snippet-badges { display: flex; flex-wrap: wrap; gap: 5px; min-height: 19px; margin-top: 7px; }
     .snippet-badges span { padding: 2px 6px; border-radius: 999px; background: var(--bg-secondary); color: var(--text-muted); font-size: 9px; font-weight: 700; }
@@ -539,7 +552,7 @@ export function getRubyWasmPage(username: string): string {
   <div class="modal-overlay" id="sampleDetailOverlay" role="dialog" aria-modal="true" aria-labelledby="sampleDetailTitle">
     <div class="modal-box sample-detail-box">
       <button type="button" class="modal-close sample-detail-corner-close" id="sampleDetailCloseBtn" aria-label="サンプルを閉じる">✕</button>
-      <div class="sample-detail-heading"><button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><span class="ruby4-badge">Ruby 4</span></div>
+      <div class="sample-detail-heading"><button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><span class="ruby-version-badges" id="sampleDetailVersions" aria-label="動作確認済みRubyバージョン"></span></div>
       <p class="sample-detail-description" id="sampleDetailDescription"></p>
       <div class="sample-detail-code-wrap"><button type="button" class="snippet-run" id="sampleRunBtn" disabled>Run ▶︎</button><pre class="sample-detail-code"><code class="ruby-code" id="sampleDetailCode"></code></pre></div>
       <div class="sample-detail-result-wrap" id="sampleDetailResultWrap" hidden><button type="button" class="sample-detail-result-close" id="sampleDetailResultCloseBtn">close</button><output class="snippet-output" id="sampleDetailResult"></output></div>
@@ -725,6 +738,7 @@ export function getRubyWasmPage(username: string): string {
     var sampleDetailCloseBtn = document.getElementById('sampleDetailCloseBtn');
     var sampleDetailCategory = document.getElementById('sampleDetailCategory');
     var sampleDetailTitle = document.getElementById('sampleDetailTitle');
+    var sampleDetailVersions = document.getElementById('sampleDetailVersions');
     var sampleDetailDescription = document.getElementById('sampleDetailDescription');
     var sampleDetailCode = document.getElementById('sampleDetailCode');
     var sampleDetailResultWrap = document.getElementById('sampleDetailResultWrap');
@@ -829,6 +843,7 @@ export function getRubyWasmPage(username: string): string {
         sampleDetailCategory.textContent = button.querySelector('.snippet-category').textContent;
         sampleDetailCategory.setAttribute('data-category-index', button.querySelector('.snippet-category').getAttribute('data-category-index'));
         sampleDetailTitle.textContent = button.querySelector('.sample-choice-title').textContent;
+        sampleDetailVersions.innerHTML = button.querySelector('.ruby-version-badges').innerHTML;
         sampleDetailDescription.textContent = button.querySelector('.sample-choice-copy > span').textContent;
         sampleDetailCode.innerHTML = card.querySelector('.ruby-code').innerHTML;
         sampleDetailResultWrap.hidden = true;
