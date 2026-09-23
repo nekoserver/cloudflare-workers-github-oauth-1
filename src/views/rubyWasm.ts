@@ -107,8 +107,8 @@ function renderRubyReplSnippets(): string {
     return `<article class="snippet-card" data-snippet-card="${index}">
       <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3></div>
       <p>${escapeHtml(snippet.description)}</p>
-      <div class="snippet-code-wrap"><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button></div>
-      <span class="snippet-state">WASMを準備中…</span>
+      <div class="snippet-code-wrap"><pre><code class="ruby-code">${highlightRuby(snippet.code)}</code></pre></div>
+      <div class="snippet-actions"><span class="snippet-state">WASMを準備中…</span><button type="button" class="snippet-run" data-run-snippet="${index}" disabled>Run ▶︎</button></div>
       <div class="snippet-result" data-snippet-result="${index}" hidden>
         <button type="button" class="snippet-output-close" data-close-snippet="${index}" aria-label="実行結果を折り畳む">close</button>
         <output class="snippet-output" data-snippet-output="${index}"></output>
@@ -123,7 +123,7 @@ function renderRubySampleChoices(): string {
   return RUBY_REPL_SNIPPETS.map((snippet, index) => {
     const categoryIndex = categories.indexOf(snippet.category);
     const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
-    return `<button type="button" class="sample-choice" data-load-sample="${index}"${firstInCategory ? ` id="sample-category-${categoryIndex}"` : ''}>
+    return `<button type="button" class="sample-choice" data-open-sample="${index}"${firstInCategory ? ` id="sample-category-${categoryIndex}"` : ''}>
     <span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span>
     <span class="sample-choice-copy"><strong>${escapeHtml(snippet.title)}</strong><span>${escapeHtml(snippet.description)}</span></span>
   </button>`;
@@ -316,6 +316,14 @@ export function getRubyWasmPage(username: string): string {
     .sample-choice-copy { display: grid; gap: 4px; min-width: 0; }
     .sample-choice-copy strong { font-size: 14px; }
     .sample-choice-copy > span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    .sample-detail-box { width: min(640px, 92vw); }
+    .sample-detail-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+    .sample-detail-heading h2 { margin: 0; }
+    .sample-detail-description { margin: 0 0 12px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+    .sample-detail-code { max-height: 46vh; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .sample-detail-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+    .sample-load-button { min-width: 42px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-weight: 700; cursor: pointer; }
+    .sample-detail-result { margin-top: 10px; }
     .modal-snippet-list { list-style: none; padding: 0; margin: 0 0 14px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
     .modal-snippet-list li { font-size: 13px; border-bottom: 1px solid var(--border-color); }
     .modal-snippet-list li:last-child { border-bottom: none; }
@@ -351,14 +359,15 @@ export function getRubyWasmPage(username: string): string {
     .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
     .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-    .snippet-code-wrap { position: relative; margin: 12px 0 7px; }
-    .snippet-card pre { max-height: 260px; margin: 0; padding: 48px 14px 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .snippet-code-wrap { margin: 10px 0 7px; }
+    .snippet-card pre { max-height: 260px; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .ruby-keyword { color: #ff7ab2; font-weight: 600; }
     .ruby-string { color: #b4f1a1; }
     .ruby-comment { color: #8290a6; font-style: italic; }
     .ruby-number { color: #ffd580; }
     .ruby-literal { color: #82aaff; font-weight: 600; }
-    .snippet-run { position: absolute; top: 9px; right: 9px; padding: 7px 12px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
+    .snippet-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .snippet-run { padding: 7px 12px; border: 0; border-radius: 8px; background: #667eea; color: #fff; font-weight: 700; cursor: pointer; }
     .snippet-run:hover:not(:disabled) { background: #5568d3; }
     .snippet-run:disabled { opacity: .5; cursor: not-allowed; }
     .snippet-state { color: var(--text-muted); font-size: 11px; }
@@ -438,6 +447,19 @@ export function getRubyWasmPage(username: string): string {
     <div class="modal-box sample-modal-box">
       <div class="sample-modal-header"><h2 id="sampleModalTitle">💎 Ruby サンプルを選ぶ</h2><nav class="sample-category-links" aria-label="カテゴリー別サンプル">${renderRubySampleCategoryLinks()}</nav><button type="button" class="modal-close" id="sampleModalCloseBtn" aria-label="閉じる">✕</button></div>
       <div class="sample-choice-list">${renderRubySampleChoices()}</div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="sampleDetailOverlay" role="dialog" aria-modal="true" aria-labelledby="sampleDetailTitle">
+    <div class="modal-box sample-detail-box">
+      <div class="sample-detail-heading"><span class="snippet-category" id="sampleDetailCategory"></span><h2 id="sampleDetailTitle"></h2><button type="button" class="modal-close" id="sampleDetailCloseBtn" aria-label="サンプルを閉じる">✕</button></div>
+      <p class="sample-detail-description" id="sampleDetailDescription"></p>
+      <pre class="sample-detail-code"><code class="ruby-code" id="sampleDetailCode"></code></pre>
+      <div class="sample-detail-actions">
+        <button type="button" class="sample-load-button" id="sampleLoadBtn" aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button>
+        <button type="button" class="run-btn" id="sampleRunBtn" disabled>Run ▶︎</button>
+      </div>
+      <output class="snippet-output sample-detail-result" id="sampleDetailResult" hidden></output>
     </div>
   </div>
 
@@ -615,6 +637,16 @@ export function getRubyWasmPage(username: string): string {
     var openSamplesBtn = document.getElementById('openSamplesBtn');
     var sampleModalOverlay = document.getElementById('sampleModalOverlay');
     var sampleModalCloseBtn = document.getElementById('sampleModalCloseBtn');
+    var sampleDetailOverlay = document.getElementById('sampleDetailOverlay');
+    var sampleDetailCloseBtn = document.getElementById('sampleDetailCloseBtn');
+    var sampleDetailCategory = document.getElementById('sampleDetailCategory');
+    var sampleDetailTitle = document.getElementById('sampleDetailTitle');
+    var sampleDetailDescription = document.getElementById('sampleDetailDescription');
+    var sampleDetailCode = document.getElementById('sampleDetailCode');
+    var sampleDetailResult = document.getElementById('sampleDetailResult');
+    var sampleLoadBtn = document.getElementById('sampleLoadBtn');
+    var sampleRunBtn = document.getElementById('sampleRunBtn');
+    var selectedSampleCode = '';
 
     // ---- 実行結果モーダル(一覧モーダルよりさらに上のレイヤー) ----
     var resultModalOverlay = document.getElementById('resultModalOverlay');
@@ -641,6 +673,7 @@ export function getRubyWasmPage(username: string): string {
         wasmStatus.className = 'wasm-status ready';
         runBtn.disabled = false;
         modalRunBtn.disabled = false;
+        sampleRunBtn.disabled = false;
         document.querySelectorAll('[data-run-snippet]').forEach(function(button) {
           button.disabled = false;
           var card = button.closest('.snippet-card');
@@ -699,21 +732,44 @@ export function getRubyWasmPage(username: string): string {
     sampleModalOverlay.addEventListener('click', function(e) {
       if (e.target === sampleModalOverlay) closeModal(sampleModalOverlay);
     });
-    document.querySelectorAll('[data-load-sample]').forEach(function(button) {
+    document.querySelectorAll('[data-open-sample]').forEach(function(button) {
       button.addEventListener('click', function() {
-        var index = button.getAttribute('data-load-sample');
+        var index = button.getAttribute('data-open-sample');
         var codeNode = document.querySelector('[data-snippet-code="' + index + '"]');
-        if (!codeNode) return;
+        var card = codeNode && codeNode.closest('.snippet-card');
+        if (!codeNode || !card) return;
+        selectedSampleCode = JSON.parse(codeNode.textContent || '""');
+        sampleDetailCategory.textContent = button.querySelector('.snippet-category').textContent;
+        sampleDetailCategory.setAttribute('data-category-index', button.querySelector('.snippet-category').getAttribute('data-category-index'));
+        sampleDetailTitle.textContent = button.querySelector('strong').textContent;
+        sampleDetailDescription.textContent = button.querySelector('.sample-choice-copy > span').textContent;
+        sampleDetailCode.innerHTML = card.querySelector('.ruby-code').innerHTML;
+        sampleDetailResult.hidden = true;
+        sampleDetailResult.textContent = '';
+        openModal(sampleDetailOverlay);
+      });
+    });
+    sampleDetailCloseBtn.addEventListener('click', function() { closeModal(sampleDetailOverlay); });
+    sampleDetailOverlay.addEventListener('click', function(e) {
+      if (e.target === sampleDetailOverlay) closeModal(sampleDetailOverlay);
+    });
+    sampleRunBtn.addEventListener('click', function() {
+      var result = runRubyCode(selectedSampleCode);
+      sampleDetailResult.hidden = false;
+      sampleDetailResult.classList.toggle('error', !result.ok);
+      sampleDetailResult.textContent = result.output;
+    });
+    sampleLoadBtn.addEventListener('click', function() {
         // 以前の入力と実行状態を一度すべて消してから、選択コードだけを入れる。
         inputCode.value = '';
         resultBlock.style.display = 'none';
         resultValue.textContent = '';
         saveBtn.style.display = 'none';
         saveNote.textContent = '';
-        inputCode.value = JSON.parse(codeNode.textContent || '""');
+        inputCode.value = selectedSampleCode;
+        closeModal(sampleDetailOverlay);
         closeModal(sampleModalOverlay);
         inputCode.focus();
-      });
     });
 
     // 呼び出し側にはモーダル操作を漏らさず、ユーザーの承認結果だけを返す。

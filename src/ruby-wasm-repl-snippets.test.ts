@@ -35,11 +35,13 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).not.toContain("state.textContent = '実行できます'");
   });
 
-  it('Runボタンを各コードブロックの右上に配置し、closeリンクの下線を表示しない', () => {
+  it('Runボタンをコードブロック外に配置してコード内の余白を抑え、closeリンクの下線を表示しない', () => {
     const html = getRubyWasmPage('tester');
 
     expect(html).toContain('<div class="snippet-code-wrap"><pre>');
-    expect(html).toContain('.snippet-run { position: absolute; top: 9px; right: 9px;');
+    expect(html).toContain('</pre></div>\n      <div class="snippet-actions">');
+    expect(html).toContain('.snippet-card pre { max-height: 260px; margin: 0; padding: 14px;');
+    expect(html).not.toContain('.snippet-run { position: absolute;');
     expect(html).toContain('.snippet-output-close { display: block;');
     expect(html).toContain('text-decoration: none;');
     expect(html).not.toContain('text-decoration: underline;');

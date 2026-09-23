@@ -9,7 +9,7 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html).not.toContain('<select id="practiceExample">');
     expect(html).toContain('id="sampleModalOverlay"');
     expect(html).toContain('id="openSamplesBtn"');
-    expect(html.match(/data-load-sample=/g)).toHaveLength(RUBY_REPL_SNIPPETS.length);
+    expect(html.match(/data-open-sample=/g)).toHaveLength(RUBY_REPL_SNIPPETS.length);
     for (const snippet of RUBY_REPL_SNIPPETS) {
       expect(html).toContain(snippet.title);
       expect(html).toContain(snippet.description);
@@ -17,16 +17,42 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     }
   });
 
-  it('タップしたサンプルでREPLと以前の実行状態をクリアしてからコードを読み込む', () => {
+  it('行タップでは最上位の詳細パネルを開き、閉じれば別のサンプルを選べる', () => {
     const html = getRubyWasmPage('tester');
 
-    expect(html).toContain("document.querySelectorAll('[data-load-sample]')");
+    expect(html).toContain('id="sampleDetailOverlay"');
+    expect(html).toContain("document.querySelectorAll('[data-open-sample]')");
+    expect(html).toContain('openModal(sampleDetailOverlay)');
+    expect(html).toContain("sampleDetailCloseBtn.addEventListener('click'");
+    const rowHandler = html.slice(
+      html.indexOf("document.querySelectorAll('[data-open-sample]')"),
+      html.indexOf("sampleDetailCloseBtn.addEventListener('click'")
+    );
+    expect(rowHandler).not.toContain('closeModal(sampleModalOverlay)');
+  });
+
+  it('詳細パネルの▲ボタンでREPLを初期化してコードを読み込み、両モーダルを閉じる', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('id="sampleLoadBtn"');
+    expect(html).toContain('aria-label="REPLにコピーしてサンプル選択を閉じる">▲</button>');
+    expect(html).toContain("sampleLoadBtn.addEventListener('click'");
     expect(html).toContain("inputCode.value = ''");
     expect(html).toContain("resultBlock.style.display = 'none'");
     expect(html).toContain("saveBtn.style.display = 'none'");
-    expect(html).toContain("inputCode.value = JSON.parse(codeNode.textContent || '\"\"')");
+    expect(html).toContain('inputCode.value = selectedSampleCode');
+    expect(html).toContain('closeModal(sampleDetailOverlay)');
     expect(html).toContain('closeModal(sampleModalOverlay)');
     expect(html).toContain('inputCode.focus()');
+  });
+
+  it('詳細パネル内から選択したサンプルを実行して結果を表示できる', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('id="sampleRunBtn" disabled>Run ▶︎</button>');
+    expect(html).toContain("sampleRunBtn.addEventListener('click'");
+    expect(html).toContain('var result = runRubyCode(selectedSampleCode)');
+    expect(html).toContain('sampleDetailResult.textContent = result.output');
   });
 
   it('全サンプルのコードをRubyシンタックスハイライトし、実行用の元コードも保持する', () => {
