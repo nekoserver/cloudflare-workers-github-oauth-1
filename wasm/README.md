@@ -118,6 +118,11 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
   gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
   `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
+- `msb-wasm`: microsandbox の `msb` CLI 引数配列を解析し、コマンド・位置引数・
+  オプションからなる JSON 実行要求へ変換する純Rust実装。WASMから直接microVMを
+  起動することはできないため、デーモン通信・microVMライフサイクル・ファイルI/O・
+  ネットワークはホスト側が担当する。`parse_msb_args`はシェル文字列ではなくJSONの
+  文字列配列を受け取り、`--`以降をサンドボックス内コマンドとしてそのまま保持する
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
