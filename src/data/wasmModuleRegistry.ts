@@ -144,6 +144,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 108613,
     builtAt: '2026-09-17',
   },
+  {
+    id: 'msb',
+    name: 'msb --help / --tree (microsandbox CLI, Rust)',
+    description:
+      'microsandbox(https://github.com/microsandbox/microsandbox)のCLI `msb` のヘルプ・コマンドツリー表示だけを再実装したもの。msb本体はKVM/libkrun/Apple Silicon仮想化/WHPに依存するmicroVMランタイムでWASMからは実行できないため、公式READMEのコマンド一覧に基づく静的なヘルプ・ツリー出力(msb_help/msb_tree/msb_command_help)のみを提供する。サンドボックスの実行そのものは対象外',
+    wasmPath: 'public/wasm/msb_bg.wasm',
+    sourceDir: 'wasm/msb-wasm',
+    sourceFile: 'wasm/msb-wasm/src/lib.rs',
+    approxSize: '約61KB',
+    sizeBytes: 62596,
+    builtAt: '2026-09-23',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {

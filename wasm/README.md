@@ -118,6 +118,14 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
   gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
   `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
+- `msb-wasm`: microsandbox(https://github.com/microsandbox/microsandbox)の
+  CLI `msb`のヘルプ・コマンドツリー表示だけを再実装したもの。`msb`本体は
+  KVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVM
+  ランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README
+  (Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力
+  (`msb_help`・`msb_tree`・`msb_command_help`)のみを提供する。実際の
+  サンドボックス起動・イメージ取得・スナップショット等は対象外。ブラウザ
+  ページ・`/neko`サブコマンドからはまだ呼ばれておらず配線は未実施
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
