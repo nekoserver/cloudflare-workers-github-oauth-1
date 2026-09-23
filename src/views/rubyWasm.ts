@@ -177,6 +177,13 @@ export function getRubyWasmPage(username: string): string {
     .result-value.error { color: #991b1b; }
     .theme-toggle-inline { display: flex; align-items: center; }
     .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .practice-picker { margin-bottom: 12px; }
+    .practice-picker label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .practice-picker select {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px;
+      background: var(--bg-secondary); color: var(--text-primary); font-size: 14px;
+    }
+    .practice-hint { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
     .btn-secondary {
       background: var(--bg-secondary); color: var(--text-primary);
       border: 1px solid var(--border-color); border-radius: 8px;
@@ -268,6 +275,16 @@ export function getRubyWasmPage(username: string): string {
       <div class="toolbar">
         <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
       </div>
+      <div class="practice-picker">
+        <label for="practiceExample">練習サンプル（選ぶとエディターへ読み込みます）</label>
+        <select id="practiceExample">
+          <option value="">サンプルを選択…</option>
+          <option value="word_count">単語の出現回数を数える</option>
+          <option value="json_format">JSONを読みやすく整形する</option>
+          <option value="expense_total">支出をカテゴリ別に集計する</option>
+        </select>
+        <div class="practice-hint" id="practiceHint">配列・Hash・標準ライブラリなどを、小さな実用品で練習できます。</div>
+      </div>
       <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
       <div class="toolbar">
         <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
@@ -335,7 +352,40 @@ export function getRubyWasmPage(username: string): string {
     var inputCode = document.getElementById('inputCode');
     var resultBlock = document.getElementById('resultBlock');
     var resultValue = document.getElementById('resultValue');
+    var practiceExample = document.getElementById('practiceExample');
+    var practiceHint = document.getElementById('practiceHint');
     var rubyVM = null;
+
+    // 外部通信やファイルアクセスを必要とせず、ブラウザ内だけで完結する題材に
+    // 絞る。完成コードを少しずつ改造し、入力や出力を変えて試せる例にする。
+    var practiceExamples = {
+      word_count: {
+        hint: 'split・map・tallyを使うテキスト集計です。除外語や並び順を追加してみましょう。',
+        code: 'text = "Ruby is fun. Ruby is readable!"\\n\\nwords = text.downcase.scan(/[a-z]+/)\\nwords.tally.sort_by { |word, count| [-count, word] }.each do |word, count|\\n  puts "#{word}: #{count}"\\nend'
+      },
+      json_format: {
+        hint: 'JSON標準ライブラリと例外処理の練習です。キーの追加や値の抽出も試せます。',
+        code: 'require "json"\\n\\nraw = %q({"name":"Ruby","runs_in":"WebAssembly","useful":true})\\n\\nbegin\\n  data = JSON.parse(raw)\\n  puts JSON.pretty_generate(data)\\nrescue JSON::ParserError => error\\n  warn "JSON error: #{error.message}"\\nend'
+      },
+      expense_total: {
+        hint: '配列・Hash・group_by・sumを使う集計です。税率や月別集計を足してみましょう。',
+        code: 'expenses = [\\n  { category: "食費", amount: 850 },\\n  { category: "交通", amount: 420 },\\n  { category: "食費", amount: 630 },\\n  { category: "書籍", amount: 1_500 }\\n]\\n\\nexpenses.group_by { |item| item[:category] }.each do |category, items|\\n  total = items.sum { |item| item[:amount] }\\n  puts "#{category}: #{total}円"\\nend\\n\\nputs "合計: #{expenses.sum { |item| item[:amount] }}円"'
+      }
+    };
+
+    practiceExample.addEventListener('change', function() {
+      var example = practiceExamples[practiceExample.value];
+      if (!example) {
+        practiceHint.textContent = '配列・Hash・標準ライブラリなどを、小さな実用品で練習できます。';
+        return;
+      }
+      inputCode.value = example.code;
+      practiceHint.textContent = example.hint;
+      resultBlock.style.display = 'none';
+      saveBtn.style.display = 'none';
+      saveNote.textContent = '';
+      inputCode.focus();
+    });
 
     // 複数のモーダル・オーバーレイが同時に開いた際、後から開いた方が必ず
     // 手前に来るようz-indexを動的に算出する(固定値は書かない。CLAUDE.mdルール26)。
