@@ -26,12 +26,23 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).toContain("output.classList.toggle('error', !result.ok)");
   });
 
-  it('WASM準備完了までは全Runボタンを無効化し、完了後にまとめて有効化する', () => {
+  it('WASM準備完了までは全Runボタンを無効化し、完了後に案内文を消してまとめて有効化する', () => {
     const html = getRubyWasmPage('tester');
 
     expect(html).toContain('class="snippet-run" data-run-snippet="0" disabled');
     expect(html).toContain("document.querySelectorAll('[data-run-snippet]').forEach");
-    expect(html).toContain("state.textContent = '実行できます'");
+    expect(html).toContain("state.textContent = ''");
+    expect(html).not.toContain("state.textContent = '実行できます'");
+  });
+
+  it('Runボタンを各コードブロックの右上に配置し、closeリンクの下線を表示しない', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('<div class="snippet-code-wrap"><pre>');
+    expect(html).toContain('.snippet-run { position: absolute; top: 9px; right: 9px;');
+    expect(html).toContain('.snippet-output-close { display: block;');
+    expect(html).toContain('text-decoration: none;');
+    expect(html).not.toContain('text-decoration: underline;');
   });
 
   it('素数ジェネレーターはWASMに含まれないprime標準ライブラリに依存しない', () => {
