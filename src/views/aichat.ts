@@ -179,7 +179,9 @@ export function getAiChatPage(user: {
     .kb-chip-check { width:12px; height:12px; margin:0; cursor:pointer; accent-color:var(--accent-color,#667eea); flex-shrink:0; }
     .kb-chip { border:none; background:transparent; color:var(--accent-color,#667eea); font-size:11px; cursor:pointer; padding:0; }
     .kb-chip:hover { text-decoration:underline; }
-    .kb-auto-explore-btn { margin-left:auto; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
+    .kb-auto-explore-input { margin-left:auto; width:min(180px,30vw); min-width:110px; padding:4px 9px; border:1px solid var(--border-color); border-radius:12px; background:var(--card-bg); color:var(--text-primary); font-size:11px; }
+    .kb-auto-explore-input:focus { outline:none; border-color:var(--accent-color,#667eea); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent-color,#667eea) 20%, transparent); }
+    .kb-auto-explore-btn { padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
     .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
     .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
     .kb-auto-explore-btn.kb-running { border-color:#dc2626; color:#dc2626; }
@@ -1082,7 +1084,8 @@ export function getAiChatPage(user: {
       <div class="kb-panel" id="keywordBoundaryPanel">
         <span class="kb-panel-label">🧭 まだ分類されていないキーワード:</span>
         <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
+        <input type="search" class="kb-auto-explore-input" id="autoExploreKeywordInput" placeholder="探索するキーワード" aria-label="自動探索の開始キーワード">
+        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="入力したキーワード、またはチェックしたキーワードを起点に、最大3階層まで自動で問い合わせる">🧭 自動探索</button>
       </div>
       <!-- 自動探索の途中経過ログ。AI問い合わせ→Jev処理→キー切り出しの
            各段階の開始・完了時刻と所要時間を、実行中だけ表示する。 -->
@@ -7211,7 +7214,9 @@ export function getAiChatPage(user: {
       Object.keys(keywordBoundarySelection).forEach(function(keyword) {
         if (!stillPresent[keyword]) delete keywordBoundarySelection[keyword];
       });
-      keywordBoundaryPanel.classList.toggle('kb-panel-visible', keywords.length > 0);
+      // 候補がすべて1週間の再探索待ちでも、手入力から探索を始められるよう
+      // 検索窓を含むパネル自体は表示しておく。
+      keywordBoundaryPanel.classList.add('kb-panel-visible');
     }
 
     function loadUnknownKeywordBoundaryPanel() {
@@ -7243,6 +7248,7 @@ export function getAiChatPage(user: {
     // 回答に対してだけ行う設計を守る。Jev処理をすっ飛ばして先にキー切り出し
     // だけ行うことはしない)。
     var autoExploreBtn = document.getElementById('autoExploreBtn');
+    var autoExploreKeywordInput = document.getElementById('autoExploreKeywordInput');
     var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
@@ -7280,20 +7286,32 @@ export function getAiChatPage(user: {
     }
 
     function autoExploreProcessKeyword(keyword) {
-      return autoExploreRunStage(keyword, 'AI問い合わせ', function() {
-        return fetch('/api/aichat', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: keyword + 'について説明してください', model: lastModel, systemPromptMode: langModeSelect.value, source: 'auto-explore' }),
-        })
-          .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
-          .then(function(res) {
-            if (res.status < 200 || res.status >= 300 || res.data.error || !res.data.shareId) {
-              throw new Error((res.data && res.data.error) || keyword + 'への問い合わせに失敗しました');
-            }
-            return { shareId: res.data.shareId, model: res.data.usedModel || lastModel };
-          });
+      return fetch('/api/aichat/keyword-boundary/auto-explore/claim', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: keyword }),
+      }).then(function(r) {
+        return r.json().then(function(data) {
+          if (r.status === 409) throw new Error(keyword + 'は直近1週間に探索済みです');
+          if (!r.ok) throw new Error(data.error || keyword + 'の探索履歴を確認できませんでした');
+        });
+      }).then(function() {
+        return autoExploreRunStage(keyword, 'AI問い合わせ', function() {
+          return fetch('/api/aichat', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: keyword + 'について説明してください', model: lastModel, systemPromptMode: langModeSelect.value, source: 'auto-explore' }),
+          })
+            .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+            .then(function(res) {
+              if (res.status < 200 || res.status >= 300 || res.data.error || !res.data.shareId) {
+                throw new Error((res.data && res.data.error) || keyword + 'への問い合わせに失敗しました');
+              }
+              return { shareId: res.data.shareId, model: res.data.usedModel || lastModel };
+            });
+        });
       }).then(function(answer) {
         return autoExploreRunStage(keyword, 'Jev処理', function() {
           return fetch('/api/aichat/jev-score', {
@@ -7355,17 +7373,19 @@ export function getAiChatPage(user: {
       autoExploreBtn.disabled = false;
       autoExploreBtn.classList.remove('kb-running');
       autoExploreBtn.textContent = '🧭 自動探索';
-      autoExploreBtn.title = 'チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる';
+      autoExploreBtn.title = '入力したキーワード、またはチェックしたキーワードを起点に、最大3階層まで自動で問い合わせる';
     }
 
     function runAutoExplore() {
-      var seedKeywords = Object.keys(keywordBoundarySelection);
+      var typedKeyword = autoExploreKeywordInput.value.trim();
+      var seedKeywords = typedKeyword ? [typedKeyword] : Object.keys(keywordBoundarySelection);
       if (seedKeywords.length === 0) {
-        showAichatToast('自動探索するキーワードをチェックしてください', 'aichat-scissors-toast-neutral');
+        showAichatToast('キーワードを入力するか、自動探索するキーワードをチェックしてください', 'aichat-scissors-toast-neutral');
         return;
       }
 
       autoExploreRunning = true;
+      autoExploreKeywordInput.disabled = true;
       autoExploreCancelRequested = false;
       setAutoExploreButtonRunning();
       autoExploreProgressLog.innerHTML = '';
@@ -7413,6 +7433,7 @@ export function getAiChatPage(user: {
         .finally(function() {
           autoExploreRunning = false;
           autoExploreCancelRequested = false;
+          autoExploreKeywordInput.disabled = false;
           setAutoExploreButtonIdle();
         });
     }
@@ -7425,6 +7446,12 @@ export function getAiChatPage(user: {
         return;
       }
       runAutoExplore();
+    });
+    autoExploreKeywordInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!autoExploreRunning) runAutoExplore();
+      }
     });
 
     // ===== 写真添付(＋ボタン) =====
