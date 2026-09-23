@@ -175,8 +175,10 @@ export function getAiChatPage(user: {
     .kb-panel { display:none; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 14px; border-top:1px solid var(--border-color); background:var(--bg-secondary); }
     .kb-panel.kb-panel-visible { display:flex; }
     .kb-panel-label { font-size:11px; color:var(--text-muted); white-space:nowrap; }
-    .kb-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; box-sizing:border-box; border:1.5px solid var(--accent-color,#667eea); color:var(--accent-color,#667eea); background:transparent; }
-    .kb-chip:hover { background:var(--accent-color,#667eea); color:#fff; }
+    .kb-chip-wrap { display:inline-flex; align-items:center; gap:3px; padding:3px 10px 3px 6px; border-radius:12px; font-size:11px; white-space:nowrap; box-sizing:border-box; border:1.5px solid var(--accent-color,#667eea); background:transparent; }
+    .kb-chip-check { width:12px; height:12px; margin:0; cursor:pointer; accent-color:var(--accent-color,#667eea); flex-shrink:0; }
+    .kb-chip { border:none; background:transparent; color:var(--accent-color,#667eea); font-size:11px; cursor:pointer; padding:0; }
+    .kb-chip:hover { text-decoration:underline; }
     .kb-auto-explore-btn { margin-left:auto; padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
     .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
     .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
@@ -1077,7 +1079,7 @@ export function getAiChatPage(user: {
       <div class="kb-panel" id="keywordBoundaryPanel">
         <span class="kb-panel-label">🧭 まだ分類されていないキーワード:</span>
         <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="未分類キーワードへ、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
+        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックしたキーワードだけを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
       </div>
       <div class="chat-form-area">
         <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
@@ -7146,14 +7148,19 @@ export function getAiChatPage(user: {
     // ===== 探索の境界線(未分類キーワード)パネル =====
     // ベクタ化済みの回答から抽出されたキーワードのうち、まだどのカテゴリにも
     // 分類されていないもの(aichat_keyword_category_map未登録=境界線の外側)を
-    // 一覧表示し、クリックで「〇〇について説明してください」を入力欄に
-    // 差し込んで次の質問へつなげる。「理解済みですか」という自己申告は
-    // 根拠が曖昧なため置かず、既存のキーワード分類(実際に分類したかどうか)
-    // だけを根拠にする。分類はanswer-graph側で行うため、このパネル自体は
+    // 一覧表示する。「理解済みですか」という自己申告は根拠が曖昧なため置かず、
+    // 既存のキーワード分類(実際に分類したかどうか)だけを根拠にする。
+    // 各キーワードにはチェックボックスが付いており、テキスト部分をクリックすると
+    // 「〇〇について説明してください」を入力欄に差し込んで単発の質問ができる
+    // (従来通り)。チェックボックスは「自動探索」の対象を選ぶためのもので、
+    // 一覧に出ているものを無差別に自動探索するのではなく、ユーザーが選んだ
+    // ものだけを起点にする(「選択されたものだけを問い合わせろ」という
+    // 指摘への対応)。分類はanswer-graph側で行うため、このパネル自体は
     // 一覧表示とテンプレート差し込みだけを担い、回答のベクタ化(✂️)後と
     // 初回表示時に一覧を読み直す。
     var keywordBoundaryPanel = document.getElementById('keywordBoundaryPanel');
     var keywordBoundaryChips = document.getElementById('keywordBoundaryChips');
+    var keywordBoundarySelection = {};
 
     function fillChatInputWithBoundaryTemplate(keyword) {
       chatInput.value = keyword + 'について説明してください';
@@ -7164,14 +7171,39 @@ export function getAiChatPage(user: {
 
     function renderKeywordBoundaryChips(keywords) {
       keywordBoundaryChips.innerHTML = '';
+      var stillPresent = {};
       keywords.forEach(function(entry) {
+        stillPresent[entry.keyword] = true;
+        var wrap = document.createElement('span');
+        wrap.className = 'kb-chip-wrap';
+
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'kb-chip-check';
+        checkbox.checked = !!keywordBoundarySelection[entry.keyword];
+        checkbox.setAttribute('aria-label', entry.keyword + 'を自動探索の対象に選ぶ');
+        checkbox.addEventListener('change', function() {
+          if (checkbox.checked) {
+            keywordBoundarySelection[entry.keyword] = true;
+          } else {
+            delete keywordBoundarySelection[entry.keyword];
+          }
+        });
+        wrap.appendChild(checkbox);
+
         var chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'kb-chip';
         chip.textContent = entry.keyword;
         chip.title = entry.keyword + 'について説明してください(クリックで入力欄へ)';
         chip.addEventListener('click', function() { fillChatInputWithBoundaryTemplate(entry.keyword); });
-        keywordBoundaryChips.appendChild(chip);
+        wrap.appendChild(chip);
+
+        keywordBoundaryChips.appendChild(wrap);
+      });
+      // 一覧から消えた(=分類済みになった等)キーワードの選択状態は残さない。
+      Object.keys(keywordBoundarySelection).forEach(function(keyword) {
+        if (!stillPresent[keyword]) delete keywordBoundarySelection[keyword];
       });
       keywordBoundaryPanel.classList.toggle('kb-panel-visible', keywords.length > 0);
     }
@@ -7188,16 +7220,16 @@ export function getAiChatPage(user: {
 
     loadUnknownKeywordBoundaryPanel();
 
-    // 「自動探索」: 入力待ちを挟まず、未分類キーワードへ最大3階層まで
-    // 自動で問い合わせを進める(1階層ごとに、その時点の未分類キーワード
-    // 一覧(最大20件、抽出が新しい順)を取得し、まだこの回で処理していない
-    // ものへ順番に「〇〇について説明してください」を送って回答をベクタ化
-    // する。新しく抽出されたキーワードは次の階層の一覧に自然に含まれる
-    // (抽出が新しい順に並ぶため優先的に拾われる)ので、「掘り下げるほど
-    // 未分類が増える」形になる)。1件でもAI呼び出し/ベクタ化に失敗したら
-    // 即座に打ち切り、そこまでの結果を報告する(コストは気にしないが、
-    // エラーが出たら止める方針のため)。分類自体はこの機能では行わず、
-    // 最後に「分類済み/未分類」の累計を表示するだけに留める。
+    // 「自動探索」: 入力待ちを挟まず、選んだキーワードを起点に最大3階層まで
+    // 自動で問い合わせを進める。1階層目は「一覧を無差別に上から拾う」のでは
+    // なく、ユーザーがチェックボックスで選んだキーワードだけを対象にする
+    // (指摘への対応: 選択されたものだけを問い合わせる)。2階層目以降は、
+    // そこから新しく抽出されたキーワードへ自然に掘り下げていく(抽出が
+    // 新しい順に並ぶ一覧を取得し、まだこの回で処理していないものを拾う)。
+    // 1件でもAI呼び出し/ベクタ化に失敗したら即座に打ち切り、そこまでの
+    // 結果を報告する(コストは気にしないが、エラーが出たら止める方針のため)。
+    // 分類自体はこの機能では行わず、最後に「分類済み/未分類」の累計を
+    // 表示するだけに留める。
     var autoExploreBtn = document.getElementById('autoExploreBtn');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
@@ -7223,43 +7255,62 @@ export function getAiChatPage(user: {
         });
     }
 
-    function autoExploreProcessLevel(processedKeywords) {
+    function autoExploreRunCandidates(candidates, processedKeywords) {
+      var chain = Promise.resolve();
+      candidates.forEach(function(keyword) {
+        if (processedKeywords[keyword]) return;
+        chain = chain.then(function() {
+          processedKeywords[keyword] = true;
+          return autoExploreProcessKeyword(keyword);
+        });
+      });
+      return chain;
+    }
+
+    function autoExploreNextLevelCandidates(processedKeywords) {
       return fetch('/api/aichat/keyword-boundary/unknown?limit=' + AUTO_EXPLORE_LEVEL_LIMIT, { credentials: 'same-origin' })
         .then(function(r) { return r.ok ? r.json() : { keywords: [] }; })
         .then(function(data) {
-          var candidates = (data.keywords || [])
+          return (data.keywords || [])
             .map(function(entry) { return entry.keyword; })
             .filter(function(keyword) { return !processedKeywords[keyword]; });
-          var chain = Promise.resolve();
-          candidates.forEach(function(keyword) {
-            chain = chain.then(function() {
-              processedKeywords[keyword] = true;
-              return autoExploreProcessKeyword(keyword);
-            });
-          });
-          return chain;
         });
     }
 
     function runAutoExplore() {
+      var seedKeywords = Object.keys(keywordBoundarySelection);
+      if (seedKeywords.length === 0) {
+        showAichatToast('自動探索するキーワードをチェックしてください', 'aichat-scissors-toast-neutral');
+        return;
+      }
+
       autoExploreBtn.disabled = true;
       autoExploreBtn.textContent = '🧭 探索中...';
-      showAichatToast('自動探索を開始します(最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');
+      showAichatToast('自動探索を開始します(選択' + seedKeywords.length + '件・最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');
 
       var processedKeywords = {};
       var stoppedByError = null;
-      var chain = Promise.resolve();
-      for (var level = 0; level < AUTO_EXPLORE_MAX_LEVELS; level++) {
+
+      // 1階層目: 選択されたキーワードのみ。
+      var chain = autoExploreRunCandidates(seedKeywords, processedKeywords).catch(function(err) {
+        stoppedByError = err instanceof Error ? err.message : String(err);
+      });
+
+      // 2階層目以降: 1階層目で新たに抽出されたキーワードへ自然に掘り下げる。
+      for (var level = 1; level < AUTO_EXPLORE_MAX_LEVELS; level++) {
         chain = chain.then(function() {
           if (stoppedByError) return;
-          return autoExploreProcessLevel(processedKeywords).catch(function(err) {
-            stoppedByError = err instanceof Error ? err.message : String(err);
+          return autoExploreNextLevelCandidates(processedKeywords).then(function(candidates) {
+            return autoExploreRunCandidates(candidates, processedKeywords);
           });
+        }).catch(function(err) {
+          stoppedByError = err instanceof Error ? err.message : String(err);
         });
       }
 
       chain
         .then(function() {
+          keywordBoundarySelection = {};
           loadUnknownKeywordBoundaryPanel();
           return fetch('/api/aichat/keyword-boundary/stats', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : null; })
