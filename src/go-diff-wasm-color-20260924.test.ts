@@ -60,6 +60,17 @@ describe('/go-diff-wasm: 差分表示の色分け', () => {
     expect(out).toContain('class="diff-line diff-add">+ c<');
   });
 
+  it('ブロック表示する各行のspan間に改行文字を入れず、余分な空行を作らない', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('- before\n+ after');
+    expect(out).toBe(
+      '<span class="diff-line diff-del">- before</span>' +
+      '<span class="diff-line diff-add">+ after</span>'
+    );
+    expect(out).not.toContain('</span>\n<span');
+  });
+
   it('renderDiffOutputはHTMLをエスケープする(XSS対策)', () => {
     const html = getGoDiffWasmPage('tester');
     const renderDiffOutput = extractRenderDiffOutput(html);

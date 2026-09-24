@@ -235,13 +235,15 @@ export function getGoDiffWasmPage(username: string): string {
     // diffフェンス、本体行("+ "=追加, "- "=削除, "  "=変更なし)からなる。
     // 行頭の接頭辞ごとに色分けし、変更点(追加/削除)と不変な行を見分けやすくする。
     function renderDiffOutput(out) {
+      // 各行はdisplay:blockのspanとして改行されるため、span間にも改行文字を
+      // 入れるとwhite-space:pre-wrapによって空行として描画されてしまう。
       return out.split('\\n').map(function (line) {
         var cls = 'diff-meta';
         if (line.indexOf('+ ') === 0) cls = 'diff-add';
         else if (line.indexOf('- ') === 0) cls = 'diff-del';
         else if (line.indexOf('  ') === 0) cls = 'diff-ctx';
         return '<span class="diff-line ' + cls + '">' + escapeForHtml(line) + '</span>';
-      }).join('\\n');
+      }).join('');
     }
 
     function parseInput() {
