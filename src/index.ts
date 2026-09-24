@@ -393,7 +393,6 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
-import { fetchJevCreditsFromTypesafeApi } from './utils/jevApi';
 
 /**
  * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
@@ -6148,7 +6147,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
-    fetchJevCredits: c.env.TYPESAFE_API_KEY ? () => fetchJevCreditsFromTypesafeApi(c.env.TYPESAFE_API_KEY as string) : undefined,
     searchYoutubeLinks: (c.env.GOOGLE_CSE_API_KEY && c.env.GOOGLE_CSE_CX)
       ? (keyword) => fetchYoutubeLinksViaGoogleSearch(c.env, keyword)
       : undefined,
