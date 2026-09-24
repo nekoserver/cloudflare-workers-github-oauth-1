@@ -15,6 +15,12 @@
  *   (5) blob(ファイル)なのにdir(ディレクトリ)として扱われてしまう、逆も
  *   (6) GitHub API呼び出し失敗時に例外を投げず、握りつぶしてok:trueを返してしまう
  *   (7) レスポンスのtreeが配列でない不正な形式を握りつぶしてしまう
+ *   (8) 削除・リネームされたファイルがマージのみでは永久にツリーへ残り、
+ *       ファイル数が減らない(2026-09-24、`/neko tvupdate --force`でも
+ *       ファイル数が更新されないというユーザー指摘)
+ *   (9) GitHub Trees APIがtruncated:trueを返した(巨大リポジトリで一部
+ *       欠落)ときに全置換すると、たまたま応答に含まれなかった既存の
+ *       正しいファイルまで消えてしまう
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -22,6 +28,7 @@ import {
   buildTreeViewSnapshotFromGithubItems,
   fetchRepoTreeSnapshot,
   mergeMissingTreeViewNodes,
+  resolveNextTreeViewSnapshot,
   type GithubTreeItem,
 } from './treeViewSnapshot';
 
@@ -58,6 +65,36 @@ describe('mergeMissingTreeViewNodes', () => {
     const existing = buildTreeViewSnapshotFromGithubItems([{ path: 'entry', type: 'blob' }], 'root');
     const latest = buildTreeViewSnapshotFromGithubItems([{ path: 'entry/new.ts', type: 'blob' }], 'root');
     expect(mergeMissingTreeViewNodes(existing, latest)).toEqual(existing);
+  });
+});
+
+describe('resolveNextTreeViewSnapshot', () => {
+  it('既存データが無ければ最新ツリーをそのまま採用する', () => {
+    const latest = buildTreeViewSnapshotFromGithubItems([{ path: 'a.ts', type: 'blob' }], 'root');
+    expect(resolveNextTreeViewSnapshot(null, latest, false)).toEqual(latest);
+  });
+
+  it('truncated===falseのときは削除・リネームも反映して最新ツリーで全置換する', () => {
+    const existing = buildTreeViewSnapshotFromGithubItems([
+      { path: 'removed.ts', type: 'blob' },
+      { path: 'kept.ts', type: 'blob' },
+    ], 'root');
+    const latest = buildTreeViewSnapshotFromGithubItems([
+      { path: 'kept.ts', type: 'blob' },
+      { path: 'added.ts', type: 'blob' },
+    ], 'root');
+    expect(resolveNextTreeViewSnapshot(existing, latest, false)).toEqual(latest);
+  });
+
+  it('truncated===trueのときは従来通り追加のみのマージに留め、既存データを失わない', () => {
+    const existing = buildTreeViewSnapshotFromGithubItems([
+      { path: 'legacy.ts', type: 'blob' },
+    ], 'root');
+    const latest = buildTreeViewSnapshotFromGithubItems([
+      { path: 'added.ts', type: 'blob' },
+    ], 'root');
+    expect(resolveNextTreeViewSnapshot(existing, latest, true)).toEqual(mergeMissingTreeViewNodes(existing, latest));
+    expect(resolveNextTreeViewSnapshot(existing, latest, true).children?.map((c) => c.name)).toEqual(['added.ts', 'legacy.ts']);
   });
 });
 
@@ -149,7 +186,17 @@ describe('fetchRepoTreeSnapshot', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.snapshot.children?.map((c) => c.name)).toEqual(['README.md']);
+      expect(result.truncated).toBe(false);
     }
+  });
+
+  it('レスポンスのtruncated:trueをそのまま伝える', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ tree: [{ path: 'README.md', type: 'blob' }], truncated: true }), { status: 200 })
+    ) as unknown as typeof fetch;
+    const result = await fetchRepoTreeSnapshot({ repoName: 'nekoserver/example', githubToken: 'token', fetchImpl });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.truncated).toBe(true);
   });
 
   it('GitHub APIがエラーステータスを返した場合はok:falseを返し、握りつぶさない', async () => {

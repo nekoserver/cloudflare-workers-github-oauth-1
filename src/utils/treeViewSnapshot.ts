@@ -22,6 +22,10 @@ export type GithubTreeItem = { path: string; type: 'blob' | 'tree' | 'commit' };
  * D1 に保存済みのツリーを基準に、GitHub の最新ツリーにだけ存在するノードを
  * 追加する。保存済みノードは削除も上書きもしないため、部分的な Trees API
  * レスポンスや一時的な取得漏れで既存データを失わない。
+ *
+ * 削除・リネームされたファイルが永久にツリーへ残り続ける("ファイル数が
+ * 増える一方で減らない")原因だったため、現在は latest.truncated===false の
+ * ときだけ使う関数になった(resolveNextTreeViewSnapshot参照)。
  */
 export function mergeMissingTreeViewNodes(
   existing: TreeViewSnapshotNode,
@@ -41,6 +45,34 @@ export function mergeMissingTreeViewNodes(
   merged.push(...latestByName.values());
   merged.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return merged.length > 0 ? { ...existing, children: merged } : existing;
+}
+
+/**
+ * D1に保存する次のスナップショットを決める。
+ *
+ * 以前はGitHub Trees APIの取得結果に関わらず常にmergeMissingTreeViewNodes
+ * (既存ノードへの追加のみ・削除もリネームも反映しない)を使っていたため、
+ * リポジトリ側でファイルを削除・リネームしても/tree-viewのファイル数が
+ * 一切減らず、`/neko tvupdate --force`しても更新されたように見えない
+ * 問題があった(2026-09-24、ユーザー指摘)。
+ *
+ * GitHub Trees APIはレスポンスが大きすぎる場合(エントリ数上限・7MB超)に
+ * `truncated: true`を返し、その場合はtree配列が部分的にしか含まれない。
+ * truncatedなレスポンスを正として全置換すると、たまたま返された範囲外の
+ * 既存ファイルが消えてしまう(mergeMissingTreeViewNodesの元々の設計意図)。
+ * そのため truncated かどうかで戦略を切り替える:
+ *   - truncated===false (通常): GitHubの最新ツリーをそのまま正として使う
+ *     (削除・リネームも反映される)
+ *   - truncated===true (巨大リポジトリで一部欠落): 従来通り追加のみの
+ *     マージに留め、既存データを失わない
+ */
+export function resolveNextTreeViewSnapshot(
+  existing: TreeViewSnapshotNode | null,
+  latest: TreeViewSnapshotNode,
+  truncated: boolean,
+): TreeViewSnapshotNode {
+  if (!existing) return latest;
+  return truncated ? mergeMissingTreeViewNodes(existing, latest) : latest;
 }
 
 /**
@@ -106,7 +138,7 @@ export function buildTreeViewSnapshotFromGithubItems(items: GithubTreeItem[], ro
 }
 
 export type FetchRepoTreeResult =
-  | { ok: true; snapshot: TreeViewSnapshotNode }
+  | { ok: true; snapshot: TreeViewSnapshotNode; truncated: boolean }
   | { ok: false; errorCode: 'http_error' | 'invalid_json'; detail: string };
 
 /**
@@ -152,10 +184,11 @@ export async function fetchRepoTreeSnapshot(params: {
   if (!Array.isArray(tree)) {
     return { ok: false, errorCode: 'invalid_json', detail: 'レスポンスにtree配列がありません' };
   }
+  const truncated = (json as { truncated?: unknown }).truncated === true;
 
   const items: GithubTreeItem[] = tree.filter(
     (t): t is GithubTreeItem => t && typeof t === 'object' && typeof (t as GithubTreeItem).path === 'string' && typeof (t as GithubTreeItem).type === 'string'
   );
 
-  return { ok: true, snapshot: buildTreeViewSnapshotFromGithubItems(items, repoName) };
+  return { ok: true, snapshot: buildTreeViewSnapshotFromGithubItems(items, repoName), truncated };
 }
