@@ -1,0 +1,16 @@
+name = "cloudflare-workers-github-oauth-1-sqlx-d1"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-11-17"
+
+# worker-buildは事前に `cargo install worker-build --version "^0.1"` でインストールしておくこと
+# (0.1系はworker 0.5.x系向け。最新の0.8系はworker>=0.8を要求しsqlx-d1と噛み合わない)
+[build]
+command = "worker-build --release"
+
+# 本体Worker(cloudflare-workers-github-oauth-1)とD1データベースを共有する場合、
+# 同じdatabase_id/database_nameを指定する。専用DBを使う場合は
+# `wrangler d1 create <DATABASE_NAME>` で新規作成してここに書き換える。
+[[d1_databases]]
+binding = "DB"
+database_name = "<DATABASE_NAME>"
+database_id = "<DATABASE_ID>"
