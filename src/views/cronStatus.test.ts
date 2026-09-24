@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CookieJar, JSDOM } from 'jsdom';
-import { getCronStatusPage, getNextTreeViewCronAt } from './cronStatus';
+import { getCronStatusPage, getNextTreeViewCronAt, getCronHealthStatus, pickLatestScheduledBatch } from './cronStatus';
 
 const interactivePageInput = {
   generatedAt: '2026-09-22T07:00:00.000Z',
@@ -26,8 +26,8 @@ describe('cron status page', () => {
       generatedAt: '2026-09-22T07:00:00.000Z',
       dataAvailable: true,
       executions: [
-        { id: 2, repo_name: 'nekoserver/dynamicneko', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:05.000Z' },
-        { id: 1, repo_name: 'nekoserver/example', update_source: 'manual', changed: 1, executed_at: '2026-09-22T06:30:00.000Z' },
+        { id: 2, repo_name: 'nekoserver/dynamicneko', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:05.000Z', error_message: null },
+        { id: 1, repo_name: 'nekoserver/example', update_source: 'manual', changed: 1, executed_at: '2026-09-22T06:30:00.000Z', error_message: null },
       ],
       snapshots: [{ repo_name: 'nekoserver/dynamicneko', updated_at: '2026-09-22T00:00:05.000Z' }],
     });
@@ -44,9 +44,24 @@ describe('cron status page', () => {
   it('shows a warning when the last scheduled execution is stale', () => {
     const html = getCronStatusPage({
       generatedAt: '2026-09-22T14:30:00.000Z', dataAvailable: true, snapshots: [],
-      executions: [{ id: 1, repo_name: 'nekoserver/dynamicneko', update_source: 'scheduled', changed: 1, executed_at: '2026-09-22T06:00:00.000Z' }],
+      executions: [{ id: 1, repo_name: 'nekoserver/dynamicneko', update_source: 'scheduled', changed: 1, executed_at: '2026-09-22T06:00:00.000Z', error_message: null }],
     });
     expect(html).toContain('実行遅延');
+  });
+
+  it('shows a warning when the latest scheduled batch includes a failure', () => {
+    const html = getCronStatusPage({
+      generatedAt: '2026-09-22T07:00:00.000Z',
+      dataAvailable: true,
+      snapshots: [],
+      executions: [
+        { id: 2, repo_name: 'nekoserver/dynamicneko', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: null },
+        { id: 1, repo_name: 'nekoserver/example', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: 'GitHub API 502' },
+      ],
+    });
+    expect(html).toContain('一部失敗');
+    expect(html).toContain('❌ 失敗');
+    expect(html).toContain('GitHub API 502');
   });
 
   it('escapes values read from D1', () => {
@@ -110,5 +125,58 @@ describe('cron status page', () => {
     expect(document.querySelector('tbody tr')!.getAttribute('data-snapshot-repo')).toBe('nekoserver/first');
     expect(cookieJar.getCookieStringSync('https://example.com/cron-status')).toContain('cron_snapshot_check_state=');
     secondLoad.window.close();
+  });
+});
+
+describe('pickLatestScheduledBatch', () => {
+  it('groups rows sharing the same executed_at into one batch and ignores manual rows', () => {
+    const batch = pickLatestScheduledBatch([
+      { id: 3, repo_name: 'nekoserver/a', update_source: 'manual', changed: 1, executed_at: '2026-09-22T07:00:00.000Z', error_message: null },
+      { id: 2, repo_name: 'nekoserver/b', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: null },
+      { id: 1, repo_name: 'nekoserver/c', update_source: 'scheduled', changed: 1, executed_at: '2026-09-22T06:00:00.000Z', error_message: null },
+    ]);
+    expect(batch).toEqual({ executedAt: '2026-09-22T06:00:00.000Z', failed: false });
+  });
+
+  it('marks the batch as failed when any row in it has an error_message', () => {
+    const batch = pickLatestScheduledBatch([
+      { id: 2, repo_name: 'nekoserver/a', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: null },
+      { id: 1, repo_name: 'nekoserver/b', update_source: 'scheduled', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: 'timeout' },
+    ]);
+    expect(batch).toEqual({ executedAt: '2026-09-22T06:00:00.000Z', failed: true });
+  });
+
+  it('returns null when there is no scheduled row', () => {
+    expect(pickLatestScheduledBatch([])).toBeNull();
+    expect(pickLatestScheduledBatch([
+      { id: 1, repo_name: 'nekoserver/a', update_source: 'manual', changed: 0, executed_at: '2026-09-22T06:00:00.000Z', error_message: null },
+    ])).toBeNull();
+  });
+});
+
+describe('getCronHealthStatus', () => {
+  it('returns unknown when data is unavailable', () => {
+    expect(getCronHealthStatus('2026-09-22T07:00:00.000Z', null, false))
+      .toEqual({ state: 'unknown', label: '確認できません' });
+  });
+
+  it('returns 実行待ち when there is no scheduled batch yet', () => {
+    expect(getCronHealthStatus('2026-09-22T07:00:00.000Z', null, true))
+      .toEqual({ state: 'warning', label: '実行待ち' });
+  });
+
+  it('returns 実行遅延 when the latest batch is stale', () => {
+    expect(getCronHealthStatus('2026-09-22T14:30:00.000Z', { executedAt: '2026-09-22T06:00:00.000Z', failed: false }, true))
+      .toEqual({ state: 'warning', label: '実行遅延' });
+  });
+
+  it('returns 一部失敗 when the latest fresh batch includes a failure', () => {
+    expect(getCronHealthStatus('2026-09-22T07:00:00.000Z', { executedAt: '2026-09-22T06:00:00.000Z', failed: true }, true))
+      .toEqual({ state: 'warning', label: '一部失敗' });
+  });
+
+  it('returns 正常稼働 when the latest fresh batch has no failures', () => {
+    expect(getCronHealthStatus('2026-09-22T07:00:00.000Z', { executedAt: '2026-09-22T06:00:00.000Z', failed: false }, true))
+      .toEqual({ state: 'healthy', label: '正常稼働' });
   });
 });

@@ -22,7 +22,7 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
   const safeUsername = escapeHtml(username);
   const cronStatus = getCronHealthStatus(
     cronStatusInput.generatedAt,
-    cronStatusInput.latestScheduledAt,
+    cronStatusInput.latestScheduledAt ? { executedAt: cronStatusInput.latestScheduledAt, failed: false } : null,
     cronStatusInput.dataAvailable,
   );
 

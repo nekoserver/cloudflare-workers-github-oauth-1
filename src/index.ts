@@ -2508,6 +2508,7 @@ INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) 
   ('このキーワードをユーザーは理解済みですか?', '["未理解(探索の境界線の外側)","理解済み(探索の境界線の内側)"]');`,
   '0159': `DROP TABLE IF EXISTS jev_keyword_boundary_evaluations;
 DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
+  '0160': `ALTER TABLE tree_view_update_log ADD COLUMN error_message TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -13658,7 +13659,7 @@ app.get('/cron-status', authMiddleware, async (c) => {
   try {
     const [executionResult, snapshotResult] = await Promise.all([
       db.prepare(
-        `SELECT id, repo_name, update_source, changed, executed_at
+        `SELECT id, repo_name, update_source, changed, executed_at, error_message
          FROM tree_view_update_log
          ORDER BY datetime(executed_at) DESC, id DESC
          LIMIT 50`
@@ -15575,17 +15576,26 @@ async function upsertTreeViewSnapshotIfChanged(
   return true;
 }
 
+/**
+ * 成功・失敗の両方を記録する(error_messageがNULLなら成功、文字列が
+ * 入っていれば失敗)。以前は成功時(GitHub Trees API取得成功時)しか
+ * この関数を呼んでおらず、失敗はlogger.error()のみでWorkerのコンソール
+ * ログにしか残らなかった。/cron-statusページの稼働状況バッジが
+ * 「直近の成功」だけを見て、全リポジトリが連続で失敗していても
+ * 「正常稼働」と表示してしまう原因になっていた(2026-09-24、ユーザー指摘)。
+ */
 async function recordTreeViewUpdate(
   db: D1Database,
   repoName: string,
   source: 'scheduled' | 'manual',
   changed: boolean,
-  executedAt: string
+  executedAt: string,
+  errorMessage: string | null = null
 ): Promise<void> {
   await db.prepare(
-    `INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at)
-     VALUES (?, ?, ?, ?)`
-  ).bind(repoName, source, changed ? 1 : 0, executedAt).run();
+    `INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at, error_message)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(repoName, source, changed ? 1 : 0, executedAt, errorMessage).run();
 }
 
 function listTreeViewPaths(node: TreeViewSnapshotNode): string[] {
@@ -15668,6 +15678,11 @@ async function syncTreeViewSnapshots(
         const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN!, fetchImpl: fetch });
         if (!result.ok) {
           logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+          if (!dryRun) {
+            await recordTreeViewUpdate(targetDb, repoName, source, false, now.toISOString(), result.detail).catch((logErr) => {
+              logger.error('[tree-view-snapshot-sync] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+            });
+          }
           results[index] = { kind: 'failed', error: result.detail };
           continue;
         }
@@ -15691,6 +15706,11 @@ async function syncTreeViewSnapshots(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('[tree-view-snapshot-sync] リポジトリ同期失敗', { repoName, error: message });
+        if (!dryRun) {
+          await recordTreeViewUpdate(targetDb, repoName, source, false, now.toISOString(), message).catch((logErr) => {
+            logger.error('[tree-view-snapshot-sync] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+          });
+        }
         results[index] = { kind: 'failed', error: message };
       }
     }
@@ -15904,6 +15924,9 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
   const result = await fetchRepoTreeSnapshot({ repoName, githubToken: c.env.GITHUB_TOKEN, fetchImpl: fetch });
   if (!result.ok) {
     logger.error('[tree-view-snapshot-refresh-external] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+    await recordTreeViewUpdate(c.env.DB, repoName, 'manual', false, new Date().toISOString(), result.detail).catch((logErr) => {
+      logger.error('[tree-view-snapshot-refresh-external] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+    });
     return jsonUtf8({ error: `GitHub Trees APIの取得に失敗しました(${result.errorCode}): ${result.detail}` }, 502);
   }
 
