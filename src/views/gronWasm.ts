@@ -8,9 +8,10 @@ const SAMPLE_JSON = `{
   "nested": { "id": 1 }
 }`;
 
-export function getGronWasmPage(username: string): string {
-  const safeUsername = escapeHtml(username);
-
+// usernameは呼び出し元(index.ts)のルート定義との一貫性のために受け取るが、
+// このページはユーザー名・アバターを画面に表示しない(2026-09-24、
+// ユーザー依頼により削除)。
+export function getGronWasmPage(_username: string): string {
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -38,37 +39,6 @@ export function getGronWasmPage(username: string): string {
     }
     .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
-    .user-icon {
-      width: 40px; height: 40px; border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      display: flex; align-items: center; justify-content: center;
-      color: white; font-weight: 600; font-size: 16px; cursor: pointer;
-    }
-    .user-menu-container { position: relative; }
-    .dropdown-menu {
-      display: none;
-      position: absolute;
-      top: 48px;
-      right: 0;
-      background: var(--card-bg);
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-      min-width: 200px;
-      overflow: hidden;
-      z-index: 100;
-    }
-    .dropdown-menu.open { display: block; }
-    .dropdown-item {
-      display: block;
-      padding: 12px 16px;
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-size: 14px;
-    }
-    .dropdown-item:hover { background: var(--bg-secondary); }
-    .dropdown-item.logout { color: #e53e3e; }
-    .dropdown-item.switch-account { color: var(--accent-color, #667eea); }
     .container { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
     .card {
       background: var(--card-bg);
@@ -76,7 +46,6 @@ export function getGronWasmPage(username: string): string {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       padding: 32px;
     }
-    .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
     .wasm-status {
       font-size: 12px;
       padding: 6px 12px;
@@ -87,7 +56,7 @@ export function getGronWasmPage(username: string): string {
     .wasm-status.loading { background: var(--bg-secondary); color: var(--text-muted); }
     .wasm-status.ready { background: #dcfce7; color: #166534; }
     .wasm-status.error { background: #fee2e2; color: #991b1b; }
-    .mode-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .mode-tabs { display: flex; gap: 8px; margin-top: 20px; }
     .mode-tab {
       background: var(--bg-secondary);
       color: var(--text-secondary);
@@ -117,19 +86,7 @@ export function getGronWasmPage(username: string): string {
       margin-bottom: 12px;
       resize: vertical;
     }
-    .hint { font-size: 12px; color: var(--text-muted); margin: -10px 0 16px; }
-    .parse-btn {
-      background: #667eea;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .parse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .parse-btn:hover:not(:disabled) { background: #5568d3; }
+    .hint { font-size: 12px; color: var(--text-muted); margin: -10px 0 0; }
     .result-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
     .result-value {
       font-family: 'Monaco', 'Courier New', monospace;
@@ -146,7 +103,6 @@ export function getGronWasmPage(username: string): string {
     .result-value.error { color: #991b1b; }
     @media (max-width: 760px) {
       .navbar { padding: 14px 18px; }
-      .user-name { display: none; }
       .card { padding: 22px 18px; }
       .editor-grid { grid-template-columns: 1fr; }
     }
@@ -160,32 +116,12 @@ export function getGronWasmPage(username: string): string {
     </div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name">${safeUsername}</span>
-      <div class="user-menu-container">
-        <div class="user-icon" title="${safeUsername}" onclick="toggleDropdown()">
-          ${escapeHtml(username.substring(0, 2).toUpperCase())}
-        </div>
-        <div class="dropdown-menu" id="dropdownMenu">
-          <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
-          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
-          <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
-          <a href="/settings" class="dropdown-item">⚙️ 設定</a>
-          <a href="/api-keys" class="dropdown-item">🔑 キー管理</a>
-          <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
-          <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
-        </div>
-      </div>
     </div>
   </nav>
 
   <div class="container">
     <div class="card">
-      <div class="title">gron / ungron (WASM)</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
-      <div class="mode-tabs">
-        <button class="mode-tab active" id="modeGron" type="button">JSON → gron</button>
-        <button class="mode-tab" id="modeUngron" type="button">gron → JSON</button>
-      </div>
       <div class="editor-grid">
         <div class="editor-pane">
           <div class="pane-heading">
@@ -194,7 +130,6 @@ export function getGronWasmPage(username: string): string {
           </div>
           <textarea id="inputText" spellcheck="false" aria-label="入力">${escapeHtml(SAMPLE_JSON)}</textarea>
           <div class="hint">入力から250ms後に自動変換します。</div>
-          <button class="parse-btn" id="parseBtn" disabled>今すぐ変換 <span aria-hidden="true">⌘↵</span></button>
         </div>
         <div class="editor-pane">
           <div class="pane-heading">
@@ -203,26 +138,17 @@ export function getGronWasmPage(username: string): string {
           <div class="result-value" id="resultValue" aria-live="polite">WASMモジュールの読み込み後、ここに結果が表示されます。</div>
         </div>
       </div>
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="modeGron" type="button">JSON → gron</button>
+        <button class="mode-tab" id="modeUngron" type="button">gron → JSON</button>
+      </div>
     </div>
   </div>
 
   <script type="module">
     ${getThemeToggleScript()}
 
-    function toggleDropdown() {
-      document.getElementById('dropdownMenu').classList.toggle('open');
-    }
-    window.toggleDropdown = toggleDropdown;
-    document.addEventListener('click', function(e) {
-      var menu = document.getElementById('dropdownMenu');
-      var container = document.querySelector('.user-menu-container');
-      if (menu.classList.contains('open') && container && !container.contains(e.target)) {
-        menu.classList.remove('open');
-      }
-    });
-
     var wasmStatus = document.getElementById('wasmStatus');
-    var parseBtn = document.getElementById('parseBtn');
     var inputText = document.getElementById('inputText');
     var resultValue = document.getElementById('resultValue');
     var liveState = document.getElementById('liveState');
@@ -298,7 +224,6 @@ export function getGronWasmPage(username: string): string {
         go.run(instance);
         wasmStatus.textContent = 'WASMモジュール読み込み完了';
         wasmStatus.className = 'wasm-status ready';
-        parseBtn.disabled = false;
         parseInput();
       } catch (err) {
         wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
@@ -318,7 +243,6 @@ export function getGronWasmPage(username: string): string {
         parseInput();
       }
     });
-    parseBtn.addEventListener('click', parseInput);
   </script>
 </body>
 </html>`;
