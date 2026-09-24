@@ -69,7 +69,7 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
     CREATE TABLE dynamicneko_aichat_allowed_users (email TEXT PRIMARY KEY, github_login TEXT);
     CREATE TABLE tree_view_snapshots (repo_name TEXT PRIMARY KEY, tree_json TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE tree_view_snapshot_refresh_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, repo_name TEXT NOT NULL, requested_at TEXT NOT NULL);
-    CREATE TABLE tree_view_update_log (id INTEGER PRIMARY KEY AUTOINCREMENT, repo_name TEXT NOT NULL, update_source TEXT NOT NULL, changed INTEGER NOT NULL, executed_at TEXT NOT NULL);
+    CREATE TABLE tree_view_update_log (id INTEGER PRIMARY KEY AUTOINCREMENT, repo_name TEXT NOT NULL, update_source TEXT NOT NULL, changed INTEGER NOT NULL, executed_at TEXT NOT NULL, error_message TEXT);
     CREATE TABLE installation_permissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       installation_id INTEGER NOT NULL,
