@@ -135,6 +135,14 @@ export function getGoDiffWasmPage(username: string): string {
       min-height: 160px;
     }
     .result-value.error { color: #991b1b; }
+    /* 追加/削除行の色は「緑=追加, 赤=削除」という差分表示の普遍的な意味を
+       持つ固定色(CLAUDE.CSS.mdの例外規定: バッジ等の意味的に色が固定される
+       もの)。.wasm-status.ready/.error と同じ配色を再利用する。 */
+    .diff-line { display: block; }
+    .diff-line.diff-add { background: #dcfce7; color: #166534; }
+    .diff-line.diff-del { background: #fee2e2; color: #991b1b; }
+    .diff-line.diff-ctx { color: var(--text-secondary); }
+    .diff-line.diff-meta { color: var(--text-muted); }
     @media (max-width: 760px) {
       .navbar { padding: 14px 18px; }
       .user-name { display: none; }
@@ -219,6 +227,23 @@ export function getGoDiffWasmPage(username: string): string {
     var liveState = document.getElementById('liveState');
     var parseTimer = 0;
 
+    function escapeForHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // go-diff-wasm(DiffText)の出力は「N行追加, M行削除」等のサマリ行、
+    // diffフェンス、本体行("+ "=追加, "- "=削除, "  "=変更なし)からなる。
+    // 行頭の接頭辞ごとに色分けし、変更点(追加/削除)と不変な行を見分けやすくする。
+    function renderDiffOutput(out) {
+      return out.split('\\n').map(function (line) {
+        var cls = 'diff-meta';
+        if (line.indexOf('+ ') === 0) cls = 'diff-add';
+        else if (line.indexOf('- ') === 0) cls = 'diff-del';
+        else if (line.indexOf('  ') === 0) cls = 'diff-ctx';
+        return '<span class="diff-line ' + cls + '">' + escapeForHtml(line) + '</span>';
+      }).join('\\n');
+    }
+
     function parseInput() {
       if (typeof window.goDiffText !== 'function') return;
       window.clearTimeout(parseTimer);
@@ -229,7 +254,7 @@ export function getGoDiffWasmPage(username: string): string {
           resultValue.textContent = out;
           resultValue.className = 'result-value error';
         } else {
-          resultValue.textContent = out;
+          resultValue.innerHTML = renderDiffOutput(out);
           resultValue.className = 'result-value';
         }
         liveState.textContent = '比較済み';
