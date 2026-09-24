@@ -158,7 +158,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko fymd | 今日以降でYYYYMMDDが最初に素数になる日を表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko tvlog | tree-view更新の最新10件を表示します |',
-    '| /neko tvupdate [--force] [-R owner/repo] | tree-viewを手動更新します。-Rの直後に対象リポジトリ名を指定できます。--forceは本番DBを書き換えずGitHubの最新状態と現在の本番DBとの差分を報告します |',
+    '| /neko tvupdate [--force] [--dryrun] [-R owner/repo] | 元のJSONで展開済みのtree-viewリポジトリを手動更新します。--forceは1時間の待機を省略し、--dryrunは書き換えず更新イメージと現状の差分だけを表示します |',
     '| /neko sessions | ユーザーセッションのログイン時刻を新しい順に表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
@@ -944,7 +944,7 @@ export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   fetchUserSessionLogins?: () => Promise<UserSessionLoginRow[]>;
   fetchTreeViewUpdateLogs?: () => Promise<TreeViewUpdateLogRow[]>;
-  updateTreeView?: (force?: boolean, repoName?: string) => Promise<TreeViewUpdateOutcome>;
+  updateTreeView?: (force?: boolean, repoName?: string, dryRun?: boolean) => Promise<TreeViewUpdateOutcome>;
   clientIp?: string;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   searchCursorAgentHistory?: (keyword: string) => Promise<CursorAgentCsearchOutcome>;
@@ -978,7 +978,7 @@ export type TreeViewUpdateOutcome = {
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
-  differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[];
+  differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[];
 };
 
 export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): string {
@@ -992,7 +992,7 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
     return [
       '## tree-view 手動更新',
       '❌ 更新対象のリポジトリが0件のため、手動更新を実行できませんでした。',
-      'GitHub Appのinstallation_permissions同期状態を確認してください。',
+      '元のJSONから展開済みのtree_view_snapshotsを確認してください。',
     ].join('\n');
   }
   const lines = outcome.differences ? [
@@ -1017,7 +1017,10 @@ export function formatTreeViewUpdateOutcome(outcome: TreeViewUpdateOutcome): str
       `- 一致: ${outcome.differences.length - differences.length}件`,
     );
     if (differences.length > 0) {
-      lines.push('', '| リポジトリ | 差分 |', '|---|---|', ...differences.map((item) => `| ${item.repoName} | ${item.status === 'added' ? '本番DBに未登録' : '内容変更'} |`));
+      lines.push('', '| リポジトリ | 追加されるパス |', '|---|---|');
+      for (const item of differences) {
+        lines.push(...item.addedPaths.map((path) => `| ${item.repoName} | ${path} |`));
+      }
     }
   }
   if (outcome.failed.length > 0) {
@@ -1330,15 +1333,18 @@ export async function interpretAichatSlashCommand(
     // オプションを誤って拒否しないよう、検証前にASCII表記へ揃える。
     const args = parts.slice(2).map((part) => part.normalize('NFKC').replace(/^[—–]/, '--'));
     let force = false;
+    let dryRun = false;
     let repoName: string | undefined;
     for (let index = 0; index < args.length; index++) {
       const arg = args[index];
       if (arg.toLowerCase() === '--force' && !force) {
         force = true;
+      } else if (arg.toLowerCase() === '--dryrun' && !dryRun) {
+        dryRun = true;
       } else if (arg === '-R' && repoName === undefined && args[index + 1]) {
         repoName = args[++index];
       } else {
-        return { handled: true, response: '❌ /neko tvupdate のオプションは --force と -R owner/repo を指定できます' };
+        return { handled: true, response: '❌ /neko tvupdate のオプションは --force、--dryrun と -R owner/repo を指定できます' };
       }
     }
     if (repoName !== undefined && !/^nekoserver\/[A-Za-z0-9_.-]+$/.test(repoName)) {
@@ -1346,7 +1352,8 @@ export async function interpretAichatSlashCommand(
     }
     const startedAt = Date.now();
     try {
-      return { handled: true, response: formatTreeViewUpdateOutcome(await deps.updateTreeView(force, repoName)) };
+      const response = formatTreeViewUpdateOutcome(await deps.updateTreeView(force, repoName, dryRun));
+      return { handled: true, response: `${response}\n${formatTreeViewUpdateElapsedTime(Date.now() - startedAt)}` };
     } catch (err) {
       return {
         handled: true,

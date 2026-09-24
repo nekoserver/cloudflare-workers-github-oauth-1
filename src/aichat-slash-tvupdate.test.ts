@@ -16,7 +16,7 @@ describe('/neko tvupdate', () => {
     });
 
     expect(updateTreeView).toHaveBeenCalledOnce();
-    expect(updateTreeView).toHaveBeenCalledWith(false, undefined);
+    expect(updateTreeView).toHaveBeenCalledWith(false, undefined, false);
     expect(result.handled && result.response).toContain('手動更新を実行しました');
     expect(result.handled && result.response).toContain('更新あり: 1件');
     expect(result.handled && result.response).toContain('変更なし: 1件');
@@ -69,12 +69,12 @@ describe('/neko tvupdate', () => {
     });
 
     expect(result.handled && result.response).toContain('更新対象のリポジトリが0件');
-    expect(result.handled && result.response).toContain('installation_permissions');
+    expect(result.handled && result.response).toContain('tree_view_snapshots');
     expect(result.handled && result.response).not.toContain('手動更新を実行しました');
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] [-R owner/repo] |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] [--dryrun] [-R owner/repo] |');
   });
 
   it('--forceを強制更新フラグとして渡す', async () => {
@@ -87,7 +87,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
+    expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
   });
 
   it.each(['—force', '–force', '－－force'])(
@@ -102,7 +102,7 @@ describe('/neko tvupdate', () => {
         updateTreeView,
       });
 
-      expect(updateTreeView).toHaveBeenCalledWith(true, undefined);
+      expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
     }
   );
 
@@ -126,7 +126,7 @@ describe('/neko tvupdate', () => {
       await vi.advanceTimersByTimeAsync(250);
       const result = await resultPromise;
 
-      expect(updateTreeView).toHaveBeenCalledWith(true);
+      expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
       expect(result.handled && result.response).toContain('更新あり: 1件');
       expect(result.handled && result.response).toContain('実行時間: 0.250秒');
     } finally {
@@ -155,7 +155,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true, 'nekoserver/repo-a');
+    expect(updateTreeView).toHaveBeenCalledWith(true, 'nekoserver/repo-a', false);
   });
 
   it('-Rの引数欠落と不正なリポジトリ名を拒否する', async () => {
@@ -172,21 +172,23 @@ describe('/neko tvupdate', () => {
     expect(updateTreeView).not.toHaveBeenCalled();
   });
 
-  it('--forceのGitHub最新状態と本番DBの差分を報告する', async () => {
-    const result = await interpretAichatSlashCommand('/neko tvupdate --force', new Date(), {
+  it('--dryrunのGitHub最新状態と本番DBの差分を報告する', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated', updated: ['nekoserver/changed'], unchanged: [], failed: [],
+      differences: [
+        { repoName: 'nekoserver/changed', status: 'changed', addedPaths: ['src/new.ts'] },
+        { repoName: 'nekoserver/same', status: 'unchanged', addedPaths: [] },
+      ],
+    });
+    const result = await interpretAichatSlashCommand('/neko tvupdate --dryrun', new Date(), {
       fetchLatestCommitAgentLog: async () => null,
-      updateTreeView: async () => ({
-        status: 'updated', updated: ['nekoserver/changed'], unchanged: [], failed: [],
-        differences: [
-          { repoName: 'nekoserver/changed', status: 'changed' },
-          { repoName: 'nekoserver/same', status: 'unchanged' },
-        ],
-      }),
+      updateTreeView,
     });
 
+    expect(updateTreeView).toHaveBeenCalledWith(false, undefined, true);
     expect(result.handled && result.response).toContain('GitHub最新状態と本番DBの差分');
     expect(result.handled && result.response).toContain('本番DBを更新せずに差分を確認しました');
-    expect(result.handled && result.response).toContain('| nekoserver/changed | 内容変更 |');
+    expect(result.handled && result.response).toContain('| nekoserver/changed | src/new.ts |');
     expect(result.handled && result.response).toContain('一致: 1件');
   });
 });
