@@ -139,8 +139,11 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   diff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の
   差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用
   (`patch_make`/`patch_apply`)・あいまい一致(`match_main`)は対象外。
-  `/go-diff-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは
-  呼ばれない
+  `/go-diff-wasm`ページのブラウザ実行に加え、`POST /api/diff`(セッション
+  またはAPIキー認証、`src/utils/goDiffWasmServer.ts`)からサーバー実行でも
+  呼び出せる。gron-wasmはブラウザ実行のみでサーバー(`/neko`等)からは
+  呼ばれない。go-diff-wasmもコード生成の正しさ判定には使わないこと
+  (CLAUDE.mdルール35参照。人間が差分を見るための表示専用)
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
@@ -345,6 +348,45 @@ sqlc-wasmと同じ`Go`/`wasm_exec.js`パターン。`/gron-wasm`は
 エラー時はどちらも`"ERROR: "`接頭辞付きの文字列を返す(gh-attach-wasm・
 sqlc-wasmと同じ規約。例外を投げるとjs.FuncOf経由の呼び出し側の
 ハンドリングが煩雑になるため)。
+
+### サーバー側(Worker)からの利用(go-diff-wasmのみ)
+
+`go-diff-wasm`は`POST /api/diff`からもサーバー実行できる
+(`src/utils/goDiffWasmServer.ts`)。Rust/wasm-bindgen製モジュール
+(`sha256WasmServer.ts`等)が使う`initSync`は同期的に初期化できるが、
+Goの`go.run(instance)`が返すPromiseは`main()`がreturnするまで解決しない。
+`DiffText`のWASM側実装(`main_js.go`)は`select{}`で意図的に無限ブロック
+するため、`go.run()`を`await`すると永久に返ってこない。そこで
+`go.run()`は(ブラウザページ側と同じく)あえて`await`せず、代わりに
+JS側が`globalThis.__goDiffWasmReady`にresolve関数を仕込んでおき、
+WASM側の`main()`が`goDiffText`の登録直後にそれを呼び出すことで
+「グローバル関数の登録が完了した」と合図する(`__goDiffWasmReady`が
+未定義の場合は何もしない後方互換の分岐なので、ブラウザページ側の挙動は
+変わらない)。
+
+```ts
+import '../../public/wasm/go-diff-wasm_exec.js'; // globalThis.Go を定義
+import goDiffWasmModule from '../../public/wasm/go-diff.wasm';
+
+const ready = new Promise<void>((resolve) => {
+  (globalThis as any).__goDiffWasmReady = resolve;
+  const go = new Go();
+  WebAssembly.instantiate(goDiffWasmModule, go.importObject).then((instance) => {
+    void go.run(instance); // awaitしない
+  });
+});
+await ready;
+const markdown = (globalThis as any).goDiffText(a, b);
+```
+
+`gron-wasm`はサーバー側の配線をまだ用意していない(`/gron-wasm`ページの
+ブラウザ実行のみ)。将来必要になった場合は同じ`__goDiffWasmReady`
+パターンを`gron-wasm/main_js.go`にも追加すること。
+
+**注意**: `go-diff-wasm`(サーバー・ブラウザ双方)はあくまで人間が差分を
+目視確認するための表示専用ツールであり、コード生成の正しさ判定・
+自動検証には使わないこと(CLAUDE.mdルール35参照。`/json-structural-diff`の
+配列順序の制限と同じ理由で、出力を過信しない方針)。
 
 ## sqlc CodegenRequest共通IR・差分判定
 
