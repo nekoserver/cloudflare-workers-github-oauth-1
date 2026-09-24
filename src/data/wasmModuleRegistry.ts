@@ -133,6 +133,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     builtAt: '2026-09-06',
   },
   {
+    id: 'sqlx',
+    name: 'SQLx QueryBuilder (Rust)',
+    description:
+      'SQLxのQueryBuilder<Postgres>をRust/WASMで実行し、複数行INSERTのプレースホルダーSQLと引数を生成する。識別子検証と値のバインドをWASM内で行い、DB接続・クエリ実行はブラウザではなくWorker側に分離する。/sqlx-wasmページで利用する',
+    wasmPath: 'public/wasm/sqlx_bg.wasm',
+    sourceDir: 'wasm/sqlx-wasm',
+    sourceFile: 'wasm/sqlx-wasm/src/lib.rs',
+    approxSize: '未ビルド',
+    sizeBytes: 0,
+    builtAt: '未ビルド',
+  },
+  {
     id: 'jev',
     name: 'jev (Jev評価ロジック, Rust)',
     description:
