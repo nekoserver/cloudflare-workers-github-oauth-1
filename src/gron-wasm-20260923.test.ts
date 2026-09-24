@@ -97,7 +97,6 @@ describe('GET /gron-wasm', () => {
     expect(html).toContain('class="editor-grid"');
     expect(html).toContain("inputText.addEventListener('input'");
     expect(html).toContain('window.setTimeout(parseInput, 250)');
-    expect(html).toContain("parseBtn.addEventListener('click', parseInput)");
     expect(html).toContain('aria-live="polite"');
   });
 
@@ -121,10 +120,36 @@ describe('GET /gron-wasm', () => {
     expect(m![1]).toContain("].join('\\n')");
   });
 
-  it('ユーザー名はエスケープされる', () => {
+  // ユーザー名・アバターは画面右上から削除済み(2026-09-24、ユーザー依頼)。
+  // usernameを画面に一切出力しないこと自体が「エスケープ漏れによるXSS」の
+  // 根本対策になるため、意図通り出力されないことを確認する(生の値も
+  // エスケープ済みの値もどちらも含まれないことを検証する)。
+  it('ユーザー名・アバターは画面に一切表示されない(XSSの入力元ごと削除)', () => {
     const html = getGronWasmPage('<script>alert(1)</script>');
     expect(html).not.toContain('<script>alert(1)</script>');
-    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('&lt;script&gt;');
+    expect(html).not.toContain('class="user-name"');
+    expect(html).not.toContain('class="user-icon"');
+    expect(html).not.toContain('dropdown-menu');
+  });
+
+  it('「今すぐ変換」ボタンは表示されない(自動デバウンス変換とCmd/Ctrl+Enterのみ)', () => {
+    const html = getGronWasmPage('tester');
+    expect(html).not.toContain('id="parseBtn"');
+    expect(html).not.toContain('今すぐ変換');
+  });
+
+  it('重複していたページ内タイトル(.title)は表示されない(ナビバーのブランド表記のみ)', () => {
+    const html = getGronWasmPage('tester');
+    expect(html).not.toContain('class="title"');
+  });
+
+  it('モード切替ボタン(JSON→gron / gron→JSON)はエディタの最下段に配置される', () => {
+    const html = getGronWasmPage('tester');
+    const editorGridIdx = html.indexOf('class="editor-grid"');
+    const modeTabsIdx = html.indexOf('class="mode-tabs"');
+    expect(editorGridIdx).toBeGreaterThan(-1);
+    expect(modeTabsIdx).toBeGreaterThan(editorGridIdx);
   });
 
   it('サンプルJSON内に未エスケープの</textarea>が含まれず、要素を閉じない', () => {
