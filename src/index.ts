@@ -6141,7 +6141,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return rows.results ?? [];
     },
     updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
-      ? (force, repoName) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force, repoName)
+      ? (force, repoName, dryRun) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force, repoName, dryRun)
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15588,6 +15588,24 @@ async function recordTreeViewUpdate(
   ).bind(repoName, source, changed ? 1 : 0, executedAt).run();
 }
 
+function listTreeViewPaths(node: TreeViewSnapshotNode): string[] {
+  const visit = (current: TreeViewSnapshotNode, parent: string): string[] => {
+    const path = parent ? `${parent}/${current.name}` : current.name;
+    if (current.type === 'file') return [path];
+    return (current.children ?? []).flatMap((child) => visit(child, path));
+  };
+  return (node.children ?? []).flatMap((child) => visit(child, ''));
+}
+
+/** dry-run表示用に、現状には無く更新後イメージに追加されるファイルを列挙する。 */
+function listAddedTreeViewPaths(
+  existing: TreeViewSnapshotNode | null,
+  next: TreeViewSnapshotNode,
+): string[] {
+  const existingPaths = new Set(existing ? listTreeViewPaths(existing) : []);
+  return listTreeViewPaths(next).filter((path) => !existingPaths.has(path));
+}
+
 /**
  * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、tree-view対象分の
  * 同期処理本体。対象は保存済みかつ固定許可リスト内のリポジトリに
@@ -15605,11 +15623,11 @@ async function syncTreeViewSnapshots(
   targetDb: D1Database | undefined = env.DB,
   dryRun = false,
   requestedRepoName?: string
-): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] }> {
+): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[] }> {
   const synced: string[] = [];
   const skipped: string[] = [];
   const failed: { repoName: string; error: string }[] = [];
-  const differences: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[] = [];
+  const differences: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[] = [];
 
   if (!env.DB || !targetDb || !env.GITHUB_TOKEN) {
     return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
@@ -15620,12 +15638,7 @@ async function syncTreeViewSnapshots(
   // 追加しないことを保証する。
   let repositoryQuery: string;
   if (requestedRepoName) {
-    repositoryQuery = 'SELECT ? AS repo_name';
-  } else if (source === 'manual' && !dryRun) {
-    repositoryQuery = `SELECT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL
-         UNION
-         SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL
-         ORDER BY repo_name`;
+    repositoryQuery = 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name = ?';
   } else {
     repositoryQuery = 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL ORDER BY repo_name';
   }
@@ -15665,7 +15678,11 @@ async function syncTreeViewSnapshots(
           const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
           const nextSnapshot = existingSnapshot ? mergeMissingTreeViewNodes(existingSnapshot, result.snapshot) : result.snapshot;
           changed = !existing || existing.tree_json !== JSON.stringify(nextSnapshot);
-          differences[index] = { repoName, status: !existing ? 'added' : changed ? 'changed' : 'unchanged' };
+          differences[index] = {
+            repoName,
+            status: changed ? 'changed' : 'unchanged',
+            addedPaths: listAddedTreeViewPaths(existingSnapshot, nextSnapshot),
+          };
         } else {
           changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt);
           await recordTreeViewUpdate(targetDb, repoName, source, changed, executedAt);
@@ -15696,7 +15713,7 @@ type TreeViewManualRefreshOutcome = {
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
-  differences?: { repoName: string; status: 'added' | 'changed' | 'unchanged' }[];
+  differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[];
 };
 
 /** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
@@ -15705,15 +15722,16 @@ async function refreshTreeViewSnapshotsIfStale(
   now = new Date(),
   force = false,
   repoName?: string,
+  dryRun = false,
 ): Promise<TreeViewManualRefreshOutcome> {
   const empty = { updated: [], unchanged: [], failed: [] };
   if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
 
-  // --force は読み取り専用の差分確認であり、更新ログも権限キャッシュも書かない。
+  // --dryrun は読み取り専用の差分確認であり、更新ログも権限キャッシュも書かない。
   // 比較先のsnapshotさえあれば、不必要なテーブル検査で強制実行を制止しない。
-  const requiredTables = force
+  const requiredTables = dryRun
     ? ['tree_view_snapshots']
-    : ['installation_permissions', 'tree_view_snapshots', 'tree_view_update_log'];
+    : ['tree_view_snapshots', 'tree_view_update_log'];
   const tableRows = await env.DB.prepare(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => '?').join(', ')})`
   ).bind(...requiredTables).all<{ name: string }>();
@@ -15722,7 +15740,7 @@ async function refreshTreeViewSnapshotsIfStale(
     return { status: 'table_missing', ...empty };
   }
 
-  if (!force) {
+  if (!force && !dryRun) {
     const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
     const recent = repoName
       ? await env.DB.prepare(
@@ -15734,16 +15752,16 @@ async function refreshTreeViewSnapshotsIfStale(
     if (recent) return { status: 'recent', ...empty };
   }
 
-  // --force は待機時間と対象制限を越えてGitHubの最新状態を取得するが、D1は更新しない。
+  // --force は待機時間を省略し、--dryrun はD1を更新しない。
   // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
-  const result = await syncTreeViewSnapshots(env, 'manual', now, env.DB, force, repoName);
+  const result = await syncTreeViewSnapshots(env, 'manual', now, env.DB, dryRun, repoName);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
   // ため、成功として扱わず設定不備を利用者に明示する。
   if (result.synced.length === 0 && result.skipped.length === 0 && result.failed.length === 0) {
     return { status: 'no_repositories', ...empty };
   }
-  if (force) {
+  if (dryRun) {
     return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed, differences: result.differences };
   }
   return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed };
