@@ -76,8 +76,7 @@ export function getGronWasmPage(username: string): string {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       padding: 32px;
     }
-    .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-    .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+    .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
     .wasm-status {
       font-size: 12px;
       padding: 6px 12px;
@@ -182,7 +181,6 @@ export function getGronWasmPage(username: string): string {
   <div class="container">
     <div class="card">
       <div class="title">gron / ungron (WASM)</div>
-      <div class="subtitle">gron(https://github.com/tomnomnom/gron)のJSON⇔代入文変換ロジックをGo実装(js/wasmビルド)でブラウザ上のWebAssemblyで実行します。HTTPリクエスト実行・ファイル監視・カラー出力は含まれません。</div>
       <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
       <div class="mode-tabs">
         <button class="mode-tab active" id="modeGron" type="button">JSON → gron</button>
