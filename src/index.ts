@@ -441,7 +441,7 @@ import {
   EMBEDDED_TREE_VIEW_SNAPSHOTS,
   EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
   fetchRepoTreeSnapshot,
-  mergeMissingTreeViewNodes,
+  resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
@@ -15560,11 +15560,12 @@ async function upsertTreeViewSnapshotIfChanged(
   db: D1Database,
   repoName: string,
   snapshot: TreeViewSnapshotNode,
-  nowIso: string
+  nowIso: string,
+  truncated = false
 ): Promise<boolean> {
   const existing = await db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
   const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
-  const nextSnapshot = existingSnapshot ? mergeMissingTreeViewNodes(existingSnapshot, snapshot) : snapshot;
+  const nextSnapshot = resolveNextTreeViewSnapshot(existingSnapshot, snapshot, truncated);
   const nextJson = JSON.stringify(nextSnapshot);
   if (existing && existing.tree_json === nextJson) {
     return false;
@@ -15691,7 +15692,7 @@ async function syncTreeViewSnapshots(
         if (dryRun) {
           const existing = await targetDb.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
           const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
-          const nextSnapshot = existingSnapshot ? mergeMissingTreeViewNodes(existingSnapshot, result.snapshot) : result.snapshot;
+          const nextSnapshot = resolveNextTreeViewSnapshot(existingSnapshot, result.snapshot, result.truncated);
           changed = !existing || existing.tree_json !== JSON.stringify(nextSnapshot);
           differences[index] = {
             repoName,
@@ -15699,7 +15700,7 @@ async function syncTreeViewSnapshots(
             addedPaths: listAddedTreeViewPaths(existingSnapshot, nextSnapshot),
           };
         } else {
-          changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt);
+          changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt, result.truncated);
           await recordTreeViewUpdate(targetDb, repoName, source, changed, executedAt);
         }
         results[index] = { kind: changed ? 'synced' : 'skipped' };
@@ -15935,7 +15936,7 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
     await c.env.DB.prepare(
       'INSERT INTO tree_view_snapshot_refresh_log (user_id, repo_name, requested_at) VALUES (?, ?, ?)'
     ).bind(login, repoName, now).run();
-    const changed = await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now);
+    const changed = await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now, result.truncated);
     await recordTreeViewUpdate(c.env.DB, repoName, 'manual', changed, now);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -299,7 +299,7 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 0 });
   });
 
-  it('GitHubの最新状態から不足ノードだけをD1へ追加し、既存ノードは保持する', async () => {
+  it('truncatedでないGitHubの最新状態で全置換する(削除されたファイルも消える)', async () => {
     const db = setupDb({});
     insertSnapshot(db, 'nekoserver/dynamicneko', {
       name: 'nekoserver/dynamicneko',
@@ -308,6 +308,32 @@ describe('syncAllTreeViewSnapshots (cron)', () => {
     });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       tree: [{ path: 'latest-only.ts', type: 'blob' }],
+    }), { status: 200 })));
+
+    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
+
+    expect(result.synced).toEqual(['nekoserver/dynamicneko']);
+    const row = db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?')
+      .get('nekoserver/dynamicneko') as { tree_json: string };
+    expect(JSON.parse(row.tree_json)).toEqual({
+      name: 'nekoserver/dynamicneko',
+      type: 'dir',
+      children: [
+        { name: 'latest-only.ts', type: 'file' },
+      ],
+    });
+  });
+
+  it('GitHub Trees APIがtruncated:trueを返したときは不足ノードだけをD1へ追加し、既存ノードは保持する', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', {
+      name: 'nekoserver/dynamicneko',
+      type: 'dir',
+      children: [{ name: 'database-only.ts', type: 'file' }],
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      tree: [{ path: 'latest-only.ts', type: 'blob' }],
+      truncated: true,
     }), { status: 200 })));
 
     const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
@@ -519,6 +545,52 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
       name: 'nekoserver/dynamicneko', type: 'dir', children: [{ name: 'force-updated.ts', type: 'file' }],
     });
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 2 });
+  });
+
+  it('--forceでGitHub側で削除されたファイルは、truncatedでなければツリーから消える(ファイル数が減る)', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', {
+      name: 'nekoserver/dynamicneko', type: 'dir',
+      children: [{ name: 'kept.ts', type: 'file' }, { name: 'removed.ts', type: 'file' }],
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      tree: [{ path: 'kept.ts', type: 'blob' }],
+    }), { status: 200 })));
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+      true,
+    );
+
+    expect(result.status).toBe('updated');
+    expect(JSON.parse((db.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({
+      name: 'nekoserver/dynamicneko', type: 'dir', children: [{ name: 'kept.ts', type: 'file' }],
+    });
+  });
+
+  it('GitHub Trees APIがtruncated:trueを返した場合は、削除に見えるファイルも消さず既存データを保持する', async () => {
+    const db = setupDb({});
+    insertSnapshot(db, 'nekoserver/dynamicneko', {
+      name: 'nekoserver/dynamicneko', type: 'dir',
+      children: [{ name: 'kept.ts', type: 'file' }, { name: 'maybe-missing.ts', type: 'file' }],
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      tree: [{ path: 'kept.ts', type: 'blob' }],
+      truncated: true,
+    }), { status: 200 })));
+
+    const result = await refreshTreeViewSnapshotsIfStale(
+      { ...BASE_ENV, DB: wrapD1(db) } as never,
+      new Date('2026-09-22T03:00:00.000Z'),
+      true,
+    );
+
+    expect(result.status).toBe('updated');
+    expect(JSON.parse((db.prepare('SELECT tree_json FROM tree_view_snapshots').get() as { tree_json: string }).tree_json)).toEqual({
+      name: 'nekoserver/dynamicneko', type: 'dir',
+      children: [{ name: 'kept.ts', type: 'file' }, { name: 'maybe-missing.ts', type: 'file' }],
+    });
   });
 
   it('--dryrunなら直近の更新履歴を無視して本番DBとの差分を確認する', async () => {
