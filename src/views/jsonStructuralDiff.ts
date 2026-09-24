@@ -107,8 +107,12 @@ export function getJsonStructuralDiffPage(username: string): string {
     async function loadGoWasm(glue, binary) {
       await import(glue);
       var runtime = new Go();
-      var module = await WebAssembly.instantiateStreaming(fetch(binary), runtime.importObject);
-      runtime.run(module.instance);
+      var res = await fetch(binary);
+      if (!res.ok) throw new Error(binary + 'の取得に失敗しました(HTTP ' + res.status + ')');
+      var bytes = await res.arrayBuffer();
+      var mod = await WebAssembly.compile(bytes);
+      var instance = await WebAssembly.instantiate(mod, runtime.importObject);
+      runtime.run(instance);
     }
 
     (async function () {

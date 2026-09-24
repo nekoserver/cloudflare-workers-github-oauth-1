@@ -987,8 +987,12 @@ export function getD1QueryCatalogPage(
         sqlcWasmPromise = (async function() {
           await import('/wasm/sqlc-wasm_exec.js');
           var go = new Go();
-          var result = await WebAssembly.instantiateStreaming(fetch('/wasm/sqlc.wasm'), go.importObject);
-          go.run(result.instance);
+          var res = await fetch('/wasm/sqlc.wasm');
+          if (!res.ok) throw new Error('sqlc.wasmの取得に失敗しました(HTTP ' + res.status + ')');
+          var bytes = await res.arrayBuffer();
+          var mod = await WebAssembly.compile(bytes);
+          var instance = await WebAssembly.instantiate(mod, go.importObject);
+          go.run(instance);
           if (typeof globalThis.sqlcParseQueryAnnotations !== 'function') {
             throw new Error('sqlcParseQueryAnnotationsが登録されませんでした');
           }
