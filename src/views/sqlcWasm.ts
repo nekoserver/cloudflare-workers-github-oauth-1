@@ -248,8 +248,12 @@ export function getSqlcWasmPage(username: string): string {
       try {
         await import('/wasm/sqlc-wasm_exec.js');
         var go = new Go();
-        var result = await WebAssembly.instantiateStreaming(fetch('/wasm/sqlc.wasm'), go.importObject);
-        go.run(result.instance);
+        var res = await fetch('/wasm/sqlc.wasm');
+        if (!res.ok) throw new Error('sqlc.wasmの取得に失敗しました(HTTP ' + res.status + ')');
+        var bytes = await res.arrayBuffer();
+        var mod = await WebAssembly.compile(bytes);
+        var instance = await WebAssembly.instantiate(mod, go.importObject);
+        go.run(instance);
         wasmStatus.textContent = 'WASMモジュール読み込み完了';
         wasmStatus.className = 'wasm-status ready';
         parseBtn.disabled = false;
