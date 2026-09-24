@@ -355,6 +355,7 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
+import { getSqlxWasmPage } from './views/sqlxWasm';
 import { getGronWasmPage } from './views/gronWasm';
 import { getGoDiffWasmPage } from './views/goDiffWasm';
 import { getJsonStructuralDiffPage } from './views/jsonStructuralDiff';
@@ -12131,6 +12132,15 @@ app.get('/sqlc-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getSqlcWasmPage(user.sub));
+});
+
+app.get('/sqlx-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getSqlxWasmPage(user.sub));
 });
 
 app.get('/gron-wasm', authMiddleware, async (c) => {

@@ -118,6 +118,10 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
   Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
   gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
   `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
+- `sqlx-wasm`: RustのSQLx `QueryBuilder<Postgres>`でパラメーター化された複数行
+  INSERTを組み立てる。`/sqlx-wasm`ページでブラウザWASMとして動作する。ブラウザには
+  DBソケットがないため、WASMはクエリ構築・識別子検証だけを担当し、接続と実行はWorker側へ
+  分離する。`npm run wasm:build:sqlx`でテスト・wasm32ビルド・wasm-bindgen生成を行う
 - `msb-wasm`: microsandbox(https://github.com/microsandbox/microsandbox)の
   CLI `msb`のヘルプ・コマンドツリー表示だけを再実装したもの。`msb`本体は
   KVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVM
