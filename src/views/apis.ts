@@ -767,6 +767,8 @@ const APIS = [
       res:{ok:true} },
     { method:'GET', path:'/api/gh/pr-list', desc:'gh-wasm(Rust実装)でリポジトリのプルリクエスト一覧をMarkdownテーブルへ整形して取得(/neko gh pr listと同じロジック)', query:[{n:'repo',req:true,s:'nekoserver/cloudflare-workers-github-oauth-1'}],
       res:{markdown:'## nekoserver/cloudflare-workers-github-oauth-1 のプルリクエスト一覧\\n| # | タイトル | 作成者 | 状態 | URL |\\n|---|---|---|---|---|\\n| 1600 | ... | nekoserver | open | https://github.com/... |'} },
+    { method:'POST', path:'/api/diff', desc:'go-diff-wasm(Go実装)で2つのテキストの行単位差分をMarkdownへ整形して取得(セッションまたはAPIキー認証。コード生成の正しさ判定には使わないこと。人間が見るための差分表示専用)', body:[{n:'a',req:true,s:'line one\\nline two\\n'},{n:'b',req:true,s:'line one\\nline two (edited)\\n'}],
+      res:{markdown:'1行追加, 1行削除\\n\\n(diff形式のコードブロック)\\n  line one\\n- line two\\n+ line two (edited)'} },
   ]},
   { group: 'GitHub Issue添付 (/gh-attach, WASM)', endpoints: [
     { method:'POST', path:'/api/gh-attach/upload', desc:'画像をGitHubへアップロード(gh issue create --attachのWASM移植、実アップロードは専用のclassic PAT=GH_ATTACH_UPLOAD_TOKEN経由)', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'filename',req:true,s:'login.png'},{n:'dataUrl',req:true,s:'data:image/png;base64,iVBORw0KGgo...'}],

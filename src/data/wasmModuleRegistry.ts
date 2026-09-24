@@ -172,13 +172,13 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     id: 'go-diff',
     name: 'go-diff (Go)',
     description:
-      'go-diff(https://github.com/sergi/go-diff、Googleのdiff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用(patch_make/patch_apply)・あいまい一致(match_main)は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/go-diff-wasmページのブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+      'go-diff(https://github.com/sergi/go-diff、Googleのdiff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用(patch_make/patch_apply)・あいまい一致(match_main)は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/go-diff-wasmページのブラウザ実行に加え、POST /api/diff(セッションまたはAPIキー認証)からサーバー実行でも呼び出せる。コード生成の正しさ判定には使わない(CLAUDE.mdルール35参照)、人間が見るための差分表示専用',
     wasmPath: 'public/wasm/go-diff.wasm',
     sourceDir: 'wasm/go-diff-wasm',
     sourceFile: 'wasm/go-diff-wasm/diff.go',
     approxSize: '約3.0MB',
-    sizeBytes: 3150323,
-    builtAt: '2026-09-23',
+    sizeBytes: 3152752,
+    builtAt: '2026-09-24',
   },
 ];
 

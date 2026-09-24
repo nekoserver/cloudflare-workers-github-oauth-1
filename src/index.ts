@@ -12339,6 +12339,44 @@ app.get('/api/gh/pr-list', authMiddleware, async (c) => {
   }
 });
 
+const DIFF_MAX_TEXT_LENGTH = 500_000;
+
+/**
+ * POST /api/diff: go-diff-wasm(Rust製ではなくGo標準のwasm_exec.jsで動く)で
+ * 2つのテキストの行単位差分をMarkdownへ整形して返す。コード生成の入力/検証には
+ * 使わない(CLAUDE.mdルール35: /json-structural-diffの配列順序の制限と同じ理由で、
+ * 差分結果を「正しさの根拠」として自動判定に使わないこと。人間が見て確認する
+ * 用途に限る)。セッションCookieに加え、APIキー(nkapi_...)でも外部から呼び出せる
+ * (aichatAuthMiddlewareと同じ認証、/api/aichatと同様の仕組み)。
+ */
+app.post('/api/diff', aichatAuthMiddleware, async (c) => {
+  if (c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+    ).bind('go-diff').first<WasmModuleStartupRow>().catch(() => null);
+    if (!isWasmModuleEnabled(row)) {
+      return jsonUtf8({ error: 'go-diffモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)' }, 503);
+    }
+  }
+  const body = await c.req.json<{ a?: unknown; b?: unknown }>().catch(() => null);
+  if (!body || typeof body.a !== 'string' || typeof body.b !== 'string') {
+    return jsonUtf8({ error: 'a・bはどちらも文字列で指定してください' }, 400);
+  }
+  if (body.a.length > DIFF_MAX_TEXT_LENGTH || body.b.length > DIFF_MAX_TEXT_LENGTH) {
+    return jsonUtf8({ error: `a・bはそれぞれ${DIFF_MAX_TEXT_LENGTH}文字以下で指定してください` }, 400);
+  }
+  try {
+    // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+    // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+    // 既存テストが壊れるため)
+    const { diffTextViaWasm } = await import('./utils/goDiffWasmServer');
+    const markdown = await diffTextViaWasm(body.a, body.b);
+    return jsonUtf8({ markdown });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
+  }
+});
+
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
   const db = c.env.DB;
   let modules = mergeWasmModuleConfig([]);
