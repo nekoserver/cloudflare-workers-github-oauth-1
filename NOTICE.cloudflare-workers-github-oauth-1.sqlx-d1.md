@@ -1,5 +1,9 @@
 # NOTICE: sqlx(sqlx-d1)をこの環境でRust/WASM Workerとして使う手順
 
+**追記(切り出し後)**: `rust-worker-sqlx-d1/` は別リポジトリ
+[`nekoserver/rust-worker-sqlx-d1`](https://github.com/nekoserver/rust-worker-sqlx-d1)
+に切り出し済み。以下のビルド回避策は今後そちらのリポジトリで作業する際にも有効。
+
 **対象**: `rust-worker-sqlx-d1/`（本体Workerとは別のRustネイティブCloudflare Worker）。
 `sqlx`本体はwasm32では動かない(tokioがOSソケットを要求するmio依存でビルド不可)ため、
 D1専用の`sqlx-d1`クレート(`ohkami-rs/sqlx-d1`)を使う。これは`workers-rs`(`worker`クレート)

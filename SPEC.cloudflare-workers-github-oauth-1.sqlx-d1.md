@@ -1,5 +1,9 @@
 # SPEC: sqlx(sqlx-d1)を使うRustネイティブWorkerの新設
 
+**追記(切り出し後)**: `rust-worker-sqlx-d1/` ディレクトリは別リポジトリ
+[`nekoserver/rust-worker-sqlx-d1`](https://github.com/nekoserver/rust-worker-sqlx-d1)
+に切り出し済み。本ファイルは調査経緯の記録として残す(コードは本リポジトリには無い)。
+
 ## 1. sqlx-d1 Rust Workerによる D1 クエリ実装
 
 **対象**: `rust-worker-sqlx-d1/` ディレクトリ一式(`Cargo.toml`・`src/lib.rs`・`wrangler.toml`)
