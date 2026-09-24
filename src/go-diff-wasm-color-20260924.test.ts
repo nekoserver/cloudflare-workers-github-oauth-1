@@ -29,6 +29,15 @@ function extractRenderDiffOutput(html: string): (out: string) => string {
   return fn();
 }
 
+function extractRenderDiffSummary(html: string): (out: string) => string {
+  const scriptMatch = html.match(/<script type="module">([\s\S]*?)<\/script>/);
+  expect(scriptMatch).not.toBeNull();
+  const renderMatch = scriptMatch![1].match(/function renderDiffSummary\(out\) \{[\s\S]*?\n\s{4}\}/);
+  expect(renderMatch).not.toBeNull();
+  const fn = new Function(`${renderMatch![0]}\nreturn renderDiffSummary;`) as () => (out: string) => string;
+  return fn();
+}
+
 describe('/go-diff-wasm: 差分表示の色分け', () => {
   it('追加行はdiff-add、削除行はdiff-del、変更なし行はdiff-ctxになる', () => {
     const html = getGoDiffWasmPage('tester');
@@ -54,12 +63,27 @@ describe('/go-diff-wasm: 差分表示の色分け', () => {
     const html = getGoDiffWasmPage('tester');
     const renderDiffOutput = extractRenderDiffOutput(html);
     const out = renderDiffOutput('1行追加, 1行削除\n\n```diff\n  a\n- b\n+ c\n```');
-    expect(out).toContain('class="diff-line diff-meta">1行追加, 1行削除<');
+    expect(out).not.toContain('1行追加, 1行削除');
     expect(out).toContain('class="diff-line diff-ctx">  a<');
     expect(out).toContain('class="diff-line diff-del">- b<');
     expect(out).toContain('class="diff-line diff-add">+ c<');
     expect(out).not.toContain('```diff');
     expect(out).not.toContain('>```<');
+  });
+
+  it('追加・削除数を「差分」の右に符号付きの緑色・ピンク色で表示する', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffSummary = extractRenderDiffSummary(html);
+    const out = renderDiffSummary('1行追加, 2行削除\n\n```diff\n- before\n+ after\n```');
+
+    expect(html).toContain('<div class="result-label">差分</div>');
+    expect(html).toContain('<div class="diff-summary" id="diffSummary"');
+    expect(html).toContain('.diff-summary-add { color: #16a34a; }');
+    expect(html).toContain('.diff-summary-del { color: #db2777; }');
+    expect(out).toBe(
+      '<span class="diff-summary-item"><span class="diff-summary-add">+1</span> 行追加</span>' +
+      '<span class="diff-summary-item"><span class="diff-summary-del">-2</span> 行削除</span>'
+    );
   });
 
   it('Markdownのdiffコードフェンスは表示せず、フェンス内の行だけを描画する', () => {

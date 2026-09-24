@@ -121,7 +121,13 @@ export function getGoDiffWasmPage(username: string): string {
     }
     .parse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .parse-btn:hover:not(:disabled) { background: #5568d3; }
-    .result-label { font-size: 12px; color: var(--text-muted); margin: 20px 0 6px; }
+    .result-heading { display: flex; align-items: baseline; gap: 12px; margin: 20px 0 6px; }
+    .result-label { font-size: 12px; color: var(--text-muted); }
+    .diff-summary { display: flex; gap: 8px; font-size: 12px; font-weight: 700; }
+    .diff-summary:empty { display: none; }
+    .diff-summary-item { color: var(--text-muted); }
+    .diff-summary-add { color: #16a34a; }
+    .diff-summary-del { color: #db2777; }
     .result-value {
       font-family: 'Monaco', 'Courier New', monospace;
       font-size: 13px;
@@ -199,7 +205,10 @@ export function getGoDiffWasmPage(username: string): string {
       </div>
       <div class="hint">入力から250ms後に自動差分表示します。</div>
       <button class="parse-btn" id="parseBtn" disabled>今すぐ比較 <span aria-hidden="true">⌘↵</span></button>
-      <div class="result-label">差分</div>
+      <div class="result-heading">
+        <div class="result-label">差分</div>
+        <div class="diff-summary" id="diffSummary" aria-live="polite"></div>
+      </div>
       <div class="result-value" id="resultValue" aria-live="polite">WASMモジュールの読み込み後、ここに結果が表示されます。</div>
     </div>
   </div>
@@ -224,6 +233,7 @@ export function getGoDiffWasmPage(username: string): string {
     var inputA = document.getElementById('inputA');
     var inputB = document.getElementById('inputB');
     var resultValue = document.getElementById('resultValue');
+    var diffSummary = document.getElementById('diffSummary');
     var liveState = document.getElementById('liveState');
     var parseTimer = 0;
 
@@ -239,7 +249,8 @@ export function getGoDiffWasmPage(username: string): string {
       // 各行はdisplay:blockのspanとして改行されるため、span間にも改行文字を
       // 入れるとwhite-space:pre-wrapによって空行として描画されてしまう。
       return out.split('\\n').filter(function (line) {
-        return !/^\\s*\`\`\`(?:diff)?\\s*$/.test(line);
+        return !/^\\s*\`\`\`(?:diff)?\\s*$/.test(line) &&
+          !/^\\d+行追加,\\s*\\d+行削除$/.test(line);
       }).map(function (line) {
         var cls = 'diff-meta';
         if (line.indexOf('+ ') === 0) cls = 'diff-add';
@@ -247,6 +258,13 @@ export function getGoDiffWasmPage(username: string): string {
         else if (line.indexOf('  ') === 0) cls = 'diff-ctx';
         return '<span class="diff-line ' + cls + '">' + escapeForHtml(line) + '</span>';
       }).join('');
+    }
+
+    function renderDiffSummary(out) {
+      var match = out.match(/(?:^|\\n)(\\d+)行追加,\\s*(\\d+)行削除(?:\\n|$)/);
+      if (!match) return '';
+      return '<span class="diff-summary-item"><span class="diff-summary-add">+' + match[1] + '</span> 行追加</span>' +
+        '<span class="diff-summary-item"><span class="diff-summary-del">-' + match[2] + '</span> 行削除</span>';
     }
 
     function parseInput() {
@@ -258,14 +276,17 @@ export function getGoDiffWasmPage(username: string): string {
         if (typeof out === 'string' && out.indexOf('ERROR: ') === 0) {
           resultValue.textContent = out;
           resultValue.className = 'result-value error';
+          diffSummary.textContent = '';
         } else {
           resultValue.innerHTML = renderDiffOutput(out);
           resultValue.className = 'result-value';
+          diffSummary.innerHTML = renderDiffSummary(out);
         }
         liveState.textContent = '比較済み';
       } catch (err) {
         resultValue.textContent = (err && err.message) ? err.message : String(err);
         resultValue.className = 'result-value error';
+        diffSummary.textContent = '';
         liveState.textContent = '比較エラー';
       }
     }
