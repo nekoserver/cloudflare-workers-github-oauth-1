@@ -186,7 +186,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
-    '| /neko jev | TypeSafe AI(Jev)APIの残クレジット・残入力トークン数を表示します |',
+    '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
     '| /neko vlink <キーワード> | Googleで「YouTube <キーワード>」を検索し、www.youtube.comのリンクのみを抽出して表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
@@ -245,17 +245,18 @@ export function formatDynamicWorkerPingResult(reply: string): string {
   return `## ダイナミックWorker起動確認 (dynamicneko)\n⚠️ 想定外の応答: ${reply}`;
 }
 
-export type JevCreditsInfo = {
-  creditsRemainingUsd: number;
-  paidInputTokensRemaining: number;
-};
-
-/** `/neko jev` の取得結果(TypeSafe AI Jevの残クレジット・残入力トークン数)を表示する。 */
-export function formatJevCreditsResult(info: JevCreditsInfo): string {
+/**
+ * `/neko jev` の表示内容。TypeSafe AI(Jev)の公式APIには残クレジットを取得する
+ * エンドポイントが存在しない(公式Python SDKのソースを確認済み。存在するのは
+ * POST /v1/systemoneとGET /v1/modelsのみで、使用量は各systemone呼び出しの
+ * レスポンスにinput_tokens/output_tokensとして個別に含まれるだけで、累計残高を
+ * 問い合わせるAPIは無い)ため、コンソールへの案内のみを返す。
+ */
+export function formatJevCreditsInfo(): string {
   return [
     '## Jev API 使用量 (TypeSafe AI)',
-    `- 残クレジット: $${info.creditsRemainingUsd}`,
-    `- 残入力トークン数: ${info.paidInputTokensRemaining}`,
+    'TypeSafe AI公式APIには残クレジットを取得するエンドポイントがありません。',
+    '残クレジットの確認は https://console.typesafe.ai のダッシュボードで行ってください。',
   ].join('\n');
 }
 
@@ -982,7 +983,6 @@ export type AichatSlashCommandDeps = {
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
-  fetchJevCredits?: () => Promise<JevCreditsInfo>;
   /** `/neko vlink <キーワード>` 用。Googleに「YouTube <キーワード>」で検索をかけ、www.youtube.comのリンクのみを抽出して返す */
   searchYoutubeLinks?: (keyword: string) => Promise<string[]>;
   /** `/neko j <キーワード>` 用。jev_evaluationsをquestion/answerのキーワード部分一致で絞り込み、ヒット件数と各share(先頭AICHAT_JEV_KEYWORD_SCORE_LIMIT件)の1〜20ラベル個別スコアを返す */
@@ -1946,20 +1946,7 @@ export async function interpretAichatSlashCommand(
   }
 
   if (subcommand === 'jev') {
-    if (!deps.fetchJevCredits) {
-      return { handled: true, response: '❌ /neko jev は現在利用できません(TypeSafe AI APIキー未設定)' };
-    }
-    const outcome = await raceWithTimeout(deps.fetchJevCredits(), AICHAT_SEARCH_TIMEOUT_MS);
-    if (outcome.status === 'timeout') {
-      return {
-        handled: true,
-        response: `❌ /neko jev がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
-      };
-    }
-    if (outcome.status === 'error') {
-      return { handled: true, response: `❌ /neko jev でエラーが発生しました: ${outcome.message}` };
-    }
-    return { handled: true, response: formatJevCreditsResult(outcome.value) };
+    return { handled: true, response: formatJevCreditsInfo() };
   }
 
   if (subcommand === 'rubyver') {
