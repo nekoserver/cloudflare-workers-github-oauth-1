@@ -163,6 +163,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
+    '| /neko jev | TypeSafe AI(Jev)APIの残クレジット・残入力トークン数を表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -218,6 +219,20 @@ export function formatDynamicWorkerPingResult(reply: string): string {
     return '## ダイナミックWorker起動確認 (dynamicneko)\n✅ hello → world (LOADER.load()経由で使い捨てisolateが正常に応答しました)';
   }
   return `## ダイナミックWorker起動確認 (dynamicneko)\n⚠️ 想定外の応答: ${reply}`;
+}
+
+export type JevCreditsInfo = {
+  creditsRemainingUsd: number;
+  paidInputTokensRemaining: number;
+};
+
+/** `/neko jev` の取得結果(TypeSafe AI Jevの残クレジット・残入力トークン数)を表示する。 */
+export function formatJevCreditsResult(info: JevCreditsInfo): string {
+  return [
+    '## Jev API 使用量 (TypeSafe AI)',
+    `- 残クレジット: $${info.creditsRemainingUsd}`,
+    `- 残入力トークン数: ${info.paidInputTokensRemaining}`,
+  ].join('\n');
 }
 
 export type CommitAgentLogRow = {
@@ -650,6 +665,7 @@ export type AichatSlashCommandDeps = {
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
+  fetchJevCredits?: () => Promise<JevCreditsInfo>;
 };
 
 export type SqlImpactCatalogRow = {
@@ -1342,6 +1358,23 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatDynamicWorkerPingResult(outcome.value) };
   }
 
+  if (subcommand === 'jev') {
+    if (!deps.fetchJevCredits) {
+      return { handled: true, response: '❌ /neko jev は現在利用できません(TypeSafe AI APIキー未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.fetchJevCredits(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko jev がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko jev でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatJevCreditsResult(outcome.value) };
+  }
+
   if (subcommand === 'rubyver') {
     try {
       return { handled: true, response: formatRubyWasmVersionResult(getRubyWasmVersionInfo()) };
@@ -1359,6 +1392,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko jev, /neko help\n詳細は /neko help を実行してください`,
   };
 }

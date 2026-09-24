@@ -273,6 +273,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
+import { fetchJevCreditsFromTypesafeApi } from './utils/jevApi';
 
 /**
  * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
@@ -5371,6 +5372,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
+    fetchJevCredits: c.env.TYPESAFE_API_KEY ? () => fetchJevCreditsFromTypesafeApi(c.env.TYPESAFE_API_KEY as string) : undefined,
     fetchAichatSourceTotals: async () => {
       if (!c.env.DB) throw new Error('DB未設定です');
       const month = new Date().toISOString().slice(0, 7);

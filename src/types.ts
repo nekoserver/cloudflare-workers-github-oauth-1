@@ -48,6 +48,8 @@ export type Bindings = {
   /** harness_hook_logへのPostToolUseフック書き込み用の共有シークレット */
   HARNESS_HOOK_SECRET?: string;
   GITHUB_TOKEN?: string;
+  /** /neko jev（TypeSafe AI Jev の使用量・残クレジット取得）用のAPIキー。console.typesafe.aiで発行する */
+  TYPESAFE_API_KEY?: string;
   /**
    * /gh-attach（gh issue create --attachのWASM移植）のアップロード専用GitHub PAT
    * （classic、repoスコープ必須）。uploads.github.com/user-attachments/assetsは
