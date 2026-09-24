@@ -6,7 +6,7 @@ SELECT printf('%04d', COALESCE(MAX(CAST(workflow_no AS INTEGER)), 0) + 1),
 FROM workflow_registry;
 
 INSERT INTO workflow_steps (workflow_no, step_order, stage_title, api_method, api_path, note, indent_level)
-SELECT workflow_no, 1, '対象リポジトリのファイル一覧を取得', NULL, NULL, 'git ls-tree -r HEADで対象リポジトリ(既定はnekoserver/cloudflare-workers-github-oauth-1)のパス一覧(path\ttype)を取得します。/neko treeはGitHub APIのツリーAPIから同じ形式の一覧を取得します。', 0
+SELECT workflow_no, 1, '対象リポジトリのファイル一覧を取得', NULL, NULL, 'git ls-tree -r HEADで対象リポジトリ(既定はnekoserver/cloudflare-workers-github-oauth-1)のパス一覧(path\ttype)を取得します。/neko treeはGitHub APIのツリーAPIから同じ形式の一覧を取得します。更新対象は現在実在するリポジトリのみに限定し、テンプレートから新たに作成されたインスタンスであっても自動的には対象に含めない。対象を広げる場合は都度リポジトリを明示的に指定すること。', 0
 FROM workflow_registry ORDER BY CAST(workflow_no AS INTEGER) DESC LIMIT 1;
 
 INSERT INTO workflow_steps (workflow_no, step_order, stage_title, api_method, api_path, note, indent_level)
