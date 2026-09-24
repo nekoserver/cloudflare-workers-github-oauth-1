@@ -432,10 +432,9 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
 
     const result = await interpretAichatSlashCommand('/neko tvupdate -R nekoserver/dynamicneko', new Date('2026-09-22T03:00:00.000Z'), {
       fetchLatestCommitAgentLog: async () => null,
-      updateTreeView: (force, repoName) => refreshTreeViewSnapshotsIfStale(
+      updateTreeView: (repoName) => refreshTreeViewSnapshotsIfStale(
         { ...BASE_ENV, DB: wrapD1(db) } as never,
         new Date('2026-09-22T03:00:00.000Z'),
-        force,
         repoName,
       ),
     });
@@ -510,21 +509,7 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(result.updated).toEqual([]);
   });
 
-  it('過去1時間以内の更新履歴があればGitHub APIを呼ばない', async () => {
-    const db = setupDb({});
-    insertInstallationRepo(db, 'nekoserver/dynamicneko');
-    db.prepare(`INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at) VALUES (?, 'scheduled', 0, ?)`)
-      .run('nekoserver/dynamicneko', '2026-09-22T02:30:00.000Z');
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await refreshTreeViewSnapshotsIfStale({ ...BASE_ENV, DB: wrapD1(db) } as never, new Date('2026-09-22T03:00:00.000Z'));
-
-    expect(result.status).toBe('recent');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('--forceは直近の更新履歴を無視してD1を更新する', async () => {
+  it('直近1時間以内に実行履歴があっても待機せず毎回GitHubから再取得する(1時間規制は撤去済み)', async () => {
     const db = setupDb({});
     insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'nekoserver/dynamicneko', type: 'dir' });
     db.prepare(`INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at) VALUES (?, 'scheduled', 0, ?)`)
@@ -536,7 +521,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      true,
     );
 
     expect(result.status).toBe('updated');
@@ -547,7 +531,7 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     expect(db.prepare('SELECT COUNT(*) AS count FROM tree_view_update_log').get()).toEqual({ count: 2 });
   });
 
-  it('--forceでGitHub側で削除されたファイルは、truncatedでなければツリーから消える(ファイル数が減る)', async () => {
+  it('GitHub側で削除されたファイルは、truncatedでなければツリーから消える(ファイル数が減る)', async () => {
     const db = setupDb({});
     insertSnapshot(db, 'nekoserver/dynamicneko', {
       name: 'nekoserver/dynamicneko', type: 'dir',
@@ -560,7 +544,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      true,
     );
 
     expect(result.status).toBe('updated');
@@ -583,7 +566,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      true,
     );
 
     expect(result.status).toBe('updated');
@@ -604,7 +586,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      false,
       undefined,
       true,
     );
@@ -631,7 +612,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      false,
       undefined,
       true,
     );
@@ -660,7 +640,6 @@ describe('refreshTreeViewSnapshotsIfStale (/neko tvupdate)', () => {
     const result = await refreshTreeViewSnapshotsIfStale(
       { ...BASE_ENV, DB: wrapD1(db) } as never,
       new Date('2026-09-22T03:00:00.000Z'),
-      false,
       undefined,
       true,
     );
