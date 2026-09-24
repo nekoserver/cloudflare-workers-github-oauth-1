@@ -73,7 +73,7 @@ describe('🔑キー管理ページ(/api-keys)のHTML', () => {
 
   it('生キーは発行直後の一度だけ表示するモーダルを持つ', () => {
     expect(html).toContain('id="rawKeyModal"');
-    expect(html).toContain('showRawKeyModal(res.data.rawKey)');
+    expect(html).toContain('showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown)');
   });
 
   it('一覧描画時にラベルやプレフィックスをエスケープしている(XSS対策)', () => {
@@ -118,7 +118,7 @@ describe('🔑キー管理ページ(/api-keys)のHTML', () => {
 
   it('確認モーダルはgetNextZ()で動的にz-indexを算出してから表示する(CLAUDE.mdルール26)', () => {
     expect(html).toContain('function getNextZ()');
-    expect(html).toContain("staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000 }");
+    expect(html).toContain("staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000, statsModal: 2000 }");
     const idx = html.indexOf('function requestRevoke(id)');
     const block = html.slice(idx, idx + 300);
     expect(block).toContain("modal.style.zIndex = String(getNextZ())");

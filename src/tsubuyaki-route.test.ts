@@ -43,7 +43,7 @@ describe('POST /api/tsubuyaki', () => {
 
   it('通知先(Slack/外部Worker)はresolveNotifyConfig/dispatchNotificationで解決する（NOTIFY_TARGETで切替可能）', () => {
     expect(postBlock).toContain('const notifyConfig = await resolveNotifyConfigWithSetting(c.env);');
-    expect(postBlock).toContain('const result = await dispatchNotification(notifyConfig, { text: message });');
+    expect(postBlock).toContain('const result = await dispatchNotification(notifyConfig, { text: message, blocks });');
   });
 
   it('送信先が未設定の場合は503、送信を試みて失敗した場合は502でエラー内容を返す（握りつぶさない）', () => {

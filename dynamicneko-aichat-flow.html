@@ -102,7 +102,7 @@
   <p class="lede">
     別デプロイのWorkerである <code>dynamicneko</code> の「AIに問い合わせ」ウィジェットから、
     本体WorkerのWorkers AIを呼び出して応答を返すまでの経緯。2026-09-10の1日で積み上がった
-    5コミットを時系列で示す。詳細は
+    5コミットと、2026-09-14に発覚したセキュリティ脆弱性の修正2コミットを時系列で示す。詳細は
     <a href="SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md">SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md</a>
     を参照。
   </p>
@@ -160,12 +160,28 @@
           <td><code>source='dynamicneko'</code>のレコードが<code>normalizeAichatSource</code>のフォールバックで円グラフ上「回答伝播ページ(api)」に紛れ込んでいたバグを修正。専用の<code>dynamicneko</code>区分(色<code>#10b981</code>)を追加</td>
           <td>「日ごとキーワード数・質問数」モーダルの円グラフで、dynamicneko経由の問い合わせだけを独立した区分として正確に集計・可視化できるようになった</td>
         </tr>
+        <tr>
+          <td class="step">⑥</td>
+          <td class="date">2026-09-14</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/4bdb102"><code>4bdb102</code></a></td>
+          <td><code>query-external</code>系がリクエスト本文の<code>login</code>を信用する脆弱性を修正</td>
+          <td>外部セキュリティレビューにより、Bearer secretと許可メールの検証はしていたものの検索・保存対象の<code>user_id</code>(login)をリクエスト本文からそのまま受け取っていたことが発覚(PR #1809/#1810で混入)。他ユーザーの質問・回答全文やAgent履歴を検索・書き込みできる状態だった。新設した<code>resolveDynamicnekoAllowedLogin</code>がサーバー側で検証済みのemailに紐づく<code>dynamicneko_aichat_allowed_users.github_login</code>だけを信頼するようにし、2エンドポイントで共通化。migration <code>0141</code>で<code>github_login</code>列を追加</td>
+          <td>dynamicneko側の「AIに問い合わせ」・CursorOpsの両ウィジェットで、他ユーザーのuser_idを騙って検索・書き込みすることができなくなった</td>
+        </tr>
+        <tr>
+          <td class="step">⑦</td>
+          <td class="date">2026-09-14</td>
+          <td class="commit"><a href="https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c7b677a"><code>c7b677a</code></a></td>
+          <td><code>permission-external</code>が<code>github_login</code>未登録も<code>allowed:false</code>として返すよう修正</td>
+          <td>⑥までは<code>isDynamicnekoAichatAllowed</code>(メールの許可リスト登録有無)しか見ておらず、<code>github_login</code>登録漏れの許可済みメールは「ボタンを押すまで使えないと分からない」状態だった。<code>resolveDynamicnekoAllowedLogin</code>の結果も見て、未登録なら<code>allowed:false</code>を返すようにした</td>
+          <td>dynamicneko側のウィジェットが、<code>github_login</code>登録漏れのケースも事前にグレーアウト表示できるようになった</td>
+        </tr>
       </tbody>
     </table>
   </div>
 
   <footer>
-    出典: コミットログ(<code>origin/main</code>、2026-09-10) — 詳細は
+    出典: コミットログ(<code>origin/main</code>、2026-09-10・2026-09-14) — 詳細は
     <a href="SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md">SPEC.cloudflare-workers-github-oauth-1.dynamicneko-aichat-flow.md</a>
   </footer>
 </div>

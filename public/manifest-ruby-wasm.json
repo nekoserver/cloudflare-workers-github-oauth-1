@@ -1,0 +1,19 @@
+{
+  "name": "Ruby WASM",
+  "short_name": "Ruby WASM",
+  "description": "Rubyコードをブラウザ上のWebAssemblyで実行するREPLとサンプル集",
+  "start_url": "/ruby-wasm",
+  "scope": "/ruby-wasm",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/wasm-modules-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -95,6 +95,44 @@ describe('POST /api/aichat/vectorize-answer: 埋め込みモデル選択', () =>
     expect(ai.run).toHaveBeenCalledWith('@cf/baai/bge-m3', expect.anything());
   });
 
+  it('forcePlamo=trueの場合、未知のmodelを指定しても400にならず強制的にplamo-embedding-1bで問い合わせる(AIチャット✂️ボタン専用フラグ)', async () => {
+    const auth = await makeAuthHeader();
+    const db = makeDb({ id: 's1', answer: 'テスト回答' });
+    const ai = {
+      run: vi.fn().mockImplementation((model: string) => {
+        if (model === PLAMO_EMBEDDING_MODEL) return Promise.resolve({ data: [[0.1, 0.2, 0.3]] });
+        return Promise.resolve({ response: '' });
+      }),
+    };
+
+    const res = await app.request('/api/aichat/vectorize-answer', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareId: 's1', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', forcePlamo: true }),
+    }, makeEnv(db, ai));
+
+    expect(res.status).toBe(200);
+    const bodyJson = await res.json() as { model: string; vectorized: boolean };
+    expect(bodyJson.vectorized).toBe(true);
+    expect(bodyJson.model).toBe(PLAMO_EMBEDDING_MODEL);
+    expect(ai.run).toHaveBeenCalledWith(PLAMO_EMBEDDING_MODEL, expect.anything());
+  });
+
+  it('forcePlamoが無い(またはfalse)場合は、従来通り未知のmodelは400で拒否される(answer-graphのモデル選択への影響なし)', async () => {
+    const auth = await makeAuthHeader();
+    const db = makeDb({ id: 's1', answer: 'テスト回答' });
+    const ai = { run: vi.fn().mockResolvedValue({ data: [[0.1, 0.2]] }) };
+
+    const res = await app.request('/api/aichat/vectorize-answer', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareId: 's1', model: '@cf/unknown/not-a-real-model', forcePlamo: false }),
+    }, makeEnv(db, ai));
+
+    expect(res.status).toBe(400);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
   it('model未指定時は従来通りplamo-embedding-1bがデフォルトになる', async () => {
     const auth = await makeAuthHeader();
     const db = makeDb({ id: 's1', answer: 'テスト回答' });

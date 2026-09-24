@@ -176,8 +176,12 @@ function ensureWasmReady() {
   wasmReadyPromise = (async () => {
     await import('/wasm/gh-attach-wasm_exec.js');
     const go = new Go();
-    const result = await WebAssembly.instantiateStreaming(fetch('/wasm/gh-attach.wasm'), go.importObject);
-    go.run(result.instance);
+    const res = await fetch('/wasm/gh-attach.wasm');
+    if (!res.ok) throw new Error('gh-attach.wasmの取得に失敗しました(HTTP ' + res.status + ')');
+    const bytes = await res.arrayBuffer();
+    const mod = await WebAssembly.compile(bytes);
+    const instance = await WebAssembly.instantiate(mod, go.importObject);
+    go.run(instance);
   })();
   return wasmReadyPromise;
 }

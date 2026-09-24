@@ -7,6 +7,7 @@ import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript
 import { getCountdownQuickAddModalCSS, getCountdownQuickAddModalHTML, getCountdownQuickAddModalScript } from '../utils/countdownQuickAdd';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getKeywordHighlightScript } from '../utils/keywordHighlight';
+import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -168,6 +169,23 @@ export function getAiChatPage(user: {
     .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(0,0,0,0.07)); color:var(--kw-pal-unc-fg,var(--text-secondary,#6b7280)); border:1.5px solid transparent; }
     [data-theme="dark"] .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(255,255,255,0.1)); color:var(--kw-pal-unc-fg,var(--text-secondary,#9ca3af)); }
     .hist-kw-chip-active { background:var(--kw-pal-act,#6366f1) !important; color:#fff !important; border-color:var(--kw-pal-act,#6366f1) !important; }
+    /* 「探索の境界線」パネル(未理解キーワード一覧)。回答をベクタ化する
+       たびに更新され、チップを押すと「〇〇について説明してください」を
+       入力欄へ差し込む(次の探索を境界線上のキーワードへ誘導する)。 */
+    .kb-panel { display:none; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 14px; border-top:1px solid var(--border-color); background:var(--bg-secondary); }
+    .kb-panel.kb-panel-visible { display:flex; }
+    .kb-panel-label { font-size:11px; color:var(--text-muted); white-space:nowrap; }
+    .kb-chip-wrap { display:inline-flex; align-items:center; gap:3px; padding:3px 10px 3px 6px; border-radius:12px; font-size:11px; white-space:nowrap; box-sizing:border-box; border:1.5px solid var(--accent-color,#667eea); background:transparent; }
+    .kb-chip-check { width:12px; height:12px; margin:0; cursor:pointer; accent-color:var(--accent-color,#667eea); flex-shrink:0; }
+    .kb-chip { border:none; background:transparent; color:var(--accent-color,#667eea); font-size:11px; cursor:pointer; padding:0; }
+    .kb-chip:hover { text-decoration:underline; }
+    .kb-auto-explore-input { margin-left:auto; width:140px; padding:3px 8px; border-radius:12px; font-size:11px; border:1.5px solid var(--border-color); background:var(--bg-primary,transparent); color:var(--text-primary); }
+    .kb-auto-explore-btn { padding:3px 10px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:transparent; }
+    .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
+    .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
+    .kb-auto-explore-btn.kb-running { border-color:#dc2626; color:#dc2626; }
+    .kb-progress-log { display:none; max-height:120px; overflow-y:auto; padding:6px 14px; font-family:monospace; font-size:10.5px; line-height:1.5; color:var(--text-muted); background:var(--bg-secondary); border-top:1px solid var(--border-color); white-space:pre; }
+    .kb-progress-log.kb-progress-log-visible { display:block; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -244,6 +262,26 @@ export function getAiChatPage(user: {
     .search-log-date { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
     .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
     .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
+    .csearch-answer-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
+    .qsearch-id-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
+    .csearch-result-table .csearch-created-at { white-space: nowrap; color: var(--text-muted, var(--text-secondary)); font-size: 12px; }
+    .csearch-result-table td { word-break: break-word; white-space: normal; }
+    .qsearch-result-table td { word-break: break-word; white-space: normal; }
+    .qsearch-result-table .qsearch-id-link { white-space: nowrap; }
+    #cursorAgentAnswerModal .search-log-modal { width: min(840px, 96vw); }
+    #cursorAgentAnswerModalBody {
+      word-break: break-word; font-size: 13px;
+      color: var(--text-primary); background: var(--bg-secondary);
+      padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
+      white-space: normal;
+    }
+    #qsearchAnswerModal .search-log-modal { width: min(840px, 96vw); }
+    #qsearchAnswerModalBody {
+      word-break: break-word; font-size: 13px;
+      color: var(--text-primary); background: var(--bg-secondary);
+      padding: 12px; border-radius: 8px; margin: 0; font-family: inherit;
+      white-space: normal;
+    }
 
     .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
@@ -696,6 +734,19 @@ export function getAiChatPage(user: {
       to { transform: translateY(0); opacity: 1; }
     }
 
+    /* ======= ✂️切り出し(ベクタ化+キーワード一括登録)の進行トースト ======= */
+    /* ✂️ボタンは押しても見た目の変化が背景色の一瞬の切り替えだけで、
+       「本当に何か起きたのか」が利用者に伝わりにくかった(実際には動作は
+       していたが無反応に見える不具合の原因)。処理の各段階が終わるたびに
+       トーストで明示する。 */
+    .aichat-send-toast.aichat-scissors-toast-cyan { background: #bee3f8; color: #1a365d; }
+    .aichat-send-toast.aichat-scissors-toast-neutral { background: #e2e8f0; color: #2d3748; }
+    @keyframes scissorsBtnSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .scissors-btn-spinning { display: inline-block; animation: scissorsBtnSpin 0.8s linear infinite; }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
@@ -974,6 +1025,19 @@ export function getAiChatPage(user: {
       </div>
     </div>
 
+    <!-- Jev評価値(jev_label_id 1〜20)モーダル -->
+    <div class="search-log-overlay" id="jevValuesModal" aria-hidden="true" style="z-index:820;">
+      <div class="search-log-modal" style="max-width:720px;">
+        <div class="search-log-head">
+          <span class="search-log-title">📔 Jev評価値</span>
+          <button class="search-log-close" id="jevValuesClose" aria-label="閉じる">✕</button>
+        </div>
+        <div class="search-log-body" id="jevValuesBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
+          <div class="search-log-loading">読み込み中...</div>
+        </div>
+      </div>
+    </div>
+
     <!-- 日ごとキーワード数・質問数グラフモーダル -->
     <div class="search-log-overlay" id="dailyStatsModal" aria-hidden="true" style="z-index:820;">
       <div class="search-log-modal" style="max-width:720px;">
@@ -1010,6 +1074,21 @@ export function getAiChatPage(user: {
     <!-- チャット本体 -->
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
+      <!-- 「探索の境界線」パネル: ベクタ化済みキーワードのうちまだどの
+           カテゴリにも分類されていないもの(aichat_keyword_category_map
+           未登録)を並べる。チップを押すと「〇〇について説明してください」が
+           入力欄に入り、次の質問がすぐ送れる。回答のベクタ化(✂️)のたびに
+           更新される。「自動探索」ボタンは、入力待ちを挟まず未分類
+           キーワードへ次々に問い合わせる(最大3階層)。 -->
+      <div class="kb-panel" id="keywordBoundaryPanel">
+        <span class="kb-panel-label">🧭 まだ分類されていないキーワード:</span>
+        <div id="keywordBoundaryChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <input type="text" class="kb-auto-explore-input" id="autoExploreManualInput" placeholder="キーワードを入力して探索" title="チェックボックスの一覧に無いキーワードも、ここに入力して自動探索ボタンを押せば起点に追加される">
+        <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックした(または入力した)キーワードを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
+      </div>
+      <!-- 自動探索の途中経過ログ。AI問い合わせ→Jev処理→キー切り出しの
+           各段階の開始・完了時刻と所要時間を、実行中だけ表示する。 -->
+      <div class="kb-progress-log" id="autoExploreProgressLog"></div>
       <div class="chat-form-area">
         <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
           <div class="chat-image-preview-thumb">
@@ -1076,6 +1155,30 @@ export function getAiChatPage(user: {
         <button class="search-log-close" id="nekoResultsModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body" id="nekoResultsModalBody"></div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="cursorAgentAnswerModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" aria-labelledby="cursorAgentAnswerModalTitle">
+      <div class="search-log-head">
+        <span class="search-log-title" id="cursorAgentAnswerModalTitle">回答全文</span>
+        <button class="search-log-close" id="cursorAgentAnswerModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body">
+        <div id="cursorAgentAnswerModalBody" class="preview-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="qsearchAnswerModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" aria-labelledby="qsearchAnswerModalTitle">
+      <div class="search-log-head">
+        <span class="search-log-title" id="qsearchAnswerModalTitle">最新の回答</span>
+        <button class="search-log-close" id="qsearchAnswerModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body">
+        <div id="qsearchAnswerModalBody" class="preview-area"></div>
+      </div>
     </div>
   </div>
 
@@ -1414,6 +1517,8 @@ export function getAiChatPage(user: {
         <span id="historyModalMeta"></span>
         <span id="historyModalTokens" style="font-size:11px;color:var(--text-muted);"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
+        <button type="button" class="search-hist-btn" id="historyModalJevValuesBtn" style="padding:3px 6px;font-size:13px;" title="Jev評価値(jev_label_id 1〜20)を表示">📔</button>
+        <button type="button" class="search-hist-btn" id="historyModalScissorsBtn" style="padding:3px 6px;font-size:13px;" title="この回答をベクタ化してキーワードを一括登録する">✂️</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
       <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
@@ -1630,6 +1735,255 @@ export function getAiChatPage(user: {
       var td = e.target.closest('td[data-share-id]');
       if (!td) return;
       openHistoryModalByShareId(td.getAttribute('data-share-id'), '[]');
+    });
+
+    var cursorAgentAnswerModal = document.getElementById('cursorAgentAnswerModal');
+    var cursorAgentAnswerModalTitle = document.getElementById('cursorAgentAnswerModalTitle');
+    var cursorAgentAnswerModalClose = document.getElementById('cursorAgentAnswerModalClose');
+    var cursorAgentAnswerModalBody = document.getElementById('cursorAgentAnswerModalBody');
+
+    function formatCursorAgentCsearchAnswerText(payload) {
+      if (payload && typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+      var answers = [];
+      if (payload && Array.isArray(payload.answers)) {
+        payload.answers.forEach(function(a) {
+          if (typeof a === 'string' && a.length > 0) answers.push(a);
+        });
+      }
+      if (answers.length === 0) return 'キャッシュに回答文がありません';
+      var body = answers.join('\\n\\n');
+      if (payload && typeof payload.cacheError === 'string' && payload.cacheError.trim()) {
+        return body + '\\n\\n' + payload.cacheError;
+      }
+      return body;
+    }
+
+    function closeCursorAgentAnswerModal() {
+      cursorAgentAnswerModal.classList.remove('open');
+      cursorAgentAnswerModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openCursorAgentAnswerModal(launchId, question) {
+      cursorAgentAnswerModalTitle.textContent = question || '回答全文';
+      cursorAgentAnswerModalBody.textContent = '読み込み中...';
+      cursorAgentAnswerModal.style.zIndex = String(getNextZ());
+      cursorAgentAnswerModal.classList.add('open');
+      cursorAgentAnswerModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/cursor-agent/history/' + encodeURIComponent(String(launchId)) + '/conversation', { credentials: 'same-origin' })
+        .then(function(res) { return res.json().then(function(data) { return data; }); })
+        .then(function(data) {
+          var payload = data || {};
+          var text = formatCursorAgentCsearchAnswerText(payload);
+          if (typeof payload.error === 'string' && payload.error.trim()) {
+            cursorAgentAnswerModalBody.textContent = text;
+            return;
+          }
+          cursorAgentAnswerModalBody.innerHTML = parseMd(text);
+        })
+        .catch(function(err) {
+          cursorAgentAnswerModalBody.textContent = '回答の取得に失敗しました: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+
+    function parseCsearchHrefId(href) {
+      if (!href) return '';
+      var prefix = '#csearch-';
+      if (href.indexOf(prefix) !== 0) return '';
+      var rest = href.slice(prefix.length);
+      if (!rest) return '';
+      var i;
+      for (i = 0; i < rest.length; i++) {
+        var code = rest.charCodeAt(i);
+        if (code < 48 || code > 57) return '';
+      }
+      return rest;
+    }
+
+    function bindCsearchAnswerLink(a, item) {
+      if (!a || !item) return;
+      a.href = '#csearch-' + item.id;
+      a.className = 'csearch-answer-link';
+      a.textContent = '表示';
+      a.removeAttribute('target');
+      a.setAttribute('data-launch-id', String(item.id));
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCursorAgentAnswerModal(item.id, item.question || '');
+      });
+    }
+
+    function createCsearchAnswerLink(item) {
+      var a = document.createElement('a');
+      bindCsearchAnswerLink(a, item);
+      return a;
+    }
+
+    function questionFromCsearchRow(tr) {
+      if (!tr || !tr.cells || tr.cells.length < 2) return '';
+      return (tr.cells[tr.cells.length - 2].textContent || '').trim();
+    }
+
+    function createdAtFromCsearchRow(tr) {
+      if (!tr || !tr.cells || tr.cells.length < 3) return '(時刻不明)';
+      return (tr.cells[0].textContent || '').trim() || '(時刻不明)';
+    }
+
+    function wireCsearchAnswerLinks(el, items) {
+      if (!el) return;
+      var byId = {};
+      (items || []).forEach(function(item) {
+        if (item && item.id != null) byId[String(item.id)] = item;
+      });
+      var table = el.querySelector('table');
+      if (!table) {
+        if (!items || items.length === 0) return;
+        table = document.createElement('table');
+        table.className = 'csearch-result-table';
+        var thead = document.createElement('thead');
+        var headRow = document.createElement('tr');
+        var tHead = document.createElement('th');
+        tHead.textContent = '作成時刻(JST)';
+        var qHead = document.createElement('th');
+        qHead.textContent = '質問文';
+        var aHead = document.createElement('th');
+        aHead.textContent = '表示';
+        headRow.appendChild(tHead);
+        headRow.appendChild(qHead);
+        headRow.appendChild(aHead);
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        var tbody = document.createElement('tbody');
+        items.forEach(function(item) {
+          var tr = document.createElement('tr');
+          var timeTd = document.createElement('td');
+          timeTd.className = 'csearch-created-at';
+          timeTd.textContent = item.createdAtJst || '(時刻不明)';
+          var qTd = document.createElement('td');
+          qTd.textContent = item.question || '(質問文なし)';
+          var aTd = document.createElement('td');
+          aTd.appendChild(createCsearchAnswerLink(item));
+          tr.appendChild(timeTd);
+          tr.appendChild(qTd);
+          tr.appendChild(aTd);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        el.appendChild(table);
+        return;
+      }
+      table.classList.add('csearch-result-table');
+      var rows = table.querySelectorAll('tbody tr');
+      rows.forEach(function(tr, i) {
+        var lastTd = tr.cells[tr.cells.length - 1];
+        if (!lastTd) return;
+        var existing = lastTd.querySelector('a');
+        var hrefId = existing ? parseCsearchHrefId(existing.getAttribute('href') || '') : '';
+        var item = (hrefId && byId[hrefId]) || (items && items[i]) || null;
+        if (!item) {
+          var inferredId = hrefId || (existing && existing.getAttribute('data-launch-id')) || '';
+          if (!inferredId) return;
+          item = {
+            id: Number(inferredId),
+            question: questionFromCsearchRow(tr),
+            createdAtJst: createdAtFromCsearchRow(tr),
+          };
+        }
+        if (existing) {
+          bindCsearchAnswerLink(existing, item);
+        } else {
+          lastTd.textContent = '';
+          lastTd.appendChild(createCsearchAnswerLink(item));
+        }
+      });
+    }
+
+    cursorAgentAnswerModalClose.addEventListener('click', closeCursorAgentAnswerModal);
+    cursorAgentAnswerModal.addEventListener('click', function(e) { if (e.target === cursorAgentAnswerModal) closeCursorAgentAnswerModal(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && cursorAgentAnswerModal.classList.contains('open')) closeCursorAgentAnswerModal();
+    });
+
+    var qsearchAnswerModal = document.getElementById('qsearchAnswerModal');
+    var qsearchAnswerModalTitle = document.getElementById('qsearchAnswerModalTitle');
+    var qsearchAnswerModalClose = document.getElementById('qsearchAnswerModalClose');
+    var qsearchAnswerModalBody = document.getElementById('qsearchAnswerModalBody');
+
+    function formatAichatQsearchAnswerText(payload) {
+      if (payload && typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+      if (payload && typeof payload.answer === 'string' && payload.answer.length > 0) return payload.answer;
+      return '回答文がありません';
+    }
+
+    function closeQsearchAnswerModal() {
+      qsearchAnswerModal.classList.remove('open');
+      qsearchAnswerModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openQsearchAnswerModal(id, model) {
+      qsearchAnswerModalTitle.textContent = id || '最新の回答';
+      qsearchAnswerModalBody.textContent = '読み込み中...';
+      qsearchAnswerModal.style.zIndex = String(getNextZ());
+      qsearchAnswerModal.classList.add('open');
+      qsearchAnswerModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/aichat/qsearch/latest-answer?id=' + encodeURIComponent(id || '') + '&model=' + encodeURIComponent(model || ''), { credentials: 'same-origin' })
+        .then(function(res) { return res.json().then(function(data) { return data; }); })
+        .then(function(data) {
+          var payload = data || {};
+          if (payload && typeof payload.question === 'string' && payload.question.trim()) {
+            qsearchAnswerModalTitle.textContent = payload.question;
+          }
+          var text = formatAichatQsearchAnswerText(payload);
+          if (typeof payload.error === 'string' && payload.error.trim()) {
+            qsearchAnswerModalBody.textContent = text;
+            return;
+          }
+          qsearchAnswerModalBody.innerHTML = parseMd(text);
+        })
+        .catch(function(err) {
+          qsearchAnswerModalBody.textContent = '回答の取得に失敗しました: ' + (err && err.message ? err.message : String(err));
+        });
+    }
+
+    function parseAichatQsearchHref(href) {
+      if (!href) return null;
+      var normalized = String(href);
+      while (normalized.indexOf('&amp;') !== -1) {
+        normalized = normalized.split('&amp;').join('&');
+      }
+      var prefix = '#qsearch?';
+      if (normalized.indexOf(prefix) !== 0) return null;
+      var params = new URLSearchParams(normalized.slice(prefix.length));
+      var id = params.get('id') || '';
+      if (!id) return null;
+      return { id: id, model: params.get('model') || '' };
+    }
+
+    function bindQsearchIdLink(a) {
+      if (!a) return;
+      var parsed = parseAichatQsearchHref(a.getAttribute('href') || '');
+      a.className = 'qsearch-id-link';
+      a.removeAttribute('target');
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!parsed) return;
+        openQsearchAnswerModal(parsed.id || '', parsed.model || '');
+      });
+    }
+
+    function wireQsearchIdLinks(el) {
+      if (!el) return;
+      var table = el.querySelector('table');
+      if (table) table.classList.add('qsearch-result-table');
+      var links = el.querySelectorAll('a[href^="#qsearch"]');
+      links.forEach(function(a) { bindQsearchIdLink(a); });
+    }
+
+    qsearchAnswerModalClose.addEventListener('click', closeQsearchAnswerModal);
+    qsearchAnswerModal.addEventListener('click', function(e) { if (e.target === qsearchAnswerModal) closeQsearchAnswerModal(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && qsearchAnswerModal.classList.contains('open')) closeQsearchAnswerModal();
     });
 
     searchImpressionsBody.addEventListener('click', function(e) {
@@ -2771,6 +3125,11 @@ export function getAiChatPage(user: {
     var historyModalMeta = document.getElementById('historyModalMeta');
     var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
+    var historyModalJevValuesBtn = document.getElementById('historyModalJevValuesBtn');
+    var historyModalScissorsBtn = document.getElementById('historyModalScissorsBtn');
+    var jevValuesModal = document.getElementById('jevValuesModal');
+    var jevValuesBody = document.getElementById('jevValuesBody');
+    var jevValuesClose = document.getElementById('jevValuesClose');
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalFullscreenBtn = document.getElementById('historyModalFullscreenBtn');
     var historyModal = document.querySelector('.history-modal');
@@ -2818,6 +3177,7 @@ export function getAiChatPage(user: {
         historyModalSwipeDataCache[targetItem.id] = data;
         historyModalCurrentId = data.id;
         historyModalCurrentModel = data.model;
+        refreshJevValuesButtonState();
         historyModalShareLink.href = '/s/' + data.user_hash + '/' + data.id;
         renderHistoryModalTokens(data);
         if (assistBubble) {
@@ -2983,6 +3343,7 @@ export function getAiChatPage(user: {
 
     // ===== キーワードハイライト(画像添付会話プレビュー等と共通) =====
     ${getKeywordHighlightScript()}
+    ${getVectorizeAndBulkRegisterScript()}
 
     function buildAllKeywords() {
       var all = [];
@@ -3212,6 +3573,7 @@ export function getAiChatPage(user: {
       historyModalCurrentId = r.id;
       currentHistoryQuestion = r.question || '';
       historyModalCurrentModel = r.model || '';
+      refreshJevValuesButtonState();
       historyModalSubqueryLinks.style.display = 'none';
       historyModalSubqueryLinks.innerHTML = '';
       historyModalBackdrop.style.zIndex = String(getNextZ());
@@ -3415,7 +3777,8 @@ export function getAiChatPage(user: {
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
         canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
-        ztKeywordSharesModal: 920,
+        ztKeywordSharesModal: 920, cursorAgentAnswerModal: 700, qsearchAnswerModal: 700,
+        jevValuesModal: 820,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3448,6 +3811,24 @@ export function getAiChatPage(user: {
         toast.style.color = '#fff';
         toast.textContent = '送信失敗 フォールバックし継続';
       }
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.classList.add('aichat-send-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 4000);
+    }
+
+    /**
+     * showAichatSendToastと同じ #aichatSendToastContainer を使う汎用トースト。
+     * ✂️ボタン(切り出し・キーワード登録・ベクタ化完了の各段階)のように、
+     * 固定文言でなく呼び出し元ごとに異なるメッセージ・配色を出したい場合に使う。
+     */
+    function showAichatToast(message, className) {
+      var container = document.getElementById('aichatSendToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      toast.className = 'aichat-send-toast' + (className ? ' ' + className : '');
+      toast.textContent = message;
       container.appendChild(toast);
       setTimeout(function() {
         toast.classList.add('aichat-send-toast-fade');
@@ -3617,7 +3998,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -4303,6 +4684,250 @@ export function getAiChatPage(user: {
         })
         .catch(function() { addSubqueryMsg.textContent = '通信エラーが発生しました'; });
     });
+
+    // アイコン設置(ボタンのイベント配線)〜モーダル処理(状態判定・確認・表示)〜
+    // Jev問い合わせ〜DB登録(POST /api/aichat/jev-score)までの一連の流れを
+    // 1つのファクトリ関数にまとめたもの。DOM要素と「今どのshareId/modelを
+    // 見ているか」を返すgetContext()だけを差し替えれば、historyModal以外の
+    // 場所(将来resultsPanel等に同種のボタンを置く場合)からも
+    // createJevValuesWidget(...)を呼ぶだけで同じ挙動を再現できる。
+    function createJevValuesWidget(config) {
+      var button = config.button;
+      var modal = config.modal;
+      var body = config.body;
+      var closeBtn = config.closeBtn;
+      var getContext = config.getContext;
+      var onJevComplete = config.onJevComplete;
+      var onStateLoaded = config.onStateLoaded;
+
+      // 固定色を使う(CLAUDE.CSS.mdの例外: バッジ・ステータス表示で意味的に
+      // 色が固定されているもの、PK/FK/UK/IDXバッジと同じ扱い)。
+      var COLORS = { pink: '#ffd6e8', yellow: '#fff8c5', green: '#d1f7dd' };
+      var TITLES = {
+        pink: 'Jev評価値: 通常のjevテーブルにこの質問+モデルのデータがありません(タップして追加)',
+        yellow: 'Jev評価値: テーブルはありますが評価データがまだありません(タップして追加)',
+        green: 'Jev評価値: 評価済みです(タップして表示)'
+      };
+
+      function gridHtml(values) {
+        if (!values || values.length === 0) {
+          return '<div class="search-log-loading">評価データがありません</div>';
+        }
+        var itemsHtml = values.map(function(v) {
+          var text = v.value === null || v.value === undefined ? '—' : String(v.value);
+          return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);min-width:44px;">'
+            + '<span style="font-size:10px;color:var(--text-muted);">' + escHtml(String(v.jevLabelId)) + '</span>'
+            + '<span style="font-size:14px;color:var(--text-primary);font-weight:600;">' + escHtml(text) + '</span>'
+            + '</span>';
+        }).join('');
+        return '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + itemsHtml + '</div>';
+      }
+
+      function applyButtonState(state) {
+        button.style.background = COLORS[state] || '';
+        button.dataset.jevState = state || '';
+        button.title = TITLES[state] || 'Jev評価値';
+      }
+
+      function refresh() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        var shareIdAtRequest = ctx.shareId;
+        fetch(
+          '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(shareIdAtRequest)) + '&model=' + encodeURIComponent(ctx.model || ''),
+          { credentials: 'same-origin' }
+        )
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            var state = data && data.state;
+            applyButtonState(state);
+            if (typeof onStateLoaded === 'function') onStateLoaded(state);
+          })
+          .catch(function() {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            applyButtonState('pink');
+            if (typeof onStateLoaded === 'function') onStateLoaded('pink');
+          });
+      }
+
+      function showResult(values, state, extraFooterHtml) {
+        applyButtonState(state);
+        body.innerHTML = gridHtml(values) + (extraFooterHtml || '');
+      }
+
+      function close() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+
+      function openModal() {
+        modal.style.zIndex = String(getNextZ());
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function openValuesDisplay() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        openModal();
+        body.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+        fetch(
+          '/api/aichat/jev-values?shareId=' + encodeURIComponent(String(ctx.shareId)) + '&model=' + encodeURIComponent(ctx.model || ''),
+          { credentials: 'same-origin' }
+        )
+          .then(function(r) { return r.json(); })
+          .then(function(data) { showResult(data && data.values, data && data.state, ''); })
+          .catch(function() {
+            body.innerHTML = '<div class="search-log-loading">読み込みに失敗しました</div>';
+          });
+      }
+
+      function runJevScoreAndShow() {
+        var ctx = getContext();
+        var shareIdAtRequest = ctx.shareId;
+        var modelAtRequest = ctx.model || '';
+        body.innerHTML = '<div class="search-log-loading">Jevへ問い合わせ中...</div>';
+        fetch('/api/aichat/jev-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ shareId: shareIdAtRequest, model: modelAtRequest })
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(result) {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            if (!result.ok || !result.data || result.data.verified !== true) {
+              var errText = (result.data && result.data.error) || '書き込みに失敗しました';
+              body.innerHTML = '<div class="search-log-loading">' + escHtml(errText) + '</div>';
+              return;
+            }
+            showResult(
+              result.data.values,
+              result.data.state,
+              '<div style="margin-top:10px;text-align:center;color:var(--text-primary);font-weight:600;">完了</div>'
+            );
+            if (typeof onJevComplete === 'function') onJevComplete(shareIdAtRequest, modelAtRequest);
+          })
+          .catch(function() {
+            if (getContext().shareId !== shareIdAtRequest) return;
+            body.innerHTML = '<div class="search-log-loading">通信エラーが発生しました</div>';
+          });
+      }
+
+      function showAddConfirm() {
+        openModal();
+        body.innerHTML =
+          '<div style="text-align:center;padding:12px;">'
+          + '<div style="margin-bottom:12px;color:var(--text-primary);">Jev評価データがまだありません。追加しますか?</div>'
+          + '<button type="button" id="jevValuesConfirmYes" class="search-hist-btn" style="margin-right:8px;">はい</button>'
+          + '<button type="button" id="jevValuesConfirmNo" class="search-hist-btn">いいえ</button>'
+          + '</div>';
+        var yesBtn = document.getElementById('jevValuesConfirmYes');
+        var noBtn = document.getElementById('jevValuesConfirmNo');
+        if (noBtn) noBtn.addEventListener('click', close);
+        if (yesBtn) yesBtn.addEventListener('click', runJevScoreAndShow);
+      }
+
+      button.addEventListener('click', function() {
+        var ctx = getContext();
+        if (!ctx || !ctx.shareId) return;
+        var state = button.dataset.jevState;
+        if (state === 'pink' || state === 'yellow') {
+          showAddConfirm();
+        } else {
+          openValuesDisplay();
+        }
+      });
+      // closeBtn/modal(背景)のクリックは「今開いているモーダルを閉じる」だけの
+      // 副作用の無い操作なので、同じmodal/closeBtn要素を複数のボタン(複数の
+      // AI応答バブル)で共有してcreateJevValuesWidgetを繰り返し呼んでも、
+      // 二重登録によるリスナーの積み上がりを避けるため一度だけ配線する。
+      if (!modal.dataset.jevModalWired) {
+        modal.dataset.jevModalWired = '1';
+        closeBtn.addEventListener('click', close);
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) close();
+        });
+      }
+
+      return { refresh: refresh, runJevScoreAndShow: runJevScoreAndShow };
+    }
+
+    var historyModalJevValuesWidget = createJevValuesWidget({
+      button: historyModalJevValuesBtn,
+      modal: jevValuesModal,
+      body: jevValuesBody,
+      closeBtn: jevValuesClose,
+      getContext: function() { return { shareId: historyModalCurrentId, model: historyModalCurrentModel }; }
+    });
+
+    // Jev評価値ボタンの右に置く✂️ボタン。クリックされたら
+    // (1) GET /api/aichat/shares/:idで既にベクタ化済み(登録済み)かどうかを
+    //     確認し、ボタンの黄色/通常表示に反映する(「既登録チェック」)
+    // (2) vectorizeAnswerAndExtractKeywordsでPlaMo埋め込みモデルによる
+    //     ベクタ化+予備知識キーワード抽出を行う
+    // (3) 抽出できたキーワードがあればbulkRegisterUnregisteredKeywordsで
+    //     一括登録する
+    var HISTORY_MODAL_SCISSORS_DEFAULT_TITLE = 'この回答をベクタ化してキーワードを一括登録する';
+    function applyHistoryModalScissorsState(vectorized) {
+      historyModalScissorsBtn.style.background = vectorized ? '' : '#fff8c5';
+    }
+    function refreshHistoryModalScissorsState() {
+      if (!historyModalCurrentId) return;
+      var shareIdAtRequest = historyModalCurrentId;
+      fetch('/api/aichat/shares/' + encodeURIComponent(String(shareIdAtRequest)), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (historyModalCurrentId !== shareIdAtRequest) return;
+          applyHistoryModalScissorsState(!!(data && data.vectorized));
+        })
+        .catch(function() {});
+    }
+    historyModalScissorsBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var shareId = historyModalCurrentId;
+      if (!shareId) return;
+      historyModalScissorsBtn.disabled = true;
+      historyModalScissorsBtn.title = '既登録チェック中...';
+      historyModalScissorsBtn.classList.add('scissors-btn-spinning');
+      fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          applyHistoryModalScissorsState(!!(data && data.vectorized));
+          historyModalScissorsBtn.title = 'ベクタ化中...';
+          return vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true);
+        })
+        .then(function(result) {
+          if (result.status < 200 || result.status >= 300 || !result.data) {
+            throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');
+          }
+          applyHistoryModalScissorsState(true);
+          showAichatToast('✂️切り出し完了', 'aichat-scissors-toast-cyan');
+          var keywords = result.data.keywords || [];
+          if (!keywords.length) {
+            showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+            return;
+          }
+          historyModalScissorsBtn.title = 'キーワード一括登録中...';
+          return bulkRegisterUnregisteredKeywords(shareId, keywords, {})
+            .then(function() {
+              showAichatToast('新規キーワード切り出し完了', 'aichat-scissors-toast-neutral');
+              showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+            });
+        })
+        .catch(function() {})
+        .then(function() {
+          historyModalScissorsBtn.disabled = false;
+          historyModalScissorsBtn.title = HISTORY_MODAL_SCISSORS_DEFAULT_TITLE;
+          historyModalScissorsBtn.classList.remove('scissors-btn-spinning');
+        });
+    });
+
+    function refreshJevValuesButtonState() {
+      historyModalJevValuesWidget.refresh();
+      refreshHistoryModalScissorsState();
+    }
 
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
@@ -6528,6 +7153,311 @@ export function getAiChatPage(user: {
       }
     });
 
+    // ===== 探索の境界線(未分類キーワード)パネル =====
+    // ベクタ化済みの回答から抽出されたキーワードのうち、まだどのカテゴリにも
+    // 分類されていないもの(aichat_keyword_category_map未登録=境界線の外側)を
+    // 一覧表示する。「理解済みですか」という自己申告は根拠が曖昧なため置かず、
+    // 既存のキーワード分類(実際に分類したかどうか)だけを根拠にする。
+    // 各キーワードにはチェックボックスが付いており、テキスト部分をクリックすると
+    // 「〇〇について説明してください」を入力欄に差し込んで単発の質問ができる
+    // (従来通り)。チェックボックスは「自動探索」の対象を選ぶためのもので、
+    // 一覧に出ているものを無差別に自動探索するのではなく、ユーザーが選んだ
+    // ものだけを起点にする(「選択されたものだけを問い合わせろ」という
+    // 指摘への対応)。分類はanswer-graph側で行うため、このパネル自体は
+    // 一覧表示とテンプレート差し込みだけを担い、回答のベクタ化(✂️)後と
+    // 初回表示時に一覧を読み直す。
+    var keywordBoundaryPanel = document.getElementById('keywordBoundaryPanel');
+    var keywordBoundaryChips = document.getElementById('keywordBoundaryChips');
+    var keywordBoundarySelection = {};
+
+    function fillChatInputWithBoundaryTemplate(keyword) {
+      chatInput.value = keyword + 'について説明してください';
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+      chatInput.focus();
+    }
+
+    function renderKeywordBoundaryChips(keywords) {
+      keywordBoundaryChips.innerHTML = '';
+      var stillPresent = {};
+      keywords.forEach(function(entry) {
+        stillPresent[entry.keyword] = true;
+        var wrap = document.createElement('span');
+        wrap.className = 'kb-chip-wrap';
+
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'kb-chip-check';
+        checkbox.checked = !!keywordBoundarySelection[entry.keyword];
+        checkbox.setAttribute('aria-label', entry.keyword + 'を自動探索の対象に選ぶ');
+        checkbox.addEventListener('change', function() {
+          if (checkbox.checked) {
+            keywordBoundarySelection[entry.keyword] = true;
+          } else {
+            delete keywordBoundarySelection[entry.keyword];
+          }
+        });
+        wrap.appendChild(checkbox);
+
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'kb-chip';
+        chip.textContent = entry.keyword;
+        chip.title = entry.keyword + 'について説明してください(クリックで入力欄へ)';
+        chip.addEventListener('click', function() { fillChatInputWithBoundaryTemplate(entry.keyword); });
+        wrap.appendChild(chip);
+
+        keywordBoundaryChips.appendChild(wrap);
+      });
+      // 一覧から消えた(=分類済みになった等)キーワードの選択状態は残さない。
+      Object.keys(keywordBoundarySelection).forEach(function(keyword) {
+        if (!stillPresent[keyword]) delete keywordBoundarySelection[keyword];
+      });
+      // 未分類キーワードが0件でも、手入力での自動探索(autoExploreManualInput)は
+      // 使えるようにしたいので、一覧が空でもパネル自体は常に表示する。
+      keywordBoundaryPanel.classList.add('kb-panel-visible');
+    }
+
+    function loadUnknownKeywordBoundaryPanel() {
+      fetch('/api/aichat/keyword-boundary/unknown?limit=20', { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { keywords: [] }; })
+        .then(function(data) { renderKeywordBoundaryChips(data.keywords || []); })
+        .catch(function() {
+          // 一覧取得の失敗はパネルを非表示のままにするだけで、チャット自体の
+          // 利用は妨げない(探索の境界線はあくまで補助機能のため)。
+        });
+    }
+
+    loadUnknownKeywordBoundaryPanel();
+
+    // 「自動探索」: 入力待ちを挟まず、選んだキーワードを起点に最大3階層まで
+    // 自動で問い合わせを進める。1階層目は「一覧を無差別に上から拾う」のでは
+    // なく、ユーザーがチェックボックスで選んだキーワードだけを対象にする
+    // (指摘への対応: 選択されたものだけを問い合わせる)。2階層目以降は、
+    // そこから新しく抽出されたキーワードへ自然に掘り下げていく(抽出が
+    // 新しい順に並ぶ一覧を取得し、まだこの回で処理していないものを拾う)。
+    // 1件でもAI呼び出し/Jev処理/ベクタ化に失敗したら即座に打ち切り、
+    // そこまでの結果を報告する(コストは気にしないが、エラーが出たら
+    // 止める方針のため)。分類自体はこの機能では行わず、最後に
+    // 「分類済み/未分類」の累計を表示するだけに留める。
+    //
+    // 各キーワードは必ず「AI問い合わせ→Jev処理→キー切り出し」の順で処理する
+    // (✂️ボタンの既存フロー(createJevValuesWidget/onJevComplete)と同じく、
+    // キー切り出し(vectorizeAnswerAndExtractKeywords)はJev処理が完了した
+    // 回答に対してだけ行う設計を守る。Jev処理をすっ飛ばして先にキー切り出し
+    // だけ行うことはしない)。
+    var autoExploreBtn = document.getElementById('autoExploreBtn');
+    var autoExploreManualInput = document.getElementById('autoExploreManualInput');
+    var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
+    var AUTO_EXPLORE_MAX_LEVELS = 3;
+    var AUTO_EXPLORE_LEVEL_LIMIT = 20;
+    var autoExploreRunning = false;
+    var autoExploreCancelRequested = false;
+
+    function autoExploreClock() {
+      return new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    }
+
+    function autoExploreLogLine(text) {
+      var line = document.createElement('div');
+      line.textContent = text;
+      autoExploreProgressLog.appendChild(line);
+      autoExploreProgressLog.scrollTop = autoExploreProgressLog.scrollHeight;
+    }
+
+    // 1段階ぶん(AI問い合わせ/Jev処理/キー切り出し)を実行し、開始・完了
+    // (または失敗)をそれぞれ時刻・所要秒数つきでログへ出す共通ラッパー。
+    function autoExploreRunStage(keyword, stageLabel, run) {
+      var startedAt = Date.now();
+      autoExploreLogLine('[' + keyword + '] ' + stageLabel + '開始 ' + autoExploreClock());
+      return run().then(
+        function(value) {
+          var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          autoExploreLogLine('[' + keyword + '] ' + stageLabel + '完了 ' + autoExploreClock() + ' (' + elapsed + 's)');
+          return value;
+        },
+        function(err) {
+          var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+          autoExploreLogLine('[' + keyword + '] ' + stageLabel + '失敗 ' + autoExploreClock() + ' (' + elapsed + 's)');
+          throw err;
+        }
+      );
+    }
+
+    function autoExploreProcessKeyword(keyword) {
+      return autoExploreRunStage(keyword, 'AI問い合わせ', function() {
+        return fetch('/api/aichat', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: keyword + 'について説明してください', model: lastModel, systemPromptMode: langModeSelect.value, source: 'auto-explore' }),
+        })
+          .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+          .then(function(res) {
+            if (res.status < 200 || res.status >= 300 || res.data.error || !res.data.shareId) {
+              throw new Error((res.data && res.data.error) || keyword + 'への問い合わせに失敗しました');
+            }
+            return { shareId: res.data.shareId, model: res.data.usedModel || lastModel };
+          });
+      }).then(function(answer) {
+        return autoExploreRunStage(keyword, 'Jev処理', function() {
+          return fetch('/api/aichat/jev-score', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shareId: answer.shareId, model: answer.model }),
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+              if (!result.ok || !result.data || result.data.verified !== true) {
+                throw new Error((result.data && result.data.error) || keyword + 'のJev処理に失敗しました');
+              }
+              return answer;
+            });
+        });
+      }).then(function(answer) {
+        return autoExploreRunStage(keyword, 'キー切り出し', function() {
+          return vectorizeAnswerAndExtractKeywords(answer.shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true).then(function(result) {
+            if (result.status < 200 || result.status >= 300 || !result.data) {
+              throw new Error((result.data && result.data.error) || keyword + 'のキー切り出しに失敗しました');
+            }
+            // POST /api/aichat/vectorize-answerは、ベクタ化自体が成功していれば
+            // キーワード抽出(予備知識キーワード抽出)が失敗していても200を返し、
+            // 理由を_keywordsWarningに入れるだけで済ませる(ベクタ化と抽出の
+            // 失敗を独立に扱う仕様)。ここでHTTPステータスだけを見て「完了」と
+            // 扱うと、実際には1件もキーワードが切り出せていないのに気付けない
+            // (「キー切り出しが上手くいっていない」の原因)。_keywordsWarningが
+            // 付いている場合は明示的に失敗として扱う。
+            if (result.data._keywordsWarning) {
+              throw new Error(keyword + 'のキー切り出しに失敗しました: ' + result.data._keywordsWarning);
+            }
+          });
+        });
+      });
+    }
+
+    function autoExploreRunCandidates(candidates, processedKeywords) {
+      var chain = Promise.resolve();
+      candidates.forEach(function(keyword) {
+        if (processedKeywords[keyword]) return;
+        chain = chain.then(function() {
+          if (autoExploreCancelRequested) return;
+          processedKeywords[keyword] = true;
+          return autoExploreProcessKeyword(keyword);
+        });
+      });
+      return chain;
+    }
+
+    function autoExploreNextLevelCandidates(processedKeywords) {
+      return fetch('/api/aichat/keyword-boundary/unknown?limit=' + AUTO_EXPLORE_LEVEL_LIMIT, { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { keywords: [] }; })
+        .then(function(data) {
+          return (data.keywords || [])
+            .map(function(entry) { return entry.keyword; })
+            .filter(function(keyword) { return !processedKeywords[keyword]; });
+        });
+    }
+
+    function setAutoExploreButtonRunning() {
+      autoExploreBtn.disabled = false;
+      autoExploreBtn.classList.add('kb-running');
+      autoExploreBtn.textContent = '⏹ 停止';
+      autoExploreBtn.title = '自動探索を停止する(今の問い合わせが終わり次第止まります)';
+      autoExploreManualInput.disabled = true;
+    }
+
+    function setAutoExploreButtonIdle() {
+      autoExploreBtn.disabled = false;
+      autoExploreBtn.classList.remove('kb-running');
+      autoExploreBtn.textContent = '🧭 自動探索';
+      autoExploreBtn.title = 'チェックした(または入力した)キーワードを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる';
+      autoExploreManualInput.disabled = false;
+    }
+
+    function runAutoExplore() {
+      // 起点は「チェックボックスで選んだキーワード」と「手入力欄
+      // (autoExploreManualInput)に入力したキーワード」の両方を合わせる。
+      // 手入力は一覧に出ていない(=まだベクタ化すらされていない)キーワードも
+      // 探索の起点にできるようにするためのもので、カンマ・読点区切りで
+      // 複数指定できる。
+      var seedSet = {};
+      Object.keys(keywordBoundarySelection).forEach(function(keyword) { seedSet[keyword] = true; });
+      var manualRaw = (autoExploreManualInput.value || '').trim();
+      var manualKeywords = manualRaw.length > 0
+        ? manualRaw.split(/[,、]/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; })
+        : [];
+      manualKeywords.forEach(function(keyword) { seedSet[keyword] = true; });
+      var seedKeywords = Object.keys(seedSet);
+
+      if (seedKeywords.length === 0) {
+        showAichatToast('自動探索するキーワードをチェックするか、入力してください', 'aichat-scissors-toast-neutral');
+        return;
+      }
+
+      autoExploreRunning = true;
+      autoExploreCancelRequested = false;
+      setAutoExploreButtonRunning();
+      autoExploreManualInput.value = '';
+      autoExploreProgressLog.innerHTML = '';
+      autoExploreProgressLog.classList.add('kb-progress-log-visible');
+      showAichatToast('自動探索を開始します(選択' + seedKeywords.length + '件・最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');
+
+      var processedKeywords = {};
+      var stoppedByError = null;
+
+      // 1階層目: 選択されたキーワードのみ。
+      var chain = autoExploreRunCandidates(seedKeywords, processedKeywords).catch(function(err) {
+        stoppedByError = err instanceof Error ? err.message : String(err);
+      });
+
+      // 2階層目以降: 1階層目で新たに抽出されたキーワードへ自然に掘り下げる。
+      for (var level = 1; level < AUTO_EXPLORE_MAX_LEVELS; level++) {
+        chain = chain.then(function() {
+          if (stoppedByError || autoExploreCancelRequested) return;
+          return autoExploreNextLevelCandidates(processedKeywords).then(function(candidates) {
+            return autoExploreRunCandidates(candidates, processedKeywords);
+          });
+        }).catch(function(err) {
+          stoppedByError = err instanceof Error ? err.message : String(err);
+        });
+      }
+
+      chain
+        .then(function() {
+          keywordBoundarySelection = {};
+          loadUnknownKeywordBoundaryPanel();
+          return fetch('/api/aichat/keyword-boundary/stats', { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .catch(function() { return null; });
+        })
+        .then(function(stats) {
+          var summary = stats ? ('分類済み' + stats.classifiedCount + '件 / 未分類' + stats.unclassifiedCount + '件') : '';
+          if (stoppedByError) {
+            showAichatToast('自動探索を途中で停止しました(' + stoppedByError + ') ' + summary, 'aichat-scissors-toast-neutral');
+          } else if (autoExploreCancelRequested) {
+            showAichatToast('自動探索を停止しました ' + summary, 'aichat-scissors-toast-neutral');
+          } else {
+            showAichatToast('自動探索完了 ' + summary, 'aichat-send-toast-ok');
+          }
+        })
+        .finally(function() {
+          autoExploreRunning = false;
+          autoExploreCancelRequested = false;
+          setAutoExploreButtonIdle();
+        });
+    }
+
+    autoExploreBtn.addEventListener('click', function() {
+      if (autoExploreRunning) {
+        autoExploreCancelRequested = true;
+        autoExploreBtn.disabled = true;
+        autoExploreBtn.textContent = '⏹ 停止中...';
+        return;
+      }
+      runAutoExplore();
+    });
+
     // ===== 写真添付(＋ボタン) =====
     var MAX_IMAGE_FILE_BYTES = 6 * 1024 * 1024;
     var ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
@@ -6678,7 +7608,24 @@ export function getAiChatPage(user: {
       heading.appendChild(btn);
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg) {
+    // ✂️(切り取り)ボタンが呼ぶvectorizeAnswerAndExtractKeywordsへ渡す埋め込み
+    // モデル名。buildAssistantBubbleの引数modelはAIチャットの応答生成に
+    // 使われたモデル(例: @cf/meta/llama-3.3-70b-instruct-fp8-fast)であり、
+    // サーバー側のKEYWORD_EMBEDDING_MODELS一覧に含まれない埋め込み非対応の
+    // モデル名なので、誤ってこれをそのまま渡すと
+    // 「不明な埋め込みモデルです」という400エラーになりベクタ化が常に
+    // 失敗していた(✂️ボタンが手動でも自動でも一切動かない不具合の原因)。
+    // ✂️は常にPlaMo埋め込みモデルで実行する仕様のため、チャットモデル名とは
+    // 独立した固定のモデル名を使い、空欄にもならないようにする。
+    // さらに、vectorizeAnswerAndExtractKeywordsの第3引数にforcePlamo=trueを
+    // 渡すことで、サーバー側(/api/aichat/vectorize-answer)にもここで送る
+    // モデル名を問答無用でPLAMO_EMBEDDING_MODELへ上書きさせる。クライアント側の
+    // 修正が未デプロイのまま旧フロントエンドがチャットモデル名を送ってきても
+    // サーバー側だけで確実にPlaMo固定になる二重の安全策(answer-graph側の
+    // モデル選択ボタンはforcePlamoを渡さないため、この上書きの影響を受けない)。
+    var AICHAT_SCISSORS_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
+
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
@@ -6731,22 +7678,169 @@ export function getAiChatPage(user: {
         el.appendChild(notice);
       }
       if (usage && (usage.input_tokens != null || usage.total_tokens != null)) {
-        var tokEl = document.createElement('div');
-        tokEl.style.cssText = 'text-align:right;font-size:10px;color:var(--text-muted);margin-top:6px;letter-spacing:0.02em;';
+        var tokRow = document.createElement('div');
+        tokRow.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;';
+        if (shareId) {
+          // 「切り取り」(ベクタ化+予備知識キーワード抽出+未登録キーワード一括登録)を
+          // トークン表示の左に置く。埋め込みテーブル(aichat_answer_vectors)に
+          // まだ登録されていない場合は背景を黄色にし、隣のチェックボックスがONの
+          // 状態でJev判定が完了したタイミング(runJevScoreAndShow成功時)に
+          // 自動でこの処理一式を実行する。
+          var scissorsBtn = document.createElement('button');
+          scissorsBtn.type = 'button';
+          scissorsBtn.className = 'search-hist-btn';
+          scissorsBtn.style.cssText = 'padding:2px 5px;font-size:11px;line-height:1;';
+          scissorsBtn.textContent = '✂️';
+          scissorsBtn.title = 'この回答をベクタ化してキーワードを一括登録する';
+          tokRow.appendChild(scissorsBtn);
+
+          var autoVectorizeLabel = document.createElement('label');
+          autoVectorizeLabel.style.cssText = 'display:inline-flex;align-items:center;gap:2px;font-size:10px;color:var(--text-muted);cursor:pointer;';
+          var autoVectorizeCheckbox = document.createElement('input');
+          autoVectorizeCheckbox.type = 'checkbox';
+          autoVectorizeCheckbox.style.cssText = 'width:12px;height:12px;margin:0;';
+          var AUTO_VECTORIZE_COOKIE = 'aichat_auto_vectorize_after_jev';
+          var autoVectorizeCookieMatch = document.cookie.match(/(?:^|;\s*)aichat_auto_vectorize_after_jev=([^;]*)/);
+          autoVectorizeCheckbox.checked = !!(autoVectorizeCookieMatch && autoVectorizeCookieMatch[1] === 'on');
+          autoVectorizeCheckbox.addEventListener('change', function() {
+            document.cookie = AUTO_VECTORIZE_COOKIE + '=' + (autoVectorizeCheckbox.checked ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          });
+          autoVectorizeLabel.appendChild(autoVectorizeCheckbox);
+          tokRow.appendChild(autoVectorizeLabel);
+
+          var isAnswerVectorizedForScissors = false;
+          function applyScissorsState() {
+            scissorsBtn.style.background = isAnswerVectorizedForScissors ? '' : '#fff8c5';
+          }
+          applyScissorsState();
+          fetch('/api/aichat/shares/' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              isAnswerVectorizedForScissors = !!(data && data.vectorized);
+              applyScissorsState();
+            })
+            .catch(function() {});
+
+          function runVectorizeAndBulkRegisterChain() {
+            scissorsBtn.disabled = true;
+            scissorsBtn.title = '処理中...';
+            scissorsBtn.classList.add('scissors-btn-spinning');
+            vectorizeAnswerAndExtractKeywords(shareId, AICHAT_SCISSORS_EMBEDDING_MODEL, true)
+              .then(function(result) {
+                if (result.status < 200 || result.status >= 300 || !result.data) {
+                  throw new Error((result.data && result.data.error) || 'ベクタ化に失敗しました');
+                }
+                isAnswerVectorizedForScissors = true;
+                applyScissorsState();
+                showAichatToast('✂️切り出し完了', 'aichat-scissors-toast-cyan');
+                // 新たに抽出されたキーワードのぶん、「探索の境界線」パネル
+                // (未分類キーワード一覧)を最新化する。
+                loadUnknownKeywordBoundaryPanel();
+                var keywords = result.data.keywords || [];
+                if (!keywords.length) {
+                  showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+                  return;
+                }
+                return bulkRegisterUnregisteredKeywords(shareId, keywords, {})
+                  .then(function() {
+                    showAichatToast('新規キーワード切り出し完了', 'aichat-scissors-toast-neutral');
+                    showAichatToast('ベクタ化終了', 'aichat-send-toast-ok');
+                  });
+              })
+              .catch(function() {})
+              .then(function() {
+                scissorsBtn.disabled = false;
+                scissorsBtn.title = 'この回答をベクタ化してキーワードを一括登録する';
+                scissorsBtn.classList.remove('scissors-btn-spinning');
+              });
+          }
+          scissorsBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            runVectorizeAndBulkRegisterChain();
+          });
+
+          // Jev評価値ボタンの左に「jev評価の自動化」チェックボックスを置く。
+          // ONの時だけ、まだJev評価データが無い(pink/yellow)場合に
+          // runJevScoreAndShowを自動で呼び出しJev評価まで自動化する。
+          var autoJevLabel = document.createElement('label');
+          autoJevLabel.style.cssText = 'display:inline-flex;align-items:center;gap:2px;font-size:10px;color:var(--text-muted);cursor:pointer;';
+          var autoJevCheckbox = document.createElement('input');
+          autoJevCheckbox.type = 'checkbox';
+          autoJevCheckbox.style.cssText = 'width:12px;height:12px;margin:0;';
+          var AUTO_JEV_COOKIE = 'aichat_auto_jev_score';
+          var autoJevCookieMatch = document.cookie.match(/(?:^|;\s*)aichat_auto_jev_score=([^;]*)/);
+          autoJevCheckbox.checked = !!(autoJevCookieMatch && autoJevCookieMatch[1] === 'on');
+          autoJevCheckbox.addEventListener('change', function() {
+            document.cookie = AUTO_JEV_COOKIE + '=' + (autoJevCheckbox.checked ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          });
+          autoJevLabel.appendChild(autoJevCheckbox);
+          tokRow.appendChild(autoJevLabel);
+
+          // トークン出力の左側にJev評価値ボタンを置く(通常のAI応答バブル画面での動作確認用)。
+          // historyModal専用ではなく、createJevValuesWidgetをここでも呼び出して
+          // 同じ挙動(状態色・確認モーダル・Jev問い合わせ・DB登録)を再現する。
+          var bubbleJevBtn = document.createElement('button');
+          bubbleJevBtn.type = 'button';
+          bubbleJevBtn.className = 'search-hist-btn';
+          bubbleJevBtn.style.cssText = 'padding:2px 5px;font-size:11px;line-height:1;';
+          bubbleJevBtn.textContent = '📔';
+          tokRow.appendChild(bubbleJevBtn);
+          var bubbleJevWidget = createJevValuesWidget({
+            button: bubbleJevBtn,
+            modal: jevValuesModal,
+            body: jevValuesBody,
+            closeBtn: jevValuesClose,
+            getContext: function() { return { shareId: shareId, model: model }; },
+            onStateLoaded: function(state) {
+              // 両方のチェックボックスがONの場合に限り、Jev評価から
+              // 「切り取り」(ベクタ化+キーワード抽出+一括登録)までを
+              // すべて自動で行う。jev自動化のみONの場合はJev評価だけを
+              // 自動化し、✂️側の自動実行はしない(onJevComplete側で判定)。
+              if (autoJevCheckbox.checked && (state === 'pink' || state === 'yellow')) {
+                bubbleJevWidget.runJevScoreAndShow();
+                return;
+              }
+              // 根本原因: onJevCompleteはrunJevScoreAndShow(Jevへの新規問い合わせ)
+              // が成功した時にしか発火しない。そのため、このバブルの回答が
+              // 過去に既にJev評価済み(state==='green')だった場合は
+              // runJevScoreAndShowが一度も呼ばれず、✂️チェックボックスと
+              // jev自動化チェックボックスを両方ONにしていても✂️の自動連携が
+              // 永久に発火しない不具合になっていた。既に評価済みの場合は
+              // ここで直接同じ条件判定を行い、その場で切り取りチェーンを
+              // 自動実行する。
+              if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && state === 'green' && !isAnswerVectorizedForScissors) {
+                runVectorizeAndBulkRegisterChain();
+              }
+            },
+            onJevComplete: function() {
+              if (autoJevCheckbox.checked && autoVectorizeCheckbox.checked && !isAnswerVectorizedForScissors) {
+                runVectorizeAndBulkRegisterChain();
+              }
+            }
+          });
+          bubbleJevWidget.refresh();
+        }
+        var tokEl = document.createElement('span');
+        tokEl.style.cssText = 'font-size:10px;color:var(--text-muted);letter-spacing:0.02em;';
         var parts = [];
         if (usage.input_tokens != null) parts.push('in:' + usage.input_tokens.toLocaleString());
         if (usage.output_tokens != null) parts.push('out:' + usage.output_tokens.toLocaleString());
         if (usage.total_tokens != null) parts.push('total:' + usage.total_tokens.toLocaleString());
         tokEl.textContent = parts.join(' / ') + ' tokens';
-        el.appendChild(tokEl);
+        tokRow.appendChild(tokEl);
+        el.appendChild(tokRow);
+      }
+      if (isLocalCommand) {
+        wireCsearchAnswerLinks(el, nekoCursorResults || []);
+        wireQsearchIdLinks(el);
       }
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -7034,7 +8128,7 @@ export function getAiChatPage(user: {
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
-            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);
+            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {

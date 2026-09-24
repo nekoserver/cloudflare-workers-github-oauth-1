@@ -6,6 +6,20 @@ const minimalUser = {
   aiChatModel: 'claude-sonnet-4-6',
 };
 
+function routeSource(source: string, routeStart: string): string {
+  const start = source.indexOf(routeStart);
+  if (start < 0) return '';
+  const nextRoute = source.indexOf('\napp.', start + routeStart.length);
+  return source.slice(start, nextRoute < 0 ? undefined : nextRoute);
+}
+
+function namedFunctionSource(source: string, signature: string): string {
+  const start = source.indexOf(signature);
+  if (start < 0) return '';
+  const nextFunction = source.indexOf('\n    function ', start + signature.length);
+  return source.slice(start, nextFunction < 0 ? undefined : nextFunction);
+}
+
 describe('AIチャット詳細パネル: Markdownプレビュー', () => {
   it('parseMd 関数が存在する', () => {
     const html = getAiChatPage(minimalUser);
@@ -246,9 +260,8 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
 
   it('showResultsPanel がキーワード引数を受け取りハイライトを適用する', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function showResultsPanel(');
-    expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 700);
+    const fnBody = namedFunctionSource(html, 'function showResultsPanel(');
+    expect(fnBody).not.toBe('');
     expect(fnBody).toContain('keyword');
     expect(fnBody).toContain('applyKeywordHighlight');
   });
@@ -1324,11 +1337,26 @@ describe('回答バブル コピーボタン', () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
-    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg)');
+    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId)');
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const copyBtnIdx = fn.indexOf('bubble-copy-btn');
     expect(guardIdx).toBeGreaterThan(-1);
     expect(copyBtnIdx).toBeGreaterThan(guardIdx);
+  });
+
+  it('通常のAI応答バブルのトークン出力行に、shareIdがある場合だけJev評価値ボタンをcreateJevValuesWidget経由で左側に設置する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function buildAssistantBubble(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 11500);
+    const usageGuardIdx = fn.indexOf("usage.input_tokens != null || usage.total_tokens != null");
+    const shareIdGuardIdx = fn.indexOf('if (shareId) {');
+    const widgetCallIdx = fn.indexOf('createJevValuesWidget({');
+    const tokRowAppendIdx = fn.indexOf("el.appendChild(tokRow);");
+    expect(usageGuardIdx).toBeGreaterThan(-1);
+    expect(shareIdGuardIdx).toBeGreaterThan(usageGuardIdx);
+    expect(widgetCallIdx).toBeGreaterThan(shareIdGuardIdx);
+    expect(tokRowAppendIdx).toBeGreaterThan(widgetCallIdx);
   });
 
   it('chatForm submit・renderAiResultInModal のどちらも isLocalCommand を buildAssistantBubble/appendBubble に渡す', () => {
@@ -1337,12 +1365,12 @@ describe('回答バブル コピーボタン', () => {
     const modalIdx = html.indexOf('function renderAiResultInModal(');
     expect(modalIdx).toBeGreaterThan(-1);
     const modalFn = html.slice(modalIdx, modalIdx + 700);
-    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg)');
+    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId)');
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
     const submitFn = html.slice(submitIdx, submitIdx + 3600);
-    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
+    expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 });
 
@@ -1401,7 +1429,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 9700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('body.model');
   });
 
@@ -1411,7 +1439,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 9200);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -1425,7 +1453,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
-    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg);");
+    expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
@@ -1460,6 +1488,22 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('searchShares:');
     expect(fn).toContain('searchAiChatShares(');
     expect(fn).toContain('hitCount: results.length');
+    expect(fn).toContain('model: r.model');
+  });
+
+  it('index.ts の /api/aichat が searchCursorAgentHistory を渡す（スラッシュコマンド /neko csearch 用、Cursor VM履歴を表示検索して質問文最大30件を返す）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, src.indexOf("if (!c.env.AI)", idx) + 200);
+    expect(fn).toContain('searchCursorAgentHistory:');
+    expect(fn).toContain('queryCursorAgentHistoryWithSearch');
+    expect(fn).toContain('mapCursorAgentHistoryToCsearchItems');
+    expect(fn).toContain('created_at');
+    expect(fn).toContain('nekoCursorResults:');
+    expect(fn).not.toContain('persistCursorAgentPastLogHits');
   });
 
   it('index.ts の /api/aichat が vectorizedAnswers を渡す（/neko vcount用、aichat_answer_vectorsの件数・総回答数・最大30件の一覧を返す）', () => {
@@ -1481,7 +1525,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5500);
+    const fn = src.slice(idx, idx + 8600);
     expect(fn).toContain('sha256ViaWasm:');
     // 静的importにするとVite/vitestの.wasmインポートがWebAssembly.Moduleでは
     // なくアセットパス文字列を返すため、index.tsを読み込む全テストが壊れる。
@@ -2079,7 +2123,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2089,7 +2133,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('shareId');
   });
 
@@ -2099,7 +2143,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 13700);
+    const fn = routeSource(src, "app.post('/api/aichat'");
     expect(fn).toContain('userHash');
   });
 

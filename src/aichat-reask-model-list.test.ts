@@ -75,9 +75,10 @@ describe('/apis ページ: /api/aichat の modelSelect が DEFAULT_AICHAT_MODELS
     const idx = html.indexOf("path:'/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
     const entry = html.slice(idx, idx + 400);
-    expect(entry).toContain('/neko hms');
-    expect(entry).toContain('/neko cal');
-    expect(entry).toContain('/neko clog');
+    expect(entry).toContain('/neko');
+    expect(entry).toContain('/neko help');
+    expect(entry).not.toContain('/neko hms');
+    expect(entry).not.toContain('/neko clog');
   });
 
   it('/api/aichat のレスポンス例が実際のフィールド名(response/usedModel)と一致する（answer/ok/tokenUsageという存在しないフィールドを使わない）', async () => {

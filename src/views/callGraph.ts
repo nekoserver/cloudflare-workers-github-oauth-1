@@ -182,6 +182,7 @@ export function getCallGraphPage(
   <input id="search-box" type="text" placeholder="関数名・ファイル名を検索..." autocomplete="off">
   <div id="legend">
     ${legendHtml}
+    <div class="legend-item" style="opacity:0.7">色相=グループ、濃淡=ファイル単位</div>
   </div>
   <div id="note">
     ※ ts_function_catalog はトップレベルの名前付き関数のみを対象とするため、
@@ -382,6 +383,51 @@ function getVisibleEdges(visibleSet) {
 // RENDER
 // ─────────────────────────────────────────────
 
+// グループ(view/util等、GROUP_META由来のベース色)だけでは1ファイルあたり
+// 数百件の関数が同じ色になり粒度が粗すぎるという指摘への対応。グループの
+// 色相(hue)・彩度はそのまま(凡例・フィルタボタンとの対応を崩さない)、
+// ファイルパスのハッシュから明度(lightness)だけをずらし、同じグループ内でも
+// ファイルごとに濃淡が変わるようにする(色相=グループ、明度=ファイルという
+// 2段階の粒度)。
+const fileShadeCache = {};
+
+function hashStringToUnit(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) | 0;
+  }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+
+function fileShadeHsl(baseHex, filePath) {
+  const cacheKey = baseHex + '|' + filePath;
+  if (fileShadeCache[cacheKey]) return fileShadeCache[cacheKey];
+  const [h, s, l] = hexToHsl(baseHex);
+  const seed = hashStringToUnit(filePath);
+  const shadedL = Math.max(24, Math.min(80, l + (seed - 0.5) * 44));
+  const result = [Math.round(h), Math.round(s), Math.round(shadedL)];
+  fileShadeCache[cacheKey] = result;
+  return result;
+}
+
 function drawArrow(x1, y1, x2, y2, color, r1, r2) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.sqrt(dx * dx + dy * dy);
@@ -449,15 +495,17 @@ function render() {
 
   visibleNodes.forEach(n => {
     const isHl = !highlightedNode || highlightedIds.has(n.id);
-    const color = (GROUPS[n.group] && GROUPS[n.group].color) || '#8b949e';
+    const baseColor = (GROUPS[n.group] && GROUPS[n.group].color) || '#8b949e';
+    const [h, s, l] = fileShadeHsl(baseColor, n.file);
+    const hs = 'hsl(' + h + ',' + s + '%,' + l + '%)';
     const alpha = isHl ? 1 : 0.2;
 
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-    ctx.fillStyle = color + (isHl ? 'cc' : '44');
+    ctx.fillStyle = 'hsla(' + h + ',' + s + '%,' + l + '%,' + (isHl ? 0.8 : 0.27) + ')';
     ctx.fill();
-    ctx.strokeStyle = n === highlightedNode ? '#ffffff' : color;
+    ctx.strokeStyle = n === highlightedNode ? '#ffffff' : hs;
     ctx.lineWidth = n === highlightedNode ? 2.5 : 1.5;
     ctx.stroke();
     ctx.globalAlpha = 1;

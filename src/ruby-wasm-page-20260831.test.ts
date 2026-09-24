@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getRubyWasmPage } from './views/rubyWasm';
 
 // 対象: 新規ページ /ruby-wasm。公式のCRuby WASM(WASI)ビルド(@ruby/wasm-wasi,
-// @ruby/3.4-wasm-wasi、jsDelivr CDN配信)をブラウザ側で読み込みRubyコードを
+// @ruby/4.0-wasm-wasi、jsDelivr CDN配信)をブラウザ側で読み込みRubyコードを
 // 実行するデモページ。他のwasm/*-wasmクレートと違い、Rustで自前ビルドした
 // バイナリではなく公式ビルド済みパッケージをCDN経由で使う
 // (C言語コード生成を含むCRubyはこの環境ではwasm32-unknown-unknownへ
@@ -24,13 +24,16 @@ import { getRubyWasmPage } from './views/rubyWasm';
 describe('Ruby WASMページ', () => {
   it('script内で公式CRuby WASMモジュールを動的importしている', () => {
     const html = getRubyWasmPage('tester');
-    expect(html).toContain("import('https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js')");
-    expect(html).toContain('https://cdn.jsdelivr.net/npm/@ruby/3.4-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
+    expect(html).toContain('https://esm.sh/@ruby/wasm-wasi@2.10.1/dist/esm/browser.js');
+    expect(html).toContain('https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm');
+    expect(html).not.toContain('@ruby/3.4-wasm-wasi');
+    expect(html).toContain('loadRubyWasmVm(');
+    expect(html).not.toContain('compileStreaming');
   });
 
   it('bare specifierを解決できるesm.sh経由でJSグルーコードを読み込む(jsDelivr直接importは使わない)', () => {
     const html = getRubyWasmPage('tester');
-    expect(html).toMatch(/import\('https:\/\/esm\.sh\/@ruby\/wasm-wasi@[^']+'\)/);
+    expect(html).toContain('https://esm.sh/@ruby/wasm-wasi@');
     expect(html).not.toContain("import('https://cdn.jsdelivr.net/npm/@ruby/wasm-wasi");
   });
 

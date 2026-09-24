@@ -65,6 +65,12 @@ export function sha256HexViaWasm(input: string): string {
 
 ## 導入済みモジュール一覧
 
+Jev CLIについては、既存CLIを丸ごと移植するのではなく、入力検証・APIペイロード構築・
+レスポンス整形だけを候補にする実現可能性調査を
+[`SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md`](../SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md)
+に記載している。Jev APIキーとHTTP通信はWorker側に残す方針で、現時点では
+`jev-wasm`モジュールは未実装である。
+
 - `sha256-wasm`: SHA-256計算(`sha2` crate)。`/sha256-wasm`ページ・`/neko 256`
 - `factor-wasm`: GNU coreutils `factor` を模した素因数分解(試し割り法、
   0以上2^53以下の整数のみ対応)。`/factor-wasm`ページ・`/neko factor`。
@@ -83,6 +89,24 @@ export function sha256HexViaWasm(input: string): string {
   が`WASM_MODULE_REGISTRY`自体を仮想ディレクトリとして渡す
   (`"name\ttype\tsize\tmtime"`形式のTSVをls-wasmへ渡し、整形済みテキストを受け取る)。
   `/neko ls [-l] [-a]`。ブラウザページは無くサーバー(Worker)実行のみ
+- `tree-wasm`: GitHub Trees APIの`path`・`type`一覧を受け取り、リポジトリの
+  ディレクトリ構造を罫線文字を使わないMarkdown入れ子リストへ整形するRust実装。
+  名前順ソート、表示深さ、隠しパス除外に対応する。ネットワークアクセスやOAuthは
+  WASMに持ち込まずWorker側が担当する。`/neko tree <owner/repo>`で既定2階層、
+  `--depth 1`から`--depth 4`で表示階層を指定する。`--pattern '*.ts'`で名前を
+  glob絞り込み、`--files-only`/`--dirs-only`で種別を限定できる。`--hidden`で
+  隠しパスを含め、`--sort name|time`と`--reverse`で順序を変更する。時刻順は
+  3列目にUnixミリ秒の時刻が渡された場合に利用できる。
+  Worker側はユーザーのGitHub OAuthトークンでTrees APIを取得する。WASM生成物を
+  リポジトリへ含めるまでは、`src/utils/treeWasmServer.ts`の互換アダプターが
+  `tree_format`と同じTSV契約・出力規則を提供し、未生成ファイルのimportでWorker全体を
+  ビルド不能にしない。両実装の同一性はRust/TypeScript双方のテストで固定する
+
+  ビルドはリポジトリルートで`npm run wasm:build:tree`を実行する。スクリプトはRustテストを
+  先に実行し、クレートと同じ`wasm-bindgen-cli 0.2.127`だけを受け付けて
+  `public/wasm/tree.js`・`tree_bg.wasm`を再現可能に生成する。ツールチェーン不足時には必要な
+  導入コマンドを表示して失敗するため、古いwasm-bindgenで互換性のないグルーコードを誤って
+  コミットしない。
 - `gh-wasm`: `gh pr list <owner/repo>`相当。GitHub REST APIのプルリクエスト
   一覧JSONをMarkdownテーブルへ整形する(`format_pr_list`)。実際のfetchは
   `src/index.ts`の`fetchAndFormatGhPrList`がユーザーのOAuthトークンで行う。
@@ -94,10 +118,42 @@ export function sha256HexViaWasm(input: string): string {
   Markdownテーブルへ整形する(`parseQueryAnnotations`・`formatResultMarkdown`)。
   gh-attach-wasmと同じくGo/js-wasm移植(下記「sqlc-wasm移植プロトタイプ」節参照)。
   `/sqlc-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは呼ばれない
+- `msb-wasm`: microsandbox(https://github.com/microsandbox/microsandbox)の
+  CLI `msb`のヘルプ・コマンドツリー表示だけを再実装したもの。`msb`本体は
+  KVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVM
+  ランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README
+  (Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力
+  (`msb_help`・`msb_tree`・`msb_command_help`)のみを提供する。実際の
+  サンドボックス起動・イメージ取得・スナップショット等は対象外。
+  `/neko msb --help`(`msb_help`のみ配線済み。引数無し・`-h`も同じ扱い)の
+  サーバー実行で使用する。`msb_tree`・`msb_command_help`とブラウザページは
+  未配線。リポジトリルートで`npm run wasm:build:msb`を実行するとRustテストとreleaseビルドを
+  行い、`public/wasm/msb.js`と`public/wasm/msb_bg.wasm`を生成する
+- `gron-wasm`: gron(https://github.com/tomnomnom/gron)の中核である
+  JSON⇔代入文(`json.a.b[0] = 1;`)の相互変換だけを移植したもの。HTTP
+  リクエスト実行・ファイル監視・ANSIカラー出力・CLI引数解析は対象外。
+  gh-attach-wasm・sqlc-wasmと同じくGo標準の`wasm_exec.js`グルーコードで
+  動く。`/gron-wasm`ページのブラウザ実行のみでサーバー(`/neko`等)からは
+  呼ばれない。ビルド手順は下記「gron-wasm / go-diff-wasm ビルド手順」参照
+- `go-diff-wasm`: go-diff(https://github.com/sergi/go-diff、Googleの
+  diff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の
+  差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用
+  (`patch_make`/`patch_apply`)・あいまい一致(`match_main`)は対象外。
+  `/go-diff-wasm`ページのブラウザ実行に加え、`POST /api/diff`(セッション
+  またはAPIキー認証、`src/utils/goDiffWasmServer.ts`)からサーバー実行でも
+  呼び出せる。gron-wasmはブラウザ実行のみでサーバー(`/neko`等)からは
+  呼ばれない。go-diff-wasmもコード生成の正しさ判定には使わないこと
+  (CLAUDE.mdルール35参照。人間が差分を見るための表示専用)
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
 にもエントリを追加すること。
+
+アプリ固有モジュールだけでなく、実行時にWASMを直接読み込むCLI依存も一覧の
+対象にする。現在は`wrangler`がアセットの内容ハッシュ生成に利用する
+`blake3-wasm`を登録している。外部依存のソースはリポジトリに含めないため、
+一覧のソース表示は導入バージョンと完全性ハッシュを確認できる`package-lock.json`
+を参照する。
 
 ## gh-wasm移植プロトタイプ
 
@@ -257,3 +313,108 @@ PostgreSQL/MySQL/SQLite文法のパーサーが必要でこのプロトタイプ
 大きく超えるため未着手。将来必要になった場合は、公式が構文解析器の
 WASMビルドを配布していないか先に確認すること
 (`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`の教訓と同じ)。
+
+## gron-wasm / go-diff-wasm ビルド手順
+
+`gron-wasm/`は`tomnomnom/gron`のJSON⇔代入文変換ロジックのみ、
+`go-diff-wasm/`は`sergi/go-diff`(外部依存、`go.mod`の`require`で取得)を
+使った行単位テキスト差分のみを移植したもの。どちらもsqlc-wasm・
+gh-attach-wasmと同じ理由(`wasm32-unknown-unknown`のC言語コード生成を
+含むクレートがビルドできないというRust側の制約を受けない)でGo標準の
+`GOOS=js GOARCH=wasm`ターゲット・`wasm_exec.js`グルーコードを使う。
+
+```bash
+cd wasm/gron-wasm
+go test ./...                                        # ネイティブ環境でロジック部分を検証
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/gron.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/gron-wasm_exec.js
+
+cd ../go-diff-wasm
+go test ./...
+GOOS=js GOARCH=wasm go build -o ../../public/wasm/go-diff.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ../../public/wasm/go-diff-wasm_exec.js
+```
+
+`public/wasm/gron.wasm`・`public/wasm/gron-wasm_exec.js`・
+`public/wasm/go-diff.wasm`・`public/wasm/go-diff-wasm_exec.js`は
+ビルド成果物なのでリポジトリにコミットする。
+
+### ブラウザ側の読み込み
+
+sqlc-wasmと同じ`Go`/`wasm_exec.js`パターン。`/gron-wasm`は
+`window.gronToGron(json)`(JSON→gron)・`window.gronFromGron(gron)`
+(gron→JSON、ungron)、`/go-diff-wasm`は`window.goDiffText(a, b)`
+(2つのテキストの行単位差分をMarkdownで返す)をそれぞれ登録する。
+エラー時はどちらも`"ERROR: "`接頭辞付きの文字列を返す(gh-attach-wasm・
+sqlc-wasmと同じ規約。例外を投げるとjs.FuncOf経由の呼び出し側の
+ハンドリングが煩雑になるため)。
+
+### サーバー側(Worker)からの利用(go-diff-wasmのみ)
+
+`go-diff-wasm`は`POST /api/diff`からもサーバー実行できる
+(`src/utils/goDiffWasmServer.ts`)。Rust/wasm-bindgen製モジュール
+(`sha256WasmServer.ts`等)が使う`initSync`は同期的に初期化できるが、
+Goの`go.run(instance)`が返すPromiseは`main()`がreturnするまで解決しない。
+`DiffText`のWASM側実装(`main_js.go`)は`select{}`で意図的に無限ブロック
+するため、`go.run()`を`await`すると永久に返ってこない。そこで
+`go.run()`は(ブラウザページ側と同じく)あえて`await`せず、代わりに
+JS側が`globalThis.__goDiffWasmReady`にresolve関数を仕込んでおき、
+WASM側の`main()`が`goDiffText`の登録直後にそれを呼び出すことで
+「グローバル関数の登録が完了した」と合図する(`__goDiffWasmReady`が
+未定義の場合は何もしない後方互換の分岐なので、ブラウザページ側の挙動は
+変わらない)。
+
+```ts
+import '../../public/wasm/go-diff-wasm_exec.js'; // globalThis.Go を定義
+import goDiffWasmModule from '../../public/wasm/go-diff.wasm';
+
+const ready = new Promise<void>((resolve) => {
+  (globalThis as any).__goDiffWasmReady = resolve;
+  const go = new Go();
+  WebAssembly.instantiate(goDiffWasmModule, go.importObject).then((instance) => {
+    void go.run(instance); // awaitしない
+  });
+});
+await ready;
+const markdown = (globalThis as any).goDiffText(a, b);
+```
+
+`gron-wasm`はサーバー側の配線をまだ用意していない(`/gron-wasm`ページの
+ブラウザ実行のみ)。将来必要になった場合は同じ`__goDiffWasmReady`
+パターンを`gron-wasm/main_js.go`にも追加すること。
+
+**注意**: `go-diff-wasm`(サーバー・ブラウザ双方)はあくまで人間が差分を
+目視確認するための表示専用ツールであり、コード生成の正しさ判定・
+自動検証には使わないこと(CLAUDE.mdルール35参照。`/json-structural-diff`の
+配列順序の制限と同じ理由で、出力を過信しない方針)。
+
+## sqlc CodegenRequest共通IR・差分判定
+
+`scripts/sqlc-codegen-ir.js`はSQLや`-- name:`を独自解析せず、sqlcのJSON
+generatorまたはcodegen pluginへ渡される`CodegenRequest`を入力にする。
+sqlcがスキーマとSQLから確定したquery名、command、parameter、result column、
+DB型、nullabilityを小さなバージョン付きIRへ正規化する境界である。sqlc parseの
+betaなAST形式そのものをアプリケーション各所へ漏らさず、生成・文書化・CI判定が
+同じ入力を利用できるようにする。
+
+```bash
+npm run sqlc:ir -- --input codegen_request.json --format json
+npm run sqlc:ir -- --input codegen_request.json --format markdown
+npm run sqlc:ir -- --baseline main-codegen_request.json --input codegen_request.json
+```
+
+baselineを指定した場合は、query削除、command変更、必須parameter追加、parameter
+型・必須性変更、result shape・型・nullability変更を破壊的変更としてJSONに出力し、
+1件以上あれば終了コード`2`を返す。query追加とnullable parameter追加は非破壊的変更
+として分離するため、CIでは次のようにgateとして利用できる。
+
+```bash
+npm run sqlc:ir -- \
+  --baseline artifacts/main/codegen_request.json \
+  --input artifacts/pr/codegen_request.json > sqlc-ir-diff.json
+```
+
+このIRはHTTP path、認証、404/403、rate limitなどを推測しない。それらは別の
+Application/Service metadataと組み合わせてAPI IRを作る責務とし、DB operation IRを
+直接OpenAPIへ変換しない。またCRUD、read/write set、column lineage、WHEREの有無など
+ASTが必要な情報も推測せず、将来sqlc AST用adapterを追加するまで未定義のまま扱う。

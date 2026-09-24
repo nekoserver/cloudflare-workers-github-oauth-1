@@ -108,16 +108,15 @@ export function getSettingsPage(user: {
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 10px var(--navbar-shadow);
-      padding: 16px 32px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      height: 44px; padding: 0 32px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 100;
     }
     .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
     .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
-      width: 40px; height: 40px; border-radius: 50%;
+      width: 36px; height: 36px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex; align-items: center; justify-content: center;
       color: white; font-weight: 600; font-size: 16px; cursor: pointer;
@@ -138,7 +137,23 @@ export function getSettingsPage(user: {
     .dropdown-item:hover { background: var(--dropdown-hover); }
     .dropdown-item.switch-account { color: var(--accent-color); }
     .dropdown-item.logout { color: var(--danger-color); }
-    .container { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
+    html { scroll-behavior: smooth; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 40px 32px; }
+    .settings-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; align-items: start; }
+    .settings-content { min-width: 0; }
+    .settings-sidebar {
+      position: sticky; top: 68px; background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 20px 14px; box-shadow: 0 12px 36px var(--card-shadow-light);
+    }
+    .jump-menu-heading { color: var(--text-primary); font-size: 16px; font-weight: 700; padding: 0 8px 12px; }
+    .jump-menu-list { display: flex; flex-direction: column; gap: 4px; }
+    .jump-menu-group { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+    .jump-menu-group:last-child { margin-bottom: 0; }
+    .jump-menu-group-title { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 8px 10px 4px; }
+    .jump-menu-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 10px; transition: background .2s ease, color .2s ease; }
+    .jump-menu-link:hover, .jump-menu-link:focus-visible { background: var(--bg-secondary); color: var(--accent-color); outline: none; }
+    .section, .info-item[id], .function-anchor { scroll-margin-top: 64px; }
+    .function-anchor { grid-column: 1 / -1; color: var(--text-primary); font-size: 14px; font-weight: 700; padding: 16px 2px 4px; border-bottom: 1px solid var(--border-color); }
     .settings-card {
       background: var(--card-bg); border-radius: 16px;
       box-shadow: 0 20px 60px var(--card-shadow); padding: 48px; margin-bottom: 32px;
@@ -227,6 +242,21 @@ export function getSettingsPage(user: {
       cursor: pointer; white-space: nowrap; transition: background 0.2s, color 0.2s;
     }
     .btn-danger:hover { background: var(--danger-color); color: white; }
+    @media (max-width: 820px) {
+      .navbar { padding: 0 16px; }
+      .user-name { display: none; }
+      .container { padding: 20px 16px; }
+      .settings-layout { display: block; }
+      .settings-sidebar { position: sticky; top: 44px; z-index: 50; padding: 10px; margin-bottom: 16px; border-radius: 0 0 12px 12px; }
+      .jump-menu-heading, .jump-menu-group-title { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+      .jump-menu-list { flex-direction: row; overflow-x: auto; gap: 6px; scrollbar-width: thin; }
+      .jump-menu-group { display: contents; }
+      .jump-menu-link { white-space: nowrap; background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 8px 11px; }
+      .settings-card { padding: 24px 18px; border-radius: 12px; }
+      .settings-title { font-size: 28px; }
+      .info-item { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .setting-control { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -258,11 +288,22 @@ export function getSettingsPage(user: {
   </nav>
 
   <div class="container">
+    <div class="settings-layout">
+      <aside class="settings-sidebar" aria-label="設定ページ内メニュー">
+        <div class="jump-menu-heading">設定メニュー</div>
+        <nav class="jump-menu-list">
+          <div class="jump-menu-group"><span class="jump-menu-group-title">アカウント</span><a class="jump-menu-link" href="#account">ログインとセキュリティ</a><a class="jump-menu-link" href="#permissions">GitHub 権限</a></div>
+          <div class="jump-menu-group"><span class="jump-menu-group-title">共通</span><a class="jump-menu-link" href="#appearance">基本表示</a></div>
+          <div class="jump-menu-group"><span class="jump-menu-group-title">ページ・機能別</span><a class="jump-menu-link" href="#status-settings">キャッシュ状況</a><a class="jump-menu-link" href="#er-diagram-settings">ER図</a><a class="jump-menu-link" href="#search-ai-settings">検索・AIチャット</a><a class="jump-menu-link" href="#data-tools-settings">データ・ツール</a><a class="jump-menu-link" href="#api-settings">APIリファレンス</a></div>
+          <div class="jump-menu-group"><span class="jump-menu-group-title">アカウント操作</span><a class="jump-menu-link" href="#danger-zone">承認の取り消し</a></div>
+        </nav>
+      </aside>
+      <main class="settings-content">
     <div class="settings-card">
       <h1 class="settings-title">⚙️ 設定</h1>
       <p class="settings-subtitle">ログイン状況と表示設定</p>
 
-      <div class="section">
+      <div class="section" id="account">
         <h2 class="section-title">ログイン状況</h2>
         <div class="info-grid">
           <div class="info-item">
@@ -331,7 +372,7 @@ export function getSettingsPage(user: {
           <button class="btn btn-save" onclick="saveSessionDuration()">保存</button>
           <button class="btn btn-cancel" onclick="cancelSessionDuration()">キャンセル</button>
         </div>
-        <div class="success-message" id="sessionSuccessMessage">✓ セッション有効期限を変更しました</div>
+        <div class="success-message" id="sessionSuccessMessage">✓ 保存しました。次回ログインから適用されます（現在の期限とカウントダウンは変わりません）</div>
         <div class="button-container" id="idleTimeoutButtonContainer" style="display:none">
           <button class="btn btn-save" onclick="saveIdleTimeout()">保存</button>
           <button class="btn btn-cancel" onclick="cancelIdleTimeout()">キャンセル</button>
@@ -339,7 +380,7 @@ export function getSettingsPage(user: {
         <div class="success-message" id="idleTimeoutSuccessMessage">✓ アイドルタイムアウトを変更しました</div>
       </div>
 
-      <div class="section">
+      <div class="section" id="permissions">
         <h2 class="section-title">このアプリに付与済みの権限</h2>
         <div class="info-grid">
           <div class="info-item">
@@ -357,7 +398,7 @@ export function getSettingsPage(user: {
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="appearance">
         <h2 class="section-title">表示設定</h2>
         <div class="info-grid">
           <div class="info-item disabled" id="timezoneItem">
@@ -409,6 +450,7 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="toastDurationCheckbox" onchange="toggleToastDurationEdit()">
             </div>
           </div>
+          <h3 class="function-anchor" id="status-settings">キャッシュ状況・コミット表示</h3>
           <div class="info-item disabled" id="statusChartModeItem">
             <span class="info-label">月別コミット量チャートの表示モード</span>
             <div class="setting-control">
@@ -433,6 +475,7 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="statusChartSortOrderCheckbox" onchange="toggleStatusChartSortOrderEdit()">
             </div>
           </div>
+          <h3 class="function-anchor" id="er-diagram-settings">ER図</h3>
           <div class="info-item">
             <span class="info-label">デバイスの傾きによってER図キー一覧の表示位置を変化させる</span>
             <div class="setting-control" style="justify-content: flex-end;">
@@ -476,6 +519,7 @@ export function getSettingsPage(user: {
           <div class="info-item" id="erHeaderTapNoteItem" style="display:none">
             <span class="info-label" style="color:var(--text-muted);font-size:12px">※ OFFにするとER図のテーブルヘッダーをタップしてもデータモーダルが開きません。ONの場合はログイン済みの場合のみデータを取得できます（未ログイン時はメッセージを表示）。</span>
           </div>
+          <h3 class="function-anchor">キャッシュ状況・テーブル表示</h3>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -521,6 +565,7 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <h3 class="function-anchor" id="search-ai-settings">検索・AIチャット</h3>
           <div class="info-item">
             <span class="info-label">検索履歴モーダルのインクリメントサーチ既定値</span>
             <div class="setting-control" style="justify-content: flex-end;">
@@ -710,6 +755,7 @@ export function getSettingsPage(user: {
               </select>
             </div>
           </div>
+          <h3 class="function-anchor" id="data-tools-settings">データ・ツール・各ページ</h3>
           <div class="info-item">
             <span class="info-label">D1クエリカタログ: テーブル選択の対象を常に1つに限定する（デフォルト）</span>
             <div class="setting-control" style="justify-content: flex-end;">
@@ -772,6 +818,7 @@ export function getSettingsPage(user: {
               </select>
             </div>
           </div>
+          <h3 class="function-anchor" id="api-settings">APIリファレンス</h3>
           <div class="info-item">
             <span class="info-label">APIページのサイドバーグループを初期状態で展開する</span>
             <div class="setting-control" style="justify-content: flex-end;">
@@ -861,7 +908,7 @@ export function getSettingsPage(user: {
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
     </div>
 
-    <div class="settings-card danger-zone-card">
+    <div class="settings-card danger-zone-card" id="danger-zone">
       <div class="section" style="margin-bottom: 0;">
         <h2 class="section-title danger-zone-title">Danger Zone</h2>
         <div class="danger-zone-item">
@@ -872,6 +919,8 @@ export function getSettingsPage(user: {
           <button class="btn btn-danger" onclick="confirmRevoke()">承認を取り消す</button>
         </div>
       </div>
+    </div>
+      </main>
     </div>
   </div>
 

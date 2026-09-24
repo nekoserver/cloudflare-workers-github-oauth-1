@@ -16,10 +16,11 @@ import { hashApiKey } from '../utils/apiKeys';
 function buildApp(dbRows: (Record<string, unknown> | null)[]) {
   const app = new Hono<{ Bindings: { DB?: unknown; JWT_SECRET?: string } }>();
   let callIndex = 0;
+  const sqlCalls: { sql: string; args: unknown[] }[] = [];
   const fakeDb = {
-    prepare() {
+    prepare(sql: string) {
       return {
-        bind() {
+        bind(...args: unknown[]) {
           return {
             async first() {
               const row = dbRows[callIndex++];
@@ -27,6 +28,7 @@ function buildApp(dbRows: (Record<string, unknown> | null)[]) {
             },
             async run() {
               callIndex++;
+              sqlCalls.push({ sql, args });
               return { success: true };
             },
           };
@@ -34,13 +36,18 @@ function buildApp(dbRows: (Record<string, unknown> | null)[]) {
       };
     },
   };
-  const fakeExecutionCtx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
+  const waitUntilPromises: Promise<unknown>[] = [];
+  const fakeExecutionCtx = {
+    waitUntil: (p: Promise<unknown>) => { waitUntilPromises.push(p); },
+    passThroughOnException: () => {},
+  } as unknown as ExecutionContext;
   app.use('/api/aichat', aichatAuthMiddleware);
   app.post('/api/aichat', (c) => {
     const user = c.get('user' as never) as { sub: string } | undefined;
-    return c.json({ ok: true, sub: user?.sub });
+    const apiKeyId = c.get('apiKeyId' as never) as string | undefined;
+    return c.json({ ok: true, sub: user?.sub, apiKeyId });
   });
-  return { app, fakeDb, fakeExecutionCtx };
+  return { app, fakeDb, fakeExecutionCtx, sqlCalls, waitUntilPromises };
 }
 
 const VALID_KEY = 'nkapi_' + 'a'.repeat(64);
@@ -57,7 +64,7 @@ describe('aichatAuthMiddleware', () => {
     }, { DB: fakeDb }, fakeExecutionCtx);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ ok: true, sub: 'user1' });
+    expect(body).toEqual({ ok: true, sub: 'user1', apiKeyId: 'k1' });
   });
 
   it('失効済みAPIキーは401で拒否され、ハンドラに到達しない', async () => {
@@ -107,6 +114,25 @@ describe('aichatAuthMiddleware', () => {
     expect(res.status).toBe(401);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('無効なトークンです');
+  });
+
+  it('リクエスト完了後、そのAPIキーのエンドポイント別使用統計(api_key_endpoint_stats)をUPSERTする', async () => {
+    const { app, fakeDb, fakeExecutionCtx, sqlCalls, waitUntilPromises } = buildApp([
+      { id: 'k1', user_id: 'user1', label: 'test', expires_at: null, revoked_at: null },
+      { revoked_at: null },
+    ]);
+    const res = await app.request('/api/aichat', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${VALID_KEY}` },
+    }, { DB: fakeDb }, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    await Promise.all(waitUntilPromises);
+
+    const statsCall = sqlCalls.find((c) => c.sql.includes('api_key_endpoint_stats'));
+    expect(statsCall).toBeDefined();
+    expect(statsCall!.args[0]).toBe('k1');
+    expect(statsCall!.args[2]).toBe('POST /api/aichat');
+    expect(statsCall!.args[3]).toBe(200);
   });
 
   it('APIキーの照合に使うのはSHA-256ハッシュであり、生キーはそのままクエリに渡さない', async () => {

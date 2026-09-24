@@ -1,0 +1,4 @@
+{
+  "name": "cloudflare-workers-github-oauth-1",
+  "install": "npm install"
+}

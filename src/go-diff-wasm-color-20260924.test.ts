@@ -1,0 +1,117 @@
+/**
+ * /go-diff-wasm ページの差分表示色分け(diff-add/diff-del/diff-ctx)のテスト。
+ *
+ * 対象: go-diff-wasmの出力(`+ `=追加, `- `=削除, `  `=変更なしの接頭辞付き行)を
+ * 行ごとに色分けして表示するクライアント側ロジック(renderDiffOutput)。
+ *
+ * 故障シナリオ:
+ *   (1) 追加/削除/変更なしの行が同じ色になり、変更点が見分けられない
+ *   (2) HTMLへ差し込む際にエスケープを忘れ、diffの内容にXSSペイロードが
+ *       含まれるとスクリプトが実行されてしまう(a・bはユーザー入力)
+ *   (3) Markdownのdiffフェンスが評価されず、```diff / ``` が文字として表示される
+ */
+import { describe, it, expect } from 'vitest';
+import { getGoDiffWasmPage } from './views/goDiffWasm';
+
+function extractRenderDiffOutput(html: string): (out: string) => string {
+  const scriptMatch = html.match(/<script type="module">([\s\S]*?)<\/script>/);
+  expect(scriptMatch).not.toBeNull();
+  const script = scriptMatch![1];
+  // DOM要素へのアクセスを含む周辺コードは実行できないため、
+  // escapeForHtml・renderDiffOutputの関数定義部分だけを抜き出して評価する。
+  const escapeMatch = script.match(/function escapeForHtml\(s\) \{[\s\S]*?\n\s{4}\}/);
+  const renderMatch = script.match(/function renderDiffOutput\(out\) \{[\s\S]*?\n\s{4}\}/);
+  expect(escapeMatch).not.toBeNull();
+  expect(renderMatch).not.toBeNull();
+  const fn = new Function(
+    `${escapeMatch![0]}\n${renderMatch![0]}\nreturn renderDiffOutput;`
+  ) as () => (out: string) => string;
+  return fn();
+}
+
+function extractRenderDiffSummary(html: string): (out: string) => string {
+  const scriptMatch = html.match(/<script type="module">([\s\S]*?)<\/script>/);
+  expect(scriptMatch).not.toBeNull();
+  const renderMatch = scriptMatch![1].match(/function renderDiffSummary\(out\) \{[\s\S]*?\n\s{4}\}/);
+  expect(renderMatch).not.toBeNull();
+  const fn = new Function(`${renderMatch![0]}\nreturn renderDiffSummary;`) as () => (out: string) => string;
+  return fn();
+}
+
+describe('/go-diff-wasm: 差分表示の色分け', () => {
+  it('追加行はdiff-add、削除行はdiff-del、変更なし行はdiff-ctxになる', () => {
+    const html = getGoDiffWasmPage('tester');
+    const scriptMatch = html.match(/<script type="module">([\s\S]*?)<\/script>/);
+    expect(scriptMatch).not.toBeNull();
+    const script = scriptMatch![1];
+    expect(script).toContain("cls = 'diff-add'");
+    expect(script).toContain("cls = 'diff-del'");
+    expect(script).toContain("cls = 'diff-ctx'");
+    expect(script).toContain("cls = 'diff-meta'");
+    expect(script).toContain('resultValue.innerHTML = renderDiffOutput(out)');
+  });
+
+  it('CSSにdiff-add(緑系)・diff-del(赤系)の色定義がある', () => {
+    const html = getGoDiffWasmPage('tester');
+    expect(html).toContain('.diff-line.diff-add');
+    expect(html).toContain('.diff-line.diff-del');
+    expect(html).toContain('#dcfce7');
+    expect(html).toContain('#fee2e2');
+  });
+
+  it('renderDiffOutputが接頭辞ごとに正しいクラスへ振り分ける(実際に評価)', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('1行追加, 1行削除\n\n```diff\n  a\n- b\n+ c\n```');
+    expect(out).not.toContain('1行追加, 1行削除');
+    expect(out).toContain('class="diff-line diff-ctx">  a<');
+    expect(out).toContain('class="diff-line diff-del">- b<');
+    expect(out).toContain('class="diff-line diff-add">+ c<');
+    expect(out).not.toContain('```diff');
+    expect(out).not.toContain('>```<');
+  });
+
+  it('追加・削除数を「差分」の右に符号付きの緑色・ピンク色で表示する', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffSummary = extractRenderDiffSummary(html);
+    const out = renderDiffSummary('1行追加, 2行削除\n\n```diff\n- before\n+ after\n```');
+
+    expect(html).toContain('<div class="result-label">差分</div>');
+    expect(html).toContain('<div class="diff-summary" id="diffSummary"');
+    expect(html).toContain('.diff-summary-add { color: #16a34a; }');
+    expect(html).toContain('.diff-summary-del { color: #db2777; }');
+    expect(out).toBe(
+      '<span class="diff-summary-item"><span class="diff-summary-add">+1</span> 行追加</span>' +
+      '<span class="diff-summary-item"><span class="diff-summary-del">-2</span> 行削除</span>'
+    );
+  });
+
+  it('Markdownのdiffコードフェンスは表示せず、フェンス内の行だけを描画する', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('```diff\n- before\n+ after\n```');
+    expect(out).toBe(
+      '<span class="diff-line diff-del">- before</span>' +
+      '<span class="diff-line diff-add">+ after</span>'
+    );
+  });
+
+  it('ブロック表示する各行のspan間に改行文字を入れず、余分な空行を作らない', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('- before\n+ after');
+    expect(out).toBe(
+      '<span class="diff-line diff-del">- before</span>' +
+      '<span class="diff-line diff-add">+ after</span>'
+    );
+    expect(out).not.toContain('</span>\n<span');
+  });
+
+  it('renderDiffOutputはHTMLをエスケープする(XSS対策)', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('+ <script>alert(1)</script>');
+    expect(out).not.toContain('<script>alert(1)</script>');
+    expect(out).toContain('&lt;script&gt;');
+  });
+});

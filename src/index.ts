@@ -5,14 +5,15 @@
 
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
-import { createJWT, JWTPayload, extractBearerToken } from './utils/jwt';
+import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
-import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware } from './middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware, cfDashboardAdminMiddleware } from './middleware/auth';
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
+import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
@@ -25,16 +26,23 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { renderJevScoreBoardPage } from './views/jevScoreBoard';
+import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
+import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
+import { getJevPlaygroundPage } from './views/jevPlayground';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
+import { getEarthComposer25Page } from './views/earthComposer25';
+import { getPentagonKaleidoscopePage } from './views/pentagonKaleidoscope';
 import { getWebGLHeritagePage } from './views/webglHeritage';
 import { getHeritageAccessPage } from './views/heritageAccess';
 import { getHeritageAreaPage } from './views/heritageArea';
@@ -68,6 +76,13 @@ import {
   stripHtmlTags,
 } from './utils/ghAttach';
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
+import { getD1BindingCount, validateD1BindingValues } from './utils/d1QueryBindings';
+import {
+  buildGithubRepositoryApiUrl,
+  buildGithubTreeApiUrl,
+  fetchGithubRepositoryWithPublicFallback,
+  parseDefaultBranch,
+} from './utils/repositoryTree';
 
 /**
  * gh-attach向け: GitHub APIのエラーレスポンスからmessageフィールドを取り出す。
@@ -183,6 +198,69 @@ async function fetchAndFormatGhPrList(
   return formatPrListViaWasm(repoFullName, json, maskAuthor);
 }
 
+/** GitHub Trees APIから取得したパスをtree-wasmでMarkdownツリーへ整形する。 */
+async function fetchAndFormatRepositoryTree(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  userSub: string,
+  repoFullNameInput: string,
+  depth: number,
+  options: import('./utils/treeWasmServer').TreeFormatOptions = {},
+): Promise<string> {
+  const parsed = parseOwnerRepo(repoFullNameInput);
+  if (!parsed) throw new Error('リポジトリは owner/repo 形式で指定してください');
+  const repoFullName = `${parsed.owner}/${parsed.repo}`;
+  const userSession = await getUserSession(c.env.DB, userSub);
+  const accessToken = userSession?.githubAccessToken;
+  if (!accessToken) throw new Error('GitHubアクセストークンが見つかりません。再ログインしてください');
+
+  const githubHeaders = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+
+  // Trees APIに疑似参照のHEADを渡すと、存在するリポジトリでもGitHub側で
+  // 解決されず404になる場合がある。Repository APIで実際の既定ブランチを
+  // 取得してからtree_shaとして渡す。
+  const repositoryFetch = await fetchGithubRepositoryWithPublicFallback(
+    buildGithubRepositoryApiUrl(parsed.owner, parsed.repo),
+    githubHeaders,
+  );
+  const repositoryRes = repositoryFetch.response;
+  if (!repositoryRes.ok) {
+    const ghMessage = await extractGithubErrorMessage(repositoryRes);
+    logger.warn('repository tree: repository fetch failed', { repoFullName, userSub, status: repositoryRes.status, ghMessage });
+    if (repositoryRes.status === 404) {
+      throw new Error(`リポジトリ ${repoFullName} が見つからないか、GitHubアカウントに参照権限がありません。owner/repo の綴りと、非公開リポジトリの場合はOAuth権限を確認してください`);
+    }
+    throw new Error(describeGithubApiError('リポジトリ情報の取得', repositoryRes.status, ghMessage));
+  }
+  const defaultBranch = parseDefaultBranch(await repositoryRes.json<unknown>());
+  if (!defaultBranch) throw new Error('GitHub Repository APIの応答に既定ブランチがありません');
+
+  const res = await fetch(
+    buildGithubTreeApiUrl(parsed.owner, parsed.repo, defaultBranch),
+    { headers: repositoryFetch.usedAnonymousFallback
+      ? { Accept: githubHeaders.Accept, 'User-Agent': githubHeaders['User-Agent'] }
+      : githubHeaders },
+  );
+  if (!res.ok) {
+    const ghMessage = await extractGithubErrorMessage(res);
+    logger.warn('repository tree: fetch failed', { repoFullName, userSub, status: res.status, ghMessage });
+    throw new Error(describeGithubApiError('ディレクトリツリーの取得', res.status, ghMessage));
+  }
+  const body = await res.json<{ truncated?: boolean; tree?: Array<{ path?: unknown; type?: unknown }> }>();
+  if (!Array.isArray(body.tree)) throw new Error('GitHub Trees APIの応答形式が不正です');
+  const entries = body.tree
+    .filter((entry): entry is { path: string; type: 'tree' | 'blob' | 'commit' } =>
+      typeof entry.path === 'string' && (entry.type === 'tree' || entry.type === 'blob' || entry.type === 'commit'))
+    .map((entry) => `${entry.path}\t${entry.type}`)
+    .join('\n');
+  const { formatTreeViaWasm } = await import('./utils/treeWasmServer');
+  const tree = formatTreeViaWasm(entries, repoFullName, depth, options);
+  return `## ${repoFullName} ディレクトリツリー (${depth}階層)\n\n${tree}${body.truncated ? '\n\n⚠️ GitHub APIの上限により一部のパスは省略されています。' : ''}`;
+}
+
 /**
  * `/neko mlb` 用に、MLB Stats APIから指定日(YYYY-MM-DD)の試合予定を取得し、
  * 開始時刻・対戦カード・両チーム先発投手だけの軽量な形に整形する。
@@ -223,11 +301,37 @@ async function fetchMlbTodayGamesFromStatsApi(dateStr: string): Promise<MlbToday
   return games;
 }
 
+/**
+ * `/neko vlink <キーワード>` 用。Google Custom Search JSON APIへ
+ * 「YouTube <キーワード>」で検索をかけ、結果のうちwww.youtube.comの
+ * リンクのみを抽出する(抽出処理自体はextractYoutubeLinksFromSearchItemsに
+ * 切り出し済み。ここは実際のfetch()呼び出しのみを担う)。
+ * GOOGLE_CSE_API_KEY・GOOGLE_CSE_CXはwrangler secretで管理する(CLAUDE.mdルール4)。
+ */
+async function fetchYoutubeLinksViaGoogleSearch(env: Bindings, keyword: string): Promise<string[]> {
+  const apiKey = env.GOOGLE_CSE_API_KEY;
+  const cx = env.GOOGLE_CSE_CX;
+  if (!apiKey || !cx) {
+    throw new Error('GOOGLE_CSE_API_KEY・GOOGLE_CSE_CXが未設定です');
+  }
+  const query = `YouTube ${keyword}`;
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(apiKey)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Google Custom Search APIの呼び出しに失敗しました(status ${res.status})`);
+  }
+  const data = await res.json<{ items?: Array<{ link?: string }> }>();
+  return extractYoutubeLinksFromSearchItems(data.items ?? []);
+}
+
 import { getKimiCodePage } from './views/kimiCode';
+import { getCursorAgentPage } from './views/cursorAgent';
+import { validateCursorAgentLaunchRequest, formatCursorAgentValidationError, buildCursorAgentRequestBody, buildCursorAgentStatusUrl, buildCursorAgentConversationUrl, extractCursorAgentConversationAnswers, mergeCursorAgentConversationAnswers, extractCursorAgentFields, buildCursorAgentHistoryListSql, buildCursorAgentAnswerCacheCountSql, normalizeCursorAgentHistorySearchQuery, isCursorAgentSuccessfulTerminal, persistCursorAgentPastLogHits, queryCursorAgentHistoryWithSearch, CURSOR_AGENT_ALLOWED_REPOS } from './utils/cursorAgentLaunch';
 import { getKimiCodeMarkdownListPage, getKimiCodeMarkdownDetailPage } from './views/kimiCodeMarkdown';
 import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
+import { getCronStatusPage, type CronExecutionRow, type CronSnapshotRow } from './views/cronStatus';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
@@ -236,6 +340,13 @@ import { getAirlineNetworkPage } from './views/airlineNetwork';
 import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
+import { getOrigamiSculpturePage } from './views/origamiSculpture';
+import { getFlyBrainPage } from './views/flyBrain';
+import { getFlyBrainMahjongPage } from './views/flyBrainMahjong';
+import { flyBrainChooseDiscard } from './flyBrainMahjongLogic';
+import { recommendDiscard } from './mahjongDiscardLogic';
+import { getBrushJjaemuPage } from './views/brushJjaemu';
+import { getTsuruNoNiwaPage } from './views/tsuruNoNiwa';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
@@ -244,11 +355,14 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
+import { getGronWasmPage } from './views/gronWasm';
+import { getGoDiffWasmPage } from './views/goDiffWasm';
+import { getJsonStructuralDiffPage } from './views/jsonStructuralDiff';
 import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTableClassification } from './views/d1QueryCatalog';
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
-import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL } from './utils/countdown';
+import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, replaceCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -260,12 +374,17 @@ import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } fr
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
 import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
-import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
+import { validateFreeText, buildFreeTextSlackMessage, buildFreeTextSlackBlocks, isSlackPostTemplateId, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
 import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
+import { computeJevQuestionCounts, renderJevRevViewerPage } from './utils/jevRevViewer';
+import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } from './utils/jevAnswerValues';
+import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
+import { buildJevLivePulse, type JevLivePulseRow } from './utils/jevLivePulse';
+import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -298,7 +417,7 @@ import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
-import { getSessionDurationSeconds, renewSession, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
+import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
@@ -315,8 +434,17 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
+import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
+import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
+import {
+  EMBEDDED_TREE_VIEW_SNAPSHOTS,
+  EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
+  fetchRepoTreeSnapshot,
+  resolveNextTreeViewSnapshot,
+  type TreeViewSnapshotNode,
+} from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -341,6 +469,7 @@ import {
   touchApiKeyLastUsed,
   type ApiKeyDb,
 } from './utils/apiKeys';
+import { summarizeApiKeyUsage, type ApiKeyEndpointStatRow } from './utils/apiKeyStats';
 import {
   isValidEcPublicKeyJwk,
   generateChallengeValue,
@@ -360,7 +489,6 @@ import {
   LOGIN_METHOD_PUBLIC_KEY,
   type LoginMethod,
 } from './utils/loginHistory';
-import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
@@ -511,6 +639,29 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ruby_wasm_snippets', migration: '0134', description: '/kimi-codeページの「コードを保管」ボタンで、生成されたコードがRuby(looksLikeRubyCode()による判定)だった場合に保存するスニペット。/ruby-wasmページから一覧取得・読み込んで実行できる。ruby_version(0135)は保存時点で読み込んでいたRuby/WASMのビルドライン', syncPolicy: 'auto' },
   { name: 'ruby_wasm_snippet_verifications', migration: '0135', description: '/ruby-wasmページでスニペットを実行して「動作確認」した結果の履歴。同じスニペットを複数のRubyビルドライン(ruby_version)で検証した記録をそれぞれ残せる', syncPolicy: 'auto' },
   { name: 'kimi_code_markdown_snippets', migration: '0136', description: '/kimi-codeページの「📝 Markdownとして保存」ボタンで、生成されたコード(言語問わず)をMarkdown化して保存したもの。/kimi-code/markdown/:idで閲覧でき、Rubyコードブロックはその場でWASM実行できる', syncPolicy: 'auto' },
+  { name: 'cursor_agent_launch_log', migration: '0137', description: '/cursor-agentページからCursor Background Agent APIを起動したプロンプト・レスポンス(問答ペア)の履歴。AIチャットのai_chat_sharesと同様、後から一覧・詳細を読み出せる', syncPolicy: 'auto' },
+  { name: 'cursor_agent_status_log', migration: '0138', description: 'cursor_agent_launch_log 1件(1回の起動)に対する状態取得履歴(初回起動時・以後の「最新状態を取得」のたびに追記。上書きせず連鎖として保持する。ruby_wasm_snippet_verificationsと同じ親子パターン)', syncPolicy: 'auto' },
+  { name: 'cursor_agent_answer_cache', migration: '0139', description: '/cursor-agentのAgent IDタップで取得した会話回答文のキャッシュ。Cursor APIはキャッシュが空のときだけ呼び、断片化したassistant回答は1本のanswer_textにまとめて保存する。生の会話JSONやuser_messageは持たない', syncPolicy: 'auto' },
+  { name: 'cursor_agent_search_log', migration: '0140', description: '/cursor-agentの「過去ログ検索」で、検索キーワードとヒットした起動履歴(cursor_agent_launch_log)を結びつける集計。AIチャットのaichat_search_logと同じく (user_id, keyword, launch_id) が一意', syncPolicy: 'auto' },
+  { name: 'cursor_agent_search_history', migration: '0140', description: '/cursor-agentの「過去ログ検索」明細。同じキーワード×起動を完了検索するたびにseq_numを増やして追記する(aichat_search_history相当)', syncPolicy: 'auto' },
+  { name: 'jev_label_groups', migration: '0144', description: 'jev_labelsの表示グループ(事実の正確さ/論理・整合性/伝わりやすさ/応答姿勢・手続きの4分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_labels', migration: '0144', description: 'Jev(TypeSafe AI System One Model)でAI回答の品質を評価するラベルのマスター。追記専用(既存行は編集しない)で、ラベルを追加しても過去の評価データと矛盾しない設計', syncPolicy: 'manual' },
+  { name: 'jev_evaluations', migration: '0144', description: 'ai_chat_sharesの回答(またはtarget_type=source_questionで元の質問文自体)をjev_labelsの各ラベルでJevに評価させた結果。/ai-cacheのモデル比較で使う', syncPolicy: 'auto' },
+  { name: 'jev_country_keyword_labels', migration: '0145', description: 'AI分類のキーワードがカタカナの国名だった場合に使う、国名1語から判定できるJev評価ラベルのマスター(jev_labelsとは別。旅程前提の質問を除いた国レベルの質問のみ)', syncPolicy: 'manual' },
+  { name: 'jev_country_keyword_evaluations', migration: '0145', description: 'カタカナ国名キーワードをjev_country_keyword_labelsの各ラベルでJevに評価させた結果。share_id/modelではなくkeyword文字列で引く点がjev_evaluationsと異なる', syncPolicy: 'auto' },
+  { name: 'jev_keyword_evaluation_locks', migration: '0148', description: 'runJevScoreForKeywordの多重実行防止用の一時ロック行(user_id+keyword単位)。一定時間で失効し、処理完了後は削除される', syncPolicy: 'auto' },
+  { name: 'api_key_endpoint_stats', migration: '0149', description: 'APIキー(nkapi_...)単位のエンドポイント別・日別(JST)アクセス集計。🔑キー管理ページの使用統計表示で使う', syncPolicy: 'auto' },
+  { name: 'jev_vuln_label_groups', migration: '0150', description: '脆弱性判定チェックリスト(jev_vuln_labels)の表示グループ(脆弱性の成立可否/到達可能性・攻撃経路/認証/認可・権限等の18分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_vuln_labels', migration: '0150', description: '脆弱性を「Yes=危険側」に統一した二値判定文でJevに評価させるためのラベルのマスター。各question_textの先頭に[外部]/[内部]/[共通]/[除外]の脅威分類タグを付与している。jev_labelsと同じく追記専用', syncPolicy: 'manual' },
+  { name: 'jev_vuln_evaluations', migration: '0150', description: '任意の対象(target_id、PR番号やfinding ID等の文字列)をjev_vuln_labelsの各ラベルでJevに評価させた結果。share_id/modelで引くjev_evaluationsに対し、対象がAIチャット回答に限らない汎用的な脆弱性判定のため独立したテーブルにしている', syncPolicy: 'auto' },
+  { name: 'jev_test_label_groups', migration: '0151', description: 'テストコード品質判定チェックリスト(jev_test_labels)の表示グループ(カバレッジ・正常系異常系バランス・モック妥当性・独立性再現性・アサーション品質・命名可読性・回帰防止力・実行コスト保守性の8分類)のマスター', syncPolicy: 'manual' },
+  { name: 'jev_test_labels', migration: '0151', description: 'テストコードの問題を「Yes=危険側(問題あり)」に統一した二値判定文でJevに評価させるためのラベルのマスター。jev_vuln_labelsと同じ構造で、対象はコミットの差分/テストコードの品質。追記専用', syncPolicy: 'manual' },
+  { name: 'jev_test_evaluations', migration: '0151', description: '任意の対象(target_id、commitHash等)をjev_test_labelsの各ラベルでJevに評価させた結果。tree-viewの「テスト評価」ボタン等から使う', syncPolicy: 'auto' },
+  { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
+  { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
+  { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
+  { name: 'jev_keyword_boundary_labels', migration: '0158', description: '【非推奨・migration 0159で削除済み】「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスターだったが、自己申告は根拠が曖昧なため、既存のaichat_keyword_category_map(未分類=境界線の外側)を根拠にする方式へ置き換えた', syncPolicy: 'manual' },
+  { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '【非推奨・migration 0159で削除済み】回答文から切り出したキーワードの未理解/理解済み状態を自己申告で保持していたが、既存のaichat_keyword_category_map(分類済みかどうか)を根拠にする方式へ置き換えた', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -2077,6 +2228,288 @@ CREATE INDEX IF NOT EXISTS idx_ruby_wasm_snippet_verifications_snippet ON ruby_w
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_kimi_code_markdown_snippets_user_created ON kimi_code_markdown_snippets(user_id, created_at);`,
+  '0137': `CREATE TABLE IF NOT EXISTS cursor_agent_launch_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  agent_id TEXT,
+  cursor_response TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_launch_log_user_created ON cursor_agent_launch_log(user_id, created_at);`,
+  '0138': `ALTER TABLE cursor_agent_launch_log ADD COLUMN agent_name TEXT;
+ALTER TABLE cursor_agent_launch_log ADD COLUMN agent_url TEXT;
+CREATE TABLE IF NOT EXISTS cursor_agent_status_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  agent_status TEXT,
+  run_status TEXT,
+  report_text TEXT,
+  raw_response TEXT NOT NULL,
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_status_log_launch ON cursor_agent_status_log(launch_id, fetched_at);`,
+  '0139': `CREATE TABLE IF NOT EXISTS cursor_agent_answer_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  launch_id INTEGER NOT NULL UNIQUE REFERENCES cursor_agent_launch_log(id),
+  answer_text TEXT NOT NULL,
+  cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_answer_cache_launch ON cursor_agent_answer_cache(launch_id);`,
+  '0140': `CREATE TABLE IF NOT EXISTS cursor_agent_search_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  first_searched_at TEXT NOT NULL,
+  last_searched_at TEXT NOT NULL,
+  select_count INTEGER NOT NULL DEFAULT 1,
+  result_count INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cursor_agent_search_log_unique ON cursor_agent_search_log(user_id, keyword, launch_id);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_log_user ON cursor_agent_search_log(user_id, last_searched_at);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_log_launch ON cursor_agent_search_log(launch_id);
+CREATE TABLE IF NOT EXISTS cursor_agent_search_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  launch_id INTEGER NOT NULL REFERENCES cursor_agent_launch_log(id),
+  seq_num INTEGER NOT NULL,
+  searched_at TEXT NOT NULL,
+  result_count INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_lookup ON cursor_agent_search_history(user_id, keyword, launch_id);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_user ON cursor_agent_search_history(user_id, searched_at);
+CREATE INDEX IF NOT EXISTS idx_cursor_agent_search_history_launch ON cursor_agent_search_history(launch_id);`,
+  '0144': `CREATE TABLE IF NOT EXISTS jev_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_label_groups_name ON jev_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_type TEXT NOT NULL,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_evaluations_unique ON jev_evaluations(target_type, user_id, share_id, model, jev_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_evaluations_share ON jev_evaluations(share_id);`,
+  // AI分類のキーワード(例: カタカナの国名)を対象にしたJev評価は、
+  // ai_chat_sharesの回答を評価するjev_labels/jev_evaluationsとは対象が
+  // 異なる(share_id/modelではなくkeyword文字列で引く)ため、あえて別の
+  // テーブルに分けている。ラベル内容はsrc/utils/jevCountryKeyword.tsの
+  // COUNTRY_LEVEL_JEV_LABELSと対応させている(このマイグレーションの
+  // question_text/options_jsonを変更したらそちらのコメントも更新すること)。
+  '0145': `CREATE TABLE IF NOT EXISTS jev_country_keyword_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_text TEXT NOT NULL,
+  options_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_country_keyword_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  jev_country_keyword_label_id INTEGER NOT NULL REFERENCES jev_country_keyword_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_country_keyword_evaluations_unique ON jev_country_keyword_evaluations(user_id, keyword, jev_country_keyword_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_country_keyword_evaluations_keyword ON jev_country_keyword_evaluations(keyword);
+INSERT OR IGNORE INTO jev_country_keyword_labels (question_text, options_json) VALUES
+  ('日本国籍者がビザ(査証)無しで渡航できる国ですか?', '["ビザが必要","ビザ免除で渡航できる"]'),
+  ('日本語以外が公用語の国ですか?', '["日本語が公用語","日本語以外が公用語"]'),
+  ('英語が公用語または広く通じる国ですか?', '["英語はあまり通じない","英語が公用語または広く通じる"]'),
+  ('通貨単位は日本円とは異なる国ですか?', '["日本円を使用する","日本円とは異なる通貨を使う"]'),
+  ('日本と陸続きで国境を接している国ですか?', '["日本と陸続きではない","日本と陸続きで国境を接する"]'),
+  ('島国(国土が海に囲まれている)ですか?', '["大陸内に位置する内陸国・陸続きの国","国土が海に囲まれた島国"]'),
+  ('自動車は右側通行の国ですか?', '["左側通行","右側通行"]'),
+  ('日本との時差は6時間以上ある国ですか?', '["時差は6時間未満","時差は6時間以上"]'),
+  ('北半球に位置する国ですか?', '["南半球に位置する","北半球に位置する"]'),
+  ('EU(欧州連合)加盟国ですか?', '["EU非加盟国","EU加盟国"]'),
+  ('日本の外務省が渡航に注意を要すると案内している地域を含む国ですか?', '["注意喚起の対象地域は含まれない","注意喚起の対象地域を含む"]'),
+  ('世界遺産(自然遺産・文化遺産)に登録された場所がある国ですか?', '["世界遺産の登録は無い","世界遺産が登録されている"]'),
+  ('日本からの直行便が就航している国ですか?', '["直行便は無く乗り継ぎが必要","日本からの直行便がある"]'),
+  ('通年で温暖な気候(熱帯・亜熱帯)が中心の国ですか?', '["温帯・寒帯など温暖ではない地域が中心","熱帯・亜熱帯など温暖な地域が中心"]'),
+  ('公用語の表記にラテン文字(アルファベット)を使う国ですか?', '["ラテン文字以外の文字体系を使う","ラテン文字(アルファベット)を使う"]');`,
+  '0148': `CREATE TABLE IF NOT EXISTS jev_keyword_evaluation_locks (
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  locked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, keyword)
+);`,
+  '0149': `CREATE TABLE IF NOT EXISTS api_key_endpoint_stats (
+  key_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  status_code INTEGER NOT NULL DEFAULT 0,
+  count INTEGER NOT NULL DEFAULT 1,
+  last_called_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (key_id, day, endpoint, status_code)
+);
+CREATE INDEX IF NOT EXISTS idx_api_key_endpoint_stats_key_id ON api_key_endpoint_stats(key_id);`,
+  '0150': `CREATE TABLE IF NOT EXISTS jev_vuln_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_label_groups_name ON jev_vuln_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_vuln_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_vuln_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_vuln_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_vuln_label_id INTEGER NOT NULL REFERENCES jev_vuln_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_unique ON jev_vuln_evaluations(user_id, target_id, model, jev_vuln_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_vuln_evaluations_target ON jev_vuln_evaluations(target_id);`,
+  '0151': `CREATE TABLE IF NOT EXISTS jev_test_label_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_test_label_groups_name ON jev_test_label_groups(name);
+CREATE TABLE IF NOT EXISTS jev_test_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_type TEXT NOT NULL,
+  question_text TEXT NOT NULL,
+  options_json TEXT,
+  jev_group_id INTEGER NOT NULL REFERENCES jev_test_label_groups(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_test_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_test_label_id INTEGER NOT NULL REFERENCES jev_test_labels(id),
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_test_evaluations_unique ON jev_test_evaluations(user_id, target_id, model, jev_test_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_test_evaluations_target ON jev_test_evaluations(target_id);`,
+  '0152': `CREATE TABLE IF NOT EXISTS tree_view_snapshots (
+  repo_name TEXT PRIMARY KEY,
+  tree_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_snapshots_updated ON tree_view_snapshots(updated_at);
+CREATE TABLE IF NOT EXISTS tree_view_snapshot_refresh_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  repo_name TEXT NOT NULL,
+  requested_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_snapshot_refresh_log_user ON tree_view_snapshot_refresh_log(user_id, requested_at);`,
+  '0154': `DROP TABLE IF EXISTS d1_query_catalog_0154_new;
+CREATE TABLE d1_query_catalog_0154_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  command TEXT NOT NULL,
+  command_confirmed INTEGER NOT NULL DEFAULT 0,
+  table_name TEXT,
+  source_file TEXT NOT NULL DEFAULT 'src/index.ts',
+  source_line INTEGER NOT NULL,
+  sql_text TEXT NOT NULL,
+  migration_file TEXT,
+  last_commit_hash TEXT,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_commit_at TEXT,
+  sync_generation TEXT
+);
+INSERT INTO d1_query_catalog_0154_new (
+  query_name, command, command_confirmed, table_name, source_file, source_line,
+  sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
+)
+SELECT query_name, command, command_confirmed, table_name, source_file, source_line,
+       sql_text, migration_file, last_commit_hash, recorded_at, last_commit_at
+FROM (
+  SELECT d.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY lower(trim(query_name))
+           ORDER BY
+             ((table_name IS NOT NULL) + (migration_file IS NOT NULL) +
+              (last_commit_hash IS NOT NULL) + (last_commit_at IS NOT NULL)) DESC,
+             COALESCE(last_commit_at, recorded_at) DESC,
+             id DESC
+         ) AS duplicate_rank
+  FROM d1_query_catalog d
+)
+WHERE duplicate_rank = 1;
+DROP TABLE d1_query_catalog;
+ALTER TABLE d1_query_catalog_0154_new RENAME TO d1_query_catalog;
+CREATE INDEX idx_d1_query_catalog_table_name ON d1_query_catalog(table_name);
+CREATE INDEX idx_d1_query_catalog_source ON d1_query_catalog(source_file, source_line);
+INSERT INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order)
+VALUES ('d1_query_catalog', 'config', 'D1クエリカタログ: src/index.tsのSQLクエリ一覧', '0154', 'manual', 0)
+ON CONFLICT(table_name) DO UPDATE SET
+  group_name = excluded.group_name,
+  description = excluded.description,
+  migration = excluded.migration,
+  sync_policy = excluded.sync_policy;
+DELETE FROM table_column_keys WHERE table_name = 'd1_query_catalog';
+INSERT INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+  ('d1_query_catalog', 'id', 'pk', NULL),
+  ('d1_query_catalog', 'query_name', 'uk', NULL),
+  ('d1_query_catalog', 'table_name', 'idx', NULL),
+  ('d1_query_catalog', 'source_file', 'idx', NULL),
+  ('d1_query_catalog', 'source_line', 'idx', NULL);`,
+  '0155': `CREATE TABLE IF NOT EXISTS tree_view_update_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_name TEXT NOT NULL,
+  update_source TEXT NOT NULL CHECK (update_source IN ('scheduled', 'manual')),
+  changed INTEGER NOT NULL CHECK (changed IN (0, 1)),
+  executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_executed ON tree_view_update_log(executed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tree_view_update_log_repo ON tree_view_update_log(repo_name, executed_at DESC);`,
+  '0158': `CREATE TABLE IF NOT EXISTS jev_keyword_boundary_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_text TEXT NOT NULL,
+  options_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS jev_keyword_boundary_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  jev_keyword_boundary_label_id INTEGER NOT NULL REFERENCES jev_keyword_boundary_labels(id),
+  value REAL NOT NULL,
+  source_share_id TEXT,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_unique ON jev_keyword_boundary_evaluations(user_id, keyword, jev_keyword_boundary_label_id);
+CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_keyword ON jev_keyword_boundary_evaluations(keyword);
+CREATE INDEX IF NOT EXISTS idx_jev_keyword_boundary_evaluations_unknown ON jev_keyword_boundary_evaluations(user_id, jev_keyword_boundary_label_id, value, computed_at DESC);
+INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) VALUES
+  ('このキーワードをユーザーは理解済みですか?', '["未理解(探索の境界線の外側)","理解済み(探索の境界線の内側)"]');`,
+  '0159': `DROP TABLE IF EXISTS jev_keyword_boundary_evaluations;
+DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
+  '0160': `ALTER TABLE tree_view_update_log ADD COLUMN error_message TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2220,7 +2653,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   public_key_challenges: { id: 'pk', user_id: 'fk+idx', key_id: 'fk' },
   login_history: { id: 'pk', user_id: 'fk+idx' },
   public_key_security_events: { id: 'pk', user_id: 'fk+idx', key_id: 'fk', created_at: 'idx' },
-  d1_query_catalog: { id: 'pk', source_file: 'uk', source_line: 'uk', query_name: 'idx', table_name: 'idx' },
+  d1_query_catalog: { id: 'pk', query_name: 'uk', table_name: 'idx' },
   alt_notify_ingest_log: { id: 'pk', received_at: 'idx', linked_request_id: 'idx' },
   dynamicneko_aichat_allowed_users: { id: 'pk', email: 'uk' },
   user_preferences: { user_id: 'pk+fk', pref_key: 'pk', updated_at: 'idx' },
@@ -2328,6 +2761,29 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
   kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
+  cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
+  cursor_agent_status_log: { id: 'pk', launch_id: 'fk+idx' },
+  cursor_agent_answer_cache: { id: 'pk', launch_id: 'fk' },
+  cursor_agent_search_log: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx' },
+  cursor_agent_search_history: { id: 'pk', user_id: 'fk', launch_id: 'fk', keyword: 'idx', seq_num: 'idx' },
+  jev_label_groups: { id: 'pk' },
+  jev_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
+  jev_country_keyword_labels: { id: 'pk' },
+  jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
+  jev_keyword_boundary_labels: { id: 'pk' },
+  jev_keyword_boundary_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_keyword_boundary_label_id: 'fk', source_share_id: 'fk' },
+  jev_vuln_label_groups: { id: 'pk' },
+  jev_vuln_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_vuln_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_vuln_label_id: 'fk' },
+  jev_test_label_groups: { id: 'pk' },
+  jev_test_labels: { id: 'pk', jev_group_id: 'fk' },
+  jev_test_evaluations: { id: 'pk', target_id: 'idx', user_id: 'fk', jev_test_label_id: 'fk' },
+  tree_view_snapshots: { repo_name: 'pk', updated_at: 'idx' },
+  tree_view_snapshot_refresh_log: { id: 'pk', user_id: 'idx', repo_name: 'fk' },
+  tree_view_update_log: { id: 'pk', repo_name: 'fk+idx', executed_at: 'idx' },
+  jev_keyword_evaluation_locks: { user_id: 'pk+fk', keyword: 'pk' },
+  api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -2456,6 +2912,29 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ruby_wasm_snippets: 'ai',
   ruby_wasm_snippet_verifications: 'ai',
   kimi_code_markdown_snippets: 'ai',
+  cursor_agent_launch_log: 'ai',
+  cursor_agent_status_log: 'ai',
+  cursor_agent_answer_cache: 'ai',
+  cursor_agent_search_log: 'ai',
+  cursor_agent_search_history: 'ai',
+  jev_label_groups: 'ai',
+  jev_labels: 'ai',
+  jev_evaluations: 'ai',
+  jev_country_keyword_labels: 'ai',
+  jev_country_keyword_evaluations: 'ai',
+  jev_keyword_boundary_labels: 'ai',
+  jev_keyword_boundary_evaluations: 'ai',
+  jev_vuln_label_groups: 'ai',
+  jev_vuln_labels: 'ai',
+  jev_vuln_evaluations: 'ai',
+  jev_test_label_groups: 'ai',
+  jev_test_labels: 'ai',
+  jev_test_evaluations: 'ai',
+  tree_view_snapshots: 'commit',
+  tree_view_snapshot_refresh_log: 'commit',
+  tree_view_update_log: 'commit',
+  jev_keyword_evaluation_locks: 'ai',
+  api_key_endpoint_stats: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2556,9 +3035,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
   api_keys: { user_id: 'user_sessions' },
   user_public_keys: { user_id: 'user_sessions' },
-  public_key_challenges: { user_id: 'user_sessions' },
+  public_key_challenges: { user_id: 'user_sessions', key_id: 'user_public_keys' },
   login_history: { user_id: 'user_sessions' },
-  public_key_security_events: { user_id: 'user_sessions' },
+  public_key_security_events: { user_id: 'user_sessions', key_id: 'user_public_keys' },
   user_preferences: { user_id: 'user_sessions' },
   wine_details: { wine_id: 'wine_embeddings' },
   wine_metadata: { id: 'wine_embeddings' },
@@ -2579,6 +3058,11 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ruby_wasm_snippets: { user_id: 'user_sessions' },
   ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
   kimi_code_markdown_snippets: { user_id: 'user_sessions' },
+  cursor_agent_launch_log: { user_id: 'user_sessions' },
+  cursor_agent_status_log: { launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_answer_cache: { launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_search_log: { user_id: 'user_sessions', launch_id: 'cursor_agent_launch_log' },
+  cursor_agent_search_history: { user_id: 'user_sessions', launch_id: 'cursor_agent_launch_log' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -2615,6 +3099,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
+  tree_view_snapshots: { repo_name: 'installation_permissions' },
+  tree_view_snapshot_refresh_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
+  tree_view_update_log: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -2658,6 +3145,16 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
+  jev_labels: { jev_group_id: 'jev_label_groups' },
+  jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
+  jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
+  jev_keyword_boundary_evaluations: { user_id: 'user_sessions', jev_keyword_boundary_label_id: 'jev_keyword_boundary_labels', source_share_id: 'ai_chat_shares' },
+  jev_vuln_labels: { jev_group_id: 'jev_vuln_label_groups' },
+  jev_vuln_evaluations: { user_id: 'user_sessions', jev_vuln_label_id: 'jev_vuln_labels' },
+  jev_test_labels: { jev_group_id: 'jev_test_label_groups' },
+  jev_test_evaluations: { user_id: 'user_sessions', jev_test_label_id: 'jev_test_labels' },
+  jev_keyword_evaluation_locks: { user_id: 'user_sessions' },
+  api_key_endpoint_stats: { key_id: 'api_keys' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2665,6 +3162,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   heritage_question_view_log: { user_id: 'user_sessions', question_master_id: 'heritage_ai_question_masters' },
   heritage_area_boxes: { user_id: 'user_sessions' },
   heritage_area_items: { area_seq: 'heritage_area_boxes' },
+  heritage_master: { moved_to: 'heritage_master' },
 
   // ========================================================================
   // /workflow/NNNN ページ
@@ -2698,6 +3196,9 @@ export const USER_PREFERENCE_KEYS: Record<string, { description: string; values:
  * ここに登録がない場合は fromCol と同名のカラムを参照する（同名FK）。
  */
 export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
+  // key_id 系 → api_keys.id
+  'api_key_endpoint_stats.key_id': 'id',
+
   // workspace_id 系 → workspaces.id
   'user_sessions.current_workspace_id': 'id',
   'commit_calendar_cache.workspace_id': 'id',
@@ -2739,6 +3240,17 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
 
   // ID名が異なる参照先 → 各マスターの id (PK)
   'wine_details.wine_id': 'id',
+  'jev_vuln_labels.jev_group_id': 'id',
+  'jev_vuln_evaluations.jev_vuln_label_id': 'id',
+  'jev_test_labels.jev_group_id': 'id',
+  'jev_test_evaluations.jev_test_label_id': 'id',
+  'public_key_challenges.key_id': 'id',
+  'public_key_security_events.key_id': 'id',
+  'ruby_wasm_snippet_verifications.snippet_id': 'id',
+  'cursor_agent_status_log.launch_id': 'id',
+  'cursor_agent_answer_cache.launch_id': 'id',
+  'cursor_agent_search_log.launch_id': 'id',
+  'cursor_agent_search_history.launch_id': 'id',
   'ai_chat_shares.image_id': 'id',
   'aichat_search_log.share_id': 'id',
   'aichat_search_history.share_id': 'id',
@@ -2748,11 +3260,18 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'aichat_keyword_category_suggestions.suggested_category_id': 'id',
   'aichat_answer_category_scores.share_id': 'id',
   'aichat_answer_category_scores.category_id': 'id',
+  'jev_labels.jev_group_id': 'id',
+  'jev_evaluations.share_id': 'id',
+  'jev_evaluations.jev_label_id': 'id',
+  'jev_country_keyword_evaluations.jev_country_keyword_label_id': 'id',
+  'jev_keyword_boundary_evaluations.jev_keyword_boundary_label_id': 'id',
+  'jev_keyword_boundary_evaluations.source_share_id': 'id',
   'aichat_answer_vectors.share_id': 'id',
   'aichat_answer_keyword_vectors.share_id': 'id',
   'aichat_moondream_analyses.share_id': 'id',
   'aichat_moondream_analyses.image_id': 'id',
   'heritage_question_view_log.question_master_id': 'id',
+  'heritage_master.moved_to': 'id',
   'ts_function_catalog.repo_id': 'id',
   'ts_function_callers.repo_id': 'id',
   'ts_function_callers.callee_id': 'id',
@@ -2761,6 +3280,10 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'ts_function_impact.repo_id': 'id',
   'ts_commit_quality.repo_id': 'id',
   'api_search_keyword_sections.keyword_id': 'id',
+
+  // workflow_hierarchy の親子番号 → workflow_registry.workflow_no
+  'workflow_hierarchy.child_workflow_no': 'workflow_no',
+  'workflow_hierarchy.parent_workflow_no': 'workflow_no',
 
   // search_history_id → commit_search_history.id
   'commit_search_repo_stats.search_history_id': 'id',
@@ -3574,6 +4097,7 @@ async function autoRegisterTablesFromSqliteMaster(
     let previewSql = `SELECT * FROM ${tableName} LIMIT 20`;
     let pkColumn: string | null = null;
     try {
+      // d1-query-name: AutoRegisterTableColumns
       const pragma = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string; pk: number }>();
       const cols = (pragma.results ?? []).map((c) => c.name);
       pkColumn = (pragma.results ?? []).find((c) => c.pk > 0)?.name ?? null;
@@ -4019,6 +4543,25 @@ async function hasCfAuthAccess(db: D1Database | undefined, userId: string): Prom
   return userSession !== null;
 }
 
+async function syncLoginSessionCountdown(
+  db: D1Database | undefined,
+  userId: string,
+  targetAt: string
+): Promise<void> {
+  const result = await replaceCountdownEvent(db, {
+    userId,
+    label: 'セッション有効期限',
+    targetAt,
+  });
+  if (!result.ok) {
+    logger.error('セッション期限カウントダウンの置換登録に失敗', {
+      userId,
+      errorCode: result.errorCode,
+      error: result.detail,
+    });
+  }
+}
+
 // ログイン確定処理（D1保存・JWT発行・Cookieセット）。
 // 即時ログイン(/auth/github/callback)とメール確認後ログイン(/auth/email-confirm)の
 // 両方から共通利用する。
@@ -4046,6 +4589,7 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
   await recordLoginMethod(c.env.DB, params.githubLogin, LOGIN_METHOD_GITHUB_OAUTH);
 
   const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
   const token = await createJWT(
@@ -4057,7 +4601,15 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
       github_access_token: params.accessToken,
     },
     params.jwtSecret,
-    sessionDurationSeconds
+    sessionDurationSeconds,
+    issuedAtSeconds
+  );
+
+  // 設定保存時ではなく、実際に新しいJWTを発行した時点でのみ期限予定を更新する。
+  await syncLoginSessionCountdown(
+    c.env.DB,
+    params.githubLogin,
+    new Date((issuedAtSeconds + sessionDurationSeconds) * 1000).toISOString()
   );
 
   logger.info('GitHub OAuth authentication successful', {
@@ -4148,12 +4700,20 @@ async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: 
   await recordLoginMethod(c.env.DB, params.userId, LOGIN_METHOD_PUBLIC_KEY);
 
   const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
   const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
   const token = await createJWT(
     { sub: params.userId },
     params.jwtSecret,
-    sessionDurationSeconds
+    sessionDurationSeconds,
+    issuedAtSeconds
+  );
+
+  await syncLoginSessionCountdown(
+    c.env.DB,
+    params.userId,
+    new Date((issuedAtSeconds + sessionDurationSeconds) * 1000).toISOString()
   );
 
   logger.info('Public key (passkey) authentication successful', { userId: params.userId });
@@ -4323,6 +4883,107 @@ app.get('/health', (c) => {
 
 app.get('/fetch-text-stream-demo', (c) => {
   return c.html(getFetchTextStreamDemoPage());
+});
+
+app.get('/jev-playground', authMiddleware, (c) => {
+  return c.html(getJevPlaygroundPage());
+});
+
+/**
+ * /jev-playground(本体ページ)・POST /api/jev-playground-external
+ * (dynamicnekoの/jev-pg-reactページ用)で共通のリクエストボディ検証。
+ * 検証に失敗した場合はエラーメッセージを、成功した場合は検証済みの
+ * payloadを返す(CLAUDE.mdルール32相当の判別可能な戻り値)。
+ */
+type JevPlaygroundValidationResult =
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; error: string };
+
+function validateJevPlaygroundPayload(body: unknown): JevPlaygroundValidationResult {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, error: 'リクエストJSONはオブジェクトで指定してください' };
+  }
+  const payload = body as Record<string, unknown>;
+  if (typeof payload.state !== 'string' || payload.state.trim() === '' || payload.state.length > 20_000) {
+    return { ok: false, error: 'stateは1〜20000文字の文字列で指定してください' };
+  }
+  if (!payload.questions || typeof payload.questions !== 'object' || Array.isArray(payload.questions)) {
+    return { ok: false, error: 'questionsは質問IDをキーにしたオブジェクトで指定してください' };
+  }
+  const questions = Object.values(payload.questions as Record<string, unknown>);
+  if (questions.length < 1 || questions.length > 20) {
+    return { ok: false, error: 'questionsは1〜20件で指定してください' };
+  }
+  if (questions.some((question) => !question || typeof question !== 'object' || !['noul', 'choice', 'score'].includes(String((question as Record<string, unknown>).type)))) {
+    return { ok: false, error: '質問のtypeはnoul、choice、scoreのいずれかで指定してください' };
+  }
+  return { ok: true, payload };
+}
+
+/**
+ * 検証済みpayloadをJev API(api.typesafe.ai)へそのまま転送し、レスポンスを
+ * 素通しする(/jev-playground・/api/jev-playground-externalの共通処理)。
+ */
+async function callJevPlaygroundApi(jevApiKey: string, payload: Record<string, unknown>): Promise<Response> {
+  try {
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jevApiKey}` },
+      body: JSON.stringify({ ...payload, model: typeof payload.model === 'string' ? payload.model : 'jev-latest' }),
+    });
+    return new Response(await response.text(), {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('jev-playground request failed', { error: error instanceof Error ? error.message : String(error) });
+    return jsonUtf8({ error: 'Jev APIへの接続に失敗しました' }, 502);
+  }
+}
+
+app.post('/api/jev-playground', authMiddleware, async (c) => {
+  if (!c.env.JEV_API_KEY) return c.json({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  }
+  const validation = validateJevPlaygroundPayload(body);
+  if (!validation.ok) return c.json({ error: validation.error }, 400);
+
+  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
+});
+
+/**
+ * dynamicnekoの/jev-pg-reactページ用。高コストなJEV_API_KEYの代理利用を
+ * 原則としてこのルート専用のBearer secretを使い、短命userTokenと許可ユーザーDBの
+ * 両方を必須にする。専用secretの配備前から動いているdynamicnekoを停止させないため、
+ * 専用secretが未設定の環境に限って従来のAICHAT_EXTERNAL_SECRETへフォールバックする。
+ */
+app.post('/api/jev-playground-external', async (c) => {
+  const authorization = c.req.header('Authorization') ?? '';
+  const externalSecret = c.env.JEV_PLAYGROUND_EXTERNAL_SECRET || c.env.AICHAT_EXTERNAL_SECRET;
+  const expectedAuthorization = externalSecret
+    ? `Bearer ${externalSecret}`
+    : null;
+  if (!expectedAuthorization || authorization !== expectedAuthorization) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string } & Record<string, unknown>>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  if (!body) return jsonUtf8({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  const { userToken: _userToken, ...rest } = body;
+  const validation = validateJevPlaygroundPayload(rest);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
 });
 
 // =====================================================
@@ -5234,7 +5895,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       if (!c.env.DB) return { hitCount: 0, results: [] };
       const db = c.env.DB as unknown as D1Like;
       const { results } = await searchAiChatShares(db, user.sub, keyword);
-      return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question })) };
+      return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question, model: r.model })) };
     },
     logSearchShares: c.env.DB ? (keyword, outcome) => logNekoMultiSearchResults(c.env.DB!, user.sub, keyword, outcome) : undefined,
     vectorizedAnswers: async () => {
@@ -5255,6 +5916,81 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
          LIMIT 30`
       ).bind(user.sub).all<{ id: string; question: string }>();
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
+    },
+    jevKeywordLookup: async (keyword) => {
+      if (!c.env.DB) return { hitCount: 0, results: [] };
+      // 「キーワード」はモデル名ではなく、/ai-cacheの検索ボックスで使う検索キー
+      // (searchAiChatSharesがquestion/answerの両方をINSTRで見ているのと同じもの)。
+      // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
+      // "LIKE or GLOB pattern too complex" になるため、searchAiChatSharesと
+      // 同じくINSTRを使う(中黒の表記ゆれもREPLACEで正規化)。
+      const normalized = keyword.replace(/[・･]/g, '・');
+      const matchCondition = `s.deleted_at IS NULL AND (
+             INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+             OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+           )`;
+      const countRow = await c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT je.share_id) AS cnt
+         FROM jev_evaluations je
+         JOIN ai_chat_shares s ON s.id = je.share_id
+         WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}`
+      ).bind(user.sub, normalized, normalized).first<{ cnt: number }>();
+      const hitCount = countRow?.cnt ?? 0;
+      if (hitCount === 0) return { hitCount: 0, results: [] };
+
+      // 検索ロジック側(business logic)で「検索キーワード→質問ID→jev_label_id=1〜20
+      // (ループA)の個別スコア」まで解決する。表示件数が青天井にならないよう、
+      // 該当share自体は最新順にAICHAT_JEV_KEYWORD_SCORE_LIMIT件までに絞る。
+      const matchedShares = await c.env.DB.prepare(
+        `SELECT DISTINCT je.share_id AS share_id, s.question AS question, s.created_at AS created_at
+         FROM jev_evaluations je
+         JOIN ai_chat_shares s ON s.id = je.share_id
+         WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}
+         ORDER BY s.created_at DESC
+         LIMIT ${AICHAT_JEV_KEYWORD_SCORE_LIMIT}`
+      ).bind(user.sub, normalized, normalized).all<{ share_id: string; question: string; created_at: string }>();
+      const shareRows = matchedShares.results ?? [];
+      if (shareRows.length === 0) return { hitCount, results: [] };
+
+      const shareIds = shareRows.map((r) => r.share_id);
+      const placeholders = shareIds.map(() => '?').join(',');
+      const scoreRows = await c.env.DB.prepare(
+        `SELECT share_id, model, jev_label_id, value
+         FROM jev_evaluations
+         WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+      ).bind(user.sub, ...shareIds).all<{ share_id: string; model: string | null; jev_label_id: number; value: number }>();
+
+      const groupKey = (shareId: string, model: string | null) => `${shareId} ${model ?? ''}`;
+      const rowsByGroup = new Map<string, { jev_label_id: number; value: number }[]>();
+      const modelByGroup = new Map<string, string | null>();
+      const groupOrder: string[] = [];
+      for (const row of scoreRows.results ?? []) {
+        const key = groupKey(row.share_id, row.model);
+        if (!rowsByGroup.has(key)) {
+          rowsByGroup.set(key, []);
+          modelByGroup.set(key, row.model);
+          groupOrder.push(key);
+        }
+        rowsByGroup.get(key)!.push({ jev_label_id: row.jev_label_id, value: row.value });
+      }
+      const questionByShareId = new Map(shareRows.map((r) => [r.share_id, r.question]));
+      const shareOrder = new Map(shareIds.map((id, i) => [id, i]));
+      groupOrder.sort((a, b) => {
+        const shareIdA = a.split(' ')[0];
+        const shareIdB = b.split(' ')[0];
+        return (shareOrder.get(shareIdA) ?? 0) - (shareOrder.get(shareIdB) ?? 0);
+      });
+
+      const results = groupOrder.map((key) => {
+        const shareId = key.split(' ')[0];
+        return {
+          shareId,
+          question: questionByShareId.get(shareId) ?? '',
+          model: modelByGroup.get(key) ?? null,
+          values: buildJevValuesForLoop(rowsByGroup.get(key) ?? []),
+        };
+      });
+      return { hitCount, results };
     },
     generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),
     hourlyTokenUsage: async () => {
@@ -5352,6 +6088,21 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const { lsFormatViaWasm } = await import('./utils/lsWasmServer');
       return lsFormatViaWasm(long, all);
     },
+    msbHelpViaWasm: async (query) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('msb').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('msbモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+      // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+      // 既存テストが壊れるため)
+      const { msbHelpViaWasm } = await import('./utils/msbWasmServer');
+      return msbHelpViaWasm(query);
+    },
     countdownList: async () => {
       if (!c.env.DB) return [];
       const rows = await c.env.DB.prepare(
@@ -5370,9 +6121,36 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       }
       return fetchAndFormatGhPrList(c, user.sub, repoFullName);
     },
+    repositoryTree: async (repoFullName, depth, options) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('tree').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('treeモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      return fetchAndFormatRepositoryTree(c, user.sub, repoFullName, depth, options);
+    },
+    fetchTreeViewUpdateLogs: async () => {
+      if (!c.env.DB) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT id, repo_name, update_source, changed, executed_at
+         FROM tree_view_update_log
+         ORDER BY executed_at DESC, id DESC
+         LIMIT 10`
+      ).all<TreeViewUpdateLogRow>();
+      return rows.results ?? [];
+    },
+    updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
+      ? (repoName, dryRun) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), repoName, dryRun)
+      : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
     fetchJevCredits: c.env.TYPESAFE_API_KEY ? () => fetchJevCreditsFromTypesafeApi(c.env.TYPESAFE_API_KEY as string) : undefined,
+    searchYoutubeLinks: (c.env.GOOGLE_CSE_API_KEY && c.env.GOOGLE_CSE_CX)
+      ? (keyword) => fetchYoutubeLinksViaGoogleSearch(c.env, keyword)
+      : undefined,
     fetchAichatSourceTotals: async () => {
       if (!c.env.DB) throw new Error('DB未設定です');
       const month = new Date().toISOString().slice(0, 7);
@@ -5384,6 +6162,16 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>();
       return buildAichatSourceTotals(sourceRows.results ?? []);
     },
+    searchCursorAgentHistory: async (keyword) => {
+      if (!c.env.DB) return { results: [] };
+      const searchQuery = normalizeCursorAgentHistorySearchQuery(keyword);
+      if (!searchQuery) return { results: [] };
+      const listed = await queryCursorAgentHistoryWithSearch<{ id: number; prompt: string; created_at: string }>(c.env.DB, user.sub, searchQuery);
+      return {
+        results: mapCursorAgentHistoryToCsearchItems(listed.rows),
+        searchError: listed.searchError,
+      };
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
@@ -5391,6 +6179,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       usedModel: 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
+      nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
       svg: slashCommand.svg ?? null,
     });
   }
@@ -6257,6 +7046,34 @@ export async function buildAnswerPropagationGraph(
 
   return { nodes, edges };
 }
+
+/**
+ * /neko qsearch の質問IDクリック用。質問IDで種行を特定し、
+ * パラメータの言語モデルで過去ログを絞り、created_at が一番新しい回答文だけを返す。
+ */
+app.get('/api/aichat/qsearch/latest-answer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = (c.req.query('id') ?? '').trim();
+  const model = (c.req.query('model') ?? '').trim();
+  try {
+    const result = await findLatestAiChatShareAnswer(
+      c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+      user.sub,
+      id,
+      model,
+    );
+    if (!result.ok) {
+      const status = result.errorCode === 'missing_params' ? 400 : 404;
+      return jsonUtf8({ error: result.detail }, status);
+    }
+    return jsonUtf8(result.value);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('qsearch latest-answer failed', { error: message });
+    return jsonUtf8({ error: '最新回答の取得に失敗しました: ' + message }, 500);
+  }
+});
 
 /**
  * AIチャット共有履歴の全文検索 API（認証が必要）
@@ -7395,6 +8212,109 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
 });
 
 /**
+ * AIチャットの詳細プレビューモーダル(📔ボタン)向け。表示中の回答バブルの
+ * share_idについて、jev_label_id=1〜20(ループA)の評価値(jev_evaluations.value)を
+ * 順番に並べて返す。該当行が無いIDはnullを返す(黙って除外しない)。
+ */
+app.get('/api/aichat/jev-values', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const modelParam = c.req.query('model') ?? '';
+  const model = modelParam.trim() === '' ? null : modelParam;
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind('answer', user.sub, shareId, model, model)
+      .all<{ jev_label_id: number; value: number }>();
+    const values = buildJevValuesForLoop(rows.results ?? []);
+    return jsonUtf8({ values, tableMissing: false, state: computeJevButtonState(values, false) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      const values = buildJevValuesForLoop([]);
+      return jsonUtf8({ values, tableMissing: true, state: computeJevButtonState(values, true) });
+    }
+    logger.error('[jev-values] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * AIチャットの詳細プレビューモーダルの📔ボタンがpink状態(通常のjevテーブルに
+ * この質問+モデルの評価データが1件も無い)のときの「追加しますか」確認後に
+ * 呼ばれる。表示中の回答バブルの回答文をJevの全ラベルで評価させ、
+ * jev_evaluationsへ書き込んだ後、書き込み内容を再読み込みして検証
+ * (ベリファイ)する。verified:trueを返すのは、実際にDBから読み戻して
+ * 確認できた場合のみ(書き込みSQLが成功しただけでは信用しない)。
+ */
+app.post('/api/aichat/jev-score', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ shareId?: string; model?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  const shareRow = await getAichatShareDetail(c.env.DB, user.sub, shareId, '');
+  if (!shareRow) return jsonUtf8({ error: 'Not found' }, 404);
+
+  const result = await runJevScoreForShare({
+    db: c.env.DB,
+    jevApiKey: c.env.JEV_API_KEY,
+    fetchImpl: fetch,
+    targetType: 'answer',
+    userId: user.sub,
+    shareId,
+    model,
+    stateText: shareRow.answer,
+  });
+  if (!result.ok) {
+    logger.error('[jev-score] runJevScoreForShare失敗', { shareId, model, status: result.status, error: result.error });
+    return jsonUtf8({ error: result.error, verified: false }, result.status);
+  }
+
+  return jsonUtf8({ shareId, model, values: result.values, verified: result.verified, state: result.state });
+});
+
+/**
+ * jev_country_keyword_labels/jev_country_keyword_evaluations(migrations/0145、
+ * keyword文字列で引く国名専用のJev評価結果)への書き込みエンドポイント。
+ * これまでラベル定義(jev_country_keyword_labels)は登録済みだったが、
+ * 実際にJev APIを呼んで評価結果を書き込む処理が存在しなかった
+ * (jevCountryKeyword.tsのコメント参照)。/neko jの0件表示から自動では
+ * 呼ばれない(明示的にこのエンドポイントを叩いた場合のみ書き込む)。
+ */
+app.post('/api/aichat/jev-score-keyword', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req.json<{ keyword?: string }>().catch(() => null);
+  const keyword = (body?.keyword ?? '').trim();
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  const result = await runJevScoreForKeyword({
+    db: c.env.DB,
+    jevApiKey: c.env.JEV_API_KEY,
+    fetchImpl: fetch,
+    userId: user.sub,
+    keyword,
+  });
+  if (!result.ok) {
+    logger.error('[jev-score-keyword] runJevScoreForKeyword失敗', { keyword, status: result.status, error: result.error });
+    return jsonUtf8({ error: result.error, verified: false }, result.status);
+  }
+
+  return jsonUtf8({ keyword: result.keyword, results: result.results, verified: result.verified });
+});
+
+/**
  * 質問テキストで紐づく ai_chat_shares の一覧（question_hash が未設定の旧レコード向けフォールバック）
  */
 app.get('/api/aichat/shares-by-question', authMiddleware, async (c) => {
@@ -7588,6 +8508,7 @@ app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (
   const catId = Number(body.category_id);
   if (!catId || isNaN(catId)) return jsonUtf8({ error: 'category_id は必須です' }, 400);
   try {
+    // d1-query-name: SelectCategoryGroupForAdd
     const row = await c.env.DB.prepare(
       `SELECT category_ids FROM aichat_category_groups WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
     ).bind(groupId, user.sub).first<{ category_ids: string }>();
@@ -7598,6 +8519,7 @@ app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (
       ids.push(catId);
       ids.sort((a, b) => a - b);
     }
+    // d1-query-name: UpdateCategoryGroupAfterAdd
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
@@ -7623,6 +8545,7 @@ app.post('/api/aichat/category-groups/:id/remove-category', authMiddleware, asyn
   const catId = Number(body.category_id);
   if (!catId || isNaN(catId)) return jsonUtf8({ error: 'category_id は必須です' }, 400);
   try {
+    // d1-query-name: SelectCategoryGroupForRemove
     const row = await c.env.DB.prepare(
       `SELECT category_ids FROM aichat_category_groups WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
     ).bind(groupId, user.sub).first<{ category_ids: string }>();
@@ -7630,6 +8553,7 @@ app.post('/api/aichat/category-groups/:id/remove-category', authMiddleware, asyn
     let ids: number[] = [];
     try { ids = JSON.parse(row.category_ids); } catch { /* ignore */ }
     ids = ids.filter((id) => id !== catId);
+    // d1-query-name: UpdateCategoryGroupAfterRemove
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
@@ -8745,6 +9669,54 @@ export async function listAnswerKeywordVectors(
 }
 
 /**
+ * 「探索の境界線」(まだ理解していないキーワード)一覧。ユーザー自己申告の
+ * 状態(jev_keyword_boundary_evaluations、当初案)は根拠が曖昧なため、
+ * 既存のAIチャットキーワード分類(aichat_keyword_category_map。
+ * /answer-graphでカテゴリ分けした・されていないの判定に使っている実データ)
+ * を根拠に流用する: ベクタ化済みの回答から抽出されたキーワード
+ * (aichat_answer_keyword_vectors)のうち、まだどのカテゴリにも分類
+ * されていないもの=「未分類」を「まだ理解していない」とみなす。
+ * 更新(抽出)が新しい順に返す。
+ */
+export async function listUnclassifiedAnswerKeywords(
+  db: D1Database,
+  userId: string,
+  limit: number,
+): Promise<string[]> {
+  const rows = await db.prepare(
+    `SELECT v.keyword, MAX(v.computed_at) AS latest
+     FROM aichat_answer_keyword_vectors v
+     LEFT JOIN aichat_keyword_category_map m ON m.keyword = v.keyword AND m.user_id = v.user_id
+     WHERE v.user_id = ? AND m.category_id IS NULL
+     GROUP BY v.keyword
+     ORDER BY latest DESC
+     LIMIT ?`
+  ).bind(userId, limit).all<{ keyword: string; latest: string }>();
+  return (rows.results ?? []).map((r) => r.keyword);
+}
+
+export type KeywordBoundaryStats = { classifiedCount: number; unclassifiedCount: number };
+
+/**
+ * 「探索の境界線」の累計サマリ。ベクタ化済みの回答から抽出された
+ * (重複除去済みの)キーワードの総数のうち、いくつが既にカテゴリ分類済みか
+ * (classifiedCount)・いくつがまだ未分類か(unclassifiedCount)を数える。
+ * 自動探索ボタン(3階層まで問い合わせを自動で進める機能)の締めくくりに
+ * 表示する、探索の進み具合のゆるい目安。
+ */
+export async function getKeywordBoundaryStats(db: D1Database, userId: string): Promise<KeywordBoundaryStats> {
+  const row = await db.prepare(
+    `SELECT
+       COUNT(DISTINCT CASE WHEN m.category_id IS NOT NULL THEN v.keyword END) AS classified_count,
+       COUNT(DISTINCT CASE WHEN m.category_id IS NULL THEN v.keyword END) AS unclassified_count
+     FROM aichat_answer_keyword_vectors v
+     LEFT JOIN aichat_keyword_category_map m ON m.keyword = v.keyword AND m.user_id = v.user_id
+     WHERE v.user_id = ?`
+  ).bind(userId).first<{ classified_count: number; unclassified_count: number }>();
+  return { classifiedCount: row?.classified_count ?? 0, unclassifiedCount: row?.unclassified_count ?? 0 };
+}
+
+/**
  * キーワード群それぞれについて、AIチャットのキーワードテーブル
  * (aichat_search_log。回答文への紐付け選択ログの集計値select_countの合計)
  * 内で何回出現しているかをまとめて取得する。バインド上限に収まる単位で
@@ -9388,6 +10360,48 @@ app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
   return jsonUtf8({ shareId, keywords, keywordOccurrences });
 });
 
+/**
+ * 「探索の境界線」機能の一覧API。ベクタ化済みの回答から抽出されたキーワード
+ * (aichat_answer_keyword_vectors)のうち、まだどのカテゴリにも分類
+ * されていない(aichat_keyword_category_mapに行が無い)ものを、抽出が
+ * 新しい順に返す(次の質問候補として使う)。自己申告のON/OFFではなく、
+ * 既存のキーワード分類という実データを根拠にする。limitクエリで件数を
+ * 絞れる(省略時50、最大200)。
+ */
+app.get('/api/aichat/keyword-boundary/unknown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rawLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+
+  try {
+    const keywords = await listUnclassifiedAnswerKeywords(c.env.DB, user.sub, limit);
+    return jsonUtf8({ keywords: keywords.map((keyword) => ({ keyword })) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-boundary/unknown] listUnclassifiedAnswerKeywords失敗', { error: message });
+    return jsonUtf8({ error: message }, 500);
+  }
+});
+
+/**
+ * 「探索の境界線」の累計サマリAPI。自動探索(最大3階層、入力待ちを挟まず
+ * 未分類キーワードへ次々に問い合わせる機能)の締めくくりに、分類済み/
+ * 未分類のキーワード数を返す。
+ */
+app.get('/api/aichat/keyword-boundary/stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const stats = await getKeywordBoundaryStats(c.env.DB, user.sub);
+    return jsonUtf8(stats);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-boundary/stats] getKeywordBoundaryStats失敗', { error: message });
+    return jsonUtf8({ error: message }, 500);
+  }
+});
+
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -9419,7 +10433,7 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
 
-  let body: { shareId?: string; model?: string };
+  let body: { shareId?: string; model?: string; forcePlamo?: boolean };
   try {
     body = await c.req.json();
   } catch {
@@ -9428,11 +10442,22 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const shareId = (body.shareId ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
 
-  const requestedModel = (body.model ?? '').trim();
-  if (requestedModel && !KEYWORD_EMBEDDING_MODELS.includes(requestedModel)) {
-    return jsonUtf8({ error: '不明な埋め込みモデルです: ' + requestedModel }, 400);
+  // forcePlamo: AIチャットの✂️ボタン専用フラグ。✂️は常にPlaMo埋め込みモデルで
+  // 実行する仕様(src/utils/vectorizeAndBulkRegister.tsのコメント参照)のため、
+  // modelに何が入っていても(旧デプロイのフロントエンドがチャットモデル名を
+  // 誤って送ってくる場合を含む)バリデーションで弾かず常にPLAMO_EMBEDDING_MODELへ
+  // 強制上書きする。answer-graphのモデル選択ボタンはforcePlamoを渡さないため、
+  // 従来通りKEYWORD_EMBEDDING_MODELSによるバリデーションを経由する。
+  let embeddingModel: string;
+  if (body.forcePlamo === true) {
+    embeddingModel = PLAMO_EMBEDDING_MODEL;
+  } else {
+    const requestedModel = (body.model ?? '').trim();
+    if (requestedModel && !KEYWORD_EMBEDDING_MODELS.includes(requestedModel)) {
+      return jsonUtf8({ error: '不明な埋め込みモデルです: ' + requestedModel }, 400);
+    }
+    embeddingModel = requestedModel || PLAMO_EMBEDDING_MODEL;
   }
-  const embeddingModel = requestedModel || PLAMO_EMBEDDING_MODEL;
 
   const share = await c.env.DB.prepare(
     `SELECT id, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
@@ -9563,6 +10588,16 @@ app.get('/webgl-sphere', authMiddleware, async (c) => {
   return c.html(getWebGLSpherePage(user.sub));
 });
 
+app.get('/earth-composer-2.5', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getEarthComposer25Page(user.sub));
+});
+
+app.get('/pentagon-kaleidoscope', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getPentagonKaleidoscopePage(user.sub));
+});
+
 app.get('/webgl-heritage', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLHeritagePage(user.sub));
@@ -9602,7 +10637,7 @@ app.get('/tsubuyaki', authMiddleware, async (c) => {
 
 app.post('/api/tsubuyaki', authMiddleware, async (c) => {
   const user = c.get('user');
-  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const body = await c.req.json<{ text?: string; template?: string }>().catch(() => null);
   const validated = validateFreeText(body?.text);
   if (!validated.ok) {
     return c.json({ ok: false, error: validated.error }, 400);
@@ -9610,14 +10645,86 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
 
   const displayName = user.name || user.sub;
   const message = buildFreeTextSlackMessage(displayName, validated.text);
+  const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
+  const blocks = buildFreeTextSlackBlocks(displayName, validated.text, template);
   const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
-  const result = await dispatchNotification(notifyConfig, { text: message });
+  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
     const status = result.status === undefined ? 503 : 502;
     return c.json({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, status);
   }
   return c.json({ ok: true });
+});
+
+/**
+ * dynamicnekoの/slack-postページ(React版つぶやき投稿)向け。本体Workerの
+ * 内部版(Cookie認証、POST /api/tsubuyaki)と同じロジックをService Binding
+ * 経由の呼び出し用に公開する。認可はjev-score-external等と同じパターン:
+ * Bearer secret(AICHAT_EXTERNAL_SECRET)で呼び出し元Worker自体を認証した上、
+ * リクエスト本文の生emailは信用せずAICHAT_USER_TOKEN_SECRETで署名された
+ * 短寿命userTokenのsubだけをemailとして扱い、
+ * dynamicneko_aichat_allowed_usersで許可確認する。Slackへの表示名も
+ * 本文のlogin等ではなく、許可済みemailにサーバー側で紐づく
+ * github_loginだけを使う(他ユーザーになりすませないようにするため)。
+ */
+app.post('/api/tsubuyaki-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string; text?: string; template?: string }>().catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tsubuyaki-external] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[tsubuyaki-external] 未許可メールアドレスからの投稿を拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはSlack投稿を許可されていません' }, 403);
+  }
+
+  const validated = validateFreeText(body?.text);
+  if (!validated.ok) {
+    return jsonUtf8({ ok: false, error: validated.error }, 400);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tsubuyaki-external] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[tsubuyaki-external] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const message = buildFreeTextSlackMessage(login, validated.text);
+  const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
+  const blocks = buildFreeTextSlackBlocks(login, validated.text, template);
+  const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
+  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
+  if (!result.ok) {
+    // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
+    const status = result.status === undefined ? 503 : 502;
+    return jsonUtf8({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, status);
+  }
+  return jsonUtf8({ ok: true });
 });
 
 app.get('/webgl-faults', authMiddleware, async (c) => {
@@ -10451,7 +11558,40 @@ app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) =
 
 app.get('/countdown', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getCountdownPage(user.sub));
+  const generatedAt = new Date().toISOString();
+  let latestScheduledAt: string | null = null;
+  let cronDataAvailable = false;
+  if (c.env.DB) {
+    try {
+      await ensureTreeViewCronCountdownForUser(c.env.DB, user.sub);
+    } catch (err) {
+      logger.error('tree-view cron countdown ensure failed', {
+        userId: user.sub,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+    try {
+      const latestExecution = await c.env.DB.prepare(
+        `SELECT executed_at
+         FROM tree_view_update_log
+         WHERE update_source = 'scheduled'
+         ORDER BY datetime(executed_at) DESC, id DESC
+         LIMIT 1`
+      ).first<{ executed_at: string }>();
+      latestScheduledAt = latestExecution?.executed_at ?? null;
+      cronDataAvailable = true;
+    } catch (err) {
+      logger.warn('tree-view cron status lookup failed', {
+        userId: user.sub,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+  return c.html(getCountdownPage(user.sub, {
+    generatedAt,
+    latestScheduledAt,
+    dataAvailable: cronDataAvailable,
+  }));
 });
 
 app.get('/api/countdown', authMiddleware, async (c) => {
@@ -10993,6 +12133,38 @@ app.get('/sqlc-wasm', authMiddleware, async (c) => {
   return c.html(getSqlcWasmPage(user.sub));
 });
 
+app.get('/gron-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGronWasmPage(user.sub));
+});
+
+app.get('/go-diff-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateStreamingの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getGoDiffWasmPage(user.sub));
+});
+
+app.get('/json-structural-diff', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // gronとgo-diffの2つのWebAssemblyモジュールをブラウザで実行するページだけの例外。
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getJsonStructuralDiffPage(user.sub));
+});
+
 app.get('/d1-query-catalog', authMiddleware, async (c) => {
   const user = c.get('user');
   // SQL詳細ダイアログでsqlc WASMを遅延実行するため、このページだけ許可する。
@@ -11069,6 +12241,41 @@ app.get('/d1-query-catalog', authMiddleware, async (c) => {
   return c.html(getD1QueryCatalogPage(user.sub, rows, initialSort, columnCounts, singleTableSelection, tableClassifications, expandCategoryTables));
 });
 
+// SQL本文をクライアントから受け取らず、カタログに登録済みのクエリ名から再取得して
+// 実行する。これによりRunボタンを任意SQL実行APIとして転用できないようにする。
+app.post('/api/d1-query-catalog/run', authMiddleware, async (c) => {
+  if (!c.env.DB) return c.json({ error: 'DB未設定のためSQLを実行できません。' }, 503);
+  const body = await c.req.json<{ queryName?: string; bindings?: unknown }>().catch(() => null);
+  const queryName = body?.queryName?.trim();
+  if (!queryName || queryName.length > 200) {
+    return c.json({ error: '有効なクエリ名を指定してください。' }, 400);
+  }
+
+  try {
+    const catalogRow = await c.env.DB.prepare(
+      `SELECT sql_text, command FROM d1_query_catalog WHERE query_name = ? LIMIT 1`
+    ).bind(queryName).first<{ sql_text: string; command: string }>();
+    if (!catalogRow?.sql_text) return c.json({ error: '指定されたSQLはカタログにありません。' }, 404);
+
+    const bindingCount = getD1BindingCount(catalogRow.sql_text);
+    const validation = validateD1BindingValues(body?.bindings, bindingCount);
+    if (!validation.ok) return c.json({ error: validation.error, bindingCount }, 400);
+
+    const prepared = c.env.DB.prepare(catalogRow.sql_text);
+    const statement = bindingCount > 0 ? prepared.bind(...validation.values) : prepared;
+    if (catalogRow.command === 'exec') {
+      const result = await statement.run();
+      return c.json({ ok: true, result });
+    }
+    const result = await statement.all();
+    return c.json({ ok: true, result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('d1-query-catalog: run failed', { queryName, error: message });
+    return c.json({ error: `SQLの実行に失敗しました: ${message}` }, 400);
+  }
+});
+
 /**
  * ブラウザに現在保存されているCookie/localStorageの値を、
  * どのページの設定なのか・D1(user_preferences)への移行先がすでにあるか
@@ -11129,6 +12336,44 @@ app.get('/api/gh/pr-list', authMiddleware, async (c) => {
   }
   try {
     const markdown = await fetchAndFormatGhPrList(c, user.sub, repo);
+    return jsonUtf8({ markdown });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
+  }
+});
+
+const DIFF_MAX_TEXT_LENGTH = 500_000;
+
+/**
+ * POST /api/diff: go-diff-wasm(Rust製ではなくGo標準のwasm_exec.jsで動く)で
+ * 2つのテキストの行単位差分をMarkdownへ整形して返す。コード生成の入力/検証には
+ * 使わない(CLAUDE.mdルール35: /json-structural-diffの配列順序の制限と同じ理由で、
+ * 差分結果を「正しさの根拠」として自動判定に使わないこと。人間が見て確認する
+ * 用途に限る)。セッションCookieに加え、APIキー(nkapi_...)でも外部から呼び出せる
+ * (aichatAuthMiddlewareと同じ認証、/api/aichatと同様の仕組み)。
+ */
+app.post('/api/diff', aichatAuthMiddleware, async (c) => {
+  if (c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+    ).bind('go-diff').first<WasmModuleStartupRow>().catch(() => null);
+    if (!isWasmModuleEnabled(row)) {
+      return jsonUtf8({ error: 'go-diffモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)' }, 503);
+    }
+  }
+  const body = await c.req.json<{ a?: unknown; b?: unknown }>().catch(() => null);
+  if (!body || typeof body.a !== 'string' || typeof body.b !== 'string') {
+    return jsonUtf8({ error: 'a・bはどちらも文字列で指定してください' }, 400);
+  }
+  if (body.a.length > DIFF_MAX_TEXT_LENGTH || body.b.length > DIFF_MAX_TEXT_LENGTH) {
+    return jsonUtf8({ error: `a・bはそれぞれ${DIFF_MAX_TEXT_LENGTH}文字以下で指定してください` }, 400);
+  }
+  try {
+    // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+    // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+    // 既存テストが壊れるため)
+    const { diffTextViaWasm } = await import('./utils/goDiffWasmServer');
+    const markdown = await diffTextViaWasm(body.a, body.b);
     return jsonUtf8({ markdown });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : String(err) }, 502);
@@ -11481,6 +12726,7 @@ export async function bulkRegisterWines(
   seeds: WineSeedRow[],
   limit?: number,
 ): Promise<WineBulkRegisterResult> {
+  // d1-query-name: SelectBulkRegisterExistingWines
   const existingRows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
   const existingSet = new Set((existingRows.results ?? []).map((r) => r.wine_name));
   const notRegistered = seeds.filter((w) => !existingSet.has(w.wine));
@@ -11496,6 +12742,7 @@ export async function bulkRegisterWines(
         errors.push({ wine: w.wine, error: '埋め込みが空でした(AI呼び出し失敗の可能性があります)' });
         continue;
       }
+      // d1-query-name: SelectBulkRegisterWineId
       const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(w.wine).first<{ id: number }>();
       if (!idRow) {
         errors.push({ wine: w.wine, error: '埋め込み保存後にIDが取得できませんでした' });
@@ -11749,6 +12996,7 @@ export async function checkWineSeedConsistency(
   db: D1Database,
   seeds: WineSeedRow[],
 ): Promise<WineSeedConsistencyResult> {
+  // d1-query-name: SelectWineSeedConsistencyNames
   const rows = await db.prepare(`SELECT wine_name FROM wine_embeddings`).all<{ wine_name: string }>();
   const embeddedSet = new Set((rows.results ?? []).map((r) => r.wine_name));
   const missing = seeds.filter((s) => !embeddedSet.has(s.wine)).map((s) => s.wine);
@@ -11813,6 +13061,7 @@ export async function bulkRegisterWineMetadata(
 
   for (const row of seeds) {
     try {
+      // d1-query-name: SelectWineMetadataEmbeddingId
       const idRow = await db.prepare(`SELECT id FROM wine_embeddings WHERE wine_name = ?`).bind(row.wine_name).first<{ id: number }>();
       if (!idRow) {
         skipped++;
@@ -12110,6 +13359,48 @@ app.get('/megaminx', authMiddleware, async (c) => {
   return c.html(getMegaminxPage(user.sub));
 });
 
+app.get('/origami-sculpture', authMiddleware, async (c) => {
+  return c.html(getOrigamiSculpturePage());
+});
+
+app.get('/fly-brain', authMiddleware, async (c) => {
+  return c.html(getFlyBrainPage());
+});
+
+app.get('/fly-brain-mahjong', authMiddleware, async (c) => {
+  return c.html(getFlyBrainMahjongPage());
+});
+
+app.post('/api/fly-brain-mahjong/solve', authMiddleware, async (c) => {
+  try {
+    const body = await c.req.json<{ hand?: string }>();
+    const hand = body.hand?.trim();
+    if (!hand) return c.json({ ok: false, error: 'hand が空です' }, 400);
+    const rec = recommendDiscard(hand);
+    const fly = flyBrainChooseDiscard(rec.candidates);
+    return c.json({
+      ok: true,
+      discard: fly.chosen.tileLabel,
+      shanten: rec.best.shanten,
+      ukeire: rec.best.ukeire,
+      handLabels: rec.handLabels,
+      candidates: rec.candidates,
+      neurons: fly.neurons,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ ok: false, error: message }, 400);
+  }
+});
+
+app.get('/brush-jjaemu', authMiddleware, async (c) => {
+  return c.html(getBrushJjaemuPage());
+});
+
+app.get('/tsuru-no-niwa', authMiddleware, async (c) => {
+  return c.html(getTsuruNoNiwaPage());
+});
+
 app.get('/webgl-solar', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSolarPage(user.sub));
@@ -12357,6 +13648,41 @@ app.post('/internal/harness-hook-log', async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'harness_hook_logへの書き込みに失敗しました' }, 500);
+  }
+});
+
+app.get('/cron-status', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const generatedAt = new Date().toISOString();
+  if (!db) {
+    return c.html(getCronStatusPage({ executions: [], snapshots: [], generatedAt, dataAvailable: false }));
+  }
+
+  try {
+    const [executionResult, snapshotResult] = await Promise.all([
+      db.prepare(
+        `SELECT id, repo_name, update_source, changed, executed_at, error_message
+         FROM tree_view_update_log
+         ORDER BY datetime(executed_at) DESC, id DESC
+         LIMIT 50`
+      ).all<CronExecutionRow>(),
+      db.prepare(
+        `SELECT repo_name, updated_at
+         FROM tree_view_snapshots
+         ORDER BY repo_name ASC`
+      ).all<CronSnapshotRow>(),
+    ]);
+    return c.html(getCronStatusPage({
+      executions: executionResult.results ?? [],
+      snapshots: snapshotResult.results ?? [],
+      generatedAt,
+      dataAvailable: true,
+    }));
+  } catch (error) {
+    logger.warn('Failed to render cron-status', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.html(getCronStatusPage({ executions: [], snapshots: [], generatedAt, dataAvailable: false }));
   }
 });
 
@@ -12779,13 +14105,20 @@ app.post('/api/kimi-code/generate-external', async (c) => {
 });
 
 /**
- * dynamicnekoのAI問い合わせウィジェットが、質問を送信する前に許可ユーザーか
- * どうかを確認するAPI。Bearer secret(AICHAT_EXTERNAL_SECRET)で認証した上、
- * D1のdynamicneko_aichat_allowed_usersに登録されたメールアドレスかどうかを
- * 判定する。フェイルクローズ(DB未設定・クエリ失敗時もallowed:falseを返す。
- * ルール8: 記録はlogger.error、通知はレスポンスのerrorフィールド)。
+ * dynamicnekoのAI問い合わせウィジェット・CursorOps(cursor cacheモジュール)双方が、
+ * 実際に送信する前に許可ユーザーかどうかを確認するAPI。Bearer secret
+ * (AICHAT_EXTERNAL_SECRET)で認証した上、D1のdynamicneko_aichat_allowed_usersに
+ * 登録されたメールアドレスかどうか、かつgithub_loginが登録済みかどうかを判定する。
+ * フェイルクローズ(DB未設定・クエリ失敗時もallowed:falseを返す。ルール8: 記録は
+ * logger.error、通知はレスポンスのerrorフィールド)。
+ *
+ * github_login未登録の場合もallowed:falseにする(メール自体は許可リストに
+ * あっても、query-external側は運用側の設定漏れで500を返す。「ボタンを押すまで
+ * 使えないと分からない」体験を避け、事前にグレーアウト表示できるようにするため)。
+ *
  * dynamicneko側はこのAPIの結果でUIをグレーアウトするが、実際の問い合わせ本体
- * (/api/aichat/query-external)側でも同じ判定を必ず再検証する。
+ * (/api/aichat/query-external・/api/cursor-agent/query-external)側でも
+ * 同じ判定を必ず再検証する。
  */
 app.post('/api/aichat/permission-external', async (c) => {
   const auth = c.req.header('Authorization') ?? '';
@@ -12798,7 +14131,9 @@ app.post('/api/aichat/permission-external', async (c) => {
   const email = body?.email ?? '';
   try {
     const allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
-    return jsonUtf8({ allowed });
+    if (!allowed) return jsonUtf8({ allowed: false });
+    const login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+    return jsonUtf8({ allowed: login !== null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[dynamicneko-aichat] 権限確認クエリ失敗', { email, error: message });
@@ -12821,9 +14156,8 @@ app.post('/api/aichat/query-external', async (c) => {
   }
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
 
-  const body = await c.req.json<{ email?: string; question?: string; model?: string; login?: string }>().catch(() => null);
+  const body = await c.req.json<{ email?: string; question?: string; model?: string }>().catch(() => null);
   const email = body?.email ?? '';
-  const login = body?.login ?? '';
   const question = (body?.question ?? '').trim().slice(0, 4000);
   if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
   const model = resolveDynamicnekoAichatModel(body?.model);
@@ -12841,11 +14175,28 @@ app.post('/api/aichat/query-external', async (c) => {
     return jsonUtf8({ error: 'このメールアドレスはAI問い合わせを許可されていません' }, 403);
   }
 
+  // login(user_id)はリクエスト本文から受け取らない。Bearer secretと許可済み
+  // メールアドレス1件さえ知っていれば任意のloginを送りつけて他ユーザーの
+  // 履歴を検索・書き込みできてしまう脆弱性(PR #1809/#1810で混入)が実際に
+  // 発覚したため、サーバー側で検証済みのemailに紐づく登録済みloginだけを
+  // 信頼する(resolveDynamicnekoAllowedLogin参照)。
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-aichat] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-aichat] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
   // /neko aireqst のみ、AIを呼ばずローカルで応答する(他の/nekoサブコマンドは
   // user.subベースのCookieセッション前提のD1参照が多く、dynamicneko側の
   // Bearer secret認証とは前提が異なるため対象外。必要になれば個別に追加する)。
   if (question.toLowerCase() === '/neko aireqst') {
-    if (!login) return jsonUtf8({ error: 'login は必須です' }, 400);
     try {
       const month = new Date().toISOString().slice(0, 7);
       const sourceRows = await c.env.DB.prepare(
@@ -12890,6 +14241,1706 @@ app.post('/api/aichat/query-external', async (c) => {
     logger.error('[dynamicneko-aichat] AI問い合わせ失敗', { email, error: message });
     return jsonUtf8({ error: 'AI問い合わせでサーバーエラーが発生しました: ' + message }, 500);
   }
+});
+
+/**
+ * dynamicnekoの新規「CursorOps」ページ(cursor cacheモジュール)からの
+ * Cursor VMキャッシュ検索。Bearer secret(AICHAT_EXTERNAL_SECRET、AIに聞く
+ * ウィジェットと共用)で認証した上、dynamicneko_aichat_allowed_usersに登録された
+ * メールアドレスかどうかをサーバー側で必ず再検証する。/neko csearch(AIチャットの
+ * スラッシュコマンド)と同じ queryCursorAgentHistoryWithSearch を使い、
+ * emailに紐づく「サーバー側で登録済みの」GitHub loginをuser_idとして自分の
+ * 起動履歴だけを検索する(他ユーザーの履歴は返さない)。
+ *
+ * セキュリティ: リクエスト本文のloginは一切受け取らない・信用しない。
+ * Bearer secretと許可済みメールアドレス1件さえ知っていれば、loginを任意の
+ * 値に差し替えて他ユーザーの履歴を検索できてしまう脆弱性(PR #1809/#1810で
+ * 混入)が実際に発覚したため、resolveDynamicnekoAllowedLoginでDB側の
+ * 登録済みloginだけを信頼する。
+ */
+app.post('/api/cursor-agent/query-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; keyword?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const keyword = normalizeCursorAgentHistorySearchQuery(body?.keyword);
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-cursor-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-cursor-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはCursor VMキャッシュ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-cursor-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-cursor-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const listed = await queryCursorAgentHistoryWithSearch<{
+    id: number;
+    prompt: string;
+    created_at: string;
+    report_text: string | null;
+    cached_answer_text?: string | null;
+  }>(c.env.DB, login, keyword);
+  if (listed.searchError) {
+    logger.error('[dynamicneko-cursor-cache] 過去ログ検索に失敗', { login, error: listed.searchError });
+  }
+  return jsonUtf8({
+    rows: listed.rows.slice(0, 30).map((row) => ({
+      id: row.id,
+      question: (row.prompt ?? '').replace(/\r?\n/g, ' ').trim() || '(質問文なし)',
+      createdAtJst: formatCursorAgentCreatedAtJst(row.created_at),
+      // AIチャットの /neko csearch モーダルが表示する回答本文と揃える。
+      // モーダルは GET /api/cursor-agent/history/:id/conversation を叩いて
+      // cursor_agent_answer_cache を優先的に読む(未キャッシュならCursor APIへ
+      // ライブ問い合わせしてキャッシュへ書き戻す)。この外部API(dynamicneko用)は
+      // 「cursor vmのキャッシュ」に問い合わせる仕様のため、ライブ問い合わせは
+      // 行わずcursor_agent_answer_cache(cached_answer_text)だけを見る。
+      // cached_answer_textが無い場合のみ、起動直後の状態取得で自動抽出された
+      // report_text(状態ログの簡易レポート)にフォールバックする。
+      answer: row.cached_answer_text ?? row.report_text ?? null,
+    })),
+    searchError: listed.searchError || undefined,
+  });
+});
+
+/**
+ * dynamicnekoの/ai-cacheページ(AiCachePage)からのAI応答ログ検索。Bearer secret
+ * (AICHAT_EXTERNAL_SECRET、他の外部APIと共用)で認証した上、
+ * dynamicneko_aichat_allowed_usersに登録されたメールアドレスかどうかを
+ * サーバー側で必ず再検証する。/neko qsearch(AIチャットのスラッシュコマンド)と
+ * 同じ searchAiChatShares を使い、emailに紐づく「サーバー側で登録済みの」
+ * GitHub loginをuser_idとして自分の質問・回答だけを検索する
+ * (他ユーザーの履歴は返さない)。
+ *
+ * セキュリティ: リクエスト本文のloginは一切受け取らない・信用しない。
+ * Bearer secretと許可済みメールアドレス1件さえ知っていれば、loginを任意の
+ * 値に差し替えて他ユーザーの履歴を検索できてしまう脆弱性
+ * (/api/cursor-agent/query-externalで発覚したものと同じ穴)を作らないため、
+ * resolveDynamicnekoAllowedLoginでDB側の登録済みloginだけを信頼する。
+ */
+app.post('/api/aichat/qsearch-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; keyword?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const keyword = (body?.keyword ?? '').trim();
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-ai-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, login, keyword);
+    // /neko qsearch(AIチャットのスラッシュコマンド)のテーブルと同じ形
+    // (質問ID・質問文・言語モデル)で返す。回答本文はここでは返さない
+    // (件数が多いと重く、/neko qsearch側もモーダルを開くまでは表示しない
+    // 設計に揃えている)。回答本文が必要な場合は
+    // /api/aichat/qsearch-external/latest-answer を別途呼ぶ。
+    const items = mapAiChatSharesToQsearchItems(results);
+    // /ai-cacheの左サイドパネルで、既にJev評価済みの回答を緑背景にするための
+    // フラグ。この確認に失敗しても検索結果自体は返す(装飾用フラグのため、
+    // 失敗時は全件hasJevResult=falseにフォールバックする。エラーはログに記録する)。
+    let evaluatedShareIds = new Set<string>();
+    if (items.length > 0 && c.env.DB) {
+      try {
+        const placeholders = items.map(() => '?').join(',');
+        const jevRows = await c.env.DB.prepare(
+          `SELECT DISTINCT share_id FROM jev_evaluations WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+        )
+          .bind(login, ...items.map((item) => item.id))
+          .all<{ share_id: string }>();
+        evaluatedShareIds = new Set((jevRows.results ?? []).map((row) => row.share_id));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[dynamicneko-ai-cache] jev_evaluations有無確認クエリ失敗', { login, error: message });
+      }
+    }
+    return jsonUtf8({ rows: attachJevResultFlags(items, evaluatedShareIds) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 過去ログ検索に失敗', { login, error: message });
+    return jsonUtf8({ error: '過去ログ検索でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/ai-cacheページで、検索結果の表から1件クリックしたときに
+ * 呼ばれる。/neko qsearch のモーダルが使う findLatestAiChatShareAnswer と
+ * 同じロジックで、質問ID+言語モデルから一番新しい回答文を1件返す。
+ * 認可・login解決はqsearch-externalと同じ(リクエスト本文のloginは信用しない)。
+ */
+app.post('/api/aichat/qsearch-external/latest-answer', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string; id?: string; model?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  const id = (body?.id ?? '').trim();
+  const model = body?.model ?? '';
+  if (!id) return jsonUtf8({ error: 'id は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[dynamicneko-ai-cache] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const result = await findLatestAiChatShareAnswer(
+      c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+      login,
+      id,
+      model,
+    );
+    if (!result.ok) {
+      const status = result.errorCode === 'missing_params' ? 400 : 404;
+      return jsonUtf8({ error: result.detail }, status);
+    }
+    return jsonUtf8(result.value);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 最新回答の取得に失敗', { login, error: message });
+    return jsonUtf8({ error: '最新回答の取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/ai-cacheページの左サイドパネル(言語モデル色丸の凡例)用。
+ * /aichatページのナビバー色丸と同じ aichat_model_colors をそのまま返す。
+ * 色データはユーザー固有ではないため、permission-externalと同じ認可チェック
+ * (許可済みメールアドレスかどうか)だけを行い、login解決は行わない。
+ */
+app.post('/api/aichat/model-colors-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email ?? '';
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[dynamicneko-ai-cache] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let modelColors: Record<string, string> = {};
+  const modelLabels: Record<string, string> = {};
+  try {
+    const rows = await c.env.DB.prepare('SELECT model_id, color, label FROM aichat_model_colors').all<{ model_id: string; color: string; label: string }>();
+    for (const row of rows.results ?? []) {
+      modelColors[row.model_id] = row.color;
+      modelLabels[row.model_id] = row.label;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+  if (newAssignments.length > 0) {
+    const db = c.env.DB;
+    for (const a of newAssignments) {
+      modelLabels[a.model_id] = a.label;
+      safeWaitUntil(
+        c,
+        db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+          .bind(a.model_id, a.color, a.label)
+          .run()
+          .catch(() => {})
+      );
+    }
+  }
+  // /ai-cacheの左サイドパネル(言語モデル色丸の凡例)向けに、色と表示ラベルを
+  // 一覧配列で返す(モデルIDはUIで表示するには長すぎるため)。
+  const models = Object.entries(merged).map(([id, color]) => ({
+    id,
+    color,
+    label: modelLabels[id] ?? id,
+  }));
+  return jsonUtf8({ models });
+});
+
+/**
+ * jev-score-external・jev-stats-externalが共通で使う、リクエスト本文の
+ * userToken(短寿命JWT、sub=email)を検証してemailを取り出すヘルパー。
+ *
+ * これらのエンドポイントはAICHAT_EXTERNAL_SECRET(*-external全体で共通の
+ * サービス認証)に加え、本文のemailを直接信用せずAICHAT_USER_TOKEN_SECRETで
+ * 署名された短寿命トークンのsubだけを信用する。AICHAT_EXTERNAL_SECRETを
+ * 知っているだけの呼び出し元が任意のemailを名乗って他ユーザーの集計・評価
+ * データを読めてしまう問題を、別シークレットのトークン検証で切り離すため
+ * (jev-score-external・jev-stats-externalどちらもuser_id別のデータを扱うため
+ * 対象)。
+ */
+async function resolveJevUserTokenEmail(
+  userTokenSecret: string | undefined,
+  userToken: string | undefined,
+): Promise<{ ok: true; email: string } | { ok: false; status: 401 | 503; error: string }> {
+  if (!userTokenSecret) {
+    return { ok: false, status: 503, error: 'AICHAT_USER_TOKEN_SECRETが未設定です' };
+  }
+  if (!userToken) {
+    return { ok: false, status: 401, error: 'userTokenは必須です' };
+  }
+  const payload = await verifyJWT(userToken, userTokenSecret);
+  if (!payload || !payload.sub) {
+    return { ok: false, status: 401, error: 'userTokenが無効です' };
+  }
+  return { ok: true, email: payload.sub };
+}
+
+/**
+ * dynamicnekoの/ai-cacheページの一括処理ボタン用。Jev(TypeSafe AI System One
+ * Model)にshare_id(target_type='answer'なら回答文、'source_question'なら
+ * 質問文そのもの)をjev_labelsの各ラベルで評価させ、jev_evaluationsに保存する。
+ * 認可・login解決はqsearch-externalと同じ(リクエスト本文のloginは信用しない)。
+ *
+ * 既に(target_type, login, share_id, model, jev_label_id)で評価済みのラベルは
+ * 再送しない(computeJevEvaluationPlan)。全ラベル評価済みならJevを一切呼ばず
+ * キャッシュ済みの結果だけを返す。
+ */
+app.post('/api/aichat/jev-score-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  const body = await c.req
+    .json<{ userToken?: string; shareId?: string; model?: string; targetType?: string }>()
+    .catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  const targetType = body?.targetType === 'source_question' ? 'source_question' : 'answer';
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-score] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-score] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  const answerResult = await findLatestAiChatShareAnswer(
+    c.env.DB as unknown as Parameters<typeof findLatestAiChatShareAnswer>[0],
+    login,
+    shareId,
+    model,
+  );
+  if (!answerResult.ok) {
+    const status = answerResult.errorCode === 'missing_params' ? 400 : 404;
+    return jsonUtf8({ error: answerResult.detail }, status);
+  }
+  const stateText = targetType === 'source_question' ? answerResult.value.question : answerResult.value.answer;
+  // source_questionはモデル非依存(質問文自体の評価)のため、保存時はmodelをNULL扱いにする。
+  const evalModel = targetType === 'source_question' ? null : model;
+
+  let allLabels: JevLabel[] = [];
+  try {
+    const rows = await c.env.DB.prepare('SELECT id, question_text, options_json FROM jev_labels').all<{ id: number; question_text: string; options_json: string | null }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-score] jev_labels.options_jsonが不正です(Jev APIのcriteriaに必要な2要素配列)', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) {
+    return jsonUtf8({ error: 'jev_labelsが1件も登録されていません' }, 500);
+  }
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_label_id, value FROM jev_evaluations WHERE target_type = ? AND user_id = ? AND share_id = ? AND (model = ? OR (model IS NULL AND ? IS NULL))'
+    )
+      .bind(targetType, login, shareId, evalModel, evalModel)
+      .all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score] jev_evaluations取得クエリ失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'jev_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    const jevResult = await callJevApi({
+      apiKey: c.env.JEV_API_KEY,
+      state: stateText,
+      labels: plan.pending,
+      fetchImpl: fetch,
+    });
+    if (!jevResult.ok) {
+      logger.error('[jev-score] Jev API呼び出し失敗', { shareId, model: evalModel, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_evaluations (target_type, share_id, user_id, model, jev_label_id, value) VALUES (?, ?, ?, ?, ?, ?)'
+        )
+          .bind(targetType, shareId, login, evalModel, score.labelId, score.value)
+          .run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-score] jev_evaluations保存クエリ失敗', { shareId, error: message });
+      return jsonUtf8({ error: 'jev_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    shareId,
+    model: evalModel,
+    targetType,
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
+});
+
+/**
+ * dynamicnekoの/ai-cacheページ向けのJev分析ダッシュボード集計。
+ * (1)過去回答文の全登録件数とJev分析済み件数の比率、(2)分析済み件数の
+ * モデル別内訳、(3)モデルごとの平均score、(4)ラベル(分析観点)ごとの
+ * 平均scoreをスコア順に返す。認可・login解決はqsearch-externalと同じ
+ * パターンを踏襲する(リクエスト本文のloginは信用しない)。
+ *
+ * 「分析済み」は target_type='answer' の(share_id, model)の組み合わせが
+ * 1件でもjev_evaluationsに存在することを指す(20ラベル全部が揃っている
+ * 保証はしないが、/ai-cache左サイドパネルのhasJevResult判定と同じ基準に
+ * 揃えている)。
+ */
+app.post('/api/aichat/jev-stats-external', async (c) => {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  if (!expected || auth !== expected) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const tokenResult = await resolveJevUserTokenEmail(c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken);
+  if (!tokenResult.ok) {
+    return jsonUtf8({ error: tokenResult.error }, tokenResult.status);
+  }
+  const email = tokenResult.email;
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] 権限確認クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: '権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!allowed) {
+    logger.warn('[jev-stats] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return jsonUtf8({ error: 'このメールアドレスはAI応答ログ検索を許可されていません' }, 403);
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(c.env.DB, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] login解決クエリ失敗', { email, error: message });
+    return jsonUtf8({ error: 'login解決でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (!login) {
+    logger.error('[jev-stats] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return jsonUtf8({ error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' }, 500);
+  }
+
+  try {
+    const totalRow = await c.env.DB.prepare('SELECT COUNT(*) as c FROM ai_chat_shares WHERE user_id = ?')
+      .bind(login)
+      .first<{ c: number }>();
+    const analyzedRow = await c.env.DB.prepare(
+      `SELECT COUNT(*) as c FROM (SELECT DISTINCT share_id, model FROM jev_evaluations WHERE target_type = 'answer' AND user_id = ?)`
+    )
+      .bind(login)
+      .first<{ c: number }>();
+    const byModelRows = await c.env.DB.prepare(
+      `SELECT model, COUNT(DISTINCT share_id) as analyzedCount, AVG(value) as avgScore FROM jev_evaluations WHERE target_type = 'answer' AND user_id = ? GROUP BY model ORDER BY avgScore DESC`
+    )
+      .bind(login)
+      .all<{ model: string | null; analyzedCount: number; avgScore: number }>();
+    const byLabelRows = await c.env.DB.prepare(
+      `SELECT jl.question_text as label, AVG(je.value) as avgScore FROM jev_evaluations je JOIN jev_labels jl ON jl.id = je.jev_label_id WHERE je.target_type = 'answer' AND je.user_id = ? GROUP BY je.jev_label_id ORDER BY avgScore DESC`
+    )
+      .bind(login)
+      .all<{ label: string; avgScore: number }>();
+
+    return jsonUtf8({
+      totalAnswers: totalRow?.c ?? 0,
+      analyzedAnswers: analyzedRow?.c ?? 0,
+      byModel: (byModelRows.results ?? []).map((r) => ({
+        model: r.model ?? '(モデル不明)',
+        analyzedCount: r.analyzedCount,
+        avgScore: r.avgScore,
+      })),
+      byLabel: (byLabelRows.results ?? []).map((r) => ({ label: r.label, avgScore: r.avgScore })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-stats] 集計クエリ失敗', { login, error: message });
+    return jsonUtf8({ error: '集計でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+type JevScoreBoardExternalAuthResult =
+  | { ok: true; email: string; login: string | null }
+  | { ok: false; status: 401 | 403 | 500 | 503; error: string };
+
+/**
+ * dynamicnekoの/jev-scoresページ(jev-score-board-externalの各エンドポイント)
+ * 共通の認可処理。jev-score-external等と同じ「Bearer認証はルート側で確認済み
+ * →userTokenのsubからemailを検証→dynamicneko_aichat_allowed_usersで許可確認」
+ * までを1箇所にまとめ、4エンドポイントへのコピペを避ける。
+ * requireLogin=falseの場合(例: label-names、ユーザースコープのデータでは
+ * ないため)はgithub_login解決をスキップし、許可チェックのみ行う。
+ */
+async function resolveJevScoreBoardExternalAuth(
+  db: D1Database,
+  userTokenSecret: string | undefined,
+  userToken: string | undefined,
+  requireLogin: boolean,
+): Promise<JevScoreBoardExternalAuthResult> {
+  const tokenResult = await resolveJevUserTokenEmail(userTokenSecret, userToken);
+  if (!tokenResult.ok) {
+    return { ok: false, status: tokenResult.status, error: tokenResult.error };
+  }
+  const email = tokenResult.email;
+
+  let allowed = false;
+  try {
+    allowed = await isDynamicnekoAichatAllowed(db, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] 権限確認クエリ失敗', { email, error: message });
+    return { ok: false, status: 500, error: '権限確認でサーバーエラーが発生しました: ' + message };
+  }
+  if (!allowed) {
+    logger.warn('[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否', { email });
+    return { ok: false, status: 403, error: 'このメールアドレスはAI応答ログ検索を許可されていません' };
+  }
+
+  if (!requireLogin) {
+    return { ok: true, email, login: null };
+  }
+
+  let login: string | null = null;
+  try {
+    login = await resolveDynamicnekoAllowedLogin(db, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] login解決クエリ失敗', { email, error: message });
+    return { ok: false, status: 500, error: 'login解決でサーバーエラーが発生しました: ' + message };
+  }
+  if (!login) {
+    logger.error('[jev-score-board-external] 許可済みメールアドレスにgithub_loginが未登録です', { email });
+    return { ok: false, status: 500, error: 'このメールアドレスにはGitHub loginが未登録のため利用できません(dynamicneko_aichat_allowed_users.github_loginを設定してください)' };
+  }
+  return { ok: true, email, login };
+}
+
+function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Variables: Variables }>): boolean {
+  const auth = c.req.header('Authorization') ?? '';
+  const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
+  return !!expected && auth === expected;
+}
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/rowsのexternal版。 */
+app.post('/api/aichat/jev-score-board-rows-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; keyword?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, auth.login as string, body?.keyword ?? '');
+    return jsonUtf8({ hitCount, rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] rows取得に失敗', { error: message });
+    return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/top-by-labelのexternal版。 */
+app.post('/api/aichat/jev-score-board-top-by-label-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; labelId?: number }>().catch(() => null);
+  const labelIdParam = Number(body?.labelId);
+  if (!isValidJevScoreBoardLabelId(labelIdParam)) {
+    return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
+  }
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const result = await fetchJevScoreBoardTopByLabel(c.env.DB, auth.login as string, labelIdParam);
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] top-by-label取得に失敗', { labelId: labelIdParam, error: message });
+    return jsonUtf8({ error: 'top-by-label取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/answerのexternal版。 */
+app.post('/api/aichat/jev-score-board-answer-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; shareId?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const row = await fetchJevScoreBoardAnswer(c.env.DB, auth.login as string, shareId);
+    if (!row) return jsonUtf8({ error: '指定されたshareIdは見つかりません' }, 404);
+    return jsonUtf8({ question: row.question, answer: row.answer });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] answer取得に失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'answer取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/jev-scoresページ用。/api/jev-score-board/label-namesのexternal
+ * 版。jev_labelsはユーザースコープのデータではないため、login解決はスキップし
+ * 許可チェックのみ行う(resolveJevScoreBoardExternalAuthのrequireLogin=false)。
+ */
+app.post('/api/aichat/jev-score-board-label-names-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  try {
+    const labels = await fetchJevScoreBoardLabelNames(c.env.DB);
+    return jsonUtf8({ labels });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board-external] label-names取得に失敗', { error: message });
+    return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+// commit-checkerがJev診断結果の保存に使う固定のmodel値。commit_messageは
+// 特定のAIチャットモデルの回答ではなく、どのAIモデルとも無関係な入力
+// (コミットログ)であるため、jev_vuln_evaluations.modelにNULLを入れると
+// SQLiteのUNIQUE制約はNULL同士を別値として扱いINSERT OR IGNOREでの重複
+// 排除が効かなくなる。固定文字列にしてuniqueインデックスを機能させる。
+const JEV_VULN_MODEL = 'commit-checker';
+
+/**
+ * dynamicnekoの/commit-checkerページ用。repo_commit_indexのcommit_messageを
+ * キーワード検索し、各候補についてjev_vuln_labels全件がjev_vuln_evaluations
+ * (target_id=commit_hash, user_id=login, model=JEV_VULN_MODEL)で既に診断済み
+ * かどうかを付けて返す(検索結果一覧で診断済みの選択肢の背景色を変える用途)。
+ */
+app.post('/api/repo-commit-search-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; query?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const query = (body?.query ?? '').trim();
+  const repoName = (body?.repoName ?? '').trim();
+  if (!query) return jsonUtf8({ error: 'query は必須です' }, 400);
+
+  try {
+    const likePattern = '%' + query.replace(/[%_]/g, (ch) => '\\' + ch) + '%';
+    const stmt = repoName
+      ? c.env.DB.prepare(
+          `SELECT commit_hash, repo_name, seq_num, github_pr_number, commit_message FROM repo_commit_index
+           WHERE repo_name = ? AND commit_message LIKE ? ESCAPE '\\' ORDER BY seq_num DESC LIMIT 50`
+        ).bind(repoName, likePattern)
+      : c.env.DB.prepare(
+          `SELECT commit_hash, repo_name, seq_num, github_pr_number, commit_message FROM repo_commit_index
+           WHERE commit_message LIKE ? ESCAPE '\\' ORDER BY seq_num DESC LIMIT 50`
+        ).bind(likePattern);
+    const { results } = await stmt.all<{ commit_hash: string; repo_name: string; seq_num: number; github_pr_number: number | null; commit_message: string }>();
+    const rows = results ?? [];
+    if (rows.length === 0) return jsonUtf8({ results: [] });
+
+    const totalLabelsRow = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_vuln_labels').first<{ cnt: number }>();
+    const totalLabels = totalLabelsRow?.cnt ?? 0;
+
+    const placeholders = rows.map(() => '?').join(',');
+    const diagRows = await c.env.DB.prepare(
+      `SELECT target_id, COUNT(DISTINCT jev_vuln_label_id) AS cnt FROM jev_vuln_evaluations
+       WHERE user_id = ? AND model = ? AND target_id IN (${placeholders}) GROUP BY target_id`
+    ).bind(login, JEV_VULN_MODEL, ...rows.map((r) => r.commit_hash)).all<{ target_id: string; cnt: number }>();
+    const diagnosedCounts = new Map((diagRows.results ?? []).map((r) => [r.target_id, r.cnt]));
+
+    return jsonUtf8({
+      results: rows.map((r) => ({
+        commitHash: r.commit_hash,
+        repoName: r.repo_name,
+        seqNum: r.seq_num,
+        githubPrNumber: r.github_pr_number,
+        commitMessage: r.commit_message,
+        diagnosed: totalLabels > 0 && (diagnosedCounts.get(r.commit_hash) ?? 0) >= totalLabels,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[repo-commit-search-external] 検索クエリ失敗', { error: message });
+    return jsonUtf8({ error: '検索でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+// commit-checkerが1ユーザーあたり許可する新規診断(Jevへの新規問い合わせが
+// 発生するコミット数)の上限。任意のcommitHashを送り続けて約180ラベル分の
+// Jev評価とD1行追加を無制限に発生させられる問題への対処(2026-09-19)。
+const JEV_VULN_RATE_LIMIT_WINDOW_SQL = '-1 hour';
+const JEV_VULN_RATE_LIMIT_MAX_COMMITS = 20;
+
+/**
+ * dynamicnekoの/commit-checkerページ用。選択されたコミットログ本文
+ * (commit_message)をjev_vuln_labelsの全ラベルでJevに評価させ、
+ * jev_vuln_evaluationsに保存する。既に評価済みのラベルは再送しない
+ * (computeJevEvaluationPlan、jev-score-externalと同じ仕組み)。
+ * レスポンスのrequestJsonには実際にJevへ送る(送った)リクエストボディを
+ * そのまま含める(全ラベル分。dynamicneko側の「問い合わせJSON」モーダル用)。
+ *
+ * commit_messageはリクエストボディの値をそのまま信用せず、repo_commit_index
+ * に実在するcommitHashの保存済み本文をサーバー側で取得して使う
+ * (2026-09-19: 任意の本文を送り込んで無制限にJev評価を発生させられる問題を修正)。
+ */
+app.post('/api/jev-vuln-score-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const commitHash = (body?.commitHash ?? '').trim();
+  if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+
+  let commitMessage: string;
+  try {
+    const commitRow = await c.env.DB.prepare(
+      'SELECT commit_message FROM repo_commit_index WHERE commit_hash = ?'
+    ).bind(commitHash).first<{ commit_message: string }>();
+    if (!commitRow) return jsonUtf8({ error: '指定されたcommitHashはrepo_commit_indexに存在しません' }, 404);
+    commitMessage = commitRow.commit_message;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] repo_commit_index取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'repo_commit_index取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  let allLabels: (JevLabel & { groupName: string })[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT jl.id, jl.question_text, jl.options_json, jg.name AS group_name
+       FROM jev_vuln_labels jl JOIN jev_vuln_label_groups jg ON jg.id = jl.jev_group_id
+       ORDER BY jg.id, jl.id`
+    ).all<{ id: number; question_text: string; options_json: string | null; group_name: string }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-vuln-score-external] jev_vuln_labels.options_jsonが不正です', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria, groupName: r.group_name });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] jev_vuln_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_vuln_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) return jsonUtf8({ error: 'jev_vuln_labelsが1件も登録されていません' }, 500);
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_vuln_label_id AS jev_label_id, value FROM jev_vuln_evaluations WHERE user_id = ? AND target_id = ? AND model = ?'
+    ).bind(login, commitHash, JEV_VULN_MODEL).all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-vuln-score-external] jev_vuln_evaluations取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'jev_vuln_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    let recentCommitCount = 0;
+    try {
+      const rateRow = await c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT target_id) AS cnt FROM jev_vuln_evaluations
+         WHERE user_id = ? AND model = ? AND computed_at >= datetime('now', ?) AND target_id != ?`
+      ).bind(login, JEV_VULN_MODEL, JEV_VULN_RATE_LIMIT_WINDOW_SQL, commitHash).first<{ cnt: number }>();
+      recentCommitCount = rateRow?.cnt ?? 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-vuln-score-external] レート制限クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+    }
+    if (recentCommitCount >= JEV_VULN_RATE_LIMIT_MAX_COMMITS) {
+      return jsonUtf8({ error: `1時間あたりに新規診断できるコミット数の上限(${JEV_VULN_RATE_LIMIT_MAX_COMMITS}件)に達しました。しばらく待ってから再試行してください` }, 429);
+    }
+    const jevResult = await callJevApi({ apiKey: c.env.JEV_API_KEY, state: commitMessage, labels: plan.pending, fetchImpl: fetch });
+    if (!jevResult.ok) {
+      logger.error('[jev-vuln-score-external] Jev API呼び出し失敗', { commitHash, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_vuln_evaluations (target_id, user_id, model, jev_vuln_label_id, value) VALUES (?, ?, ?, ?, ?)'
+        ).bind(commitHash, login, JEV_VULN_MODEL, score.labelId, score.value).run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-vuln-score-external] jev_vuln_evaluations保存クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'jev_vuln_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    commitHash,
+    labels: allLabels.map((l) => ({ id: l.id, questionText: l.question_text, groupName: l.groupName })),
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+    requestJson: buildJevRequestBody(commitMessage, allLabels),
+  });
+});
+
+// commit-summary-externalが要約対象として受け付けるリポジトリ(SPEC.COMMITDB.md/
+// CLAUDE.mdルール24で repo_commit_index の対象として挙げている3repoと同じ)。
+// repoNameはリクエストボディから受け取るが、この一覧に無い値は拒否する。
+const COMMIT_SUMMARY_ALLOWED_REPOS = [
+  'nekoserver/cloudflare-workers-github-oauth-1',
+  'nekoserver/dynamicneko',
+  'nekoserver/cf-auth',
+] as const;
+
+/**
+ * dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。
+ * PRマージ時のWebhookパイプラインが既にcommit_agent_log/ai_summary_logへ
+ * 保存している日本語要約を優先して読み出す(2026-09-19: 当初は
+ * 見つからない場合にGitHub Commit API+AIで新規生成し専用の新テーブル
+ * commit_summary_cacheへキャッシュする実装にしていたが、そもそも対象の
+ * コミットは(一部の記録漏れ期間を除き)全てWebhookで要約済みのため
+ * 不要な複雑化だった。既存の記録箇所を正しく参照する方に倒した)。
+ * commit_agent_logはPRの最新コミットのsha(PRブランチ先端、
+ * fetchLatestPrCommitInfoがpr.commits_urlから取るもの)をrequest_id
+ * (ai_summary_log)に紐付けて記録している。これは非squashマージの場合、
+ * mainに残る実コミットオブジェクトとしては存在するが、"Merge pull
+ * request #N from ..." のマージコミット自体は別の新規SHAになり
+ * commit_agent_logには記録されない。/tree-viewのコミット一覧はGitHub
+ * Commits APIでmainの全履歴(マージコミット含む)を返すため、ユーザーが
+ * マージコミットをクリックすると commit_sha 完全一致では見つからず、
+ * 実際には要約済みのPRなのに404になっていた
+ * (2026-09-19、実データ(repo_commit_index)で確認: マージコミットの
+ * commit_message は "Merge pull request #N from ..." 形式で、
+ * repo_commit_index.github_pr_number に既にそのNが入っている)。
+ * そこでcommit_sha直接一致で見つからない場合は、repo_commit_indexで
+ * そのcommitHashのgithub_pr_numberを引き、repo_full_name+pr_numberで
+ * ai_summary_logを直接引くフォールバックを行う。
+ * それでも見つからない場合(2026-09-19、ユーザー指摘: 過去にWebhook側の
+ * commit_agent_log記録が一時的に欠落していた期間があり、そのため実際には
+ * 一度も要約されていないコミットが存在しうる)は、GitHub Commit APIから
+ * 直接diffとコミットメッセージを取得してrunSummaryPipelineで新規に要約を
+ * 生成し、ai_summary_log/commit_agent_logへ書き込んでから返す。次回以降は
+ * commit_agent_logの直接一致で見つかるようになる。
+ */
+app.post('/api/commit-summary-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const commitHash = (body?.commitHash ?? '').trim();
+  if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  try {
+    const existing = await c.env.DB.prepare(
+      `SELECT l.summary, l.model FROM commit_agent_log c
+       JOIN ai_summary_log l ON l.request_id = c.request_id
+       WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
+       ORDER BY l.id DESC LIMIT 1`
+    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    if (existing) {
+      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
+    }
+
+    // commit_shaの直接一致で見つからない場合、マージコミットの可能性を
+    // 考えてrepo_commit_index.github_pr_number経由でai_summary_logを引く。
+    const viaMergeCommit = await c.env.DB.prepare(
+      `SELECT l.summary, l.model FROM repo_commit_index i
+       JOIN ai_summary_log l ON l.repo_full_name = i.repo_name AND l.pr_number = i.github_pr_number
+       WHERE i.commit_hash = ? AND i.repo_name = ? AND i.github_pr_number IS NOT NULL
+         AND l.summary IS NOT NULL AND l.summary != ''
+       ORDER BY l.id DESC LIMIT 1`
+    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    if (viaMergeCommit) {
+      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index' });
+    }
+
+    return await generateAndRecordCommitSummary(c.env, c.env.DB, commitHash, repoName);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-summary-external] ai_summary_log照合クエリ失敗', { commitHash, repoName, error: message });
+    return jsonUtf8({ error: 'ai_summary_log照合でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * commit_agent_log/ai_summary_log/repo_commit_indexのいずれからも
+ * 見つからなかったコミット(Webhookの記録漏れ期間に紛れ込んだもの等)向けに、
+ * GitHub Commit APIからdiff・コミットメッセージを取得し、既存のPR要約と
+ * 同じrunSummaryPipelineで新規に日本語要約を生成する。生成に成功したら
+ * ai_summary_log/commit_agent_logへ書き込み、以後は直接一致で読み出せる
+ * ようにする(同じコミットへの2回目以降のリクエストでAIを再度呼ばない)。
+ */
+async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, commitHash: string, repoName: string): Promise<Response> {
+  const githubToken = env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return jsonUtf8({ error: 'このコミットの要約記録が見つからず、GITHUB_TOKEN未設定のため新規生成もできません' }, 404);
+  }
+  if (!env.AI) {
+    return jsonUtf8({ error: 'このコミットの要約記録が見つからず、AIバインディング未設定のため新規生成もできません' }, 404);
+  }
+
+  const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
+  const commitRes = await fetch(commitApiUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    },
+  });
+  if (commitRes.status === 404) {
+    return jsonUtf8({ error: `指定されたcommitHashは${repoName}に存在しません` }, 404);
+  }
+  if (!commitRes.ok) {
+    const errBody = await commitRes.text().catch(() => '');
+    return jsonUtf8({ error: `GitHub Commit APIの取得に失敗しました: ${commitRes.status} ${errBody.slice(0, 300)}` }, 502);
+  }
+  const commitData = await commitRes.json() as { commit?: { message?: string; author?: { name?: string; email?: string } } };
+  const commitMessage = commitData.commit?.message ?? '';
+  if (!commitMessage) {
+    return jsonUtf8({ error: 'GitHub Commit APIのレスポンスにコミットメッセージがありません' }, 502);
+  }
+
+  const diffResult = await fetchPrDiff({ diffUrl: commitApiUrl, githubToken });
+  const aiModel = resolveAiModel(env.AI_MODEL);
+  const title = commitMessage.split('\n')[0].slice(0, 200);
+  const pipelineResult = await runSummaryPipeline({
+    ai: env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> },
+    model: aiModel,
+    fallbackModel: FALLBACK_AI_MODEL,
+    title,
+    description: commitMessage,
+    trimmedDiff: diffResult.trimmedDiff,
+  });
+  if (!pipelineResult.success) {
+    logger.error('[commit-summary-external] 新規要約生成に失敗', { commitHash, repoName, summary: pipelineResult.summary, errorCode: pipelineResult.errorCode });
+    return jsonUtf8({ error: '要約の新規生成に失敗しました: ' + pipelineResult.summary }, 502);
+  }
+
+  const now = new Date();
+  const eventDate = now.toISOString().slice(0, 10);
+  const requestId = crypto.randomUUID();
+  const mergeMatch = commitMessage.match(/Merge pull request #(\d+)/);
+  const prNumber = mergeMatch ? Number(mergeMatch[1]) : null;
+
+  let dailySeq = 1;
+  try {
+    const countResult = await db.prepare(
+      'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
+    ).bind(eventDate).first<{ cnt: number }>();
+    dailySeq = (countResult?.cnt ?? 0) + 1;
+  } catch (error) {
+    logger.warn('[commit-summary-external] daily_seq取得に失敗', { error: error instanceof Error ? error.message : String(error) });
+  }
+
+  try {
+    await db.prepare(
+      `INSERT INTO ai_summary_log
+        (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      requestId, dailySeq, eventDate, 'commit_summary_backfill', repoName, prNumber, null, null,
+      pipelineResult.usedModel, pipelineResult.summary, diffResult.diffLength, 0, now.toISOString()
+    ).run();
+
+    // commit_agent_log.pr_numberはNOT NULLのため、PRに紐付かないコミットは
+    // 0を「PR不明」のセンチネル値として使う(直接一致の検索はcommit_sha+
+    // repo_full_nameのみで行っており、pr_numberは見ないため実害はない)。
+    await db.prepare(
+      `INSERT INTO commit_agent_log
+        (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      requestId, repoName, prNumber ?? 0, commitHash, commitMessage,
+      commitData.commit?.author?.name ?? null, commitData.commit?.author?.email ?? null,
+      null, null, null, now.toISOString()
+    ).run();
+  } catch (error) {
+    logger.error('[commit-summary-external] 新規生成した要約の保存に失敗', {
+      commitHash, repoName, error: error instanceof Error ? error.message : String(error),
+    });
+    // 保存に失敗しても、せっかく生成できた要約自体はこのレスポンスで返す
+    // (次回同じコミットが再度リクエストされた場合は再生成される)。
+  }
+
+  return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false, source: 'generated' });
+}
+
+// tree-viewの「テスト評価」ボタンがJev診断結果の保存に使う固定のmodel値
+// (JEV_VULN_MODELと同じ理由。target_idはcommitHash)。
+const JEV_TEST_MODEL = 'tree-view-test-eval';
+
+// jev-vuln-score-externalと同じ理由(任意のcommitHashを送り続けて大量の
+// Jev評価とD1行追加を無制限に発生させられる問題への対処)。
+const JEV_TEST_RATE_LIMIT_WINDOW_SQL = '-1 hour';
+const JEV_TEST_RATE_LIMIT_MAX_COMMITS = 20;
+
+/**
+ * dynamicnekoの/tree-viewコミット履歴モーダルの「テスト評価」ボタン用。
+ * commit-summary-externalと同じくGitHub Commit APIから対象コミットのdiffを
+ * 取得し、jev_test_labels(テストコード品質チェックリスト、8グループ78問)
+ * 全件でJevに評価させ、jev_test_evaluationsに保存する。既に評価済みの
+ * ラベルは再送しない(jev-vuln-score-externalと同じcomputeJevEvaluationPlan)。
+ * セキュリティ脆弱性判定(jev_vuln_*)とはドメインが異なるため、テーブル・
+ * エンドポイントを完全に分離している(同じ204/78問を混在させない)。
+ */
+app.post('/api/jev-test-score-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.JEV_API_KEY) return jsonUtf8({ error: 'JEV_API_KEYが未設定です' }, 503);
+  if (!c.env.GITHUB_TOKEN) return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; commitHash?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const commitHash = (body?.commitHash ?? '').trim();
+  if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
+  const existsRes = await fetch(commitApiUrl, {
+    headers: {
+      Authorization: `Bearer ${c.env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    },
+  });
+  if (existsRes.status === 404) {
+    return jsonUtf8({ error: `指定されたcommitHashは${repoName}に存在しません` }, 404);
+  }
+  if (!existsRes.ok) {
+    const errBody = await existsRes.text().catch(() => '');
+    logger.error('[jev-test-score-external] GitHub Commit API取得失敗', { commitHash, repoName, status: existsRes.status });
+    return jsonUtf8({ error: `GitHub Commit APIの取得に失敗しました: ${existsRes.status} ${errBody.slice(0, 300)}` }, 502);
+  }
+
+  let diffText: string;
+  try {
+    const diffResult = await fetchPrDiff({ diffUrl: commitApiUrl, githubToken: c.env.GITHUB_TOKEN });
+    diffText = diffResult.trimmedDiff;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] diff取得失敗', { commitHash, repoName, error: message });
+    return jsonUtf8({ error: 'GitHubからdiffの取得に失敗しました: ' + message }, 502);
+  }
+  if (!diffText) return jsonUtf8({ error: '指定されたcommitHashのdiffが取得できませんでした(差分が空です)' }, 404);
+
+  let allLabels: (JevLabel & { groupName: string })[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT jl.id, jl.question_text, jl.options_json, jg.name AS group_name
+       FROM jev_test_labels jl JOIN jev_test_label_groups jg ON jg.id = jl.jev_group_id
+       ORDER BY jg.id, jl.id`
+    ).all<{ id: number; question_text: string; options_json: string | null; group_name: string }>();
+    for (const r of rows.results ?? []) {
+      const criteria = parseLabelCriteria(r.options_json);
+      if (!criteria) {
+        logger.error('[jev-test-score-external] jev_test_labels.options_jsonが不正です', { labelId: r.id });
+        return jsonUtf8({ error: `ラベル(id=${r.id})にJev用のcriteria(options_json、2要素配列)が正しく設定されていません` }, 500);
+      }
+      allLabels.push({ id: r.id, question_text: r.question_text, criteria, groupName: r.group_name });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] jev_test_labels取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: 'jev_test_labels取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (allLabels.length === 0) return jsonUtf8({ error: 'jev_test_labelsが1件も登録されていません' }, 500);
+
+  let evaluatedRows: { jev_label_id: number; value: number }[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT jev_test_label_id AS jev_label_id, value FROM jev_test_evaluations WHERE user_id = ? AND target_id = ? AND model = ?'
+    ).bind(login, commitHash, JEV_TEST_MODEL).all<{ jev_label_id: number; value: number }>();
+    evaluatedRows = rows.results ?? [];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-external] jev_test_evaluations取得クエリ失敗', { commitHash, error: message });
+    return jsonUtf8({ error: 'jev_test_evaluations取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  const plan = computeJevEvaluationPlan(allLabels, evaluatedRows);
+  let newScores: { labelId: number; value: number }[] = [];
+  if (plan.pending.length > 0) {
+    let recentCommitCount = 0;
+    try {
+      const rateRow = await c.env.DB.prepare(
+        `SELECT COUNT(DISTINCT target_id) AS cnt FROM jev_test_evaluations
+         WHERE user_id = ? AND model = ? AND computed_at >= datetime('now', ?) AND target_id != ?`
+      ).bind(login, JEV_TEST_MODEL, JEV_TEST_RATE_LIMIT_WINDOW_SQL, commitHash).first<{ cnt: number }>();
+      recentCommitCount = rateRow?.cnt ?? 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-test-score-external] レート制限クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+    }
+    if (recentCommitCount >= JEV_TEST_RATE_LIMIT_MAX_COMMITS) {
+      return jsonUtf8({ error: `1時間あたりに新規診断できるコミット数の上限(${JEV_TEST_RATE_LIMIT_MAX_COMMITS}件)に達しました。しばらく待ってから再試行してください` }, 429);
+    }
+    const jevResult = await callJevApi({ apiKey: c.env.JEV_API_KEY, state: diffText, labels: plan.pending, fetchImpl: fetch });
+    if (!jevResult.ok) {
+      logger.error('[jev-test-score-external] Jev API呼び出し失敗', { commitHash, errorCode: jevResult.errorCode, detail: jevResult.detail });
+      return jsonUtf8({ error: `Jev API呼び出しに失敗しました(${jevResult.errorCode}): ${jevResult.detail}` }, 502);
+    }
+    newScores = jevResult.scores;
+    try {
+      for (const score of newScores) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO jev_test_evaluations (target_id, user_id, model, jev_test_label_id, value) VALUES (?, ?, ?, ?, ?)'
+        ).bind(commitHash, login, JEV_TEST_MODEL, score.labelId, score.value).run();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[jev-test-score-external] jev_test_evaluations保存クエリ失敗', { commitHash, error: message });
+      return jsonUtf8({ error: 'jev_test_evaluations保存でサーバーエラーが発生しました: ' + message }, 500);
+    }
+  }
+
+  const allScores = [...plan.cached, ...newScores];
+  return jsonUtf8({
+    commitHash,
+    labels: allLabels.map((l) => ({ id: l.id, questionText: l.question_text, groupName: l.groupName })),
+    scores: allScores,
+    newlyEvaluatedCount: newScores.length,
+    cachedCount: plan.cached.length,
+  });
+});
+
+/**
+ * dynamicnekoの/tree-viewコミット履歴モーダルの「テスト評価の推移」表示用。
+ * 1コミットのdiffは不変なので、同じコミットを再評価しても結果は変わらない
+ * (jev_test_evaluationsはtarget_id=commit_hash単位でキャッシュされる)。
+ * 「コードの改変でテスト品質が良くなった」ことを見るには、時間的に異なる
+ * 複数コミットの評価結果をrepo_commit_index.seq_num(コミット順序)で並べて
+ * 推移として見る必要がある(2026-09-19、ユーザー指摘)。
+ * このAPIは、そのユーザーが「テスト評価」ボタンを押して実際に評価済みの
+ * コミットだけをseq_num昇順で返す(全コミットを自動評価するわけではない
+ * ため、ボタンを押した分だけの疎なデータになる。既存のコスト方針と一貫)。
+ */
+app.post('/api/jev-test-score-trend-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  }
+
+  try {
+    const totalLabelsRow = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_test_labels').first<{ cnt: number }>();
+    const totalLabels = totalLabelsRow?.cnt ?? 0;
+
+    const rows = await c.env.DB.prepare(
+      `SELECT i.commit_hash AS commit_hash, i.seq_num AS seq_num, i.commit_message AS commit_message,
+              COUNT(*) AS evaluated_count,
+              SUM(CASE WHEN e.value >= 2.0/3.0 THEN 1 ELSE 0 END) AS bad_count,
+              MAX(e.computed_at) AS computed_at
+       FROM jev_test_evaluations e
+       JOIN repo_commit_index i ON i.commit_hash = e.target_id AND i.repo_name = ?
+       WHERE e.user_id = ? AND e.model = ?
+       GROUP BY i.commit_hash, i.seq_num, i.commit_message
+       ORDER BY i.seq_num ASC`
+    ).bind(repoName, login, JEV_TEST_MODEL).all<{
+      commit_hash: string;
+      seq_num: number;
+      commit_message: string;
+      evaluated_count: number;
+      bad_count: number;
+      computed_at: string;
+    }>();
+
+    return jsonUtf8({
+      repoName,
+      totalLabels,
+      commits: (rows.results ?? []).map((r) => ({
+        commitHash: r.commit_hash,
+        seqNum: r.seq_num,
+        commitMessage: r.commit_message,
+        evaluatedCount: r.evaluated_count,
+        badCount: r.bad_count,
+        computedAt: r.computed_at,
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-test-score-trend-external] 推移取得クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: '推移取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+// dynamicnekoの/tree-viewで公開する対象は、初期JSONを用意したこの2件だけ。
+// installation_permissionsやGitHub tokenに別リポジトリへの権限が増えても、
+// tree-view用データに勝手に取り込まない。
+const TREE_VIEW_SNAPSHOT_REPOS = Object.freeze(Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
+const TREE_VIEW_SNAPSHOT_REPO_SET = new Set(TREE_VIEW_SNAPSHOT_REPOS);
+const TREE_VIEW_SNAPSHOT_REPO_RE = /^nekoserver\/[A-Za-z0-9._-]+$/;
+
+function isTreeViewSnapshotRepo(repoName: string): boolean {
+  return TREE_VIEW_SNAPSHOT_REPO_RE.test(repoName) && TREE_VIEW_SNAPSHOT_REPO_SET.has(repoName);
+}
+
+/**
+ * tree_view_snapshotsへ書き込む前にGitHubの最新状態と突き合わせ、既存JSONに
+ * 無いノードだけを追加する。既存データは削除・上書きせず、追加も無ければ
+ * 書き込みをスキップする。cron・手動更新の共通書き込み経路。
+ */
+async function upsertTreeViewSnapshotIfChanged(
+  db: D1Database,
+  repoName: string,
+  snapshot: TreeViewSnapshotNode,
+  nowIso: string,
+  truncated = false
+): Promise<boolean> {
+  const existing = await db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
+  const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
+  const nextSnapshot = resolveNextTreeViewSnapshot(existingSnapshot, snapshot, truncated);
+  const nextJson = JSON.stringify(nextSnapshot);
+  if (existing && existing.tree_json === nextJson) {
+    return false;
+  }
+  await db.prepare(
+    `INSERT INTO tree_view_snapshots (repo_name, tree_json, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(repo_name) DO UPDATE SET tree_json = excluded.tree_json, updated_at = excluded.updated_at`
+  ).bind(repoName, nextJson, nowIso).run();
+  return true;
+}
+
+/**
+ * 成功・失敗の両方を記録する(error_messageがNULLなら成功、文字列が
+ * 入っていれば失敗)。以前は成功時(GitHub Trees API取得成功時)しか
+ * この関数を呼んでおらず、失敗はlogger.error()のみでWorkerのコンソール
+ * ログにしか残らなかった。/cron-statusページの稼働状況バッジが
+ * 「直近の成功」だけを見て、全リポジトリが連続で失敗していても
+ * 「正常稼働」と表示してしまう原因になっていた(2026-09-24、ユーザー指摘)。
+ */
+async function recordTreeViewUpdate(
+  db: D1Database,
+  repoName: string,
+  source: 'scheduled' | 'manual',
+  changed: boolean,
+  executedAt: string,
+  errorMessage: string | null = null
+): Promise<void> {
+  await db.prepare(
+    `INSERT INTO tree_view_update_log (repo_name, update_source, changed, executed_at, error_message)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(repoName, source, changed ? 1 : 0, executedAt, errorMessage).run();
+}
+
+function listTreeViewPaths(node: TreeViewSnapshotNode): string[] {
+  const visit = (current: TreeViewSnapshotNode, parent: string): string[] => {
+    const path = parent ? `${parent}/${current.name}` : current.name;
+    if (current.type === 'file') return [path];
+    return (current.children ?? []).flatMap((child) => visit(child, path));
+  };
+  return (node.children ?? []).flatMap((child) => visit(child, ''));
+}
+
+/** dry-run表示用に、現状には無く更新後イメージに追加されるファイルを列挙する。 */
+function listAddedTreeViewPaths(
+  existing: TreeViewSnapshotNode | null,
+  next: TreeViewSnapshotNode,
+): string[] {
+  const existingPaths = new Set(existing ? listTreeViewPaths(existing) : []);
+  return listTreeViewPaths(next).filter((path) => !existingPaths.has(path));
+}
+
+/**
+ * cronトリガー(worker-entry.tsのscheduled)から呼ばれる、tree-view対象分の
+ * 同期処理本体。対象は保存済みかつ固定許可リスト内のリポジトリに
+ * 限定する。GitHub Appの権限やPATの参照範囲は、新しいtree-viewデータを
+ * 作成するための発見元としては使用しない。
+ */
+async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
+  return syncTreeViewSnapshots(env, 'scheduled', new Date());
+}
+
+async function syncTreeViewSnapshots(
+  env: Bindings,
+  source: 'scheduled' | 'manual',
+  now: Date,
+  targetDb: D1Database | undefined = env.DB,
+  dryRun = false,
+  requestedRepoName?: string
+): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[]; differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[] }> {
+  const synced: string[] = [];
+  const skipped: string[] = [];
+  const failed: { repoName: string; error: string }[] = [];
+  const differences: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[] = [];
+
+  if (!env.DB || !targetDb || !env.GITHUB_TOKEN) {
+    return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
+  }
+
+  // 指定更新でも固定許可リスト外は対象にしない。一括更新は
+  // tree_view_snapshotsに現在あるリポジトリだけを読み、cronが新規行を
+  // 追加しないことを保証する。
+  let repositoryQuery: string;
+  if (requestedRepoName) {
+    repositoryQuery = 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name = ?';
+  } else {
+    repositoryQuery = 'SELECT repo_name FROM tree_view_snapshots WHERE repo_name IS NOT NULL ORDER BY repo_name';
+  }
+  const statement = env.DB.prepare(repositoryQuery);
+  const rows = await (requestedRepoName ? statement.bind(requestedRepoName) : statement).all<{ repo_name: string }>();
+  // installation webhook used to persist repository.name (for example "dynamicneko")
+  // instead of repository.full_name. Accept those existing rows as nekoserver repos so a
+  // manual refresh repairs itself immediately, while new webhook deliveries below store
+  // the canonical owner/name form. Set removes duplicates during the transition.
+  let repoNames = Array.from(new Set((rows.results ?? [])
+    .map((row) => row.repo_name.includes('/') ? row.repo_name : `nekoserver/${row.repo_name}`)
+    .filter(isTreeViewSnapshotRepo)));
+
+  // リポジトリごとに直列でGitHub APIを待つと、対象数に比例して/neko tvupdateの
+  // HTTP応答が遅れ、チャット側では送信中のまま(未処理)になる。GitHub/D1への
+  // 同時アクセス数は抑えつつ並列化し、結果はrepoNamesの順序で集約する。
+  const concurrency = 5;
+  type RepoSyncResult = { kind: 'synced' } | { kind: 'skipped' } | { kind: 'failed'; error: string };
+  const results: RepoSyncResult[] = new Array(repoNames.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < repoNames.length) {
+      const index = nextIndex++;
+      const repoName = repoNames[index];
+      try {
+        const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN!, fetchImpl: fetch });
+        if (!result.ok) {
+          logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+          if (!dryRun) {
+            await recordTreeViewUpdate(targetDb, repoName, source, false, now.toISOString(), result.detail).catch((logErr) => {
+              logger.error('[tree-view-snapshot-sync] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+            });
+          }
+          results[index] = { kind: 'failed', error: result.detail };
+          continue;
+        }
+        const executedAt = now.toISOString();
+        let changed: boolean;
+        if (dryRun) {
+          const existing = await targetDb.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?').bind(repoName).first<{ tree_json: string }>();
+          const existingSnapshot = existing ? JSON.parse(existing.tree_json) as TreeViewSnapshotNode : null;
+          const nextSnapshot = resolveNextTreeViewSnapshot(existingSnapshot, result.snapshot, result.truncated);
+          changed = !existing || existing.tree_json !== JSON.stringify(nextSnapshot);
+          differences[index] = {
+            repoName,
+            status: changed ? 'changed' : 'unchanged',
+            addedPaths: listAddedTreeViewPaths(existingSnapshot, nextSnapshot),
+          };
+        } else {
+          changed = await upsertTreeViewSnapshotIfChanged(targetDb, repoName, result.snapshot, executedAt, result.truncated);
+          await recordTreeViewUpdate(targetDb, repoName, source, changed, executedAt);
+        }
+        results[index] = { kind: changed ? 'synced' : 'skipped' };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[tree-view-snapshot-sync] リポジトリ同期失敗', { repoName, error: message });
+        if (!dryRun) {
+          await recordTreeViewUpdate(targetDb, repoName, source, false, now.toISOString(), message).catch((logErr) => {
+            logger.error('[tree-view-snapshot-sync] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+          });
+        }
+        results[index] = { kind: 'failed', error: message };
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, repoNames.length) }, () => worker()));
+
+  results.forEach((result, index) => {
+    const repoName = repoNames[index];
+    if (result.kind === 'synced') synced.push(repoName);
+    else if (result.kind === 'skipped') skipped.push(repoName);
+    else failed.push({ repoName, error: result.error });
+  });
+
+  return { synced, skipped, failed, ...(dryRun ? { differences: differences.filter(Boolean) } : {}) };
+}
+
+type TreeViewManualRefreshOutcome = {
+  status: 'updated' | 'table_missing' | 'no_repositories';
+  updated: string[];
+  unchanged: string[];
+  failed: { repoName: string; error: string }[];
+  differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[];
+};
+
+/**
+ * `/neko tvupdate` 用。必要なD1テーブルを確認してから同期する。
+ * 以前は直近1時間以内に実行履歴があると--force無指定では即座にスキップ
+ * していたが、ユーザーから「毎回--forceを付けさせられるのが煩わしい」と
+ * 指摘を受け、この待機制限自体を撤去した(2026-09-24)。呼び出し過多の
+ * 抑制は「今すぐ更新」APIの10分5回レート制限(TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX)
+ * 側で別途行っている。
+ */
+async function refreshTreeViewSnapshotsIfStale(
+  env: Bindings,
+  now = new Date(),
+  repoName?: string,
+  dryRun = false,
+): Promise<TreeViewManualRefreshOutcome> {
+  const empty = { updated: [], unchanged: [], failed: [] };
+  if (!env.DB || !env.GITHUB_TOKEN) return { status: 'table_missing', ...empty };
+
+  // --dryrun は読み取り専用の差分確認であり、更新ログも権限キャッシュも書かない。
+  // 比較先のsnapshotさえあれば、不必要なテーブル検査で強制実行を制止しない。
+  const requiredTables = dryRun
+    ? ['tree_view_snapshots']
+    : ['tree_view_snapshots', 'tree_view_update_log'];
+  const tableRows = await env.DB.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => '?').join(', ')})`
+  ).bind(...requiredTables).all<{ name: string }>();
+  const existingTables = new Set((tableRows.results ?? []).map((row) => row.name));
+  if (requiredTables.some((table) => !existingTables.has(table))) {
+    return { status: 'table_missing', ...empty };
+  }
+
+  // --dryrun はD1を更新しない。本番スナップショットとの比較だけを返すため、
+  // 追加バインディングなしで安全に実行できる。
+  const result = await syncTreeViewSnapshots(env, 'manual', now, env.DB, dryRun, repoName);
+  // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
+  // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
+  // ため、成功として扱わず設定不備を利用者に明示する。
+  if (result.synced.length === 0 && result.skipped.length === 0 && result.failed.length === 0) {
+    return { status: 'no_repositories', ...empty };
+  }
+  if (dryRun) {
+    return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed, differences: result.differences };
+  }
+  return { status: 'updated', updated: result.synced, unchanged: result.skipped, failed: result.failed };
+}
+
+/**
+ * dynamicnekoの/tree-viewページ起動時用。tree_view_snapshotsに実際に
+ * 同期済みの固定2リポジトリ一覧を返す。DBに過去の不要な行が
+ * 残っていても、APIのレスポンスには含めない。
+ */
+app.post('/api/tree-view-repos-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT repo_name, updated_at FROM tree_view_snapshots ORDER BY repo_name ASC'
+    ).all<{ repo_name: string; updated_at: string }>();
+    const repos = new Map(
+      Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS).map((repoName) => [
+        repoName,
+        { repoName, updatedAt: EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT },
+      ]),
+    );
+    for (const row of rows.results ?? []) {
+      if (!isTreeViewSnapshotRepo(row.repo_name)) continue;
+      repos.set(row.repo_name, { repoName: row.repo_name, updatedAt: row.updated_at });
+    }
+    return jsonUtf8({ repos: [...repos.values()].sort((a, b) => a.repoName.localeCompare(b.repoName)) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-repos-external] 一覧取得クエリ失敗', { error: message });
+    return jsonUtf8({ error: '一覧取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoの/tree-viewページ用。指定したリポジトリの、cronが最後に
+ * 同期したツリースナップショット(JSON)をそのまま返す。まだ一度も
+ * 同期されていないリポジトリ(tree_view_snapshotsに行が無い)は404。
+ */
+app.post('/api/tree-view-snapshot-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!isTreeViewSnapshotRepo(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+  }
+
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT tree_json, updated_at FROM tree_view_snapshots WHERE repo_name = ?'
+    ).bind(repoName).first<{ tree_json: string; updated_at: string }>();
+    if (!row) {
+      const embeddedTree = EMBEDDED_TREE_VIEW_SNAPSHOTS[repoName];
+      if (embeddedTree) {
+        return jsonUtf8({
+          repoName,
+          updatedAt: EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
+          tree: embeddedTree,
+        });
+      }
+      return jsonUtf8({ error: `${repoName}はまだ同期されていません(次回cron実行、または手動更新をお試しください)` }, 404);
+    }
+    return jsonUtf8({ repoName, updatedAt: row.updated_at, tree: JSON.parse(row.tree_json) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-external] 取得クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'スナップショット取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+// 手動更新(ライブ再取得)のレート制限。cronによる定期更新とは別に、
+// ユーザーが「今すぐ更新」を押したときにGitHub APIを無制限に叩けて
+// しまわないようにする(commit-summary-external等と同じ方針)。
+const TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_WINDOW_SQL = '-10 minutes';
+const TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX = 5;
+
+/**
+ * dynamicnekoの/tree-viewページの「今すぐ更新」ボタン用。cronの定期実行を
+ * 待たず、その場でGitHub Trees APIから最新のツリーを取得してD1へ反映する
+ * (ユーザー要望: 「ライブ方式も併用して」)。内容が前回と変わっていない
+ * 場合はupdated_atを含め書き込みをスキップする(不要なD1書き込みを避ける)。
+ */
+app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.GITHUB_TOKEN) return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const login = auth.login as string;
+
+  const repoName = (body?.repoName ?? '').trim();
+  if (!isTreeViewSnapshotRepo(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+  }
+
+  // 正規表現による形式チェックだけでは、GITHUB_TOKENが読めるnekoserver
+  // 配下の任意のリポジトリ(GitHub Appがアクセス許可されていないものも
+  // 含む)を許可ユーザーが自由にD1へ保存・一覧公開できてしまう
+  // (セキュリティレビュー指摘、PR #1925マージ後)。cronの同期対象と同じく
+  // installation_permissionsに存在することを必須条件にする。
+  try {
+    const permitted = await c.env.DB.prepare(
+      'SELECT 1 FROM installation_permissions WHERE repo_name = ? LIMIT 1'
+    ).bind(repoName).first();
+    if (!permitted) {
+      return jsonUtf8({ error: `${repoName}はGitHub Appのアクセス許可対象に含まれていません` }, 403);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] installation_permissions照合失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'アクセス権限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  let recentRefreshCount = 0;
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM tree_view_snapshot_refresh_log
+       WHERE user_id = ? AND requested_at >= datetime('now', ?)`
+    ).bind(login, TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_WINDOW_SQL).first<{ cnt: number }>();
+    recentRefreshCount = row?.cnt ?? 0;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] レート制限クエリ失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'レート制限確認でサーバーエラーが発生しました: ' + message }, 500);
+  }
+  if (recentRefreshCount >= TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX) {
+    return jsonUtf8({ error: `手動更新の上限(10分あたり${TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX}回)に達しました。しばらく待ってから再試行するか、次回のcron同期をお待ちください` }, 429);
+  }
+
+  const result = await fetchRepoTreeSnapshot({ repoName, githubToken: c.env.GITHUB_TOKEN, fetchImpl: fetch });
+  if (!result.ok) {
+    logger.error('[tree-view-snapshot-refresh-external] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
+    await recordTreeViewUpdate(c.env.DB, repoName, 'manual', false, new Date().toISOString(), result.detail).catch((logErr) => {
+      logger.error('[tree-view-snapshot-refresh-external] 失敗ログの記録にも失敗', { repoName, error: logErr instanceof Error ? logErr.message : String(logErr) });
+    });
+    return jsonUtf8({ error: `GitHub Trees APIの取得に失敗しました(${result.errorCode}): ${result.detail}` }, 502);
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO tree_view_snapshot_refresh_log (user_id, repo_name, requested_at) VALUES (?, ?, ?)'
+    ).bind(login, repoName, now).run();
+    const changed = await upsertTreeViewSnapshotIfChanged(c.env.DB, repoName, result.snapshot, now, result.truncated);
+    await recordTreeViewUpdate(c.env.DB, repoName, 'manual', changed, now);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-snapshot-refresh-external] D1保存失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'スナップショット保存でサーバーエラーが発生しました: ' + message }, 500);
+  }
+
+  return jsonUtf8({ repoName, updatedAt: now, tree: result.snapshot });
 });
 
 /**
@@ -12972,7 +16023,7 @@ app.post('/api/ruby-wasm/snippets', authMiddleware, async (c) => {
   }
   const title = (body?.title ?? '').trim().slice(0, 200) || deriveRubySnippetTitle(code);
   const id = crypto.randomUUID();
-  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"3.4")を
+  // 保存時点で/ruby-wasmページが読み込んでいるRuby/WASMのビルドライン(例:"4.0")を
   // 記録する。将来対応バージョンが増えた場合、このスニペットがどのバージョン向けに
   // 生成されたコードかを区別できるようにするため(動作確認履歴側でもこの値を
   // デフォルトのバージョンとして使う)。
@@ -13195,6 +16246,475 @@ app.get('/api/kimi-code/token-usage', authMiddleware, async (c) => {
   } catch {
     return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
   }
+});
+
+app.get('/cursor-agent', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getCursorAgentPage(user.sub));
+});
+
+/**
+ * Cursor Background Agent API(POST https://api.cursor.com/v1/agents)を
+ * フォーム入力(プロンプト・対象リポジトリ)から起動する。
+ * CURSOR_API_KEY未設定・プロンプト1文字以下・対象リポジトリが許可リスト外の
+ * いずれか1つでも欠けていたら、Cursor APIへは一切リクエストしない
+ * (validateCursorAgentLaunchRequestに集約。CLAUDE.mdルール15)。
+ * 実行に成功した場合のみ、プロンプトと応答をcursor_agent_launch_logへ記録し、
+ * AIチャット(ai_chat_shares)同様に後からGET /api/cursor-agent/historyで
+ * 読み出せるようにする。
+ */
+app.post('/api/cursor-agent/launch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ prompt?: string; repoFullName?: string }>().catch(() => null);
+  const prompt = body?.prompt ?? '';
+  const repoFullName = body?.repoFullName ?? '';
+
+  const validation = validateCursorAgentLaunchRequest({
+    hasApiKey: Boolean(c.env.CURSOR_API_KEY),
+    prompt,
+    repoFullName,
+    allowedRepos: CURSOR_AGENT_ALLOWED_REPOS,
+  });
+  if (!validation.ok) {
+    return jsonUtf8({ error: formatCursorAgentValidationError(validation.errorCode) }, 400);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch('https://api.cursor.com/v1/agents', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildCursorAgentRequestBody(prompt, repoFullName)),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 呼び出し失敗', { userId: user.sub, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] Cursor APIエラー応答', { userId: user.sub, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const cursorResponse: unknown = await res.json().catch(() => null);
+  // HTTPは成功(200)でも本文がJSONとして解析できない場合、agent_id等を
+  // 一切特定できない(通信障害と同じ扱いにする。詳細は/refreshの同種の
+  // ガードのコメント参照)。
+  if (cursorResponse === null) {
+    logger.warn('[cursor-agent] 起動応答がJSONとして解析できませんでした', { userId: user.sub });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
+  const fields = extractCursorAgentFields(cursorResponse);
+
+  // Agent自体は起動に成功しているため、履歴保存(D1書き込み)がここで失敗しても
+  // (例: migration未実行でcursor_agent_launch_log/cursor_agent_status_logが
+  // 存在しない)、ユーザーには起動成功として返す。握りつぶす代わりに
+  // logger.errorへ記録し、レスポンスのhistorySavedフィールドで保存できなかった
+  // 事実を伝える(CLAUDE.mdルール8: 記録・通知の義務)。
+  //
+  // agent_status・run_status・report_textはJSONブロブのまま持たず個別カラムへ
+  // 切り出す。以後の状態変化はUPDATEで上書きせず、cursor_agent_status_logへ
+  // 追記する連鎖構造にする(ruby_wasm_snippets/ruby_wasm_snippet_verificationsと
+  // 同じ親子パターン。1件の起動(問い)に対して複数の状態取得(答えの更新)を
+  // 履歴として保持し、後から連鎖として読み出せるようにするため)。
+  let historySaved = false;
+  if (c.env.DB) {
+    try {
+      const insertLaunch = await c.env.DB
+        .prepare(
+          `INSERT INTO cursor_agent_launch_log (user_id, repo_full_name, prompt, agent_id, agent_name, agent_url, cursor_response) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(user.sub, repoFullName, prompt.trim(), fields.id, fields.name, fields.url, JSON.stringify(cursorResponse))
+        .run();
+      const launchId = insertLaunch.meta.last_row_id;
+      await c.env.DB
+        .prepare(
+          `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(launchId, fields.status, fields.runStatus, fields.reportText, JSON.stringify(cursorResponse))
+        .run();
+      historySaved = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cursor-agent] 履歴のD1保存に失敗しました(migration未実行の可能性があります)', {
+        userId: user.sub,
+        error: message,
+      });
+    }
+  }
+  return jsonUtf8({ cursorResponse, historySaved, reportText: fields.reportText });
+});
+
+type CursorAgentHistoryRow = {
+  id: number;
+  repo_full_name: string;
+  prompt: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agent_url: string | null;
+  created_at: string;
+  agent_status: string | null;
+  run_status: string | null;
+  report_text: string | null;
+  raw_response: string | null;
+  last_status_at: string | null;
+};
+
+/**
+ * /cursor-agent ページ用。自分がこれまでに起動したプロンプトの一覧を新しい順で
+ * 返す。各行にはcursor_agent_status_logの最新1件(fetched_at最大)の状態
+ * (agent_status/run_status/report_text)を相関サブクエリで結合する
+ * (=「問答集」として、起動時点の情報と最新の答えをまとめて読み出せるようにする)。
+ * q があるときは回答キャッシュ本文と画面の列を INSTR する。
+ * キャッシュ表(0139)が無いときは画面の列だけで再検索し、診断用 searchError は残す。
+ * AIチャットのai_chat_shares検索と同様、他ユーザーの履歴は返さない。
+ */
+app.get('/api/cursor-agent/history', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ rows: [] });
+  const searchQuery = normalizeCursorAgentHistorySearchQuery(c.req.query('q'));
+  const hasAnswerSearch = searchQuery.length > 0;
+  if (!hasAnswerSearch) {
+    const { results } = await c.env.DB
+      .prepare(buildCursorAgentHistoryListSql(false))
+      .bind(user.sub)
+      .all<CursorAgentHistoryRow>();
+    return jsonUtf8({ rows: results ?? [] });
+  }
+  let cacheTotal: number | null = null;
+  try {
+    const countRow = await c.env.DB
+      .prepare(buildCursorAgentAnswerCacheCountSql())
+      .bind(user.sub)
+      .first<{ c: number }>();
+    cacheTotal = Number(countRow?.c ?? 0);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
+  }
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  if (listed.searchError) {
+    logger.error('[cursor-agent] 回答キャッシュの履歴検索に失敗', { userId: user.sub, error: listed.searchError });
+  }
+  // 表未作成・破損の確認用。本番D1は
+  // 「回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR」
+  // になる。SPEC.cursor-agent.md に必載。0140を適用しても 0139 が無い限り残る。
+  return jsonUtf8({
+    rows: listed.rows,
+    source: 'answer_cache',
+    query: searchQuery,
+    cacheTotal,
+    searchError: listed.searchError || undefined,
+  });
+});
+
+/**
+ * /cursor-agent の「過去ログ検索」。AIチャット左サイドバーの検索完了
+ * (aichat_search_log へキーワード×ヒット共有を結ぶ)と同じく、サーバ側で
+ * 履歴を検索し、ヒットした自分の起動 id だけをキーワードへ結びつける。
+ * クライアントが送った launchIds は使わない。キー入力の GET では保存しない。
+ */
+app.post('/api/cursor-agent/history/past-log-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  let body: { keyword?: string } = {};
+  try {
+    body = await c.req.json<{ keyword?: string }>();
+  } catch {
+    body = {};
+  }
+  const searchQuery = normalizeCursorAgentHistorySearchQuery(body.keyword);
+  if (!searchQuery) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  let cacheTotal: number | null = null;
+  try {
+    const countRow = await c.env.DB
+      .prepare(buildCursorAgentAnswerCacheCountSql())
+      .bind(user.sub)
+      .first<{ c: number }>();
+    cacheTotal = Number(countRow?.c ?? 0);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュ件数の取得に失敗', { userId: user.sub, error: message });
+  }
+
+  const listed = await queryCursorAgentHistoryWithSearch<CursorAgentHistoryRow>(c.env.DB, user.sub, searchQuery);
+  const rows = listed.rows;
+  const searchError = listed.searchError ?? '';
+  if (searchError) {
+    logger.error('[cursor-agent] 過去ログ検索の履歴取得に失敗', { userId: user.sub, error: searchError });
+  }
+
+  const launchIds = rows.map((row) => row.id);
+  const persist = await persistCursorAgentPastLogHits(c.env.DB, {
+    userId: user.sub,
+    keyword: searchQuery,
+    launchIds,
+    resultCount: launchIds.length,
+    nowIso: new Date().toISOString(),
+  });
+  if (!persist.ok && persist.errorCode === 'persist_failed') {
+    logger.error('[cursor-agent] 過去ログ検索の保存に失敗', {
+      userId: user.sub,
+      keyword: searchQuery,
+      error: persist.detail,
+    });
+  }
+
+  return jsonUtf8({
+    rows,
+    source: 'answer_cache',
+    query: searchQuery,
+    cacheTotal,
+    searchError: searchError || undefined,
+    savedCount: persist.ok ? persist.savedCount : 0,
+    resultCount: launchIds.length,
+    persistError: persist.ok ? undefined : persist.detail,
+  });
+});
+
+/**
+ * /cursor-agent ページ用。1件の起動(問い)に対する状態取得の連鎖
+ * (cursor_agent_status_log全件)を古い順で返す。他ユーザーの起動には
+ * アクセスできない(404)。
+ */
+app.get('/api/cursor-agent/history/:id/timeline', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ rows: [] });
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  const launch = await c.env.DB
+    .prepare(`SELECT id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: number }>();
+  if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  const { results } = await c.env.DB
+    .prepare(
+      `SELECT agent_status, run_status, report_text, raw_response, fetched_at FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at ASC, id ASC`
+    )
+    .bind(id)
+    .all<{ agent_status: string | null; run_status: string | null; report_text: string | null; raw_response: string; fetched_at: string }>();
+  return jsonUtf8({ rows: results ?? [] });
+});
+
+/**
+ * /cursor-agent ページ用(暫定措置)。自分の起動履歴を1件削除する。
+ * 他ユーザーの行(user_id不一致)・存在しないidは404を返し、削除しない。
+ * cursor_agent_status_log側の関連行も合わせて削除する(FKの参照切れを防ぐ)。
+ * 設計が安定するまでの暫定対応であり、安定次第撤去する方針。
+ */
+app.delete('/api/cursor-agent/history/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  const launch = await c.env.DB
+    .prepare(`SELECT id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ id: number }>();
+  if (!launch) return jsonUtf8({ error: '見つかりません' }, 404);
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_search_history WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 過去ログ検索明細の削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_search_log WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 過去ログ検索集計の削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
+  try {
+    await c.env.DB.prepare(`DELETE FROM cursor_agent_answer_cache WHERE launch_id = ?`).bind(id).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 回答キャッシュ削除失敗', { userId: user.sub, launchId: id, error: message });
+  }
+  await c.env.DB.prepare(`DELETE FROM cursor_agent_status_log WHERE launch_id = ?`).bind(id).run();
+  await c.env.DB.prepare(`DELETE FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`).bind(id, user.sub).run();
+  return jsonUtf8({ deleted: true });
+});
+
+/**
+ * launch直後にD1へ保存される状態は、Agentがまだ実行中(RUNNING等)の制御情報
+ * でしかなく、実際の作業結果(完了後の状態)ではない。このAPIでCursor APIの
+ * GET /v1/agents/{id}へ問い合わせ直し、結果をcursor_agent_status_logへ
+ * 追記した上で呼び出し元(ブラウザ)へそのまま返す(=結果はアプリ内部だけに
+ * 溜め込まず、呼び出し元に返す)。既存行を上書きせず追記するため、
+ * 状態変化の履歴(連鎖)がそのまま残る。
+ */
+app.post('/api/cursor-agent/history/:id/refresh', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  if (!c.env.CURSOR_API_KEY) {
+    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
+  }
+  const row = await c.env.DB
+    .prepare(`SELECT agent_id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ agent_id: string | null }>();
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+  if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため最新状態を取得できません' }, 400);
+
+  let res: Response;
+  try {
+    res = await fetch(buildCursorAgentStatusUrl(row.agent_id), {
+      headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 最新状態の取得に失敗', { userId: user.sub, agentId: row.agent_id, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] 最新状態取得でCursor APIエラー応答', { userId: user.sub, agentId: row.agent_id, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const cursorResponse: unknown = await res.json().catch(() => null);
+  // HTTPは成功(200)でも本文がJSONとして解析できない場合、cursorResponseは
+  // null(=情報量ゼロ)になる。これを「取得できた」ものとしてstatus_logへ
+  // 記録すると、agent_status等が全てnullの意味の無い行(「未取得」表示)が
+  // 連鎖に積み上がり続けてしまう(実際にこの不具合でユーザーの画面に
+  // 空の行が残った)。JSON解析失敗は通信障害として扱い、記録しない。
+  if (cursorResponse === null) {
+    logger.warn('[cursor-agent] 最新状態取得でCursor APIの応答がJSONとして解析できませんでした', { userId: user.sub, agentId: row.agent_id });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
+  const fields = extractCursorAgentFields(cursorResponse);
+  await c.env.DB
+    .prepare(
+      `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
+    )
+    .bind(id, fields.status, fields.runStatus, fields.reportText, JSON.stringify(cursorResponse))
+    .run();
+  return jsonUtf8({ cursorResponse, reportText: fields.reportText });
+});
+
+/**
+ * /cursor-agent ページのAgent IDタップ用。
+ * まず cursor_agent_answer_cache を見、回答文があれば Cursor API は呼ばない。
+ * キャッシュが空のときだけ GET /v0/agents/{id}/conversation を呼び、
+ * assistant の断片を1本の回答文にまとめてキャッシュへ書く。
+ * 他ユーザーの起動・agent_id未記録・API失敗は握りつぶさない。
+ */
+app.get('/api/cursor-agent/history/:id/conversation', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return jsonUtf8({ error: '不正なidです' }, 400);
+  const row = await c.env.DB
+    .prepare(`SELECT agent_id FROM cursor_agent_launch_log WHERE id = ? AND user_id = ?`)
+    .bind(id, user.sub)
+    .first<{ agent_id: string | null }>();
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+  if (!row.agent_id) return jsonUtf8({ error: 'agent_idが記録されていないため会話を取得できません' }, 400);
+
+  const latestStatus = await c.env.DB
+    .prepare(
+      `SELECT agent_status, run_status FROM cursor_agent_status_log WHERE launch_id = ? ORDER BY fetched_at DESC, id DESC LIMIT 1`
+    )
+    .bind(id)
+    .first<{ agent_status: string | null; run_status: string | null }>();
+  let canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(latestStatus?.agent_status, latestStatus?.run_status);
+
+  // DB上のcursor_agent_status_logは、/cursor-agentページを開いたときの
+  // 自動リフレッシュか明示的なrefresh呼び出しでしか更新されない。/neko csearch
+  // の「表示」だけを使い続けているユーザーの起動記録は、Agentが実際には
+  // とっくに完了していてもDB上は起動直後のRUNNING等のまま更新されず、
+  // isCursorAgentSuccessfulTerminalが永遠にfalseのままになる(実データで
+  // cursor_agent_answer_cacheが0件だった原因。詳細はNOTICE参照)。
+  // DB上が非終了のときだけ、会話取得の前にrefreshと同じCursor APIステータス
+  // 問い合わせで鮮度を取り直す。既に終了扱いならAPI呼び出しを増やさない。
+  if (!canCacheFinalAnswer && c.env.CURSOR_API_KEY) {
+    try {
+      const statusRes = await fetch(buildCursorAgentStatusUrl(row.agent_id), {
+        headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+      });
+      if (statusRes.ok) {
+        const statusJson: unknown = await statusRes.json().catch(() => null);
+        if (statusJson !== null) {
+          const fields = extractCursorAgentFields(statusJson);
+          await c.env.DB
+            .prepare(
+              `INSERT INTO cursor_agent_status_log (launch_id, agent_status, run_status, report_text, raw_response) VALUES (?, ?, ?, ?, ?)`
+            )
+            .bind(id, fields.status, fields.runStatus, fields.reportText, JSON.stringify(statusJson))
+            .run();
+          canCacheFinalAnswer = isCursorAgentSuccessfulTerminal(fields.status, fields.runStatus);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('[cursor-agent] 会話取得前の状態再取得に失敗(そのまま続行)', { userId: user.sub, agentId: row.agent_id, error: message });
+    }
+  }
+
+  let cacheError: string | undefined;
+  if (canCacheFinalAnswer) {
+    try {
+      const cached = await c.env.DB
+        .prepare(`SELECT answer_text FROM cursor_agent_answer_cache WHERE launch_id = ?`)
+        .bind(id)
+        .first<{ answer_text: string | null }>();
+      if (cached && typeof cached.answer_text === 'string' && cached.answer_text.length > 0) {
+        return jsonUtf8({ answers: [cached.answer_text], source: 'cache' });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      cacheError = `回答キャッシュの読み出しに失敗しました: ${message}`;
+      logger.error('[cursor-agent] 回答キャッシュ読み出し失敗', { userId: user.sub, launchId: id, error: message });
+    }
+  }
+
+  if (!c.env.CURSOR_API_KEY) {
+    return jsonUtf8({ error: formatCursorAgentValidationError('missing_api_key') }, 400);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(buildCursorAgentConversationUrl(row.agent_id), {
+      headers: { 'Authorization': 'Basic ' + btoa(`${c.env.CURSOR_API_KEY}:`) },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cursor-agent] 会話の取得に失敗', { userId: user.sub, agentId: row.agent_id, error: message });
+    return jsonUtf8({ error: `Cursor APIの呼び出しに失敗しました: ${message}` }, 502);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.warn('[cursor-agent] 会話取得でCursor APIエラー応答', { userId: user.sub, agentId: row.agent_id, status: res.status, text: text.slice(0, 500) });
+    return jsonUtf8({ error: `Cursor APIがエラーを返しました(status ${res.status}): ${text.slice(0, 500)}` }, 502);
+  }
+  const conversation: unknown = await res.json().catch(() => null);
+  if (conversation === null) {
+    logger.warn('[cursor-agent] 会話取得でCursor APIの応答がJSONとして解析できませんでした', { userId: user.sub, agentId: row.agent_id });
+    return jsonUtf8({ error: 'Cursor APIの応答を解析できませんでした' }, 502);
+  }
+  const merged = mergeCursorAgentConversationAnswers(extractCursorAgentConversationAnswers(conversation));
+  if (merged.length > 0 && canCacheFinalAnswer) {
+    try {
+      await c.env.DB
+        .prepare(`INSERT INTO cursor_agent_answer_cache (launch_id, answer_text) VALUES (?, ?)`)
+        .bind(id, merged)
+        .run();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      cacheError = cacheError
+        ? `${cacheError}; 回答キャッシュの保存に失敗しました: ${message}`
+        : `回答キャッシュの保存に失敗しました: ${message}`;
+      logger.error('[cursor-agent] 回答キャッシュ保存失敗', { userId: user.sub, launchId: id, error: message });
+    }
+  }
+  return jsonUtf8(cacheError
+    ? { answers: merged.length > 0 ? [merged] : [], source: 'api', cacheError }
+    : { answers: merged.length > 0 ? [merged] : [], source: 'api' });
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
@@ -13699,41 +17219,68 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
 
 /**
  * Cloudflare D1 ダッシュボード API
- * D1 データベース一覧と各テーブルの行数を返す
+ * D1バインディング、またはCloudflare REST API経由でデータベースとテーブルの一覧を返す
  */
-app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
-  if (!c.env.DB) {
-    return jsonUtf8({ error: 'DB未設定です', configured: false }, 200);
+app.get('/api/cf-dashboard/d1', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    if (!c.env.DB) {
+      return jsonUtf8({ error: 'DBバインディングが未設定です', configured: false }, 200);
+    }
+    try {
+      const names = await listD1TableNames(c.env.DB);
+      return jsonUtf8({
+        configured: true,
+        databases: [
+          { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
+        ],
+        provider: 'd1-binding',
+      });
+    } catch (err) {
+      return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
+    }
   }
   try {
-    const names = await listD1TableNames(c.env.DB);
-    return jsonUtf8({
-      configured: true,
-      databases: [
-        { uuid: 'this', name: 'このWorkerのD1データベース', created_at: null, file_size: null, num_tables: names.length },
-      ],
+    const databases = await listCloudflareD1Databases({
+      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
+      apiKey: c.env.CLOUDFLARE_API_KEY,
+      apiEmail: c.env.CLOUDFLARE_API_EMAIL,
     });
+    return jsonUtf8({ configured: true, databases, provider: 'cloudflare-api' });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
   }
 });
 
-app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
-  if (!c.env.DB) {
-    return jsonUtf8({ error: 'DB未設定です' }, 503);
+app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    if (!c.env.DB) {
+      return jsonUtf8({ error: 'DBバインディングが未設定です' }, 503);
+    }
+    try {
+      const tables = await loadCfDashboardTables(c.env.DB);
+      return jsonUtf8({ tables, provider: 'd1-binding' });
+    } catch (err) {
+      return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
+    }
   }
   try {
-    const tables = await loadCfDashboardTables(c.env.DB);
-    return jsonUtf8({ tables });
+    const tables = await listCloudflareD1Tables({
+      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
+      apiKey: c.env.CLOUDFLARE_API_KEY,
+      apiEmail: c.env.CLOUDFLARE_API_EMAIL,
+    }, c.req.param('dbId'));
+    const { wranglerBlake3Hex } = await import('./utils/wranglerBlake3Server');
+    const digest = await wranglerBlake3Hex(JSON.stringify(tables));
+    return jsonUtf8({ tables, wasm: { module: 'wrangler/blake3-wasm', digest } });
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
 });
 
 /**
- * Cloudflare D1 ダッシュボードページ（認証が必要）
+ * Cloudflare D1 ダッシュボードページ（管理者認証が必要）
  */
-app.get('/cf-dashboard', authMiddleware, async (c) => {
+app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
@@ -13788,6 +17335,7 @@ app.get('/status', authMiddleware, async (c) => {
     { migration: '0060', table: 'user_sessions', column: 'idle_timeout_seconds', sql: 'ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;' },
     { migration: '0028', table: 'ai_summary_log', column: 'fallback_used',       sql: 'ALTER TABLE ai_summary_log ADD COLUMN fallback_used INTEGER DEFAULT 0;' },
     { migration: '0028', table: 'ai_summary_log', column: 'primary_model',      sql: 'ALTER TABLE ai_summary_log ADD COLUMN primary_model TEXT;' },
+    { migration: '0154', table: 'd1_query_catalog', column: 'sync_generation', sql: STATUS_MIGRATION_SQL['0154'] },
   ];
 
   const data: CacheStatusData = {
@@ -14285,6 +17833,7 @@ app.get('/status', authMiddleware, async (c) => {
 
       if (groupRows.results && groupRows.results.length > 0) {
         const groupIds = groupRows.results.map(g => g.id);
+        // d1-query-name: SelectStatusRepoGroupMembers
         const memberRows = await db.prepare(
           `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
         ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
@@ -14393,6 +17942,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: StatusTablePreviewColumns
     const columnsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
     const pragmaColumns = (columnsResult.results ?? []).map((column) => column.name);
     const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
@@ -14432,6 +17982,7 @@ app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: StatusYearMonthSummaryColumns
     const colsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
     const cols = (colsResult.results ?? []).map((r) => r.name);
     if (!cols.includes('last_updated_at')) {
@@ -14520,6 +18071,7 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
 
     for (const tName of tableNames) {
       const colsResult = await db
+        // d1-query-name: StatusSchemaTableColumns
         .prepare(`PRAGMA table_info(${tName})`)
         .all<{ name: string; type: string; pk: number; notnull: number }>();
       const cols = (colsResult.results ?? []).map((col) => {
@@ -14548,6 +18100,7 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
       }
 
       const fkResult = await db
+        // d1-query-name: StatusSchemaForeignKeys
         .prepare(`PRAGMA foreign_key_list(${tName})`)
         .all<{ table: string; from: string; to: string }>();
       for (const fk of fkResult.results ?? []) {
@@ -14621,6 +18174,7 @@ async function loadSchemaRelations(db: D1Database): Promise<{
 
   for (const tName of tableNames) {
     const colsResult = await db
+      // d1-query-name: SchemaRelationsTableColumns
       .prepare(`PRAGMA table_info(${tName})`)
       .all<{ name: string; type: string }>();
     const cols = (colsResult.results ?? []).map((col) => ({
@@ -14630,6 +18184,7 @@ async function loadSchemaRelations(db: D1Database): Promise<{
     }));
 
     const fkResult = await db
+      // d1-query-name: SchemaRelationsForeignKeys
       .prepare(`PRAGMA foreign_key_list(${tName})`)
       .all<{ table: string; from: string; to: string }>();
     for (const fk of fkResult.results ?? []) {
@@ -14697,6 +18252,37 @@ app.get('/status/column-stats', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render column-stats', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+});
+
+app.get('/jev-rev-viewer', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  try {
+    const [evaluationsResult, labelsResult] = await Promise.all([
+      db.prepare('SELECT jev_label_id FROM jev_evaluations').all(),
+      db.prepare('SELECT id, question_text FROM jev_labels').all(),
+    ]);
+    const evaluations = (evaluationsResult.results ?? []) as { jev_label_id: number }[];
+    const labels = (labelsResult.results ?? []) as { id: number; question_text: string }[];
+    const counts = computeJevQuestionCounts(evaluations, labels);
+    const html = renderJevRevViewerPage(counts);
+
+    return new Response(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('Failed to render jev-rev-viewer', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render jev-rev-viewer', {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
@@ -14789,6 +18375,287 @@ app.get('/function-changelog', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render function-changelog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * /jev-score-boardページ・/api/jev-score-board/rows共通の絞り込みロジック。
+ * keyword未指定時はtarget_type='answer'のshareを最新評価日時順に、指定時は
+ * ai_chat_shares.question/answerへのキーワード部分一致(/neko jと同じ検索キー
+ * の意味論だが、コードは独立)で絞り込む。どちらもJEV_SCORE_BOARD_LIMIT件まで。
+ * このページは/neko jスラッシュコマンド(jevKeywordLookup)とは意図的に
+ * 別実装にしている(スラッシュコマンド経由の機能ではなく独立ページのため)。
+ */
+async function fetchJevScoreBoardData(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+): Promise<{ hitCount: number; rows: ReturnType<typeof groupJevScoreRowsByShare> }> {
+  const trimmed = keyword.trim();
+  const normalized = trimmed.replace(/[・･]/g, '・');
+  const matchCondition = trimmed
+    ? `s.deleted_at IS NULL AND (
+         INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+         OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+       )`
+    : 's.deleted_at IS NULL';
+  const bindArgs = trimmed ? [userId, normalized, normalized] : [userId];
+
+  const countRow = await db.prepare(
+    `SELECT COUNT(DISTINCT je.share_id) AS cnt
+     FROM jev_evaluations je
+     JOIN ai_chat_shares s ON s.id = je.share_id
+     WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}`
+  ).bind(...bindArgs).first<{ cnt: number }>();
+  const hitCount = countRow?.cnt ?? 0;
+  if (hitCount === 0) return { hitCount: 0, rows: [] };
+
+  const shareRowsResult = await db.prepare(
+    `SELECT DISTINCT je.share_id AS share_id, s.question AS question, s.created_at AS created_at
+     FROM jev_evaluations je
+     JOIN ai_chat_shares s ON s.id = je.share_id
+     WHERE je.user_id = ? AND je.target_type = 'answer' AND ${matchCondition}
+     ORDER BY s.created_at DESC
+     LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+  ).bind(...bindArgs).all<{ share_id: string; question: string; created_at: string }>();
+  const shareRows = shareRowsResult.results ?? [];
+  if (shareRows.length === 0) return { hitCount, rows: [] };
+
+  const shareIds = shareRows.map((r) => r.share_id);
+  const placeholders = shareIds.map(() => '?').join(',');
+  const scoreRowsResult = await db.prepare(
+    `SELECT share_id, model, jev_label_id, value
+     FROM jev_evaluations
+     WHERE user_id = ? AND target_type = 'answer' AND share_id IN (${placeholders})`
+  ).bind(userId, ...shareIds).all<JevScoreBoardScoreRow>();
+
+  const questionByShareId = new Map(shareRows.map((r) => [r.share_id, r.question]));
+  const rows = groupJevScoreRowsByShare(scoreRowsResult.results ?? [], questionByShareId, shareIds);
+  return { hitCount, rows };
+}
+
+/**
+ * /jev-score-boardの質問文左の色丸用。aichat_model_colorsからmodel_id->colorの
+ * 対応を取得するだけの読み取り専用ヘルパー(/aichatページのように新規モデルへ
+ * 自動で色を割り当てる書き込みは行わない。一覧表示のための補助情報のため)。
+ */
+async function fetchJevScoreBoardModelColors(db: D1Database): Promise<Record<string, string>> {
+  try {
+    const rows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+    const colors: Record<string, string> = {};
+    for (const row of rows.results ?? []) colors[row.model_id] = row.color;
+    return colors;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('[jev-score-board] aichat_model_colors取得に失敗、色丸なしで表示', { error: message });
+    return {};
+  }
+}
+
+/**
+ * 質問ID(share)1件=1行、jev_label_id=1〜20(ループA)を横列(L1〜L20)に並べる
+ * 専用ページ。/neko jスラッシュコマンドとは独立(スラッシュコマンドから
+ * 呼び出す機能ではなく、こちらが主動線という要望のため)。
+ * キーワード未指定時は評価済みshareを最新順に最大20件表示する。
+ */
+app.get('/jev-score-board', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const keyword = c.req.query('keyword') ?? '';
+    const [{ hitCount, rows }, modelColors] = await Promise.all([
+      fetchJevScoreBoardData(c.env.DB, user.sub, keyword),
+      fetchJevScoreBoardModelColors(c.env.DB),
+    ]);
+    const html = renderJevScoreBoardPage({ keyword, hitCount, rows, modelColors });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] ページ描画に失敗', { error: message });
+    return new Response('Failed to render jev-score-board', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * 📋 Jev評価項目一覧ページ。「どのパターン(入力内容)のときにいくつの
+ * 質問項目でJevに問い合わせているか」を把握するための一覧。
+ * パターン1(回答/質問文評価、jev_labels)は表示グループ別・合計件数、
+ * パターン2(国名キーワード評価、jev_country_keyword_labels)は件数のみ。
+ */
+app.get('/jev-label-stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const [groupRows, labelRows, keywordRow] = await Promise.all([
+      c.env.DB.prepare('SELECT id, name FROM jev_label_groups ORDER BY id').all<{ id: number; name: string }>(),
+      c.env.DB.prepare('SELECT id, question_text, jev_group_id FROM jev_labels ORDER BY id').all<{ id: number; question_text: string; jev_group_id: number }>(),
+      c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM jev_country_keyword_labels').first<{ cnt: number }>(),
+    ]);
+
+    const groups: JevLabelGroupCount[] = buildJevLabelGroupCounts(groupRows.results ?? [], labelRows.results ?? []);
+    const totalAnswerLabels = groups.reduce((sum, g) => sum + g.labelCount, 0);
+    const keywordLabelCount = keywordRow?.cnt ?? 0;
+
+    const html = getJevLabelStatsPage({ name: user.name, username: user.sub }, { groups, totalAnswerLabels, keywordLabelCount });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-label-stats] ページ描画に失敗', { error: message });
+    return new Response('Failed to render jev-label-stats', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/** /jev-score-boardのキーワード検索ボックス用JSON API。ページ全体を再読み込みしない。 */
+app.get('/api/jev-score-board/rows', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const keyword = c.req.query('keyword') ?? '';
+    const { hitCount, rows } = await fetchJevScoreBoardData(c.env.DB, user.sub, keyword);
+    return jsonUtf8({ hitCount, rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] rows取得に失敗', { error: message });
+    return jsonUtf8({ error: 'rows取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * 直近1時間のJev評価を、直前24時間の平均との差が大きい順に返すライブ指標。
+ * 保存済みの評価を再利用するためJev APIへの追加課金はなく、ページ側が10秒ごとに
+ * 再取得することで、新しい評価が入るたびに品質の動きを可視化できる。
+ */
+app.get('/api/jev-score-board/live-pulse', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT l.id AS jev_label_id, l.question_text AS label_text,
+         AVG(CASE WHEN je.computed_at >= datetime('now', '-1 hour') THEN je.value END) AS recent_average,
+         AVG(CASE WHEN je.computed_at < datetime('now', '-1 hour')
+                   AND je.computed_at >= datetime('now', '-25 hours') THEN je.value END) AS baseline_average,
+         SUM(CASE WHEN je.computed_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) AS recent_count
+       FROM jev_labels l
+       LEFT JOIN jev_evaluations je ON je.jev_label_id = l.id
+         AND je.user_id = ? AND je.target_type = 'answer'
+       WHERE l.id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}
+       GROUP BY l.id, l.question_text`
+    ).bind(user.sub).all<JevLivePulseRow>();
+    return jsonUtf8({
+      generatedAt: new Date().toISOString(),
+      windowMinutes: 60,
+      items: buildJevLivePulse(result.results ?? []),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] live-pulse取得に失敗', { error: message });
+    return jsonUtf8({ error: 'live-pulse取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * jev_labels(id=1〜20)のquestion_textをまとめて返す。内部版(Cookie認証)・
+ * external版(dynamicnekoからのService Binding経由)の両方から呼ばれる共通
+ * ロジック。行が無いidはオブジェクトのキーごと含めない(黙って空文字にしない)。
+ */
+async function fetchJevScoreBoardLabelNames(db: D1Database): Promise<Record<string, string>> {
+  const rows = await db.prepare(
+    `SELECT id, question_text FROM jev_labels WHERE id BETWEEN ${JEV_SCORE_BOARD_LABEL_MIN} AND ${JEV_SCORE_BOARD_LABEL_MAX}`
+  ).all<{ id: number; question_text: string }>();
+  const labels: Record<string, string> = {};
+  for (const row of rows.results ?? []) labels[String(row.id)] = row.question_text;
+  return labels;
+}
+
+/**
+ * /jev-score-boardのth表記切替(現行のL1〜L20 / 日本語ラベル名)用。
+ * クライアント側は初回切替時にこれを取得し、以降はオブジェクトへのキャッシュ
+ * 参照で賄うため切替のたびに叩かれるエンドポイントではない。
+ */
+app.get('/api/jev-score-board/label-names', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  try {
+    const labels = await fetchJevScoreBoardLabelNames(c.env.DB);
+    return jsonUtf8({ labels });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] label-names取得に失敗', { error: message });
+    return jsonUtf8({ error: 'label-names取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+export type JevScoreBoardTopByLabelResult = {
+  rows: { shareId: string; question: string; model: string | null; value: number }[];
+  labelText: string | null;
+};
+
+/**
+ * 表示中の20件に限らず、userIdの全評価データからそのラベル(jev_label_id)の
+ * スコアが高い順に上位JEV_SCORE_BOARD_LIMIT件を返す。内部版・external版の
+ * 両方から呼ばれる共通ロジック。
+ */
+async function fetchJevScoreBoardTopByLabel(db: D1Database, userId: string, labelId: number): Promise<JevScoreBoardTopByLabelResult> {
+  const [rows, labelRow] = await Promise.all([
+    db.prepare(
+      `SELECT je.share_id AS share_id, s.question AS question, je.model AS model, je.value AS value
+       FROM jev_evaluations je
+       JOIN ai_chat_shares s ON s.id = je.share_id
+       WHERE je.user_id = ? AND je.target_type = 'answer' AND je.jev_label_id = ? AND s.deleted_at IS NULL
+       ORDER BY je.value DESC
+       LIMIT ${JEV_SCORE_BOARD_LIMIT}`
+    ).bind(userId, labelId).all<{ share_id: string; question: string; model: string | null; value: number }>(),
+    db.prepare('SELECT question_text FROM jev_labels WHERE id = ?').bind(labelId).first<{ question_text: string }>(),
+  ]);
+  const results = (rows.results ?? []).map((r) => ({ shareId: r.share_id, question: r.question, model: r.model, value: r.value }));
+  return { rows: results, labelText: labelRow?.question_text ?? null };
+}
+
+/**
+ * /jev-score-boardのラベル列(th)タップ用。表示中の20件に限らず、ユーザーの
+ * 全評価データからそのラベル(jev_label_id)のスコアが高い順に上位20件を返す。
+ */
+app.get('/api/jev-score-board/top-by-label', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const labelIdParam = Number(c.req.query('labelId'));
+  if (!isValidJevScoreBoardLabelId(labelIdParam)) {
+    return jsonUtf8({ error: 'labelIdは1〜20の整数で指定してください' }, 400);
+  }
+  try {
+    const result = await fetchJevScoreBoardTopByLabel(c.env.DB, user.sub, labelIdParam);
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] top-by-label取得に失敗', { labelId: labelIdParam, error: message });
+    return jsonUtf8({ error: 'top-by-label取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * shareIdの質問文・回答文を返す(userIdのshareでない場合、または論理削除済みの
+ * 場合はnull)。内部版・external版の両方から呼ばれる共通ロジック。
+ */
+async function fetchJevScoreBoardAnswer(db: D1Database, userId: string, shareId: string): Promise<{ question: string; answer: string } | null> {
+  const row = await db.prepare(
+    `SELECT question, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(shareId, userId).first<{ question: string; answer: string }>();
+  return row ?? null;
+}
+
+/** /jev-score-boardの質問文リンクタップ用。質問文・回答文を返す(他ユーザーのshareは404)。 */
+app.get('/api/jev-score-board/answer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  try {
+    const row = await fetchJevScoreBoardAnswer(c.env.DB, user.sub, shareId);
+    if (!row) return jsonUtf8({ error: '指定されたshareIdは見つかりません' }, 404);
+    return jsonUtf8({ question: row.question, answer: row.answer });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[jev-score-board] answer取得に失敗', { shareId, error: message });
+    return jsonUtf8({ error: 'answer取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
@@ -15398,6 +19265,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   }> = [];
   if (c.env.DB) {
     try {
+      // d1-query-name: SelectRepositoryPageCloudflareSetupPending
       const pendingRows = await c.env.DB.prepare(`
         SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
         FROM cloudflare_setup_pending
@@ -15554,7 +19422,9 @@ app.post('/webhook/github', async (c) => {
             const repos = payload?.repositories ?? payload?.repositories_added ?? [];
             if (Array.isArray(repos)) {
               for (const repo of repos) {
-                const repoName = repo.name ?? repo.full_name?.split('/').pop();
+                // tree-view同期を含む利用側はowner/name形式で照合するため、
+                // 短いnameではなくfull_nameを優先して正規形を保存する。
+                const repoName = repo.full_name ?? (repo.name ? `nekoserver/${repo.name}` : undefined);
                 if (!repoName) continue;
                 await db.prepare(`
                   INSERT INTO installation_permissions (installation_id, repo_name, repository_selection, permissions, updated_at)
@@ -15572,11 +19442,12 @@ app.post('/webhook/github', async (c) => {
           const removedRepos = payload?.repositories_removed ?? [];
           if (Array.isArray(removedRepos)) {
             for (const repo of removedRepos) {
-              const repoName = repo.name ?? repo.full_name?.split('/').pop();
+              const repoName = repo.full_name ?? (repo.name ? `nekoserver/${repo.name}` : undefined);
               if (!repoName) continue;
               await db.prepare(
-                'DELETE FROM installation_permissions WHERE installation_id = ? AND repo_name = ?'
-              ).bind(installationId, repoName).run();
+                `DELETE FROM installation_permissions
+                 WHERE installation_id = ? AND (repo_name = ? OR repo_name = ?)`
+              ).bind(installationId, repoName, repo.name ?? repoName.split('/').pop()).run();
             }
           }
 
@@ -15638,6 +19509,7 @@ app.post('/webhook/github', async (c) => {
     if (db && repo && senderLogin) {
       const now = new Date().toISOString();
       try {
+        // d1-query-name: InsertWebhookCloudflareSetupPending
         await db.prepare(`
           INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
@@ -15904,6 +19776,7 @@ app.post('/webhook/github', async (c) => {
               // 要約結果を自動診断してフィードバックを記録
               const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
               try {
+                // d1-query-name: InsertWebhookAiSummaryReview
                 await db.prepare(`
                   INSERT INTO ai_summary_reviews
                     (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -15929,6 +19802,7 @@ app.post('/webhook/github', async (c) => {
               if (commitAgentFetchError !== null) {
                 const commitFetchDiagnosis = classifyCommitAgentFetchError(commitAgentFetchError);
                 try {
+                  // d1-query-name: InsertWebhookAiSummaryReviewFallback
                   await db.prepare(`
                     INSERT INTO ai_summary_reviews
                       (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -16858,6 +20732,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     const classifyDebugEnabled = cookieValsSearch['keyword_classify_debug'] === 'on';
 
     try {
+      // d1-query-name: InsertCommitSearchLabel
       const labelInsert = await c.env.DB.prepare(
         `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
       ).bind(user.sub, q).run();
@@ -16870,6 +20745,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     // classify_status='ai_success' の場合はAI正常終了済みとみなし再分類しない。
     if (!isNewKeyword && searchLabelMode === 'auto-classify') {
       try {
+        // d1-query-name: SelectCommitSearchLabelStatus
         const existingRow = await c.env.DB.prepare(
           `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
         ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
@@ -16879,6 +20755,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       } catch {
         // classify_status カラム未作成（マイグレーション0038未実行）の場合は旧来チェックにフォールバック
         try {
+          // d1-query-name: SelectCommitSearchLabel
           const existingRowLegacy = await c.env.DB.prepare(
             `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
           ).bind(user.sub, q).first<{ label: string }>();
@@ -16918,11 +20795,13 @@ app.get('/api/repositories/search/keyword-classify-check', authMiddleware, async
   try {
     let row: { label: string; classify_status: string | null } | null = null;
     try {
+      // d1-query-name: SelectKeywordClassifyCheckLabelStatus
       row = await db.prepare(
         `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
       ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
     } catch {
       try {
+        // d1-query-name: SelectKeywordClassifyCheckLabel
         const legacy = await db.prepare(
           `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
         ).bind(user.sub, q).first<{ label: string }>();
@@ -16937,6 +20816,7 @@ app.get('/api/repositories/search/keyword-classify-check', authMiddleware, async
     }
     if (!registered) {
       try {
+        // d1-query-name: InsertKeywordClassifyCheckLabel
         await db.prepare(
           `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
         ).bind(user.sub, q).run();
@@ -17995,6 +21875,7 @@ async function handleResendWebhookCore(
 
     if (resendWebhookDedupCache.has(dedupKey)) {
       logger.warn('Duplicate Resend webhook detected', { sourceId: logSourceLabel, resendEventId });
+      safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', { svixId: resendEventId }, 'Duplicate webhook'));
       return c.json({ error: 'Duplicate webhook' }, 409);
     }
 
@@ -18005,9 +21886,11 @@ async function handleResendWebhookCore(
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch (error) {
+    const parseError = error instanceof Error ? error.message : 'Unknown error';
     logger.warn('Unable to parse Resend webhook payload', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: parseError,
     });
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', resendEventId ? { svixId: resendEventId } : null, `Invalid webhook payload: ${parseError}`));
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
@@ -18016,7 +21899,6 @@ async function handleResendWebhookCore(
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
-  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
@@ -18155,9 +22037,19 @@ async function handleResendWebhookCore(
   }
 
   if (proxyFailed && eventType !== 'email.delivered') {
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'error', {
+      svixId,
+      slackResult: slackResultText,
+      proxyResult: proxyResultText,
+    }, 'Failed to notify proxy target'));
     return c.json({ error: 'Failed to notify proxy target' }, 502);
   }
 
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', {
+    svixId,
+    slackResult: slackResultText,
+    proxyResult: proxyResultText,
+  }));
   return c.json({ success: true, event: eventType }, 200);
 }
 
@@ -18180,12 +22072,14 @@ app.post('/webhook/resend/:sourceId', async (c) => {
 
   if (!sourceRow) {
     logger.warn('Unknown Resend webhook source', { sourceId });
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'rejected', null, 'Unknown webhook source'));
     return c.json({ error: 'Unknown webhook source' }, 404);
   }
 
   const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured', { sourceId });
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'error', null, 'Webhook secret is not configured'));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
@@ -18200,6 +22094,7 @@ app.post('/webhook/resend', async (c) => {
   const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured');
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured'));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
@@ -18304,9 +22199,12 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
     return c.json({ keys: [] });
   }
   try {
+    // 失効済みキーは周知期間として7日間だけ一覧に残す。それより古いものは
+    // DBには監査用に保持したまま、キー管理ページのレスポンスから除外する。
+    const revokedKeyVisibleAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const rows = await db.prepare(
-      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
-    ).bind(user.sub).all<{
+      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? AND (revoked_at IS NULL OR revoked_at > ?) ORDER BY created_at DESC'
+    ).bind(user.sub, revokedKeyVisibleAfter).all<{
       id: string; label: string; key_prefix: string; created_at: string;
       expires_at: string | null; revoked_at: string | null; last_used_at: string | null;
     }>();
@@ -18317,6 +22215,41 @@ app.get('/api/api-keys', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキー一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * ログインページが、このブラウザにある公開鍵のうち現在も利用可能なものだけを
+ * 表示するための照会。失効済み公開鍵は失効からの経過時間にかかわらず返さない。
+ */
+app.post('/auth/public-key/available', async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keyIds: [] });
+  }
+  try {
+    const body = await c.req.json<{ keys?: Array<{ userId?: string; keyId?: string }> }>();
+    const candidates = Array.isArray(body.keys) ? body.keys.slice(0, 100) : [];
+    const now = new Date().toISOString();
+    const keyIds: string[] = [];
+
+    for (const candidate of candidates) {
+      const userId = typeof candidate?.userId === 'string' ? candidate.userId.trim() : '';
+      const keyId = typeof candidate?.keyId === 'string' ? candidate.keyId.trim() : '';
+      if (!userId || !keyId) continue;
+      const row = await db.prepare(
+        'SELECT id FROM user_public_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)'
+      ).bind(keyId, userId, now).first<{ id: string }>();
+      if (row) keyIds.push(keyId);
+    }
+
+    return c.json({ keyIds });
+  } catch (error) {
+    logger.error('Failed to check available public keys', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // 状態を確認できないときに失効鍵を表示しないよう、fail closedにする。
+    return c.json({ keyIds: [] });
   }
 });
 
@@ -18350,10 +22283,27 @@ app.post('/api/api-keys', authMiddleware, async (c) => {
       'INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, keyHash, keyPrefix, now.toISOString(), expiresAt).run();
 
-    logger.info('Created api key', { userId: user.sub, keyId: id, label, expiresAt });
+    const countdown = await insertCountdownEvent(db, {
+      userId: user.sub,
+      label: 'PK期限',
+      targetAt: expiresAt,
+    });
+    if (!countdown.ok) {
+      logger.error('APIキー期限カウントダウンの自動登録に失敗', {
+        userId: user.sub,
+        keyId: id,
+        errorCode: countdown.errorCode,
+        error: countdown.detail,
+      });
+    }
+    const countdownNotice = formatCountdownInsertNotice(countdown, 'PK期限');
+
+    logger.info('Created api key', { userId: user.sub, keyId: id, label, expiresAt, countdown });
     return c.json({
       key: { id, label, keyPrefix, createdAt: now.toISOString(), expiresAt },
       rawKey,
+      countdown,
+      countdownNotice,
     }, 201);
   } catch (error) {
     logger.error('Failed to create api key', {
@@ -18392,6 +22342,41 @@ app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIキーの失効に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 🔑キー管理ページの使用統計表示用。指定APIキー(自分が発行したものに限る)の
+ * エンドポイント別・日別・月別アクセス件数を返す。api_key_endpoint_statsは
+ * 「/api/aichatをAPIキー認証で叩いたリクエスト」だけを記録している(セッション
+ * Cookie/JWT経由のアクセスや、GET /のログイン判定は含まない)。
+ */
+app.get('/api/api-keys/:id/stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const ownerRow = await db.prepare(
+      'SELECT id FROM api_keys WHERE id = ? AND user_id = ?'
+    ).bind(keyId, user.sub).first<{ id: string }>();
+    if (!ownerRow) {
+      return c.json({ error: '対象のAPIキーが見つかりません' }, 404);
+    }
+    const rows = await db.prepare(
+      'SELECT day, endpoint, status_code, count FROM api_key_endpoint_stats WHERE key_id = ?'
+    ).bind(keyId).all<ApiKeyEndpointStatRow>();
+    const summary = summarizeApiKeyUsage(rows.results ?? []);
+    return c.json(summary);
+  } catch (error) {
+    logger.error('Failed to fetch api key usage stats', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '使用統計の取得に失敗しました' }, 500);
   }
 });
 
@@ -18450,9 +22435,28 @@ app.post('/api/public-keys', authMiddleware, async (c) => {
       'INSERT INTO user_public_keys (id, user_id, label, public_key_jwk, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(id, user.sub, label, publicKeyJwkJson, now.toISOString(), expiresAt).run();
 
-    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt });
+    // APIキー発行と同じ共通処理を使い、期限付きの公開鍵も/countdownへ登録する。
+    // 無期限の場合はinsertCountdownEvent側で正常なスキップとして扱われる。
+    const countdown = await insertCountdownEvent(db, {
+      userId: user.sub,
+      label: 'PK期限',
+      targetAt: expiresAt,
+    });
+    if (!countdown.ok) {
+      logger.error('公開鍵期限カウントダウンの自動登録に失敗', {
+        userId: user.sub,
+        keyId: id,
+        errorCode: countdown.errorCode,
+        error: countdown.detail,
+      });
+    }
+    const countdownNotice = formatCountdownInsertNotice(countdown, 'PK期限');
+
+    logger.info('Registered public key', { userId: user.sub, keyId: id, label, expiresAt, countdown });
     return c.json({
       key: { id, label, createdAt: now.toISOString(), expiresAt },
+      countdown,
+      countdownNotice,
     }, 201);
   } catch (error) {
     logger.error('Failed to register public key', {
@@ -18699,26 +22703,17 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
       return c.json({ error: 'データベースの更新に失敗しました' }, 500);
     }
 
-    const jwtSecret = c.env.JWT_SECRET;
-    if (!jwtSecret) {
-      return c.json({ error: 'サーバー設定エラー' }, 500);
-    }
-
-    const renewed = await renewSession({
-      currentUser: user,
-      newDuration: sessionDuration,
-      jwtSecret,
-      idleTimeoutEnv: c.env.SESSION_IDLE_TIMEOUT_SECONDS,
-    });
-
     const headers = new Headers();
-    for (const cookie of renewed.cookies) {
-      headers.append('Set-Cookie', cookie);
-    }
+    headers.append('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
     headers.set('Content-Type', 'application/json; charset=utf-8');
 
     return new Response(
-      JSON.stringify({ message: 'セッション有効期限を変更しました（即時反映）', sessionDuration }),
+      JSON.stringify({
+        message: '次回ログイン時のセッション有効期限を変更しました',
+        sessionDuration,
+        appliesAt: 'next_login',
+        currentSessionUnchanged: true,
+      }),
       { status: 200, headers }
     );
   } catch (error) {
@@ -19605,6 +23600,7 @@ app.get('/api/repo-groups', authMiddleware, async (c) => {
     }
 
     const groupIds = groups.map(g => g.id);
+    // d1-query-name: SelectApiRepoGroupMembers
     const memberRows = await db.prepare(
       `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
     ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
@@ -20299,6 +24295,7 @@ app.post('/api/ai-summary/:id/feedback', authMiddleware, async (c) => {
   const now = new Date().toISOString();
   const reviewerType = body.reviewer_type || 'human';
 
+  // d1-query-name: InsertAiSummaryFeedbackReview
   await db.prepare(`
     INSERT INTO ai_summary_reviews
       (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
@@ -20592,6 +24589,7 @@ app.get('/api/cloudflare-setup-pending', authMiddleware, async (c) => {
   }
 
   try {
+    // d1-query-name: SelectCloudflareSetupPendingApi
     const rows = await db.prepare(`
       SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
       FROM cloudflare_setup_pending
@@ -20721,6 +24719,7 @@ app.post('/api/repositories', authMiddleware, async (c) => {
       const now = new Date().toISOString();
       const repoFullName = `${user.sub}/${result.repository.name}`;
       try {
+        // d1-query-name: InsertRepositoryCloudflareSetupPending
         const insertResult = await db.prepare(`
           INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
@@ -20795,5 +24794,8 @@ app.onError((err, c) => {
 
   return jsonUtf8({ error: 'サーバーエラーが発生しました' }, 500);
 });
+
+// worker-entry.tsのscheduled()ハンドラ(cronトリガー)から呼ばれる。
+export { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots };
 
 export default app;

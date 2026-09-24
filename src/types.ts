@@ -38,6 +38,17 @@ export type Bindings = {
   KIMI_CODE_EXTERNAL_SECRET?: string;
   /** dynamicnekoのAI問い合わせウィジェットがPOST /api/aichat/query-external・/api/aichat/permission-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
   AICHAT_EXTERNAL_SECRET?: string;
+  /** Jev(TypeSafe AI System One Model, https://api.typesafe.ai/v1/systemone)のAPIキー。wrangler secret putで設定する(平文で[vars]に書かない) */
+  JEV_API_KEY?: string;
+  /** dynamicnekoのJev Playgroundだけに使用するBearer認証シークレット。他のexternal APIと共有しない */
+  JEV_PLAYGROUND_EXTERNAL_SECRET?: string;
+  /**
+   * jev-score-external・jev-stats-externalが受け取るuserToken(短寿命JWT、sub=email)の
+   * 検証用シークレット。dynamicneko側の同名シークレットと同じ値をwrangler secret putで設定する。
+   * AICHAT_EXTERNAL_SECRET(全*-external共通のサービス認証)とは別のシークレットにすることで、
+   * 「AICHAT_EXTERNAL_SECRETを知っていれば本文にemailを書くだけで誰の集計でも読める」問題を切り離す
+   */
+  AICHAT_USER_TOKEN_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
@@ -62,11 +73,27 @@ export type Bindings = {
   AI_CHAT_MODEL?: string;
   /** 未設定時はテストメール送信機能自体を無効(デフォルトOFF)にする */
   RESEND_API_KEY?: string;
+  /** /neko vlink が使うGoogle Custom Search JSON APIのAPIキー。GOOGLE_CSE_CXとセットで設定する(未設定時は/neko vlinkを無効化) */
+  GOOGLE_CSE_API_KEY?: string;
+  /** /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cxパラメータ) */
+  GOOGLE_CSE_CX?: string;
+  /** /cursor-agent ページが使うCursor Background Agent APIのAPIキー。未設定時は/cursor-agentからの起動を無効化する */
+  CURSOR_API_KEY?: string;
+  /** Cloudflare D1 REST APIのAPI Token、またはGlobal API Key。必ずwrangler secretで管理する */
+  CLOUDFLARE_API_KEY?: string;
+  /** D1を列挙するCloudflareアカウントID */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  /** Global API Keyを使う場合のメールアドレス。API Tokenの場合は未設定にする */
+  CLOUDFLARE_API_EMAIL?: string;
+  /** /cf-dashboard とそのAPIへのアクセスを許可するGitHub numeric ID（カンマ区切り）。未設定・不正時はアクセスを拒否する */
+  CF_DASHBOARD_ADMIN_GITHUB_IDS?: string;
 };
 
 /** Hono コンテキスト変数 */
 export type Variables = {
   user: JWTPayload;
+  /** APIキー認証で通ったリクエストのみ設定される、そのキーのid(api_keys.id)。使用統計の記録に使う */
+  apiKeyId?: string;
 };
 
 // =====================================================

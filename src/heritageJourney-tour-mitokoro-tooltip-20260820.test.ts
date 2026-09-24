@@ -284,26 +284,42 @@ describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート�
     const y = -R * (Math.cos(lat0) * Math.sin(latR) - Math.sin(lat0) * Math.cos(latR) * Math.cos(lonR));
     return { x: cx + x, y: cy + y };
   }
-  /** src/views/heritageJourney.tsのcomputeInitialView()と同じ計算式(定数含む)を再現する。 */
-  function computeInitialView(start: { lat: number; lon: number }, end: { lat: number; lon: number }, baseR: number) {
+  /** src/views/heritageJourney.tsのcomputeInitialView(points, baseR)と同じ計算式。 */
+  function computeInitialView(points: { lat: number; lon: number }[], baseR: number) {
+    const start = points[0], end = points[points.length - 1];
     const centerLat = (start.lat + end.lat) / 2;
     const centerLon = circularMeanLon(start.lon, end.lon);
-    const pStart = project(start.lat, start.lon, centerLat, centerLon, baseR, 0, 0);
-    const pEnd = project(end.lat, end.lon, centerLat, centerLon, baseR, 0, 0);
-    const maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
+    let maxDist = 0;
+    points.forEach((p) => {
+      const pp = project(p.lat, p.lon, centerLat, centerLon, baseR, 0, 0);
+      const d = Math.hypot(pp.x, pp.y);
+      if (d > maxDist) maxDist = d;
+    });
     const MARGIN = 0.97;
     let zoom = maxDist > 0.01 ? (baseR * MARGIN) / maxDist : 1;
     zoom = Math.max(0.5, Math.min(16, zoom));
     return { centerLat, centerLon, zoom };
   }
 
-  /** その城を#tour-globe-canvas(520x520)上でタップするためのクリック座標を求める。 */
+  function readTourPointsFromDom(): { lat: number; lon: number }[] {
+    const rows = Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]')) as HTMLElement[];
+    const points = rows.map((row) => ({
+      lat: Number(row.getAttribute('data-side-lat')),
+      lon: Number(row.getAttribute('data-side-lon')),
+    })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    return points.length >= 2 ? points : [PARIS, ROME];
+  }
+
+  /** 現在の巡回ルート(tourPoints)と同じ視点で、城のクリック座標を求める。 */
   function computeCastleClickPoint(castleLat: number, castleLon: number) {
-    const baseR = Math.min(520, 520) / 2 - 24; // getGlobeGeometry()と同じ式(margin=24)
-    const { centerLat, centerLon, zoom } = computeInitialView(PARIS, ROME, baseR);
+    const canvas = document.getElementById('tour-globe-canvas') as HTMLCanvasElement;
+    const W = canvas.width || 520;
+    const H = canvas.height || 520;
+    const margin = Math.min(W, H) <= 300 ? 12 : 24;
+    const baseR = Math.min(W, H) / 2 - margin;
+    const { centerLat, centerLon, zoom } = computeInitialView(readTourPointsFromDom(), baseR);
     const R = baseR * zoom;
-    const cx = 260, cy = 260;
-    return project(castleLat, castleLon, centerLat, centerLon, R, cx, cy);
+    return project(castleLat, castleLon, centerLat, centerLon, R, W / 2, H / 2);
   }
 
   it('修正前は城をタップしてもツールチップ(#tour-tap-label)が一切表示されなかった(城はtourPointsに含まれないため)', async () => {
@@ -311,15 +327,7 @@ describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート�
     setupPage(fetchMock);
     await flushMicrotasks();
 
-    // 「城ON/OFF」は経由地候補の初期値変更(すべて解除+空港ON+城ON)により既定でON
-    // (aria-pressed="true")になったため、クリックは不要(むしろクリックするとOFFに
-    // なってしまう)。また出発地・到着地の中間地点から最も遠い座標をスコープ半径とする
-    // 仕様変更で、既定選択の候補(近隣の空港・城)もタップ座標の算出に影響するため、
-    // #opt-detourを0にして候補をゼロにし、computeCastleClickPoint()が想定する
-    // 「出発地・到着地の2点のみ」のビューと実際の計算を一致させる。
-    (document.getElementById('opt-detour') as HTMLInputElement).value = '0';
-    document.getElementById('opt-detour')!.dispatchEvent(new Event('input'));
-
+    // 「城ON/OFF」は既定でON。クリック座標は現在のtourPointsから再計算する。
     (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
 
     const canvas = document.getElementById('tour-globe-canvas')!;
@@ -344,10 +352,6 @@ describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート�
     const { fetchMock } = buildFetchMock({ gemmaShareId: 'share-gemma' });
     setupPage(fetchMock);
     await flushMicrotasks();
-
-    // 「城ON/OFF」は既定でON、#opt-detourを0にする理由は直前のテストと同じ。
-    (document.getElementById('opt-detour') as HTMLInputElement).value = '0';
-    document.getElementById('opt-detour')!.dispatchEvent(new Event('input'));
 
     (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
 

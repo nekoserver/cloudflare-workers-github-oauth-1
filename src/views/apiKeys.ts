@@ -92,6 +92,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .status-expired { background: #a0a0a0; color: white; }
     .empty-row td { text-align: center; color: var(--text-muted); padding: 24px; }
     .key-cell { display: flex; align-items: center; gap: 6px; }
+    .status-cell { display: flex; align-items: center; gap: 8px; }
     .key-textarea {
       font-family: monospace; font-size: 12px; resize: none; overflow: hidden;
       width: 160px; height: 32px; padding: 6px 8px; border: 1px solid var(--input-border);
@@ -118,12 +119,23 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .modal-box { background: var(--card-bg); border-radius: 12px; padding: 28px; max-width: 520px; width: 90%; }
     .modal-box h3 { color: var(--text-primary); margin-bottom: 12px; }
     .modal-box p { color: var(--text-muted); font-size: 13px; margin-bottom: 12px; }
+    .countdown-notice { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; }
+    .countdown-notice.countdown-notice-error { color: var(--danger-color); }
     .raw-key-box {
       font-family: monospace; font-size: 13px; word-break: break-all;
       background: var(--bg-secondary); padding: 12px; border-radius: 8px; margin-bottom: 12px;
       color: var(--text-primary);
     }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .stats-modal-box { max-width: 560px; }
+    .stats-total { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+    .stats-section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin: 16px 0 8px; }
+    .stats-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .stats-bar-label { width: 150px; flex-shrink: 0; font-size: 12px; color: var(--text-secondary); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stats-bar-track { flex: 1; height: 14px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+    .stats-bar-fill { height: 100%; background: var(--accent-color); border-radius: 4px; }
+    .stats-bar-count { width: 44px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--text-secondary); }
+    .stats-empty { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
   </style>
 </head>
 <body>
@@ -199,6 +211,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     <div class="modal-box">
       <h3>✅ APIキーを発行しました</h3>
       <p>このキーは今だけ表示されます。安全な場所に保存してください(再表示はできません)。</p>
+      <p class="countdown-notice" id="countdownNotice"></p>
       <div class="raw-key-box" id="rawKeyText"></div>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="closeRawKeyModal()">閉じる</button>
@@ -212,6 +225,17 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
       <div class="modal-actions">
         <button class="btn" onclick="closeRevokeConfirmModal()">いいえ</button>
         <button class="btn btn-danger" style="background:var(--danger-color);color:white;border:none" onclick="confirmRevoke()">はい</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="statsModal">
+    <div class="modal-box stats-modal-box">
+      <h3>📊 使用統計</h3>
+      <p>このAPIキーで <code>/api/aichat</code> を叩いたリクエストの集計です(セッションでのアクセスは含みません)。</p>
+      <div id="statsBody"><div class="stats-empty">読み込み中...</div></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeStatsModal()">閉じる</button>
       </div>
     </div>
   </div>
@@ -248,7 +272,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         var z = parseInt(el.style.zIndex, 10);
         if (!isNaN(z) && z < 9000 && z > max) max = z;
       });
-      var staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000 };
+      var staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000, statsModal: 2000 };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
         if (el && el.classList.contains('show')) {
@@ -283,7 +307,9 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             '<button class="icon-btn" onclick="copyKeyText(this)">📋 コピー</button>' +
             '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
           '</div></td>' +
-          '<td>' + formatStatus(item) + '</td>' +
+          '<td><div class="status-cell">' + formatStatus(item) +
+            '<button class="icon-btn" onclick="showStats(&#39;' + item.id + '&#39;)">📊 統計</button>' +
+          '</div></td>' +
           '<td>' + escapeHtmlClient(item.created_at) + '</td>' +
           '<td>' + (item.expires_at ? escapeHtmlClient(item.expires_at) : '無期限') + '</td>' +
           '<td>' + (item.last_used_at ? escapeHtmlClient(item.last_used_at) : '未使用') + '</td>' +
@@ -343,7 +369,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             return;
           }
           labelEl.value = '';
-          showRawKeyModal(res.data.rawKey);
+          showRawKeyModal(res.data.rawKey, res.data.countdownNotice, res.data.countdown);
           loadApiKeys();
         })
         .catch(function() { alert('APIキーの発行に失敗しました'); });
@@ -382,8 +408,65 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .catch(function() { alert('APIキーの失効に失敗しました'); });
     }
 
-    function showRawKeyModal(rawKey) {
+    function escapeBarLabel(s) {
+      return escapeHtmlClient(s);
+    }
+
+    function renderStatsBarSection(title, items, labelKey, countKey) {
+      if (!items || items.length === 0) {
+        return '<div class="stats-section-title">' + escapeHtmlClient(title) + '</div>' +
+          '<div class="stats-empty">データがありません</div>';
+      }
+      var max = items.reduce(function(m, it) { return Math.max(m, it[countKey]); }, 1);
+      var rows = items.map(function(it) {
+        var pct = Math.max(4, Math.round((it[countKey] / max) * 100));
+        return '<div class="stats-bar-row">' +
+          '<div class="stats-bar-label" title="' + escapeBarLabel(it[labelKey]) + '">' + escapeBarLabel(it[labelKey]) + '</div>' +
+          '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="stats-bar-count">' + it[countKey] + '</div>' +
+          '</div>';
+      }).join('');
+      return '<div class="stats-section-title">' + escapeHtmlClient(title) + '</div>' + rows;
+    }
+
+    function showStats(id) {
+      var modal = document.getElementById('statsModal');
+      var body = document.getElementById('statsBody');
+      body.innerHTML = '<div class="stats-empty">読み込み中...</div>';
+      modal.style.zIndex = String(getNextZ());
+      modal.classList.add('show');
+
+      fetch('/api/api-keys/' + encodeURIComponent(id) + '/stats', { credentials: 'same-origin' })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+          if (!res.ok) {
+            body.innerHTML = '<div class="stats-empty">' + escapeHtmlClient(res.data.error || '取得に失敗しました') + '</div>';
+            return;
+          }
+          var data = res.data;
+          var html = '<div class="stats-total">合計 ' + data.totalCount + ' 回</div>';
+          // 直近30日分だけをグラフに使う(古いデータで棒が埋もれるのを防ぐ)
+          var recentDays = (data.byDay || []).slice(-30);
+          html += renderStatsBarSection('よく使われているエンドポイント', data.byEndpoint, 'endpoint', 'count');
+          html += renderStatsBarSection('月別(直近)', data.byMonth, 'month', 'count');
+          html += renderStatsBarSection('日別(直近30日)', recentDays, 'day', 'count');
+          body.innerHTML = html;
+        })
+        .catch(function() {
+          body.innerHTML = '<div class="stats-empty">通信エラーが発生しました</div>';
+        });
+    }
+
+    function closeStatsModal() {
+      document.getElementById('statsModal').classList.remove('show');
+    }
+
+    function showRawKeyModal(rawKey, countdownNotice, countdown) {
       document.getElementById('rawKeyText').textContent = rawKey;
+      var noticeEl = document.getElementById('countdownNotice');
+      noticeEl.textContent = countdownNotice || '';
+      noticeEl.className = 'countdown-notice';
+      if (countdown && countdown.ok === false) noticeEl.classList.add('countdown-notice-error');
       var modal = document.getElementById('rawKeyModal');
       modal.style.zIndex = String(getNextZ());
       modal.classList.add('show');

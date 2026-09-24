@@ -1,6 +1,6 @@
 # API リファレンス: cloudflare-workers-github-oauth-1
 
-最終更新: 2026-03-16
+最終更新: 2026-09-24
 
 ---
 

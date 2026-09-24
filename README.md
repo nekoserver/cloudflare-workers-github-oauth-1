@@ -119,6 +119,31 @@ git switch -c feat/<task-name>
 git push -u origin feat/<task-name>
 ```
 
+#### `origin` が未設定で Git コマンドが失敗する場合
+
+`git fetch origin` や `git push` が `fatal: 'origin' does not appear to be a git repository`
+で失敗する場合は、まずリモート設定を確認してください。
+
+```bash
+git remote -v
+```
+
+何も表示されなければ、このリポジトリの `origin` を追加してから接続を確認します。
+
+```bash
+git remote add origin https://github.com/nekoserver/cloudflare-workers-github-oauth-1.git
+git ls-remote --heads origin main
+```
+
+すでに誤った `origin` が登録されている場合は、追加ではなく URL を修正します。
+
+```bash
+git remote set-url origin https://github.com/nekoserver/cloudflare-workers-github-oauth-1.git
+```
+
+なお、`CONNECT tunnel failed` などが表示される場合は Git の設定ではなく、実行環境の
+プロキシーまたはネットワーク制限を確認してください。
+
 さらに GitHub 側で以下を有効化してください。
 
 - `main` への直接 push を禁止（Branch protection rule）
@@ -134,11 +159,64 @@ git config core.hooksPath .githooks
 この設定後は `main` / `master` への直接 push が拒否され、PR 運用を強制できます。
 （緊急時のみ `ALLOW_MAIN_PUSH=1 git push ...` で一時的に回避）
 
+#### VMローカルに残った作業ブランチの整理
+
+ローカルブランチを「ベースへマージ済み」と「未マージ」に分類する監査コマンドを用意しています。
+既定では確認だけを行い、ブランチを変更しません。
+
+```bash
+npm run branches:audit
+```
+
+`origin/main`、`main`、`origin/master`、`master`の順に存在するベースを自動選択します。
+明示する場合は`npm run branches:audit -- --base origin/main`を使います。`unmerged`と表示された
+ブランチは自動削除されないため、差分を確認してpush・PR作成・マージまたはPRクローズを判断してください。
+
+マージ済みブランチだけを削除する場合は次を実行します。
+
+```bash
+npm run branches:cleanup
+```
+
+このコマンドも、現在チェックアウト中のブランチと`main`/`master`は削除しません。PRの状態は
+GitHub側の情報でありローカルGitだけでは確定できないため、未マージブランチを一括削除・一括マージする
+危険な処理は行いません。作業開始前に監査結果が0件であることを確認し、1タスク1ブランチを徹底します。
+
 「マージの瞬間」と「既存ビルドの完了」が重なる構成は、実際に不整合の原因になり得るため、タイミング調整とブランチ運用の固定化は推奨です。
 
 ---
 
 ## セットアップ
+
+### D1ダッシュボード
+
+`/cf-dashboard` では、標準でこのWorkerの`DB`バインディングに接続されたD1データベースと
+テーブルを一覧表示します。ページと配下APIは、`CF_DASHBOARD_ADMIN_GITHUB_IDS`に
+GitHub numeric IDが登録された管理者だけが利用できます。未設定または不正な設定では
+全ユーザーを拒否します（GitHubの変更可能なlogin名ではなく、プロフィールAPIの`id`値を使用します）。
+
+このリポジトリの`wrangler.toml`には、デプロイ直後に管理者設定が未構成とならないよう
+リポジトリ管理者のnumeric IDを既定値として設定しています。別の管理者へ変更する場合は
+`[vars]`の値を変更してください。GitHub numeric IDは公開情報なのでsecretにする必要はありません。
+
+```toml
+CF_DASHBOARD_ADMIN_GITHUB_IDS = "12345,67890"
+```
+
+複数の管理者を許可する場合は、numeric IDをカンマ区切りで設定してください。この表示には
+Cloudflare APIのsecretは不要です。
+
+アカウント内の全D1データベースを一覧表示する場合のみ、D1の読み取り権限を付与した
+API Tokenと次のsecretを設定してください。
+
+```bash
+wrangler secret put CLOUDFLARE_API_KEY
+wrangler secret put CLOUDFLARE_ACCOUNT_ID
+```
+
+Global API Keyを使う場合は、さらに `wrangler secret put CLOUDFLARE_API_EMAIL` を実行します。
+APIキーはブラウザへ送信されずWorkerからCloudflare APIを呼び出します。テーブル一覧には、
+Wranglerが依存するBLAKE3 WASMで算出したダイジェストも表示されます。
 
 ### 1. 依存パッケージのインストール
 
@@ -260,6 +338,7 @@ npm run deploy
 | `npm run dev` | ローカル開発サーバー起動 |
 | `npm run deploy` | Cloudflare Workers へデプロイ |
 | `npm run typecheck` | TypeScript 型チェック（`tsc --noEmit`） |
+| `npm run test:tvupdate` | `/neko tvupdate` の手動実行経路（コマンド解釈・D1更新・並列同期）だけを検証 |
 | `npm run db:migrate:local` | D1 ローカルマイグレーション |
 | `npm run db:migrate:remote` | D1 リモートマイグレーション |
 

@@ -25,6 +25,8 @@
  *   (13) SQL全文を未エスケープで埋め込みXSSが起きる、またはWASM実行用CSPが不足する
  *   (14) 詳細ダイアログが既存モーダルの背面に入り、キーボードで開閉・復帰できない
  *   (15) 一覧では色分けされるSQLが、詳細ダイアログではプレーンテキストに戻る
+ *   (16) テーブル帯を開いても、バインド値なしで実行できるSQLと入力が必要なSQLを
+ *        行の枠色とテキストで判別できない
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from './index';
@@ -168,12 +170,82 @@ describe('GET /d1-query-catalog', () => {
     expect(sqlCellRule![0]).toContain('white-space: nowrap');
   });
 
-  it('コマンド確定件数がサマリに表示される', () => {
+  it('全件検査と実行メソッド確認済み件数を混同せずに表示する', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
       { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null, last_commit_at: null },
     ]);
-    expect(html).toContain('2件中、コマンド種別確定済み1件');
+    expect(html).toContain('カタログ全2件');
+    expect(html).toContain('実行メソッド確認済み1件');
+    expect(html).toContain('SQL動詞からの推定1件');
+    expect(html).not.toContain('コマンド種別確定済み1件(sqlcパーサーで検証済み)');
+  });
+
+  it('推定分を含むカタログ全件をsqlcアノテーションパーサーで一括検査できる', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'one', command_confirmed: 1, table_name: 't', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT 1', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 0, table_name: 't', source_file: 'src/index.ts', source_line: 2, sql_text: 'DELETE FROM t', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('id="verifyAllAnnotationsButton"');
+    expect(html).toContain('全2件のアノテーションを検査');
+    expect(html).toContain('id="catalogVerificationStatus"');
+    expect(html).toContain("document.querySelectorAll('#tableBands tbody tr')");
+    expect(html).toContain("globalThis.sqlcParseQueryAnnotations(input)");
+    expect(html).toContain("'全' + catalogRows.length + '件のアノテーション形式を検査しました");
+    expect(html).toContain('SQL構文・スキーマ・実行結果の検証ではありません');
+  });
+
+  it('登録位置・クエリ名の重複を修正必須として検出し、修正プランを表示する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'DuplicateName', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'duplicatename', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT name FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('重複登録監査');
+    expect(html).toContain('修正必須 2グループ / 要確認 0グループ');
+    expect(html).toContain('登録位置の重複');
+    expect(html).toContain('クエリ名の重複');
+    expect(html).toContain('修正プラン');
+    expect(html).toContain('migration 0154');
+  });
+
+  it('空白と大文字小文字だけが異なる同一SQLは、自動削除せず要確認候補にする', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'FindUserA', command: 'one', command_confirmed: 1, table_name: 'users', source_file: 'src/a.ts', source_line: 1, sql_text: 'SELECT id FROM users WHERE id = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'FindUserB', command: 'one', command_confirmed: 1, table_name: 'users', source_file: 'src/b.ts', source_line: 2, sql_text: ' select ID   from USERS where ID = ? ', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('修正必須 0グループ / 要確認 1グループ');
+    expect(html).toContain('同一SQL（要確認）');
+    expect(html).toContain('意図的な再利用は維持する');
+    expect(html).toContain('id="duplicateAuditToggle"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('id="duplicateAuditContent" hidden');
+    expect(html).toContain("duplicateAuditContent.hidden = expanded;");
+  });
+
+  it('修正必須の重複がある場合は監査内容を初期表示する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'DuplicateName', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'duplicatename', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/index.ts', source_line: 10, sql_text: 'SELECT name FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('id="duplicateAuditToggle"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('id="duplicateAuditContent">');
+    expect(html).not.toContain('id="duplicateAuditContent" hidden');
+  });
+
+  it('重複がない場合は重複登録監査を表示しない', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'A', command: 'many', command_confirmed: 1, table_name: 'users', source_file: 'src/a.ts', source_line: 1, sql_text: 'SELECT id FROM users', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'B', command: 'exec', command_confirmed: 1, table_name: 'users', source_file: 'src/b.ts', source_line: 2, sql_text: 'UPDATE users SET name = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).not.toContain('重複登録監査');
+    expect(html).not.toContain('<section class="duplicate-audit"');
+    expect(html).not.toContain('修正プラン');
   });
 
   it('発行SQL種別の複数選択セレクトボックスが、出現回数の多い順で表示される', () => {
@@ -361,6 +433,78 @@ describe('GET /d1-query-catalog', () => {
     expect(countIdx).toBeLessThan(nameIdx);
   });
 
+  it('入力不要が1件以上なら薄緑、入力必要は常に赤のバッジで示し、行の背景色は変えない', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'ListItems', command: 'many', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT * FROM items', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'FindItem', command: 'one', command_confirmed: 1, table_name: 'items', source_file: 'src/index.ts', source_line: 2, sql_text: "SELECT * FROM items WHERE id = ? AND note = '?'", migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<span class="binding-summary-no has-items">入力不要 1</span>');
+    expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
+    expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
+    expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="2">');
+    expect(html).toContain('このSQLにはバインド値がなく、そのまま実行できます');
+    expect(html).toContain('このSQLの実行には2個のバインド値が必要です');
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings td\s*\{[^}]*background:/);
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings td:first-child\s*\{[^}]*box-shadow:/);
+    expect(html).not.toMatch(/tbody tr\.query-with-bindings td\s*\{[^}]*background:/);
+    expect(html).not.toMatch(/tbody tr\.query-with-bindings td:first-child\s*\{[^}]*box-shadow:/);
+    expect(html).toMatch(/\.binding-summary-no\.has-items\s*\{[^}]*border-color: #16a34a;[^}]*background: light-dark\(#dcfce7, #143d24\);/);
+    expect(html).toMatch(/\.binding-summary-required\s*\{[^}]*border-color: #dc2626;/);
+    expect(html).toMatch(/\.query-no-bindings \.binding-status\s*\{[^}]*border-color: #d97706;/);
+    expect(html).toMatch(/\.query-with-bindings \.binding-status\s*\{[^}]*border-color: #16a34a;/);
+    expect(html).toMatch(/\.binding-summary-required\s*\{[^}]*background: transparent;/);
+    expect(html).toMatch(/\.query-no-bindings \.binding-status\s*\{[^}]*background: transparent;/);
+    expect(html).toMatch(/\.query-with-bindings \.binding-status\s*\{[^}]*background: transparent;/);
+  });
+
+  it('SQL本文に ? も $ も無い場合だけバインド値なしに分類する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'WineNames', command: 'many', command_confirmed: 1, table_name: 'wine_embeddings', source_file: 'src/index.ts', source_line: 1, sql_text: 'SELECT wine_name FROM wine_embeddings', migration_file: null, last_commit_hash: null, last_commit_at: null },
+      { query_name: 'WineByName', command: 'one', command_confirmed: 1, table_name: 'wine_embeddings', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT wine_name FROM wine_embeddings WHERE wine_name = $wine_name', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<span class="binding-summary-no has-items">入力不要 1</span>');
+    expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
+    expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
+    expect(html).toContain('<tr class="query-with-bindings" data-verb="SELECT" data-binding-count="1">');
+  });
+
+  it('バインド値なしのSQLはアコーディオン内で行全体を中抜きの注意色枠にする', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      {
+        query_name: 'ListHeritageCities',
+        command: 'many',
+        command_confirmed: 1,
+        table_name: 'heritage_cities',
+        source_file: 'src/index.ts',
+        source_line: 1,
+        sql_text: 'SELECT city_name, country_code, ROUND(AVG(city_lat), 4) AS city_lat, ROUND(AVG(city_lon), 4) AS city_lon, MAX(population) AS population FROM heritage_cities GROUP BY city_name, country_code',
+        migration_file: null,
+        last_commit_hash: null,
+        last_commit_at: null,
+      },
+      { query_name: 'FindHeritageCity', command: 'one', command_confirmed: 1, table_name: 'heritage_cities', source_file: 'src/index.ts', source_line: 2, sql_text: 'SELECT * FROM heritage_cities WHERE city_name = ?', migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<tr class="query-no-bindings" data-verb="SELECT" data-binding-count="0">');
+    expect(html).toMatch(/tbody tr\.query-no-bindings\s*\{[^}]*outline: 2px solid #d97706;[^}]*outline-offset: -2px;/);
+    expect(html).not.toMatch(/tbody tr\.query-with-bindings\s*\{[^}]*outline:/);
+    expect(html).not.toMatch(/tbody tr\.query-no-bindings\s*\{[^}]*background:/);
+  });
+
+  it('文字列・コメント中であってもSQL本文に ? があれば入力必要に分類する', () => {
+    const html = getD1QueryCatalogPage('tester', [
+      { query_name: 'QuestionText', command: 'many', command_confirmed: 1, table_name: 'messages', source_file: 'src/index.ts', source_line: 3, sql_text: "SELECT '?' AS mark FROM messages -- ? is documentation", migration_file: null, last_commit_hash: null, last_commit_at: null },
+    ]);
+
+    expect(html).toContain('<span class="binding-summary-no">入力不要 0</span>');
+    expect(html).toContain('<span class="binding-summary-required">入力必要 1</span>');
+    expect(html).not.toContain('<span class="binding-summary-no has-items">入力不要 0</span>');
+    expect(html).toContain('data-binding-count="2"');
+    expect(html).not.toContain('data-binding-count="0"');
+  });
+
   it('「コマンド」と「SQL」の間に「最終コミット日時」列がありYMD HMS形式で表示される', () => {
     const html = getD1QueryCatalogPage('tester', [
       { query_name: 'A', command: 'exec', command_confirmed: 1, table_name: 'foo', source_file: 'src/index.ts', source_line: 1, sql_text: 'INSERT INTO foo VALUES (1)', migration_file: null, last_commit_hash: 'abcdef1234567890', last_commit_at: '2026-05-31 00:36:59' },
@@ -408,6 +552,18 @@ describe('GET /d1-query-catalog', () => {
     expect(html).toContain('id="copySqlcButton"');
     expect(html).toContain('id="closeSqlDetailButton"');
     expect(html).toContain('DBへの問い合わせ、スキーマ照合、完全なsqlc構文解析は行いません。');
+  });
+
+  it('SQL全文コードブロック右側のRunボタンから登録済みSQLを実行できる', () => {
+    const html = getD1QueryCatalogPage('tester', []);
+    expect(html).toContain('class="sql-detail-code-wrap"');
+    expect(html).toContain('id="runSqlButton"');
+    expect(html).toContain('Run▶︎');
+    expect(html).toContain("fetch('/api/d1-query-catalog/run'");
+    expect(html).toContain("runSqlButton.addEventListener('click', runCurrentSql)");
+    expect(html).toContain('id="sqlRunResult"');
+    expect(html).toContain('id="sqlBindingsInput"');
+    expect(html).toContain('JSON.stringify({ queryName: queryName, bindings: bindings })');
   });
 
   it('詳細モーダルからSQLite(D1)検査を明示的に実行できる', () => {
@@ -493,6 +649,91 @@ describe('GET /d1-query-catalog', () => {
     expect(html).not.toContain('d1_query_catalog_sort=');
     expect(html).not.toContain('localStorage.setItem');
     expect(html).not.toContain('localStorage.getItem');
+  });
+});
+
+describe('POST /api/d1-query-catalog/run', () => {
+  it('クライアントのSQLではなくカタログから取得したSQLを実行して結果を返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const all = vi.fn().mockResolvedValue({ results: [{ value: 1 }], success: true });
+    const first = vi.fn().mockResolvedValue({ sql_text: 'SELECT 1 AS value', command: 'one' });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        bind: vi.fn().mockReturnValue({ first, all: vi.fn(), run: vi.fn() }),
+        first: vi.fn().mockImplementation(() => sql.includes('user_sessions') ? Promise.resolve({ revoked_at: null }) : Promise.resolve(null)),
+        all: sql === 'SELECT 1 AS value' ? all : vi.fn(),
+        run: vi.fn(),
+      })),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'SelectOne', sql: 'DROP TABLE users' }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(200);
+    expect(db.prepare).toHaveBeenCalledWith('SELECT 1 AS value');
+    expect(all).toHaveBeenCalledOnce();
+    expect(await res.json()).toEqual({ ok: true, result: { results: [{ value: 1 }], success: true } });
+  });
+
+  it('カタログに存在しないクエリは実行しない', async () => {
+    const authHeader = await makeAuthHeader();
+    const db = createMockDb();
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'Missing' }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(404);
+  });
+
+  it('カタログSQLのプレースホルダーへリクエストの値をバインドして実行する', async () => {
+    const authHeader = await makeAuthHeader();
+    const all = vi.fn().mockResolvedValue({ results: [{ id: 7 }], success: true });
+    const executionBind = vi.fn().mockReturnValue({ all });
+    const catalogFirst = vi.fn().mockResolvedValue({
+      sql_text: 'SELECT id FROM items WHERE user_id = ? AND score >= ?',
+      command: 'many',
+    });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('user_sessions')) {
+          return { bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }) };
+        }
+        if (sql.includes('FROM d1_query_catalog')) {
+          return { bind: vi.fn().mockReturnValue({ first: catalogFirst }) };
+        }
+        return { bind: executionBind, all, run: vi.fn() };
+      }),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'ItemsByScore', bindings: ['user-1', 80] }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(200);
+    expect(executionBind).toHaveBeenCalledWith('user-1', 80);
+    expect(all).toHaveBeenCalledOnce();
+  });
+
+  it('必要なバインド値が不足するとD1実行前に必要数を返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const catalogFirst = vi.fn().mockResolvedValue({ sql_text: 'SELECT * FROM items WHERE user_id = ?', command: 'many' });
+    const db = {
+      prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('user_sessions')) {
+          return { bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }) };
+        }
+        return { bind: vi.fn().mockReturnValue({ first: catalogFirst }) };
+      }),
+    };
+    const res = await app.request('/api/d1-query-catalog/run', {
+      method: 'POST',
+      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryName: 'Items', bindings: [] }),
+    }, { JWT_SECRET, DB: db });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'このSQLには1個のバインド値が必要です（受信: 0個）。', bindingCount: 1 });
   });
 });
 

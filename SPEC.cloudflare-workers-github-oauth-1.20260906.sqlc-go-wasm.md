@@ -78,6 +78,8 @@ MySQL、SQLiteの構文解析、スキーマとの型照合、コード生成を
 - `sqlc-wasm_exec.js`と`sqlc.wasm`はdynamic import／fetchで読み込む。
 - `go.run()`は待機せず、Go側`main()`をブロックしてグローバル関数を存続させる。
 - WASM初期化完了までは解析ボタンを無効にする。
+- WASM初期化後は初期サンプルを解析し、入力変更から250msのデバウンス後に結果をライブ更新する。
+- 手動解析ボタンとCtrl/Cmd+Enterでも待機中の解析を即時実行できる。
 - 読み込み失敗と呼び出し例外は利用者へ表示し、握りつぶさない。
 - WebAssembly実行を許可するため、`/sqlc-wasm`だけのCSPに`'wasm-unsafe-eval'`を追加する。
 

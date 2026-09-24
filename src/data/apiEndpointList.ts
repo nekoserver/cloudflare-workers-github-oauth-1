@@ -4,7 +4,7 @@
 export type ApiEndpointEntry = { group: string; method: string; path: string; desc: string };
 
 export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
-  { group: 'AI チャット', method: 'POST', path: '/api/aichat', desc: 'AI にメッセージを送信（/neko ローカルコマンドではAIを呼ばず応答し、uuidgen4・uuidgen7は生成したUUIDを履歴にも保存する）' },
+  { group: 'AI チャット', method: 'POST', path: '/api/aichat', desc: 'AI にメッセージを送信（/neko ローカルコマンドではAIを呼ばず応答し、一覧は /neko help で確認可能。uuidgen4・uuidgen7は生成したUUIDを履歴にも保存する）' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares/search', desc: 'AIチャット全文検索' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares/calendar', desc: '月別カレンダー' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/daily-stats', desc: '日別統計（キーワード・モデル）' },
@@ -149,8 +149,9 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/email-confirm-login', desc: 'ログイン確認メールゲートON/OFF設定' },
   { group: 'プロフィール・設定', method: 'GET', path: '/api/settings/slack-notify', desc: 'Slack通知設定の現在値取得(CF_AUTH_WEBHOOK_SECRETのBearer認証が必要)' },
   { group: 'プロフィール・設定', method: 'POST', path: '/api/settings/slack-notify', desc: 'Slack通知ON/OFF設定' },
-  { group: 'APIキー管理', method: 'GET', path: '/api/api-keys', desc: '🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)' },
-  { group: 'APIキー管理', method: 'POST', path: '/api/api-keys', desc: 'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)' },
+  { group: 'APIキー管理', method: 'GET', path: '/api/api-keys', desc: '🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まず、失効済みキーは失効後7日以内のみ表示)' },
+  { group: 'APIキー管理', method: 'POST', path: '/auth/public-key/available', desc: 'ブラウザに保存された公開鍵のうち、未失効かつ有効期限内のキーIDを取得' },
+  { group: 'APIキー管理', method: 'POST', path: '/api/api-keys', desc: 'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)。有効期限付きなら /countdown へ予定名 PK期限 を予約する' },
   { group: 'APIキー管理', method: 'POST', path: '/api/api-keys/:id/revoke', desc: 'APIキー失効(自分が発行したキーのみ)' },
   { group: 'ワークスペース・関数', method: 'GET', path: '/api/workspaces', desc: 'ワークスペース一覧' },
   { group: 'ワークスペース・関数', method: 'POST', path: '/api/workspaces/switch', desc: 'ワークスペース切り替え' },

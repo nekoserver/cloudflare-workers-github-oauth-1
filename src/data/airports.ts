@@ -391,6 +391,7 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "STR", name: "シュトゥットガルト空港", city: "🇩🇪 ドイツ・シュトゥットガルト", lat: 48.6899, lon: 9.222 },
   { code: "GVA", name: "ジュネーブ空港", city: "🇨🇭 スイス・ジュネーブ", lat: 46.2381, lon: 6.1089 },
   { code: "SXB", name: "ストラスブール空港", city: "🇫🇷 フランス・ストラスブール", lat: 48.5383, lon: 7.6282 },
+  { code: "LKCS", name: "チェスケー・ブジェヨヴィツェ空港", city: "🇨🇿 チェコ・チェスケー・ブジェヨヴィツェ", lat: 48.9482, lon: 14.4283 },
   { code: "TRS", name: "トリエステ空港", city: "🇮🇹 イタリア・トリエステ", lat: 45.8275, lon: 13.4722 },
   { code: "TRN", name: "トリノ空港", city: "🇮🇹 イタリア・トリノ", lat: 45.2008, lon: 7.6497 },
   { code: "EPTO", name: "トルン空港", city: "🇵🇱 ポーランド・トルン", lat: 53.0292, lon: 18.5459 },

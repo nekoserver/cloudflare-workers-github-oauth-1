@@ -25,12 +25,15 @@ describe('世界遺産ページ 見どころモーダルのMarkdown描画', () =
     expect(html).toContain('.mitokoro-md table');
   });
 
-  it('取得した回答があればparseMdでHTMLに変換してinnerHTMLへ描画する', () => {
-    expect(html).toMatch(/if \(data\.answer\) \{\s*body\.innerHTML = parseMd\(data\.answer\);/);
+  it('取得した回答があればparseMd経由のrenderMitokoroAnswerWithKeywordHighlightsでHTMLへ描画する', () => {
+    expect(html).toContain('function renderMitokoroAnswerWithKeywordHighlights(answerText, keywords, enabled)');
+    expect(html).toContain("var html = parseMd(answerText || '');");
+    expect(html).toContain('body.innerHTML = renderMitokoroAnswerWithKeywordHighlights(answerText, hitKeywords, highlightEnabled);');
+    expect(html).toContain('if (data.answer)');
   });
 
   it('回答が無い場合はtextContentのままerror/未応答メッセージを表示する（Markdown解釈しない）', () => {
-    expect(html).toMatch(/\} else \{\s*body\.textContent = data\.error \|\| '（応答なし）';\s*\}/);
+    expect(html).toContain("body.textContent = data.error || '（応答なし）';");
   });
 
   it('通信エラー時もtextContentのまま表示する', () => {

@@ -54,6 +54,24 @@ export function getCountdownWidgetCSS(): string {
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .widget-label[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .widget-cron-label { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+    .widget-cron-tooltip {
+      visibility: hidden; opacity: 0; position: absolute; right: 0; bottom: calc(100% + 8px);
+      z-index: 2; width: min(290px, 78vw); padding: 10px; border-radius: 8px;
+      background: var(--text-primary); color: var(--card-bg); line-height: 1.5;
+      pointer-events: none; transition: opacity .15s ease;
+    }
+    .widget-cron-label:hover .widget-cron-tooltip,
+    .widget-cron-label:focus-within .widget-cron-tooltip { visibility: visible; opacity: 1; pointer-events: auto; }
+    .widget-cron-health {
+      display: inline-flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 3px 8px;
+      border-radius: 999px; color: #fff; text-decoration: none; font-weight: 700;
+    }
+    .widget-cron-health::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .widget-cron-health-healthy { background: #1a7f37; }
+    .widget-cron-health-warning, .widget-cron-health-unknown { background: #9a6700; }
+    .widget-cron-description { display: block; }
     .widget-clock { font-size: 20px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     #countdownToast {
       position: fixed;
@@ -92,7 +110,12 @@ export function getCountdownWidgetHTML(): string {
  * 呼び出し元のスクリプトが独自に`pad2`等の同名変数を持っていても衝突しないよう、
  * このスクリプト内で完結させ外部のグローバル関数には依存しない。
  */
-export function getCountdownWidgetScript(): string {
+export function getCountdownWidgetScript(cronHealth: { state: string; label: string } = {
+  state: 'unknown',
+  label: '確認できません',
+}): string {
+  const safeState = JSON.stringify(cronHealth.state);
+  const safeLabel = JSON.stringify(cronHealth.label);
   return `
     (function() {
       var widget = document.getElementById('countdownWidget');
@@ -102,6 +125,8 @@ export function getCountdownWidgetScript(): string {
       var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
       var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
       var toastHideTimer = null;
+      var cronHealthState = ${safeState};
+      var cronHealthLabel = ${safeLabel};
 
       function clampPosition(left, top, widgetWidth, widgetHeight, viewportWidth, viewportHeight) {
         var maxLeft = Math.max(0, viewportWidth - widgetWidth);
@@ -224,6 +249,25 @@ export function getCountdownWidgetScript(): string {
           var label = document.createElement('div');
           label.className = 'widget-label';
           label.textContent = event.label;
+          if (event.label === 'tree-view cron更新') {
+            label.classList.add('widget-cron-label');
+            label.tabIndex = 0;
+            label.setAttribute('aria-label', label.textContent + '。Cronステータス: ' + cronHealthLabel);
+            var tooltip = document.createElement('span');
+            tooltip.className = 'widget-cron-tooltip';
+            tooltip.setAttribute('role', 'tooltip');
+            var health = document.createElement('a');
+            health.href = '/cron-status';
+            health.className = 'widget-cron-health widget-cron-health-' + cronHealthState;
+            health.textContent = 'Health: ' + cronHealthLabel;
+            health.setAttribute('aria-label', 'Cron稼働状況を開く: ' + cronHealthLabel);
+            var description = document.createElement('span');
+            description.className = 'widget-cron-description';
+            description.textContent = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に自動更新されます。表示中の残り時間は次回cron開始までです。';
+            tooltip.appendChild(health);
+            tooltip.appendChild(description);
+            label.appendChild(tooltip);
+          }
           var clock = document.createElement('div');
           clock.className = 'widget-clock';
           timer.appendChild(label);

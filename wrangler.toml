@@ -14,6 +14,9 @@ assets = { directory = "./public" }
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
 AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# GitHubのnumeric IDは公開情報であり、デプロイ直後から管理者認可が機能するよう
+# このWorkerの管理者を明示する。複数人の場合はカンマ区切りで追加する。
+CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 # 通知（GitHub Webhook通知・/pts等）の送信先スイッチ。"worker" にすると
 # 外部Workerへの送信に切り替わる。未設定・それ以外の値は従来どおり "slack"
 # NOTIFY_TARGET = "worker"
@@ -48,6 +51,26 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #   KIMI_CODE_EXTERNAL_SECRET  # dynamicnekoのNew SnippetウィジェットがPOST
 #                               # /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。
 #                               # dynamicneko側も同じ変数名(KIMI_CODE_EXTERNAL_SECRET)・同じ値で設定する
+#   JEV_PLAYGROUND_EXTERNAL_SECRET  # dynamicnekoのJev Playground専用Bearer認証シークレット。
+#     JEV_API_KEYの代理利用経路を他のexternal APIから分離するため、AICHAT_EXTERNAL_SECRETとは
+#     必ず異なる値をsecretで設定し、dynamicneko側にも同じ値を設定する。未設定時は移行互換性のため
+#     AICHAT_EXTERNAL_SECRETを使用するが、専用secretを両Workerへ設定して切り替えることを推奨する。
+#   CURSOR_API_KEY  # /cursor-agent が使うCursor Background Agent APIのAPIキー
+#     未設定の場合、/cursor-agentからの起動は実行前に拒否される(Cursor APIへは
+#     リクエストしない)。secretで管理し、[vars]には平文で書かないこと。
+#     設定手順: wrangler secret put CURSOR_API_KEY
+#   CLOUDFLARE_API_KEY  # /cf-dashboardでアカウント内の全D1を列挙する場合のみ必要
+#                       # API TokenまたはGlobal API Key（secretで管理）
+#   CLOUDFLARE_ACCOUNT_ID  # 上記API利用時にD1を列挙するアカウントID
+#   CLOUDFLARE_API_EMAIL  # Global API Key利用時のみ必要（API Tokenでは不要）
+#   CF_DASHBOARD_ADMIN_GITHUB_IDS  # /cf-dashboardを許可するGitHub numeric ID（カンマ区切り）
+#     GitHubプロフィールAPIのid値を[vars]に設定する（公開情報なのでsecretでなくてよい）。
+#     未設定・不正な値の場合は全員を拒否する。
+#   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
+#   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
+#     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、
+#     [vars]には平文で書かないこと（CLAUDE.mdルール4）。
+#     設定手順: wrangler secret put GOOGLE_CSE_API_KEY / wrangler secret put GOOGLE_CSE_CX
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
 #   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/meta/llama-3.3-70b-instruct-fp8-fast）
 #     注意: gemma-4-26b-a4b-it はsystem messageが存在すると enable_thinking:false を無視して
@@ -90,3 +113,10 @@ enabled = true
 [[analytics_engine_datasets]]
 binding = "ANALYTICS"
 dataset = "github_oauth_metrics"
+
+# /tree-view（dynamicneko）のサイドバーツリー用スナップショット（tree_view_snapshots）を
+# 6時間ごとに再同期する（src/worker-entry.tsのscheduled()、installation_permissionsに
+# 記録済みのnekoserver組織配下リポジトリが対象。新しいリポジトリへのGitHub App
+# インストールも次回実行時に自動反映される）。
+[triggers]
+crons = ["0 */6 * * *"]

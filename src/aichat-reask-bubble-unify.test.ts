@@ -34,7 +34,7 @@ describe('応答バブル共通化: buildAssistantBubble', () => {
   });
 
   it('buildAssistantBubble がトークン数表示を生成する', () => {
-    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 3000);
+    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 10700);
     expect(fn).toContain('input_tokens');
     expect(fn).toContain('output_tokens');
     expect(fn).toContain('total_tokens');
@@ -42,12 +42,12 @@ describe('応答バブル共通化: buildAssistantBubble', () => {
   });
 
   it('buildAssistantBubble がフォールバック通知を生成する', () => {
-    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 3000);
+    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 3400);
     expect(fn).toContain('bubble-fallback-notice');
   });
 
   it('usage が欠落していてもトークン表示をスキップするガードがある', () => {
-    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 3000);
+    const fn = sliceFn(buildPage(), 'buildAssistantBubble(', 3400);
     expect(fn).toMatch(/usage && \(usage\.input_tokens != null \|\| usage\.total_tokens != null\)/);
   });
 });

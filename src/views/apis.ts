@@ -9,8 +9,9 @@ export function getApisPage(): string {
 <title>API テスター</title>
 <style>
 :root{
-  --bg:#f6f8fa;--surface:#fff;--border:#d0d7de;--text:#1f2328;--muted:#656d76;
+  --bg:#f4f7fb;--surface:#fff;--surface-subtle:#f8fafc;--border:#d8e0ea;--text:#18212f;--muted:#657184;
   --link:#0969da;--nav-h:40px;--radius:6px;--hl:#fff8e1;
+  --accent:#2563eb;--accent-soft:#eaf2ff;--shadow:0 12px 35px rgba(28,44,74,.09);
   --get:#1a7f37;--get-bg:#dafbe1;--post:#0969da;--post-bg:#ddf4ff;
   --put:#9a6700;--put-bg:#fff8c5;--delete:#cf222e;--delete-bg:#ffebe9;
   --patch:#6639ba;--patch-bg:#fbefff;--hl:#ddf4ff;
@@ -18,8 +19,9 @@ export function getApisPage(): string {
   --search-hl:#ffe066;--search-hl-text:#1f2328;
 }
 @media(prefers-color-scheme:dark){
-  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  :root{--bg:#0b1018;--surface:#151c26;--surface-subtle:#111822;--border:#2b3645;--text:#edf2f7;--muted:#94a3b8;
   --link:#58a6ff;--hl:#0c2d6b;
+  --accent:#60a5fa;--accent-soft:#10294d;--shadow:0 14px 40px rgba(0,0,0,.28);
   --get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
   --put:#e3b341;--put-bg:#2d1f00;--delete:#f85149;--delete-bg:#300a0a;
   --patch:#bc8cff;--patch-bg:#1d0f33;--query:#56d364;--query-bg:#0d2818;--search-hl:#6b5000;--search-hl-text:#e6edf3;}
@@ -30,7 +32,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 /* ── top nav ── */
 #topnav{
   height:var(--nav-h);min-height:var(--nav-h);flex-shrink:0;
-  background:var(--surface);border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface) 92%,transparent);border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:1px;padding:0 8px;overflow-x:auto;
   scrollbar-width:none;
 }
@@ -39,6 +41,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   display:flex;align-items:center;gap:6px;flex-shrink:0;padding-right:8px;margin-right:5px;
   border-right:1px solid var(--border);color:var(--text);font-size:12px;font-weight:700;
 }
+.brand-mark{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;font:800 10px/1 monospace;box-shadow:0 4px 10px color-mix(in srgb,var(--accent) 30%,transparent);}
 .nav-home-count{padding:1px 5px;border-radius:999px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:600;}
 .workflow-browser-link{
   display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;
@@ -187,8 +190,18 @@ mark.hl-match{
 .desc-text{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;}
 
 /* ── main ── */
-#main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
-#welcome{display:flex;align-items:center;justify-content:center;flex:1;color:var(--muted);font-size:14px;}
+#main{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column;background:radial-gradient(circle at 82% 5%,var(--accent-soft),transparent 32%),var(--bg);}
+#welcome{display:flex;align-items:center;justify-content:center;flex:1;padding:32px;color:var(--muted);font-size:14px;}
+.welcome-card{width:min(680px,100%);padding:34px;border:1px solid var(--border);border-radius:16px;background:color-mix(in srgb,var(--surface) 94%,transparent);box-shadow:var(--shadow);}
+.welcome-eyebrow{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:9px;}
+.welcome-title{color:var(--text);font-size:clamp(24px,4vw,38px);line-height:1.15;letter-spacing:-.035em;margin-bottom:11px;}
+.welcome-copy{max-width:540px;font-size:14px;line-height:1.75;}
+.welcome-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:25px;}
+.welcome-stat{padding:13px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle);}
+.welcome-stat strong{display:block;color:var(--text);font-size:19px;line-height:1.2;}
+.welcome-stat span{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.welcome-tip{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:12px;}
+kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--surface);color:var(--text);font:11px/1.5 monospace;}
 #detail{display:none;flex-direction:column;padding:20px 24px;gap:14px;max-width:820px;width:100%;}
 .ep-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .ep-title{font-size:15px;font-weight:600;font-family:monospace;word-break:break-all;}
@@ -216,6 +229,11 @@ mark.hl-match{
 .req-note-auth{background:#ddf4ff;color:#0969da;}
 .req-note-null{background:#ffebe9;color:#cf222e;}
 .type-badge{color:var(--muted);font-size:10px;font-weight:normal;}
+@media(max-width:720px){
+  #topnav{padding-inline:6px}.workflow-browser-link{font-size:0;padding:4px 7px}.workflow-browser-link::after{content:'利用状況';font-size:11px}
+  #sidebar{width:176px;min-width:176px}#desc-panel{left:176px}#desc-panel.open{width:176px}
+  #detail{padding:16px}.welcome-stats{grid-template-columns:1fr}.welcome-card{padding:24px}.welcome-stat{display:flex;align-items:center;justify-content:space-between}
+}
 </style>
 </head>
 <body>
@@ -248,7 +266,19 @@ mark.hl-match{
   </div>
 
   <div id="main">
-    <div id="welcome">← エンドポイントを選択してください</div>
+    <div id="welcome">
+      <section class="welcome-card" aria-labelledby="welcome-title">
+        <div class="welcome-eyebrow">Developer workspace</div>
+        <h1 class="welcome-title" id="welcome-title">APIを探して、すぐ試す。</h1>
+        <p class="welcome-copy">左のカタログからエンドポイントを選ぶと、パラメータ、リクエスト例、レスポンスの型をひとつの画面で確認できます。</p>
+        <div class="welcome-stats" aria-label="APIカタログの概要">
+          <div class="welcome-stat"><strong id="welcome-endpoint-count">—</strong><span>Endpoints</span></div>
+          <div class="welcome-stat"><strong id="welcome-group-count">—</strong><span>Categories</span></div>
+          <div class="welcome-stat"><strong id="welcome-method-count">—</strong><span>HTTP methods</span></div>
+        </div>
+        <p class="welcome-tip"><kbd>/</kbd> でエンドポイント検索へ移動</p>
+      </section>
+    </div>
     <div id="detail">
       <div class="ep-header">
         <span class="badge" id="d-badge"></span>
@@ -419,6 +449,16 @@ const APIS = [
       res:{ok:true} },
     { method:'POST',   path:'/api/ai-summary/:id/resolve', desc:'解決ステータス更新', path_params:['id'], pp:{id:'1'}, body:[{n:'resolved',req:true,s:true},{n:'resolution_note',s:'対応済み'}],
       res:{ok:true} },
+  ]},
+  { group: 'Jevスコアボード', endpoints: [
+    { method:'GET',  path:'/api/jev-score-board/rows', desc:'質問ID(share)1件=1行・ラベルL1〜L20を横列に並べた一覧(評価済み最大50件、keywordで質問文/回答文を部分一致検索)', query:[{n:'keyword',s:'cloudflare'}],
+      res:{hitCount:1,rows:[{shareId:'a1b2c3d4',question:'Cloudflare Workersとは?',model:'@cf/google/gemma-4-26b-a4b-it',values:[{jevLabelId:1,value:0.9},{jevLabelId:2,value:null}]}]} },
+    { method:'GET',  path:'/api/jev-score-board/top-by-label', desc:'表示中の50件に限らず、指定ラベル(jev_label_id)のスコアが高い順に全データから上位20件を再取得', query:[{n:'labelId',req:true,s:'1'}],
+      res:{rows:[{shareId:'a1b2c3d4',question:'Cloudflare Workersとは?',model:'@cf/google/gemma-4-26b-a4b-it',value:0.95}],labelText:'正確度は高いか'} },
+    { method:'GET',  path:'/api/jev-score-board/answer', desc:'質問文タップ用。shareIdの質問文・回答文を取得(他ユーザーのshareIdは404)', query:[{n:'shareId',req:true,s:'a1b2c3d4'}],
+      res:{question:'Cloudflare Workersとは?',answer:'エッジで動くサーバーレス実行環境です。'} },
+    { method:'GET',  path:'/api/jev-score-board/label-names', desc:'th見出し表記切替(現行のL1〜L20/日本語)用。jev_labels(id=1〜20)の質問文をまとめて取得(初回切替時のみ呼ばれ、以降はクライアント側でキャッシュ)',
+      res:{labels:{'1':'正確度は高いか','2':'具体性はあるか'}} },
   ]},
   { group: 'リポジトリ', endpoints: [
     { method:'POST',   path:'/api/repositories', desc:'リポジトリ作成', body:[{n:'name',req:true,s:'my-test-repo'},{n:'isPrivate',s:false},{n:'description',s:'テスト用リポジトリ'}],
@@ -597,10 +637,12 @@ const APIS = [
       res:{message:'設定を保存しました',key:'d1_query_catalog_sort',value:'count'} },
   ]},
   { group: 'APIキー管理', endpoints: [
-    { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まない)',
+    { method:'GET',  path:'/api/api-keys', desc:'🔑キー管理ページ(/api-keys)用のAPIキー一覧取得(生キー・ハッシュ値は含まず、失効済みキーは失効後7日以内のみ表示)',
       res:{keys:[{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',label:'監視用',key_prefix:'nkapi_ab12cd34********',created_at:'2026-08-15T00:00:00.000Z',expires_at:'2026-09-14T00:00:00.000Z',revoked_at:null,last_used_at:null}]} },
-    { method:'POST', path:'/api/api-keys', desc:'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)', body:[{n:'label',req:true,s:'監視用'},{n:'expiresInDays',s:30}],
-      res:{key:{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',label:'監視用',keyPrefix:'nkapi_ab12cd34********',createdAt:'2026-08-15T00:00:00.000Z',expiresAt:'2026-09-14T00:00:00.000Z'},rawKey:'nkapi_ab12cd34ef56gh78ij90kl12mn34op56...'} },
+    { method:'POST', path:'/auth/public-key/available', desc:'ブラウザに保存された公開鍵のうち、未失効かつ有効期限内のキーIDを取得', body:[{n:'keys',req:true,s:[{userId:'nekoserver',keyId:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}]}],
+      res:{keyIds:['xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx']} },
+    { method:'POST', path:'/api/api-keys', desc:'APIキー発行(生キーはこのレスポンスでのみ返し、以降は再表示不可)。有効期限付きなら /countdown へ予定名 PK期限 を予約する', body:[{n:'label',req:true,s:'監視用'},{n:'expiresInDays',s:30}],
+      res:{key:{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',label:'監視用',keyPrefix:'nkapi_ab12cd34********',createdAt:'2026-08-15T00:00:00.000Z',expiresAt:'2026-09-14T00:00:00.000Z'},rawKey:'nkapi_ab12cd34ef56gh78ij90kl12mn34op56...',countdown:{ok:true,registered:true},countdownNotice:'カウントダウンに「PK期限」を登録しました'} },
     { method:'POST', path:'/api/api-keys/:id/revoke', desc:'APIキー失効(自分が発行したキーのみ)', path_params:['id'], pp:{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'},
       res:{message:'APIキーを失効しました'} },
   ]},
@@ -725,6 +767,8 @@ const APIS = [
       res:{ok:true} },
     { method:'GET', path:'/api/gh/pr-list', desc:'gh-wasm(Rust実装)でリポジトリのプルリクエスト一覧をMarkdownテーブルへ整形して取得(/neko gh pr listと同じロジック)', query:[{n:'repo',req:true,s:'nekoserver/cloudflare-workers-github-oauth-1'}],
       res:{markdown:'## nekoserver/cloudflare-workers-github-oauth-1 のプルリクエスト一覧\\n| # | タイトル | 作成者 | 状態 | URL |\\n|---|---|---|---|---|\\n| 1600 | ... | nekoserver | open | https://github.com/... |'} },
+    { method:'POST', path:'/api/diff', desc:'go-diff-wasm(Go実装)で2つのテキストの行単位差分をMarkdownへ整形して取得(セッションまたはAPIキー認証。コード生成の正しさ判定には使わないこと。人間が見るための差分表示専用)', body:[{n:'a',req:true,s:'line one\\nline two\\n'},{n:'b',req:true,s:'line one\\nline two (edited)\\n'}],
+      res:{markdown:'1行追加, 1行削除\\n\\n(diff形式のコードブロック)\\n  line one\\n- line two\\n+ line two (edited)'} },
   ]},
   { group: 'GitHub Issue添付 (/gh-attach, WASM)', endpoints: [
     { method:'POST', path:'/api/gh-attach/upload', desc:'画像をGitHubへアップロード(gh issue create --attachのWASM移植、実アップロードは専用のclassic PAT=GH_ATTACH_UPLOAD_TOKEN経由)', body:[{n:'owner',req:true,s:'nekoserver'},{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'},{n:'filename',req:true,s:'login.png'},{n:'dataUrl',req:true,s:'data:image/png;base64,iVBORw0KGgo...'}],
@@ -783,12 +827,19 @@ function collapseOtherGroups(openGi) {
 function renderTopNav() {
   const nav = document.getElementById('topnav');
   const endpointCount = APIS.reduce((sum, g) => sum + g.endpoints.length, 0);
+  const methodCount = new Set(APIS.flatMap(g => g.endpoints.map(ep => ep.method))).size;
   nav.innerHTML =
-    '<span class="nav-home" title="APIテスター"><span>API</span><span class="nav-home-count">' + endpointCount + ' endpoints</span></span>' +
+    '<span class="nav-home" title="APIテスター"><span class="brand-mark">API</span><span>Explorer</span><span class="nav-home-count">' + endpointCount + ' endpoints</span></span>' +
     APIS.map((g, i) =>
     \`<button class="nav-btn" id="navbtn-\${i}" onclick="jumpGroup(\${i})">\${esc(g.group)}</button>\`
     ).join('') +
     '<a class="workflow-browser-link" href="/wf-browser" title="ワークフローから参照されているAPIを確認">↗ 利用状況</a>';
+  const endpointEl = document.getElementById('welcome-endpoint-count');
+  const groupEl = document.getElementById('welcome-group-count');
+  const methodEl = document.getElementById('welcome-method-count');
+  if (endpointEl) endpointEl.textContent = String(endpointCount);
+  if (groupEl) groupEl.textContent = String(APIS.length);
+  if (methodEl) methodEl.textContent = String(methodCount);
 }
 
 function jumpGroup(gi) {
@@ -1587,6 +1638,14 @@ function flashNavBtns(count) {
 }
 
 renderTopNav();
+document.addEventListener('keydown', function(event) {
+  if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+  var activeTag = document.activeElement && document.activeElement.tagName;
+  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
+  event.preventDefault();
+  var searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.focus();
+});
 const _sidebarOpen = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_open='))?.split('=')[1] ?? 'off').trim();
 _accordionMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_accordion='))?.split('=')[1] ?? 'off').trim() === 'on';
 _descMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_desc_mode='))?.split('=')[1] ?? 'on').trim() !== 'off';

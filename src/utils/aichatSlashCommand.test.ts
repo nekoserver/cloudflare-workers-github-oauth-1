@@ -139,11 +139,27 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko factor');
     expect(result).toContain('/neko dig');
     expect(result).toContain('/neko help');
+    expect(result).toContain('/neko csearch');
+    expect(result).toContain('/neko qsearch');
+  });
+
+  it('/neko qsearch の説明は質問IDと最新回答モーダルであると書く', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).toContain('/neko qsearch');
+    expect(result).toContain('質問IDと言語モデルをパラメータとして');
+    expect(result).toContain('最上位モーダル');
   });
 
   it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {
     const result = formatAichatSlashCommandHelp();
     expect(result).not.toMatch(/[├└│─┼]/);
+  });
+
+  it('/neko csearch の説明は Cursor VM と書き、Cursor VM(courts) とは書かない', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).toContain('Cursor VM');
+    expect(result).not.toContain('Cursor VM(courts)');
+    expect(result).not.toContain('(courts)');
   });
 });
 

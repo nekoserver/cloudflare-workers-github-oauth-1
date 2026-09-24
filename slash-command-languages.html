@@ -222,6 +222,7 @@
         <tr data-tags="WASM,API"><td class="cmd"><code>/neko dig</code></td><td class="tags"></td><td>DNSクエリの組み立て/応答パースはRust(WASM)、DoHへのHTTPS通信はTypeScriptのfetch</td></tr>
         <tr data-tags="WASM"><td class="cmd"><code>/neko ls</code></td><td class="tags"></td><td><code>ls.wasm</code>(Rust)でWASMモジュール一覧を整形</td></tr>
         <tr data-tags="WASM,API"><td class="cmd"><code>/neko gh pr list</code></td><td class="tags"></td><td>リポジトリ名検証・Markdown整形は<code>gh.wasm</code>(Rust)、GitHub APIへの通信はTypeScript</td></tr>
+        <tr data-tags="TypeScript,API"><td class="cmd"><code>/neko tree</code></td><td class="tags"></td><td>GitHub Repository/Trees APIへのHTTPS通信とツリー整形・フィルタ(<code>--depth</code>・<code>--pattern</code>等)はいずれもTypeScript。Rust版<code>tree-wasm</code>はソースのみで未ビルド</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko clog</code></td><td class="tags"></td><td>D1から直近のコミットエージェントログを取得</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sessions</code></td><td class="tags"></td><td>D1からユーザーセッションのログイン時刻を取得</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko sql impact</code></td><td class="tags"></td><td>D1のクエリカタログテーブルを参照</td></tr>
@@ -229,11 +230,16 @@
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko tokens</code></td><td class="tags"></td><td>D1から過去24時間のトークン使用量を集計</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko tcheck</code></td><td class="tags"></td><td>D1でAPIトークンの有効性を確認</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko search</code></td><td class="tags"></td><td>D1に対するキーワード検索</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko qsearch</code></td><td class="tags"></td><td>D1に対するキーワード検索(質問ID・質問文・言語モデルの表形式で表示)</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko csearch</code></td><td class="tags"></td><td>D1のCursor Agent起動履歴に対するキーワード検索</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko s</code></td><td class="tags"></td><td>D1に対する複数キーワード検索</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko vcount</code></td><td class="tags"></td><td>D1からベクタ化済み回答文の件数を集計</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko j</code></td><td class="tags"></td><td>D1のJev評価済み回答に対するキーワード検索</td></tr>
+        <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko aireqst</code></td><td class="tags"></td><td>D1のai_chat_sharesから当月のリクエスト元別(source)問い合わせ件数を集計しSVG円グラフも生成</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko uuidgen4</code></td><td class="tags"></td><td>UUIDv4を生成しD1に保存</td></tr>
         <tr data-tags="TypeScript,SQL"><td class="cmd"><code>/neko uuidgen7</code></td><td class="tags"></td><td>UUIDv7を生成しD1に保存</td></tr>
         <tr data-tags="TypeScript,API"><td class="cmd"><code>/neko mlb</code></td><td class="tags"></td><td>MLB Stats APIへHTTPS fetchして試合情報を整形</td></tr>
+        <tr data-tags="TypeScript,API"><td class="cmd"><code>/neko vlink</code></td><td class="tags"></td><td>Google Custom Search APIへHTTPS fetchしYouTubeリンクを抽出</td></tr>
         <tr data-tags="TypeScript,Binding"><td class="cmd"><code>/neko hellodw</code></td><td class="tags"></td><td>別デプロイのdynamicneko WorkerへService Binding経由で呼び出し</td></tr>
       </tbody>
     </table>

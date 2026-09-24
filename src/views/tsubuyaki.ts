@@ -1,8 +1,14 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { SLACK_POST_TEMPLATES } from '../utils/freeTextSlackPost';
 
 export function getTsubuyakiPage(username: string): string {
   const safeUsername = escapeHtml(username);
+  const templateCards = SLACK_POST_TEMPLATES.map((template, index) => `
+        <button type="button" class="template-card${index === 0 ? ' selected' : ''}" data-template="${template.id}" aria-pressed="${index === 0 ? 'true' : 'false'}">
+          <span class="template-emoji">${template.emoji}</span>
+          <span><strong>${template.title}</strong><small>${template.description}</small></span>
+        </button>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -61,6 +67,22 @@ export function getTsubuyakiPage(username: string): string {
     }
     .post-title { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
     .post-subtitle { font-size: 15px; color: var(--text-muted); margin-bottom: 28px; }
+    .template-heading { font-size: 14px; color: var(--text-secondary); margin-bottom: 10px; }
+    .template-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+      max-height: 260px; overflow-y: auto; padding: 2px 4px 12px 2px; margin-bottom: 18px;
+    }
+    .template-card {
+      display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px;
+      border: 1px solid var(--input-border); border-radius: 9px; text-align: left;
+      background: var(--input-bg); color: var(--text-primary); cursor: pointer;
+    }
+    .template-card:hover { border-color: var(--accent-color); }
+    .template-card.selected { border-color: var(--accent-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent); }
+    .template-emoji { font-size: 21px; flex: 0 0 auto; }
+    .template-card strong, .template-card small { display: block; }
+    .template-card strong { font-size: 13px; }
+    .template-card small { color: var(--text-muted); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     textarea {
       width: 100%; min-height: 160px; resize: vertical;
       background: var(--input-bg); color: var(--text-primary);
@@ -89,6 +111,11 @@ export function getTsubuyakiPage(username: string): string {
       display: inline-block; margin-top: 24px; color: var(--accent-color); text-decoration: none; font-size: 14px;
     }
     .back-link:hover { text-decoration: underline; }
+    @media (max-width: 560px) {
+      .container { padding: 24px 14px; }
+      .post-card { padding: 26px 18px; }
+      .template-grid { grid-template-columns: 1fr; max-height: 300px; }
+    }
   </style>
 </head>
 <body>
@@ -122,6 +149,11 @@ export function getTsubuyakiPage(username: string): string {
       <h1 class="post-title">📮 つぶやき投稿</h1>
       <p class="post-subtitle">自由に書いた一言をSlackに投稿できます。</p>
 
+      <h2 class="template-heading">Block Kit テンプレート（${SLACK_POST_TEMPLATES.length}種類）</h2>
+      <div class="template-grid" id="templateGrid" aria-label="投稿テンプレート">
+${templateCards}
+      </div>
+
       <textarea id="freeText" placeholder="ここに投稿したい内容を書いてください…" maxlength="3000"></textarea>
       <div class="char-count" id="charCount">0 / 3000</div>
       <button class="post-btn" id="postBtn" onclick="postToSlack()">📮 Slackに投稿する</button>
@@ -147,7 +179,20 @@ export function getTsubuyakiPage(username: string): string {
     var charCountEl = document.getElementById('charCount');
     var postBtnEl = document.getElementById('postBtn');
     var statusMsgEl = document.getElementById('statusMsg');
+    var selectedTemplate = 'plain';
     var MAX_LEN = 3000;
+
+    document.getElementById('templateGrid').addEventListener('click', function(e) {
+      var card = e.target.closest('.template-card');
+      if (!card) return;
+      selectedTemplate = card.dataset.template;
+      document.querySelectorAll('.template-card').forEach(function(item) {
+        var selected = item === card;
+        item.classList.toggle('selected', selected);
+        item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+      freeTextEl.focus();
+    });
 
     freeTextEl.addEventListener('input', function() {
       var len = freeTextEl.value.length;
@@ -172,7 +217,7 @@ export function getTsubuyakiPage(username: string): string {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ text: text })
+        body: JSON.stringify({ text: text, template: selectedTemplate })
       }).then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
         .then(function(res) {
           if (res.status >= 200 && res.status < 300 && res.data.ok) {

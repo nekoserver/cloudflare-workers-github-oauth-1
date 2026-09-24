@@ -177,7 +177,15 @@ function renderRow(row: D1QueryCatalogRow): string {
   const commit = row.last_commit_hash ? commitLink(row.last_commit_hash) : '(なし)';
   const commitAt = row.last_commit_at ? escapeHtml(row.last_commit_at) : '(なし)';
   const table = row.table_name ? escapeHtml(row.table_name) : '(不明)';
-  return `<tr data-verb="${verb}">
+  // カタログ上の「バインド値なし」は、SQL 本文に ? も $ も一つもない行を指す。
+  // 実行時の値検証とは異なり、引用符・コメント内も含めて本文をそのまま確認する。
+  const bindingCount = (row.sql_text.match(/[?$]/g) ?? []).length;
+  const bindingClass = bindingCount === 0 ? 'query-no-bindings' : 'query-with-bindings';
+  const bindingLabel = bindingCount === 0 ? '入力不要' : `${bindingCount}個必要`;
+  const bindingTitle = bindingCount === 0
+    ? 'このSQLにはバインド値がなく、そのまま実行できます'
+    : `このSQLの実行には${bindingCount}個のバインド値が必要です`;
+  return `<tr class="${bindingClass}" data-verb="${verb}" data-binding-count="${bindingCount}">
     <td><span class="query-detail-name">${escapeHtml(row.query_name)}</span></td>
     <td>:<span class="query-detail-command">${escapeHtml(row.command)}</span> ${badge}<span class="query-detail-confirmed" hidden>${row.command_confirmed ? '確定' : '推測'}</span></td>
     <td class="commit-at-cell"><code>${commitAt}</code></td>
@@ -185,6 +193,7 @@ function renderRow(row: D1QueryCatalogRow): string {
     <td><span class="query-detail-migration">${migration}</span></td>
     <td>${commit}</td>
     <td><span class="query-detail-source">${escapeHtml(row.source_file)}:${row.source_line}</span><span class="query-detail-table" hidden>${table}</span><span class="query-detail-commit-at" hidden>${commitAt}</span></td>
+    <td class="binding-status-cell"><span class="binding-status" title="${bindingTitle}">${bindingLabel}</span></td>
   </tr>`;
 }
 
@@ -193,6 +202,8 @@ function renderRow(row: D1QueryCatalogRow): string {
 // パネルのチェックボックス選択(data-table)・全体の折りたたみ表示に使う。
 function renderTableBand(table: string, rows: D1QueryCatalogRow[], classification?: D1QueryCatalogTableClassification): string {
   const rowsHtml = rows.map(renderRow).join('\n');
+  const noBindingCount = rows.filter(row => !/[?$]/.test(row.sql_text)).length;
+  const withBindingCount = rows.length - noBindingCount;
   const color = classification?.color ?? '#8b949e';
   const groupBadge = classification
     ? `<span class="table-group-badge" data-group="${escapeHtml(classification.group)}">${escapeHtml(classification.groupLabel)}</span>`
@@ -207,6 +218,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
       <span class="band-count">${rows.length}件</span>
       <span class="band-name">${escapeHtml(table)}</span>
       ${groupBadge}${fkBadge}
+      <span class="band-binding-summary" aria-label="バインド値の内訳"><span class="binding-summary-no${noBindingCount > 0 ? ' has-items' : ''}">入力不要 ${noBindingCount}</span><span class="binding-summary-required">入力必要 ${withBindingCount}</span></span>
       <span class="band-toggle-arrow">▾</span>
     </button>
     <div class="table-wrap" hidden>
@@ -220,6 +232,7 @@ function renderTableBand(table: string, rows: D1QueryCatalogRow[], classificatio
             <th>migration</th>
             <th>最終変更コミット</th>
             <th>位置</th>
+            <th>バインド</th>
           </tr>
         </thead>
         <tbody>
@@ -240,6 +253,99 @@ function groupByTable(rows: D1QueryCatalogRow[]): [string, D1QueryCatalogRow[]][
   return [...byTable.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+type DuplicateCatalogGroup = {
+  kind: 'source' | 'name' | 'sql';
+  key: string;
+  rows: D1QueryCatalogRow[];
+};
+
+/**
+ * カタログ登録の一意性を監査する。
+ *
+ * source_file + source_line と query_name の衝突は修正必須、SQL本文の一致は別の
+ * 呼び出し元で同じSQLを意図的に使う場合もあるため確認候補として分ける。
+ */
+function findDuplicateCatalogGroups(rows: D1QueryCatalogRow[]): DuplicateCatalogGroup[] {
+  const definitions: Array<{
+    kind: DuplicateCatalogGroup['kind'];
+    keyFor: (row: D1QueryCatalogRow) => string;
+  }> = [
+    { kind: 'source', keyFor: row => `${row.source_file}:${row.source_line}` },
+    { kind: 'name', keyFor: row => row.query_name.trim().toLocaleLowerCase() },
+    {
+      kind: 'sql',
+      keyFor: row => `${row.table_name ?? '(不明)'}\u0000${row.sql_text.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}`,
+    },
+  ];
+
+  const groups: DuplicateCatalogGroup[] = [];
+  for (const definition of definitions) {
+    const indexed = new Map<string, D1QueryCatalogRow[]>();
+    for (const row of rows) {
+      const key = definition.keyFor(row);
+      const matches = indexed.get(key) ?? [];
+      matches.push(row);
+      indexed.set(key, matches);
+    }
+    for (const [key, matches] of indexed) {
+      if (matches.length > 1) groups.push({ kind: definition.kind, key, rows: matches });
+    }
+  }
+  return groups;
+}
+
+function renderDuplicateAudit(rows: D1QueryCatalogRow[]): string {
+  const groups = findDuplicateCatalogGroups(rows);
+  if (groups.length === 0) return '';
+
+  const required = groups.filter(group => group.kind !== 'sql');
+  const candidates = groups.filter(group => group.kind === 'sql');
+  const initiallyExpanded = required.length > 0;
+  const statusClass = required.length > 0 ? 'duplicate-status-error' : 'duplicate-status-warning';
+  const statusText = required.length > 0
+    ? `修正必須 ${required.length}グループ / 要確認 ${candidates.length}グループ`
+    : `修正必須 0グループ / 要確認 ${candidates.length}グループ`;
+  const kindLabels: Record<DuplicateCatalogGroup['kind'], string> = {
+    source: '登録位置の重複',
+    name: 'クエリ名の重複',
+    sql: '同一SQL（要確認）',
+  };
+  const details = groups.map(group => {
+    const locations = group.rows
+      .map(row => `${escapeHtml(row.query_name)} (${escapeHtml(row.source_file)}:${row.source_line})`)
+      .join(' / ');
+    const visibleKey = group.kind === 'sql'
+      ? group.rows[0].sql_text.replace(/\s+/g, ' ').trim().slice(0, 120)
+      : group.key;
+    return `<li><strong>${kindLabels[group.kind]}</strong><code>${escapeHtml(visibleKey)}</code><span>${locations}</span></li>`;
+  }).join('\n');
+
+  return `<section class="duplicate-audit" aria-labelledby="duplicateAuditTitle">
+    <div class="duplicate-audit-heading">
+      <h2 id="duplicateAuditTitle">重複登録監査</h2>
+      <div class="duplicate-audit-heading-actions">
+        <span class="duplicate-status ${statusClass}">${statusText}</span>
+        <button type="button" class="duplicate-audit-toggle" id="duplicateAuditToggle" aria-controls="duplicateAuditContent" aria-expanded="${initiallyExpanded}">
+          <span class="duplicate-audit-toggle-label">${initiallyExpanded ? '折り畳む' : '詳細を表示'}</span>
+          <span class="duplicate-audit-toggle-arrow" aria-hidden="true">▾</span>
+        </button>
+      </div>
+    </div>
+    <div id="duplicateAuditContent"${initiallyExpanded ? '' : ' hidden'}>
+      <ul class="duplicate-list">${details}</ul>
+      <div class="duplicate-plan">
+        <h3>修正プラン</h3>
+        <ol>
+          <li><strong>既存DB</strong>へmigration 0154を適用し、同名の旧行を情報量と更新日時で1件へ統合する。</li>
+          <li><strong>クエリ名</strong>の重複は用途を表す一意な名前へ変更し、世代ID付きの同期SQLを再生成する。</li>
+          <li><strong>同一SQL</strong>は呼び出し元を確認し、共通化できるものだけ実装を統合する（意図的な再利用は維持する）。</li>
+          <li>同期SQLで今回の世代にない旧行を削除し、この監査の修正必須が0件であることを確認する。</li>
+        </ol>
+      </div>
+    </div>
+  </section>`;
+}
+
 export function getD1QueryCatalogPage(
   username: string,
   rows: D1QueryCatalogRow[],
@@ -251,6 +357,7 @@ export function getD1QueryCatalogPage(
 ): string {
   const safeUsername = escapeHtml(username);
   const confirmedCount = rows.filter(r => r.command_confirmed).length;
+  const inferredCount = rows.length - confirmedCount;
   const verbOptionsHtml = verbCounts(rows)
     .map(({ verb, count }) => `<option value="${escapeHtml(verb)}">${escapeHtml(verb)} (${count})</option>`)
     .join('\n');
@@ -294,6 +401,7 @@ export function getD1QueryCatalogPage(
   const nameSortPressed = initialSort === 'name' ? 'true' : 'false';
   const countSortPressed = initialSort === 'count' ? 'true' : 'false';
   const tableSelectionMode = singleTableSelection ? 'single' : 'multiple';
+  const duplicateAuditHtml = renderDuplicateAudit(rows);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -392,6 +500,8 @@ export function getD1QueryCatalogPage(
     .category-chart-percent { min-width: 34px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
     .catalog-main { min-width: 0; }
     .summary { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+    .catalog-verification { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .catalog-verification .sql-detail-status { line-height: 1.5; }
     .filter-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .catalog-filter-toolbar { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; margin-bottom: 8px; }
     .verb-filter-control { flex: 0 1 320px; min-width: 0; }
@@ -500,6 +610,24 @@ export function getD1QueryCatalogPage(
     }
     select#verbFilter option { padding: 4px 6px; }
     .filter-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+    .duplicate-audit { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
+    .duplicate-audit-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .duplicate-audit-heading-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .duplicate-audit h2 { font-size: 15px; }
+    .duplicate-audit h3 { font-size: 13px; margin-bottom: 4px; }
+    .duplicate-status { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .duplicate-status-warning { color: light-dark(#8a5300, #ffd27a); background: light-dark(#fff5dc, #3d3015); }
+    .duplicate-status-error { color: light-dark(#a12622, #ff928c); background: light-dark(#ffebe9, #461d1b); }
+    .duplicate-audit-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); color: var(--text-primary); font: 700 11px/1.4 inherit; cursor: pointer; }
+    .duplicate-audit-toggle:hover, .duplicate-audit-toggle:focus-visible { border-color: var(--accent-color); outline: none; }
+    .duplicate-audit-toggle-arrow { transition: transform 0.15s ease; }
+    .duplicate-audit-toggle[aria-expanded="true"] .duplicate-audit-toggle-arrow { transform: rotate(180deg); }
+    .duplicate-list { margin: 9px 0 0 20px; font-size: 12px; }
+    .duplicate-list li { margin-bottom: 7px; }
+    .duplicate-list code { margin: 0 6px; color: var(--text-primary); }
+    .duplicate-list span { color: var(--text-muted); }
+    .duplicate-plan { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-color); }
+    .duplicate-plan ol { margin-left: 20px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
     .band-sort-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .sort-btn {
       padding: 4px 10px;
@@ -528,6 +656,11 @@ export function getD1QueryCatalogPage(
     .band-header:hover { background: var(--border-color); }
     .band-header[aria-expanded="true"] { border-radius: 8px 8px 0 0; }
     .band-name { font-family: 'Monaco', 'Courier New', monospace; font-weight: 700; color: var(--table-color, var(--text-primary)); font-size: 14px; }
+    .band-binding-summary { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; font-weight: 800; white-space: nowrap; }
+    .band-binding-summary span { padding: 2px 7px; border: 1px solid; border-radius: 999px; }
+    .binding-summary-no { border-color: var(--border-color); background: transparent; color: var(--text-muted); }
+    .binding-summary-no.has-items { border-color: #16a34a; background: light-dark(#dcfce7, #143d24); color: light-dark(#166534, #86efac); }
+    .binding-summary-required { border-color: #dc2626; background: transparent; color: light-dark(#991b1b, #fca5a5); }
     .table-group-badge, .table-fk-badge {
       border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 700;
     }
@@ -542,7 +675,7 @@ export function getD1QueryCatalogPage(
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
-    .band-toggle-arrow { margin-left: auto; color: var(--text-muted); transition: transform 0.15s; }
+    .band-toggle-arrow { color: var(--text-muted); transition: transform 0.15s; }
     .band-header[aria-expanded="true"] .band-toggle-arrow { transform: rotate(180deg); }
     .table-band .table-wrap {
       border: 1px solid var(--border-color);
@@ -554,6 +687,12 @@ export function getD1QueryCatalogPage(
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     td { color: var(--text-primary); }
+    /* 入力不要のクエリは、表の背景を塗らずに行全体の中抜き枠で見分けられるようにする。 */
+    tbody tr.query-no-bindings { outline: 2px solid #d97706; outline-offset: -2px; }
+    .binding-status-cell { white-space: nowrap; }
+    .binding-status { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; }
+    .query-no-bindings .binding-status { border-color: #d97706; background: transparent; color: light-dark(#92400e, #fcd34d); }
+    .query-with-bindings .binding-status { border-color: #16a34a; background: transparent; color: light-dark(#166534, #86efac); }
     td code { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-secondary); }
     .sql-token { font-weight: 600; }
     .sql-keyword { color: #7c3aed; font-weight: 800; }
@@ -590,7 +729,13 @@ export function getD1QueryCatalogPage(
     .sql-detail-meta dd { color: var(--text-primary); word-break: break-word; }
     .sql-detail-section { margin-top: 16px; }
     .sql-detail-section-title { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .sql-detail-code-wrap { position: relative; }
+    .sql-detail-code-wrap .sql-detail-code { padding-right: 78px; }
+    .sql-run-button { position: absolute; top: 8px; right: 8px; z-index: 1; border: 1px solid var(--success-color); border-radius: 7px; padding: 6px 9px; background: var(--card-bg); color: var(--success-color); cursor: pointer; font: 700 12px/1.4 'Monaco', 'Courier New', monospace; }
+    .sql-run-button:hover, .sql-run-button:focus-visible { background: var(--success-color); color: white; }
+    .sql-run-button:disabled { cursor: wait; opacity: 0.65; }
     .sql-detail-help { font-size: 12px; line-height: 1.6; color: var(--text-muted); margin-bottom: 8px; }
+    #sqlBindingsInput { width: 100%; box-sizing: border-box; margin: 4px 0 10px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); background: var(--bg-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .sql-detail-code { margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--code-bg); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font: 12px/1.6 'Monaco', 'Courier New', monospace; }
     .sql-detail-status { font-size: 13px; color: var(--text-muted); }
     .sql-detail-status.ready { color: var(--success-color); }
@@ -688,7 +833,12 @@ export function getD1QueryCatalogPage(
       </div>
 
       <div class="filter-hint">テーブル名を決め打ちせず、発行しているSQL種別(INSERT/SELECT/UPDATE等)だけで全テーブル横断検索する場合はこちらを使う。両方指定した場合はAND条件になる</div>
-      <div class="summary">${rows.length}件中、コマンド種別確定済み${confirmedCount}件(sqlcパーサーで検証済み)</div>
+      <div class="summary">カタログ全${rows.length}件 / 実行メソッド確認済み${confirmedCount}件 / SQL動詞からの推定${inferredCount}件</div>
+      <div class="catalog-verification">
+        <button type="button" class="sql-detail-tool" id="verifyAllAnnotationsButton">全${rows.length}件のアノテーションを検査</button>
+        <span class="sql-detail-status" id="catalogVerificationStatus" aria-live="polite">未検査。sqlc/WASMが確認するのは名前・コマンド・重複などのアノテーション形式です。SQL構文・スキーマ・実行結果の検証ではありません。</span>
+      </div>
+      ${duplicateAuditHtml}
 
       <div class="band-sort-controls">
         <span class="filter-label">並び替え:</span>
@@ -720,7 +870,14 @@ export function getD1QueryCatalogPage(
       </dl>
       <div class="sql-detail-section">
         <div class="sql-detail-section-title">SQL全文</div>
-        <pre class="sql-detail-code" id="sqlDetailSql"></pre>
+        <div class="sql-detail-code-wrap">
+          <pre class="sql-detail-code" id="sqlDetailSql"></pre>
+          <button type="button" class="sql-run-button" id="runSqlButton" title="このSQLをD1で実行する">Run▶︎</button>
+        </div>
+        <div class="sql-detail-status" id="sqlRunStatus" aria-live="polite"></div>
+        <label class="sql-detail-help" for="sqlBindingsInput">バインド値（SQL内の ? の順序に合わせたJSON配列）</label>
+        <input type="text" id="sqlBindingsInput" value="[]" spellcheck="false" autocomplete="off">
+        <pre class="sql-detail-code" id="sqlRunResult" hidden></pre>
       </div>
       <div class="sql-detail-section">
         <div class="sql-detail-section-title">sqlc parse・方言比較</div>
@@ -765,12 +922,47 @@ export function getD1QueryCatalogPage(
     var sqlDetailWasmStatus = document.getElementById('sqlDetailWasmStatus');
     var sqlDetailResult = document.getElementById('sqlDetailResult');
     var parseD1SqlButton = document.getElementById('parseD1SqlButton');
+    var runSqlButton = document.getElementById('runSqlButton');
+    var sqlRunStatus = document.getElementById('sqlRunStatus');
+    var sqlRunResult = document.getElementById('sqlRunResult');
+    var sqlBindingsInput = document.getElementById('sqlBindingsInput');
     var postgresComparison = document.getElementById('postgresComparison');
     var currentSql = '';
     var currentSqlcInput = '';
     var lastSqlDetailTrigger = null;
     var sqlcWasmPromise = null;
     var sqlDetailRequestId = 0;
+    var verifyAllAnnotationsButton = document.getElementById('verifyAllAnnotationsButton');
+    var catalogVerificationStatus = document.getElementById('catalogVerificationStatus');
+
+    async function runCurrentSql() {
+      var queryName = document.getElementById('sqlDetailName').textContent || '';
+      if (!queryName || !currentSql) return;
+      runSqlButton.disabled = true;
+      sqlRunResult.hidden = true;
+      sqlRunStatus.textContent = 'D1でSQLを実行しています…';
+      sqlRunStatus.className = 'sql-detail-status';
+      try {
+        var bindings = JSON.parse(sqlBindingsInput.value || '[]');
+        if (!Array.isArray(bindings)) throw new Error('バインド値はJSON配列で指定してください。');
+        var response = await fetch('/api/d1-query-catalog/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queryName: queryName, bindings: bindings })
+        });
+        var payload = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(payload.error || ('HTTP ' + response.status));
+        sqlRunResult.textContent = JSON.stringify(payload.result, null, 2);
+        sqlRunResult.hidden = false;
+        sqlRunStatus.textContent = 'SQLを実行しました。';
+        sqlRunStatus.className = 'sql-detail-status ready';
+      } catch (error) {
+        sqlRunStatus.textContent = 'SQLを実行できませんでした: ' + (error && error.message ? error.message : String(error));
+        sqlRunStatus.className = 'sql-detail-status error';
+      } finally {
+        runSqlButton.disabled = false;
+      }
+    }
 
     function getNextZ() {
       var staticZDefaults = { sqlDetailDialog: 1000 };
@@ -795,8 +987,12 @@ export function getD1QueryCatalogPage(
         sqlcWasmPromise = (async function() {
           await import('/wasm/sqlc-wasm_exec.js');
           var go = new Go();
-          var result = await WebAssembly.instantiateStreaming(fetch('/wasm/sqlc.wasm'), go.importObject);
-          go.run(result.instance);
+          var res = await fetch('/wasm/sqlc.wasm');
+          if (!res.ok) throw new Error('sqlc.wasmの取得に失敗しました(HTTP ' + res.status + ')');
+          var bytes = await res.arrayBuffer();
+          var mod = await WebAssembly.compile(bytes);
+          var instance = await WebAssembly.instantiate(mod, go.importObject);
+          go.run(instance);
           if (typeof globalThis.sqlcParseQueryAnnotations !== 'function') {
             throw new Error('sqlcParseQueryAnnotationsが登録されませんでした');
           }
@@ -811,6 +1007,30 @@ export function getD1QueryCatalogPage(
     function rowText(row, selector) {
       var el = row.querySelector(selector);
       return el ? (el.textContent || '') : '';
+    }
+
+    async function verifyAllAnnotations() {
+      var catalogRows = Array.prototype.slice.call(document.querySelectorAll('#tableBands tbody tr'));
+      var input = catalogRows.map(function(row) {
+        return '-- name: ' + rowText(row, '.query-detail-name') + ' :' + rowText(row, '.query-detail-command') + '\\n' + rowText(row, '.query-detail-sql');
+      }).join('\\n\\n');
+      verifyAllAnnotationsButton.disabled = true;
+      catalogVerificationStatus.textContent = '全' + catalogRows.length + '件のアノテーション形式を検査しています…';
+      catalogVerificationStatus.className = 'sql-detail-status';
+      try {
+        await ensureSqlcWasm();
+        var markdown = globalThis.sqlcParseQueryAnnotations(input);
+        var hasErrors = markdown.indexOf('エラー:') !== -1;
+        catalogVerificationStatus.textContent = hasErrors
+          ? '全' + catalogRows.length + '件のアノテーション形式を検査しました。エラーがあります。SQL構文・スキーマ・実行結果は未検証です。'
+          : '全' + catalogRows.length + '件のアノテーション形式を検査しました。エラーはありません。SQL構文・スキーマ・実行結果の検証ではありません。';
+        catalogVerificationStatus.className = hasErrors ? 'sql-detail-status error' : 'sql-detail-status ready';
+      } catch (error) {
+        catalogVerificationStatus.textContent = '全件検査に失敗しました: ' + (error && error.message ? error.message : String(error));
+        catalogVerificationStatus.className = 'sql-detail-status error';
+      } finally {
+        verifyAllAnnotationsButton.disabled = false;
+      }
     }
 
     async function runD1Parse() {
@@ -959,6 +1179,12 @@ export function getD1QueryCatalogPage(
       document.getElementById('sqlDetailSql').innerHTML = highlightedSql ? highlightedSql.innerHTML : '';
       sqlDetailResult.hidden = true;
       sqlDetailResult.textContent = '';
+      sqlRunResult.hidden = true;
+      sqlRunResult.textContent = '';
+      sqlBindingsInput.value = '[]';
+      sqlRunStatus.textContent = '';
+      sqlRunStatus.className = 'sql-detail-status';
+      runSqlButton.disabled = false;
       postgresComparison.hidden = true;
       document.getElementById('postgresSql').textContent = '';
       document.getElementById('postgresDifferences').replaceChildren();
@@ -974,6 +1200,8 @@ export function getD1QueryCatalogPage(
     });
     document.getElementById('closeSqlDetailButton').addEventListener('click', function() { sqlDetailDialog.close(); });
     parseD1SqlButton.addEventListener('click', runD1Parse);
+    verifyAllAnnotationsButton.addEventListener('click', verifyAllAnnotations);
+    runSqlButton.addEventListener('click', runCurrentSql);
     document.getElementById('comparePostgresButton').addEventListener('click', compareWithPostgres);
     sqlDetailDialog.addEventListener('close', function() {
       if (lastSqlDetailTrigger) lastSqlDetailTrigger.focus();
@@ -991,6 +1219,17 @@ export function getD1QueryCatalogPage(
     }
     document.getElementById('copySqlButton').addEventListener('click', function() { copySqlDetail(currentSql, 'SQL'); });
     document.getElementById('copySqlcButton').addEventListener('click', function() { copySqlDetail(currentSqlcInput, 'sqlc形式'); });
+
+    var duplicateAuditToggle = document.getElementById('duplicateAuditToggle');
+    var duplicateAuditContent = document.getElementById('duplicateAuditContent');
+    if (duplicateAuditToggle && duplicateAuditContent) {
+      duplicateAuditToggle.addEventListener('click', function() {
+        var expanded = duplicateAuditToggle.getAttribute('aria-expanded') === 'true';
+        duplicateAuditContent.hidden = expanded;
+        duplicateAuditToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        duplicateAuditToggle.querySelector('.duplicate-audit-toggle-label').textContent = expanded ? '詳細を表示' : '折り畳む';
+      });
+    }
 
     var tablePanelToggle = document.getElementById('tablePanelToggle');
     var tablePanel = document.getElementById('tablePanel');

@@ -16,6 +16,54 @@
 
 3つとも「webhook」と呼ばれがちだが、**認証方式も通信経路も別物**。「webhookが届かない」と言われたら、まずA/B/Cのどれの話かを最初に特定すること。
 
+### 1.1 Slack通知フロー(Mermaid)
+
+以下は、通知イベントの発生からSlackまたはAltワーカーへ到達するまでの現在の分岐を示す。実線は`sendNotification()`に集約された通常の通知経路、破線はセキュリティ検知から`postSlackMessage()`を直接呼ぶSlack専用経路である。
+
+```mermaid
+flowchart TD
+  subgraph Sources["通知イベントの発生元"]
+    GH["GitHub webhook<br/>installation / pull_request"]
+    CFAUTH["cf-auth webhook<br/>ログイン・アクセス判定"]
+    RESEND["Resend webhook<br/>delivered / failed / bounced"]
+    USER["ユーザー操作<br/>つぶやき / F1 / セッションrevoke"]
+    LOGIN["ログイン失敗"]
+  end
+
+  GH --> BUILD["通知本文を生成<br/>必要に応じてAI要約・Block Kitを構築"]
+  CFAUTH --> BUILD
+  RESEND --> BUILD
+  USER --> BUILD
+  LOGIN --> BUILD
+
+  BUILD --> CONFIG["resolveNotifyConfigWithSetting<br/>環境変数 + D1 notification_settings"]
+  CONFIG --> TARGET{"NOTIFY_TARGET = worker ?"}
+
+  TARGET -- "No: 未設定・slack・その他" --> ENABLED{"slack_enabled = 1<br/>かつ token / channel 設定済み?"}
+  ENABLED -- No --> SKIP["通知をスキップ<br/>エラー結果またはログを残す"]
+  ENABLED -- Yes --> DISPATCH["sendNotification"]
+  DISPATCH --> POST["postSlackMessage"]
+  POST --> SLACKAPI["Slack Web API<br/>chat.postMessage"]
+  SLACKAPI --> SLACK["Slackチャンネル"]
+
+  TARGET -- Yes --> WORKERCONFIG{"NOTIFY_WORKER_URL<br/>設定済み?"}
+  WORKERCONFIG -- No --> SKIP
+  WORKERCONFIG -- Yes --> DISPATCHWORKER["sendNotification / sendToWorker"]
+  DISPATCHWORKER --> INGEST["Altワーカー /ingest<br/>Bearer認証 + JSON"]
+  INGEST --> ALTDB["D1 alt_notify_ingest_log"]
+  ALTDB --> WSPACE["Altワーカー /wspace"]
+
+  SECURITY["セキュリティ検知<br/>無効JWT / revoke済みセッション / 公開鍵異常"]
+  SECURITY -. "token / channel設定時に直接送信" .-> POST
+
+  SLACKAPI --> RESULT{"Slack API / HTTP結果"}
+  INGEST --> RESULT
+  RESULT -- Success --> DONE["送信成功"]
+  RESULT -- Failure --> FAILURE["呼び出し元でエラー記録<br/>主要処理は原則継続"]
+```
+
+通常経路で`NOTIFY_TARGET=worker`を選んだ場合、`slack_enabled`は参照されない。反対にSlack経路では、D1のユーザーオプションがデフォルトOFFであり、`SLACK_OAUTH_TOKEN`と`SLACK_CHANNEL_ID`も必要となる。なお、無効JWT、revoke済みセッション、公開鍵異常のセキュリティ通知は現状この共通ディスパッチを通らず、Slackへ直接送信されるため、`NOTIFY_TARGET`および`slack_enabled`による切り替えの対象外である。
+
 ## 2. 経路A: GitHub → 本体Worker `/webhook/github`
 
 - `X-GitHub-Event`ヘッダーでイベント種別(`installation`/`repository`/`pull_request`等)を判定する。JSON本文の`action`フィールドは補助情報。

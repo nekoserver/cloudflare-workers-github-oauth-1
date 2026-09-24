@@ -23,6 +23,20 @@ export type WasmModuleInfo = {
 
 export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
   {
+    id: 'wrangler',
+    name: 'wrangler (BLAKE3, Rust)',
+    description:
+      'Cloudflare Wrangler CLIが静的アセットの内容ハッシュ生成に使用するblake3-wasm。アプリ固有のWASMだけを手動登録していたため一覧から漏れていた依存モジュールで、npmのwranglerコマンドからNode.js向けWASMとして読み込まれる',
+    wasmPath: 'node_modules/blake3-wasm/dist/wasm/nodejs/blake3_js_bg.wasm',
+    sourceDir: 'node_modules/blake3-wasm',
+    // 外部依存のソースはリポジトリに含めないため、バージョンと完全性ハッシュを
+    // 確認できるlockfileをソース表示の対象にする。
+    sourceFile: 'package-lock.json',
+    approxSize: '約34KB',
+    sizeBytes: 34405,
+    builtAt: '2026-09-15',
+  },
+  {
     id: 'sha256',
     name: 'SHA-256 (Rust)',
     description:
@@ -71,6 +85,18 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     builtAt: '2026-08-26',
   },
   {
+    id: 'tree',
+    name: 'tree (repository tree, Rust)',
+    description:
+      'GitHub Trees APIのpath・type・任意timestamp一覧をMarkdown入れ子リストへ整形する。globフィルタ、ファイル/ディレクトリ限定、名前/時刻順、逆順、表示深さ、隠しパス切替に対応する。ネットワークアクセスとOAuthはWorker側が担当する',
+    wasmPath: 'wasm/tree-wasm/target/wasm32-unknown-unknown/release/tree_wasm.wasm',
+    sourceDir: 'wasm/tree-wasm',
+    sourceFile: 'wasm/tree-wasm/src/lib.rs',
+    approxSize: '未ビルド',
+    sizeBytes: 0,
+    builtAt: '未ビルド',
+  },
+  {
     id: 'gh-attach',
     name: 'gh issue create --attach (Go)',
     description:
@@ -105,6 +131,54 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     approxSize: '約2.4MB',
     sizeBytes: 2402703,
     builtAt: '2026-09-06',
+  },
+  {
+    id: 'jev',
+    name: 'jev (Jev評価ロジック, Rust)',
+    description:
+      'Jev(TypeSafe AI System One Model)評価の純粋ロジック(criteriaの入力検証・未評価ラベルの抽出・APIリクエストボディ組み立て・レスポンス解析)をRustで実装。HTTP通信・APIキー・D1・認可はWorker側のTypeScriptが担当する。ブラウザページ・/neko サブコマンドからはまだ呼ばれておらず、src/utils/jevWasmServer.ts経由でのサーバー再利用のみ用意している',
+    wasmPath: 'public/wasm/jev_bg.wasm',
+    sourceDir: 'wasm/jev-wasm',
+    sourceFile: 'wasm/jev-wasm/src/lib.rs',
+    approxSize: '約106KB',
+    sizeBytes: 108613,
+    builtAt: '2026-09-17',
+  },
+  {
+    id: 'msb',
+    name: 'msb --help / --tree (microsandbox CLI, Rust)',
+    description:
+      'microsandbox(https://github.com/microsandbox/microsandbox)のCLI `msb` のヘルプ・コマンドツリー表示だけを再実装したもの。msb本体はKVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVMランタイムでWASM(ブラウザ/Workers)からは実行できないため、公式README(Apache-2.0)に列挙されたコマンド一覧を元にした静的なヘルプ・ツリー出力(msb_help/msb_tree/msb_command_help)のみを提供する。実際のサンドボックス起動・イメージ取得・スナップショット等は対象外。`/neko msb --help`のサーバー実行で使用する(msb_helpのみ配線済み。msb_tree/msb_command_helpとブラウザページは未配線)',
+    wasmPath: 'public/wasm/msb_bg.wasm',
+    sourceDir: 'wasm/msb-wasm',
+    sourceFile: 'wasm/msb-wasm/src/lib.rs',
+    approxSize: '約61KB',
+    sizeBytes: 62596,
+    builtAt: '2026-09-23',
+  },
+  {
+    id: 'gron',
+    name: 'gron / ungron (Go)',
+    description:
+      'gron(https://github.com/tomnomnom/gron)の中核であるJSON⇔代入文(`json.a.b[0] = 1;`)の相互変換だけを移植したもの。HTTPリクエスト実行・ファイル監視・ANSIカラー出力・CLI引数解析は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/gron-wasmページのブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+    wasmPath: 'public/wasm/gron.wasm',
+    sourceDir: 'wasm/gron-wasm',
+    sourceFile: 'wasm/gron-wasm/gron.go',
+    approxSize: '約3.1MB',
+    sizeBytes: 3226678,
+    builtAt: '2026-09-23',
+  },
+  {
+    id: 'go-diff',
+    name: 'go-diff (Go)',
+    description:
+      'go-diff(https://github.com/sergi/go-diff、Googleのdiff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用(patch_make/patch_apply)・あいまい一致(match_main)は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/go-diff-wasmページのブラウザ実行に加え、POST /api/diff(セッションまたはAPIキー認証)からサーバー実行でも呼び出せる。コード生成の正しさ判定には使わない(CLAUDE.mdルール35参照)、人間が見るための差分表示専用',
+    wasmPath: 'public/wasm/go-diff.wasm',
+    sourceDir: 'wasm/go-diff-wasm',
+    sourceFile: 'wasm/go-diff-wasm/diff.go',
+    approxSize: '約3.0MB',
+    sizeBytes: 3152752,
+    builtAt: '2026-09-24',
   },
 ];
 

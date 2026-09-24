@@ -1,0 +1,930 @@
+{
+  "name": "nekoserver/dynamicneko",
+  "type": "dir",
+  "children": [
+    {
+      "name": "CLAUDE.design.md",
+      "type": "file"
+    },
+    {
+      "name": "CLAUDE.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.20260908.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.20260910.react-19.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.20260924.go-diff-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.4.kv-setup.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.6.oauth-callback.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.build.20260908.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.security.20260912.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.security.md",
+      "type": "file"
+    },
+    {
+      "name": "SUGGEST.react-router.md",
+      "type": "file"
+    },
+    {
+      "name": "cf-auth",
+      "type": "dir",
+      "children": [
+        {
+          "name": "README.md",
+          "type": "file"
+        },
+        {
+          "name": "migrations",
+          "type": "dir",
+          "children": [
+            {
+              "name": "0001_create_alt_notify_ingest_log.sql",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "package-lock.json",
+          "type": "file"
+        },
+        {
+          "name": "package.json",
+          "type": "file"
+        },
+        {
+          "name": "scripts",
+          "type": "dir",
+          "children": [
+            {
+              "name": "deploy.mjs",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "src",
+          "type": "dir",
+          "children": [
+            {
+              "name": "feed.ts",
+              "type": "file"
+            },
+            {
+              "name": "index.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "oauth",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "github.ts",
+                  "type": "file"
+                },
+                {
+                  "name": "google.ts",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "session.ts",
+              "type": "file"
+            },
+            {
+              "name": "state.ts",
+              "type": "file"
+            },
+            {
+              "name": "types.ts",
+              "type": "file"
+            },
+            {
+              "name": "webhook.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "type": "dir",
+          "children": [
+            {
+              "name": "ingest.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "oauth-callback.test.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "tsconfig.json",
+          "type": "file"
+        },
+        {
+          "name": "tsconfig.test.json",
+          "type": "file"
+        },
+        {
+          "name": "wrangler.toml",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "env.d.ts",
+      "type": "file"
+    },
+    {
+      "name": "index.html",
+      "type": "file"
+    },
+    {
+      "name": "migrations",
+      "type": "dir",
+      "children": [
+        {
+          "name": "0001_create_snippets.sql",
+          "type": "file"
+        },
+        {
+          "name": "0002_create_cursor_agent_runs.sql",
+          "type": "file"
+        },
+        {
+          "name": "0003_create_ai_cache_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0004_create_tree_view_file_types.sql",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "public",
+      "type": "dir",
+      "children": [
+        {
+          "name": "dynamic-worker-runner.css",
+          "type": "file"
+        },
+        {
+          "name": "favicon.ico",
+          "type": "file"
+        },
+        {
+          "name": "html-run-preview.css",
+          "type": "file"
+        },
+        {
+          "name": "manifest-ai-panel.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest-approval.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest-gallery.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest-select.js",
+          "type": "file"
+        },
+        {
+          "name": "manifest-welcome.json",
+          "type": "file"
+        },
+        {
+          "name": "manifest.json",
+          "type": "file"
+        },
+        {
+          "name": "register-sw.js",
+          "type": "file"
+        },
+        {
+          "name": "rive",
+          "type": "dir",
+          "children": [
+            {
+              "name": "avatar.riv",
+              "type": "file"
+            },
+            {
+              "name": "emojis.riv",
+              "type": "file"
+            },
+            {
+              "name": "layouts_demo.riv",
+              "type": "file"
+            },
+            {
+              "name": "login.riv",
+              "type": "file"
+            },
+            {
+              "name": "rive.wasm",
+              "type": "file"
+            },
+            {
+              "name": "vehicles.riv",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "sw.js",
+          "type": "file"
+        },
+        {
+          "name": "theme-init.js",
+          "type": "file"
+        },
+        {
+          "name": "wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "go-diff-wasm_exec.js",
+              "type": "file"
+            },
+            {
+              "name": "go-diff.wasm",
+              "type": "file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ruby-3.4.md",
+      "type": "file"
+    },
+    {
+      "name": "src",
+      "type": "dir",
+      "children": [
+        {
+          "name": "ai-cache-jev.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-log.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-swipe.ts",
+          "type": "file"
+        },
+        {
+          "name": "auth",
+          "type": "dir",
+          "children": [
+            {
+              "name": "github.ts",
+              "type": "file"
+            },
+            {
+              "name": "session.ts",
+              "type": "file"
+            },
+            {
+              "name": "state.ts",
+              "type": "file"
+            },
+            {
+              "name": "types.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "client.tsx",
+          "type": "file"
+        },
+        {
+          "name": "components",
+          "type": "dir",
+          "children": [
+            {
+              "name": "ai-cache-question-row.tsx",
+              "type": "file"
+            },
+            {
+              "name": "ai-panel-state.ts",
+              "type": "file"
+            },
+            {
+              "name": "aireqst-widget.tsx",
+              "type": "file"
+            },
+            {
+              "name": "answer-segments.ts",
+              "type": "file"
+            },
+            {
+              "name": "approval-panel.tsx",
+              "type": "file"
+            },
+            {
+              "name": "ask-ai-slash-command.ts",
+              "type": "file"
+            },
+            {
+              "name": "ask-ai-widget.tsx",
+              "type": "file"
+            },
+            {
+              "name": "code-snippet-styles.tsx",
+              "type": "file"
+            },
+            {
+              "name": "commit-checker-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "commit-checker-score.ts",
+              "type": "file"
+            },
+            {
+              "name": "container-queries-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "container-queries-samples.ts",
+              "type": "file"
+            },
+            {
+              "name": "css-menu-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "css-menu-samples.ts",
+              "type": "file"
+            },
+            {
+              "name": "css-tables-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "css-tables-samples.ts",
+              "type": "file"
+            },
+            {
+              "name": "css100-effects-grid.tsx",
+              "type": "file"
+            },
+            {
+              "name": "css100-effects.ts",
+              "type": "file"
+            },
+            {
+              "name": "cursor-cache-widget.tsx",
+              "type": "file"
+            },
+            {
+              "name": "diff-viewer-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "dynamic-worker-runner.ts",
+              "type": "file"
+            },
+            {
+              "name": "jev-playground-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "jev-score-board-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "loading-icons-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "markdown-lite.ts",
+              "type": "file"
+            },
+            {
+              "name": "rive-app-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "rive-app-state.ts",
+              "type": "file"
+            },
+            {
+              "name": "rubiks-cube-engine.ts",
+              "type": "file"
+            },
+            {
+              "name": "samples-state.ts",
+              "type": "file"
+            },
+            {
+              "name": "sandbox-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "shimmer-stat-cards.tsx",
+              "type": "file"
+            },
+            {
+              "name": "slack-mrkdwn.ts",
+              "type": "file"
+            },
+            {
+              "name": "slack-post-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "style-picker.tsx",
+              "type": "file"
+            },
+            {
+              "name": "svg-gallery-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "svg-icons-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "tree-view-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "typewriter-composer-page.tsx",
+              "type": "file"
+            },
+            {
+              "name": "ui-samples.tsx",
+              "type": "file"
+            },
+            {
+              "name": "use-document-title.ts",
+              "type": "file"
+            },
+            {
+              "name": "welcome-browser-counter.tsx",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "cursor-agent-runs.ts",
+          "type": "file"
+        },
+        {
+          "name": "data",
+          "type": "dir",
+          "children": [
+            {
+              "name": "tree-view-repos.ts",
+              "type": "file"
+            },
+            {
+              "name": "tree-view-sample-data-dynamicneko.ts",
+              "type": "file"
+            },
+            {
+              "name": "tree-view-sample-data.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "github-repo-tree.ts",
+          "type": "file"
+        },
+        {
+          "name": "go-diff-wasm-client.ts",
+          "type": "file"
+        },
+        {
+          "name": "html-run-preview.ts",
+          "type": "file"
+        },
+        {
+          "name": "run-code.ts",
+          "type": "file"
+        },
+        {
+          "name": "server.ts",
+          "type": "file"
+        },
+        {
+          "name": "snippets.ts",
+          "type": "file"
+        },
+        {
+          "name": "styles.css",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-diff-render.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-file-types.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-raw-path.ts",
+          "type": "file"
+        },
+        {
+          "name": "utils",
+          "type": "dir",
+          "children": [
+            {
+              "name": "aichatUserToken.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "welcome-browser-test-sample.ts",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "type": "dir",
+      "children": [
+        {
+          "name": "ai-cache-jev-average.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-jev-bulk-select.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-jev-chart.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-jev-score.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-jev-stats.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-log.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-model-colors.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-qsearch-latest-answer.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-qsearch.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-swipe.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-cache-user-token.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ai-panel-state.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "answer-segments.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ask-ai-slash-command.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ask-ai.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "auto-carousel-20260918.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "commit-checker-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-checker-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-checker-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "commit-checker-score.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "container-queries-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "css-menu-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "css-tables-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "css100-effects-grid.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "cursor-cache-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "diff-viewer-page-20260924.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "diff-viewer-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gallery-css100.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "generate-code.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "github-repo-tree.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "html-run-preview.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-playground-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-playground-jump-links-20260922.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "jev-playground-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-playground-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-board-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-board-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "jev-score-board-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "loading-icons-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "markdown-lite.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ping.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "rive-app-state.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "samples-state.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "service-worker-sw.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "shimmer-samples-20260918.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "slack-mrkdwn.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-post-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-post-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "slack-post-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "svg-icons-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "tokenize-go.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tokenize-ruby.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tokenize-sql.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tokenize-yaml-toml-mermaid.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-commit-summary-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-commits-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-diff-button-20260924.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-diff-render.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-file-types.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-html-preview-csp.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-raw-path.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-raw-ref-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-sidebar-resize-20260919.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-test-score-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-test-score-trend-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "typewriter-composer-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "typewriter-ja-20260922.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "typewriter-ja-crumble-20260922.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "typewriter-ja-decay-shift-20260922.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "ui-samples-20260922.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "ui-samples-anim-icons-20260923.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "ui-samples-new.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "use-document-title.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "welcome-browser-counter.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "welcome-browser-test-sample.test.ts",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "tsconfig.json",
+      "type": "file"
+    },
+    {
+      "name": "tsconfig.test.json",
+      "type": "file"
+    },
+    {
+      "name": "vite.config.ts",
+      "type": "file"
+    },
+    {
+      "name": "vitest.config.ts",
+      "type": "file"
+    },
+    {
+      "name": "wrangler.jsonc",
+      "type": "file"
+    }
+  ]
+}

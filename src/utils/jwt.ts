@@ -55,17 +55,21 @@ async function getKey(secret: string): Promise<CryptoKey> {
 /**
  * JWTを生成
  */
-export async function createJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>, secret: string, expiresIn: number = 3600): Promise<string> {
+export async function createJWT(
+  payload: Omit<JWTPayload, 'iat' | 'exp'>,
+  secret: string,
+  expiresIn: number = 3600,
+  issuedAtSeconds: number = Math.floor(Date.now() / 1000)
+): Promise<string> {
   const header = {
     alg: 'HS256',
     typ: 'JWT'
   };
 
-  const now = Math.floor(Date.now() / 1000);
   const fullPayload: JWTPayload = {
     ...payload,
-    iat: now,
-    exp: now + expiresIn
+    iat: issuedAtSeconds,
+    exp: issuedAtSeconds + expiresIn
   };
 
   const encoder = new TextEncoder();
@@ -97,7 +101,10 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
     const encoder = new TextEncoder();
     const key = await getKey(secret);
     const signature = base64UrlDecode(signatureEncoded);
-    const isValid = await crypto.subtle.verify('HMAC', key, signature, encoder.encode(data));
+    // jsdom と Node の SubtleCrypto は ArrayBuffer の realm が異なり、
+    // raw ArrayBuffer だと "3rd argument is not instance of ArrayBuffer" になる。
+    // TypedArray ならどちらの実装でも受け付ける。
+    const isValid = await crypto.subtle.verify('HMAC', key, new Uint8Array(signature), encoder.encode(data));
 
     if (!isValid) {
       return null;

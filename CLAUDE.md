@@ -186,6 +186,36 @@
     - エラー種別（`errorCode`）は`enum`かunion literal型で列挙し、新しい失敗パターンを追加する際はコンパイラがすべての判定箇所の網羅漏れを検出できるようにする（`switch`の`default`で`never`型にフォールスルーさせる等）
     - D1保存やSlack表示など「人間が読む文字列」が必要な場面では、この構造化結果から**最後の1箇所でだけ**表示用文字列を組み立てる。表示用文字列を判定に使い回さない
     - 既に永続化された文字列（D1に保存済みの過去データ等）を後から分類する必要がある場合は、prefixのリストを判定ロジックの側で共有配列・共有関数として1箇所にまとめ、複数箇所にハードコードしない
+33. **自動アップロードしてよいものとよくないものを区別しろ** — `/opt/cursor/artifacts` への配置・PR本文への成果物埋め込み・リポジトリへの追加は、自動アップロード対象だけに限る。詳細は「自動アップロード対象の区別」を参照。D1貼り付け用SQLやコピー用の一時ファイルを成果物やGitに載せない
+34. **push・コミット追加の前に、そのブランチのPRが既にマージ/クローズ済みでないか必ず確認しろ** — 既存ブランチへ追加のコミットをpushする前に、対応するPRの状態（`state`/`merged`）を確認すること。マージ済み・クローズ済みのPRへは、後からpushしても自動で取り込まれない（PRが再オープンされない限りマージ対象にならず、そのコミットは宙に浮く）。作業対象のブランチが既にマージ/クローズされていた場合は、そのブランチに直接pushせず、**最新のdefaultブランチから新しいブランチを作り直し**（必要なら未マージ分のコミットを`git cherry-pick`で移植）、新規PRとしてpushすること（実例: PR #1869がマージ済みと気づかずに同じブランチへ追加コミットをpushしてしまい、`/wasm-modules`ページへのレジストリ登録が取り残され、PR #1870として作り直す羽目になった）。
+35. **`/json-structural-diff` ページ（gron-wasm × go-diff-wasmによるJSON構造差分表示）は原則使わない** — オブジェクトのキー順は`gronToGron`がソートするため無視されるが、**配列の要素順序は無視されない**（`json.arr[0]`のようにインデックスをそのまま使うため、要素の並び替えだけでも差分ありと表示される）。「構造的な差分だけを見せる」という見た目に反して配列を含むデータでは誤解を招きやすく、ユーザー判断により本番運用では使用しない方針とした。ページ自体（PR #2043）・土台の`gron-wasm`/`go-diff-wasm`（PR #2042）は削除せず残っているが、新規に頼るロジックを組む際はこのページの出力を正しさの根拠にしないこと。配列も正規化して比較したい場合は、`gron-wasm`側に配列ソートオプションを追加する改修が別途必要（未着手）。
+
+---
+
+## 自動アップロード対象の区別
+
+自動アップロードしてよいものとよくないものを混同しないこと。
+「コピーできるようにして」「ダウンロードできるようにして」と頼まれても、後者を前者の置き場所に流用しない。
+
+### 自動アップロードしてよいもの
+
+依頼されたコード変更の動作証明だけ。
+
+- スクリーンショット、画面録画、テストログのうち、その変更が動いたことを示すもの
+- 置き場所は `/opt/cursor/artifacts`
+- PR に載せるなら `img` / `video` だけ
+
+### 自動アップロードしてはいけないもの
+
+チャットで渡せば足りる生成物。リポジトリにも成果物ディレクトリにも置かない。
+
+- D1 に貼る関数カタログ SQL（`ts_function_catalog` 更新SQLを含む）
+- コピー用・ダウンロード用の一時ファイル
+- 「コピーできるようにして」と頼まれた本文
+- リポジトリに残す必要のない生成物
+
+これらはチャットのコードブロックで提示する。コードブロック右上のコピーで足りる。
+ユーザーが明示的にリポジトリへ追加するよう頼んだ場合だけ例外とする。
 
 ---
 
@@ -289,6 +319,12 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 - GitHub webhook → Slack/外部Worker(Altワーカー)通知パイプライン(経路A/B/Cの区別・write-onlyデータストア事故・Slack app_mentionのbot判定):
   [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md)
+- /cursor-agent（起動・チャンク結合・キャッシュ・応答/過去検索。次工程はAIチャット入力窓とダイナミックワーカー。診断エラー `no such table: cursor_agent_answer_cache` は `SPEC.cursor-agent.md` に必載）:
+  [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
+  [`SPEC.cursor-agent.md`](SPEC.cursor-agent.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.20260914.md`](NOTICE.cloudflare-workers-github-oauth-1.20260914.md)
+  [`SPEC.cloudflare-workers-github-oauth-1.20260914.md`](SPEC.cloudflare-workers-github-oauth-1.20260914.md)
+  [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 
 ---
 
@@ -371,6 +407,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
 4. **SQL をユーザーに提示して D1 で実行**
    修正後の SQL をコードブロックで提示する（`--` コメント禁止）。
    ユーザーが D1 コンソールにそのまま貼り付けて実行できる形式にすること。
+   この SQL は自動アップロード対象外である。`/opt/cursor/artifacts` にもリポジトリにも置かず、
+   ダウンロード用HTMLやGit上のファイルで代用しないこと。
 
 5. **新関数も変更もなければスキップ**
    変更ファイルに関数の追加・変更が一切なければこのステップはスキップしてよい。

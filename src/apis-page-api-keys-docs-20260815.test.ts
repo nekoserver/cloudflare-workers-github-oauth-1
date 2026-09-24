@@ -37,10 +37,12 @@ describe('APIリファレンスページ: APIキー管理エンドポイント�
   it('POST /api/api-keys(発行)が登録され、ラベル・有効期限日数をbodyに持つ', () => {
     const idx = html.indexOf("method:'POST', path:'/api/api-keys',");
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 500);
+    const block = html.slice(idx, idx + 900);
     expect(block).toContain("n:'label'");
     expect(block).toContain("n:'expiresInDays'");
     expect(block).toContain('rawKey');
+    expect(block).toContain('countdownNotice');
+    expect(block).toContain('PK期限');
   });
 
   it('POST /api/api-keys/:id/revoke(失効)が登録され、idをpath_paramsに持つ', () => {

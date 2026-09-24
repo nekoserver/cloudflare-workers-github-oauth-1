@@ -27,7 +27,7 @@ function loadFunctions() {
     `${src}\nreturn { vectorizeAnswerAndExtractKeywords, registerKeywordViaSearchLogFlow, bulkRegisterUnregisteredKeywords };`
   );
   return fn() as {
-    vectorizeAnswerAndExtractKeywords: (shareId: string, model?: string) => Promise<{ status: number; data: unknown }>;
+    vectorizeAnswerAndExtractKeywords: (shareId: string, model?: string, forcePlamo?: boolean) => Promise<{ status: number; data: unknown }>;
     registerKeywordViaSearchLogFlow: (keyword: string, originShareId: string | null) => Promise<boolean>;
     bulkRegisterUnregisteredKeywords: (
       originShareId: string | null,
@@ -74,6 +74,34 @@ describe('getVectorizeAndBulkRegisterScript', () => {
       method: 'POST',
       body: JSON.stringify({ shareId: 's1', model: '@cf/baai/bge-m3' }),
     }));
+  });
+
+  it('forcePlamo=trueを渡すとリクエストボディにforcePlamo:trueが含まれる(✂️ボタン専用: サーバー側で常にPlaMoへ強制上書きしてもらうためのフラグ)', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ vectorized: true, keywords: [] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { vectorizeAnswerAndExtractKeywords } = loadFunctions();
+
+    await vectorizeAnswerAndExtractKeywords('s1', '@cf/meta/llama-3.3-70b-instruct-fp8-fast', true);
+    expect(fetchMock).toHaveBeenCalledWith('/api/aichat/vectorize-answer', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ shareId: 's1', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', forcePlamo: true }),
+    }));
+  });
+
+  it('forcePlamoを渡さない場合は従来通りforcePlamoキーがボディに含まれない', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ vectorized: true, keywords: [] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { vectorizeAnswerAndExtractKeywords } = loadFunctions();
+
+    await vectorizeAnswerAndExtractKeywords('s1', '@cf/baai/bge-m3');
+    const call = fetchMock.mock.calls[0][1] as { body: string };
+    expect(JSON.parse(call.body)).not.toHaveProperty('forcePlamo');
   });
 
   it('サーバーが一定時間(30秒)応答しない場合はタイムアウトエラーを返す(通信エラーとして投げない)', async () => {

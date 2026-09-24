@@ -10,10 +10,38 @@ import { postSlackMessage } from '../utils/slack';
 import { getSessionDurationSeconds } from '../utils/session';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables } from '../types';
 import { isApiKeyToken, checkApiKeyAuth, touchApiKeyLastUsed, type ApiKeyDb } from '../utils/apiKeys';
+import { recordApiKeyEndpointAccess, type ApiKeyStatsDb } from '../utils/apiKeyStats';
 
 // Contextに認証ユーザー情報を追加
 export interface AuthContext {
   user: JWTPayload;
+}
+
+/**
+ * GitHubの変更可能なlogin名ではなく、不変なnumeric IDでダッシュボード管理者を判定する。
+ * 設定ミスで一般ユーザーへ権限が開かないよう、空要素や数値以外を含む設定もfail closedにする。
+ */
+export function isCfDashboardAdmin(githubId: number | undefined, configuredIds: string | undefined): boolean {
+  if (!Number.isSafeInteger(githubId) || !configuredIds?.trim()) return false;
+  const entries = configuredIds.split(',').map((entry) => entry.trim());
+  if (entries.some((entry) => !/^[1-9]\d*$/.test(entry))) return false;
+  return entries.some((entry) => Number(entry) === githubId);
+}
+
+/** authMiddlewareの後に使用する、/cf-dashboard専用の管理者認可。 */
+export async function cfDashboardAdminMiddleware(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  next: Next
+) {
+  const configuredIds = c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS;
+  const headers = { 'Cache-Control': 'no-store' };
+  if (!configuredIds?.trim()) {
+    return c.json({ error: '管理者設定が未構成です' }, 503, headers);
+  }
+  if (!isCfDashboardAdmin(c.get('user').github_id, configuredIds)) {
+    return c.json({ error: 'この操作には管理者権限が必要です' }, 403, headers);
+  }
+  await next();
 }
 
 /**
@@ -252,10 +280,15 @@ export async function aichatAuthMiddleware(c: Context<{ Bindings: Bindings; Vari
     }
     const nowSeconds = Math.floor(Date.now() / 1000);
     c.set('user', { sub: result.userId, iat: nowSeconds, exp: nowSeconds + 60 });
+    c.set('apiKeyId', result.keyId);
     c.executionCtx.waitUntil(
       touchApiKeyLastUsed(db as unknown as ApiKeyDb, bearerToken).catch(() => {})
     );
     await next();
+    c.executionCtx.waitUntil(
+      recordApiKeyEndpointAccess(db as unknown as ApiKeyStatsDb, result.keyId, c.req.method, c.req.routePath, c.res.status)
+        .catch(() => {})
+    );
     return;
   }
   return authMiddleware(c, next);

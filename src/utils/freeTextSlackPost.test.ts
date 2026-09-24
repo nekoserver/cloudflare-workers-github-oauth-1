@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand, type TsubuyakiSlashCommandDeps } from './freeTextSlackPost';
+import { validateFreeText, buildFreeTextSlackMessage, buildFreeTextSlackBlocks, isSlackPostTemplateId, SLACK_POST_TEMPLATES, handleTsubuyakiSlashCommand, type TsubuyakiSlashCommandDeps } from './freeTextSlackPost';
 
 describe('validateFreeText', () => {
   it('通常の文字列を受け付ける', () => {
@@ -49,6 +49,33 @@ describe('buildFreeTextSlackMessage', () => {
     const msg = buildFreeTextSlackMessage('octocat', 'テスト投稿です');
     expect(msg).toContain('octocat');
     expect(msg).toContain('テスト投稿です');
+  });
+});
+
+describe('Slack投稿Block Kitテンプレート', () => {
+  it('幅広い用途のテンプレートを重複なく提供する', () => {
+    expect(SLACK_POST_TEMPLATES.length).toBeGreaterThanOrEqual(25);
+    expect(new Set(SLACK_POST_TEMPLATES.map((item) => item.id)).size).toBe(SLACK_POST_TEMPLATES.length);
+    expect(SLACK_POST_TEMPLATES.map((item) => item.id)).toEqual(expect.arrayContaining([
+      'announcement', 'release', 'incident', 'approval', 'meeting', 'daily', 'event', 'security',
+    ]));
+  });
+
+  it('既知のIDだけを受け付け、不明なIDを拒否する', () => {
+    expect(isSlackPostTemplateId('incident')).toBe(true);
+    expect(isSlackPostTemplateId('not-a-template')).toBe(false);
+    expect(isSlackPostTemplateId(null)).toBe(false);
+  });
+
+  it('テンプレートから有効なBlock Kit構造とフォールバック本文用情報を作る', () => {
+    const blocks = buildFreeTextSlackBlocks('octocat', '復旧作業中です', 'incident');
+    expect(blocks?.map((block) => block.type)).toEqual(['header', 'section', 'divider', 'context']);
+    expect(JSON.stringify(blocks)).toContain('復旧作業中です');
+    expect(JSON.stringify(blocks)).toContain('octocat');
+  });
+
+  it('フリーメッセージは従来互換のためblocksを付けない', () => {
+    expect(buildFreeTextSlackBlocks('octocat', 'hello', 'plain')).toBeUndefined();
   });
 });
 
