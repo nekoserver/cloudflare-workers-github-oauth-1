@@ -8,7 +8,7 @@
  *   (1) 追加/削除/変更なしの行が同じ色になり、変更点が見分けられない
  *   (2) HTMLへ差し込む際にエスケープを忘れ、diffの内容にXSSペイロードが
  *       含まれるとスクリプトが実行されてしまう(a・bはユーザー入力)
- *   (3) サマリ行やコードフェンス行(接頭辞なし)まで誤って色分けされてしまう
+ *   (3) Markdownのdiffフェンスが評価されず、```diff / ``` が文字として表示される
  */
 import { describe, it, expect } from 'vitest';
 import { getGoDiffWasmPage } from './views/goDiffWasm';
@@ -58,6 +58,18 @@ describe('/go-diff-wasm: 差分表示の色分け', () => {
     expect(out).toContain('class="diff-line diff-ctx">  a<');
     expect(out).toContain('class="diff-line diff-del">- b<');
     expect(out).toContain('class="diff-line diff-add">+ c<');
+    expect(out).not.toContain('```diff');
+    expect(out).not.toContain('>```<');
+  });
+
+  it('Markdownのdiffコードフェンスは表示せず、フェンス内の行だけを描画する', () => {
+    const html = getGoDiffWasmPage('tester');
+    const renderDiffOutput = extractRenderDiffOutput(html);
+    const out = renderDiffOutput('```diff\n- before\n+ after\n```');
+    expect(out).toBe(
+      '<span class="diff-line diff-del">- before</span>' +
+      '<span class="diff-line diff-add">+ after</span>'
+    );
   });
 
   it('ブロック表示する各行のspan間に改行文字を入れず、余分な空行を作らない', () => {

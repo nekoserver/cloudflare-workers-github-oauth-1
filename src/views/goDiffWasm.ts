@@ -232,12 +232,15 @@ export function getGoDiffWasmPage(username: string): string {
     }
 
     // go-diff-wasm(DiffText)の出力は「N行追加, M行削除」等のサマリ行、
-    // diffフェンス、本体行("+ "=追加, "- "=削除, "  "=変更なし)からなる。
-    // 行頭の接頭辞ごとに色分けし、変更点(追加/削除)と不変な行を見分けやすくする。
+    // Markdownのdiffフェンス、本体行("+ "=追加, "- "=削除, "  "=変更なし)からなる。
+    // フェンスは表示せずコードブロックとして評価し、本体は行頭の接頭辞ごとに
+    // 色分けして変更点(追加/削除)と不変な行を見分けやすくする。
     function renderDiffOutput(out) {
       // 各行はdisplay:blockのspanとして改行されるため、span間にも改行文字を
       // 入れるとwhite-space:pre-wrapによって空行として描画されてしまう。
-      return out.split('\\n').map(function (line) {
+      return out.split('\\n').filter(function (line) {
+        return !/^\\s*\`\`\`(?:diff)?\\s*$/.test(line);
+      }).map(function (line) {
         var cls = 'diff-meta';
         if (line.indexOf('+ ') === 0) cls = 'diff-add';
         else if (line.indexOf('- ') === 0) cls = 'diff-del';
