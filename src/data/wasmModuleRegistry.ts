@@ -156,6 +156,30 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sizeBytes: 62596,
     builtAt: '2026-09-23',
   },
+  {
+    id: 'gron',
+    name: 'gron / ungron (Go)',
+    description:
+      'gron(https://github.com/tomnomnom/gron)の中核であるJSON⇔代入文(`json.a.b[0] = 1;`)の相互変換だけを移植したもの。HTTPリクエスト実行・ファイル監視・ANSIカラー出力・CLI引数解析は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/gron-wasmページのブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+    wasmPath: 'public/wasm/gron.wasm',
+    sourceDir: 'wasm/gron-wasm',
+    sourceFile: 'wasm/gron-wasm/gron.go',
+    approxSize: '約3.1MB',
+    sizeBytes: 3226678,
+    builtAt: '2026-09-23',
+  },
+  {
+    id: 'go-diff',
+    name: 'go-diff (Go)',
+    description:
+      'go-diff(https://github.com/sergi/go-diff、Googleのdiff-match-patchアルゴリズムのGo移植)を使い、2つのテキストの行単位の差分を```diff フェンス付きMarkdownへ整形する。パッチ生成・適用(patch_make/patch_apply)・あいまい一致(match_main)は対象外。gh-attach-wasm・sqlc-wasmと同じくGo標準のwasm_exec.jsグルーコードで動く。/go-diff-wasmページのブラウザ実行のみでサーバー(/neko等)からは呼ばれない',
+    wasmPath: 'public/wasm/go-diff.wasm',
+    sourceDir: 'wasm/go-diff-wasm',
+    sourceFile: 'wasm/go-diff-wasm/diff.go',
+    approxSize: '約3.0MB',
+    sizeBytes: 3150323,
+    builtAt: '2026-09-23',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
