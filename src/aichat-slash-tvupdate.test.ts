@@ -16,7 +16,7 @@ describe('/neko tvupdate', () => {
     });
 
     expect(updateTreeView).toHaveBeenCalledOnce();
-    expect(updateTreeView).toHaveBeenCalledWith(false, undefined, false);
+    expect(updateTreeView).toHaveBeenCalledWith(undefined, false);
     expect(result.handled && result.response).toContain('手動更新を実行しました');
     expect(result.handled && result.response).toContain('更新あり: 1件');
     expect(result.handled && result.response).toContain('変更なし: 1件');
@@ -48,18 +48,28 @@ describe('/neko tvupdate', () => {
     }
   });
 
-  it('必要なD1テーブルがない場合と直近1時間に実行済みの場合は更新しない', async () => {
+  it('必要なD1テーブルがない場合は更新しない', async () => {
     const missing = await interpretAichatSlashCommand('/neko tvupdate', new Date(), {
       fetchLatestCommitAgentLog: async () => null,
       updateTreeView: async () => ({ status: 'table_missing', updated: [], unchanged: [], failed: [] }),
     });
-    const recent = await interpretAichatSlashCommand('/neko tvupdate', new Date(), {
-      fetchLatestCommitAgentLog: async () => null,
-      updateTreeView: async () => ({ status: 'recent', updated: [], unchanged: [], failed: [] }),
-    });
 
     expect(missing.handled && missing.response).toContain('必要なD1テーブルがありません');
-    expect(recent.handled && recent.response).toContain('過去1時間以内');
+  });
+
+  it('直近の実行履歴があっても待機せず毎回GitHubから再取得する(1時間規制は撤去済み)', async () => {
+    const updateTreeView = vi.fn().mockResolvedValue({
+      status: 'updated' as const, updated: ['nekoserver/repo-a'], unchanged: [], failed: [],
+    });
+
+    const result = await interpretAichatSlashCommand('/neko tvupdate', new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      updateTreeView,
+    });
+
+    expect(updateTreeView).toHaveBeenCalledOnce();
+    expect(result.handled && result.response).not.toContain('過去1時間以内');
+    expect(result.handled && result.response).toContain('更新あり: 1件');
   });
 
   it('更新対象が0件なら実行成功と表示せず、設定確認を促す', async () => {
@@ -74,10 +84,10 @@ describe('/neko tvupdate', () => {
   });
 
   it('ヘルプにコマンドを掲載する', () => {
-    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--force] [--dryrun] [-R owner/repo] |');
+    expect(formatAichatSlashCommandHelp()).toContain('| /neko tvupdate [--dryrun] [-R owner/repo] |');
   });
 
-  it('--forceを強制更新フラグとして渡す', async () => {
+  it('--forceは互換性のため受け付けるが、渡す引数には影響しない(no-op)', async () => {
     const updateTreeView = vi.fn().mockResolvedValue({
       status: 'updated' as const, updated: [], unchanged: ['nekoserver/repo-a'], failed: [],
     });
@@ -87,11 +97,11 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
+    expect(updateTreeView).toHaveBeenCalledWith(undefined, false);
   });
 
   it.each(['—force', '–force', '－－force'])(
-    'チャットやIMEでハイフンが変換された%sも強制更新として扱う',
+    'チャットやIMEでハイフンが変換された%sもno-opの--forceとして受け付ける',
     async (forceOption) => {
       const updateTreeView = vi.fn().mockResolvedValue({
         status: 'updated' as const, updated: [], unchanged: [], failed: [],
@@ -102,11 +112,11 @@ describe('/neko tvupdate', () => {
         updateTreeView,
       });
 
-      expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
+      expect(updateTreeView).toHaveBeenCalledWith(undefined, false);
     }
   );
 
-  it('変換された--forceでも強制更新の結果と実行時間を表示する', async () => {
+  it('変換された--forceでも更新結果と実行時間を表示する', async () => {
     vi.useFakeTimers();
     try {
       const updateTreeView = vi.fn().mockImplementation(async () => {
@@ -126,7 +136,7 @@ describe('/neko tvupdate', () => {
       await vi.advanceTimersByTimeAsync(250);
       const result = await resultPromise;
 
-      expect(updateTreeView).toHaveBeenCalledWith(true, undefined, false);
+      expect(updateTreeView).toHaveBeenCalledWith(undefined, false);
       expect(result.handled && result.response).toContain('更新あり: 1件');
       expect(result.handled && result.response).toContain('実行時間: 0.250秒');
     } finally {
@@ -155,7 +165,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(true, 'nekoserver/repo-a', false);
+    expect(updateTreeView).toHaveBeenCalledWith('nekoserver/repo-a', false);
   });
 
   it('-Rの引数欠落と不正なリポジトリ名を拒否する', async () => {
@@ -185,7 +195,7 @@ describe('/neko tvupdate', () => {
       updateTreeView,
     });
 
-    expect(updateTreeView).toHaveBeenCalledWith(false, undefined, true);
+    expect(updateTreeView).toHaveBeenCalledWith(undefined, true);
     expect(result.handled && result.response).toContain('GitHub最新状態と本番DBの差分');
     expect(result.handled && result.response).toContain('本番DBを更新せずに差分を確認しました');
     expect(result.handled && result.response).toContain('| nekoserver/changed | src/new.ts |');

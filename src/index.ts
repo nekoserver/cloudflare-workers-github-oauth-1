@@ -6142,7 +6142,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return rows.results ?? [];
     },
     updateTreeView: c.env.DB && c.env.GITHUB_TOKEN
-      ? (force, repoName, dryRun) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), force, repoName, dryRun)
+      ? (repoName, dryRun) => refreshTreeViewSnapshotsIfStale(c.env, new Date(), repoName, dryRun)
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
@@ -15730,18 +15730,24 @@ async function syncTreeViewSnapshots(
 }
 
 type TreeViewManualRefreshOutcome = {
-  status: 'updated' | 'recent' | 'table_missing' | 'no_repositories';
+  status: 'updated' | 'table_missing' | 'no_repositories';
   updated: string[];
   unchanged: string[];
   failed: { repoName: string; error: string }[];
   differences?: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[];
 };
 
-/** `/neko tvupdate` 用。必要なD1テーブルと直近1時間の実行履歴を確認してから同期する。 */
+/**
+ * `/neko tvupdate` 用。必要なD1テーブルを確認してから同期する。
+ * 以前は直近1時間以内に実行履歴があると--force無指定では即座にスキップ
+ * していたが、ユーザーから「毎回--forceを付けさせられるのが煩わしい」と
+ * 指摘を受け、この待機制限自体を撤去した(2026-09-24)。呼び出し過多の
+ * 抑制は「今すぐ更新」APIの10分5回レート制限(TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX)
+ * 側で別途行っている。
+ */
 async function refreshTreeViewSnapshotsIfStale(
   env: Bindings,
   now = new Date(),
-  force = false,
   repoName?: string,
   dryRun = false,
 ): Promise<TreeViewManualRefreshOutcome> {
@@ -15761,20 +15767,8 @@ async function refreshTreeViewSnapshotsIfStale(
     return { status: 'table_missing', ...empty };
   }
 
-  if (!force && !dryRun) {
-    const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-    const recent = repoName
-      ? await env.DB.prepare(
-        'SELECT 1 AS found FROM tree_view_update_log WHERE repo_name = ? AND datetime(executed_at) >= datetime(?) LIMIT 1'
-      ).bind(repoName, cutoff).first<{ found: number }>()
-      : await env.DB.prepare(
-        'SELECT 1 AS found FROM tree_view_update_log WHERE datetime(executed_at) >= datetime(?) LIMIT 1'
-      ).bind(cutoff).first<{ found: number }>();
-    if (recent) return { status: 'recent', ...empty };
-  }
-
-  // --force は待機時間を省略し、--dryrun はD1を更新しない。
-  // 本番スナップショットとの比較だけを返すため、追加バインディングなしで安全に実行できる。
+  // --dryrun はD1を更新しない。本番スナップショットとの比較だけを返すため、
+  // 追加バインディングなしで安全に実行できる。
   const result = await syncTreeViewSnapshots(env, 'manual', now, env.DB, dryRun, repoName);
   // 対象が0件でも従来は「手動更新を実行しました（全項目0件）」と成功表示し、
   // update_logにも何も残らなかった。実際にはGitHub APIを一度も呼んでいない
