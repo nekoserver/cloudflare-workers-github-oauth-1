@@ -85,7 +85,7 @@ export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnaps
   'nekoserver/dynamicneko': dynamicnekoTreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-09-22T09:20:00.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-09-24T08:38:29.000Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
 

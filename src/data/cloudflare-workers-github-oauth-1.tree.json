@@ -219,6 +219,10 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260924.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.COMMITDB.md",
       "type": "file"
     },
@@ -288,6 +292,10 @@
     },
     {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.tree-wasm.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.workflow.md",
       "type": "file"
     },
     {
@@ -580,11 +588,39 @@
       "children": [
         {
           "name": "fetch-text-stream",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "text-stream-sample.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "text-stream-sample.ts",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "http-query-method",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "README.md",
+              "type": "file"
+            },
+            {
+              "name": "openapi.yaml",
+              "type": "file"
+            },
+            {
+              "name": "server.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "server.ts",
+              "type": "file"
+            }
+          ]
         }
       ]
     },
@@ -1159,6 +1195,26 @@
         {
           "name": "0155_create_tree_view_update_log.sql",
           "type": "file"
+        },
+        {
+          "name": "0156_reset_tree_view_seed.sql",
+          "type": "file"
+        },
+        {
+          "name": "0157_restrict_tree_view_repositories.sql",
+          "type": "file"
+        },
+        {
+          "name": "0158_create_jev_keyword_boundary_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0159_drop_jev_keyword_boundary_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0160_add_error_message_to_tree_view_update_log.sql",
+          "type": "file"
         }
       ]
     },
@@ -1215,6 +1271,10 @@
           "type": "file"
         },
         {
+          "name": "manifest-ruby-wasm.json",
+          "type": "file"
+        },
+        {
           "name": "manifest-wasm-modules.json",
           "type": "file"
         },
@@ -1244,7 +1304,153 @@
         },
         {
           "name": "wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "dig.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "dig.js",
+              "type": "file"
+            },
+            {
+              "name": "dig_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "dig_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "factor.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "factor.js",
+              "type": "file"
+            },
+            {
+              "name": "factor_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "factor_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "gh-attach-wasm_exec.js",
+              "type": "file"
+            },
+            {
+              "name": "gh-attach.wasm",
+              "type": "file"
+            },
+            {
+              "name": "gh.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "gh.js",
+              "type": "file"
+            },
+            {
+              "name": "gh_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "gh_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "go-diff-wasm_exec.js",
+              "type": "file"
+            },
+            {
+              "name": "go-diff.wasm",
+              "type": "file"
+            },
+            {
+              "name": "gron-wasm_exec.js",
+              "type": "file"
+            },
+            {
+              "name": "gron.wasm",
+              "type": "file"
+            },
+            {
+              "name": "jev.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "jev.js",
+              "type": "file"
+            },
+            {
+              "name": "jev_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "jev_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "ls.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "ls.js",
+              "type": "file"
+            },
+            {
+              "name": "ls_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "ls_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "msb.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "msb.js",
+              "type": "file"
+            },
+            {
+              "name": "msb_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "msb_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "sha256.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "sha256.js",
+              "type": "file"
+            },
+            {
+              "name": "sha256_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "sha256_bg.wasm.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "sqlc-wasm_exec.js",
+              "type": "file"
+            },
+            {
+              "name": "sqlc.wasm",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "wasm-modules-icon.svg",
@@ -1277,6 +1483,10 @@
           "type": "file"
         },
         {
+          "name": "build-msb-wasm.sh",
+          "type": "file"
+        },
+        {
           "name": "build-tree-wasm.sh",
           "type": "file"
         },
@@ -1286,7 +1496,17 @@
         },
         {
           "name": "data",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "ne_110m_lakes.geojson",
+              "type": "file"
+            },
+            {
+              "name": "ne_110m_land.geojson",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "generate-d1-query-catalog-inserts.js",
@@ -1394,6 +1614,10 @@
         },
         {
           "name": "aichat-auto-vectorize-settings.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-boundary-panel-selection-20260923.test.ts",
           "type": "file"
         },
         {
@@ -1805,6 +2029,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-slash-msb-20260923.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-slash-qsearch.test.ts",
           "type": "file"
         },
@@ -2121,6 +2349,10 @@
           "type": "file"
         },
         {
+          "name": "apis-page-refresh-20260923.test.ts",
+          "type": "file"
+        },
+        {
           "name": "apis-page-slack-tab-20260912.test.ts",
           "type": "file"
         },
@@ -2258,7 +2490,105 @@
         },
         {
           "name": "data",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "airlineNetwork.ts",
+              "type": "file"
+            },
+            {
+              "name": "airports.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiEndpointList.ts",
+              "type": "file"
+            },
+            {
+              "name": "chessEndgame2n.ts",
+              "type": "file"
+            },
+            {
+              "name": "chessQxg7Candidates.ts",
+              "type": "file"
+            },
+            {
+              "name": "chessQxg7Sac.ts",
+              "type": "file"
+            },
+            {
+              "name": "chessTsume17te.ts",
+              "type": "file"
+            },
+            {
+              "name": "cloudflare-workers-github-oauth-1.tree.json",
+              "type": "file"
+            },
+            {
+              "name": "countryBorders.ts",
+              "type": "file"
+            },
+            {
+              "name": "dynamicneko.tree.json",
+              "type": "file"
+            },
+            {
+              "name": "equalEarthMapData.ts",
+              "type": "file"
+            },
+            {
+              "name": "f1Circuits.ts",
+              "type": "file"
+            },
+            {
+              "name": "famousChessGames.ts",
+              "type": "file"
+            },
+            {
+              "name": "faults.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageList.ts",
+              "type": "file"
+            },
+            {
+              "name": "legacyStorageRegistry.ts",
+              "type": "file"
+            },
+            {
+              "name": "mahjongDiscardProblems.ts",
+              "type": "file"
+            },
+            {
+              "name": "railLines.ts",
+              "type": "file"
+            },
+            {
+              "name": "routeCities.ts",
+              "type": "file"
+            },
+            {
+              "name": "tablePageMap.ts",
+              "type": "file"
+            },
+            {
+              "name": "volcanoes.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModuleRegistry.ts",
+              "type": "file"
+            },
+            {
+              "name": "wineMetadata.ts",
+              "type": "file"
+            },
+            {
+              "name": "wineVectors.ts",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "db-table-registry-completeness-20260728.test.ts",
@@ -2362,6 +2692,22 @@
         },
         {
           "name": "gh-pr-list-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "go-diff-api-server-20260924.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "go-diff-wasm-20260923.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "go-diff-wasm-color-20260924.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "gron-wasm-20260923.test.ts",
           "type": "file"
         },
         {
@@ -2909,6 +3255,10 @@
           "type": "file"
         },
         {
+          "name": "jev-playground-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
           "name": "jev-rev-viewer-endpoint.test.ts",
           "type": "file"
         },
@@ -2954,6 +3304,14 @@
         },
         {
           "name": "json-explorer-utils.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "json-structural-diff-20260924.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "keyword-boundary-endpoints.test.ts",
           "type": "file"
         },
         {
@@ -3050,7 +3408,21 @@
         },
         {
           "name": "middleware",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "aichatAuthMiddleware.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "auth.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "msb-wasm-server-20260923.test.ts",
+          "type": "file"
         },
         {
           "name": "notification-settings.test.ts",
@@ -3130,7 +3502,17 @@
         },
         {
           "name": "routes",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "ai-summary.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "status-tables.test.ts",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "ruby-code-detector.test.ts",
@@ -3146,6 +3528,18 @@
         },
         {
           "name": "ruby-wasm-page-20260831.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-practice-examples.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-pwa.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "ruby-wasm-repl-snippets.test.ts",
           "type": "file"
         },
         {
@@ -3241,6 +3635,14 @@
           "type": "file"
         },
         {
+          "name": "tree-view-repository-restriction-migration.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-seed-migration.test.ts",
+          "type": "file"
+        },
+        {
           "name": "tree-view-snapshot-external-endpoint.test.ts",
           "type": "file"
         },
@@ -3266,11 +3668,1263 @@
         },
         {
           "name": "utils",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "aiSummary.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummary.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiTimeout.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiUsage.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatImage.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatModelConfig.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatModelConfig.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatQsearchLatest.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatSlashCommand.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatSlashCommand.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatSourceStats.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatSourceStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiKeyStats.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiKeyStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiKeys.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "buildAiMessages.ts",
+              "type": "file"
+            },
+            {
+              "name": "callGraphBuilder.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfAuthAccess.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfAuthAccess.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfDashboardD1.ts",
+              "type": "file"
+            },
+            {
+              "name": "cloudflareD1Api.ts",
+              "type": "file"
+            },
+            {
+              "name": "columnRelationStats.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "columnRelationStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitAgentLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitAgentLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "contentHash.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationHash.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationHash.ts",
+              "type": "file"
+            },
+            {
+              "name": "cookie.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdown.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownQuickAdd.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownQuickAdd.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownRegister.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownRegister.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownWidget.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdownWidget.ts",
+              "type": "file"
+            },
+            {
+              "name": "cursorAgentLaunch.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cursorAgentLaunch.ts",
+              "type": "file"
+            },
+            {
+              "name": "d1QueryBindings.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "d1QueryBindings.ts",
+              "type": "file"
+            },
+            {
+              "name": "digWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "dynamicWorkerPing.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "dynamicWorkerPing.ts",
+              "type": "file"
+            },
+            {
+              "name": "dynamicnekoAichatPermission.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "dynamicnekoAichatPermission.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailConfirm.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailConfirm.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailConfirmGate.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailConfirmGate.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailVerify.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "emailVerify.ts",
+              "type": "file"
+            },
+            {
+              "name": "extractFunctionSource.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "extractFunctionSource.ts",
+              "type": "file"
+            },
+            {
+              "name": "f1ScheduleSlackPost.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "f1ScheduleSlackPost.ts",
+              "type": "file"
+            },
+            {
+              "name": "factorWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "freeTextSlackPost.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "freeTextSlackPost.ts",
+              "type": "file"
+            },
+            {
+              "name": "ghAttach.ts",
+              "type": "file"
+            },
+            {
+              "name": "ghPrList.ts",
+              "type": "file"
+            },
+            {
+              "name": "ghWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "git-diff.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "git-diff.ts",
+              "type": "file"
+            },
+            {
+              "name": "github.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "github.ts",
+              "type": "file"
+            },
+            {
+              "name": "githubWebhook.ts",
+              "type": "file"
+            },
+            {
+              "name": "goDiffWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritage-master-seed.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritage-master-seed.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritage-tour-country-filter-resolve.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageMitokoroModal.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageQuestionMatch.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageQuestionMatch.ts",
+              "type": "file"
+            },
+            {
+              "name": "html.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevAnswerValues.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevAnswerValues.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevCountryKeyword.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevEvaluation.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevLivePulse.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevRecursiveDrilldown.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevRecursiveDrilldown.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevRevViewer.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevRevViewer.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevScoreBoard.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevScoreBoard.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevScoreFlow.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevScoreFlow.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "jsonExplorer.ts",
+              "type": "file"
+            },
+            {
+              "name": "jwt-jsdom.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jwt.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordClassifyPanel.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordHighlight.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordHighlight.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordPickerWidget.ts",
+              "type": "file"
+            },
+            {
+              "name": "logger.ts",
+              "type": "file"
+            },
+            {
+              "name": "loginHistory.ts",
+              "type": "file"
+            },
+            {
+              "name": "lsWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdownCodeBlocks.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdownRenderer.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdownRenderer.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdownToSlackMrkdwn.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdownToSlackMrkdwn.ts",
+              "type": "file"
+            },
+            {
+              "name": "megaminx.ts",
+              "type": "file"
+            },
+            {
+              "name": "megaminxGeometry.ts",
+              "type": "file"
+            },
+            {
+              "name": "mergeColumnsFromRows.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbDivisions.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamAnalyze.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamAnalyze.ts",
+              "type": "file"
+            },
+            {
+              "name": "msbWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "notifyDispatch.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "notifyDispatch.ts",
+              "type": "file"
+            },
+            {
+              "name": "parse-functions.ts",
+              "type": "file"
+            },
+            {
+              "name": "publicKeyAuth.ts",
+              "type": "file"
+            },
+            {
+              "name": "publicKeySecurity.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "publicKeySecurity.ts",
+              "type": "file"
+            },
+            {
+              "name": "railLineStations.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "railLineStations.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoValidation.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoValidation.ts",
+              "type": "file"
+            },
+            {
+              "name": "repositoryTree.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "repositoryTree.ts",
+              "type": "file"
+            },
+            {
+              "name": "resendWebhook.ts",
+              "type": "file"
+            },
+            {
+              "name": "returnTo.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "returnTo.ts",
+              "type": "file"
+            },
+            {
+              "name": "revoke.ts",
+              "type": "file"
+            },
+            {
+              "name": "rubyCodeDetector.ts",
+              "type": "file"
+            },
+            {
+              "name": "rubyWasmLoader.ts",
+              "type": "file"
+            },
+            {
+              "name": "session-duration-resolve.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "session.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "session.ts",
+              "type": "file"
+            },
+            {
+              "name": "sha256WasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "slack.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slack.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackAiReply.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackAiReply.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackEvent.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackEvent.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackInteraction.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackInteraction.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackMentionReply.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackMentionReply.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackOauth.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackOauth.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackSignature.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "slackSignature.ts",
+              "type": "file"
+            },
+            {
+              "name": "stripThinkTags.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "stripThinkTags.ts",
+              "type": "file"
+            },
+            {
+              "name": "textToMarkdown.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "textToMarkdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "theme.ts",
+              "type": "file"
+            },
+            {
+              "name": "threadTimeline.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "threadTimeline.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewCronCountdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewSnapshot.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewSnapshot.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeWasmServer.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "uuid.ts",
+              "type": "file"
+            },
+            {
+              "name": "vectorizeAndBulkRegister.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "vectorizeAndBulkRegister.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModuleConfig.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModuleConfig.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModuleSource.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModuleSource.ts",
+              "type": "file"
+            },
+            {
+              "name": "workspace.ts",
+              "type": "file"
+            },
+            {
+              "name": "worldCities.ts",
+              "type": "file"
+            },
+            {
+              "name": "wranglerBlake3Server.ts",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "views",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "aichat-chat-wrapper-width.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat-gh-pr-list-badge.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat-prefer-moondream-embed.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat-send-toast.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat-share.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatImageGallery.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatImageGallery.ts",
+              "type": "file"
+            },
+            {
+              "name": "airlineNetwork.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "airlineNetwork.ts",
+              "type": "file"
+            },
+            {
+              "name": "answerGraph.ts",
+              "type": "file"
+            },
+            {
+              "name": "apiKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "apis.ts",
+              "type": "file"
+            },
+            {
+              "name": "authFlow.ts",
+              "type": "file"
+            },
+            {
+              "name": "base64.ts",
+              "type": "file"
+            },
+            {
+              "name": "binHex.ts",
+              "type": "file"
+            },
+            {
+              "name": "brushJjaemu.ts",
+              "type": "file"
+            },
+            {
+              "name": "callGraph.ts",
+              "type": "file"
+            },
+            {
+              "name": "cf-dashboard.ts",
+              "type": "file"
+            },
+            {
+              "name": "cheeseSearch.ts",
+              "type": "file"
+            },
+            {
+              "name": "chessBoard.ts",
+              "type": "file"
+            },
+            {
+              "name": "columnStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "countdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "cronStatus.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cronStatus.ts",
+              "type": "file"
+            },
+            {
+              "name": "cursorAgent.ts",
+              "type": "file"
+            },
+            {
+              "name": "d1QueryCatalog.ts",
+              "type": "file"
+            },
+            {
+              "name": "earthComposer25.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "earthComposer25.ts",
+              "type": "file"
+            },
+            {
+              "name": "eclipseTiltLesson.ts",
+              "type": "file"
+            },
+            {
+              "name": "equalEarthMap.ts",
+              "type": "file"
+            },
+            {
+              "name": "factorWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "fetchTextStreamDemo.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "fetchTextStreamDemo.ts",
+              "type": "file"
+            },
+            {
+              "name": "fileDeps.ts",
+              "type": "file"
+            },
+            {
+              "name": "flyBrain.ts",
+              "type": "file"
+            },
+            {
+              "name": "flyBrainMahjong.ts",
+              "type": "file"
+            },
+            {
+              "name": "functionChangelog-catalog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "functionChangelog-srcview.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "functionChangelog-step-rollback.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "functionChangelog.ts",
+              "type": "file"
+            },
+            {
+              "name": "galaxy.ts",
+              "type": "file"
+            },
+            {
+              "name": "ghAttach.ts",
+              "type": "file"
+            },
+            {
+              "name": "goDiffWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "gronWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "harnessLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageAccess.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageArea.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageJourney-airline-network.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "heritageJourney.ts",
+              "type": "file"
+            },
+            {
+              "name": "htmlrewriterDemo.ts",
+              "type": "file"
+            },
+            {
+              "name": "imageSpin3d.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevLabelStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevPlayground.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevPlayground.ts",
+              "type": "file"
+            },
+            {
+              "name": "jevScoreBoard.ts",
+              "type": "file"
+            },
+            {
+              "name": "jsonExplorer.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "jsonExplorer.ts",
+              "type": "file"
+            },
+            {
+              "name": "jsonStructuralDiff.ts",
+              "type": "file"
+            },
+            {
+              "name": "kimiCode.ts",
+              "type": "file"
+            },
+            {
+              "name": "kimiCodeMarkdown.ts",
+              "type": "file"
+            },
+            {
+              "name": "kw-architecture.ts",
+              "type": "file"
+            },
+            {
+              "name": "kw-drilldown.ts",
+              "type": "file"
+            },
+            {
+              "name": "legacyStorageInventory.ts",
+              "type": "file"
+            },
+            {
+              "name": "login.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdown-preview.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "markdown-preview.ts",
+              "type": "file"
+            },
+            {
+              "name": "matrixRain.ts",
+              "type": "file"
+            },
+            {
+              "name": "megaminx.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-jp-today-start-flash.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-pitcher-filter-grayout-cookie.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-pitcher-modal-division-filter.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-pitcher-modal-live-score.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-team-abbr-color.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere-today-pitchers-modal.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "mlbSphere.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamAnalyzeLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamAnalyzeLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamVlm.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "moondreamVlm.ts",
+              "type": "file"
+            },
+            {
+              "name": "origamiSculpture.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "origamiSculpture.ts",
+              "type": "file"
+            },
+            {
+              "name": "pentagonKaleidoscope.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "pentagonKaleidoscope.ts",
+              "type": "file"
+            },
+            {
+              "name": "publicKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "repositories.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "repositories.ts",
+              "type": "file"
+            },
+            {
+              "name": "rubyWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "session-expired.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-aichat-prefer-moondream-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-answer-graph-hide-empty-rows-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-answer-graph-trail-session-storage-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-email-confirm-login-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-heritage-tour-country-filter-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-mlb-pitcher-filter-grayout-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-navigation.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-neko-pr-hide-author-toggle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-wasm-modules-view-mode-select.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings.ts",
+              "type": "file"
+            },
+            {
+              "name": "sha256Wasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "sqlcWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "status-table-status.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "status-warning.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "status.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "status.ts",
+              "type": "file"
+            },
+            {
+              "name": "tdf.ts",
+              "type": "file"
+            },
+            {
+              "name": "tsubuyaki.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tsubuyaki.ts",
+              "type": "file"
+            },
+            {
+              "name": "tsuruNoNiwa.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tsuruNoNiwa.ts",
+              "type": "file"
+            },
+            {
+              "name": "userinfo.ts",
+              "type": "file"
+            },
+            {
+              "name": "uuidGen.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmModules.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglCube.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglDemo.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglFaults.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglFaults.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-airport.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-areaZoom.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-city-stats-search.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-continent-tour-tooltip.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-countryPanel.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-f1.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-monthly-heritage.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-rail.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage-saved-area-panel.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritage.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglHeritageUtils.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglLVSphere.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglSolar-zoom.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglSolar.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglSolar.ts",
+              "type": "file"
+            },
+            {
+              "name": "webglSphere.ts",
+              "type": "file"
+            },
+            {
+              "name": "welcome.ts",
+              "type": "file"
+            },
+            {
+              "name": "wfBrowser.ts",
+              "type": "file"
+            },
+            {
+              "name": "wineSearch.ts",
+              "type": "file"
+            },
+            {
+              "name": "workflow.ts",
+              "type": "file"
+            },
+            {
+              "name": "worldCupKnockout.ts",
+              "type": "file"
+            },
+            {
+              "name": "worldCupWdl.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "wasm-gron-go-diff-registry-20260923.test.ts",
+          "type": "file"
         },
         {
           "name": "wasm-module.d.ts",
@@ -3294,6 +4948,10 @@
         },
         {
           "name": "wasm-modules-view-mode-setting-20260818.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-msb-registry-20260923.test.ts",
           "type": "file"
         },
         {
@@ -3544,39 +5202,287 @@
         },
         {
           "name": "dig-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "factor-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "gh-attach-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "go.mod",
+              "type": "file"
+            },
+            {
+              "name": "main_js.go",
+              "type": "file"
+            },
+            {
+              "name": "main_test.go",
+              "type": "file"
+            },
+            {
+              "name": "markdown.go",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "gh-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "go-diff-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "diff.go",
+              "type": "file"
+            },
+            {
+              "name": "diff_test.go",
+              "type": "file"
+            },
+            {
+              "name": "go.mod",
+              "type": "file"
+            },
+            {
+              "name": "go.sum",
+              "type": "file"
+            },
+            {
+              "name": "main_js.go",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "gron-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "go.mod",
+              "type": "file"
+            },
+            {
+              "name": "gron.go",
+              "type": "file"
+            },
+            {
+              "name": "gron_test.go",
+              "type": "file"
+            },
+            {
+              "name": "main_js.go",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "jev-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "ls-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "msb-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "sha256-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "sqlc-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "annotations.go",
+              "type": "file"
+            },
+            {
+              "name": "go.mod",
+              "type": "file"
+            },
+            {
+              "name": "main_js.go",
+              "type": "file"
+            },
+            {
+              "name": "main_test.go",
+              "type": "file"
+            }
+          ]
         },
         {
           "name": "tree-wasm",
-          "type": "dir"
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
