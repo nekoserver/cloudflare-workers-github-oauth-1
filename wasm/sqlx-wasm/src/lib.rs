@@ -63,7 +63,7 @@ pub fn build_insert_json(input: &str) -> Result<String, String> {
             separated.push(format!("\"{column}\""));
         }
     }
-    query.push(") VALUES ");
+    query.push(") ");
     let mut arguments = Vec::new();
     query.push_values(request.rows, |mut row_builder, row| {
         for value in row {

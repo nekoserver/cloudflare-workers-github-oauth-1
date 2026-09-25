@@ -140,9 +140,9 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     wasmPath: 'public/wasm/sqlx_bg.wasm',
     sourceDir: 'wasm/sqlx-wasm',
     sourceFile: 'wasm/sqlx-wasm/src/lib.rs',
-    approxSize: '未ビルド',
-    sizeBytes: 0,
-    builtAt: '未ビルド',
+    approxSize: '約177KB',
+    sizeBytes: 180739,
+    builtAt: '2026-09-25',
   },
   {
     id: 'jev',
