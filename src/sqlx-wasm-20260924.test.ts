@@ -25,6 +25,13 @@ describe('SQLx Rust/WASM page', () => {
     expect(html).toContain('各行の値の数を <code>columns</code> の要素数と一致');
   });
 
+  it('places the input options table below the conversion button', () => {
+    const html = getSqlxWasmPage('tester');
+    expect(html.indexOf('<button id="build"')).toBeLessThan(
+      html.indexOf('<section class="options"'),
+    );
+  });
+
   it('is registered as a Rust module', () => {
     expect(findWasmModule('sqlx')).toMatchObject({
       sourceDir: 'wasm/sqlx-wasm',

@@ -21,14 +21,14 @@ button{padding:10px 18px;border:0;border-radius:8px;background:#667eea;color:whi
 </style></head><body><header><b>🦀 SQLx QueryBuilder (Rust/WASM)</b><span>${escapeHtml(username)}</span></header>
 <main><div class="card"><h1>SQLxをブラウザで使う</h1>
 <p class="note">Rustの <code>sqlx::QueryBuilder&lt;Postgres&gt;</code> をWebAssemblyで実行し、値をSQLへ連結せずプレースホルダーを生成します。ブラウザにはDBソケットがないため、接続・実行はWorker側の責務です。</p>
+<div id="status" class="status">WASMを読み込み中…</div><div class="grid"><section><label for="input"><b>入力JSON</b></label><textarea id="input">${escapeHtml(SAMPLE)}</textarea><button id="build" disabled>SQLを生成</button></section>
+<section><b>SQLx出力</b><pre id="output" aria-live="polite">準備中…</pre></section></div>
 <section class="options" aria-labelledby="options-heading"><h2 id="options-heading">入力オプション</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">オプション</th><th scope="col">型</th><th scope="col">必須</th><th scope="col">説明</th><th scope="col">例</th></tr></thead><tbody>
 <tr><td><code>table</code></td><td>文字列</td><td class="required">必須</td><td>INSERT先のテーブル名。英字または <code>_</code> で始まり、英数字と <code>_</code> のみ使用できます。</td><td><code>"users"</code></td></tr>
 <tr><td><code>columns</code></td><td>文字列の配列</td><td class="required">必須</td><td>INSERTする列名。1件以上を指定し、各名前には <code>table</code> と同じ文字規則を適用します。</td><td><code>["id", "name"]</code></td></tr>
 <tr><td><code>rows</code></td><td>値の二次元配列</td><td class="required">必須</td><td>挿入する行。1行以上を指定し、各行の値の数を <code>columns</code> の要素数と一致させます。</td><td><code>[[1, "neko"]]</code></td></tr>
-</tbody></table></div></section>
-<div id="status" class="status">WASMを読み込み中…</div><div class="grid"><section><label for="input"><b>入力JSON</b></label><textarea id="input">${escapeHtml(SAMPLE)}</textarea><button id="build" disabled>SQLを生成</button></section>
-<section><b>SQLx出力</b><pre id="output" aria-live="polite">準備中…</pre></section></div></div></main>
+</tbody></table></div></section></div></main>
 <script type="module">
 const status=document.getElementById('status'),button=document.getElementById('build'),input=document.getElementById('input'),output=document.getElementById('output');
 let buildInsert;
