@@ -19370,9 +19370,21 @@ app.post('/webhook/github', async (c) => {
   }
 
   const action = typeof payload?.action === 'string' ? payload.action : 'unknown';
+  // installation/installation_repositories以外のほとんどのGitHub Webhookイベント
+  // (push・pull_request・issues等)はトップレベルにrepository.full_nameを持つ。
+  // 個別リポジトリ向けの/webhook-logページ(payload LIKE '%<repo>%'で絞り込む)が
+  // 一件もヒットしなかった原因は、ここでDBへ記録するpayloadにrepository情報が
+  // 一切含まれておらず、どのイベントもリポジトリ名でフィルタしようがなかったため。
+  const repositoryFullName =
+    typeof (payload as unknown as GitHubWebhookRepositoryPayload)?.repository?.full_name === 'string'
+      ? (payload as unknown as GitHubWebhookRepositoryPayload).repository!.full_name
+      : null;
 
-  logger.info('GitHub webhook received', { eventType, action, deliveryId });
-  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
+  logger.info('GitHub webhook received', { eventType, action, deliveryId, repositoryFullName });
+  safeWaitUntil(
+    c,
+    logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId, repository: repositoryFullName })
+  );
 
   // installation イベントを処理
   if (eventType === 'installation' || eventType === 'installation_repositories') {
@@ -19824,7 +19836,7 @@ app.post('/webhook/github', async (c) => {
             error: unexpectedPrErrorMessage,
             prUrl: pr.html_url,
           });
-          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing' }, unexpectedPrErrorMessage);
+          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing', repository: repositoryFullName }, unexpectedPrErrorMessage);
         }
       }
     }
