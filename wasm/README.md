@@ -121,7 +121,10 @@ Jev CLIについては、既存CLIを丸ごと移植するのではなく、入�
 - `sqlx-wasm`: RustのSQLx `QueryBuilder<Postgres>`でパラメーター化された複数行
   INSERTを組み立てる。`/sqlx-wasm`ページでブラウザWASMとして動作する。ブラウザには
   DBソケットがないため、WASMはクエリ構築・識別子検証だけを担当し、接続と実行はWorker側へ
-  分離する。`npm run wasm:build:sqlx`でテスト・wasm32ビルド・wasm-bindgen生成を行う
+  分離する。`npm run wasm:build:sqlx`でテスト・wasm32ビルド・wasm-bindgen生成を行う。
+  入出力、検証規則、制約、ビルド構成の詳細は
+  [`NOTICE.cloudflare-workers-github-oauth-1.sqlx-wasm.md`](../NOTICE.cloudflare-workers-github-oauth-1.sqlx-wasm.md)
+  を参照
 - `msb-wasm`: microsandbox(https://github.com/microsandbox/microsandbox)の
   CLI `msb`のヘルプ・コマンドツリー表示だけを再実装したもの。`msb`本体は
   KVM(Linux)/libkrun/Apple Silicon仮想化/WHP(Windows)に依存するmicroVM
