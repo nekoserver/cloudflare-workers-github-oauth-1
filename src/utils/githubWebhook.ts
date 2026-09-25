@@ -56,11 +56,18 @@ export async function verifyGitHubWebhookSignature(
   }
 
   if (mismatch !== 0) {
-    // 一時的な診断情報: secretの値そのものは含めず、長さと署名の先頭8文字のみ記録する。
-    // 原因特定後はこのブロックを元の 'Signature mismatch' のみに戻すこと。
+    // 一時的な診断情報: secretの値そのものは含めず、
+    // - secretのSHA-256ハッシュ先頭8文字(secretの同一性を安全に比較するため)
+    // - rawBodyの先頭/末尾(GitHubペイロードは非機密なJSON構造のため、取得の健全性確認用)
+    // を追加で記録する。原因特定後はこのブロックを元の 'Signature mismatch' のみに戻すこと。
+    const secretHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+    const secretHash = Array.from(new Uint8Array(secretHashBuf))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, 8);
     return {
       success: false,
-      reason: `Signature mismatch (secretLen=${secret.length}, bodyLen=${rawBody.length}, received=${receivedSig.slice(0, 8)}..., expected=${expectedSig.slice(0, 8)}...)`,
+      reason: `Signature mismatch (secretLen=${secret.length}, secretHash=${secretHash}, bodyLen=${rawBody.length}, bodyHead=${JSON.stringify(rawBody.slice(0, 24))}, bodyTail=${JSON.stringify(rawBody.slice(-8))}, received=${receivedSig.slice(0, 8)}..., expected=${expectedSig.slice(0, 8)}...)`,
     };
   }
 
