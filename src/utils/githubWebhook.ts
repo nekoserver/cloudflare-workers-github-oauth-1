@@ -56,7 +56,12 @@ export async function verifyGitHubWebhookSignature(
   }
 
   if (mismatch !== 0) {
-    return { success: false, reason: 'Signature mismatch' };
+    // 一時的な診断情報: secretの値そのものは含めず、長さと署名の先頭8文字のみ記録する。
+    // 原因特定後はこのブロックを元の 'Signature mismatch' のみに戻すこと。
+    return {
+      success: false,
+      reason: `Signature mismatch (secretLen=${secret.length}, bodyLen=${rawBody.length}, received=${receivedSig.slice(0, 8)}..., expected=${expectedSig.slice(0, 8)}...)`,
+    };
   }
 
   return { success: true };
