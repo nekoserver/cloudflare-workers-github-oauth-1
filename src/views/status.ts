@@ -230,6 +230,30 @@ export function getCacheStatusPage(user: {
     </tr>`;
   }).join('');
 
+  // 「関連ページ」を API ごとに逆引きし、利用テーブル数の多い順に集計する。
+  // 同じテーブルに同一 API が重複して登録されていても 1 テーブルとして数える。
+  const endpointTableMap = new Map<string, Set<string>>();
+  for (const table of statusTables) {
+    for (const page of data.tablePageMap[table.name] || []) {
+      const endpointName = `${page.method} ${page.path}`;
+      const tableNames = endpointTableMap.get(endpointName) || new Set<string>();
+      tableNames.add(table.name);
+      endpointTableMap.set(endpointName, tableNames);
+    }
+  }
+  const endpointTableRows = Array.from(endpointTableMap.entries())
+    .map(([endpointName, tableNames]) => ({
+      endpointName,
+      tableNames: Array.from(tableNames).sort((a, b) => a.localeCompare(b)),
+    }))
+    .sort((a, b) => b.tableNames.length - a.tableNames.length || a.endpointName.localeCompare(b.endpointName))
+    .map(({ endpointName, tableNames }) => `<tr>
+      <td><code>${escapeHtml(endpointName)}</code></td>
+      <td class="num endpoint-table-count">${tableNames.length}</td>
+      <td class="endpoint-table-names">${tableNames.map(name => `<code class="endpoint-table-name">${escapeHtml(name)}</code>`).join(' ')}</td>
+    </tr>`)
+    .join('');
+
   // リポジトリ別集計テーブル行
   const repoRows = data.commitCache.repos.map(r =>
     `<tr>
@@ -654,6 +678,12 @@ export function getCacheStatusPage(user: {
       margin: 1px 2px;
     }
     .table-page-badge-unknown { color: var(--text-faint); border-style: dashed; }
+    .endpoint-table-count { font-weight: 700; color: var(--text-primary) !important; }
+    .endpoint-table-names { min-width: 280px; }
+    .data-table code.endpoint-table-name {
+      display: inline-block; margin: 2px; white-space: nowrap;
+      color: var(--text-secondary); border: 1px solid var(--border-color);
+    }
     .table-pages-note-icon {
       display: inline-block;
       width: 13px; height: 13px; line-height: 13px;
@@ -1582,6 +1612,23 @@ export function getCacheStatusPage(user: {
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- API別利用テーブル一覧 -->
+      <div class="section">
+        <h2 class="section-title">API別利用テーブル一覧 <span class="section-count">(${endpointTableMap.size})</span></h2>
+        <div class="table-scroll">
+          <table class="data-table" id="endpointTablesTable">
+            <thead>
+              <tr>
+                <th>API名</th>
+                <th style="text-align:right">利用テーブル総数</th>
+                <th>テーブル名</th>
+              </tr>
+            </thead>
+            <tbody>${endpointTableRows || '<tr><td colspan="3" class="empty-message">関連するAPIはありません</td></tr>'}</tbody>
           </table>
         </div>
       </div>
