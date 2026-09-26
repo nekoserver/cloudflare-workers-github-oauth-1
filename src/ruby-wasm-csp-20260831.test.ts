@@ -38,6 +38,22 @@ function createMockDb() {
 }
 
 describe('GET /ruby-wasm', () => {
+  it('ブラウザ・共有CDN・Cloudflareのキャッシュをすべて禁止する', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/ruby-wasm',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb() }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store, no-cache, must-revalidate, max-age=0');
+    expect(res.headers.get('Cloudflare-CDN-Cache-Control')).toBe('no-store');
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Pragma')).toBe('no-cache');
+    expect(res.headers.get('Expires')).toBe('0');
+  });
+
   it('CSPのscript-src/connect-srcにwasm-unsafe-eval・cdn.jsdelivr.net・esm.shが含まれる', async () => {
     const authHeader = await makeAuthHeader();
     const res = await app.request(
