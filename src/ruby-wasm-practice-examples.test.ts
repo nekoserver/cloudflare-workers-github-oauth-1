@@ -130,6 +130,18 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     });
   });
 
+  it('未掲載だったRubyの主要テーマを追加する', () => {
+    const additions = ['ブロックとyield', 'lazyで必要分だけ計算', 'Hashのマージルール', 'Unicode文字の数え上げ', 'Comparableでバージョン比較', '深さ優先探索', '迷路の自動生成', 'パターンのガード条件'];
+
+    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(55);
+    additions.forEach((title) => {
+      const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === title);
+      expect(snippet?.badges?.length).toBeGreaterThan(0);
+      expect(snippet?.code.length).toBeGreaterThan(0);
+      expect(RUBY_SAMPLE_AUDIT_RESULTS[title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
+    });
+  });
+
   it('全サンプルのコードをRubyシンタックスハイライトし、実行用の元コードも保持する', () => {
     const html = getRubyWasmPage('tester');
 
@@ -164,10 +176,21 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html.indexOf('class="sample-jump-bar"')).toBeLessThan(html.indexOf('class="container"'));
     categories.forEach((category, index) => {
       const count = RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === category).length;
-      expect(html).toContain(`href="#page-sample-category-${index}"`);
+      expect(html).toContain(`data-page-category-filter="${index}"`);
       expect(html).toContain(`id="page-sample-category-${index}"`);
       expect(html).toContain(`<span>${category}</span><strong>${count}</strong>`);
     });
+  });
+
+  it('トップバナーを薄く右寄せにし、バッジで単一カテゴリーをフィルターする', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('padding: 3px max(10px, calc((100vw - 1120px) / 2 + 20px));');
+    expect(html).toContain('justify-content: flex-end; width: max-content; min-width: 100%; gap: 4px;');
+    expect(html).toContain('data-page-category-filter="0" aria-pressed="false"');
+    expect(html).toContain("pageCategoryLinks.classList.toggle('has-filter', willSelect)");
+    expect(html).toContain("card.hidden = willSelect && card.getAttribute('data-category-index') !== categoryIndex");
+    expect(html).toContain('.sample-jump-links.has-filter .page-category-link:not([aria-pressed="true"])');
   });
 
   it('CSV集計はWASMに同梱されないcsv gemへ依存せず実行できる', () => {

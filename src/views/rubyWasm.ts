@@ -114,6 +114,14 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '幅優先探索', description: 'キューを使って迷路のスタートからゴールまでの最短距離を求めます。', category: 'アルゴリズム', badges: ['BFS', '中級'], code: 'graph = { A: %i[B C], B: %i[D], C: %i[D E], D: %i[F], E: %i[F], F: [] }\nqueue = [[:A, 0]]\nvisited = {}\nuntil queue.empty?\n  node, distance = queue.shift\n  next if visited[node]\n  visited[node] = distance\n  graph.fetch(node).each { |neighbor| queue << [neighbor, distance + 1] }\nend\nvisited.each { |node, distance| puts "A -> #{node}: #{distance}" }' },
   { title: 'ドット絵アニメ', description: '数学関数からターミナル風のフレームを描きます。', category: '遊ぶ', badges: ['Math', '遊ぶ'], code: 'width = 31\n3.times do |frame|\n  points = Array.new(width, " ")\n  5.times do |index|\n    x = (index * 6 + frame * 2) % width\n    points[x] = %w[● ◆ ■ ★ ▲][index]\n  end\n  puts "|#{points.join}|"\nend' },
   { title: '右代入で分解', description: '式の結果を右代入と構造分解で複数の変数に受け取ります。', category: 'Ruby 4', badges: ['右代入', '構文'], code: '100.divmod(7) => quotient, remainder\nputs "100 / 7 = #{quotient} remainder #{remainder}"\n{ name: "Ruby", runtime: "WASM" } => { name:, runtime: }\nputs "#{name} on #{runtime}"' },
+  { title: 'ブロックとyield', description: 'メソッドからブロックへ値を渡し、戻り値を集めます。', category: '基本', badges: ['Block', '初級'], code: 'def transform(values)\n  values.map { |value| yield(value) }\nend\nputs transform([1, 2, 3]) { |n| n * 10 }.join(", ")\nputs transform(%w[ruby wasm]) { |word| word.upcase }.join(" / ")' },
+  { title: 'lazyで必要分だけ計算', description: '無限列を遅延評価して、条件に合う最初の値だけを取り出します。', category: 'Enumerable', badges: ['lazy', '中級'], code: 'squares = (1..).lazy.map { |n| n * n }.select { |n| n.to_s.end_with?("6") }\nputs squares.first(8).join(", ")' },
+  { title: 'Hashのマージルール', description: '設定Hashをmergeのブロックで合成します。', category: 'データ', badges: ['Hash#merge', '実践'], code: 'defaults = { retries: 2, tags: ["ruby"], timeout: 10 }\noverrides = { retries: 4, tags: ["wasm"], verbose: true }\nconfig = defaults.merge(overrides) do |key, old_value, new_value|\n  key == :tags ? old_value + new_value : new_value\nend\nconfig.each { |key, value| puts "#{key}: #{value.inspect}" }' },
+  { title: 'Unicode文字の数え上げ', description: '文字列をコードポイント単位で調べて表示します。', category: '文字列', badges: ['Unicode', '実践'], code: 'text = "Rubyと宝石💎"\nputs "characters: #{text.length}"\ntext.each_char.with_index do |char, index|\n  puts format("%2d: %-4s U+%04X", index, char, char.ord)\nend' },
+  { title: 'Comparableでバージョン比較', description: '宇宙船演算子を実装して値オブジェクトを並べ替えます。', category: 'オブジェクト', badges: ['Comparable', '中級'], code: 'Version = Struct.new(:major, :minor, :patch) do\n  include Comparable\n  def <=>(other) = to_a <=> other.to_a\n  def to_a = [major, minor, patch]\n  def to_s = to_a.join(".")\nend\nversions = [Version.new(4, 0, 0), Version.new(3, 4, 7), Version.new(3, 4, 2)]\nputs versions.sort' },
+  { title: '深さ優先探索', description: '再帰を使って木構造を奥まで順にたどります。', category: 'アルゴリズム', badges: ['DFS', '中級'], code: 'tree = { root: %i[docs src], docs: %i[guide], src: %i[views tests], guide: [], views: [], tests: [] }\ndef walk(tree, node, depth = 0)\n  puts "#{"  " * depth}└─ #{node}"\n  tree.fetch(node).each { |child| walk(tree, child, depth + 1) }\nend\nwalk(tree, :root)' },
+  { title: '迷路の自動生成', description: '固定シードの乱数で何度でも再現できる迷路風模様を描きます。', category: '遊ぶ', badges: ['Random', 'アート'], code: 'random = Random.new(404)\nheight = 7\nwidth = 25\nheight.times do |row|\n  line = width.times.map do |column|\n    row.zero? || row == height - 1 || column.zero? || column == width - 1 ? "#" : (random.rand < 0.32 ? "#" : " ")\n  end\n  puts line.join\nend' },
+  { title: 'パターンのガード条件', description: 'case/inにif条件を加えてデータを細かく分類します。', category: 'Ruby 4', badges: ['Pattern', '構文'], code: 'orders = [{ item: "book", total: 3200 }, { item: "pen", total: 300 }, { item: "bag", total: 8500 }]\norders.each do |order|\n  case order\n  in { item:, total: } if total >= 5000\n    puts "premium: #{item}"\n  in { item:, total: 1000.. }\n    puts "standard: #{item}"\n  else\n    puts "small: #{order[:item]}"\n  end\nend' },
 ];
 
 /** サンプル集を実際に一括実行した互換性確認結果 (2026-09-23)。 */
@@ -159,7 +167,7 @@ function renderRubyReplSnippets(): string {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
     const categoryIndex = categories.indexOf(snippet.category);
     const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
-    return `<article class="snippet-card" data-snippet-card="${index}"${firstInCategory ? ` id="page-sample-category-${categoryIndex}"` : ''}>
+    return `<article class="snippet-card" data-snippet-card="${index}" data-category-index="${categoryIndex}"${firstInCategory ? ` id="page-sample-category-${categoryIndex}"` : ''}>
       <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3>${renderRubyVersionBadges(snippet)}</div>
       <p>${escapeHtml(snippet.description)}</p>
       <div class="snippet-badges">${(snippet.badges || []).map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</div>
@@ -199,7 +207,7 @@ function renderRubyPageCategoryLinks(): string {
   const counts = new Map<string, number>();
   RUBY_REPL_SNIPPETS.forEach((snippet) => counts.set(snippet.category, (counts.get(snippet.category) || 0) + 1));
   return [...counts].map(([category, count], index) =>
-    `<a class="page-category-link" data-category-index="${index}" href="#page-sample-category-${index}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`
+    `<button type="button" class="page-category-link" data-page-category-filter="${index}" aria-pressed="false"><span>${escapeHtml(category)}</span><strong>${count}</strong></button>`
   ).join('');
 }
 
@@ -252,7 +260,7 @@ export function getRubyWasmPage(username: string): string {
     }
     .sample-jump-bar {
       position: sticky; top: 0; z-index: 20;
-      padding: 9px max(16px, calc((100vw - 1120px) / 2 + 20px));
+      padding: 3px max(10px, calc((100vw - 1120px) / 2 + 20px));
       overflow-x: auto; overscroll-behavior-inline: contain;
       background: color-mix(in srgb, var(--card-bg) 92%, transparent);
       border-bottom: 1px solid var(--border-color);
@@ -260,22 +268,27 @@ export function getRubyWasmPage(username: string): string {
       backdrop-filter: blur(12px);
       scrollbar-width: thin;
     }
-    .sample-jump-links { display: flex; width: max-content; min-width: 100%; gap: 7px; }
+    .sample-jump-links { display: flex; justify-content: flex-end; width: max-content; min-width: 100%; gap: 4px; }
     .page-category-link {
-      display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+      display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px;
       border: 1px solid color-mix(in srgb, var(--category-color) 35%, transparent);
       border-radius: 999px;
       background: color-mix(in srgb, var(--category-color) 18%, var(--card-bg));
-      color: var(--category-color); font-size: 11px; font-weight: 800;
-      text-decoration: none; white-space: nowrap;
+      color: var(--category-color); font-size: 9px; font-weight: 800; line-height: 1.25;
+      text-decoration: none; white-space: nowrap; cursor: pointer;
     }
     .page-category-link:hover, .page-category-link:focus-visible {
       background: var(--category-color); color: #fff; outline: none;
     }
     .page-category-link strong {
-      min-width: 19px; padding: 1px 5px; border-radius: 999px;
+      min-width: 15px; padding: 0 3px; border-radius: 999px;
       background: var(--category-color); color: #fff; text-align: center;
     }
+    .sample-jump-links.has-filter .page-category-link:not([aria-pressed="true"]) {
+      border-color: var(--border-color); background: var(--bg-secondary); color: var(--text-muted); opacity: .55;
+    }
+    .sample-jump-links.has-filter .page-category-link:not([aria-pressed="true"]) strong { background: var(--text-muted); }
+    .snippet-card[hidden] { display: none; }
     .page-category-link:hover strong, .page-category-link:focus-visible strong {
       background: #fff; color: var(--category-color);
     }
@@ -867,6 +880,24 @@ export function getRubyWasmPage(username: string): string {
         var index = button.getAttribute('data-close-snippet');
         var resultPanel = document.querySelector('[data-snippet-result="' + index + '"]');
         if (resultPanel) resultPanel.hidden = true;
+      });
+    });
+
+    // トップバナーはジャンプではなく、同じ色のカテゴリーだけを出力するフィルター。
+    // 選択中のバッジを再度押すと全件表示に戻る。
+    var pageCategoryLinks = document.querySelector('.sample-jump-links');
+    document.querySelectorAll('[data-page-category-filter]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var categoryIndex = button.getAttribute('data-page-category-filter');
+        var willSelect = button.getAttribute('aria-pressed') !== 'true';
+        document.querySelectorAll('[data-page-category-filter]').forEach(function(other) {
+          other.setAttribute('aria-pressed', String(willSelect && other === button));
+        });
+        if (pageCategoryLinks) pageCategoryLinks.classList.toggle('has-filter', willSelect);
+        document.querySelectorAll('.snippet-card[data-category-index]').forEach(function(card) {
+          card.hidden = willSelect && card.getAttribute('data-category-index') !== categoryIndex;
+        });
+        if (willSelect) document.getElementById('snippetTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
 
