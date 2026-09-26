@@ -936,7 +936,6 @@ CREATE INDEX IF NOT EXISTS idx_email_send_log_email_type ON email_send_log(email
   svix_id TEXT NOT NULL,
   resend_email_id TEXT,
   event_type TEXT NOT NULL,
-  email_from TEXT,
   email_to TEXT,
   bounce_type TEXT,
   error_detail TEXT,
