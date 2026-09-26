@@ -74,4 +74,25 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).toContain('if (resultPanel) resultPanel.hidden = true');
     expect(html).toContain("resultCloseBtn.addEventListener('click'");
   });
+
+  // 対象: 姉妹Worker(rust-worker-sqlx-d1)の/sqlx-d1-examples/dataが返す
+  // JSON形式(SectionOutcome<T>のstatus:"ok"/"error"タグ付き表現)を、Rubyの
+  // JSON.parseでも読み取れることを示すアダプタサンプル。他のスニペットと同じく
+  // 実ネットワークには依存せず固定JSON文字列で形式だけを再現している。
+  it('sqlx-d1出力アダプタは、SectionOutcome形式のJSONをネットワーク無しで解析する', () => {
+    const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === 'sqlx-d1出力アダプタ');
+
+    expect(snippet).toBeDefined();
+    expect(snippet?.category).toBe('データ');
+    // 他のスニペットと同じ制約: ネットワーク・ファイル・時刻に依存しない
+    expect(snippet?.code).not.toMatch(/http|Net::HTTP|open-uri|File\.read/);
+    expect(snippet?.code).toContain('require "json"');
+    expect(snippet?.code).toContain('"status":"ok"');
+    expect(snippet?.code).toContain('"status":"error"');
+    expect(snippet?.code).toContain('JSON.parse(raw)');
+
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain('sqlx-d1出力アダプタ');
+    expect(html).toContain('rust-worker-sqlx-d1');
+  });
 });
