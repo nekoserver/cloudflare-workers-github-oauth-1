@@ -154,10 +154,12 @@ function renderRubyVersionBadges(snippet: RubyReplSnippet): string {
 }
 
 function renderRubyReplSnippets(): string {
+  const categories = [...new Set(RUBY_REPL_SNIPPETS.map((item) => item.category))];
   return RUBY_REPL_SNIPPETS.map((snippet, index) => {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
-    const categoryIndex = [...new Set(RUBY_REPL_SNIPPETS.map((item) => item.category))].indexOf(snippet.category);
-    return `<article class="snippet-card" data-snippet-card="${index}">
+    const categoryIndex = categories.indexOf(snippet.category);
+    const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
+    return `<article class="snippet-card" data-snippet-card="${index}"${firstInCategory ? ` id="page-sample-category-${categoryIndex}"` : ''}>
       <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3>${renderRubyVersionBadges(snippet)}</div>
       <p>${escapeHtml(snippet.description)}</p>
       <div class="snippet-badges">${(snippet.badges || []).map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</div>
@@ -190,6 +192,14 @@ function renderRubySampleCategoryLinks(): string {
   RUBY_REPL_SNIPPETS.forEach((snippet) => counts.set(snippet.category, (counts.get(snippet.category) || 0) + 1));
   return [...counts].map(([category, count], index) =>
     `<a class="sample-category-link" data-category-index="${index}" href="#sample-category-${index}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`
+  ).join('');
+}
+
+function renderRubyPageCategoryLinks(): string {
+  const counts = new Map<string, number>();
+  RUBY_REPL_SNIPPETS.forEach((snippet) => counts.set(snippet.category, (counts.get(snippet.category) || 0) + 1));
+  return [...counts].map(([category, count], index) =>
+    `<a class="page-category-link" data-category-index="${index}" href="#page-sample-category-${index}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`
   ).join('');
 }
 
@@ -239,6 +249,35 @@ export function getRubyWasmPage(username: string): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
+    }
+    .sample-jump-bar {
+      position: sticky; top: 0; z-index: 20;
+      padding: 9px max(16px, calc((100vw - 1120px) / 2 + 20px));
+      overflow-x: auto; overscroll-behavior-inline: contain;
+      background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+      border-bottom: 1px solid var(--border-color);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .1);
+      backdrop-filter: blur(12px);
+      scrollbar-width: thin;
+    }
+    .sample-jump-links { display: flex; width: max-content; min-width: 100%; gap: 7px; }
+    .page-category-link {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+      border: 1px solid color-mix(in srgb, var(--category-color) 35%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--category-color) 18%, var(--card-bg));
+      color: var(--category-color); font-size: 11px; font-weight: 800;
+      text-decoration: none; white-space: nowrap;
+    }
+    .page-category-link:hover, .page-category-link:focus-visible {
+      background: var(--category-color); color: #fff; outline: none;
+    }
+    .page-category-link strong {
+      min-width: 19px; padding: 1px 5px; border-radius: 999px;
+      background: var(--category-color); color: #fff; text-align: center;
+    }
+    .page-category-link:hover strong, .page-category-link:focus-visible strong {
+      background: #fff; color: var(--category-color);
     }
     .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
@@ -433,7 +472,7 @@ export function getRubyWasmPage(username: string): string {
     .snippet-section-header h2 { font-size: 22px; margin-bottom: 6px; }
     .snippet-section-header p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
     .snippet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .snippet-card { min-width: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; box-shadow: 0 5px 18px rgba(0, 0, 0, .08); }
+    .snippet-card { min-width: 0; scroll-margin-top: 64px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; box-shadow: 0 5px 18px rgba(0, 0, 0, .08); }
     .snippet-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
     .snippet-heading h3 { color: var(--text-primary); font-size: 16px; }
     .snippet-category { flex: none; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--category-color) 18%, var(--bg-secondary)); color: var(--category-color); font-size: 10px; font-weight: 700; }
@@ -504,6 +543,10 @@ export function getRubyWasmPage(username: string): string {
         </div>
       </div>
     </div>
+  </nav>
+
+  <nav class="sample-jump-bar" aria-label="サンプルカテゴリーへジャンプ">
+    <div class="sample-jump-links">${renderRubyPageCategoryLinks()}</div>
   </nav>
 
   <div class="container">
