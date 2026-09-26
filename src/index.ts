@@ -438,6 +438,8 @@ import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynam
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
+import { extractTableSchemasFromSql, evaluateTable, JUDGMENT_LABELS as QUERY_PATTERN_JUDGMENT_LABELS, type TableSchema as QueryPatternTableSchema } from './utils/queryPatternAnalysis';
+import { getQueryPatternAnalysisPage, type QueryPatternTableRow } from './views/queryPatternAnalysis';
 import {
   EMBEDDED_TREE_VIEW_SNAPSHOTS,
   EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT,
@@ -2522,6 +2524,14 @@ CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint
   '0162': `CREATE INDEX IF NOT EXISTS idx_webhook_log_status ON webhook_log(status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source_status ON webhook_log(source, status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_status_received_at ON webhook_log(status, received_at);`,
+  '0164': `CREATE TABLE IF NOT EXISTS jev_table_pattern_scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  table_name TEXT NOT NULL,
+  judgment_code TEXT NOT NULL,
+  score REAL NOT NULL,
+  evaluated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_table_pattern_scores_unique ON jev_table_pattern_scores(table_name, judgment_code);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -17182,6 +17192,114 @@ app.get('/auth-flow', authMiddleware, (c) => c.html(getAuthFlowPage()));
 app.get('/api-keys', authMiddleware, (c) => {
   const user = c.get('user');
   return c.html(getApiKeysPage({ name: user.name, username: user.sub }));
+});
+
+/**
+ * クエリパターン分析ページ(認証が必要)
+ * 全テーブルに対する判断材料A〜L(WHERE/IN/LIKE/HAVING等のSQLパターンを
+ * そのテーブルに適用すべきかを判定する12問)のJevスコア一覧を表示し、
+ * 未投入テーブルへその場でシード投入できる。
+ */
+app.get('/query-pattern-analysis', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.text('DB未設定です', 503);
+
+  const schemas = extractTableSchemasFromSql(Object.values(STATUS_MIGRATION_SQL).join('\n'));
+  const descriptionByName = new Map(STATUS_TABLE_DEFINITIONS.map((d) => [d.name, d.description]));
+
+  let scoreRows: { table_name: string; judgment_code: string; score: number }[] = [];
+  try {
+    const result = await db
+      .prepare('SELECT table_name, judgment_code, score FROM jev_table_pattern_scores')
+      .bind()
+      .all<{ table_name: string; judgment_code: string; score: number }>();
+    scoreRows = result.results ?? [];
+  } catch (err) {
+    // jev_table_pattern_scoresが未作成(migration '0164'未適用)の場合は
+    // 空データ扱いにする。1テーブルの欠落が他の表示に影響しない既存方針と同じ。
+    const message = err instanceof Error ? err.message : String(err);
+    if (!isMissingTableError(message)) throw err;
+  }
+
+  const scoresByTable = new Map<string, Partial<Record<string, number>>>();
+  for (const row of scoreRows) {
+    if (!scoresByTable.has(row.table_name)) scoresByTable.set(row.table_name, {});
+    scoresByTable.get(row.table_name)![row.judgment_code] = row.score;
+  }
+
+  const rows: QueryPatternTableRow[] = schemas
+    .map((s) => ({
+      tableName: s.tableName,
+      description: descriptionByName.get(s.tableName) ?? null,
+      scores: scoresByTable.get(s.tableName) ?? {},
+    }))
+    .sort((a, b) => a.tableName.localeCompare(b.tableName));
+
+  return c.html(getQueryPatternAnalysisPage({ name: user.name, username: user.sub }, rows));
+});
+
+/**
+ * 1テーブル分の判断材料A〜Lを評価してjev_table_pattern_scoresへ保存する。
+ * `/query-pattern-analysis`ページの「シード投入」ボタンから呼ばれる。
+ */
+app.post('/api/query-pattern-analysis/seed', authMiddleware, async (c) => {
+  if (!c.env.JEV_API_KEY) return c.json({ error: 'JEV_API_KEYが未設定です' }, 503);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  }
+  const tableName = (body as { tableName?: unknown } | null)?.tableName;
+  if (typeof tableName !== 'string' || !tableName) {
+    return c.json({ error: 'tableNameを指定してください' }, 400);
+  }
+
+  const schemas = extractTableSchemasFromSql(Object.values(STATUS_MIGRATION_SQL).join('\n'));
+  const schema: QueryPatternTableSchema | undefined = schemas.find((s) => s.tableName === tableName);
+  if (!schema) return c.json({ error: `テーブル ${tableName} の定義が見つかりません` }, 404);
+
+  const descriptionByName = new Map(STATUS_TABLE_DEFINITIONS.map((d) => [d.name, d.description]));
+
+  const result = await evaluateTable({
+    apiKey: c.env.JEV_API_KEY,
+    schema,
+    description: descriptionByName.get(tableName),
+    fetchImpl: fetch,
+  });
+
+  if (!result.ok) {
+    return c.json({ error: `Jev APIへの問い合わせに失敗しました: ${result.detail}` }, 502);
+  }
+
+  const codeById = new Map(QUERY_PATTERN_JUDGMENT_LABELS.map((l) => [l.id, l.code]));
+  const scores = result.scores.map((s) => ({ code: codeById.get(s.labelId) ?? String(s.labelId), score: s.value }));
+
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB未設定です' }, 503);
+
+  try {
+    await db.batch(
+      scores.map((s) =>
+        db
+          .prepare(
+            `INSERT INTO jev_table_pattern_scores (table_name, judgment_code, score) VALUES (?, ?, ?)
+             ON CONFLICT(table_name, judgment_code) DO UPDATE SET score = excluded.score, evaluated_at = datetime('now')`,
+          )
+          .bind(tableName, s.code, s.score),
+      ),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingTableError(message)) {
+      return c.json({ error: 'jev_table_pattern_scoresテーブルが存在しません(マイグレーション未適用の可能性があります)' }, 500);
+    }
+    return c.json({ error: `D1への保存に失敗しました: ${message}` }, 500);
+  }
+
+  return c.json({ ok: true, scores });
 });
 
 /**
