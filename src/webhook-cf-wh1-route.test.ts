@@ -21,23 +21,30 @@ describe("POST /webhook/cf-wh1", () => {
   });
 
   it('webhook-id/webhook-timestamp/webhook-signatureヘッダーをverifyResendWebhookSignatureで検証する(Standard Webhooks形式)', () => {
-    expect(routeBlock).toContain("id: c.req.header('webhook-id')");
+    expect(routeBlock).toContain("const webhookId = c.req.header('webhook-id');");
+    expect(routeBlock).toContain('id: webhookId,');
     expect(routeBlock).toContain("timestamp: c.req.header('webhook-timestamp')");
     expect(routeBlock).toContain("signature: c.req.header('webhook-signature')");
     expect(routeBlock).toContain('await verifyResendWebhookSignature(rawBody, {');
   });
 
   it('検証失敗時は401を返しwebhook_logへrejectedとして記録する', () => {
-    expect(routeBlock).toMatch(/if \(!verification\.success\) \{[\s\S]*?logWebhookEvent\(c\.env\.DB, 'cf-wh1', null, 'rejected', null, verification\.reason\)[\s\S]*?return c\.json\(\{ error: 'Unauthorized webhook' \}, 401\);/);
+    expect(routeBlock).toMatch(/if \(!verification\.success\) \{[\s\S]*?logWebhookEvent\(c\.env\.DB, 'cf-wh1', null, 'rejected', null, verification\.reason, \{[\s\S]*?return c\.json\(\{ error: 'Unauthorized webhook' \}, 401\);/);
   });
 
   it('不正なJSONペイロードは400を返しwebhook_logへerrorとして記録する', () => {
-    expect(routeBlock).toMatch(/catch \{[\s\S]*?logWebhookEvent\(c\.env\.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload'\)[\s\S]*?return c\.json\(\{ error: 'Invalid webhook payload' \}, 400\);/);
+    expect(routeBlock).toMatch(/catch \{[\s\S]*?logWebhookEvent\(c\.env\.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload', \{[\s\S]*?return c\.json\(\{ error: 'Invalid webhook payload' \}, 400\);/);
   });
 
   it('検証成功時はwebhook_logへokとして記録し200でOKを返す', () => {
-    expect(routeBlock).toContain("logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload)");
+    expect(routeBlock).toContain("logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload, undefined, {");
     expect(routeBlock).toContain("return c.json({ result: 'OK' });");
+  });
+
+  it('webhook-idヘッダーの値をdelivery_idとして、処理時間をduration_msとしてlogWebhookEventへ渡す', () => {
+    expect(routeBlock).toContain("const webhookId = c.req.header('webhook-id');");
+    expect(routeBlock).toContain('deliveryId: webhookId,');
+    expect(routeBlock).toContain('durationMs: Date.now() - webhookStartedAt,');
   });
 });
 

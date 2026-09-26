@@ -2522,6 +2522,9 @@ CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint
   '0162': `CREATE INDEX IF NOT EXISTS idx_webhook_log_status ON webhook_log(status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source_status ON webhook_log(source, status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_status_received_at ON webhook_log(status, received_at);`,
+  '0163': `ALTER TABLE webhook_log ADD COLUMN delivery_id TEXT;
+ALTER TABLE webhook_log ADD COLUMN duration_ms INTEGER;
+CREATE INDEX IF NOT EXISTS idx_webhook_log_delivery_id ON webhook_log(delivery_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2724,7 +2727,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_endpoint_stats:         { endpoint: 'pk+idx', status_code: 'pk' },
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx' },
-  webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
+  webhook_log: { id: 'pk', source: 'idx', status: 'idx', received_at: 'idx', delivery_id: 'idx' },
   cf_auth_access_log: { id: 'pk', username: 'fk', result: 'idx', checked_at: 'idx' },
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
   heritage_cities: { id: 'pk', heritage_name: 'idx', city_name: 'uk' },
@@ -3692,25 +3695,34 @@ function safeWaitUntil(c: Context<{ Bindings: Bindings; Variables: Variables }>,
   }
 }
 
+/**
+ * meta.deliveryId: 送信元が発行する配信ごとの一意なID
+ * (GitHub: X-GitHub-Delivery、cf-wh1: webhook-id、resend: svix-id)。
+ * 送信元によっては該当する識別子が無く、その場合はundefined/nullのまま記録する。
+ * meta.durationMs: 呼び出し元がリクエスト受信からこのログ記録までに計測した処理時間。
+ */
 async function logWebhookEvent(
   db: D1Database | undefined,
   source: string,
   eventType: string | null,
   status: 'ok' | 'rejected' | 'error',
   payload: Record<string, unknown> | null,
-  error?: string
+  error?: string,
+  meta?: { deliveryId?: string | null; durationMs?: number }
 ): Promise<void> {
   if (!db) return;
   try {
     await db.prepare(
-      'INSERT INTO webhook_log (source, event_type, status, payload, error, received_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO webhook_log (source, event_type, status, payload, error, received_at, delivery_id, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       source,
       eventType ?? null,
       status,
       payload ? JSON.stringify(payload) : null,
       error ?? null,
-      new Date().toISOString()
+      new Date().toISOString(),
+      meta?.deliveryId ?? null,
+      meta?.durationMs ?? null
     ).run();
   } catch (e) {
     logger.error('Failed to log webhook event', { source, error: e instanceof Error ? e.message : 'Unknown' });
@@ -19360,6 +19372,7 @@ async function fetchLatestPrCommitInfo(commitsUrl: string, githubToken: string):
 }
 
 app.post('/webhook/github', async (c) => {
+  const webhookStartedAt = Date.now();
   const webhookSecret = c.env.GITHUB_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('GitHub webhook secret is not configured');
@@ -19375,7 +19388,10 @@ app.post('/webhook/github', async (c) => {
       reason: verification.reason,
       path: c.req.path,
     });
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason, {
+      deliveryId: c.req.header('X-GitHub-Delivery'),
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -19403,7 +19419,10 @@ app.post('/webhook/github', async (c) => {
   logger.info('GitHub webhook received', { eventType, action, deliveryId, repositoryFullName });
   safeWaitUntil(
     c,
-    logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId, repository: repositoryFullName })
+    logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId, repository: repositoryFullName }, undefined, {
+      deliveryId,
+      durationMs: Date.now() - webhookStartedAt,
+    })
   );
 
   // installation イベントを処理
@@ -19856,7 +19875,10 @@ app.post('/webhook/github', async (c) => {
             error: unexpectedPrErrorMessage,
             prUrl: pr.html_url,
           });
-          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing', repository: repositoryFullName }, unexpectedPrErrorMessage);
+          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing', repository: repositoryFullName }, unexpectedPrErrorMessage, {
+            deliveryId,
+            durationMs: Date.now() - webhookStartedAt,
+          });
         }
       }
     }
@@ -21713,6 +21735,7 @@ app.post('/slack/commands', async (c) => {
  * ログイン等のイベントを受け取りSlackへ通知する
  */
 app.post('/webhook/cf-auth', async (c) => {
+  const webhookStartedAt = Date.now();
   const webhookSecret = c.env.CF_AUTH_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('CF_AUTH_WEBHOOK_SECRET is not configured');
@@ -21725,7 +21748,9 @@ app.post('/webhook/cf-auth', async (c) => {
   const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-auth webhook', { reason: verification.reason });
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason, {
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -21746,7 +21771,9 @@ app.post('/webhook/cf-auth', async (c) => {
   const action = typeof payload.action === 'string' ? payload.action : '';
 
   logger.info('cf-auth webhook received', { event, user, action });
-  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }, undefined, {
+    durationMs: Date.now() - webhookStartedAt,
+  }));
 
   // ユーザー名が特定できない場合はアクセス権限を判定できないためNG
   if (!usernameFromPayload) {
@@ -21811,6 +21838,7 @@ app.post('/webhook/cf-auth', async (c) => {
  * 検証結果とペイロードをwebhook_logへ記録する。
  */
 app.post('/webhook/cf-wh1', async (c) => {
+  const webhookStartedAt = Date.now();
   const webhookSecret = c.env.CF_WH1_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('CF_WH1_WEBHOOK_SECRET is not configured');
@@ -21818,15 +21846,19 @@ app.post('/webhook/cf-wh1', async (c) => {
   }
 
   const rawBody = await c.req.text();
+  const webhookId = c.req.header('webhook-id');
 
   const verification = await verifyResendWebhookSignature(rawBody, {
-    id: c.req.header('webhook-id'),
+    id: webhookId,
     timestamp: c.req.header('webhook-timestamp'),
     signature: c.req.header('webhook-signature'),
   }, webhookSecret);
   if (!verification.success) {
     logger.warn('Rejected cf-wh1 webhook', { reason: verification.reason });
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', null, 'rejected', null, verification.reason, {
+      deliveryId: webhookId,
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -21834,8 +21866,11 @@ app.post('/webhook/cf-wh1', async (c) => {
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
-    safeWaitUntil(c, 
-      logWebhookEvent(c.env.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload')
+    safeWaitUntil(c,
+      logWebhookEvent(c.env.DB, 'cf-wh1', null, 'error', null, 'Invalid JSON payload', {
+        deliveryId: webhookId,
+        durationMs: Date.now() - webhookStartedAt,
+      })
     );
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
@@ -21843,7 +21878,10 @@ app.post('/webhook/cf-wh1', async (c) => {
   const event = typeof payload.event === 'string' ? payload.event : 'unknown';
 
   logger.info('cf-wh1 webhook received', { event });
-  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload, undefined, {
+    deliveryId: webhookId,
+    durationMs: Date.now() - webhookStartedAt,
+  }));
 
   return c.json({ result: 'OK' });
 });
@@ -21860,6 +21898,7 @@ async function handleResendWebhookCore(
   sourceId: string | null,
   webhookSecret: string
 ) {
+  const webhookStartedAt = Date.now();
   const logSourceLabel = sourceId ?? 'default';
   const rawBody = await c.req.text();
 
@@ -21876,7 +21915,10 @@ async function handleResendWebhookCore(
       path: c.req.path,
       method: c.req.method,
     });
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason, {
+      deliveryId: c.req.header('svix-id'),
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -21895,7 +21937,10 @@ async function handleResendWebhookCore(
 
     if (resendWebhookDedupCache.has(dedupKey)) {
       logger.warn('Duplicate Resend webhook detected', { sourceId: logSourceLabel, resendEventId });
-      safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', { svixId: resendEventId }, 'Duplicate webhook'));
+      safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', { svixId: resendEventId }, 'Duplicate webhook', {
+        deliveryId: resendEventId,
+        durationMs: Date.now() - webhookStartedAt,
+      }));
       return c.json({ error: 'Duplicate webhook' }, 409);
     }
 
@@ -21910,7 +21955,10 @@ async function handleResendWebhookCore(
     logger.warn('Unable to parse Resend webhook payload', {
       error: parseError,
     });
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', resendEventId ? { svixId: resendEventId } : null, `Invalid webhook payload: ${parseError}`));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', resendEventId ? { svixId: resendEventId } : null, `Invalid webhook payload: ${parseError}`, {
+      deliveryId: resendEventId,
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
@@ -22061,7 +22109,10 @@ async function handleResendWebhookCore(
       svixId,
       slackResult: slackResultText,
       proxyResult: proxyResultText,
-    }, 'Failed to notify proxy target'));
+    }, 'Failed to notify proxy target', {
+      deliveryId: resendEventId,
+      durationMs: Date.now() - webhookStartedAt,
+    }));
     return c.json({ error: 'Failed to notify proxy target' }, 502);
   }
 
@@ -22069,6 +22120,9 @@ async function handleResendWebhookCore(
     svixId,
     slackResult: slackResultText,
     proxyResult: proxyResultText,
+  }, undefined, {
+    deliveryId: resendEventId,
+    durationMs: Date.now() - webhookStartedAt,
   }));
   return c.json({ success: true, event: eventType }, 200);
 }
@@ -22092,14 +22146,18 @@ app.post('/webhook/resend/:sourceId', async (c) => {
 
   if (!sourceRow) {
     logger.warn('Unknown Resend webhook source', { sourceId });
-    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'rejected', null, 'Unknown webhook source'));
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'rejected', null, 'Unknown webhook source', {
+      deliveryId: c.req.header('svix-id'),
+    }));
     return c.json({ error: 'Unknown webhook source' }, 404);
   }
 
   const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured', { sourceId });
-    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'error', null, 'Webhook secret is not configured'));
+    safeWaitUntil(c, logWebhookEvent(db, `resend:${sourceId}`, null, 'error', null, 'Webhook secret is not configured', {
+      deliveryId: c.req.header('svix-id'),
+    }));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
@@ -22114,7 +22172,9 @@ app.post('/webhook/resend', async (c) => {
   const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured');
-    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured'));
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured', {
+      deliveryId: c.req.header('svix-id'),
+    }));
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
