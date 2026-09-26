@@ -187,7 +187,7 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
 
     expect(html).toContain('padding: 3px max(10px, calc((100vw - 1120px) / 2 + 20px));');
     expect(html).toContain('justify-content: flex-end; width: max-content; min-width: 100%; gap: 4px;');
-    expect(html).toContain('data-page-category-filter="0" aria-pressed="false"');
+    expect(html).toContain('data-category-index="0" data-page-category-filter="0" aria-pressed="false"');
     expect(html).toContain("pageCategoryLinks.classList.toggle('has-filter', willSelect)");
     expect(html).toContain("card.hidden = willSelect && card.getAttribute('data-category-index') !== categoryIndex");
     expect(html).toContain('.sample-jump-links.has-filter .page-category-link:not([aria-pressed="true"])');
@@ -215,4 +215,41 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
       expect(RUBY_SAMPLE_AUDIT_RESULTS[snippet.title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
     }
   });
+
+  it('トップバナーのカテゴリーバッジを固有色で表示し、左端の「選択解除」でフィルターを解除できる', () => {
+    const html = getRubyWasmPage('tester');
+    const resetIndex = html.indexOf('data-page-category-reset');
+    const firstCategoryIndex = html.indexOf('data-page-category-filter="0"');
+
+    expect(resetIndex).toBeGreaterThanOrEqual(0);
+    expect(resetIndex).toBeLessThan(firstCategoryIndex);
+    expect(html).toContain('class="page-category-link" data-category-index="0"');
+    expect(html).toContain('[data-category-index="0"] { --category-color: #e11d48; }');
+    expect(html).toContain("pageCategoryReset.addEventListener('click', resetPageCategoryFilter)");
+    expect(html).toContain("pageCategoryLinks.classList.remove('has-filter')");
+    expect(html).toContain('card.hidden = false');
+  });
+
+  it('未掲載だった主要テーマを各カテゴリーへ追加する', () => {
+    const additions = [
+      ['Procとlambda', '基本'], ['可変長引数と展開', '基本'],
+      ['each_with_objectで索引', 'Enumerable'], ['slice_whenで連続区間', 'Enumerable'],
+      ['行列データの転置', 'データ'], ['JSONイベント変換', 'データ'],
+      ['名前付きキャプチャ', '文字列'], ['文字列のエスケープ', '文字列'],
+      ['委譲でプレイリスト', 'オブジェクト'], ['メソッドの可視性', 'オブジェクト'],
+      ['マージソート', 'アルゴリズム'], ['動的計画法で両替', 'アルゴリズム'],
+      ['じゃんけん大会', '遊ぶ'], ['数当てヒント', '遊ぶ'],
+      ['配列パターンの残余', 'Ruby 4'], ['ハッシュパターンの別名', 'Ruby 4'],
+    ] as const;
+
+    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(71);
+    additions.forEach(([title, category]) => {
+      const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === title);
+      expect(snippet?.category).toBe(category);
+      expect(snippet?.badges?.length).toBeGreaterThan(0);
+      expect(snippet?.code.length).toBeGreaterThan(0);
+      expect(RUBY_SAMPLE_AUDIT_RESULTS[title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
+    });
+  });
+
 });

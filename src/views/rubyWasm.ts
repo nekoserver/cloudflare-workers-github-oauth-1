@@ -122,6 +122,22 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '深さ優先探索', description: '再帰を使って木構造を奥まで順にたどります。', category: 'アルゴリズム', badges: ['DFS', '中級'], code: 'tree = { root: %i[docs src], docs: %i[guide], src: %i[views tests], guide: [], views: [], tests: [] }\ndef walk(tree, node, depth = 0)\n  puts "#{"  " * depth}└─ #{node}"\n  tree.fetch(node).each { |child| walk(tree, child, depth + 1) }\nend\nwalk(tree, :root)' },
   { title: '迷路の自動生成', description: '固定シードの乱数で何度でも再現できる迷路風模様を描きます。', category: '遊ぶ', badges: ['Random', 'アート'], code: 'random = Random.new(404)\nheight = 7\nwidth = 25\nheight.times do |row|\n  line = width.times.map do |column|\n    row.zero? || row == height - 1 || column.zero? || column == width - 1 ? "#" : (random.rand < 0.32 ? "#" : " ")\n  end\n  puts line.join\nend' },
   { title: 'パターンのガード条件', description: 'case/inにif条件を加えてデータを細かく分類します。', category: 'Ruby 4', badges: ['Pattern', '構文'], code: 'orders = [{ item: "book", total: 3200 }, { item: "pen", total: 300 }, { item: "bag", total: 8500 }]\norders.each do |order|\n  case order\n  in { item:, total: } if total >= 5000\n    puts "premium: #{item}"\n  in { item:, total: 1000.. }\n    puts "standard: #{item}"\n  else\n    puts "small: #{order[:item]}"\n  end\nend' },
+  { title: 'Procとlambda', description: '処理をオブジェクトとして渡し、lambdaの引数チェックも確認します。', category: '基本', badges: ['Proc', '中級'], code: 'double = ->(number) { number * 2 }\ndecorate = proc { |text| "<#{text}>" }\nputs [1, 2, 3].map(&double).join(", ")\nputs decorate.call("Ruby")\nputs "lambda?: #{double.lambda?}"' },
+  { title: '可変長引数と展開', description: 'splatで任意個の引数を受け取り、配列を引数へ展開します。', category: '基本', badges: ['splat', '初級'], code: 'def average(*numbers, precision: 2)\n  numbers.sum.fdiv(numbers.size).round(precision)\nend\nvalues = [12, 18, 25, 31]\nputs average(*values)\nputs average(1, 2, 2, precision: 3)' },
+  { title: 'each_with_objectで索引', description: '列挙しながらHashを組み立て、頭文字の索引を作ります。', category: 'Enumerable', badges: ['each_with_object', '実践'], code: 'words = %w[ruby rails wasm web rack]\nindex = words.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |word, result|\n  result[word[0]] << word\nend\nindex.sort.each { |letter, items| puts "#{letter}: #{items.join(", ")}" }' },
+  { title: 'slice_whenで連続区間', description: '値の変化点で配列を区切り、連続する区間をまとめます。', category: 'Enumerable', badges: ['slice_when', '中級'], code: 'readings = [1, 2, 3, 9, 10, 20, 21, 22]\ngroups = readings.slice_when { |left, right| right != left + 1 }.to_a\nputs groups.map { |group| group.one? ? group.first.to_s : "#{group.first}-#{group.last}" }.join(", ")' },
+  { title: '行列データの転置', description: '二次元配列をtransposeで行列入れ替えし、列ごとの合計を求めます。', category: 'データ', badges: ['Array#transpose', '集計'], code: 'table = [["Jan", 12, 8], ["Feb", 15, 11], ["Mar", 9, 14]]\nmonths, *series = table.transpose\nputs "months: #{months.join(", ")}"\nseries.each_with_index { |values, index| puts "series #{index + 1}: #{values.sum}" }' },
+  { title: 'JSONイベント変換', description: 'JSONのイベント列を読み、必要なフィールドだけの新しいJSONへ変換します。', category: 'データ', badges: ['JSON', '変換'], code: 'require "json"\nsource = %q([{"type":"login","user":"Aoi"},{"type":"logout","user":"Ren"}])\nevents = JSON.parse(source, symbolize_names: true)\nsummary = events.map.with_index(1) { |event, id| { id: id, label: "#{event[:user]}:#{event[:type]}" } }\nputs JSON.pretty_generate(summary)' },
+  { title: '名前付きキャプチャ', description: '正規表現の名前付きキャプチャでログの各要素を読み取ります。', category: '文字列', badges: ['Regexp', '実践'], code: 'lines = ["2026-09-26 INFO ready", "2026-09-27 ERROR timeout"]\npattern = /(?<date>\d{4}-\d{2}-\d{2}) (?<level>[A-Z]+) (?<message>.+)/\nlines.each do |line|\n  match = pattern.match(line)\n  puts "#{match[:date]} [#{match[:level]}] #{match[:message]}"\nend' },
+  { title: '文字列のエスケープ', description: 'HTMLで特別な文字を安全な文字参照へ置換します。', category: '文字列', badges: ['gsub', 'Web'], code: 'HTML_ESCAPE = { "&" => "&amp;", "<" => "&lt;", ">" => "&gt;", 34.chr => "&quot;" }\ndef escape_html(text)\n  text.gsub(/[&<>"]/ , HTML_ESCAPE)\nend\nputs escape_html(%q(<ruby version="4">A&B</ruby>))' },
+  { title: '委譲でプレイリスト', description: 'forwardableを使わず、必要な操作だけを内包配列へ委譲します。', category: 'オブジェクト', badges: ['委譲', '設計'], code: 'class Playlist\n  def initialize = @songs = []\n  def add(title) = (@songs << title; self)\n  def size = @songs.size\n  def each(&block) = @songs.each(&block)\nend\nlist = Playlist.new.add("Ruby").add("WASM")\nputs "#{list.size} songs"\nlist.each { |song| puts "♪ #{song}" }' },
+  { title: 'メソッドの可視性', description: 'publicメソッドからprivateな補助メソッドを利用します。', category: 'オブジェクト', badges: ['private', '中級'], code: 'class TokenMasker\n  def mask(token)\n    "#{prefix(token)}#{"*" * [token.length - 4, 0].max}"\n  end\n  private\n  def prefix(token) = token[0, 4]\nend\nmasker = TokenMasker.new\nputs masker.mask("ruby-wasm-secret")\nputs "private: #{masker.private_methods.include?(:prefix)}"' },
+  { title: 'マージソート', description: '分割統治で配列を安定ソートします。', category: 'アルゴリズム', badges: ['Sort', '上級'], code: 'def merge_sort(values)\n  return values if values.length < 2\n  middle = values.length / 2\n  left = merge_sort(values.take(middle))\n  right = merge_sort(values.drop(middle))\n  result = []\n  result << (left.first <= right.first ? left.shift : right.shift) until left.empty? || right.empty?\n  result + left + right\nend\nputs merge_sort([7, 2, 9, 1, 5, 2]).join(", ")' },
+  { title: '動的計画法で両替', description: '必要な硬貨の最小枚数を小さい金額から計算します。', category: 'アルゴリズム', badges: ['DP', '上級'], code: 'coins = [1, 3, 4]\ntarget = 11\nbest = Array.new(target + 1, Float::INFINITY)\nbest[0] = 0\n(1..target).each do |amount|\n  coins.each { |coin| best[amount] = [best[amount], best[amount - coin] + 1].min if coin <= amount }\nend\nputs "#{target}: #{best[target]} coins"\nputs best.join(", ")' },
+  { title: 'じゃんけん大会', description: '固定された手の列から総当たりの勝敗表を作ります。', category: '遊ぶ', badges: ['Hash', 'ゲーム'], code: 'beats = { rock: :scissors, scissors: :paper, paper: :rock }\nplayers = { Aoi: :rock, Ren: :scissors, Kai: :paper }\nplayers.to_a.combination(2) do |(left, left_hand), (right, right_hand)|\n  winner = left_hand == right_hand ? "draw" : (beats[left_hand] == right_hand ? left : right)\n  puts "#{left}(#{left_hand}) vs #{right}(#{right_hand}): #{winner}"\nend' },
+  { title: '数当てヒント', description: '二分探索の考え方で秘密の数へ近づく過程を表示します。', category: '遊ぶ', badges: ['探索', 'ゲーム'], code: 'secret = 73\nlow = 1\nhigh = 100\nloop do\n  guess = (low + high) / 2\n  puts "guess #{guess}: #{guess == secret ? "correct" : guess < secret ? "higher" : "lower"}"\n  break if guess == secret\n  guess < secret ? low = guess + 1 : high = guess - 1\nend' },
+  { title: '配列パターンの残余', description: 'restパターンで先頭と末尾以外の要素をまとめて受け取ります。', category: 'Ruby 4', badges: ['Pattern', '構文'], code: 'routes = [["Tokyo", "Kyoto"], ["Tokyo", "Nagoya", "Kyoto", "Osaka"]]\nroutes.each do |route|\n  case route\n  in [start, *stops, destination]\n    puts "#{start} -> #{destination} (stops: #{stops.join(", ")})"\n  end\nend' },
+  { title: 'ハッシュパターンの別名', description: 'asパターンで分解した値と元のHashを同時に利用します。', category: 'Ruby 4', badges: ['as pattern', '構文'], code: 'responses = [{ status: 200, body: "OK" }, { status: 503, body: "busy" }]\nresponses.each do |response|\n  case response\n  in { status: 200, body: } => whole\n    puts "success #{body}: #{whole.inspect}"\n  in { status:, body: } if status >= 500\n    puts "server error #{status}: #{body}"\n  end\nend' },
 ];
 
 /** サンプル集を実際に一括実行した互換性確認結果 (2026-09-23)。 */
@@ -206,9 +222,10 @@ function renderRubySampleCategoryLinks(): string {
 function renderRubyPageCategoryLinks(): string {
   const counts = new Map<string, number>();
   RUBY_REPL_SNIPPETS.forEach((snippet) => counts.set(snippet.category, (counts.get(snippet.category) || 0) + 1));
-  return [...counts].map(([category, count], index) =>
-    `<button type="button" class="page-category-link" data-page-category-filter="${index}" aria-pressed="false"><span>${escapeHtml(category)}</span><strong>${count}</strong></button>`
+  const categoryButtons = [...counts].map(([category, count], index) =>
+    `<button type="button" class="page-category-link" data-category-index="${index}" data-page-category-filter="${index}" aria-pressed="false"><span>${escapeHtml(category)}</span><strong>${count}</strong></button>`
   ).join('');
+  return `<button type="button" class="page-category-reset" data-page-category-reset aria-label="カテゴリー選択を解除" disabled>選択解除</button>${categoryButtons}`;
 }
 
 function renderRubySampleAuditRows(): string {
@@ -269,6 +286,11 @@ export function getRubyWasmPage(username: string): string {
       scrollbar-width: thin;
     }
     .sample-jump-links { display: flex; justify-content: flex-end; width: max-content; min-width: 100%; gap: 4px; }
+    .page-category-reset {
+      flex: none; padding: 3px 8px; border: 1px solid var(--border-color); border-radius: 999px;
+      background: var(--text-primary); color: var(--card-bg); font-size: 9px; font-weight: 800; cursor: pointer;
+    }
+    .page-category-reset:disabled { background: var(--bg-secondary); color: var(--text-muted); cursor: default; opacity: .65; }
     .page-category-link {
       display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px;
       border: 1px solid color-mix(in srgb, var(--category-color) 35%, transparent);
@@ -886,6 +908,16 @@ export function getRubyWasmPage(username: string): string {
     // トップバナーはジャンプではなく、同じ色のカテゴリーだけを出力するフィルター。
     // 選択中のバッジを再度押すと全件表示に戻る。
     var pageCategoryLinks = document.querySelector('.sample-jump-links');
+    var pageCategoryReset = document.querySelector('[data-page-category-reset]');
+    function resetPageCategoryFilter() {
+      document.querySelectorAll('[data-page-category-filter]').forEach(function(button) {
+        button.setAttribute('aria-pressed', 'false');
+      });
+      if (pageCategoryLinks) pageCategoryLinks.classList.remove('has-filter');
+      document.querySelectorAll('.snippet-card[data-category-index]').forEach(function(card) { card.hidden = false; });
+      if (pageCategoryReset) pageCategoryReset.disabled = true;
+    }
+    if (pageCategoryReset) pageCategoryReset.addEventListener('click', resetPageCategoryFilter);
     document.querySelectorAll('[data-page-category-filter]').forEach(function(button) {
       button.addEventListener('click', function() {
         var categoryIndex = button.getAttribute('data-page-category-filter');
@@ -894,6 +926,7 @@ export function getRubyWasmPage(username: string): string {
           other.setAttribute('aria-pressed', String(willSelect && other === button));
         });
         if (pageCategoryLinks) pageCategoryLinks.classList.toggle('has-filter', willSelect);
+        if (pageCategoryReset) pageCategoryReset.disabled = !willSelect;
         document.querySelectorAll('.snippet-card[data-category-index]').forEach(function(card) {
           card.hidden = willSelect && card.getAttribute('data-category-index') !== categoryIndex;
         });
