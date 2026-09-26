@@ -12305,6 +12305,14 @@ app.get('/equal-earth-map', authMiddleware, async (c) => {
 
 app.get('/ruby-wasm', authMiddleware, async (c) => {
   const user = c.get('user');
+  // ページ更新をブラウザ・共有CDN・Cloudflareのいずれにも保持させない。
+  // Ruby/WASMページはHTML内にローダーをインライン展開するため、古いHTMLが
+  // 残るとデプロイ後も以前のローダーが実行され続けてしまう。
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  c.header('Cloudflare-CDN-Cache-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
   // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要。
   // このページはRubyバイナリ本体(ruby+stdlib.wasm)をjsDelivr CDNから、
   // bare specifierを解決済みURLへ書き換えてくれるesm.sh経由でJSグルー
