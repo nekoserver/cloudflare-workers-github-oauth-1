@@ -3466,13 +3466,30 @@ function inferGroupFromTableName(tableName: string): string | null {
   return null;
 }
 
-function getStatusTablePreviewQuery(
+export function getStatusTablePreviewQuery(
   tableName: string,
   userId: string,
   workspaceId: string | null,
   teamId: string | null,
 ): { sql: string; params: (string | number)[] } | null {
   switch (tableName) {
+    case 'aichat_images':
+      return {
+        // image_data_url は1件で数MBになることがあり、20件をそのままJSON化して
+        // ブラウザへ返すと /status のメインスレッドを長時間占有する。画像本体は
+        // 読み込まず、保存サイズが分かるプレースホルダーだけを返す。
+        sql: `SELECT id, user_id, content_hash,
+          CASE
+            WHEN image_data_url IS NULL THEN NULL
+            ELSE '[画像データ省略: ' || length(image_data_url) || '文字]'
+          END AS image_data_url,
+          byte_length, created_at
+          FROM ${tableName}
+          WHERE user_id = ?
+          ORDER BY created_at DESC, id DESC
+          LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [userId],
+      };
     case 'user_sessions':
       return {
         sql: `SELECT * FROM ${tableName} WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
@@ -4093,6 +4110,25 @@ export function buildPreviewQueryFromTemplate(
     return '?';
   });
   return { sql, params };
+}
+
+export function resolveStatusTablePreviewQuery(
+  tableName: string,
+  previewSql: string | null,
+  userId: string,
+  workspaceId: string | null,
+  teamId: string | null,
+): { sql: string; params: (string | number)[] } | null {
+  // 巨大な値を持つテーブルでは、table_catalog の汎用 SELECT * よりも安全な
+  // 組み込みクエリを優先する。特に aichat_images の data URL を取得すると、
+  // レスポンスの JSON 解析・DOM 描画でブラウザが固まるためである。
+  if (tableName === 'aichat_images') {
+    return getStatusTablePreviewQuery(tableName, userId, workspaceId, teamId);
+  }
+  if (previewSql) {
+    return buildPreviewQueryFromTemplate(previewSql, userId, workspaceId, teamId);
+  }
+  return getStatusTablePreviewQuery(tableName, userId, workspaceId, teamId);
 }
 
 async function autoRegisterTablesFromSqliteMaster(
@@ -18036,23 +18072,13 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
 
   const wsInfo = await getCurrentWorkspace(db, user.sub);
 
-  // preview_sql が DB に保存されていればテンプレート展開、なければ従来の switch 関数
-  let previewQuery: { sql: string; params: (string | number)[] } | null;
-  if (tableInfo.preview_sql) {
-    previewQuery = buildPreviewQueryFromTemplate(
-      tableInfo.preview_sql,
-      user.sub,
-      wsInfo?.workspaceId ?? null,
-      wsInfo?.teamId ?? null,
-    );
-  } else {
-    previewQuery = getStatusTablePreviewQuery(
-      tableName,
-      user.sub,
-      wsInfo?.workspaceId ?? null,
-      wsInfo?.teamId ?? null,
-    );
-  }
+  const previewQuery = resolveStatusTablePreviewQuery(
+    tableName,
+    tableInfo.preview_sql,
+    user.sub,
+    wsInfo?.workspaceId ?? null,
+    wsInfo?.teamId ?? null,
+  );
 
   if (!previewQuery) {
     return jsonUtf8({
