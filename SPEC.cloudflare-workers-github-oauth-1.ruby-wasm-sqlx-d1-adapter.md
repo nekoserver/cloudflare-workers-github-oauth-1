@@ -14,7 +14,9 @@
 
 ### サンプルコードの内容
 
-3セクション分(`user_sessions`・`api_endpoint_stats`・`commit_agent_log_page`)を模したJSONを`JSON.parse`し、各セクションの`status`に応じて成功時は件数、失敗時はエラーメッセージを表示する。`api_endpoint_stats`のエラーメッセージは、実際にデプロイ環境で発生した`D1_ERROR: no such table: api_endpoint_stats: SQLITE_ERROR`をそのまま使っており、`rust-worker-sqlx-d1`側の実際の障害分離設計(1テーブルの欠落が他のセクションに波及しない)がJSON側にもそのまま表れていることを示している。
+3セクション分(`user_sessions`・`api_endpoint_stats`・`commit_agent_log_page`)を模したJSONを`JSON.parse`し、各セクションの取得件数を表示する。以前は`api_endpoint_stats`の欠落エラーを固定サンプルに含めていたが、migration 0161でテーブルを冪等に再作成するため、正常な統計行を示すサンプルへ更新した。
+
+さらに、sqlx-d1でよく現れる別形式として、カーソルページング、`GROUP BY`集計行と`NULL`、セクション単位のエラー境界をそれぞれ独立したサンプルにした。長いサンプルは一覧で全幅を使い、コード・結果・詳細モーダルの表示高をビューポートに合わせる。
 
 ## 修正内容
 
@@ -22,10 +24,11 @@
 |---|---|
 | `src/views/rubyWasm.ts` | `RUBY_REPL_SNIPPETS`に「sqlx-d1出力アダプタ」を追加(カテゴリ: データ) |
 | `src/ruby-wasm-repl-snippets.test.ts` | 新規スニペットの存在・ネットワーク非依存・出力形式の検証テストを追加 |
+| `migrations/0161_reconcile_api_endpoint_stats.sql` | migration履歴と実DBにずれがある環境でも`api_endpoint_stats`を冪等に復旧 |
 
 ## テスト・検証
 
-- サンプルコード自体をローカルのRuby 3.3.6インタプリタで実行し、期待通りの出力(`user_sessions: 2件` / `api_endpoint_stats: ERROR (...)` / `commit_agent_log_page: 1件`)になることを確認した
+- 初版ではサンプルコードをローカルのRuby 3.3.6で実行確認した。今回の修正後は`api_endpoint_stats: 1件`を含め、全sqlx-d1サンプルをテスト対象にしている
 - `npx vitest run src/ruby-wasm-repl-snippets.test.ts src/ruby-wasm-practice-examples.test.ts src/ruby-wasm-page-20260831.test.ts src/ruby-wasm-csp-20260831.test.ts`: 32件全件成功
 - `npx tsc --noEmit`: `rubyWasm.ts`に起因するエラー0件
 

@@ -73,7 +73,10 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '成績ランキング', description: 'Hashの配列を複数条件で並べ替えます。', category: 'Enumerable', code: 'scores = [\n  { name: "Mina", score: 92 },\n  { name: "Kai", score: 78 },\n  { name: "Aoi", score: 92 },\n  { name: "Ren", score: 85 }\n]\nscores.sort_by { |row| [-row[:score], row[:name]] }.each_with_index do |row, i|\n  puts "#{i + 1}. #{row[:name]} — #{row[:score]}"\nend' },
   { title: 'グループ集計', description: '商品データをカテゴリ別に集計します。', category: 'Enumerable', code: 'items = [\n  ["book", 1800], ["food", 650], ["book", 1200],\n  ["tool", 2400], ["food", 480]\n]\nitems.group_by(&:first).sort.each do |category, rows|\n  puts "#{category}: ¥#{rows.sum { |_, price| price }}"\nend' },
   { title: 'JSON 整形', description: '標準ライブラリでJSONを解析・整形します。', category: 'データ', code: 'require "json"\nraw = %q({"name":"Ruby/WASM","features":["portable","fast"],"ready":true})\ndata = JSON.parse(raw)\ndata["features"] << "interactive"\nputs JSON.pretty_generate(data)' },
-  { title: 'sqlx-d1出力アダプタ', description: '姉妹Worker(rust-worker-sqlx-d1)の/sqlx-d1-examples/dataが返すJSON形式を、RubyからJSON.parseで読み取ります。', category: 'データ', badges: ['JSON', '相互運用'], code: 'require "json"\n# rust-worker-sqlx-d1の /sqlx-d1-examples/data が返すJSONの形。\n# 各セクションは {"status":"ok","rows":[...]} か {"status":"error","message":"..."} のどちらか。\n# ネットワークには依存せず、ここでは固定サンプルで形式だけを再現している。\nraw = %q({\n  "user_sessions": {"status":"ok","rows":[{"user_id":"octocat","timezone":"JST"},{"user_id":"nyaon","timezone":"UTC"}]},\n  "api_endpoint_stats": {"status":"error","message":"D1_ERROR: no such table: api_endpoint_stats: SQLITE_ERROR"},\n  "commit_agent_log_page": {"status":"ok","rows":[{"repo_full_name":"nekoserver/rust-worker-sqlx-d1","pr_number":54}]}\n})\nreport = JSON.parse(raw)\nreport.each do |section, outcome|\n  case outcome["status"]\n  when "ok"\n    puts "#{section}: #{outcome["rows"].size}件"\n  when "error"\n    puts "#{section}: ERROR (#{outcome["message"]})"\n  end\nend' },
+  { title: 'sqlx-d1出力アダプタ', description: 'sqlx-d1のSectionOutcome形式を解析し、取得に成功した各テーブルの行数を表示します。', category: 'データ', badges: ['sqlx-d1', 'JSON', '相互運用'], code: 'require "json"\n# rust-worker-sqlx-d1の /sqlx-d1-examples/data が返すJSONの形。\n# migration 0161適用後はapi_endpoint_statsもokとして取得できる。\nraw = %q({\n  "user_sessions": {"status":"ok","rows":[{"user_id":"octocat","timezone":"JST"},{"user_id":"nyaon","timezone":"UTC"}]},\n  "api_endpoint_stats": {"status":"ok","rows":[{"endpoint":"GET /api/user","status_code":200,"count":42}]},\n  "commit_agent_log_page": {"status":"ok","rows":[{"repo_full_name":"nekoserver/rust-worker-sqlx-d1","pr_number":54}]}\n})\nreport = JSON.parse(raw)\nreport.each do |section, outcome|\n  rows = outcome.fetch("rows")\n  puts "#{section}: #{rows.size}件"\nend' },
+  { title: 'sqlx-d1ページング応答', description: 'sqlx-d1で取得したカーソル付きページを読み、次ページの有無と行を安全に表示します。', category: 'データ', badges: ['sqlx-d1', 'ページング', 'JSON'], code: 'require "json"\nraw = %q({"rows":[{"id":103,"message":"deploy"},{"id":102,"message":"test"}],"next_cursor":"102","has_more":true})\npage = JSON.parse(raw)\npage.fetch("rows").each do |row|\n  puts "##{row.fetch("id")}: #{row.fetch("message")}"\nend\nputs page["has_more"] ? "next: #{page.fetch("next_cursor")}" : "last page"' },
+  { title: 'sqlx-d1集計行の変換', description: 'GROUP BYクエリの文字列・数値・NULLをRubyの型へ変換して集計レポートを作ります。', category: 'データ', badges: ['sqlx-d1', '集計', 'NULL'], code: 'require "json"\nraw = %q([{"status_code":200,"request_count":128,"average_ms":12.5},{"status_code":500,"request_count":3,"average_ms":null}])\nrows = JSON.parse(raw)\ntotal = rows.sum { |row| row.fetch("request_count") }\nrows.each do |row|\n  average = row["average_ms"] ? format("%.1f ms", row["average_ms"]) : "計測なし"\n  puts "HTTP #{row.fetch("status_code")}: #{row.fetch("request_count")}件 / #{average}"\nend\nputs "total: #{total}件"' },
+  { title: 'sqlx-d1エラー境界', description: 'セクション単位の成功・失敗を分離し、1クエリの失敗後も成功データを処理します。', category: 'データ', badges: ['sqlx-d1', 'Result', '障害分離'], code: 'require "json"\nraw = %q({"sessions":{"status":"ok","rows":[{"id":"s1"}]},"optional_audit":{"status":"error","message":"query timed out"},"stats":{"status":"ok","rows":[{"count":7}]}})\nJSON.parse(raw).each do |name, outcome|\n  if outcome.fetch("status") == "ok"\n    puts "OK    #{name.ljust(14)} #{outcome.fetch("rows").size} rows"\n  else\n    warn "SKIP  #{name.ljust(14)} #{outcome.fetch("message")}"\n  end\nend' },
   { title: 'CSV 集計', description: '文字列内のCSVを読み、合計を求めます。', category: 'データ', code: 'source = "item,price,qty\\nApple,120,3\\nTea,450,1\\nBread,280,2"\nheader, *lines = source.lines(chomp: true).map { |line| line.split(",") }\nrows = lines.map { |values| header.zip(values).to_h }\nrows.each { |row| puts "#{row["item"]}: #{row["price"].to_i * row["qty"].to_i}円" }\nputs "合計: #{rows.sum { |row| row["price"].to_i * row["qty"].to_i }}円"' },
   { title: '正規表現で抽出', description: 'ログ風テキストからステータスを集計します。', category: '文字列', code: 'log = <<~LOG\n  200 GET /\n  404 GET /missing\n  200 POST /items\n  500 GET /error\n  200 GET /about\nLOG\ncodes = log.scan(/^([0-9]{3})/).flatten.tally\ncodes.sort.each { |code, count| puts "HTTP #{code}: #{count}" }' },
   { title: '回文チェッカー', description: '日本語や記号を含む文字列を正規化して判定します。', category: '文字列', code: 'def palindrome?(text)\n  normalized = text.downcase.gsub(/[^a-z0-9]/, "")\n  normalized == normalized.reverse\nend\n["Never odd or even", "Ruby", "A man, a plan, a canal: Panama!"].each do |text|\n  puts "#{palindrome?(text) ? "✓" : "×"} #{text}"\nend' },
@@ -183,7 +186,8 @@ function renderRubyReplSnippets(): string {
     const payload = JSON.stringify(snippet.code).replace(/</g, '\\u003c');
     const categoryIndex = categories.indexOf(snippet.category);
     const firstInCategory = RUBY_REPL_SNIPPETS.findIndex((item) => item.category === snippet.category) === index;
-    return `<article class="snippet-card" data-snippet-card="${index}" data-category-index="${categoryIndex}"${firstInCategory ? ` id="page-sample-category-${categoryIndex}"` : ''}>
+    const isLong = snippet.code.split('\n').length > 12;
+    return `<article class="snippet-card${isLong ? ' snippet-card-long' : ''}" data-snippet-card="${index}" data-category-index="${categoryIndex}"${firstInCategory ? ` id="page-sample-category-${categoryIndex}"` : ''}>
       <div class="snippet-heading"><span class="snippet-category" data-category-index="${categoryIndex}">${escapeHtml(snippet.category)}</span><h3>${escapeHtml(snippet.title)}</h3>${renderRubyVersionBadges(snippet)}</div>
       <p>${escapeHtml(snippet.description)}</p>
       <div class="snippet-badges">${(snippet.badges || []).map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</div>
@@ -370,7 +374,7 @@ export function getRubyWasmPage(username: string): string {
     .wasm-status.error { background: #fee2e2; color: #991b1b; }
     textarea {
       width: 100%;
-      min-height: 160px;
+      min-height: clamp(180px, 30vh, 360px);
       padding: 12px;
       border: 1px solid var(--border-color);
       border-radius: 8px;
@@ -432,7 +436,7 @@ export function getRubyWasmPage(username: string): string {
     .modal-overlay.open { display: flex; }
     .modal-box {
       background: var(--card-bg); color: var(--text-primary); border-radius: 12px; padding: 24px;
-      width: min(560px, 92vw); max-height: 84vh; overflow-y: auto;
+      width: min(720px, 94vw); max-height: 92dvh; overflow-y: auto;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
     }
     .modal-box h2 {
@@ -440,7 +444,7 @@ export function getRubyWasmPage(username: string): string {
       display: flex; justify-content: space-between; align-items: center;
     }
     .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
-    .sample-modal-box { width: min(680px, 92vw); }
+    .sample-modal-box { width: min(880px, 94vw); }
     .sample-modal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
     .sample-modal-header h2 { flex: none; margin: 2px 0 0; }
     .sample-category-links { display: flex; flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
@@ -464,13 +468,13 @@ export function getRubyWasmPage(username: string): string {
     .sample-choice-copy { display: grid; gap: 4px; min-width: 0; }
     .sample-choice-copy strong { font-size: 14px; }
     .sample-choice-copy > span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
-    .sample-detail-box { position: relative; width: min(640px, 92vw); padding-top: 46px; }
+    .sample-detail-box { position: relative; width: min(960px, 96vw); padding-top: 46px; }
     .sample-detail-corner-close { position: absolute; top: 12px; right: 14px; }
     .sample-detail-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
     .sample-detail-heading h2 { margin: 0; }
     .sample-detail-description { margin: 0 0 12px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
     .sample-detail-code-wrap { position: relative; }
-    .sample-detail-code { max-height: 46vh; margin: 0; padding: 14px; padding-right: 88px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .sample-detail-code { max-height: min(58dvh, 680px); margin: 0; padding: 14px; padding-right: 88px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .sample-load-button { min-width: 42px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-weight: 700; cursor: pointer; }
     .sample-detail-result-wrap { position: relative; margin-top: 10px; padding-top: 24px; }
     .sample-detail-result-wrap[hidden] { display: none; }
@@ -514,11 +518,12 @@ export function getRubyWasmPage(username: string): string {
     .ruby-version-badges { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
     .ruby-version-badge { padding: 2px 6px; border: 1px solid #86efac; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 9px; font-weight: 800; white-space: nowrap; }
     .ruby-version-badge.ruby4-only { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
+    .snippet-card-long { grid-column: 1 / -1; }
     .snippet-card > p { min-height: 38px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
     .snippet-badges { display: flex; flex-wrap: wrap; gap: 5px; min-height: 19px; margin-top: 7px; }
     .snippet-badges span { padding: 2px 6px; border-radius: 999px; background: var(--bg-secondary); color: var(--text-muted); font-size: 9px; font-weight: 700; }
     .snippet-code-wrap { position: relative; margin: 10px 0 7px; }
-    .snippet-card pre { max-height: 260px; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
+    .snippet-card pre { min-height: 180px; max-height: min(52vh, 620px); margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border-color); border-radius: 9px; background: #172033; color: #e7edf7; font: 12px/1.55 'Monaco', 'Courier New', monospace; tab-size: 2; }
     .ruby-keyword { color: #ff7ab2; font-weight: 600; }
     .ruby-string { color: #b4f1a1; }
     .ruby-comment { color: #8290a6; font-style: italic; }
@@ -532,7 +537,7 @@ export function getRubyWasmPage(username: string): string {
     .snippet-result { position: relative; margin-top: 12px; }
     .snippet-result[hidden] { display: none; }
     .snippet-output-close { display: block; margin: 0 0 5px auto; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; text-decoration: none; }
-    .snippet-output { display: block; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
+    .snippet-output { display: block; max-height: min(42vh, 480px); overflow: auto; padding: 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 'Monaco', 'Courier New', monospace; }
     .snippet-output.error { color: #991b1b; border-color: #ef4444; }
     .audit-section { margin-top: 32px; }
     .audit-summary { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
@@ -550,6 +555,9 @@ export function getRubyWasmPage(username: string): string {
       .user-name { display: none; }
       .card { padding: 22px 18px; }
       .snippet-grid { grid-template-columns: 1fr; }
+      .modal-box { width: 96vw; max-height: 94dvh; padding: 18px; }
+      .sample-detail-code { max-height: 54dvh; }
+      .snippet-card pre { min-height: 220px; max-height: 62vh; }
       .snippet-card > p { min-height: 0; }
     }
   </style>

@@ -2510,6 +2510,16 @@ INSERT OR IGNORE INTO jev_keyword_boundary_labels (question_text, options_json) 
   '0159': `DROP TABLE IF EXISTS jev_keyword_boundary_evaluations;
 DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
   '0160': `ALTER TABLE tree_view_update_log ADD COLUMN error_message TEXT;`,
+  '0161': `CREATE TABLE IF NOT EXISTS api_endpoint_stats (
+  endpoint TEXT NOT NULL,
+  status_code INTEGER NOT NULL DEFAULT 0,
+  count INTEGER NOT NULL DEFAULT 1,
+  last_called_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (endpoint, status_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint
+  ON api_endpoint_stats(endpoint);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
