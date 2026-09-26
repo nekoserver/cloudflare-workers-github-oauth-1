@@ -76,4 +76,42 @@ describe('/status の「関連ページ」列', () => {
     const html = getCacheStatusPage(minimalUser, baseData);
     expect(html).toContain('関連ページ');
   });
+
+  it('APIごとの利用テーブル総数とテーブル名を、総数の降順で表示する', () => {
+    const html = getCacheStatusPage(minimalUser, {
+      ...baseData,
+      tables: [
+        { name: 'table_a', exists: true, rowCount: 1, migration: '0001', description: '', syncPolicy: 'auto' },
+        { name: 'table_b', exists: true, rowCount: 2, migration: '0002', description: '', syncPolicy: 'auto' },
+        { name: 'table_c', exists: true, rowCount: 3, migration: '0003', description: '', syncPolicy: 'auto' },
+      ],
+      tablePageMap: {
+        table_a: [{ method: 'GET', path: '/api/shared' }, { method: 'GET', path: '/api/single' }],
+        table_b: [{ method: 'GET', path: '/api/shared' }],
+        table_c: [{ method: 'GET', path: '/api/shared' }],
+      },
+    });
+
+    expect(html).toContain('API別利用テーブル一覧');
+    expect(html).toContain('利用テーブル総数');
+    const sharedRow = html.match(/<tr>\s*<td><code>GET \/api\/shared<\/code><\/td>[\s\S]*?<\/tr>/)?.[0] || '';
+    expect(sharedRow).toContain('endpoint-table-count">3');
+    expect(sharedRow).toContain('table_a');
+    expect(sharedRow).toContain('table_b');
+    expect(sharedRow).toContain('table_c');
+    expect(html.indexOf('GET /api/shared')).toBeLessThan(html.indexOf('GET /api/single'));
+  });
+
+  it('同じテーブルの同一APIは利用テーブル総数で重複カウントしない', () => {
+    const html = getCacheStatusPage(minimalUser, {
+      ...baseData,
+      tables: [{ name: 'table_a', exists: true, rowCount: 1, migration: '0001', description: '', syncPolicy: 'auto' }],
+      tablePageMap: {
+        table_a: [{ method: 'POST', path: '/api/duplicate' }, { method: 'POST', path: '/api/duplicate' }],
+      },
+    });
+    const row = html.match(/<tr>\s*<td><code>POST \/api\/duplicate<\/code><\/td>[\s\S]*?<\/tr>/)?.[0] || '';
+    expect(row).toContain('endpoint-table-count">1');
+    expect(row.match(/class="endpoint-table-name"/g)).toHaveLength(1);
+  });
 });
