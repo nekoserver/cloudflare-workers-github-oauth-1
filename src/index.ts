@@ -2519,6 +2519,9 @@ DROP TABLE IF EXISTS jev_keyword_boundary_labels;`,
 
 CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint
   ON api_endpoint_stats(endpoint);`,
+  '0162': `CREATE INDEX IF NOT EXISTS idx_webhook_log_status ON webhook_log(status);
+CREATE INDEX IF NOT EXISTS idx_webhook_log_source_status ON webhook_log(source, status);
+CREATE INDEX IF NOT EXISTS idx_webhook_log_status_received_at ON webhook_log(status, received_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
