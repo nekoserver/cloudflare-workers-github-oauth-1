@@ -57,7 +57,7 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     expect(html).toContain('class="sample-detail-code-wrap"><button type="button" class="snippet-run" id="sampleRunBtn" disabled>Run ▶︎</button><pre');
     expect(html).toContain("sampleRunBtn.addEventListener('click'");
     expect(html).toContain('var result = runRubyCode(selectedSampleCode)');
-    expect(html).toContain('sampleDetailResult.textContent = result.output');
+    expect(html).toContain('highlightRubyOutput(sampleDetailResult, result.output)');
     expect(html).toContain('id="sampleDetailResultCloseBtn">close</button>');
     expect(html).toContain("sampleDetailResultCloseBtn.addEventListener('click'");
   });
@@ -250,6 +250,43 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
       expect(snippet?.code.length).toBeGreaterThan(0);
       expect(RUBY_SAMPLE_AUDIT_RESULTS[title]).toEqual({ ruby34: 'ok', ruby40Wasm: 'ok' });
     });
+  });
+
+  it('実行結果もRubyトークンとして安全にシンタックスハイライトする', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('function highlightRubyOutput(target, source)');
+    expect(html).toContain("target.innerHTML = highlightRubyText(source)");
+    expect(html).toContain('highlightRubyOutput(resultValue, result.output)');
+    expect(html).toContain('highlightRubyOutput(output, result.output)');
+    expect(html).toContain('highlightRubyOutput(sampleDetailResult, result.output)');
+    expect(html).toContain('highlightRubyOutput(modalResultValue, result.output)');
+  });
+
+  it('トップパネル左上のメソッド一覧を由来別に表示し、閉じるとフィルターを解除する', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).toContain('id="methodFilterDetails"');
+    expect(html).toContain('class="method-filter-groups"');
+    expect(html).toContain('Enumerable');
+    expect(html).toContain('その他');
+    expect(html).toMatch(/data-method-filter="[^"]+" data-method-snippets="[0-9,]+"/);
+    expect(html).toMatch(/class="method-count">[0-9]+<\/span>/);
+    expect(html).toContain("methodFilterDetails.addEventListener('toggle'");
+    expect(html).toContain('if (!methodFilterDetails.open) resetMethodFilter()');
+    expect(html).toContain("card.hidden = allowed.indexOf(card.getAttribute('data-snippet-card')) === -1");
+  });
+
+  it('sqlx-d1とその他の実行可能サンプルをさらに幅広く掲載する', () => {
+    const sqlxTitles = ['sqlx-d1トランザクション結果', 'sqlx-d1バッチ書き込み', 'sqlx-d1楽観的ロック', 'sqlx-d1検索条件', 'sqlx-d1日付別集計', 'sqlx-d1リレーション結合'];
+    const generalTitles = ['Setで重複検出', 'キューでジョブ処理', '状態遷移マシン', '二次元配列の回転', 'ランレングス圧縮', 'LRU風キャッシュ'];
+
+    expect(RUBY_REPL_SNIPPETS.length).toBeGreaterThanOrEqual(83);
+    sqlxTitles.forEach((title) => {
+      const snippet = RUBY_REPL_SNIPPETS.find((item) => item.title === title);
+      expect(snippet?.badges).toContain('sqlx-d1');
+    });
+    generalTitles.forEach((title) => expect(RUBY_REPL_SNIPPETS.some((item) => item.title === title)).toBe(true));
   });
 
 });

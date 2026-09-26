@@ -141,6 +141,20 @@ export const RUBY_REPL_SNIPPETS: readonly RubyReplSnippet[] = [
   { title: '数当てヒント', description: '二分探索の考え方で秘密の数へ近づく過程を表示します。', category: '遊ぶ', badges: ['探索', 'ゲーム'], code: 'secret = 73\nlow = 1\nhigh = 100\nloop do\n  guess = (low + high) / 2\n  puts "guess #{guess}: #{guess == secret ? "correct" : guess < secret ? "higher" : "lower"}"\n  break if guess == secret\n  guess < secret ? low = guess + 1 : high = guess - 1\nend' },
   { title: '配列パターンの残余', description: 'restパターンで先頭と末尾以外の要素をまとめて受け取ります。', category: 'Ruby 4', badges: ['Pattern', '構文'], code: 'routes = [["Tokyo", "Kyoto"], ["Tokyo", "Nagoya", "Kyoto", "Osaka"]]\nroutes.each do |route|\n  case route\n  in [start, *stops, destination]\n    puts "#{start} -> #{destination} (stops: #{stops.join(", ")})"\n  end\nend' },
   { title: 'ハッシュパターンの別名', description: 'asパターンで分解した値と元のHashを同時に利用します。', category: 'Ruby 4', badges: ['as pattern', '構文'], code: 'responses = [{ status: 200, body: "OK" }, { status: 503, body: "busy" }]\nresponses.each do |response|\n  case response\n  in { status: 200, body: } => whole\n    puts "success #{body}: #{whole.inspect}"\n  in { status:, body: } if status >= 500\n    puts "server error #{status}: #{body}"\n  end\nend' },
+
+  { title: 'sqlx-d1トランザクション結果', description: 'トランザクション内の複数更新結果を検証し、変更行数をまとめます。', category: 'データ', badges: ['sqlx-d1', 'transaction', '検証'], code: 'require "json"\nraw = %q({"committed":true,"results":[{"operation":"debit","rows_affected":1},{"operation":"credit","rows_affected":1}]})\ntx = JSON.parse(raw)\nraise "rollback" unless tx.fetch("committed")\ntx.fetch("results").each { |result| puts "#{result.fetch("operation")}: #{result.fetch("rows_affected")} row" }\nputs "total changes: #{tx.fetch("results").sum { |result| result.fetch("rows_affected") }}"' },
+  { title: 'sqlx-d1バッチ書き込み', description: 'D1バッチ応答から成功件数と変更行数を集計します。', category: 'データ', badges: ['sqlx-d1', 'batch', '集計'], code: 'require "json"\nraw = %q([{"success":true,"meta":{"changes":2}},{"success":true,"meta":{"changes":1}},{"success":false,"error":"constraint"}])\nresults = JSON.parse(raw)\nsucceeded, failed = results.partition { |result| result.fetch("success") }\nputs "success: #{succeeded.size}"\nputs "changes: #{succeeded.sum { |result| result.dig("meta", "changes") }}"\nputs "failed: #{failed.map { |result| result.fetch("error") }.join(", ")}"' },
+  { title: 'sqlx-d1楽観的ロック', description: '更新前後のバージョン値から競合の有無を判定します。', category: 'データ', badges: ['sqlx-d1', '更新', '競合制御'], code: 'responses = [\n  { id: 7, expected_version: 3, current_version: 3, changes: 1 },\n  { id: 8, expected_version: 4, current_version: 5, changes: 0 }\n]\nresponses.each do |row|\n  state = row[:changes] == 1 ? "updated to v#{row[:current_version] + 1}" : "conflict at v#{row[:current_version]}"\n  puts "##{row[:id]}: #{state}"\nend' },
+  { title: 'sqlx-d1検索条件', description: '任意の検索条件をホワイトリストで正規化して表示します。', category: 'データ', badges: ['sqlx-d1', '検索', '安全性'], code: 'params = { status: "active", sort: "created_at", direction: "desc", limit: "25" }\nallowed_sorts = %w[created_at name status]\nquery = {\n  status: %w[active archived].include?(params[:status]) ? params[:status] : "active",\n  sort: allowed_sorts.include?(params[:sort]) ? params[:sort] : "created_at",\n  direction: params[:direction] == "asc" ? "ASC" : "DESC",\n  limit: [[params[:limit].to_i, 1].max, 100].min\n}\nputs query.map { |key, value| "#{key}=#{value}" }.join(" & ")' },
+  { title: 'sqlx-d1日付別集計', description: '時系列のクエリ結果を日付別にまとめ、欠けた日もゼロで補います。', category: 'データ', badges: ['sqlx-d1', '時系列', '集計'], code: 'rows = [{ day: "2026-09-23", count: 8 }, { day: "2026-09-25", count: 13 }]\ndays = (23..25).map { |day| "2026-09-#{day}" }\nby_day = rows.to_h { |row| [row[:day], row[:count]] }\ndays.each { |day| puts "#{day}: #{by_day.fetch(day, 0)}" }\nputs "total: #{by_day.values.sum}"' },
+  { title: 'sqlx-d1リレーション結合', description: 'JOIN済みのフラットな行を親子構造へ組み直します。', category: 'データ', badges: ['sqlx-d1', 'JOIN', '整形'], code: 'rows = [\n  { project_id: 1, project: "WASM", task: "build" },\n  { project_id: 1, project: "WASM", task: "test" },\n  { project_id: 2, project: "D1", task: "migrate" }\n]\nprojects = rows.group_by { |row| row[:project_id] }.values.map do |group|\n  { name: group.first[:project], tasks: group.map { |row| row[:task] } }\nend\nprojects.each { |project| puts "#{project[:name]}: #{project[:tasks].join(", ")}" }' },
+  { title: 'Setで重複検出', description: 'Setを使って入力順を保ちながら重複値を見つけます。', category: 'データ', badges: ['Set', '重複', '実践'], code: 'require "set"\nseen = Set.new\nduplicates = %w[ruby wasm d1 ruby sqlx wasm].select { |word| !seen.add?(word) }\nputs "unique: #{seen.to_a.join(", ")}"\nputs "duplicates: #{duplicates.join(", ")}"' },
+  { title: 'キューでジョブ処理', description: '配列をFIFOキューとして使い、追加ジョブも順番に処理します。', category: 'アルゴリズム', badges: ['Queue', 'FIFO', '基礎'], code: 'queue = %w[fetch parse]\ncompleted = []\nuntil queue.empty?\n  job = queue.shift\n  completed << job\n  queue << "store" if job == "parse"\n  puts "done: #{job} / waiting: #{queue.size}"\nend\nputs completed.join(" -> ")' },
+  { title: '状態遷移マシン', description: '許可されたイベントだけで注文状態を遷移させます。', category: 'オブジェクト', badges: ['State', '設計', '検証'], code: 'transitions = { pending: { pay: :paid, cancel: :cancelled }, paid: { ship: :shipped }, shipped: {} }\nstate = :pending\n[:pay, :ship, :cancel].each do |event|\n  next_state = transitions.fetch(state)[event]\n  puts next_state ? "#{state} --#{event}--> #{next_state}" : "#{state}: #{event} ignored"\n  state = next_state if next_state\nend' },
+  { title: '二次元配列の回転', description: 'transposeとreverseで正方行列を時計回りに回転します。', category: 'アルゴリズム', badges: ['Matrix', '配列', '変換'], code: 'matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]\nrotated = matrix.reverse.transpose\nrotated.each { |row| puts row.join(" ") }' },
+  { title: 'ランレングス圧縮', description: '連続する文字をグループ化して短い表現へ圧縮します。', category: '文字列', badges: ['圧縮', 'chunk', '実践'], code: 'text = "aaabccccdd"\nencoded = text.chars.chunk(&:itself).map { |char, group| "#{char}#{group.size}" }.join\ndecoded = encoded.scan(/(.)([0-9]+)/).map { |char, count| char * count.to_i }.join\nputs "#{text} -> #{encoded}"\nputs "restored: #{decoded == text}"' },
+  { title: 'LRU風キャッシュ', description: '最近使った順を更新しながら上限件数を保つ小さなキャッシュです。', category: 'オブジェクト', badges: ['Cache', 'Hash', '実践'], code: 'cache = {}\nlimit = 3\n[:a, :b, :c, :a, :d].each do |key|\n  value = cache.delete(key) || key.to_s.upcase\n  cache[key] = value\n  cache.shift while cache.size > limit\n  puts "#{key}: #{cache.keys.join(",")}"\nend' },
+
 ];
 
 /** サンプル集を実際に一括実行した互換性確認結果 (2026-09-23)。 */
@@ -230,6 +244,50 @@ function renderRubyPageCategoryLinks(): string {
     `<button type="button" class="page-category-link" data-category-index="${index}" data-page-category-filter="${index}" aria-pressed="false"><span>${escapeHtml(category)}</span><strong>${count}</strong></button>`
   ).join('');
   return `<button type="button" class="page-category-reset" data-page-category-reset aria-label="カテゴリー選択を解除" disabled>選択解除</button>${categoryButtons}`;
+}
+
+type RubyMethodCatalogEntry = {
+  method: string;
+  origin: 'Enumerable' | 'その他';
+  count: number;
+  snippetIndexes: number[];
+};
+
+const ENUMERABLE_METHODS = new Set([
+  'all?', 'any?', 'chunk', 'count', 'each_cons', 'each_entry', 'each_slice', 'each_with_index',
+  'each_with_object', 'filter_map', 'find', 'flat_map', 'group_by', 'inject', 'map', 'max', 'max_by',
+  'min', 'min_by', 'none?', 'one?', 'partition', 'reduce', 'reject', 'select', 'slice_when',
+  'sort', 'sort_by', 'sum', 'tally', 'take', 'to_h', 'zip',
+]);
+
+/** サンプル内の明示的なレシーバー呼び出しを集計し、由来別フィルターを作る。 */
+export function buildRubyMethodCatalog(): readonly RubyMethodCatalogEntry[] {
+  const entries = new Map<string, { count: number; snippetIndexes: Set<number> }>();
+  RUBY_REPL_SNIPPETS.forEach((snippet, snippetIndex) => {
+    const matcher = /(?:\.|&:)([a-zA-Z_][a-zA-Z0-9_]*[!?=]?)/g;
+    for (const match of snippet.code.matchAll(matcher)) {
+      const current = entries.get(match[1]) || { count: 0, snippetIndexes: new Set<number>() };
+      current.count += 1;
+      current.snippetIndexes.add(snippetIndex);
+      entries.set(match[1], current);
+    }
+  });
+  return [...entries].map(([method, value]): RubyMethodCatalogEntry => ({
+    method,
+    origin: ENUMERABLE_METHODS.has(method) ? 'Enumerable' : 'その他',
+    count: value.count,
+    snippetIndexes: [...value.snippetIndexes],
+  })).sort((left, right) => left.origin.localeCompare(right.origin) || left.method.localeCompare(right.method));
+}
+
+function renderRubyMethodFilter(): string {
+  const catalog = buildRubyMethodCatalog();
+  return ['Enumerable', 'その他'].map((origin) => {
+    const rows = catalog.filter((entry) => entry.origin === origin).map((entry) =>
+      `<button type="button" class="method-filter-row" data-method-filter="${escapeHtml(entry.method)}" data-method-snippets="${entry.snippetIndexes.join(',')}" aria-pressed="false"><code>${escapeHtml(entry.method)}</code><span class="method-count">${entry.count}</span></button>`
+    ).join('');
+    return `<section class="method-filter-group"><h3>${origin}<small>${catalog.filter((entry) => entry.origin === origin).length} methods</small></h3><div>${rows}</div></section>`;
+  }).join('');
 }
 
 function renderRubySampleAuditRows(): string {
@@ -359,6 +417,21 @@ export function getRubyWasmPage(username: string): string {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       padding: 32px;
     }
+    .top-panel-tools { display: flex; align-items: flex-start; margin: -14px 0 12px -14px; }
+    .method-filter { position: relative; }
+    .method-filter > summary { list-style: none; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 12px; font-weight: 700; cursor: pointer; }
+    .method-filter > summary::-webkit-details-marker { display: none; }
+    .method-filter > summary::before { content: '⌄'; margin-right: 6px; color: var(--accent-color); }
+    .method-filter[open] > summary::before { content: '⌃'; }
+    .method-filter-groups { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(560px, calc(100vw - 40px)); max-height: min(64vh, 620px); overflow: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg); box-shadow: 0 12px 32px var(--card-shadow-light); }
+    .method-filter-group + .method-filter-group { margin-top: 12px; }
+    .method-filter-group h3 { display: flex; justify-content: space-between; padding: 4px 5px 7px; color: var(--text-primary); font-size: 12px; }
+    .method-filter-group h3 small { color: var(--text-muted); font-weight: 500; }
+    .method-filter-group > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+    .method-filter-row { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 7px 8px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; }
+    .method-filter-row code { overflow: hidden; text-overflow: ellipsis; color: inherit; }
+    .method-filter-row[aria-pressed="true"] { border-color: var(--accent-color); background: var(--accent-color); color: #fff; }
+    .method-count { min-width: 20px; margin-left: 6px; padding: 1px 5px; border-radius: 999px; background: var(--card-bg); color: var(--text-muted); font-size: 10px; font-weight: 800; text-align: center; }
     .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
     .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 12px; }
     .notice { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
@@ -559,6 +632,7 @@ export function getRubyWasmPage(username: string): string {
       .sample-detail-code { max-height: 54dvh; }
       .snippet-card pre { min-height: 220px; max-height: 62vh; }
       .snippet-card > p { min-height: 0; }
+      .method-filter-group > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -594,6 +668,7 @@ export function getRubyWasmPage(username: string): string {
 
   <div class="container">
     <div class="card">
+      <div class="top-panel-tools"><details class="method-filter" id="methodFilterDetails"><summary>メソッドから絞り込む</summary><div class="method-filter-groups">${renderRubyMethodFilter()}</div></details></div>
       <div class="title">Ruby コード実行 (WASM)</div>
       <div class="subtitle">CRubyの公式WASM(WASI)ビルドをブラウザ上のWebAssemblyで実行します。</div>
       <div class="notice">初回はRuby本体(非圧縮約32MB)をCDNから取得します。通信状況により数十秒かかることがあります。進捗は下のステータスに出ます。2回目以降はブラウザキャッシュを使います。</div>
@@ -746,6 +821,54 @@ export function getRubyWasmPage(username: string): string {
       }
     }
 
+    // 出力は任意文字列なので、必ずtextContentでエスケープしてからRuby風の
+    // トークンだけをspanへ変換する。HTMLを直接信頼しない。
+    function highlightRubyText(source) {
+      var keywords = ['begin', 'case', 'class', 'def', 'do', 'else', 'elsif', 'end', 'ensure', 'if', 'raise', 'require', 'rescue', 'return', 'then', 'unless', 'until', 'when', 'while', 'yield'];
+      var literals = ['true', 'false', 'nil'];
+      var escaped = document.createElement('div');
+      escaped.textContent = String(source);
+      var text = escaped.innerHTML;
+      var result = '';
+      var index = 0;
+      function span(kind, value) { return '<span class="ruby-' + kind + '">' + value + '</span>'; }
+      function isWord(char) { return !!char && ((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char === '_'); }
+      while (index < text.length) {
+        var char = text.charAt(index);
+        if (char === '#') {
+          var commentEnd = text.indexOf(String.fromCharCode(10), index);
+          if (commentEnd < 0) commentEnd = text.length;
+          result += span('comment', text.slice(index, commentEnd));
+          index = commentEnd;
+        } else if (char === '&' && (text.slice(index, index + 6) === '&quot;' || text.slice(index, index + 5) === '&#39;')) {
+          var entity = text.slice(index, index + 6) === '&quot;' ? '&quot;' : '&#39;';
+          var stringEnd = text.indexOf(entity, index + entity.length);
+          if (stringEnd < 0) stringEnd = text.length - entity.length;
+          stringEnd += entity.length;
+          result += span('string', text.slice(index, stringEnd));
+          index = stringEnd;
+        } else if (char >= '0' && char <= '9') {
+          var numberEnd = index + 1;
+          while (numberEnd < text.length && ((text.charAt(numberEnd) >= '0' && text.charAt(numberEnd) <= '9') || text.charAt(numberEnd) === '.')) numberEnd += 1;
+          result += span('number', text.slice(index, numberEnd));
+          index = numberEnd;
+        } else if (isWord(char) && !(char >= '0' && char <= '9')) {
+          var wordEnd = index + 1;
+          while (wordEnd < text.length && isWord(text.charAt(wordEnd))) wordEnd += 1;
+          var word = text.slice(index, wordEnd);
+          result += keywords.indexOf(word) >= 0 ? span('keyword', word) : literals.indexOf(word) >= 0 ? span('literal', word) : word;
+          index = wordEnd;
+        } else {
+          result += char;
+          index += 1;
+        }
+      }
+      return result;
+    }
+    function highlightRubyOutput(target, source) {
+      target.innerHTML = highlightRubyText(source);
+    }
+
     clearBtn.addEventListener('click', function() {
       inputCode.value = '';
       resultBlock.style.display = 'none';
@@ -763,7 +886,7 @@ export function getRubyWasmPage(username: string): string {
       saveNote.textContent = '';
       var result = runRubyCode(inputCode.value);
       resultValue.classList.toggle('error', !result.ok);
-      resultValue.textContent = result.output;
+      highlightRubyOutput(resultValue, result.output);
       // 実行結果が正常(例外なし)の場合のみ保存ボタンを表示する。新しく
       // 実行し直した分は前回保存済みとは別物なので、以前の保存成功で
       // 無効化されたままになっていても、ここで必ず有効化し直す。
@@ -899,7 +1022,7 @@ export function getRubyWasmPage(username: string): string {
         var result = runRubyCode(code);
         resultPanel.hidden = false;
         output.classList.toggle('error', !result.ok);
-        output.textContent = result.output;
+        highlightRubyOutput(output, result.output);
         button.textContent = 'Run ▶︎';
         button.disabled = !rubyVM;
       });
@@ -917,6 +1040,29 @@ export function getRubyWasmPage(username: string): string {
     // 選択中のバッジを再度押すと全件表示に戻る。
     var pageCategoryLinks = document.querySelector('.sample-jump-links');
     var pageCategoryReset = document.querySelector('[data-page-category-reset]');
+    var methodFilterDetails = document.getElementById('methodFilterDetails');
+    function resetMethodFilter() {
+      document.querySelectorAll('[data-method-filter]').forEach(function(button) { button.setAttribute('aria-pressed', 'false'); });
+      document.querySelectorAll('.snippet-card[data-snippet-card]').forEach(function(card) { card.hidden = false; });
+    }
+    methodFilterDetails.addEventListener('toggle', function() {
+      if (!methodFilterDetails.open) resetMethodFilter();
+    });
+    document.querySelectorAll('[data-method-filter]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var willSelect = button.getAttribute('aria-pressed') !== 'true';
+        resetPageCategoryFilter();
+        document.querySelectorAll('[data-method-filter]').forEach(function(other) {
+          other.setAttribute('aria-pressed', String(willSelect && other === button));
+        });
+        var allowed = willSelect ? button.getAttribute('data-method-snippets').split(',') : [];
+        document.querySelectorAll('.snippet-card[data-snippet-card]').forEach(function(card) {
+          if (willSelect) card.hidden = allowed.indexOf(card.getAttribute('data-snippet-card')) === -1;
+          else card.hidden = false;
+        });
+        if (willSelect) document.getElementById('snippetTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
     function resetPageCategoryFilter() {
       document.querySelectorAll('[data-page-category-filter]').forEach(function(button) {
         button.setAttribute('aria-pressed', 'false');
@@ -928,6 +1074,7 @@ export function getRubyWasmPage(username: string): string {
     if (pageCategoryReset) pageCategoryReset.addEventListener('click', resetPageCategoryFilter);
     document.querySelectorAll('[data-page-category-filter]').forEach(function(button) {
       button.addEventListener('click', function() {
+        resetMethodFilter();
         var categoryIndex = button.getAttribute('data-page-category-filter');
         var willSelect = button.getAttribute('aria-pressed') !== 'true';
         document.querySelectorAll('[data-page-category-filter]').forEach(function(other) {
@@ -985,7 +1132,7 @@ export function getRubyWasmPage(username: string): string {
       var result = runRubyCode(selectedSampleCode);
       sampleDetailResultWrap.hidden = false;
       sampleDetailResult.classList.toggle('error', !result.ok);
-      sampleDetailResult.textContent = result.output;
+      highlightRubyOutput(sampleDetailResult, result.output);
     });
     sampleLoadBtn.addEventListener('click', function() {
         // 以前の入力と実行状態を一度すべて消してから、選択コードだけを入れる。
@@ -1176,7 +1323,7 @@ export function getRubyWasmPage(username: string): string {
       }
       var result = runRubyCode(code);
       modalResultValue.classList.toggle('error', !result.ok);
-      modalResultValue.textContent = result.output;
+      highlightRubyOutput(modalResultValue, result.output);
       // 実行結果は、一覧モーダルよりさらに上のレイヤーのモーダルに表示する。
       openModal(resultModalOverlay);
     });
