@@ -35,12 +35,13 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(html).not.toContain("state.textContent = '実行できます'");
   });
 
-  it('Runボタンをコードブロック右上に配置し、closeリンクの下線を表示しない', () => {
+  it('Runボタンをコードブロック右上に配置し、長いコードの表示窓を広げる', () => {
     const html = getRubyWasmPage('tester');
 
     expect(html).toContain('<div class="snippet-code-wrap"><button type="button" class="snippet-run"');
     expect(html).toContain('</pre></div>\n      <div class="snippet-actions">');
-    expect(html).toContain('.snippet-card pre { max-height: 260px; margin: 0; padding: 14px;');
+    expect(html).toContain('.snippet-card pre { min-height: 180px; max-height: min(52vh, 620px);');
+    expect(html).toContain('.snippet-card-long { grid-column: 1 / -1; }');
     expect(html).toContain('.snippet-run { position: absolute; top: 8px; right: 8px;');
     expect(html).toContain('.snippet-output-close { display: block;');
     expect(html).toContain('text-decoration: none;');
@@ -88,11 +89,24 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(snippet?.code).not.toMatch(/http|Net::HTTP|open-uri|File\.read/);
     expect(snippet?.code).toContain('require "json"');
     expect(snippet?.code).toContain('"status":"ok"');
-    expect(snippet?.code).toContain('"status":"error"');
+    expect(snippet?.code).toContain('"api_endpoint_stats": {"status":"ok"');
+    expect(snippet?.code).not.toContain('no such table');
     expect(snippet?.code).toContain('JSON.parse(raw)');
 
     const html = getRubyWasmPage('tester');
     expect(html).toContain('sqlx-d1出力アダプタ');
     expect(html).toContain('rust-worker-sqlx-d1');
+  });
+
+  it('sqlx-d1固有の異なる応答パターンをRubyで扱うサンプルを掲載する', () => {
+    const sqlxSamples = RUBY_REPL_SNIPPETS.filter((item) => item.badges?.includes('sqlx-d1'));
+
+    expect(sqlxSamples.map((item) => item.title)).toEqual([
+      'sqlx-d1出力アダプタ',
+      'sqlx-d1ページング応答',
+      'sqlx-d1集計行の変換',
+      'sqlx-d1エラー境界',
+    ]);
+    expect(sqlxSamples.every((item) => item.code.includes('JSON.parse'))).toBe(true);
   });
 });
