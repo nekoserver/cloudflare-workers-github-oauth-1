@@ -76,7 +76,7 @@ describe('POST /webhook/resend', () => {
   });
 
   it('secret未設定をwebhook_logへ記録する', () => {
-    expect(plainRouteBlock).toContain("logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured')");
+    expect(plainRouteBlock).toContain("logWebhookEvent(c.env.DB, 'resend:default', null, 'error', null, 'Webhook secret is not configured', {");
   });
 
   it('handleResendWebhookCoreにsourceId=nullを渡す（sourceId省略の単一アカウント運用）', () => {
