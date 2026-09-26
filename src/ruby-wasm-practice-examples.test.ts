@@ -154,6 +154,22 @@ describe('/ruby-wasm サンプル選択モーダル', () => {
     });
   });
 
+  it('トップバナー直下にスクロール追従するカテゴリー別ジャンプバッジを表示する', () => {
+    const html = getRubyWasmPage('tester');
+    const categories = [...new Set(RUBY_REPL_SNIPPETS.map((snippet) => snippet.category))];
+
+    expect(html).toContain('<nav class="sample-jump-bar" aria-label="サンプルカテゴリーへジャンプ">');
+    expect(html).toContain('.sample-jump-bar {\n      position: sticky; top: 0; z-index: 20;');
+    expect(html.indexOf('class="sample-jump-bar"')).toBeGreaterThan(html.indexOf('class="navbar"'));
+    expect(html.indexOf('class="sample-jump-bar"')).toBeLessThan(html.indexOf('class="container"'));
+    categories.forEach((category, index) => {
+      const count = RUBY_REPL_SNIPPETS.filter((snippet) => snippet.category === category).length;
+      expect(html).toContain(`href="#page-sample-category-${index}"`);
+      expect(html).toContain(`id="page-sample-category-${index}"`);
+      expect(html).toContain(`<span>${category}</span><strong>${count}</strong>`);
+    });
+  });
+
   it('CSV集計はWASMに同梱されないcsv gemへ依存せず実行できる', () => {
     const csv = RUBY_REPL_SNIPPETS.find((snippet) => snippet.title === 'CSV 集計');
 
