@@ -63,7 +63,7 @@ input[type=number] { width: 90px; }
 .save-dialog { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
 .save-dialog label { display: block; color: var(--text-strong); margin-bottom: 6px; }
 .save-dialog input { width: 100%; }
-.tab-edit { position: relative; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.tab-edit { position: relative; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; touch-action: pan-y; }
 .tab-edit.dragging { border: 2px dashed var(--danger); opacity: .72; }
 .tab-edit.drop-before::before, .tab-edit.drop-after::after {
   content: ''; position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger);
@@ -282,6 +282,11 @@ input[type=number] { width: 90px; }
   var swipeStart = null;
   var panel = null;
   var draggedTab = null;
+  var tabDragPointerId = null;
+  var tabDragSource = null;
+  var tabDragStartX = 0;
+  var tabDragStartY = 0;
+  var tabDragLongPress = null;
 
   function setStatus(msg, kind) {
     statusEl.textContent = msg;
@@ -307,7 +312,6 @@ input[type=number] { width: 90px; }
     handle.textContent = '≡';
     handle.title = 'ドラッグして並べ替え';
     handle.setAttribute('aria-label', 'タブと候補をドラッグして並べ替え');
-    handle.draggable = true;
     var name = document.createElement('input');
     name.className = 'tab-label';
     name.placeholder = 'タブ名';
@@ -331,30 +335,10 @@ input[type=number] { width: 90px; }
     box.appendChild(list);
     tabsEditor.appendChild(box);
 
-    handle.addEventListener('dragstart', function(e) {
-      draggedTab = box;
-      box.classList.add('dragging');
-      if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', 'mention-editor-tab');
-      }
-    });
-    handle.addEventListener('dragend', finishTabDrag);
-    box.addEventListener('dragover', function(e) {
-      if (!draggedTab || draggedTab === box) return;
-      e.preventDefault();
-      clearDropMarkers();
-      var after = e.clientY >= box.getBoundingClientRect().top + box.offsetHeight / 2;
-      box.classList.add(after ? 'drop-after' : 'drop-before');
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    });
-    box.addEventListener('drop', function(e) {
-      if (!draggedTab || draggedTab === box) return;
-      e.preventDefault();
-      var after = box.classList.contains('drop-after');
-      tabsEditor.insertBefore(draggedTab, after ? box.nextSibling : box);
-      finishTabDrag();
-      refresh();
+    handle.addEventListener('pointerdown', function(e) { beginTabPointerDrag(e, box, true); });
+    box.addEventListener('pointerdown', function(e) {
+      if (e.target === handle || e.target.closest('button, select')) return;
+      beginTabPointerDrag(e, box, false);
     });
   }
 
@@ -363,11 +347,80 @@ input[type=number] { width: 90px; }
     for (var i = 0; i < boxes.length; i++) boxes[i].classList.remove('drop-before', 'drop-after');
   }
 
+  function activateTabDrag() {
+    if (!tabDragSource || draggedTab) return;
+    draggedTab = tabDragSource;
+    draggedTab.classList.add('dragging');
+  }
+
+  function beginTabPointerDrag(e, box, fromHandle) {
+    if (tabDragPointerId !== null || (e.button !== undefined && e.button !== 0)) return;
+    tabDragPointerId = e.pointerId;
+    tabDragSource = box;
+    tabDragStartX = e.clientX;
+    tabDragStartY = e.clientY;
+    if (box.setPointerCapture) box.setPointerCapture(e.pointerId);
+    if (fromHandle) {
+      e.preventDefault();
+      activateTabDrag();
+    } else {
+      tabDragLongPress = setTimeout(activateTabDrag, 450);
+    }
+  }
+
+  function moveTabPointerDrag(e) {
+    if (e.pointerId !== tabDragPointerId) return;
+    if (!draggedTab) {
+      if (Math.hypot(e.clientX - tabDragStartX, e.clientY - tabDragStartY) > 8) cancelTabPointerDrag();
+      return;
+    }
+    e.preventDefault();
+    clearDropMarkers();
+    var boxes = tabsEditor.querySelectorAll('.tab-edit');
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i] === draggedTab) continue;
+      var rect = boxes[i].getBoundingClientRect();
+      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        boxes[i].classList.add(e.clientY >= rect.top + rect.height / 2 ? 'drop-after' : 'drop-before');
+        break;
+      }
+    }
+  }
+
+  function endTabPointerDrag(e) {
+    if (e.pointerId !== tabDragPointerId) return;
+    if (draggedTab) {
+      var target = tabsEditor.querySelector('.drop-before, .drop-after');
+      if (target) {
+        var after = target.classList.contains('drop-after');
+        tabsEditor.insertBefore(draggedTab, after ? target.nextSibling : target);
+        refresh();
+      }
+    }
+    finishTabDrag();
+  }
+
+  function cancelTabPointerDrag() {
+    if (tabDragLongPress !== null) clearTimeout(tabDragLongPress);
+    tabDragLongPress = null;
+    tabDragPointerId = null;
+    tabDragSource = null;
+    finishTabDrag();
+  }
+
   function finishTabDrag() {
     if (draggedTab) draggedTab.classList.remove('dragging');
     clearDropMarkers();
     draggedTab = null;
+    if (tabDragLongPress !== null) clearTimeout(tabDragLongPress);
+    tabDragLongPress = null;
+    tabDragPointerId = null;
+    tabDragSource = null;
   }
+
+  tabsEditor.addEventListener('pointermove', moveTabPointerDrag);
+  tabsEditor.addEventListener('pointerup', endTabPointerDrag);
+  tabsEditor.addEventListener('pointercancel', cancelTabPointerDrag);
 
   function readForm() {
     var tabs = [];
