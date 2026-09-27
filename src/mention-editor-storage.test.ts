@@ -20,6 +20,8 @@ describe('mention editor storage validation', () => {
     expect(validateMentionEditorConfig({ ...validConfig(), trigger: '#' })).toBeNull();
     expect(validateMentionEditorConfig({ ...validConfig(), tabs: [{ label: 'AI', items: ['has space'] }] })).not.toBeNull();
     expect(validateMentionEditorConfig({ ...validConfig(), tabs: [{ label: 'AI', items: ['has\ttab'] }] })).toBeNull();
+    expect(validateMentionEditorConfig({ ...validConfig(), content: 'puts "hello"' })?.content).toBe('puts "hello"');
+    expect(validateMentionEditorConfig({ ...validConfig(), content: 'x'.repeat(100_001) })).toBeNull();
   });
 
   it('defines user-scoped, case-insensitively unique storage', () => {

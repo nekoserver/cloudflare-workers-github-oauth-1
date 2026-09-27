@@ -98,6 +98,14 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(m![1].match(/innerHTML/g)).toHaveLength(1);
     expect(m![1]).toContain('resultArea.innerHTML = parseMd(markdown)');
   });
+
+  it('本文をファイル名付きで保存し /neko ruby からRuby/WASM実行できる配線を持つ', () => {
+    expect(html).toContain('placeholder="ここにコードを入力し、hello.rb のような名前で保存します"');
+    expect(html).toContain("var rubyPrefix = '/neko ruby '");
+    expect(html).toContain('executeSavedRuby(command.slice(rubyPrefix.length).trim())');
+    expect(html).toContain('documentData.config.content');
+    expect(html).toContain('loadRubyWasmVm(');
+  });
 });
 
 describe('プレビュー入力のスラッシュボタン', () => {
