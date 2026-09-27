@@ -65,7 +65,7 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toContain('setTimeout(activateTabDrag, 450)');
     expect(html).toContain("draggedTab.classList.add('dragging')");
     expect(html).toContain("tabsEditor.insertBefore(draggedTab");
-    expect(html).toContain('.tab-edit.dragging { border: 2px dashed var(--danger)');
+    expect(html).toMatch(/\.tab-edit\.dragging\s*\{\s*border: 2px dashed var\(--danger\)/);
   });
 
   it('script内のJSに構文エラーがなく、innerHTMLを使わない', () => {
@@ -117,6 +117,22 @@ describe('タブのポインタードラッグ', () => {
     await new Promise((resolve) => dom.window.setTimeout(resolve, 470));
     expect(boxes[0].classList.contains('dragging')).toBe(true);
     fire(dom.window, boxes[0], 'pointercancel', { pointerId: 2, clientX: 300, clientY: 70 });
+  });
+
+  it('長押しドラッグ中は入力欄からフォーカスを外し、赤枠をポインターに追従させる', async () => {
+    const { dom, boxes } = loadPage();
+    const items = boxes[0].querySelector('.tab-items') as HTMLTextAreaElement;
+    items.focus();
+    fire(dom.window, items, 'pointerdown', { pointerId: 3, button: 0, clientX: 30, clientY: 40 });
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 470));
+
+    expect(dom.window.document.activeElement).not.toBe(items);
+    fire(dom.window, boxes[0], 'pointermove', { pointerId: 3, clientX: 85, clientY: 125 });
+    expect(boxes[0].classList.contains('dragging')).toBe(true);
+    expect(boxes[0].style.transform).toBe('translate(55px, 85px)');
+
+    fire(dom.window, boxes[0], 'pointerup', { pointerId: 3, clientX: 85, clientY: 125 });
+    expect(boxes[0].style.transform).toBe('');
   });
 });
 

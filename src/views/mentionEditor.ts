@@ -64,7 +64,10 @@ input[type=number] { width: 90px; }
 .save-dialog label { display: block; color: var(--text-strong); margin-bottom: 6px; }
 .save-dialog input { width: 100%; }
 .tab-edit { position: relative; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; touch-action: pan-y; }
-.tab-edit.dragging { border: 2px dashed var(--danger); opacity: .72; }
+.tab-edit.dragging {
+  border: 2px dashed var(--danger); opacity: .72; z-index: 10;
+  cursor: grabbing; user-select: none; pointer-events: none;
+}
 .tab-edit.drop-before::before, .tab-edit.drop-after::after {
   content: ''; position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger);
 }
@@ -286,6 +289,8 @@ input[type=number] { width: 90px; }
   var tabDragSource = null;
   var tabDragStartX = 0;
   var tabDragStartY = 0;
+  var tabDragCurrentX = 0;
+  var tabDragCurrentY = 0;
   var tabDragLongPress = null;
 
   function setStatus(msg, kind) {
@@ -351,6 +356,16 @@ input[type=number] { width: 90px; }
     if (!tabDragSource || draggedTab) return;
     draggedTab = tabDragSource;
     draggedTab.classList.add('dragging');
+    var focused = document.activeElement;
+    if (focused && draggedTab.contains(focused) && focused.blur) focused.blur();
+    moveDraggedTabToPointer();
+  }
+
+  function moveDraggedTabToPointer() {
+    if (!draggedTab) return;
+    var dx = tabDragCurrentX - tabDragStartX;
+    var dy = tabDragCurrentY - tabDragStartY;
+    draggedTab.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
   }
 
   function beginTabPointerDrag(e, box, fromHandle) {
@@ -359,6 +374,8 @@ input[type=number] { width: 90px; }
     tabDragSource = box;
     tabDragStartX = e.clientX;
     tabDragStartY = e.clientY;
+    tabDragCurrentX = e.clientX;
+    tabDragCurrentY = e.clientY;
     if (box.setPointerCapture) box.setPointerCapture(e.pointerId);
     if (fromHandle) {
       e.preventDefault();
@@ -370,11 +387,14 @@ input[type=number] { width: 90px; }
 
   function moveTabPointerDrag(e) {
     if (e.pointerId !== tabDragPointerId) return;
+    tabDragCurrentX = e.clientX;
+    tabDragCurrentY = e.clientY;
     if (!draggedTab) {
       if (Math.hypot(e.clientX - tabDragStartX, e.clientY - tabDragStartY) > 8) cancelTabPointerDrag();
       return;
     }
     e.preventDefault();
+    moveDraggedTabToPointer();
     clearDropMarkers();
     var boxes = tabsEditor.querySelectorAll('.tab-edit');
     for (var i = 0; i < boxes.length; i++) {
@@ -389,6 +409,7 @@ input[type=number] { width: 90px; }
 
   function endTabPointerDrag(e) {
     if (e.pointerId !== tabDragPointerId) return;
+    e.preventDefault();
     if (draggedTab) {
       var target = tabsEditor.querySelector('.drop-before, .drop-after');
       if (target) {
@@ -409,7 +430,10 @@ input[type=number] { width: 90px; }
   }
 
   function finishTabDrag() {
-    if (draggedTab) draggedTab.classList.remove('dragging');
+    if (draggedTab) {
+      draggedTab.classList.remove('dragging');
+      draggedTab.style.transform = '';
+    }
     clearDropMarkers();
     draggedTab = null;
     if (tabDragLongPress !== null) clearTimeout(tabDragLongPress);
