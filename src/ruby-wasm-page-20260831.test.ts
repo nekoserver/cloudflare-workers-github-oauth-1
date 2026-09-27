@@ -48,6 +48,15 @@ describe('Ruby WASMページ', () => {
     expect(html).toContain('runBtn.disabled = false');
   });
 
+  it('Query BuilderのJSONを受け取り、実際のRuby/WASMで自動解析する', () => {
+    const html = getRubyWasmPage('tester');
+    expect(html).toContain("new URLSearchParams(window.location.search).get('source') === 'query-builder'");
+    expect(html).toContain("sessionStorage.getItem('queryBuilderRubyJson')");
+    expect(html).toContain("rows = JSON.parse(Base64.decode64(\"");
+    expect(html).toContain('var importedResult = runRubyCode(pendingQueryBuilderCode)');
+    expect(html).toContain('Query BuilderのJSONをRuby/WASMで解析しました。');
+  });
+
   it('WASM読み込み失敗時にエラーメッセージを表示する(catchで握りつぶさない)', () => {
     const html = getRubyWasmPage('tester');
     expect(html).toContain('.catch(function(err)');
