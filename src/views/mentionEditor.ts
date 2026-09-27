@@ -82,9 +82,10 @@ input[type=number] { width: 90px; }
 #status.error { color: var(--danger); }
 #status.ok { color: var(--ok); }
 .preview-wrap { padding: 4px; }
-.preview-anchor { position: relative; }
+.preview-anchor { position: relative; display: flex; align-items: center; gap: 6px; }
 #previewArea { resize: none; max-width: 100%; }
-#previewInput { width: 100%; margin-top: 6px; }
+#previewInput { flex: 1; min-width: 0; margin-top: 6px; }
+#previewSlashButton { flex: 0 0 auto; margin-top: 6px; }
 .slash-panel {
   position: absolute; left: 0; right: 0; z-index: 5;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
@@ -156,6 +157,7 @@ input[type=number] { width: 90px; }
       <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
       <div class="preview-anchor" id="previewAnchor">
         <input id="previewInput" placeholder="/ でコマンド" autocomplete="off">
+        <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
       </div>
     </div>
   </div>
@@ -279,6 +281,7 @@ input[type=number] { width: 90px; }
   var triggerKey = $('triggerKey'), positionSel = $('position');
   var tabsEditor = $('tabsEditor'), jsonOut = $('jsonOut'), statusEl = $('status');
   var previewArea = $('previewArea'), previewInput = $('previewInput'), previewAnchor = $('previewAnchor');
+  var previewSlashButton = $('previewSlashButton');
 
   var current = null;
   var page = 0;
@@ -604,6 +607,11 @@ input[type=number] { width: 90px; }
     previewAnchor.appendChild(panel);
   }
 
+  function updatePreviewInput() {
+    previewSlashButton.hidden = previewInput.value.length === 0;
+    renderPanel();
+  }
+
   document.querySelector('.layout').addEventListener('input', function(e) {
     if (e.target === jsonOut || e.target === previewInput) return;
     refresh();
@@ -612,7 +620,12 @@ input[type=number] { width: 90px; }
     if (e.target === jsonOut || e.target === previewInput) return;
     refresh();
   });
-  previewInput.addEventListener('input', renderPanel);
+  previewInput.addEventListener('input', updatePreviewInput);
+  previewSlashButton.addEventListener('click', function() {
+    previewInput.value = '/';
+    updatePreviewInput();
+    previewInput.focus();
+  });
 
   $('addTab').addEventListener('click', function() {
     addTabRow('新しいタブ', ['item']);
