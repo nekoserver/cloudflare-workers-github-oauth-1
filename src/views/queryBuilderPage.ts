@@ -61,6 +61,8 @@ h1 { color: var(--text-strong); font-size: 20px; margin: 0 0 4px; }
   padding: 14px 16px; margin-bottom: 14px;
 }
 .panel h2 { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.panel-heading h2 { margin: 0; }
 .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .row label { min-width: 90px; color: var(--text-muted); }
 input, select, textarea {
@@ -89,11 +91,11 @@ select.wide, input.wide { flex: 1; min-width: 160px; }
 .result-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
 .result-heading h2 { margin: 0; }
 .json-output {
-  width: 100%; min-height: 220px; height: clamp(260px, 48vh, 620px); max-height: 75vh;
+  width: 100%; min-height: 120px; height: auto; max-height: 75vh;
   margin: 0; padding: 12px; overflow: auto; resize: vertical;
   border: 1px solid var(--border); border-radius: 6px; background: var(--code-bg);
   color: var(--text); font: 12px/1.55 ui-monospace, Menlo, Consolas, monospace;
-  white-space: pre; tab-size: 2; scrollbar-gutter: stable both-edges;
+  white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; scrollbar-gutter: stable both-edges;
 }
 .json-key { color: var(--json-key); } .json-string { color: var(--json-string); }
 .json-number { color: var(--json-number); } .json-literal { color: var(--json-literal); font-weight: 600; }
@@ -119,7 +121,10 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
 </div>
 
 <div class="panel" id="modePanel" hidden>
-  <h2>2. 取り出し方</h2>
+  <div class="panel-heading">
+    <h2>2. 取り出し方</h2>
+    <button type="button" class="btn" id="btnSampleQuery">このテーブルのサンプルクエリを呼び出す</button>
+  </div>
   <div class="row">
     <label>モード</label>
     <label><input type="radio" name="mode" value="rows" id="modeRows" checked> 一覧(行をそのまま取得)</label>
@@ -166,6 +171,11 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
 </div>
 
 <div class="panel" id="resultPanel" hidden>
+  <div class="panel-heading">
+    <h2>結果出力</h2>
+    <button type="button" class="btn" id="btnToggleResult" aria-label="結果出力欄を閉じる" aria-expanded="true" aria-controls="resultBody" title="結果出力欄を閉じる">▲</button>
+  </div>
+  <div id="resultBody">
   <h2>生成されたSQL</h2>
   <textarea id="generatedSql" readonly aria-label="生成されたSQL(読み取り専用)"></textarea>
   <h2 style="margin-top:10px">結果</h2>
@@ -178,6 +188,7 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   <div class="row" style="margin-top:8px">
     <button type="button" class="btn" id="btnCopyJson">JSONをコピー</button>
     <button type="button" class="btn" id="btnDownloadJson">ダウンロード</button>
+  </div>
   </div>
 </div>
 
@@ -206,6 +217,8 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   var limitValue = $('limitValue');
   var statusEl = $('status');
   var resultPanel = $('resultPanel');
+  var resultBody = $('resultBody');
+  var btnToggleResult = $('btnToggleResult');
   var generatedSql = $('generatedSql');
   var resultTable = $('resultTable');
   var resultThead = $('resultThead');
@@ -213,6 +226,18 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   var resultJson = $('resultJson');
   var resultJsonCode = $('resultJsonCode');
   var resultJsonText = '';
+
+  function setResultExpanded(expanded) {
+    resultBody.hidden = !expanded;
+    btnToggleResult.textContent = expanded ? '▲' : '▼';
+    btnToggleResult.setAttribute('aria-expanded', String(expanded));
+    btnToggleResult.title = expanded ? '結果出力欄を閉じる' : '結果出力欄を開く';
+    btnToggleResult.setAttribute('aria-label', btnToggleResult.title);
+  }
+
+  btnToggleResult.addEventListener('click', function() {
+    setResultExpanded(resultBody.hidden);
+  });
 
   function setStatus(msg, kind) {
     statusEl.textContent = msg;
@@ -465,7 +490,7 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
     resultJson.scrollTop = 0;
   }
 
-  $('btnRun').addEventListener('click', function() {
+  function runQuery() {
     var spec = readSpec();
     setStatus('実行しています…');
     fetch('/api/query-builder/run', {
@@ -477,16 +502,31 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
       .then(function(result) {
         if (!result.ok) {
           setStatus(result.data.error || '実行に失敗しました', 'error');
-          if (result.data.sql) { generatedSql.value = result.data.sql; resultPanel.hidden = false; resultTable.hidden = true; renderJson(''); }
+          if (result.data.sql) { generatedSql.value = result.data.sql; resultPanel.hidden = false; setResultExpanded(true); resultTable.hidden = true; renderJson(''); }
           return;
         }
         generatedSql.value = result.data.sql + NL + '-- params: ' + JSON.stringify(result.data.params);
         renderJson(JSON.stringify(result.data.rows, null, 2));
         renderResultTable(result.data.rows);
         resultPanel.hidden = false;
+        setResultExpanded(true);
         setStatus(result.data.rows.length + '件取得しました', 'ok');
       })
       .catch(function(err) { setStatus('実行に失敗しました: ' + err, 'error'); });
+  }
+
+  $('btnRun').addEventListener('click', runQuery);
+
+  $('btnSampleQuery').addEventListener('click', function() {
+    modeRows.checked = true;
+    applyMode();
+    clearFilters();
+    var boxes = columnsGrid.querySelectorAll('.column-checkbox');
+    for (var i = 0; i < boxes.length; i++) boxes[i].checked = true;
+    orderByColumn.value = currentColumns.length > 0 ? currentColumns[0].name : '';
+    orderByDirection.value = 'asc';
+    limitValue.value = '20';
+    runQuery();
   });
 
   $('btnCopyJson').addEventListener('click', function() {

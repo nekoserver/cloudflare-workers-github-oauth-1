@@ -793,8 +793,7 @@ export function getRubyWasmPage(username: string): string {
       for (var i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
       var encoded = btoa(binary);
       return 'require "json"' + String.fromCharCode(10) +
-        'require "base64"' + String.fromCharCode(10) +
-        'rows = JSON.parse(Base64.decode64("' + encoded + '"))' + String.fromCharCode(10) +
+        'rows = JSON.parse("' + encoded + '".unpack1("m0").force_encoding("UTF-8"))' + String.fromCharCode(10) +
         'puts "Ruby/WASMでJSONを読み込みました"' + String.fromCharCode(10) +
         'puts "型: #{rows.class}"' + String.fromCharCode(10) +
         'puts "件数: #{rows.respond_to?(:length) ? rows.length : 1}"' + String.fromCharCode(10) +
