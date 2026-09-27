@@ -1,4 +1,6 @@
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
 
 // dynamicneko の Slash Command Input(/samples)を設定値として組み立てる編集ページ。
 // 保存はせず、結果はJSONで出力する(コピー・ダウンロード・読み込み)。
@@ -6,6 +8,8 @@ import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdow
 // リテラルを書かない(CLAUDE.md ルール29)。改行は String.fromCharCode(10) を使う。
 export function getMentionEditorPage(username: string): string {
   void username;
+  const rubyVersion = getRubyWasmVersionInfo();
+  const rubyCacheName = rubyWasmBinaryCacheName(rubyVersion.rubyBuildLine, rubyVersion.wasmWasiPackageVersion);
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -187,7 +191,7 @@ ${getMarkdownPreviewCSS()}
     </div>
     <div class="preview-wrap">
       <div id="previewBody" aria-label="本文エリア">
-        <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
+        <textarea id="previewArea" aria-label="本文エリア" placeholder="ここにコードを入力し、hello.rb のような名前で保存します"></textarea>
       </div>
       <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="preview-anchor" id="previewAnchor">
@@ -315,10 +319,13 @@ ${getMarkdownParserScript()}
       }
       tabs.push({ label: label, items: items });
     }
-    return {
+    if (raw.content !== undefined && (typeof raw.content !== 'string' || raw.content.length > 100000)) return ng('BAD_CONTENT', '本文は100,000文字以内にしてください');
+    var normalized = {
       ok: true,
       value: { version: 1, trigger: raw.trigger, position: raw.position, textarea: size, tabs: tabs }
     };
+    if (raw.content !== undefined) normalized.value.content = raw.content;
+    return normalized;
   }
 
   function findTriggerQuery(text, trigger) {
@@ -548,7 +555,8 @@ ${getMarkdownParserScript()}
         width: { value: Number(widthValue.value), unit: widthUnit.value },
         height: { value: Number(heightValue.value), unit: heightUnit.value }
       },
-      tabs: tabs
+      tabs: tabs,
+      content: previewArea.value
     };
   }
 
@@ -559,6 +567,7 @@ ${getMarkdownParserScript()}
     heightUnit.value = cfg.textarea.height.unit;
     triggerKey.value = cfg.trigger;
     positionSel.value = cfg.position;
+    previewArea.value = cfg.content || '';
     while (tabsEditor.firstChild) tabsEditor.removeChild(tabsEditor.firstChild);
     for (var i = 0; i < cfg.tabs.length; i++) addTabRow(cfg.tabs[i].label, cfg.tabs[i].items);
   }
@@ -754,6 +763,8 @@ ${getMarkdownParserScript()}
   function executeNekoCommand() {
     var command = previewInput.value.trim();
     if (!isNekoCommand(command) || previewInput.disabled) return Promise.resolve(false);
+    var rubyPrefix = '/neko ruby ';
+    if (command.toLowerCase().indexOf(rubyPrefix) === 0) return executeSavedRuby(command.slice(rubyPrefix.length).trim());
     previewInput.disabled = true;
     previewSlashButton.disabled = true;
     var resultArea = $('nekoResult');
@@ -788,6 +799,43 @@ ${getMarkdownParserScript()}
       previewInput.focus();
       return result;
     });
+  }
+
+  var rubyVM = null;
+  var rubyLoadError = '';
+
+  function runRubyCode(code) {
+    if (!rubyVM) return { ok: false, output: rubyLoadError || 'Ruby/WASMを読み込み中です。しばらく待ってから再度お試しください' };
+    try {
+      var wrapped = "require 'stringio'\\n__out = StringIO.new\\n__old = $stdout\\n$stdout = __out\\nbegin\\n" + code + "\\nensure\\n  $stdout = __old\\nend\\n__out.string";
+      var output = rubyVM.eval(wrapped).toString();
+      return { ok: true, output: output || '(出力なし)' };
+    } catch (err) {
+      return { ok: false, output: err && err.message ? err.message : String(err) };
+    }
+  }
+
+  function executeSavedRuby(filename) {
+    var resultArea = $('nekoResult');
+    var documentData = savedDocuments.find(function(item) { return item.title.toLowerCase() === filename.toLowerCase(); });
+    resultArea.hidden = false;
+    placeNekoResult(current.position);
+    resultArea.className = 'preview-area';
+    if (!documentData) {
+      resultArea.className += ' error';
+      resultArea.textContent = '保存済みコード「' + filename + '」が見つかりません';
+      return Promise.resolve(false);
+    }
+    var code = documentData.config && documentData.config.content;
+    if (!code) {
+      resultArea.className += ' error';
+      resultArea.textContent = '「' + filename + '」には実行するコードがありません';
+      return Promise.resolve(false);
+    }
+    var result = runRubyCode(code);
+    resultArea.classList.toggle('error', !result.ok);
+    resultArea.textContent = result.output;
+    return Promise.resolve(result.ok);
   }
 
   document.querySelector('.layout').addEventListener('input', function(e) {
@@ -957,6 +1005,12 @@ ${getMarkdownParserScript()}
   });
   refresh();
   loadSavedDocuments();
+${getRubyWasmLoaderScript()}
+loadRubyWasmVm('${RUBY_WASM_JS_URL}', '${RUBY_WASM_BINARY_URL}', '${rubyCacheName}', {
+  expectedBuildLine: '${rubyVersion.rubyBuildLine}',
+  onReady: function(vm) { rubyVM = vm; },
+  onError: function(err) { rubyLoadError = 'Ruby/WASMの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err)); }
+});
 })();
 </script>
 </body>

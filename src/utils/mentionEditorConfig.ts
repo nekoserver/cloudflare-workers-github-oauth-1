@@ -7,6 +7,8 @@ export type MentionEditorConfig = {
     height: { value: number; unit: 'rows' | 'px' };
   };
   tabs: Array<{ label: string; items: string[] }>;
+  /** 本文エリアに保存するソースコード。旧データでは未設定。 */
+  content?: string;
 };
 
 export function validateMentionEditorTitle(value: unknown): string | null {
@@ -18,6 +20,7 @@ export function validateMentionEditorTitle(value: unknown): string | null {
 export function validateMentionEditorConfig(value: unknown): MentionEditorConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, any>;
+  if (raw.content !== undefined && (typeof raw.content !== 'string' || raw.content.length > 100_000)) return null;
   if (raw.version !== 1 || (raw.trigger !== '/' && raw.trigger !== '@') || (raw.position !== 'top' && raw.position !== 'bottom')) return null;
   const ranges: Record<string, Record<string, [number, number]>> = {
     width: { ch: [10, 200], px: [100, 2000] },
