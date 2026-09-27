@@ -3,7 +3,7 @@ import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyW
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
 
 // dynamicneko の Slash Command Input(/samples)を設定値として組み立てる編集ページ。
-// 保存はせず、結果はJSONで出力する(コピー・ダウンロード・読み込み)。
+// 結果はJSONで出力でき、Ruby本文は構文確認後にD1へ保存して再実行できる。
 // 注意: template literal 内の <script> にはバックスラッシュ系エスケープと正規表現
 // リテラルを書かない(CLAUDE.md ルール29)。改行は String.fromCharCode(10) を使う。
 export function getMentionEditorPage(username: string): string {
@@ -64,6 +64,7 @@ input[type=number] { width: 90px; }
 }
 .btn:hover { background: var(--hover); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn[hidden], .save-actions[hidden] { display: none; }
 .saved-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .saved-row select { flex: 1; min-width: 0; }
 .save-modal { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 20px; }
@@ -89,6 +90,8 @@ input[type=number] { width: 90px; }
 #status { font-size: 12px; min-height: 18px; }
 #status.error { color: var(--danger); }
 #status.ok { color: var(--ok); }
+.hint.error { color: var(--danger); }
+.hint.ok { color: var(--ok); }
 .preview-wrap { padding: 4px; }
 .preview-anchor { position: relative; display: flex; align-items: center; gap: 6px; }
 #previewBody { max-width: 100%; }
@@ -193,6 +196,11 @@ ${getMarkdownPreviewCSS()}
       <div id="previewBody" aria-label="本文エリア">
         <textarea id="previewArea" aria-label="本文エリア" placeholder="ここにコードを入力し、hello.rb のような名前で保存します"></textarea>
       </div>
+      <div class="row" style="margin-top:8px">
+        <button type="button" class="btn" id="btnParseRuby" hidden>パース</button>
+        <button type="button" class="btn primary" id="btnSave" hidden>保存</button>
+        <span id="rubyParseStatus" class="hint" role="status"></span>
+      </div>
       <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="preview-anchor" id="previewAnchor">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
@@ -215,7 +223,6 @@ ${getMarkdownPreviewCSS()}
       <button type="button" class="btn primary" id="btnCopy">コピー</button>
       <button type="button" class="btn" id="btnDownload">ダウンロード</button>
       <button type="button" class="btn" id="btnImport">JSONを読み込む</button>
-      <button type="button" class="btn primary" id="btnSave">データベースに保存</button>
     </div>
     <div id="status" role="status"></div>
   </div>
@@ -224,13 +231,13 @@ ${getMarkdownPreviewCSS()}
 
 <div class="save-modal" id="saveModal" hidden role="dialog" aria-modal="true" aria-labelledby="saveModalTitle">
   <div class="save-dialog">
-    <h2 id="saveModalTitle">保存タイトル</h2>
-    <label for="saveTitle">この設定を識別するタイトル</label>
+    <h2 id="saveModalTitle">Rubyファイルを保存</h2>
+    <label for="saveTitle">ファイル名</label>
     <input id="saveTitle" maxlength="100" autocomplete="off">
     <div id="titleStatus" class="hint" role="alert"></div>
-    <div class="row" style="margin-top:12px">
-      <button type="button" class="btn primary" id="btnConfirmSave">保存</button>
+    <div class="row save-actions" id="saveActions" style="margin-top:12px" hidden>
       <button type="button" class="btn" id="btnCancelSave">キャンセル</button>
+      <button type="button" class="btn primary" id="btnConfirmSave">決定</button>
     </div>
   </div>
 </div>
@@ -336,10 +343,11 @@ ${getMarkdownParserScript()}
     return token.slice(1);
   }
 
-  function validateSaveTitle(title, documents) {
+  function validateSaveTitle(title, documents, editingId) {
     var normalized = String(title || '').trim();
     if (!normalized || normalized.length > 100) return 'タイトルは1〜100文字で入力してください';
     for (var i = 0; i < documents.length; i++) {
+      if (editingId && documents[i].id === editingId) continue;
       if (normalized.localeCompare(documents[i].title, undefined, { sensitivity: 'accent' }) === 0) {
         return '同じタイトルが既に登録されています';
       }
@@ -803,6 +811,27 @@ ${getMarkdownParserScript()}
 
   var rubyVM = null;
   var rubyLoadError = '';
+  var parsedRubySource = null;
+
+  function updateRubyActions() {
+    var hasCode = previewArea.value.trim().length > 0;
+    $('btnParseRuby').hidden = !hasCode;
+    $('btnSave').hidden = !hasCode || parsedRubySource !== previewArea.value;
+    if (!hasCode || parsedRubySource !== previewArea.value) {
+      parsedRubySource = null;
+      $('rubyParseStatus').textContent = '';
+    }
+  }
+
+  function parseRubyCode(code) {
+    if (!rubyVM) return { ok: false, output: rubyLoadError || 'Ruby/WASMを読み込み中です。しばらく待ってから再度お試しください' };
+    try {
+      rubyVM.eval('RubyVM::InstructionSequence.compile(' + JSON.stringify(code) + ')');
+      return { ok: true, output: 'Rubyの構文にエラーはありません' };
+    } catch (err) {
+      return { ok: false, output: err && err.message ? err.message : String(err) };
+    }
+  }
 
   function runRubyCode(code) {
     if (!rubyVM) return { ok: false, output: rubyLoadError || 'Ruby/WASMを読み込み中です。しばらく待ってから再度お試しください' };
@@ -840,6 +869,7 @@ ${getMarkdownParserScript()}
 
   document.querySelector('.layout').addEventListener('input', function(e) {
     if (e.target === jsonOut || e.target === previewInput) return;
+    if (e.target === previewArea) updateRubyActions();
     refresh();
   });
   document.querySelector('.layout').addEventListener('change', function(e) {
@@ -931,8 +961,10 @@ ${getMarkdownParserScript()}
     }).then(function(data) {
       savedDocuments = data.documents || [];
       renderSavedDocuments();
+      return true;
     }).catch(function(err) {
       setStatus(err.message, 'error');
+      return false;
     });
   }
 
@@ -975,19 +1007,53 @@ ${getMarkdownParserScript()}
     currentDocumentId = documentData.id;
     page = 0;
     refresh();
+    parsedRubySource = null;
+    updateRubyActions();
     setStatus('「' + documentData.title + '」を読み込みました', 'ok');
   });
 
-  $('btnSave').addEventListener('click', function() {
-    if (currentDocumentId) { saveDocument(''); return; }
-    $('saveTitle').value = '';
-    $('titleStatus').textContent = '';
+  function updateSaveTitleAvailability() {
+    var error = validateSaveTitle($('saveTitle').value, savedDocuments, currentDocumentId);
+    $('titleStatus').textContent = error || 'このファイル名は使用できます';
+    $('titleStatus').className = error ? 'hint error' : 'hint ok';
+    $('saveActions').hidden = Boolean(error);
+  }
+
+  function openSaveModal() {
+    var editing = savedDocuments.find(function(item) { return item.id === currentDocumentId; });
+    $('saveTitle').value = editing ? editing.title : '';
+    $('titleStatus').textContent = '既存のファイル名を確認しています…';
+    $('saveActions').hidden = true;
     $('saveModal').hidden = false;
-    $('saveTitle').focus();
+    loadSavedDocuments().then(function(loaded) {
+      if (!loaded) {
+        $('titleStatus').textContent = '既存のファイル名を確認できませんでした';
+        $('titleStatus').className = 'hint error';
+        return;
+      }
+      updateSaveTitleAvailability();
+      $('saveTitle').focus();
+    });
+  }
+
+  $('btnParseRuby').addEventListener('click', function() {
+    var result = parseRubyCode(previewArea.value);
+    $('rubyParseStatus').textContent = result.output;
+    $('rubyParseStatus').className = result.ok ? 'hint ok' : 'hint error';
+    if (!result.ok) { parsedRubySource = null; $('btnSave').hidden = true; return; }
+    parsedRubySource = previewArea.value;
+    $('btnSave').hidden = false;
+    openSaveModal();
+  });
+
+  $('btnSave').addEventListener('click', function() {
+    if (parsedRubySource !== previewArea.value) return;
+    openSaveModal();
   });
   $('btnCancelSave').addEventListener('click', function() { $('saveModal').hidden = true; });
+  $('saveTitle').addEventListener('input', updateSaveTitleAvailability);
   $('btnConfirmSave').addEventListener('click', function() {
-    var error = validateSaveTitle($('saveTitle').value, savedDocuments);
+    var error = validateSaveTitle($('saveTitle').value, savedDocuments, currentDocumentId);
     $('titleStatus').textContent = error;
     if (!error) saveDocument($('saveTitle').value.trim());
   });
@@ -1004,11 +1070,12 @@ ${getMarkdownParserScript()}
     ]
   });
   refresh();
+  updateRubyActions();
   loadSavedDocuments();
 ${getRubyWasmLoaderScript()}
 loadRubyWasmVm('${RUBY_WASM_JS_URL}', '${RUBY_WASM_BINARY_URL}', '${rubyCacheName}', {
   expectedBuildLine: '${rubyVersion.rubyBuildLine}',
-  onReady: function(vm) { rubyVM = vm; },
+  onReady: function(vm) { rubyVM = vm; updateRubyActions(); },
   onError: function(err) { rubyLoadError = 'Ruby/WASMの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err)); }
 });
 })();
