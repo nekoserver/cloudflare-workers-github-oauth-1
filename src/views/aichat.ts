@@ -8,6 +8,8 @@ import { getCountdownQuickAddModalCSS, getCountdownQuickAddModalHTML, getCountdo
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
+import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -29,6 +31,8 @@ export function getAiChatPage(user: {
   modelColors?: Record<string, string>;
   aichatPreferMoondream?: boolean;
 }): string {
+  const rubyVersion = getRubyWasmVersionInfo();
+  const rubyCacheName = rubyWasmBinaryCacheName(rubyVersion.rubyBuildLine, rubyVersion.wasmWasiPackageVersion);
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
@@ -8056,6 +8060,42 @@ export function getAiChatPage(user: {
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
+    var aichatRubyVM = null;
+    var aichatRubyVMLoading = null;
+
+${getRubyWasmLoaderScript()}
+    function getAichatRubyVM() {
+      if (aichatRubyVM) return Promise.resolve(aichatRubyVM);
+      if (aichatRubyVMLoading) return aichatRubyVMLoading;
+      aichatRubyVMLoading = new Promise(function(resolve, reject) {
+        loadRubyWasmVm('${RUBY_WASM_JS_URL}', '${RUBY_WASM_BINARY_URL}', '${rubyCacheName}', {
+          expectedBuildLine: '${rubyVersion.rubyBuildLine}',
+          onReady: function(vm) { aichatRubyVM = vm; resolve(vm); },
+          onError: reject
+        });
+      }).catch(function(err) { aichatRubyVMLoading = null; throw err; });
+      return aichatRubyVMLoading;
+    }
+
+    function runAichatRuby(code) {
+      return getAichatRubyVM().then(function(vm) {
+        var wrapped = "require 'stringio'\\n__out = StringIO.new\\n__old = $stdout\\n$stdout = __out\\nbegin\\n" + code + "\\nensure\\n  $stdout = __old\\nend\\n__out.string";
+        return vm.eval(wrapped).toString() || '(出力なし)';
+      });
+    }
+
+    function prepareAichatRubyResponse(data) {
+      if (typeof data.rubyCode !== 'string') return data;
+      return runAichatRuby(data.rubyCode).then(function(rubyOutput) {
+        var fence = String.fromCharCode(96, 96, 96);
+        data.response = '## Ruby: ' + (data.rubyFilename || 'saved code') + '\\n\\n' + fence + 'text\\n' + rubyOutput.split(fence).join(String.fromCharCode(96, 32, 96, 32, 96)) + '\\n' + fence;
+        return data;
+      }, function(err) {
+        data.response = '❌ Ruby/WASMの実行に失敗しました: ' + (err && err.message ? err.message : String(err));
+        return data;
+      });
+    }
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
@@ -8116,6 +8156,7 @@ export function getAiChatPage(user: {
         body: JSON.stringify(payload)
       })
         .then(function(res) { return res.json(); })
+        .then(prepareAichatRubyResponse)
         .then(function(data) {
           thinking.remove();
           if (data.error) {

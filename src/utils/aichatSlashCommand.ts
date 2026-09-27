@@ -185,6 +185,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
+    '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
     '| /neko vlink <キーワード> | Googleで「YouTube <キーワード>」を検索し、www.youtube.comのリンクのみを抽出して表示します |',
@@ -982,6 +983,8 @@ export type AichatSlashCommandDeps = {
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
+  /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */
+  loadMentionEditorRuby?: (filename: string) => Promise<string | null>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
   /** `/neko vlink <キーワード>` 用。Googleに「YouTube <キーワード>」で検索をかけ、www.youtube.comのリンクのみを抽出して返す */
   searchYoutubeLinks?: (keyword: string) => Promise<string[]>;
@@ -1255,7 +1258,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string }
   | { handled: false };
 
 /**
@@ -1960,6 +1963,33 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'ruby') {
+    const filename = parts.slice(2).join(' ').trim();
+    if (!filename) {
+      return { handled: true, response: '❌ ファイル名を指定してください: /neko ruby <ファイル名.rb>' };
+    }
+    if (!deps.loadMentionEditorRuby) {
+      return { handled: true, response: '❌ /neko ruby は現在利用できません(DB未設定)' };
+    }
+    try {
+      const code = await deps.loadMentionEditorRuby(filename);
+      if (code === null) {
+        return { handled: true, response: `❌ 保存済みコード「${filename}」が見つかりません` };
+      }
+      if (!code.trim()) {
+        return { handled: true, response: `❌ 「${filename}」には実行するコードがありません` };
+      }
+      return {
+        handled: true,
+        response: `Ruby/WASMで「${filename}」を実行しています…`,
+        rubyCode: code,
+        rubyFilename: filename,
+      };
+    } catch (err) {
+      return { handled: true, response: `❌ /neko ruby の読み込み中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   if (subcommand === 'vlink') {
     const keyword = parts.slice(2).join(' ').trim();
     if (!keyword) {
@@ -1987,6 +2017,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko ruby, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
