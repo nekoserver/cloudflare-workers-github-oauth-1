@@ -66,6 +66,13 @@ describe('/ruby-wasm REPLスニペット集', () => {
     expect(snippet?.code).toContain('encoded.unpack1("m0").force_encoding("UTF-8")');
   });
 
+  it('Query BuilderのJSON受け渡しもbase64標準ライブラリに依存しない', () => {
+    const html = getRubyWasmPage('tester');
+
+    expect(html).not.toContain("'require \"base64\"'");
+    expect(html).toContain('unpack1("m0").force_encoding("UTF-8")');
+  });
+
   it('Run後にcloseボタンを表示し、実行結果を折り畳める', () => {
     const html = getRubyWasmPage('tester');
 

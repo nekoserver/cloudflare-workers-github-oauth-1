@@ -32,7 +32,7 @@ describe('getQueryBuilderPage: HTML構造', () => {
   const html = getQueryBuilderPage(TABLES);
 
   it('テーブル選択・モード切替・条件追加・実行・結果表示の要素がある', () => {
-    for (const id of ['tableSelect', 'modeRows', 'modeAggregate', 'columnsGrid', 'orderByColumn', 'groupByColumn', 'havingOp', 'filtersEditor', 'addFilter', 'limitValue', 'btnRun', 'generatedSql', 'resultTable', 'resultJson', 'btnCopyJson', 'btnDownloadJson']) {
+    for (const id of ['tableSelect', 'modeRows', 'modeAggregate', 'columnsGrid', 'orderByColumn', 'groupByColumn', 'havingOp', 'filtersEditor', 'addFilter', 'limitValue', 'btnRun', 'btnSampleQuery', 'generatedSql', 'resultTable', 'resultJson', 'btnToggleResult', 'btnCopyJson', 'btnDownloadJson']) {
       expect(html, id).toContain(`id="${id}"`);
     }
   });
@@ -46,10 +46,23 @@ describe('getQueryBuilderPage: HTML構造', () => {
     expect(html).not.toContain('id="rawSql"');
   });
 
-  it('JSON領域はビューポートに合わせた高さ・スクロール・手動リサイズを備える', () => {
-    expect(html).toContain('height: clamp(260px, 48vh, 620px)');
+  it('JSON領域は内容に合わせて縦に伸縮し、長い行も折り返す', () => {
+    expect(html).toContain('min-height: 120px; height: auto');
     expect(html).toContain('max-height: 75vh');
     expect(html).toContain('overflow: auto; resize: vertical');
+    expect(html).toContain('white-space: pre-wrap; overflow-wrap: anywhere');
+  });
+
+  it('結果出力欄の右肩ボタンで開閉と上下記号を連動させる', () => {
+    expect(html).toContain('id="btnToggleResult" aria-label="結果出力欄を閉じる" aria-expanded="true"');
+    expect(html).toContain("btnToggleResult.textContent = expanded ? '▲' : '▼'");
+    expect(html).toContain('setResultExpanded(resultBody.hidden)');
+  });
+
+  it('取り出し方の行末にテーブル用サンプルクエリボタンを備える', () => {
+    expect(html).toContain('>このテーブルのサンプルクエリを呼び出す</button>');
+    expect(html).toContain("$('btnSampleQuery').addEventListener('click'");
+    expect(html).toContain('orderByColumn.value = currentColumns.length > 0 ? currentColumns[0].name');
   });
 
   it('JSONをRuby/WASMへ渡す右肩ボタンとシンタックスハイライトを備える', () => {
