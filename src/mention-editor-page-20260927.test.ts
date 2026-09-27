@@ -149,6 +149,7 @@ describe('getMentionEditorPage: HTML構造', () => {
     const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.com/mention-editor' });
     const document = dom.window.document;
     const area = document.getElementById('previewArea') as HTMLTextAreaElement;
+    const commandInput = document.getElementById('previewInput') as HTMLInputElement;
     const parseButton = document.getElementById('btnParseRuby') as HTMLButtonElement;
     const clearButton = document.getElementById('btnClearRuby') as HTMLButtonElement;
 
@@ -157,12 +158,15 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(clearButton.hidden).toBe(true);
 
     area.value = 'puts "hello"';
+    commandInput.value = '/neko ruby hello.rb';
     area.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     parseButton.click();
     expect(clearButton.hidden).toBe(false);
 
     clearButton.click();
     expect(area.value).toBe('');
+    expect(commandInput.value).toBe('/neko ruby hello.rb');
+    expect(JSON.parse((document.getElementById('jsonOut') as HTMLTextAreaElement).value).content).toBe('');
     expect(clearButton.hidden).toBe(true);
     expect(parseButton.hidden).toBe(true);
     expect(document.activeElement).toBe(area);
