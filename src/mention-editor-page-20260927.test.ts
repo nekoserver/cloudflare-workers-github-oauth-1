@@ -91,14 +91,16 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(visibleText).not.toContain('表示後、タップして入力欄へコピー');
   });
 
-  it('script内のJSに構文エラーがなく、API応答とRuby実行成功結果を安全な共通Markdownパーサー経由で描画する', () => {
+  it('script内のJSに構文エラーがなく、API応答はMarkdown、Ruby出力は空白を変形しないテキストとして描画する', () => {
     const m = /<script>([\s\S]*?)<\/script>/.exec(html);
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
-    expect(m![1].match(/innerHTML/g)).toHaveLength(2);
+    expect(m![1].match(/innerHTML/g)).toHaveLength(1);
     expect(m![1]).toContain('resultArea.innerHTML = parseMd(markdown)');
-    expect(m![1]).toContain('resultArea.innerHTML = parseMd(result.output)');
-    expect(m![1]).toMatch(/if \(result\.ok\) \{\s*resultArea\.innerHTML = parseMd\(result\.output\);\s*\} else \{\s*resultArea\.textContent = result\.output;/);
+    expect(m![1]).toContain("resultArea.className = 'preview-area ruby-output'");
+    expect(m![1]).toContain('resultArea.textContent = result.output');
+    expect(html).toMatch(/#nekoResult\.ruby-output\s*\{[^}]*white-space: pre;/s);
+    expect(html).toMatch(/#nekoResult\.ruby-output\s*\{[^}]*font-family: ui-monospace/s);
   });
 
   it('本文をファイル名付きで保存し /neko ruby からRuby/WASM実行できる配線を持つ', () => {
@@ -142,7 +144,7 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toContain("$('btnRunRuby').textContent = parsedRubySource === previewArea.value ? '▶︎' : '🔲'");
     expect(html).toContain("$('btnRunRuby').disabled = parsedRubySource !== previewArea.value");
     expect(html).toContain('var result = runRubyCode(previewArea.value)');
-    expect(html).toContain('resultArea.textContent = result.output');
+    expect(html).toContain('displayRubyResult(resultArea, result)');
   });
 
   it('パース後はパースボタンの右にクリアボタンを表示し、本文を未入力に戻す', () => {
