@@ -397,6 +397,34 @@ describe('候補選択時の動作(default/typewriter)', () => {
     });
   });
 
+  it('Typewriter領域をタップするとコマンド入力欄へコピーし、Typewriter表示を消す', () => {
+    const dom = loadPage('mentionEditorCopyMode=typewriter');
+    openSlashAndPick(dom, '/bold');
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const box = dom.window.document.getElementById('typewriterOutput') as HTMLElement;
+    const textEl = dom.window.document.getElementById('typewriterText') as HTMLElement;
+
+    box.click();
+
+    expect(input.value).toBe('/bold ');
+    expect(dom.window.document.activeElement).toBe(input);
+    expect(textEl.textContent).toBe('');
+    expect(box.hidden).toBe(true);
+  });
+
+  it('Typewriter領域はキーボード操作でも入力欄へコピーできる', () => {
+    const dom = loadPage('mentionEditorCopyMode=typewriter');
+    openSlashAndPick(dom, '/bold');
+    const window = dom.window as any;
+    const input = window.document.getElementById('previewInput') as HTMLInputElement;
+    const box = window.document.getElementById('typewriterOutput') as HTMLElement;
+
+    box.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(input.value).toBe('/bold ');
+    expect(box.hidden).toBe(true);
+  });
+
   it('Cookieに過去仕様や壊れた値が入っていても既定(default)として扱う', () => {
     const dom = loadPage('mentionEditorCopyMode=legacy-value');
     const toggle = dom.window.document.getElementById('copyModeToggle') as HTMLButtonElement;
