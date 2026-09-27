@@ -46,7 +46,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnParseRuby', 'btnSave', 'rubyParseStatus', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'saveActions', 'btnCancelSave', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnRunRuby', 'btnParseRuby', 'btnSave', 'rubyParseStatus', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'saveActions', 'btnCancelSave', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -112,19 +112,35 @@ describe('getMentionEditorPage: HTML構造', () => {
     const document = dom.window.document;
     expect((document.getElementById('btnParseRuby') as HTMLButtonElement).hidden).toBe(true);
     expect((document.getElementById('btnSave') as HTMLButtonElement).hidden).toBe(true);
+    expect((document.getElementById('btnRunRuby') as HTMLButtonElement).disabled).toBe(true);
     expect((document.getElementById('saveModal') as HTMLDivElement).hidden).toBe(true);
     expect((document.getElementById('saveActions') as HTMLDivElement).hidden).toBe(true);
     expect(document.getElementById('btnParseRuby')?.textContent).toBe('パース');
+    expect(document.getElementById('btnRunRuby')?.textContent).toBe('🔲');
     expect(document.getElementById('btnSave')?.textContent).toBe('保存');
     expect(document.getElementById('btnCancelSave')?.textContent).toBe('キャンセル');
     expect(document.getElementById('btnConfirmSave')?.textContent).toBe('決定');
     expect(html).toContain("RubyVM::InstructionSequence.compile(");
     expect(html).toContain('parsedRubySource = previewArea.value');
-    expect(html).toContain("$('btnSave').hidden = false");
+    expect(html).toContain("$('btnSave').hidden = !hasCode || parsedRubySource !== previewArea.value");
     expect(html).toContain('openSaveModal();');
     expect(html).toContain('loadSavedDocuments().then(function(loaded)');
     expect(html).toContain('既存のファイル名を確認できませんでした');
     expect(html).toContain("$('saveActions').hidden = Boolean(error)");
+  });
+
+  it('実行ボタンをパースボタンの左に置き、構文成功後だけ再生表示にして現在のコードを実行する', () => {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    const runButton = document.getElementById('btnRunRuby') as HTMLButtonElement;
+    const parseButton = document.getElementById('btnParseRuby') as HTMLButtonElement;
+
+    expect(runButton.nextElementSibling).toBe(parseButton);
+    expect(runButton.getAttribute('aria-label')).toBe('Rubyコードを実行');
+    expect(html).toContain("$('btnRunRuby').textContent = parsedRubySource === previewArea.value ? '▶︎' : '🔲'");
+    expect(html).toContain("$('btnRunRuby').disabled = parsedRubySource !== previewArea.value");
+    expect(html).toContain('var result = runRubyCode(previewArea.value)');
+    expect(html).toContain('resultArea.textContent = result.output');
   });
 });
 

@@ -197,6 +197,7 @@ ${getMarkdownPreviewCSS()}
         <textarea id="previewArea" aria-label="本文エリア" placeholder="ここにコードを入力し、hello.rb のような名前で保存します"></textarea>
       </div>
       <div class="row" style="margin-top:8px">
+        <button type="button" class="btn" id="btnRunRuby" aria-label="Rubyコードを実行" disabled>🔲</button>
         <button type="button" class="btn" id="btnParseRuby" hidden>パース</button>
         <button type="button" class="btn primary" id="btnSave" hidden>保存</button>
         <span id="rubyParseStatus" class="hint" role="status"></span>
@@ -821,6 +822,8 @@ ${getMarkdownParserScript()}
       parsedRubySource = null;
       $('rubyParseStatus').textContent = '';
     }
+    $('btnRunRuby').textContent = parsedRubySource === previewArea.value ? '▶︎' : '🔲';
+    $('btnRunRuby').disabled = parsedRubySource !== previewArea.value;
   }
 
   function parseRubyCode(code) {
@@ -1040,10 +1043,27 @@ ${getMarkdownParserScript()}
     var result = parseRubyCode(previewArea.value);
     $('rubyParseStatus').textContent = result.output;
     $('rubyParseStatus').className = result.ok ? 'hint ok' : 'hint error';
-    if (!result.ok) { parsedRubySource = null; $('btnSave').hidden = true; return; }
+    if (!result.ok) {
+      parsedRubySource = null;
+      $('btnSave').hidden = true;
+      $('btnRunRuby').textContent = '🔲';
+      $('btnRunRuby').disabled = true;
+      return;
+    }
     parsedRubySource = previewArea.value;
-    $('btnSave').hidden = false;
+    updateRubyActions();
     openSaveModal();
+  });
+
+  $('btnRunRuby').addEventListener('click', function() {
+    if (parsedRubySource !== previewArea.value) return;
+    var resultArea = $('nekoResult');
+    var result = runRubyCode(previewArea.value);
+    resultArea.hidden = false;
+    placeNekoResult(current.position);
+    resultArea.className = 'preview-area';
+    resultArea.classList.toggle('error', !result.ok);
+    resultArea.textContent = result.output;
   });
 
   $('btnSave').addEventListener('click', function() {
