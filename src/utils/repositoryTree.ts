@@ -8,8 +8,10 @@ export type GithubRepositoryFetchResult = {
 /**
  * GitHub は、トークンから参照できないリポジトリを 404 として返す。そのため、
  * fine-grained PAT や Organization の制限で対象外になっているトークンを付けると、
- * 公開リポジトリまで 404 になる場合がある。明示的に指定された公開リポジトリに
- * 限り、認証付き取得が 404 のときだけ匿名で再取得する。
+ * 公開リポジトリまで 404 になる場合がある。また、ログイン後に保存済みトークンが
+ * 失効すると 401 になり、匿名なら参照できる公開リポジトリまで取得できなくなる。
+ * 明示的に指定されたリポジトリに限り、認証付き取得が 401/404 のとき匿名で再取得する。
+ * 匿名取得にも失敗した場合、401 は再ログイン案内を維持するため元の応答を返す。
  */
 export async function fetchGithubRepositoryWithPublicFallback(
   url: string,
@@ -17,12 +19,18 @@ export async function fetchGithubRepositoryWithPublicFallback(
   fetchImpl: typeof fetch = fetch,
 ): Promise<GithubRepositoryFetchResult> {
   const response = await fetchImpl(url, { headers });
-  if (response.status !== 404) return { response, usedAnonymousFallback: false };
+  if (response.status !== 401 && response.status !== 404) {
+    return { response, usedAnonymousFallback: false };
+  }
 
   const anonymousHeaders = { ...headers };
   delete anonymousHeaders.Authorization;
   const anonymousResponse = await fetchImpl(url, { headers: anonymousHeaders });
-  return { response: anonymousResponse, usedAnonymousFallback: anonymousResponse.ok };
+  if (anonymousResponse.ok) return { response: anonymousResponse, usedAnonymousFallback: true };
+  return {
+    response: response.status === 401 ? response : anonymousResponse,
+    usedAnonymousFallback: false,
+  };
 }
 
 /** GitHub Trees APIで使う既定ブランチをRepository APIの応答から取り出す。 */
