@@ -35,6 +35,10 @@ describe('GET /query-pattern-analysis', () => {
   it('getQueryPatternAnalysisPageへ描画を委譲する', () => {
     expect(pageRouteBlock).toContain('c.html(getQueryPatternAnalysisPage(');
   });
+
+  it('各テーブルのJev評価に使うDDLをページへ渡す', () => {
+    expect(pageRouteBlock).toContain('sql: s.ddl');
+  });
 });
 
 describe('POST /api/query-pattern-analysis/seed', () => {

@@ -14,6 +14,7 @@ import { JUDGMENT_LABELS } from '../utils/queryPatternAnalysis';
 export type QueryPatternTableRow = {
   tableName: string;
   description: string | null;
+  sql: string;
   scores: Partial<Record<string, number>>;
 };
 
@@ -46,7 +47,7 @@ export function getQueryPatternAnalysisPage(
         ? `<button class="btn-reseed" data-table="${escapeHtml(row.tableName)}">再投入</button>`
         : `<button class="btn-seed" data-table="${escapeHtml(row.tableName)}">シード投入</button>`;
       return `<tr data-row-table="${escapeHtml(row.tableName)}">
-        <th class="row-table-name" title="${escapeHtml(row.description ?? '')}">${escapeHtml(row.tableName)}</th>
+        <th class="row-table-name" title="${escapeHtml(row.description ?? '')}"><a class="table-sql-link" href="#table-sql-dialog" data-table="${escapeHtml(row.tableName)}" data-sql="${escapeHtml(row.sql)}" aria-label="${escapeHtml(row.tableName)} のJev評価SQLを表示">${escapeHtml(row.tableName)}</a></th>
         ${cells}
         <td class="cell-action">${seedButton}<span class="row-status"></span></td>
       </tr>`;
@@ -112,6 +113,8 @@ export function getQueryPatternAnalysisPage(
       color: var(--text-primary); white-space: nowrap; position: sticky; left: 0;
       background: var(--card-bg); border-right: 1px solid var(--border-color);
     }
+    .table-sql-link { color: var(--accent-color); text-decoration: underline; text-underline-offset: 2px; }
+    .table-sql-link:hover { text-decoration-thickness: 2px; }
     tbody tr:nth-child(even) th, tbody tr:nth-child(even) td { background: var(--bg-secondary); }
     tbody td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
     .cell-empty { color: var(--text-muted); }
@@ -127,6 +130,30 @@ export function getQueryPatternAnalysisPage(
     .row-status { margin-left: 6px; font-size: 11px; color: var(--text-muted); }
     .row-status.error { color: var(--danger-color); }
     .row-status.success { color: var(--success-color); }
+    .sql-dialog {
+      width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+      margin: auto; padding: 0; border: 1px solid var(--border-color); border-radius: 12px;
+      background: var(--card-bg); color: var(--text-primary); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+    .sql-dialog::backdrop { background: rgba(0, 0, 0, 0.68); backdrop-filter: blur(3px); }
+    .sql-dialog-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+    }
+    .sql-dialog-title { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .sql-dialog-close {
+      border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer;
+      background: var(--bg-secondary); color: var(--text-primary); font-size: 18px; line-height: 1;
+    }
+    .sql-code {
+      margin: 0; padding: 20px; overflow: auto; font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--text-primary); background: var(--bg-secondary); white-space: pre;
+    }
+    .sql-keyword { color: #c678dd; font-weight: 700; }
+    .sql-type { color: #56b6c2; }
+    .sql-string { color: #98c379; }
+    .sql-number { color: #d19a66; }
+    .sql-comment { color: var(--text-muted); font-style: italic; }
   </style>
 </head>
 <body>
@@ -162,8 +189,52 @@ export function getQueryPatternAnalysisPage(
       </div>
     </div>
   </div>
+  <dialog id="table-sql-dialog" class="sql-dialog" aria-labelledby="table-sql-dialog-title">
+    <div class="sql-dialog-header">
+      <h2 id="table-sql-dialog-title" class="sql-dialog-title"></h2>
+      <button type="button" class="sql-dialog-close" aria-label="閉じる">×</button>
+    </div>
+    <pre class="sql-code"><code id="table-sql-code"></code></pre>
+  </dialog>
   ${getThemeToggleScript()}
   <script>
+    var sqlDialog = document.getElementById('table-sql-dialog');
+    var sqlDialogTitle = document.getElementById('table-sql-dialog-title');
+    var sqlCode = document.getElementById('table-sql-code');
+
+    function highlightSql(sql) {
+      var tokenPattern = /(--[^\\n]*|'(?:''|[^'])*'|\\b(?:CREATE|TABLE|PRIMARY|KEY|FOREIGN|REFERENCES|UNIQUE|NOT|NULL|DEFAULT|CHECK|CONSTRAINT|IF|EXISTS|ON|DELETE|UPDATE|CASCADE|AUTOINCREMENT|COLLATE)\\b|\\b(?:INTEGER|TEXT|REAL|BLOB|NUMERIC|BOOLEAN|DATETIME|TIMESTAMP)\\b|\\b\\d+(?:\\.\\d+)?\\b)/gi;
+      var position = 0;
+      sqlCode.replaceChildren();
+      sql.replace(tokenPattern, function(token, _match, offset) {
+        sqlCode.append(document.createTextNode(sql.slice(position, offset)));
+        var span = document.createElement('span');
+        if (token.slice(0, 2) === '--') span.className = 'sql-comment';
+        else if (token.charAt(0) === "'") span.className = 'sql-string';
+        else if (/^\\d/.test(token)) span.className = 'sql-number';
+        else if (/^(INTEGER|TEXT|REAL|BLOB|NUMERIC|BOOLEAN|DATETIME|TIMESTAMP)$/i.test(token)) span.className = 'sql-type';
+        else span.className = 'sql-keyword';
+        span.textContent = token;
+        sqlCode.append(span);
+        position = offset + token.length;
+        return token;
+      });
+      sqlCode.append(document.createTextNode(sql.slice(position)));
+    }
+
+    document.querySelectorAll('.table-sql-link').forEach(function(link) {
+      link.addEventListener('click', function(event) {
+        event.preventDefault();
+        sqlDialogTitle.textContent = link.dataset.table + ' — Jev評価SQL';
+        highlightSql(link.dataset.sql || '');
+        sqlDialog.showModal();
+      });
+    });
+    sqlDialog.querySelector('.sql-dialog-close').addEventListener('click', function() { sqlDialog.close(); });
+    sqlDialog.addEventListener('click', function(event) {
+      if (event.target === sqlDialog) sqlDialog.close();
+    });
+
     document.querySelectorAll('.btn-seed, .btn-reseed').forEach(function(btn) {
       btn.addEventListener('click', function() {
         seedTable(btn.dataset.table, btn);

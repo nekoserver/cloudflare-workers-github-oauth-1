@@ -17343,6 +17343,7 @@ app.get('/query-pattern-analysis', authMiddleware, async (c) => {
     .map((s) => ({
       tableName: s.tableName,
       description: descriptionByName.get(s.tableName) ?? null,
+      sql: s.ddl,
       scores: scoresByTable.get(s.tableName) ?? {},
     }))
     .sort((a, b) => a.tableName.localeCompare(b.tableName));
