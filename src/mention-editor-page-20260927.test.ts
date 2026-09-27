@@ -10,8 +10,7 @@ import { extractFunctionSource } from './utils/extractFunctionSource';
 // 故障シナリオ:
 //   (1) 読み込んだJSONが壊れている・型が違う → 握りつぶさず errorCode 付きで失敗を返す
 //   (2) サイズが0・負数・NaN・極端に大きい → 範囲外として拒否する
-//   (3) タブ0件・タブ名空・候補0件・候補に空白を含む → 拒否する
-//       (候補は空白区切りのトークンで照合するため空白入りは選べなくなる)
+//   (3) タブ0件・タブ名空・候補0件・候補にタブや改行を含む → 拒否する
 //   (4) トリガーが / @ 以外 → 拒否する
 //   (5) template literal 内のエスケープで <script> が構文エラーになる
 //   (6) username やタブ名経由のXSS → username はエスケープ、プレビューは textContent のみ
@@ -139,19 +138,37 @@ describe('normalizeConfig', () => {
     expect(normalizeConfig(c)).toMatchObject({ ok: false, errorCode: 'BAD_TAB_LABEL' });
   });
 
-  it('候補0件・空白入り候補は BAD_ITEMS', () => {
+  it('候補0件は BAD_ITEMS、半角スペース入り候補は受け入れる', () => {
     const c: any = valid();
     c.tabs[0].items = [];
     expect(normalizeConfig(c)).toMatchObject({ ok: false, errorCode: 'BAD_ITEMS' });
     const d: any = valid();
     d.tabs[0].items = ['has space'];
-    expect(normalizeConfig(d)).toMatchObject({ ok: false, errorCode: 'BAD_ITEMS' });
+    expect(normalizeConfig(d)).toMatchObject({ ok: true });
+  });
+
+  it('候補内のタブと改行は BAD_ITEMS', () => {
+    for (const item of ['has\ttab', 'has\nnewline']) {
+      const c: any = valid();
+      c.tabs[0].items = [item];
+      expect(normalizeConfig(c)).toMatchObject({ ok: false, errorCode: 'BAD_ITEMS' });
+    }
   });
 
   it('失敗時は detail に理由が入る(空文字にならない)', () => {
     const r = normalizeConfig(null);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.detail.length).toBeGreaterThan(0);
+  });
+});
+
+describe('itemTextareaRows', () => {
+  const itemTextareaRows = loadFn<(value: string) => number>('itemTextareaRows');
+
+  it('4行までは既定の高さを保ち、超えた行数に合わせて入力窓を広げる', () => {
+    expect(itemTextareaRows('one')).toBe(4);
+    expect(itemTextareaRows(['1', '2', '3', '4'].join('\n'))).toBe(4);
+    expect(itemTextareaRows(['1', '2', '3', '4', '5', '6'].join('\n'))).toBe(6);
   });
 });
 

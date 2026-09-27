@@ -68,7 +68,7 @@ input[type=number] { width: 90px; }
 .save-dialog label { display: block; color: var(--text-strong); margin-bottom: 6px; }
 .save-dialog input { width: 100%; }
 .tab-edit { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
-.tab-edit textarea { width: 100%; min-height: 70px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.tab-edit textarea { width: 100%; min-height: 70px; overflow-y: hidden; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .hint { color: var(--text-muted); font-size: 11px; }
 #jsonOut { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 #status { font-size: 12px; min-height: 18px; }
@@ -138,7 +138,7 @@ input[type=number] { width: 90px; }
     <h2>タブと候補</h2>
     <div id="tabsEditor"></div>
     <button type="button" class="btn" id="addTab">＋ タブを追加</button>
-    <div class="hint">候補は1行に1つ。空白を含む候補は使えません。</div>
+    <div class="hint">候補は1行に1つ。候補内の半角スペースも使用できます。</div>
   </div>
 </div>
 
@@ -226,8 +226,8 @@ input[type=number] { width: 90px; }
       var items = [];
       for (var j = 0; j < t.items.length; j++) {
         var it = t.items[j];
-        if (typeof it !== 'string' || !it || it.length > 50 || it.trim() !== it || it.split(' ').length > 1 || it.split(String.fromCharCode(10)).length > 1 || it.split(String.fromCharCode(9)).length > 1) {
-          return ng('BAD_ITEMS', 'タブ「' + label + '」の候補「' + String(it) + '」は空白なしの1〜50文字にしてください');
+        if (typeof it !== 'string' || !it || it.length > 50 || it.trim() !== it || it.split(String.fromCharCode(10)).length > 1 || it.split(String.fromCharCode(13)).length > 1 || it.split(String.fromCharCode(9)).length > 1) {
+          return ng('BAD_ITEMS', 'タブ「' + label + '」の候補「' + String(it) + '」はタブ・改行なしの1〜50文字にしてください');
         }
         items.push(it);
       }
@@ -283,6 +283,14 @@ input[type=number] { width: 90px; }
     statusEl.className = kind || '';
   }
 
+  function itemTextareaRows(value) {
+    return Math.max(4, String(value).split(String.fromCharCode(10)).length);
+  }
+
+  function resizeItemsInput(list) {
+    list.rows = itemTextareaRows(list.value);
+  }
+
   function addTabRow(label, items) {
     var box = document.createElement('div');
     box.className = 'tab-edit';
@@ -304,6 +312,8 @@ input[type=number] { width: 90px; }
     list.className = 'tab-items';
     list.setAttribute('aria-label', '候補(1行に1つ)');
     list.value = items.join(NL);
+    resizeItemsInput(list);
+    list.addEventListener('input', function() { resizeItemsInput(list); });
     box.appendChild(row);
     box.appendChild(list);
     tabsEditor.appendChild(box);
