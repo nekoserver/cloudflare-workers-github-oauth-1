@@ -785,6 +785,40 @@ export function getRubyWasmPage(username: string): string {
     var resultCloseBtn = document.getElementById('resultCloseBtn');
     var resultValue = document.getElementById('resultValue');
     var rubyVM = null;
+    var pendingQueryBuilderCode = '';
+
+    function queryBuilderRubyCode(json) {
+      var bytes = new TextEncoder().encode(json);
+      var binary = '';
+      for (var i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+      var encoded = btoa(binary);
+      return 'require "json"' + String.fromCharCode(10) +
+        'require "base64"' + String.fromCharCode(10) +
+        'rows = JSON.parse(Base64.decode64("' + encoded + '"))' + String.fromCharCode(10) +
+        'puts "Ruby/WASMでJSONを読み込みました"' + String.fromCharCode(10) +
+        'puts "型: #{rows.class}"' + String.fromCharCode(10) +
+        'puts "件数: #{rows.respond_to?(:length) ? rows.length : 1}"' + String.fromCharCode(10) +
+        'if rows.is_a?(Array) && rows.first.is_a?(Hash)' + String.fromCharCode(10) +
+        '  puts "カラム: #{rows.flat_map(&:keys).uniq.join(", ")}"' + String.fromCharCode(10) +
+        'end';
+    }
+
+    // Query Builderからの明示的な遷移時だけ一回限りのデータを受け取る。
+    // JSON本体はURLへ載せず、同一タブのsessionStorage経由で渡す。
+    try {
+      if (new URLSearchParams(window.location.search).get('source') === 'query-builder') {
+        var importedJson = sessionStorage.getItem('queryBuilderRubyJson');
+        if (importedJson) {
+          JSON.parse(importedJson);
+          pendingQueryBuilderCode = queryBuilderRubyCode(importedJson);
+          inputCode.value = pendingQueryBuilderCode;
+          saveNote.textContent = 'Query BuilderのJSONを受け取りました。Ruby/WASMの読み込み完了後に自動解析します。';
+          sessionStorage.removeItem('queryBuilderRubyJson');
+        }
+      }
+    } catch (err) {
+      saveNote.textContent = 'Query BuilderのJSONを読み込めませんでした: ' + (err && err.message ? err.message : String(err));
+    }
 
     // 複数のモーダル・オーバーレイが同時に開いた際、後から開いた方が必ず
     // 手前に来るようz-indexを動的に算出する(固定値は書かない。CLAUDE.mdルール26)。
@@ -999,6 +1033,16 @@ export function getRubyWasmPage(username: string): string {
           var state = card && card.querySelector('.snippet-state');
           if (state) state.textContent = '';
         });
+        if (pendingQueryBuilderCode) {
+          var importedResult = runRubyCode(pendingQueryBuilderCode);
+          resultBlock.style.display = 'block';
+          resultValue.classList.toggle('error', !importedResult.ok);
+          highlightRubyOutput(resultValue, importedResult.output);
+          saveNote.textContent = importedResult.ok
+            ? 'Query BuilderのJSONをRuby/WASMで解析しました。'
+            : 'Query BuilderのJSON解析に失敗しました。';
+          pendingQueryBuilderCode = '';
+        }
       },
       onError: function(err) {
         wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));

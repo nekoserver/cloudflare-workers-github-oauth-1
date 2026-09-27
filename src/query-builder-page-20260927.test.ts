@@ -37,11 +37,27 @@ describe('getQueryBuilderPage: HTML構造', () => {
     }
   });
 
-  it('自由入力のSQLテキストエリアは無い(SQL/クエリという名のtextareaはgeneratedSql・resultJsonのみ)', () => {
+  it('自由入力のSQLテキストエリアは無く、JSONはハイライト可能な読み取り専用領域に表示する', () => {
     const textareaIds = [...html.matchAll(/<textarea id="([^"]+)"/g)].map((m) => m[1]);
-    expect(textareaIds.sort()).toEqual(['generatedSql', 'resultJson']);
+    expect(textareaIds).toEqual(['generatedSql']);
+    expect(html).toContain('<pre id="resultJson"');
+    expect(html).toContain('id="resultJsonCode"');
     expect(html).not.toContain('id="sqlInput"');
     expect(html).not.toContain('id="rawSql"');
+  });
+
+  it('JSON領域はビューポートに合わせた高さ・スクロール・手動リサイズを備える', () => {
+    expect(html).toContain('height: clamp(260px, 48vh, 620px)');
+    expect(html).toContain('max-height: 75vh');
+    expect(html).toContain('overflow: auto; resize: vertical');
+  });
+
+  it('JSONをRuby/WASMへ渡す右肩ボタンとシンタックスハイライトを備える', () => {
+    expect(html).toContain('id="btnReadWithRuby"');
+    expect(html).toContain('rubyから読み出す');
+    expect(html).toContain("sessionStorage.setItem('queryBuilderRubyJson', resultJsonText)");
+    expect(html).toContain("window.location.href = '/ruby-wasm?source=query-builder'");
+    for (const token of ['json-key', 'json-string', 'json-number', 'json-literal']) expect(html).toContain(token);
   });
 
   it('テーブル一覧は</script>を含んでいてもscriptタグを閉じない(エスケープ済み)', () => {

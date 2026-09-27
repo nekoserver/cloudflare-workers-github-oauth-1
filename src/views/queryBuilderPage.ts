@@ -41,6 +41,10 @@ export function getQueryBuilderPage(tables: QueryBuilderTableOption[]): string {
   --danger-bg:   light-dark(#fff0ee, #2d0e0a);
   --ok:          light-dark(#1a7f37, #3fb950);
   --code-bg:     light-dark(#f6f8fa, #010409);
+  --json-key:    light-dark(#0550ae, #79c0ff);
+  --json-string: light-dark(#0a3069, #a5d6ff);
+  --json-number: light-dark(#953800, #ffa657);
+  --json-literal:light-dark(#8250df, #d2a8ff);
 }
 * { box-sizing: border-box; }
 body {
@@ -81,8 +85,19 @@ select.wide, input.wide { flex: 1; min-width: 160px; }
 #status { font-size: 12px; min-height: 18px; white-space: pre-wrap; }
 #status.error { color: var(--danger); }
 #status.ok { color: var(--ok); }
-#generatedSql, #resultJson { width: 100%; min-height: 90px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: var(--code-bg); }
-#resultJson { min-height: 220px; }
+#generatedSql { width: 100%; min-height: 90px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: var(--code-bg); }
+.result-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.result-heading h2 { margin: 0; }
+.json-output {
+  width: 100%; min-height: 220px; height: clamp(260px, 48vh, 620px); max-height: 75vh;
+  margin: 0; padding: 12px; overflow: auto; resize: vertical;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--code-bg);
+  color: var(--text); font: 12px/1.55 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre; tab-size: 2; scrollbar-gutter: stable both-edges;
+}
+.json-key { color: var(--json-key); } .json-string { color: var(--json-string); }
+.json-number { color: var(--json-number); } .json-literal { color: var(--json-literal); font-weight: 600; }
+.json-placeholder { color: var(--text-muted); }
 table.result-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
 table.result-table th, table.result-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 table.result-table th { background: var(--hover); position: sticky; top: 0; }
@@ -155,8 +170,11 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   <textarea id="generatedSql" readonly aria-label="生成されたSQL(読み取り専用)"></textarea>
   <h2 style="margin-top:10px">結果</h2>
   <div class="result-wrap"><table class="result-table" id="resultTable" hidden><thead id="resultThead"></thead><tbody id="resultTbody"></tbody></table></div>
-  <h2 style="margin-top:10px">JSON</h2>
-  <textarea id="resultJson" readonly spellcheck="false" aria-label="結果JSON"></textarea>
+  <div class="result-heading">
+    <h2>JSON</h2>
+    <button type="button" class="btn" id="btnReadWithRuby" title="JSONをRuby/WASMへ渡して解析します">rubyから読み出す</button>
+  </div>
+  <pre id="resultJson" class="json-output" tabindex="0" aria-label="結果JSON"><code id="resultJsonCode"><span class="json-placeholder">実行結果のJSONがここに表示されます</span></code></pre>
   <div class="row" style="margin-top:8px">
     <button type="button" class="btn" id="btnCopyJson">JSONをコピー</button>
     <button type="button" class="btn" id="btnDownloadJson">ダウンロード</button>
@@ -193,6 +211,8 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   var resultThead = $('resultThead');
   var resultTbody = $('resultTbody');
   var resultJson = $('resultJson');
+  var resultJsonCode = $('resultJsonCode');
+  var resultJsonText = '';
 
   function setStatus(msg, kind) {
     statusEl.textContent = msg;
@@ -421,6 +441,30 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
     }
   }
 
+  function appendJsonToken(value, kind) {
+    var span = document.createElement('span');
+    span.className = 'json-' + kind;
+    span.textContent = value;
+    resultJsonCode.appendChild(span);
+  }
+
+  // JSON.parse済みの値をJSON.stringifyした文字列だけを受け取る。それでも
+  // innerHTMLは使わず、各トークンをtextContentで描画して結果値を無害化する。
+  function renderJson(value) {
+    resultJsonText = value;
+    while (resultJsonCode.firstChild) resultJsonCode.removeChild(resultJsonCode.firstChild);
+    var tokenPattern = /("(?:\\\\u[a-fA-F0-9]{4}|\\\\[^u]|[^\\\\"])*"\\s*:)|("(?:\\\\u[a-fA-F0-9]{4}|\\\\[^u]|[^\\\\"])*")|(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)|\\b(true|false|null)\\b/g;
+    var index = 0;
+    var match;
+    while ((match = tokenPattern.exec(value)) !== null) {
+      if (match.index > index) resultJsonCode.appendChild(document.createTextNode(value.slice(index, match.index)));
+      appendJsonToken(match[0], match[1] ? 'key' : match[2] ? 'string' : match[3] ? 'number' : 'literal');
+      index = tokenPattern.lastIndex;
+    }
+    if (index < value.length) resultJsonCode.appendChild(document.createTextNode(value.slice(index)));
+    resultJson.scrollTop = 0;
+  }
+
   $('btnRun').addEventListener('click', function() {
     var spec = readSpec();
     setStatus('実行しています…');
@@ -433,11 +477,11 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
       .then(function(result) {
         if (!result.ok) {
           setStatus(result.data.error || '実行に失敗しました', 'error');
-          if (result.data.sql) { generatedSql.value = result.data.sql; resultPanel.hidden = false; resultTable.hidden = true; resultJson.value = ''; }
+          if (result.data.sql) { generatedSql.value = result.data.sql; resultPanel.hidden = false; resultTable.hidden = true; renderJson(''); }
           return;
         }
         generatedSql.value = result.data.sql + NL + '-- params: ' + JSON.stringify(result.data.params);
-        resultJson.value = JSON.stringify(result.data.rows, null, 2);
+        renderJson(JSON.stringify(result.data.rows, null, 2));
         renderResultTable(result.data.rows);
         resultPanel.hidden = false;
         setStatus(result.data.rows.length + '件取得しました', 'ok');
@@ -446,7 +490,7 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   });
 
   $('btnCopyJson').addEventListener('click', function() {
-    navigator.clipboard.writeText(resultJson.value).then(function() {
+    navigator.clipboard.writeText(resultJsonText).then(function() {
       setStatus('コピーしました', 'ok');
     }, function(err) {
       setStatus('コピーに失敗しました: ' + err, 'error');
@@ -454,12 +498,22 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   });
 
   $('btnDownloadJson').addEventListener('click', function() {
-    var blob = new Blob([resultJson.value], { type: 'application/json' });
+    var blob = new Blob([resultJsonText], { type: 'application/json' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'query-builder-result.json';
     a.click();
     setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  $('btnReadWithRuby').addEventListener('click', function() {
+    if (!resultJsonText) { setStatus('先にクエリを実行してJSONを取得してください', 'error'); return; }
+    try {
+      sessionStorage.setItem('queryBuilderRubyJson', resultJsonText);
+      window.location.href = '/ruby-wasm?source=query-builder';
+    } catch (err) {
+      setStatus('Ruby/WASMへの受け渡しに失敗しました: ' + err, 'error');
+    }
   });
 
   populateTableSelect();
