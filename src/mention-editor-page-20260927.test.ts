@@ -42,7 +42,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewArea']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -73,6 +73,43 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
     expect(m![1]).not.toContain('innerHTML');
+  });
+});
+
+describe('プレビュー入力のスラッシュボタン', () => {
+  function loadPage() {
+    return new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = (() => Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) })) as any;
+      },
+    });
+  }
+
+  it('入力窓が空の間は非表示で、入力されると右側に表示する', () => {
+    const dom = loadPage();
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const button = dom.window.document.getElementById('previewSlashButton') as HTMLButtonElement;
+
+    expect(button.hidden).toBe(true);
+    input.value = 'command';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(button.hidden).toBe(false);
+  });
+
+  it('ボタンを押すと入力窓をスラッシュだけに置き換える', () => {
+    const dom = loadPage();
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const button = dom.window.document.getElementById('previewSlashButton') as HTMLButtonElement;
+    input.value = 'before';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+    button.click();
+
+    expect(input.value).toBe('/');
+    expect(dom.window.document.activeElement).toBe(input);
+    expect(button.hidden).toBe(false);
   });
 });
 
