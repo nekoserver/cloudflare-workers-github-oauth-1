@@ -199,6 +199,7 @@ ${getMarkdownPreviewCSS()}
       <div class="row" style="margin-top:8px">
         <button type="button" class="btn" id="btnRunRuby" aria-label="Rubyコードを実行" disabled>🔲</button>
         <button type="button" class="btn" id="btnParseRuby" hidden>パース</button>
+        <button type="button" class="btn" id="btnClearRuby" hidden>クリア</button>
         <button type="button" class="btn primary" id="btnSave" hidden>保存</button>
         <span id="rubyParseStatus" class="hint" role="status"></span>
       </div>
@@ -1040,6 +1041,7 @@ ${getMarkdownParserScript()}
   }
 
   $('btnParseRuby').addEventListener('click', function() {
+    $('btnClearRuby').hidden = false;
     var result = parseRubyCode(previewArea.value);
     $('rubyParseStatus').textContent = result.output;
     $('rubyParseStatus').className = result.ok ? 'hint ok' : 'hint error';
@@ -1057,6 +1059,7 @@ ${getMarkdownParserScript()}
 
   $('btnRunRuby').addEventListener('click', function() {
     if (parsedRubySource !== previewArea.value) return;
+    $('btnClearRuby').hidden = false;
     var resultArea = $('nekoResult');
     var result = runRubyCode(previewArea.value);
     resultArea.hidden = false;
@@ -1064,6 +1067,15 @@ ${getMarkdownParserScript()}
     resultArea.className = 'preview-area';
     resultArea.classList.toggle('error', !result.ok);
     resultArea.textContent = result.output;
+  });
+
+  $('btnClearRuby').addEventListener('click', function() {
+    previewArea.value = '';
+    parsedRubySource = null;
+    $('btnClearRuby').hidden = true;
+    updateRubyActions();
+    refresh();
+    previewArea.focus();
   });
 
   $('btnSave').addEventListener('click', function() {

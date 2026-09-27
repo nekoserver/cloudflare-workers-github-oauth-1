@@ -46,7 +46,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnRunRuby', 'btnParseRuby', 'btnSave', 'rubyParseStatus', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'saveActions', 'btnCancelSave', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnRunRuby', 'btnParseRuby', 'btnClearRuby', 'btnSave', 'rubyParseStatus', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'saveActions', 'btnCancelSave', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -141,6 +141,29 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toContain("$('btnRunRuby').disabled = parsedRubySource !== previewArea.value");
     expect(html).toContain('var result = runRubyCode(previewArea.value)');
     expect(html).toContain('resultArea.textContent = result.output');
+  });
+
+  it('パース後はパースボタンの右にクリアボタンを表示し、本文を未入力に戻す', () => {
+    const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://example.com/mention-editor' });
+    const document = dom.window.document;
+    const area = document.getElementById('previewArea') as HTMLTextAreaElement;
+    const parseButton = document.getElementById('btnParseRuby') as HTMLButtonElement;
+    const clearButton = document.getElementById('btnClearRuby') as HTMLButtonElement;
+
+    expect(parseButton.nextElementSibling).toBe(clearButton);
+    expect(clearButton.textContent).toBe('クリア');
+    expect(clearButton.hidden).toBe(true);
+
+    area.value = 'puts "hello"';
+    area.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    parseButton.click();
+    expect(clearButton.hidden).toBe(false);
+
+    clearButton.click();
+    expect(area.value).toBe('');
+    expect(clearButton.hidden).toBe(true);
+    expect(parseButton.hidden).toBe(true);
+    expect(document.activeElement).toBe(area);
   });
 });
 
