@@ -127,7 +127,7 @@ describe('プレビュー入力のスラッシュボタン', () => {
         window.fetch = ((url: unknown, init?: RequestInit) => {
           calls.push([url, init]);
           if (url === '/api/aichat') {
-            return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ response: '## Ruby vet\n\n- 問題なし', usedModel: 'local/neko' })) });
+            return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ response: '## rubyver\n\n- Ruby/WASMバージョン取得成功', usedModel: 'local/neko' })) });
           }
           return Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) });
         }) as any;
@@ -135,17 +135,17 @@ describe('プレビュー入力のスラッシュボタン', () => {
     });
     const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
     const result = dom.window.document.getElementById('nekoResult') as HTMLDivElement;
-    input.value = '/neko';
+    input.value = '/neko rubyver';
     input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
 
     const apiCall = calls.find(([url]) => url === '/api/aichat');
     expect(apiCall).toBeTruthy();
-    expect(JSON.parse(String(apiCall![1]?.body))).toEqual({ message: '/neko', source: 'textbox' });
+    expect(JSON.parse(String(apiCall![1]?.body))).toEqual({ message: '/neko rubyver', source: 'textbox' });
     expect(apiCall![1]?.headers).toEqual({ 'Content-Type': 'application/json', 'Accept': 'application/json' });
     expect(result.hidden).toBe(false);
-    expect(result.querySelector('h2')?.textContent).toBe('Ruby vet');
-    expect(result.querySelector('li')?.textContent).toBe('問題なし');
+    expect(result.querySelector('h2')?.textContent).toBe('rubyver');
+    expect(result.querySelector('li')?.textContent).toBe('Ruby/WASMバージョン取得成功');
     expect(result.textContent).not.toContain('<h2>');
   });
 
@@ -161,7 +161,7 @@ describe('プレビュー入力のスラッシュボタン', () => {
     });
     const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
     const result = dom.window.document.getElementById('nekoResult') as HTMLDivElement;
-    input.value = '/neko Ruby vet';
+    input.value = '/neko rubyver';
     input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
 
