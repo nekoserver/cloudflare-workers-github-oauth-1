@@ -28,6 +28,38 @@ describe('repository tree GitHub API helpers', () => {
     });
   });
 
+  it('保存済みトークンが失効して401でも公開リポジトリを匿名で再取得する', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"message":"Bad credentials"}', { status: 401 }))
+      .mockResolvedValueOnce(new Response('{"default_branch":"main"}', { status: 200 }));
+    const result = await fetchGithubRepositoryWithPublicFallback(
+      'https://api.github.com/repos/owner/repo',
+      { Authorization: 'Bearer expired-token', Accept: 'application/vnd.github+json' },
+      fetchMock,
+    );
+
+    expect(result.response.status).toBe(200);
+    expect(result.usedAnonymousFallback).toBe(true);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.any(String), {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+  });
+
+  it('401後の匿名取得にも失敗した場合は再ログイン案内に使う元の401を返す', async () => {
+    const unauthorized = new Response('{"message":"Bad credentials"}', { status: 401 });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(unauthorized)
+      .mockResolvedValueOnce(new Response('{"message":"Not Found"}', { status: 404 }));
+    const result = await fetchGithubRepositoryWithPublicFallback(
+      'https://api.github.com/repos/owner/private-repo',
+      { Authorization: 'Bearer expired-token' },
+      fetchMock,
+    );
+
+    expect(result.response).toBe(unauthorized);
+    expect(result.usedAnonymousFallback).toBe(false);
+  });
+
   it('匿名取得も404なら失敗応答を返す', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
     const result = await fetchGithubRepositoryWithPublicFallback(
