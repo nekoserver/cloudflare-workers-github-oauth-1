@@ -867,7 +867,11 @@ ${getMarkdownParserScript()}
     }
     var result = runRubyCode(code);
     resultArea.classList.toggle('error', !result.ok);
-    resultArea.textContent = result.output;
+    if (result.ok) {
+      resultArea.innerHTML = parseMd(result.output);
+    } else {
+      resultArea.textContent = result.output;
+    }
     return Promise.resolve(result.ok);
   }
 

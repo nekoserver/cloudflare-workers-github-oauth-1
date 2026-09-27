@@ -91,12 +91,14 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(visibleText).not.toContain('表示後、タップして入力欄へコピー');
   });
 
-  it('script内のJSに構文エラーがなく、Markdown結果だけを安全な共通パーサー経由で描画する', () => {
+  it('script内のJSに構文エラーがなく、API応答とRuby実行成功結果を安全な共通Markdownパーサー経由で描画する', () => {
     const m = /<script>([\s\S]*?)<\/script>/.exec(html);
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
-    expect(m![1].match(/innerHTML/g)).toHaveLength(1);
+    expect(m![1].match(/innerHTML/g)).toHaveLength(2);
     expect(m![1]).toContain('resultArea.innerHTML = parseMd(markdown)');
+    expect(m![1]).toContain('resultArea.innerHTML = parseMd(result.output)');
+    expect(m![1]).toMatch(/if \(result\.ok\) \{\s*resultArea\.innerHTML = parseMd\(result\.output\);\s*\} else \{\s*resultArea\.textContent = result\.output;/);
   });
 
   it('本文をファイル名付きで保存し /neko ruby からRuby/WASM実行できる配線を持つ', () => {
