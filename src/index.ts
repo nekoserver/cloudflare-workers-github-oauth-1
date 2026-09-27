@@ -441,6 +441,8 @@ import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourc
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { extractTableSchemasFromSql, evaluateTable, JUDGMENT_LABELS as QUERY_PATTERN_JUDGMENT_LABELS, type TableSchema as QueryPatternTableSchema } from './utils/queryPatternAnalysis';
+import { buildQuery, type QuerySpec } from './utils/queryBuilder';
+import { getQueryBuilderPage } from './views/queryBuilderPage';
 import { getQueryPatternAnalysisPage, type QueryPatternTableRow } from './views/queryPatternAnalysis';
 import {
   EMBEDDED_TREE_VIEW_SNAPSHOTS,
@@ -17409,6 +17411,99 @@ app.post('/api/query-pattern-analysis/seed', authMiddleware, async (c) => {
   }
 
   return c.json({ ok: true, scores });
+});
+
+/**
+ * /query-builder: 「どのテーブル・どのカラムに対してどう取り出すか」を選択式で
+ * 組み立てて実行するページ。テーブル名の許可リストはSTATUS_TABLE_DEFINITIONS、
+ * カラム名の許可リストはPRAGMA table_infoで都度取得する実カラム一覧を使う
+ * (自由入力のSQL文字列は一切受け付けない)。
+ */
+app.get('/query-builder', authMiddleware, async (c) => {
+  const tables = STATUS_TABLE_DEFINITIONS.map((t) => ({ name: t.name, description: t.description }));
+  return c.html(getQueryBuilderPage(tables));
+});
+
+/**
+ * 指定テーブルのカラム一覧をPRAGMA table_infoで返す。tableは
+ * STATUS_TABLE_DEFINITIONSに登録済みの名前のみ受け付ける(許可リスト外は404)。
+ */
+app.get('/api/query-builder/columns', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB未設定です' }, 503);
+  const tableName = c.req.query('table') ?? '';
+  const known = STATUS_TABLE_DEFINITIONS.find((t) => t.name === tableName);
+  if (!known) return c.json({ error: `テーブル ${tableName} は許可されていません` }, 404);
+  try {
+    const pragma = await db
+      .prepare(`PRAGMA table_info(${tableName})`)
+      .all<{ name: string; type: string; notnull: number; pk: number }>();
+    const columns = (pragma.results ?? []).map((col) => ({
+      name: col.name,
+      type: col.type,
+      notNull: col.notnull > 0,
+      primaryKey: col.pk > 0,
+    }));
+    if (columns.length === 0) {
+      return c.json({ error: `テーブル ${tableName} のカラムを取得できませんでした(未作成の可能性があります)` }, 500);
+    }
+    return c.json({ table: tableName, columns });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+/**
+ * QuerySpec(選択式で組み立てたクエリ仕様)を検証し、SELECT文をD1へ実行する。
+ * テーブル名・カラム名は必ずSTATUS_TABLE_DEFINITIONSとPRAGMA table_infoの両方で
+ * 確認済みの値だけを許可リストとしてbuildQueryへ渡す(ルール32: 判別可能な
+ * 結果型で成功/失敗を表現し、文字列prefix判定はしない)。
+ */
+app.post('/api/query-builder/run', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB未設定です' }, 503);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  }
+  const spec = body as QuerySpec | null;
+  if (!spec || typeof spec !== 'object' || typeof spec.table !== 'string' || !spec.table) {
+    return c.json({ error: 'tableを指定してください' }, 400);
+  }
+
+  const known = STATUS_TABLE_DEFINITIONS.find((t) => t.name === spec.table);
+  if (!known) return c.json({ error: `テーブル ${spec.table} は許可されていません` }, 404);
+
+  let allowedColumns: string[];
+  try {
+    const pragma = await db.prepare(`PRAGMA table_info(${spec.table})`).all<{ name: string }>();
+    allowedColumns = (pragma.results ?? []).map((col) => col.name);
+  } catch (err) {
+    return c.json({ error: `カラム一覧の取得に失敗しました: ${err instanceof Error ? err.message : String(err)}` }, 500);
+  }
+
+  const built = buildQuery(spec, allowedColumns);
+  if (!built.ok) return c.json({ error: `[${built.errorCode}] ${built.detail}` }, 400);
+
+  try {
+    const result = await db
+      .prepare(built.value.sql)
+      .bind(...built.value.params)
+      .all<Record<string, unknown>>();
+    return c.json({ sql: built.value.sql, params: built.value.params, rows: result.results ?? [] });
+  } catch (err) {
+    return c.json(
+      {
+        error: `クエリ実行に失敗しました: ${err instanceof Error ? err.message : String(err)}`,
+        sql: built.value.sql,
+        params: built.value.params,
+      },
+      500,
+    );
+  }
 });
 
 /**
