@@ -42,7 +42,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'previewInput', 'previewArea']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewArea']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -64,6 +64,20 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
     expect(m![1]).not.toContain('innerHTML');
+  });
+});
+
+describe('validateSaveTitle', () => {
+  const validateSaveTitle = loadFn<(title: string, documents: Array<{ title: string }>) => string>('validateSaveTitle');
+
+  it('空文字と100文字超を拒否する', () => {
+    expect(validateSaveTitle('  ', [])).toContain('1〜100');
+    expect(validateSaveTitle('a'.repeat(101), [])).toContain('1〜100');
+  });
+
+  it('既存タイトルを大文字小文字を区別せず順に比較して拒否する', () => {
+    expect(validateSaveTitle('sample', [{ title: 'first' }, { title: 'Sample' }])).toContain('既に登録');
+    expect(validateSaveTitle('new title', [{ title: 'Sample' }])).toBe('');
   });
 });
 
