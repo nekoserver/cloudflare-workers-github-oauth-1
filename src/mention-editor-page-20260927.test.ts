@@ -15,6 +15,10 @@ import { extractFunctionSource } from './utils/extractFunctionSource';
 //   (4) トリガーが / @ 以外 → 拒否する
 //   (5) template literal 内のエスケープで <script> が構文エラーになる
 //   (6) username を画面に表示しない。タブ名のプレビューは textContent のみ
+//   (7) 候補選択時の動作(default/typewriter)は Cookie で永続化する。Cookie未設定・
+//       壊れた値(過去仕様の値含む)は既定の default として扱う(握りつぶさず正規化する)
+//   (8) typewriter モードで候補を選ぶと、入力欄には反映せず、選んだ値を
+//       Typewriter Text 相当の別領域へ1回だけ表示する(繰り返し再生はしない)
 
 function loadFn<T>(name: string): T {
   const html = getMentionEditorPage('tester');
@@ -42,7 +46,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -293,6 +297,113 @@ describe('findTriggerQuery', () => {
     expect(findTriggerQuery('a/b', '/')).toBeNull();
     expect(findTriggerQuery('/bold ', '/')).toBeNull();
     expect(findTriggerQuery('', '/')).toBeNull();
+  });
+});
+
+describe('resolveCopyMode / nextCopyMode', () => {
+  const resolveCopyMode = loadFn<(raw: unknown) => 'default' | 'typewriter'>('resolveCopyMode');
+  const nextCopyMode = loadFn<(mode: string) => 'default' | 'typewriter'>('nextCopyMode');
+
+  it('typewriter のみ typewriter、それ以外(未設定・壊れた値・過去の値)は default', () => {
+    expect(resolveCopyMode('typewriter')).toBe('typewriter');
+    for (const raw of [undefined, null, '', 'default', 'Typewriter', 'copy', 123, {}]) {
+      expect(resolveCopyMode(raw as any)).toBe('default');
+    }
+  });
+
+  it('default と typewriter を交互に切り替える', () => {
+    expect(nextCopyMode('default')).toBe('typewriter');
+    expect(nextCopyMode('typewriter')).toBe('default');
+  });
+});
+
+describe('typewriterFrames', () => {
+  const typewriterFrames = loadFn<(value: string) => string[]>('typewriterFrames');
+
+  it('先頭からの部分文字列を1文字ずつ増やしたコマ割りを返す', () => {
+    expect(typewriterFrames('ab')).toEqual(['', 'a', 'ab']);
+    expect(typewriterFrames('')).toEqual(['']);
+  });
+});
+
+describe('候補選択時の動作(default/typewriter)', () => {
+  function loadPage(cookie?: string) {
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = (() => Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) })) as any;
+        if (cookie) window.document.cookie = cookie;
+      },
+    });
+    return dom;
+  }
+
+  function openSlashAndPick(dom: JSDOM, optionText: string) {
+    const window = dom.window as any;
+    const input = window.document.getElementById('previewInput') as HTMLInputElement;
+    input.value = '/';
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const option = Array.from(window.document.querySelectorAll('[role="option"]')).find(
+      (el: any) => el.textContent === optionText
+    ) as HTMLButtonElement | undefined;
+    expect(option, optionText + ' が候補に見つからない').toBeTruthy();
+    option!.click();
+  }
+
+  it('既定(Cookie未設定)は入力欄へそのままコピーする(従来どおり)', () => {
+    const dom = loadPage();
+    openSlashAndPick(dom, '/bold');
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    expect(input.value).toBe('/bold ');
+  });
+
+  it('トグルボタンは既定で default を表示し、押すたびに typewriter と切り替わりCookieへ書く', () => {
+    const dom = loadPage();
+    const toggle = dom.window.document.getElementById('copyModeToggle') as HTMLButtonElement;
+    expect(toggle.textContent).toBe('default');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    toggle.click();
+    expect(toggle.textContent).toBe('typewriter');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(dom.window.document.cookie).toContain('mentionEditorCopyMode=typewriter');
+
+    toggle.click();
+    expect(toggle.textContent).toBe('default');
+    expect(dom.window.document.cookie).toContain('mentionEditorCopyMode=default');
+  });
+
+  it('Cookieが typewriter のとき、候補選択は入力欄を変えずTypewriter領域へ表示する(1回だけ)', () => {
+    const dom = loadPage('mentionEditorCopyMode=typewriter');
+    const toggle = dom.window.document.getElementById('copyModeToggle') as HTMLButtonElement;
+    expect(toggle.textContent).toBe('typewriter');
+
+    openSlashAndPick(dom, '/bold');
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const box = dom.window.document.getElementById('typewriterOutput') as HTMLElement;
+    const textEl = dom.window.document.getElementById('typewriterText') as HTMLElement;
+
+    expect(input.value).toBe('');
+    expect(box.hidden).toBe(false);
+    expect(textEl.textContent).toBe('');
+
+    return new Promise<void>((resolve) => {
+      dom.window.setTimeout(() => {
+        expect(textEl.textContent).toBe('/bold ');
+        expect(input.value).toBe('');
+        resolve();
+      }, 60 * '/bold '.length + 30);
+    });
+  });
+
+  it('Cookieに過去仕様や壊れた値が入っていても既定(default)として扱う', () => {
+    const dom = loadPage('mentionEditorCopyMode=legacy-value');
+    const toggle = dom.window.document.getElementById('copyModeToggle') as HTMLButtonElement;
+    expect(toggle.textContent).toBe('default');
+    openSlashAndPick(dom, '/bold');
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    expect(input.value).toBe('/bold ');
   });
 });
 
