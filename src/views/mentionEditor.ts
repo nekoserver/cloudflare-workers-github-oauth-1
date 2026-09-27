@@ -110,6 +110,10 @@ input[type=number] { width: 90px; }
 }
 #nekoResult[hidden] { display: none; }
 #nekoResult.error { color: var(--danger); white-space: pre-wrap; }
+#nekoResult.ruby-output {
+  overflow-x: auto; overflow-wrap: normal; white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 #nekoResult > :first-child { margin-top: 0; }
 #nekoResult > :last-child { margin-bottom: 0; }
 ${getMarkdownPreviewCSS()}
@@ -848,6 +852,12 @@ ${getMarkdownParserScript()}
     }
   }
 
+  function displayRubyResult(resultArea, result) {
+    resultArea.className = 'preview-area ruby-output';
+    resultArea.classList.toggle('error', !result.ok);
+    resultArea.textContent = result.output;
+  }
+
   function executeSavedRuby(filename) {
     var resultArea = $('nekoResult');
     var documentData = savedDocuments.find(function(item) { return item.title.toLowerCase() === filename.toLowerCase(); });
@@ -866,12 +876,7 @@ ${getMarkdownParserScript()}
       return Promise.resolve(false);
     }
     var result = runRubyCode(code);
-    resultArea.classList.toggle('error', !result.ok);
-    if (result.ok) {
-      resultArea.innerHTML = parseMd(result.output);
-    } else {
-      resultArea.textContent = result.output;
-    }
+    displayRubyResult(resultArea, result);
     return Promise.resolve(result.ok);
   }
 
@@ -1068,9 +1073,7 @@ ${getMarkdownParserScript()}
     var result = runRubyCode(previewArea.value);
     resultArea.hidden = false;
     placeNekoResult(current.position);
-    resultArea.className = 'preview-area';
-    resultArea.classList.toggle('error', !result.ok);
-    resultArea.textContent = result.output;
+    displayRubyResult(resultArea, result);
   });
 
   $('btnClearRuby').addEventListener('click', function() {
