@@ -13,7 +13,7 @@ import { extractFunctionSource } from './utils/extractFunctionSource';
 //   (3) タブ0件・タブ名空・候補0件・候補にタブや改行を含む → 拒否する
 //   (4) トリガーが / @ 以外 → 拒否する
 //   (5) template literal 内のエスケープで <script> が構文エラーになる
-//   (6) username やタブ名経由のXSS → username はエスケープ、プレビューは textContent のみ
+//   (6) username を画面に表示しない。タブ名のプレビューは textContent のみ
 
 function loadFn<T>(name: string): T {
   const html = getMentionEditorPage('tester');
@@ -52,10 +52,18 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toContain('<option value="rows">');
   });
 
-  it('usernameをエスケープする', () => {
+  it('usernameやユーザー表記を画面に表示しない', () => {
     const x = getMentionEditorPage('<script>alert(1)</script>');
     expect(x).not.toContain('<script>alert(1)</script>');
-    expect(x).toContain('&lt;script&gt;');
+    expect(x).not.toContain('&lt;script&gt;');
+    expect(x).not.toContain('ユーザー:');
+  });
+
+  it('タブと候補のセクションをドラッグして並べ替えられる', () => {
+    expect(html).toContain("handle.draggable = true");
+    expect(html).toContain("box.classList.add('dragging')");
+    expect(html).toContain("tabsEditor.insertBefore(draggedTab");
+    expect(html).toContain('.tab-edit.dragging { border: 2px dashed var(--danger)');
   });
 
   it('script内のJSに構文エラーがなく、innerHTMLを使わない', () => {

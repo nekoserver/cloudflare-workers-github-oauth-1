@@ -1,13 +1,9 @@
-function escMention(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 // dynamicneko の Slash Command Input(/samples)を設定値として組み立てる編集ページ。
 // 保存はせず、結果はJSONで出力する(コピー・ダウンロード・読み込み)。
 // 注意: template literal 内の <script> にはバックスラッシュ系エスケープと正規表現
 // リテラルを書かない(CLAUDE.md ルール29)。改行は String.fromCharCode(10) を使う。
 export function getMentionEditorPage(username: string): string {
-  const safeUser = escMention(username);
+  void username;
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -67,7 +63,15 @@ input[type=number] { width: 90px; }
 .save-dialog { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
 .save-dialog label { display: block; color: var(--text-strong); margin-bottom: 6px; }
 .save-dialog input { width: 100%; }
-.tab-edit { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.tab-edit { position: relative; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.tab-edit.dragging { border: 2px dashed var(--danger); opacity: .72; }
+.tab-edit.drop-before::before, .tab-edit.drop-after::after {
+  content: ''; position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger);
+}
+.tab-edit.drop-before::before { top: -6px; }
+.tab-edit.drop-after::after { bottom: -6px; }
+.drag-handle { cursor: grab; font-size: 16px; line-height: 1; padding: 5px 8px; touch-action: none; }
+.drag-handle:active { cursor: grabbing; }
 .tab-edit textarea { width: 100%; min-height: 70px; overflow-y: hidden; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .hint { color: var(--text-muted); font-size: 11px; }
 #jsonOut { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
@@ -103,7 +107,7 @@ input[type=number] { width: 90px; }
 </head>
 <body>
 <h1>Mention Editor</h1>
-<div class="subtitle">Slash Command Input の設定を編集して JSON で出力します(ユーザー: ${safeUser})</div>
+<div class="subtitle">Slash Command Input の設定を編集して JSON で出力します</div>
 
 <div class="layout">
 <div>
@@ -277,6 +281,7 @@ input[type=number] { width: 90px; }
   var page = 0;
   var swipeStart = null;
   var panel = null;
+  var draggedTab = null;
 
   function setStatus(msg, kind) {
     statusEl.textContent = msg;
@@ -296,6 +301,13 @@ input[type=number] { width: 90px; }
     box.className = 'tab-edit';
     var row = document.createElement('div');
     row.className = 'row';
+    var handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'btn drag-handle';
+    handle.textContent = '≡';
+    handle.title = 'ドラッグして並べ替え';
+    handle.setAttribute('aria-label', 'タブと候補をドラッグして並べ替え');
+    handle.draggable = true;
     var name = document.createElement('input');
     name.className = 'tab-label';
     name.placeholder = 'タブ名';
@@ -306,6 +318,7 @@ input[type=number] { width: 90px; }
     del.className = 'btn';
     del.textContent = '削除';
     del.addEventListener('click', function() { box.remove(); refresh(); });
+    row.appendChild(handle);
     row.appendChild(name);
     row.appendChild(del);
     var list = document.createElement('textarea');
@@ -317,6 +330,43 @@ input[type=number] { width: 90px; }
     box.appendChild(row);
     box.appendChild(list);
     tabsEditor.appendChild(box);
+
+    handle.addEventListener('dragstart', function(e) {
+      draggedTab = box;
+      box.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'mention-editor-tab');
+      }
+    });
+    handle.addEventListener('dragend', finishTabDrag);
+    box.addEventListener('dragover', function(e) {
+      if (!draggedTab || draggedTab === box) return;
+      e.preventDefault();
+      clearDropMarkers();
+      var after = e.clientY >= box.getBoundingClientRect().top + box.offsetHeight / 2;
+      box.classList.add(after ? 'drop-after' : 'drop-before');
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    box.addEventListener('drop', function(e) {
+      if (!draggedTab || draggedTab === box) return;
+      e.preventDefault();
+      var after = box.classList.contains('drop-after');
+      tabsEditor.insertBefore(draggedTab, after ? box.nextSibling : box);
+      finishTabDrag();
+      refresh();
+    });
+  }
+
+  function clearDropMarkers() {
+    var boxes = tabsEditor.querySelectorAll('.tab-edit');
+    for (var i = 0; i < boxes.length; i++) boxes[i].classList.remove('drop-before', 'drop-after');
+  }
+
+  function finishTabDrag() {
+    if (draggedTab) draggedTab.classList.remove('dragging');
+    clearDropMarkers();
+    draggedTab = null;
   }
 
   function readForm() {
