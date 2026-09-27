@@ -60,6 +60,13 @@ input[type=number] { width: 90px; }
 }
 .btn:hover { background: var(--hover); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.saved-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.saved-row select { flex: 1; min-width: 0; }
+.save-modal { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 20px; }
+.save-modal[hidden] { display: none; }
+.save-dialog { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.save-dialog label { display: block; color: var(--text-strong); margin-bottom: 6px; }
+.save-dialog input { width: 100%; }
 .tab-edit { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
 .tab-edit textarea { width: 100%; min-height: 70px; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .hint { color: var(--text-muted); font-size: 11px; }
@@ -148,20 +155,40 @@ input[type=number] { width: 90px; }
 
   <div class="panel">
     <h2>JSON</h2>
+    <div class="saved-row">
+      <select id="savedDocuments" aria-label="保存済み設定"><option value="">新規設定</option></select>
+      <button type="button" class="btn" id="btnLoadSaved">読み込む</button>
+    </div>
     <textarea id="jsonOut" spellcheck="false" aria-label="設定JSON"></textarea>
     <div class="row" style="margin-top:8px">
       <button type="button" class="btn primary" id="btnCopy">コピー</button>
       <button type="button" class="btn" id="btnDownload">ダウンロード</button>
       <button type="button" class="btn" id="btnImport">JSONを読み込む</button>
+      <button type="button" class="btn primary" id="btnSave">データベースに保存</button>
     </div>
     <div id="status" role="status"></div>
   </div>
 </div>
 </div>
 
+<div class="save-modal" id="saveModal" hidden role="dialog" aria-modal="true" aria-labelledby="saveModalTitle">
+  <div class="save-dialog">
+    <h2 id="saveModalTitle">保存タイトル</h2>
+    <label for="saveTitle">この設定を識別するタイトル</label>
+    <input id="saveTitle" maxlength="100" autocomplete="off">
+    <div id="titleStatus" class="hint" role="alert"></div>
+    <div class="row" style="margin-top:12px">
+      <button type="button" class="btn primary" id="btnConfirmSave">保存</button>
+      <button type="button" class="btn" id="btnCancelSave">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   var NL = String.fromCharCode(10);
+  var savedDocuments = [];
+  var currentDocumentId = null;
 
   function normalizeConfig(raw) {
     var LIM = {
@@ -218,6 +245,17 @@ input[type=number] { width: 90px; }
     var token = text.slice(cut + 1);
     if (token.charAt(0) !== trigger) return null;
     return token.slice(1);
+  }
+
+  function validateSaveTitle(title, documents) {
+    var normalized = String(title || '').trim();
+    if (!normalized || normalized.length > 100) return 'タイトルは1〜100文字で入力してください';
+    for (var i = 0; i < documents.length; i++) {
+      if (normalized.localeCompare(documents[i].title, undefined, { sensitivity: 'accent' }) === 0) {
+        return '同じタイトルが既に登録されています';
+      }
+    }
+    return '';
   }
 
   function sizeToStyle(t) {
@@ -475,9 +513,91 @@ input[type=number] { width: 90px; }
       return;
     }
     writeForm(r.value);
+    currentDocumentId = null;
+    $('savedDocuments').value = '';
     page = 0;
     refresh();
     setStatus('読み込みました', 'ok');
+  });
+
+  function renderSavedDocuments() {
+    var select = $('savedDocuments');
+    while (select.options.length > 1) select.remove(1);
+    for (var i = 0; i < savedDocuments.length; i++) {
+      var option = document.createElement('option');
+      option.value = savedDocuments[i].id;
+      option.textContent = savedDocuments[i].title;
+      select.appendChild(option);
+    }
+    select.value = currentDocumentId || '';
+  }
+
+  function loadSavedDocuments() {
+    return fetch('/api/mention-editor/documents').then(function(response) {
+      if (!response.ok) throw new Error('保存済みデータを取得できませんでした');
+      return response.json();
+    }).then(function(data) {
+      savedDocuments = data.documents || [];
+      renderSavedDocuments();
+    }).catch(function(err) {
+      setStatus(err.message, 'error');
+    });
+  }
+
+  function saveDocument(title) {
+    var parsed;
+    try { parsed = JSON.parse(jsonOut.value); } catch (err) {
+      setStatus('[BAD_JSON] JSONとして読めません: ' + err.message, 'error');
+      return Promise.resolve();
+    }
+    var checked = normalizeConfig(parsed);
+    if (!checked.ok) {
+      setStatus('[' + checked.errorCode + '] ' + checked.detail, 'error');
+      return Promise.resolve();
+    }
+    var payload = currentDocumentId
+      ? { id: currentDocumentId, config: checked.value }
+      : { title: title, config: checked.value };
+    $('btnConfirmSave').disabled = true;
+    return fetch('/api/mention-editor/documents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok) throw new Error(data.error || '保存に失敗しました');
+        currentDocumentId = data.id;
+        $('saveModal').hidden = true;
+        setStatus('データベースに保存しました', 'ok');
+        return loadSavedDocuments();
+      });
+    }).catch(function(err) {
+      $('titleStatus').textContent = err.message;
+      setStatus(err.message, 'error');
+    }).then(function() { $('btnConfirmSave').disabled = false; });
+  }
+
+  $('btnLoadSaved').addEventListener('click', function() {
+    var id = $('savedDocuments').value;
+    var documentData = savedDocuments.find(function(item) { return item.id === id; });
+    if (!documentData) { setStatus('読み込む保存データを選択してください', 'error'); return; }
+    writeForm(documentData.config);
+    currentDocumentId = documentData.id;
+    page = 0;
+    refresh();
+    setStatus('「' + documentData.title + '」を読み込みました', 'ok');
+  });
+
+  $('btnSave').addEventListener('click', function() {
+    if (currentDocumentId) { saveDocument(''); return; }
+    $('saveTitle').value = '';
+    $('titleStatus').textContent = '';
+    $('saveModal').hidden = false;
+    $('saveTitle').focus();
+  });
+  $('btnCancelSave').addEventListener('click', function() { $('saveModal').hidden = true; });
+  $('btnConfirmSave').addEventListener('click', function() {
+    var error = validateSaveTitle($('saveTitle').value, savedDocuments);
+    $('titleStatus').textContent = error;
+    if (!error) saveDocument($('saveTitle').value.trim());
   });
 
   writeForm({
@@ -492,6 +612,7 @@ input[type=number] { width: 90px; }
     ]
   });
   refresh();
+  loadSavedDocuments();
 })();
 </script>
 </body>

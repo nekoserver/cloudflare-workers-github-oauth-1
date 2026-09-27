@@ -61,6 +61,7 @@ import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getMentionEditorPage } from './views/mentionEditor';
+import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
 import { getBinHexPage } from './views/binHex';
 import { getGhAttachPage } from './views/ghAttach';
@@ -663,6 +664,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_snapshots', migration: '0152', description: 'dynamicnekoの/tree-viewサイドバーツリー用のGitHub Trees APIスナップショット(repo_name単位でJSON全体をキャッシュ)。cronトリガー(scheduled)が定期的に更新し、内容が変化した場合だけ書き込む。手動更新(ライブ再取得)のexternal APIからも同じ関数で更新される', syncPolicy: 'auto' },
   { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
   { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
+  { name: 'mention_editor_documents', migration: '0163', description: '/mention-editorで作成した設定JSONをタイトル付きでユーザーごとに保存する', syncPolicy: 'auto' },
   { name: 'jev_keyword_boundary_labels', migration: '0158', description: '【非推奨・migration 0159で削除済み】「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスターだったが、自己申告は根拠が曖昧なため、既存のaichat_keyword_category_map(未分類=境界線の外側)を根拠にする方式へ置き換えた', syncPolicy: 'manual' },
   { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '【非推奨・migration 0159で削除済み】回答文から切り出したキーワードの未理解/理解済み状態を自己申告で保持していたが、既存のaichat_keyword_category_map(分類済みかどうか)を根拠にする方式へ置き換えた', syncPolicy: 'auto' },
 ];
@@ -2525,6 +2527,16 @@ CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint
   '0162': `CREATE INDEX IF NOT EXISTS idx_webhook_log_status ON webhook_log(status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source_status ON webhook_log(source, status);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_status_received_at ON webhook_log(status, received_at);`,
+  '0163': `CREATE TABLE IF NOT EXISTS mention_editor_documents (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL COLLATE NOCASE,
+  config_json TEXT NOT NULL CHECK (json_valid(config_json)),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (user_id, title)
+);
+CREATE INDEX IF NOT EXISTS idx_mention_editor_documents_user_updated ON mention_editor_documents(user_id, updated_at DESC);`,
   '0164': `CREATE TABLE IF NOT EXISTS jev_table_pattern_scores (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   table_name TEXT NOT NULL,
@@ -2782,6 +2794,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   kimi_gemma_reviews: { id: 'pk', user_id: 'fk+idx' },
   kimi_code_generate_log: { id: 'pk', user_id: 'fk+idx' },
   ruby_wasm_snippets: { id: 'pk', user_id: 'fk+idx' },
+  mention_editor_documents: { id: 'pk', user_id: 'fk+idx', title: 'uk' },
   ruby_wasm_snippet_verifications: { id: 'pk', snippet_id: 'fk+idx' },
   kimi_code_markdown_snippets: { id: 'pk', user_id: 'fk+idx' },
   cursor_agent_launch_log: { id: 'pk', user_id: 'fk+idx' },
@@ -2933,6 +2946,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   kimi_gemma_reviews: 'ai',
   kimi_code_generate_log: 'ai',
   ruby_wasm_snippets: 'ai',
+  mention_editor_documents: 'system',
   ruby_wasm_snippet_verifications: 'ai',
   kimi_code_markdown_snippets: 'ai',
   cursor_agent_launch_log: 'ai',
@@ -3079,6 +3093,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   kimi_gemma_reviews: { user_id: 'user_sessions' },
   kimi_code_generate_log: { user_id: 'user_sessions' },
   ruby_wasm_snippets: { user_id: 'user_sessions' },
+  mention_editor_documents: { user_id: 'user_sessions' },
   ruby_wasm_snippet_verifications: { snippet_id: 'ruby_wasm_snippets' },
   kimi_code_markdown_snippets: { user_id: 'user_sessions' },
   cursor_agent_launch_log: { user_id: 'user_sessions' },
@@ -13842,6 +13857,54 @@ app.get('/base64', authMiddleware, async (c) => {
 app.get('/mention-editor', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getMentionEditorPage(user.sub));
+});
+
+app.get('/api/mention-editor/documents', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const user = c.get('user');
+  const rows = await c.env.DB.prepare(
+    'SELECT id, title, config_json, created_at, updated_at FROM mention_editor_documents WHERE user_id = ? ORDER BY updated_at DESC'
+  ).bind(user.sub).all<{ id: string; title: string; config_json: string; created_at: string; updated_at: string }>();
+  return jsonUtf8({ documents: (rows.results ?? []).map((row) => ({
+    id: row.id,
+    title: row.title,
+    config: JSON.parse(row.config_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  })) });
+});
+
+app.post('/api/mention-editor/documents', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const user = c.get('user');
+  let body: { id?: unknown; title?: unknown; config?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'JSON形式のリクエストが必要です' }, 400);
+  }
+  const config = validateMentionEditorConfig(body.config);
+  if (!config) return jsonUtf8({ error: '設定JSONが不正です' }, 400);
+
+  if (typeof body.id === 'string' && body.id) {
+    const result = await c.env.DB.prepare(
+      "UPDATE mention_editor_documents SET config_json = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).bind(JSON.stringify(config), body.id, user.sub).run();
+    if (!result.meta.changes) return jsonUtf8({ error: '保存データが見つかりません' }, 404);
+    return jsonUtf8({ id: body.id, saved: true });
+  }
+
+  const title = validateMentionEditorTitle(body.title);
+  if (!title) return jsonUtf8({ error: 'タイトルは1〜100文字で入力してください' }, 400);
+  const duplicate = await c.env.DB.prepare(
+    'SELECT 1 AS found FROM mention_editor_documents WHERE user_id = ? AND title = ? COLLATE NOCASE LIMIT 1'
+  ).bind(user.sub, title).first<{ found: number }>();
+  if (duplicate) return jsonUtf8({ error: '同じタイトルが既に登録されています', code: 'TITLE_EXISTS' }, 409);
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    'INSERT INTO mention_editor_documents (id, user_id, title, config_json) VALUES (?, ?, ?, ?)'
+  ).bind(id, user.sub, title, JSON.stringify(config)).run();
+  return jsonUtf8({ id, title, saved: true }, 201);
 });
 
 app.get('/json-explorer', authMiddleware, async (c) => {
