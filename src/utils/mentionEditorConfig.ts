@@ -32,7 +32,9 @@ export function validateMentionEditorConfig(value: unknown): MentionEditorConfig
   for (const tab of raw.tabs) {
     if (typeof tab?.label !== 'string' || !tab.label.trim() || tab.label.trim().length > 30) return null;
     if (!Array.isArray(tab.items) || tab.items.length < 1 || tab.items.length > 100) return null;
-    if (tab.items.some((item: unknown) => typeof item !== 'string' || !item || item.length > 50 || item.trim() !== item || /\s/.test(item))) return null;
+    // 半角スペースは候補名の一部として許可する。タブや改行など、候補の
+    // 1行1件という形式を壊すその他の空白文字は引き続き拒否する。
+    if (tab.items.some((item: unknown) => typeof item !== 'string' || !item || item.length > 50 || item.trim() !== item || /[^\S ]/.test(item))) return null;
   }
   return value as MentionEditorConfig;
 }

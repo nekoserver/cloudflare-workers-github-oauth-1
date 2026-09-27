@@ -18,7 +18,8 @@ describe('mention editor storage validation', () => {
   it('accepts a valid config and rejects malformed config', () => {
     expect(validateMentionEditorConfig(validConfig())).not.toBeNull();
     expect(validateMentionEditorConfig({ ...validConfig(), trigger: '#' })).toBeNull();
-    expect(validateMentionEditorConfig({ ...validConfig(), tabs: [{ label: 'AI', items: ['has space'] }] })).toBeNull();
+    expect(validateMentionEditorConfig({ ...validConfig(), tabs: [{ label: 'AI', items: ['has space'] }] })).not.toBeNull();
+    expect(validateMentionEditorConfig({ ...validConfig(), tabs: [{ label: 'AI', items: ['has\ttab'] }] })).toBeNull();
   });
 
   it('defines user-scoped, case-insensitively unique storage', () => {
