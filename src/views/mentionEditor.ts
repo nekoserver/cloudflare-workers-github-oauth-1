@@ -109,7 +109,8 @@ input[type=number] { width: 90px; }
 .slash-page { text-align: center; color: var(--text-muted); font-size: 11px; padding-bottom: 3px; }
 .copy-mode-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .copy-mode-row label { color: var(--text-muted); }
-.typewriter-box { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.typewriter-box { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+.typewriter-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .typewriter-box[hidden] { display: none; }
 .typewriter-line { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; min-height: 1.4em; }
 .typewriter-cursor { display: inline-block; margin-left: 1px; animation: typewriter-blink 1s step-end infinite; }
@@ -164,7 +165,7 @@ input[type=number] { width: 90px; }
     <div class="copy-mode-row">
       <label for="copyModeToggle">候補選択時の動作</label>
       <button type="button" id="copyModeToggle" class="btn" role="switch" aria-checked="false" data-testid="copy-mode-toggle">default</button>
-      <span class="hint">default: 入力欄へそのままコピー / typewriter: Typewriter Textへ1回だけタイプ</span>
+      <span class="hint">default: 入力欄へそのままコピー / typewriter: 表示後、タップして入力欄へコピー</span>
     </div>
     <div class="preview-wrap">
       <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
@@ -172,7 +173,7 @@ input[type=number] { width: 90px; }
         <input id="previewInput" placeholder="/ でコマンド" autocomplete="off">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
       </div>
-      <div class="typewriter-box" id="typewriterOutput" hidden>
+      <div class="typewriter-box" id="typewriterOutput" role="button" tabindex="0" aria-label="表示されたコマンドをコマンド入力欄へコピー" hidden>
         <p class="typewriter-line"><span id="typewriterText" data-testid="typewriter-text"></span><span class="typewriter-cursor" aria-hidden="true">▌</span></p>
       </div>
     </div>
@@ -338,6 +339,7 @@ input[type=number] { width: 90px; }
 
   var copyMode = resolveCopyMode(readCookie(COPY_MODE_COOKIE));
   var typewriterTimer = null;
+  var typewriterValue = '';
   var current = null;
   var page = 0;
   var swipeStart = null;
@@ -563,6 +565,7 @@ input[type=number] { width: 90px; }
 
   function runTypewriter(value) {
     if (typewriterTimer !== null) { clearTimeout(typewriterTimer); typewriterTimer = null; }
+    typewriterValue = value;
     var frames = typewriterFrames(value);
     typewriterOutput.hidden = false;
     var i = 0;
@@ -574,6 +577,24 @@ input[type=number] { width: 90px; }
     }
     step();
   }
+
+  function copyTypewriterToInput() {
+    if (!typewriterValue) return;
+    if (typewriterTimer !== null) { clearTimeout(typewriterTimer); typewriterTimer = null; }
+    previewInput.value += typewriterValue;
+    typewriterValue = '';
+    typewriterText.textContent = '';
+    typewriterOutput.hidden = true;
+    previewInput.focus();
+    renderPanel();
+  }
+
+  typewriterOutput.addEventListener('click', copyTypewriterToInput);
+  typewriterOutput.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    copyTypewriterToInput();
+  });
 
   function pick(cmd) {
     var text = previewInput.value;
