@@ -46,7 +46,7 @@ describe('getMentionEditorPage: HTML構造', () => {
   const html = getMentionEditorPage('tester');
 
   it('編集項目(サイズ・単位・トリガー・位置・タブ編集)とJSON出力欄がある', () => {
-    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnSave', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
+    for (const id of ['widthValue', 'widthUnit', 'heightValue', 'heightUnit', 'triggerKey', 'position', 'tabsEditor', 'addTab', 'jsonOut', 'btnCopy', 'btnDownload', 'btnImport', 'btnParseRuby', 'btnSave', 'rubyParseStatus', 'savedDocuments', 'btnLoadSaved', 'saveModal', 'saveTitle', 'saveActions', 'btnCancelSave', 'btnConfirmSave', 'previewInput', 'previewSlashButton', 'previewArea', 'copyModeToggle', 'typewriterOutput', 'typewriterText']) {
       expect(html, id).toContain(`id="${id}"`);
     }
     expect(html).toContain('<option value="/">');
@@ -105,6 +105,26 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toContain('executeSavedRuby(command.slice(rubyPrefix.length).trim())');
     expect(html).toContain('documentData.config.content');
     expect(html).toContain('loadRubyWasmVm(');
+  });
+
+  it('Ruby本文の入力後だけパースでき、構文成功後に保存モーダルと重複確認済みの決定操作を出す', () => {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    expect((document.getElementById('btnParseRuby') as HTMLButtonElement).hidden).toBe(true);
+    expect((document.getElementById('btnSave') as HTMLButtonElement).hidden).toBe(true);
+    expect((document.getElementById('saveModal') as HTMLDivElement).hidden).toBe(true);
+    expect((document.getElementById('saveActions') as HTMLDivElement).hidden).toBe(true);
+    expect(document.getElementById('btnParseRuby')?.textContent).toBe('パース');
+    expect(document.getElementById('btnSave')?.textContent).toBe('保存');
+    expect(document.getElementById('btnCancelSave')?.textContent).toBe('キャンセル');
+    expect(document.getElementById('btnConfirmSave')?.textContent).toBe('決定');
+    expect(html).toContain("RubyVM::InstructionSequence.compile(");
+    expect(html).toContain('parsedRubySource = previewArea.value');
+    expect(html).toContain("$('btnSave').hidden = false");
+    expect(html).toContain('openSaveModal();');
+    expect(html).toContain('loadSavedDocuments().then(function(loaded)');
+    expect(html).toContain('既存のファイル名を確認できませんでした');
+    expect(html).toContain("$('saveActions').hidden = Boolean(error)");
   });
 });
 
