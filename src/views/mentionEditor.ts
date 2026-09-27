@@ -1,0 +1,499 @@
+function escMention(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// dynamicneko の Slash Command Input(/samples)を設定値として組み立てる編集ページ。
+// 保存はせず、結果はJSONで出力する(コピー・ダウンロード・読み込み)。
+// 注意: template literal 内の <script> にはバックスラッシュ系エスケープと正規表現
+// リテラルを書かない(CLAUDE.md ルール29)。改行は String.fromCharCode(10) を使う。
+export function getMentionEditorPage(username: string): string {
+  const safeUser = escMention(username);
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mention Editor</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg:          light-dark(#f6f8fa, #0d1117);
+  --panel:       light-dark(#ffffff, #161b22);
+  --border:      light-dark(#d0d7de, #30363d);
+  --text:        light-dark(#1f2328, #c9d1d9);
+  --text-muted:  light-dark(#636c76, #8b949e);
+  --text-strong: light-dark(#1f2328, #f0f6fc);
+  --accent:      light-dark(#0969da, #58a6ff);
+  --accent-fg:   light-dark(#ffffff, #0d1117);
+  --input-bg:    light-dark(#ffffff, #0d1117);
+  --hover:       light-dark(#f3f4f6, #21262d);
+  --danger:      light-dark(#cf222e, #f85149);
+  --ok:          light-dark(#1a7f37, #3fb950);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  max-width: 1100px; margin-left: auto; margin-right: auto;
+}
+h1 { color: var(--text-strong); font-size: 20px; margin: 0 0 4px; }
+.subtitle { color: var(--text-muted); font-size: 12px; margin-bottom: 18px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 800px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 14px; min-width: 0;
+}
+.panel h2 { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
+.row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.row label { min-width: 110px; color: var(--text-muted); }
+input, select, textarea {
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+input[type=number] { width: 90px; }
+.btn {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-size: 12px; padding: 5px 10px; cursor: pointer;
+}
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tab-edit { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.tab-edit textarea { width: 100%; min-height: 70px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.hint { color: var(--text-muted); font-size: 11px; }
+#jsonOut { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+#status { font-size: 12px; min-height: 18px; }
+#status.error { color: var(--danger); }
+#status.ok { color: var(--ok); }
+.preview-wrap { padding: 4px; }
+.preview-anchor { position: relative; }
+#previewArea { resize: none; max-width: 100%; }
+#previewInput { width: 100%; margin-top: 6px; }
+.slash-panel {
+  position: absolute; left: 0; right: 0; z-index: 5;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.slash-panel.top { bottom: 100%; margin-bottom: 4px; }
+.slash-panel.bottom { top: 100%; margin-top: 4px; }
+.slash-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.slash-tabs button {
+  flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-muted); padding: 5px; cursor: pointer; font-size: 12px;
+}
+.slash-tabs button[aria-selected=true] { color: var(--text-strong); border-bottom-color: var(--accent); }
+.slash-body { display: flex; align-items: stretch; }
+.slash-body > button { background: none; border: none; color: var(--text-muted); padding: 0 8px; cursor: pointer; }
+.slash-body > button:disabled { opacity: 0.3; cursor: default; }
+.slash-list { flex: 1; min-height: 5rem; list-style: none; margin: 0; padding: 4px 0; touch-action: pan-y; user-select: none; }
+.slash-list button { width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 3px 6px; cursor: pointer; }
+.slash-list button:hover { background: var(--hover); }
+.slash-empty { color: var(--text-muted); padding: 3px 6px; }
+.slash-page { text-align: center; color: var(--text-muted); font-size: 11px; padding-bottom: 3px; }
+</style>
+</head>
+<body>
+<h1>Mention Editor</h1>
+<div class="subtitle">Slash Command Input の設定を編集して JSON で出力します(ユーザー: ${safeUser})</div>
+
+<div class="layout">
+<div>
+  <div class="panel">
+    <h2>テキストエリア</h2>
+    <div class="row">
+      <label for="widthValue">横幅</label>
+      <input type="number" id="widthValue" value="40" min="1">
+      <select id="widthUnit"><option value="ch">半角文字数(ch)</option><option value="px">px</option></select>
+    </div>
+    <div class="row">
+      <label for="heightValue">高さ</label>
+      <input type="number" id="heightValue" value="15" min="1">
+      <select id="heightUnit"><option value="rows">行数(rows)</option><option value="px">px</option></select>
+    </div>
+    <div class="hint">範囲: 横 10〜200ch / 100〜2000px、高さ 1〜100行 / 40〜2000px</div>
+  </div>
+
+  <div class="panel">
+    <h2>候補リスト</h2>
+    <div class="row">
+      <label for="triggerKey">トリガーキー</label>
+      <select id="triggerKey"><option value="/">/</option><option value="@">@</option></select>
+    </div>
+    <div class="row">
+      <label for="position">出現位置</label>
+      <select id="position"><option value="top">上(入力窓の上)</option><option value="bottom">下(入力窓の下)</option></select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>タブと候補</h2>
+    <div id="tabsEditor"></div>
+    <button type="button" class="btn" id="addTab">＋ タブを追加</button>
+    <div class="hint">候補は1行に1つ。空白を含む候補は使えません。</div>
+  </div>
+</div>
+
+<div>
+  <div class="panel">
+    <h2>プレビュー</h2>
+    <div class="preview-wrap">
+      <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
+      <div class="preview-anchor" id="previewAnchor">
+        <input id="previewInput" placeholder="/ でコマンド" autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>JSON</h2>
+    <textarea id="jsonOut" spellcheck="false" aria-label="設定JSON"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn primary" id="btnCopy">コピー</button>
+      <button type="button" class="btn" id="btnDownload">ダウンロード</button>
+      <button type="button" class="btn" id="btnImport">JSONを読み込む</button>
+    </div>
+    <div id="status" role="status"></div>
+  </div>
+</div>
+</div>
+
+<script>
+(function() {
+  var NL = String.fromCharCode(10);
+
+  function normalizeConfig(raw) {
+    var LIM = {
+      width: { ch: [10, 200], px: [100, 2000] },
+      height: { rows: [1, 100], px: [40, 2000] }
+    };
+    function ng(code, detail) { return { ok: false, errorCode: code, detail: detail }; }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return ng('NOT_OBJECT', '設定がオブジェクトではありません');
+    if (raw.trigger !== '/' && raw.trigger !== '@') return ng('BAD_TRIGGER', 'トリガーキーは / か @ のみです');
+    if (raw.position !== 'top' && raw.position !== 'bottom') return ng('BAD_POSITION', '出現位置は top か bottom のみです');
+    var ta = raw.textarea;
+    if (!ta || typeof ta !== 'object') return ng('BAD_SIZE', 'textarea の指定がありません');
+    var axes = ['width', 'height'];
+    var size = {};
+    for (var a = 0; a < axes.length; a++) {
+      var axis = axes[a];
+      var s = ta[axis];
+      var range = s && LIM[axis][s.unit];
+      if (!range) return ng('BAD_SIZE', axis + ' の単位が不正です');
+      var v = s.value;
+      if (typeof v !== 'number' || !isFinite(v) || v < range[0] || v > range[1]) {
+        return ng('BAD_SIZE', axis + ' は ' + range[0] + '〜' + range[1] + s.unit + ' で指定してください');
+      }
+      size[axis] = { value: Math.round(v), unit: s.unit };
+    }
+    if (!Array.isArray(raw.tabs) || raw.tabs.length < 1 || raw.tabs.length > 20) return ng('BAD_TABS', 'タブは1〜20個にしてください');
+    var tabs = [];
+    for (var i = 0; i < raw.tabs.length; i++) {
+      var t = raw.tabs[i] || {};
+      var label = typeof t.label === 'string' ? t.label.trim() : '';
+      if (!label || label.length > 30) return ng('BAD_TAB_LABEL', (i + 1) + '番目のタブ名は1〜30文字にしてください');
+      if (!Array.isArray(t.items) || t.items.length < 1 || t.items.length > 100) {
+        return ng('BAD_ITEMS', 'タブ「' + label + '」の候補は1〜100個にしてください');
+      }
+      var items = [];
+      for (var j = 0; j < t.items.length; j++) {
+        var it = t.items[j];
+        if (typeof it !== 'string' || !it || it.length > 50 || it.trim() !== it || it.split(' ').length > 1 || it.split(String.fromCharCode(10)).length > 1 || it.split(String.fromCharCode(9)).length > 1) {
+          return ng('BAD_ITEMS', 'タブ「' + label + '」の候補「' + String(it) + '」は空白なしの1〜50文字にしてください');
+        }
+        items.push(it);
+      }
+      tabs.push({ label: label, items: items });
+    }
+    return {
+      ok: true,
+      value: { version: 1, trigger: raw.trigger, position: raw.position, textarea: size, tabs: tabs }
+    };
+  }
+
+  function findTriggerQuery(text, trigger) {
+    if (!text) return null;
+    var cut = Math.max(text.lastIndexOf(' '), text.lastIndexOf(String.fromCharCode(10)), text.lastIndexOf(String.fromCharCode(9)));
+    var token = text.slice(cut + 1);
+    if (token.charAt(0) !== trigger) return null;
+    return token.slice(1);
+  }
+
+  function sizeToStyle(t) {
+    return {
+      width: t.width.value + t.width.unit,
+      height: t.height.unit === 'px' ? t.height.value + 'px' : '',
+      rows: t.height.unit === 'rows' ? t.height.value : null
+    };
+  }
+
+  var $ = function(id) { return document.getElementById(id); };
+  var widthValue = $('widthValue'), widthUnit = $('widthUnit');
+  var heightValue = $('heightValue'), heightUnit = $('heightUnit');
+  var triggerKey = $('triggerKey'), positionSel = $('position');
+  var tabsEditor = $('tabsEditor'), jsonOut = $('jsonOut'), statusEl = $('status');
+  var previewArea = $('previewArea'), previewInput = $('previewInput'), previewAnchor = $('previewAnchor');
+
+  var current = null;
+  var page = 0;
+  var swipeStart = null;
+  var panel = null;
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg;
+    statusEl.className = kind || '';
+  }
+
+  function addTabRow(label, items) {
+    var box = document.createElement('div');
+    box.className = 'tab-edit';
+    var row = document.createElement('div');
+    row.className = 'row';
+    var name = document.createElement('input');
+    name.className = 'tab-label';
+    name.placeholder = 'タブ名';
+    name.value = label;
+    name.setAttribute('aria-label', 'タブ名');
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn';
+    del.textContent = '削除';
+    del.addEventListener('click', function() { box.remove(); refresh(); });
+    row.appendChild(name);
+    row.appendChild(del);
+    var list = document.createElement('textarea');
+    list.className = 'tab-items';
+    list.setAttribute('aria-label', '候補(1行に1つ)');
+    list.value = items.join(NL);
+    box.appendChild(row);
+    box.appendChild(list);
+    tabsEditor.appendChild(box);
+  }
+
+  function readForm() {
+    var tabs = [];
+    var boxes = tabsEditor.querySelectorAll('.tab-edit');
+    for (var i = 0; i < boxes.length; i++) {
+      var lines = boxes[i].querySelector('.tab-items').value.split(NL);
+      var items = [];
+      for (var j = 0; j < lines.length; j++) {
+        var l = lines[j].trim();
+        if (l) items.push(l);
+      }
+      tabs.push({ label: boxes[i].querySelector('.tab-label').value, items: items });
+    }
+    return {
+      version: 1,
+      trigger: triggerKey.value,
+      position: positionSel.value,
+      textarea: {
+        width: { value: Number(widthValue.value), unit: widthUnit.value },
+        height: { value: Number(heightValue.value), unit: heightUnit.value }
+      },
+      tabs: tabs
+    };
+  }
+
+  function writeForm(cfg) {
+    widthValue.value = cfg.textarea.width.value;
+    widthUnit.value = cfg.textarea.width.unit;
+    heightValue.value = cfg.textarea.height.value;
+    heightUnit.value = cfg.textarea.height.unit;
+    triggerKey.value = cfg.trigger;
+    positionSel.value = cfg.position;
+    while (tabsEditor.firstChild) tabsEditor.removeChild(tabsEditor.firstChild);
+    for (var i = 0; i < cfg.tabs.length; i++) addTabRow(cfg.tabs[i].label, cfg.tabs[i].items);
+  }
+
+  function applyPreview(cfg) {
+    var st = sizeToStyle(cfg.textarea);
+    previewArea.style.width = st.width;
+    previewArea.style.height = st.height;
+    if (st.rows !== null) previewArea.rows = st.rows;
+    previewInput.placeholder = cfg.trigger + ' でコマンド';
+    if (page > cfg.tabs.length - 1) page = cfg.tabs.length - 1;
+    renderPanel();
+  }
+
+  function refresh() {
+    var r = normalizeConfig(readForm());
+    if (!r.ok) {
+      setStatus('[' + r.errorCode + '] ' + r.detail, 'error');
+      return;
+    }
+    current = r.value;
+    jsonOut.value = JSON.stringify(current, null, 2);
+    setStatus('');
+    applyPreview(current);
+  }
+
+  function pick(cmd) {
+    var text = previewInput.value;
+    var q = findTriggerQuery(text, current.trigger);
+    if (q === null) return;
+    previewInput.value = text.slice(0, text.length - q.length - 1) + current.trigger + cmd + ' ';
+    renderPanel();
+    previewInput.focus();
+  }
+
+  function go(delta) {
+    var last = current.tabs.length - 1;
+    page = Math.min(last, Math.max(0, page + delta));
+    renderPanel();
+  }
+
+  function renderPanel() {
+    if (panel) { panel.remove(); panel = null; }
+    if (!current) return;
+    var q = findTriggerQuery(previewInput.value, current.trigger);
+    if (q === null) return;
+    var tab = current.tabs[page];
+    var last = current.tabs.length - 1;
+    panel = document.createElement('div');
+    panel.className = 'slash-panel ' + current.position;
+    panel.setAttribute('data-testid', 'slash-panel');
+
+    var tabsBar = document.createElement('div');
+    tabsBar.className = 'slash-tabs';
+    tabsBar.setAttribute('role', 'tablist');
+    current.tabs.forEach(function(t, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(i === page));
+      b.textContent = t.label;
+      b.addEventListener('mousedown', function(e) { e.preventDefault(); });
+      b.addEventListener('click', function() { page = i; renderPanel(); });
+      tabsBar.appendChild(b);
+    });
+    panel.appendChild(tabsBar);
+
+    var body = document.createElement('div');
+    body.className = 'slash-body';
+    var prev = document.createElement('button');
+    prev.type = 'button';
+    prev.textContent = '<';
+    prev.setAttribute('aria-label', '前の候補リスト');
+    prev.disabled = page === 0;
+    prev.addEventListener('mousedown', function(e) { e.preventDefault(); });
+    prev.addEventListener('click', function() { go(-1); });
+    var list = document.createElement('ul');
+    list.className = 'slash-list';
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', tab.label);
+    var hit = tab.items.filter(function(c) { return c.indexOf(q) === 0; });
+    hit.forEach(function(c) {
+      var li = document.createElement('li');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', 'false');
+      b.textContent = current.trigger + c;
+      b.addEventListener('mousedown', function(e) { e.preventDefault(); });
+      b.addEventListener('click', function() { pick(c); });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    if (hit.length === 0) {
+      var empty = document.createElement('li');
+      empty.className = 'slash-empty';
+      empty.textContent = 'このタブに該当なし';
+      list.appendChild(empty);
+    }
+    list.addEventListener('pointerdown', function(e) { swipeStart = e.clientX; });
+    list.addEventListener('pointercancel', function() { swipeStart = null; });
+    list.addEventListener('pointerup', function(e) {
+      if (swipeStart === null) return;
+      var dx = e.clientX - swipeStart;
+      swipeStart = null;
+      if (Math.abs(dx) >= 40) go(dx < 0 ? 1 : -1);
+    });
+    var next = document.createElement('button');
+    next.type = 'button';
+    next.textContent = '>';
+    next.setAttribute('aria-label', '次の候補リスト');
+    next.disabled = page === last;
+    next.addEventListener('mousedown', function(e) { e.preventDefault(); });
+    next.addEventListener('click', function() { go(1); });
+    body.appendChild(prev);
+    body.appendChild(list);
+    body.appendChild(next);
+    panel.appendChild(body);
+
+    var pageEl = document.createElement('div');
+    pageEl.className = 'slash-page';
+    pageEl.textContent = (page + 1) + ' / ' + current.tabs.length;
+    panel.appendChild(pageEl);
+
+    previewAnchor.appendChild(panel);
+  }
+
+  document.querySelector('.layout').addEventListener('input', function(e) {
+    if (e.target === jsonOut || e.target === previewInput) return;
+    refresh();
+  });
+  document.querySelector('.layout').addEventListener('change', function(e) {
+    if (e.target === jsonOut || e.target === previewInput) return;
+    refresh();
+  });
+  previewInput.addEventListener('input', renderPanel);
+
+  $('addTab').addEventListener('click', function() {
+    addTabRow('新しいタブ', ['item']);
+    refresh();
+  });
+
+  $('btnCopy').addEventListener('click', function() {
+    navigator.clipboard.writeText(jsonOut.value).then(function() {
+      setStatus('コピーしました', 'ok');
+    }, function(err) {
+      setStatus('コピーに失敗しました: ' + err, 'error');
+    });
+  });
+
+  $('btnDownload').addEventListener('click', function() {
+    var blob = new Blob([jsonOut.value], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'mention-editor.json';
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  $('btnImport').addEventListener('click', function() {
+    var parsed;
+    try {
+      parsed = JSON.parse(jsonOut.value);
+    } catch (err) {
+      setStatus('[BAD_JSON] JSONとして読めません: ' + err.message, 'error');
+      return;
+    }
+    var r = normalizeConfig(parsed);
+    if (!r.ok) {
+      setStatus('[' + r.errorCode + '] ' + r.detail, 'error');
+      return;
+    }
+    writeForm(r.value);
+    page = 0;
+    refresh();
+    setStatus('読み込みました', 'ok');
+  });
+
+  writeForm({
+    version: 1,
+    trigger: '/',
+    position: 'top',
+    textarea: { width: { value: 40, unit: 'ch' }, height: { value: 15, unit: 'rows' } },
+    tabs: [
+      { label: 'テキスト', items: ['bold', 'italic', 'code', 'quote'] },
+      { label: '挿入', items: ['image', 'table', 'link', 'divider'] },
+      { label: 'AI', items: ['summarize', 'translate', 'explain'] }
+    ]
+  });
+  refresh();
+})();
+</script>
+</body>
+</html>`;
+}

@@ -60,6 +60,7 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getMentionEditorPage } from './views/mentionEditor';
 import { getJsonExplorerPage } from './views/jsonExplorer';
 import { getBinHexPage } from './views/binHex';
 import { getGhAttachPage } from './views/ghAttach';
@@ -13836,6 +13837,11 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/mention-editor', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getMentionEditorPage(user.sub));
 });
 
 app.get('/json-explorer', authMiddleware, async (c) => {
