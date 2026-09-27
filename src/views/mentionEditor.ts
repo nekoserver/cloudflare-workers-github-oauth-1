@@ -87,7 +87,16 @@ input[type=number] { width: 90px; }
 #status.ok { color: var(--ok); }
 .preview-wrap { padding: 4px; }
 .preview-anchor { position: relative; display: flex; align-items: center; gap: 6px; }
+#previewBody { max-width: 100%; }
 #previewArea { resize: none; max-width: 100%; }
+#previewBody.result-visible {
+  border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg);
+  overflow: auto;
+}
+#previewBody.result-visible #previewArea { display: none; }
+#previewBody.result-visible #nekoResult {
+  width: 100%; min-height: 100%; margin: 0; border: 0; border-radius: 0; background: transparent;
+}
 #nekoResult {
   margin-top: 10px; padding: 10px 12px; min-height: 44px; overflow-wrap: anywhere;
   border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg);
@@ -177,7 +186,9 @@ ${getMarkdownPreviewCSS()}
       <button type="button" id="copyModeToggle" class="btn" role="switch" aria-label="default/typewriterを切り替える" aria-checked="false" data-testid="copy-mode-toggle">default</button>
     </div>
     <div class="preview-wrap">
-      <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
+      <div id="previewBody" aria-label="本文エリア">
+        <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
+      </div>
       <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="preview-anchor" id="previewAnchor">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
@@ -342,7 +353,7 @@ ${getMarkdownParserScript()}
   var heightValue = $('heightValue'), heightUnit = $('heightUnit');
   var triggerKey = $('triggerKey'), positionSel = $('position');
   var tabsEditor = $('tabsEditor'), jsonOut = $('jsonOut'), statusEl = $('status');
-  var previewArea = $('previewArea'), previewInput = $('previewInput'), previewAnchor = $('previewAnchor');
+  var previewBody = $('previewBody'), previewArea = $('previewArea'), previewInput = $('previewInput'), previewAnchor = $('previewAnchor');
   var previewSlashButton = $('previewSlashButton');
   var copyModeToggle = $('copyModeToggle');
   var typewriterOutput = $('typewriterOutput');
@@ -554,9 +565,13 @@ ${getMarkdownParserScript()}
 
   function applyPreview(cfg) {
     var st = sizeToStyle(cfg.textarea);
+    previewBody.classList.remove('result-visible');
     previewArea.style.width = st.width;
     previewArea.style.height = st.height;
     if (st.rows !== null) previewArea.rows = st.rows;
+    previewBody.style.width = st.width;
+    previewBody.style.height = st.rows === null ? st.height : previewArea.offsetHeight + 'px';
+    placeNekoResult(cfg.position);
     previewInput.placeholder = cfg.trigger + ' でコマンド';
     if (page > cfg.tabs.length - 1) page = cfg.tabs.length - 1;
     renderPanel();
@@ -725,6 +740,17 @@ ${getMarkdownParserScript()}
     return command === '/neko' || command.indexOf('/neko ') === 0;
   }
 
+  function placeNekoResult(position) {
+    var resultArea = $('nekoResult');
+    var inBody = position === 'top' && !resultArea.hidden;
+    previewBody.classList.toggle('result-visible', inBody);
+    if (inBody) {
+      previewBody.appendChild(resultArea);
+    } else if (resultArea.parentElement === previewBody) {
+      previewBody.insertAdjacentElement('afterend', resultArea);
+    }
+  }
+
   function executeNekoCommand() {
     var command = previewInput.value.trim();
     if (!isNekoCommand(command) || previewInput.disabled) return Promise.resolve(false);
@@ -732,6 +758,7 @@ ${getMarkdownParserScript()}
     previewSlashButton.disabled = true;
     var resultArea = $('nekoResult');
     resultArea.hidden = false;
+    placeNekoResult(current.position);
     resultArea.className = 'preview-area';
     resultArea.textContent = '実行中…';
     renderPanel();

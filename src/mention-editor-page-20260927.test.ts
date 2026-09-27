@@ -72,7 +72,7 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toMatch(/\.tab-edit\.dragging\s*\{\s*border: 2px dashed var\(--danger\)/);
   });
 
-  it('実行結果を入力窓の上に置き、モード切替だけをプレビュー見出しの右端に置く', () => {
+  it('実行結果の表示先を本文エリアの直後に用意し、モード切替だけをプレビュー見出しの右端に置く', () => {
     const dom = new JSDOM(html);
     const document = dom.window.document;
     const result = document.getElementById('nekoResult')!;
@@ -166,6 +166,31 @@ describe('プレビュー入力のスラッシュボタン', () => {
     expect(result.querySelector('h2')?.textContent).toBe('rubyver');
     expect(result.querySelector('li')?.textContent).toBe('Ruby/WASMバージョン取得成功');
     expect(result.textContent).not.toContain('<h2>');
+    expect(result.parentElement?.id).toBe('previewBody');
+    expect(result.parentElement?.classList.contains('result-visible')).toBe(true);
+  });
+
+  it('出現位置が下の場合は実行結果を本文エリアとは別に表示する', async () => {
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = ((url: unknown) => url === '/api/aichat'
+          ? Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ response: 'result' })) })
+          : Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) })) as any;
+      },
+    });
+    const position = dom.window.document.getElementById('position') as unknown as HTMLSelectElement;
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const result = dom.window.document.getElementById('nekoResult') as HTMLDivElement;
+    position.value = 'bottom';
+    position.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    input.value = '/neko rubyver';
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+    expect(result.parentElement?.id).not.toBe('previewBody');
+    expect(dom.window.document.getElementById('previewArea')?.getAttribute('style')).toContain('width');
   });
 
   it('APIがJSON以外を返した場合はHTTPステータス付きで原因を表示する', async () => {
