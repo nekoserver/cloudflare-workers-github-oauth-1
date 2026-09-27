@@ -5851,6 +5851,10 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
   return c.html(getAiChatPage({
     name: user.name,
     username: user.sub,
@@ -6223,6 +6227,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
+    loadMentionEditorRuby: c.env.DB ? async (filename) => {
+      const row = await c.env.DB!.prepare(
+        'SELECT config_json FROM mention_editor_documents WHERE user_id = ? AND title = ? COLLATE NOCASE LIMIT 1'
+      ).bind(user.sub, filename).first<{ config_json: string }>();
+      if (!row) return null;
+      const config = JSON.parse(row.config_json) as { content?: unknown };
+      return typeof config.content === 'string' ? config.content : '';
+    } : undefined,
     searchYoutubeLinks: (c.env.GOOGLE_CSE_API_KEY && c.env.GOOGLE_CSE_CX)
       ? (keyword) => fetchYoutubeLinksViaGoogleSearch(c.env, keyword)
       : undefined,
@@ -6256,6 +6268,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       nekoResults: slashCommand.resultsForModal ?? null,
       nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
       svg: slashCommand.svg ?? null,
+      rubyCode: slashCommand.rubyCode ?? null,
+      rubyFilename: slashCommand.rubyFilename ?? null,
     });
   }
 
