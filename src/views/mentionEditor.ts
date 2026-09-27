@@ -107,6 +107,14 @@ input[type=number] { width: 90px; }
 .slash-list button:hover { background: var(--hover); }
 .slash-empty { color: var(--text-muted); padding: 3px 6px; }
 .slash-page { text-align: center; color: var(--text-muted); font-size: 11px; padding-bottom: 3px; }
+.copy-mode-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.copy-mode-row label { color: var(--text-muted); }
+.typewriter-box { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.typewriter-box[hidden] { display: none; }
+.typewriter-line { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; min-height: 1.4em; }
+.typewriter-cursor { display: inline-block; margin-left: 1px; animation: typewriter-blink 1s step-end infinite; }
+@keyframes typewriter-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .typewriter-cursor { animation: none; } }
 </style>
 </head>
 <body>
@@ -153,11 +161,19 @@ input[type=number] { width: 90px; }
 <div>
   <div class="panel">
     <h2>プレビュー</h2>
+    <div class="copy-mode-row">
+      <label for="copyModeToggle">候補選択時の動作</label>
+      <button type="button" id="copyModeToggle" class="btn" role="switch" aria-checked="false" data-testid="copy-mode-toggle">default</button>
+      <span class="hint">default: 入力欄へそのままコピー / typewriter: Typewriter Textへ1回だけタイプ</span>
+    </div>
     <div class="preview-wrap">
       <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
       <div class="preview-anchor" id="previewAnchor">
         <input id="previewInput" placeholder="/ でコマンド" autocomplete="off">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
+      </div>
+      <div class="typewriter-box" id="typewriterOutput" hidden>
+        <p class="typewriter-line"><span id="typewriterText" data-testid="typewriter-text"></span><span class="typewriter-cursor" aria-hidden="true">▌</span></p>
       </div>
     </div>
   </div>
@@ -198,6 +214,40 @@ input[type=number] { width: 90px; }
   var NL = String.fromCharCode(10);
   var savedDocuments = [];
   var currentDocumentId = null;
+  var COPY_MODE_COOKIE = 'mentionEditorCopyMode';
+
+  // 候補選択時の動作の設定値。Cookieから読んだ値が 'typewriter' 以外は
+  // すべて 'default' として扱う(未設定・壊れた値・past仕様の値を含む)。
+  function resolveCopyMode(raw) {
+    return raw === 'typewriter' ? 'typewriter' : 'default';
+  }
+
+  function nextCopyMode(mode) {
+    return mode === 'typewriter' ? 'default' : 'typewriter';
+  }
+
+  // Typewriter Text(dynamicneko /samples)と同じ「1文字ずつ増える」表示コマ割りを
+  // 純粋関数として切り出す(DOM・タイマーに依存しないのでテストしやすい)。
+  function typewriterFrames(value) {
+    var frames = [];
+    for (var i = 0; i <= value.length; i++) frames.push(value.slice(0, i));
+    return frames;
+  }
+
+  function readCookie(name) {
+    var raw = document.cookie || '';
+    var parts = raw.length ? raw.split('; ') : [];
+    for (var i = 0; i < parts.length; i++) {
+      var eq = parts[i].indexOf('=');
+      if (eq === -1) continue;
+      if (parts[i].slice(0, eq) === name) return decodeURIComponent(parts[i].slice(eq + 1));
+    }
+    return '';
+  }
+
+  function writeCookie(name, value) {
+    document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=31536000; SameSite=Lax';
+  }
 
   function normalizeConfig(raw) {
     var LIM = {
@@ -282,7 +332,12 @@ input[type=number] { width: 90px; }
   var tabsEditor = $('tabsEditor'), jsonOut = $('jsonOut'), statusEl = $('status');
   var previewArea = $('previewArea'), previewInput = $('previewInput'), previewAnchor = $('previewAnchor');
   var previewSlashButton = $('previewSlashButton');
+  var copyModeToggle = $('copyModeToggle');
+  var typewriterOutput = $('typewriterOutput');
+  var typewriterText = $('typewriterText');
 
+  var copyMode = resolveCopyMode(readCookie(COPY_MODE_COOKIE));
+  var typewriterTimer = null;
   var current = null;
   var page = 0;
   var swipeStart = null;
@@ -506,13 +561,34 @@ input[type=number] { width: 90px; }
     applyPreview(current);
   }
 
+  function runTypewriter(value) {
+    if (typewriterTimer !== null) { clearTimeout(typewriterTimer); typewriterTimer = null; }
+    var frames = typewriterFrames(value);
+    typewriterOutput.hidden = false;
+    var i = 0;
+    function step() {
+      typewriterText.textContent = frames[i];
+      i++;
+      if (i >= frames.length) { typewriterTimer = null; return; }
+      typewriterTimer = setTimeout(step, 60);
+    }
+    step();
+  }
+
   function pick(cmd) {
     var text = previewInput.value;
     var q = findTriggerQuery(text, current.trigger);
     if (q === null) return;
-    previewInput.value = text.slice(0, text.length - q.length - 1) + current.trigger + cmd + ' ';
+    var base = text.slice(0, text.length - q.length - 1);
+    var value = current.trigger + cmd + ' ';
+    if (copyMode === 'typewriter') {
+      previewInput.value = base;
+      runTypewriter(value);
+    } else {
+      previewInput.value = base + value;
+      previewInput.focus();
+    }
     renderPanel();
-    previewInput.focus();
   }
 
   function go(delta) {
@@ -625,6 +701,17 @@ input[type=number] { width: 90px; }
     previewInput.value = '/';
     updatePreviewInput();
     previewInput.focus();
+  });
+
+  function applyCopyModeToggle() {
+    copyModeToggle.textContent = copyMode;
+    copyModeToggle.setAttribute('aria-checked', String(copyMode === 'typewriter'));
+  }
+  applyCopyModeToggle();
+  copyModeToggle.addEventListener('click', function() {
+    copyMode = nextCopyMode(copyMode);
+    writeCookie(COPY_MODE_COOKIE, copyMode);
+    applyCopyModeToggle();
   });
 
   $('addTab').addEventListener('click', function() {
