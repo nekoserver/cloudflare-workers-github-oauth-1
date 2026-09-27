@@ -1079,9 +1079,10 @@ ${getMarkdownParserScript()}
   $('btnClearRuby').addEventListener('click', function() {
     previewArea.value = '';
     parsedRubySource = null;
+    // 本文エリアの通常入力と同じ経路で表示・JSONを更新する。
+    // コマンド入力欄(previewInput)は独立した入力なので変更しない。
+    previewArea.dispatchEvent(new Event('input', { bubbles: true }));
     $('btnClearRuby').hidden = true;
-    updateRubyActions();
-    refresh();
     previewArea.focus();
   });
 
