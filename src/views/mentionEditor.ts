@@ -170,8 +170,8 @@ input[type=number] { width: 90px; }
     <div class="preview-wrap">
       <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
       <div class="preview-anchor" id="previewAnchor">
-        <input id="previewInput" placeholder="/ でコマンド" autocomplete="off">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
+        <input id="previewInput" placeholder="/ でコマンド" autocomplete="off" aria-label="コマンド入力欄">
       </div>
       <div class="typewriter-box" id="typewriterOutput" role="button" tabindex="0" aria-label="表示されたコマンドをコマンド入力欄へコピー" hidden>
         <p class="typewriter-line"><span id="typewriterText" data-testid="typewriter-text"></span><span class="typewriter-cursor" aria-hidden="true">▌</span></p>
@@ -709,6 +709,40 @@ input[type=number] { width: 90px; }
     renderPanel();
   }
 
+  function isNekoCommand(value) {
+    var command = String(value || '').trim();
+    return command === '/neko' || command.indexOf('/neko ') === 0;
+  }
+
+  function executeNekoCommand() {
+    var command = previewInput.value.trim();
+    if (!isNekoCommand(command) || previewInput.disabled) return Promise.resolve(false);
+    previewInput.disabled = true;
+    previewSlashButton.disabled = true;
+    previewArea.value = '実行中…';
+    renderPanel();
+    return fetch('/api/aichat', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: command, source: 'textbox' })
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok) throw new Error(data.error || 'コマンドを実行できませんでした');
+        previewArea.value = data.response || '（応答なし）';
+        return true;
+      });
+    }).catch(function(err) {
+      previewArea.value = '実行に失敗しました: ' + (err.message || err);
+      return false;
+    }).then(function(result) {
+      previewInput.disabled = false;
+      previewSlashButton.disabled = false;
+      previewInput.focus();
+      return result;
+    });
+  }
+
   document.querySelector('.layout').addEventListener('input', function(e) {
     if (e.target === jsonOut || e.target === previewInput) return;
     refresh();
@@ -718,6 +752,11 @@ input[type=number] { width: 90px; }
     refresh();
   });
   previewInput.addEventListener('input', updatePreviewInput);
+  previewInput.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' || !isNekoCommand(previewInput.value)) return;
+    e.preventDefault();
+    executeNekoCommand();
+  });
   previewSlashButton.addEventListener('click', function() {
     previewInput.value = '/';
     updatePreviewInput();

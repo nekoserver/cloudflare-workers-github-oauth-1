@@ -91,7 +91,7 @@ describe('プレビュー入力のスラッシュボタン', () => {
     });
   }
 
-  it('入力窓が空の間は非表示で、入力されると右側に表示する', () => {
+  it('入力窓が空の間は非表示で、入力されると左側に表示する', () => {
     const dom = loadPage();
     const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
     const button = dom.window.document.getElementById('previewSlashButton') as HTMLButtonElement;
@@ -100,6 +100,7 @@ describe('プレビュー入力のスラッシュボタン', () => {
     input.value = 'command';
     input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     expect(button.hidden).toBe(false);
+    expect(button.nextElementSibling).toBe(input);
   });
 
   it('ボタンを押すと入力窓をスラッシュだけに置き換える', () => {
@@ -114,6 +115,53 @@ describe('プレビュー入力のスラッシュボタン', () => {
     expect(input.value).toBe('/');
     expect(dom.window.document.activeElement).toBe(input);
     expect(button.hidden).toBe(false);
+  });
+
+  it('/nekoをEnterで確定するとAIチャットAPIで解釈し、結果をテキストエリアへ表示する', async () => {
+    const calls: Array<[unknown, RequestInit | undefined]> = [];
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = ((url: unknown, init?: RequestInit) => {
+          calls.push([url, init]);
+          if (url === '/api/aichat') {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ response: 'neko command result', usedModel: 'local/neko' }) });
+          }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) });
+        }) as any;
+      },
+    });
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const area = dom.window.document.getElementById('previewArea') as HTMLTextAreaElement;
+    input.value = '/neko';
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+    const apiCall = calls.find(([url]) => url === '/api/aichat');
+    expect(apiCall).toBeTruthy();
+    expect(JSON.parse(String(apiCall![1]?.body))).toEqual({ message: '/neko', source: 'textbox' });
+    expect(area.value).toBe('neko command result');
+  });
+
+  it('/neko以外の入力はEnterを押してもAIチャットAPIへ送信しない', async () => {
+    const calls: unknown[] = [];
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = ((url: unknown) => {
+          calls.push(url);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) });
+        }) as any;
+      },
+    });
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    input.value = '/bold';
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    // 初期化時の保存済み設定取得だけで、AIチャットへの送信は行わない。
+    expect(calls).toEqual(['/api/mention-editor/documents']);
   });
 });
 
