@@ -72,11 +72,12 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toMatch(/\.tab-edit\.dragging\s*\{\s*border: 2px dashed var\(--danger\)/);
   });
 
-  it('script内のJSに構文エラーがなく、innerHTMLを使わない', () => {
+  it('script内のJSに構文エラーがなく、Markdown結果だけを安全な共通パーサー経由で描画する', () => {
     const m = /<script>([\s\S]*?)<\/script>/.exec(html);
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
-    expect(m![1]).not.toContain('innerHTML');
+    expect(m![1].match(/innerHTML/g)).toHaveLength(1);
+    expect(m![1]).toContain('resultArea.innerHTML = parseMd(markdown)');
   });
 });
 
@@ -117,7 +118,7 @@ describe('プレビュー入力のスラッシュボタン', () => {
     expect(button.hidden).toBe(false);
   });
 
-  it('/nekoをEnterで確定するとAIチャットAPIで解釈し、結果をテキストエリアへ表示する', async () => {
+  it('/nekoをEnterで確定するとAIチャットAPIで解釈し、結果をMarkdown表示する', async () => {
     const calls: Array<[unknown, RequestInit | undefined]> = [];
     const dom = new JSDOM(getMentionEditorPage('tester'), {
       runScripts: 'dangerously',
@@ -126,22 +127,47 @@ describe('プレビュー入力のスラッシュボタン', () => {
         window.fetch = ((url: unknown, init?: RequestInit) => {
           calls.push([url, init]);
           if (url === '/api/aichat') {
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ response: 'neko command result', usedModel: 'local/neko' }) });
+            return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ response: '## rubyver\n\n- Ruby/WASMバージョン取得成功', usedModel: 'local/neko' })) });
           }
           return Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) });
         }) as any;
       },
     });
     const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
-    const area = dom.window.document.getElementById('previewArea') as HTMLTextAreaElement;
-    input.value = '/neko';
+    const result = dom.window.document.getElementById('nekoResult') as HTMLDivElement;
+    input.value = '/neko rubyver';
     input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
 
     const apiCall = calls.find(([url]) => url === '/api/aichat');
     expect(apiCall).toBeTruthy();
-    expect(JSON.parse(String(apiCall![1]?.body))).toEqual({ message: '/neko', source: 'textbox' });
-    expect(area.value).toBe('neko command result');
+    expect(JSON.parse(String(apiCall![1]?.body))).toEqual({ message: '/neko rubyver', source: 'textbox' });
+    expect(apiCall![1]?.headers).toEqual({ 'Content-Type': 'application/json', 'Accept': 'application/json' });
+    expect(result.hidden).toBe(false);
+    expect(result.querySelector('h2')?.textContent).toBe('rubyver');
+    expect(result.querySelector('li')?.textContent).toBe('Ruby/WASMバージョン取得成功');
+    expect(result.textContent).not.toContain('<h2>');
+  });
+
+  it('APIがJSON以外を返した場合はHTTPステータス付きで原因を表示する', async () => {
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = ((url: unknown) => url === '/api/aichat'
+          ? Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve('Bad gateway') })
+          : Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) })) as any;
+      },
+    });
+    const input = dom.window.document.getElementById('previewInput') as HTMLInputElement;
+    const result = dom.window.document.getElementById('nekoResult') as HTMLDivElement;
+    input.value = '/neko rubyver';
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+    expect(result.classList.contains('error')).toBe(true);
+    expect(result.textContent).toContain('HTTP 502');
+    expect(result.textContent).not.toBe('実行に失敗しました: Load failed');
   });
 
   it('/neko以外の入力はEnterを押してもAIチャットAPIへ送信しない', async () => {

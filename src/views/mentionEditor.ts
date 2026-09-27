@@ -1,3 +1,5 @@
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+
 // dynamicneko の Slash Command Input(/samples)を設定値として組み立てる編集ページ。
 // 保存はせず、結果はJSONで出力する(コピー・ダウンロード・読み込み)。
 // 注意: template literal 内の <script> にはバックスラッシュ系エスケープと正規表現
@@ -84,6 +86,15 @@ input[type=number] { width: 90px; }
 .preview-wrap { padding: 4px; }
 .preview-anchor { position: relative; display: flex; align-items: center; gap: 6px; }
 #previewArea { resize: none; max-width: 100%; }
+#nekoResult {
+  margin-top: 10px; padding: 10px 12px; min-height: 44px; overflow-wrap: anywhere;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg);
+}
+#nekoResult[hidden] { display: none; }
+#nekoResult.error { color: var(--danger); white-space: pre-wrap; }
+#nekoResult > :first-child { margin-top: 0; }
+#nekoResult > :last-child { margin-bottom: 0; }
+${getMarkdownPreviewCSS()}
 #previewInput { flex: 1; min-width: 0; margin-top: 6px; }
 #previewSlashButton { flex: 0 0 auto; margin-top: 6px; }
 .slash-panel {
@@ -173,6 +184,7 @@ input[type=number] { width: 90px; }
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
         <input id="previewInput" placeholder="/ でコマンド" autocomplete="off" aria-label="コマンド入力欄">
       </div>
+      <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="typewriter-box" id="typewriterOutput" role="button" tabindex="0" aria-label="表示されたコマンドをコマンド入力欄へコピー" hidden>
         <p class="typewriter-line"><span id="typewriterText" data-testid="typewriter-text"></span><span class="typewriter-cursor" aria-hidden="true">▌</span></p>
       </div>
@@ -211,6 +223,7 @@ input[type=number] { width: 90px; }
 </div>
 
 <script>
+${getMarkdownParserScript()}
 (function() {
   var NL = String.fromCharCode(10);
   var savedDocuments = [];
@@ -719,21 +732,30 @@ input[type=number] { width: 90px; }
     if (!isNekoCommand(command) || previewInput.disabled) return Promise.resolve(false);
     previewInput.disabled = true;
     previewSlashButton.disabled = true;
-    previewArea.value = '実行中…';
+    var resultArea = $('nekoResult');
+    resultArea.hidden = false;
+    resultArea.className = 'preview-area';
+    resultArea.textContent = '実行中…';
     renderPanel();
     return fetch('/api/aichat', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ message: command, source: 'textbox' })
     }).then(function(response) {
-      return response.json().then(function(data) {
-        if (!response.ok) throw new Error(data.error || 'コマンドを実行できませんでした');
-        previewArea.value = data.response || '（応答なし）';
+      return response.text().then(function(body) {
+        var data;
+        try { data = JSON.parse(body); } catch (_) {
+          throw new Error('サーバーからJSONではない応答が返りました (HTTP ' + response.status + ')');
+        }
+        if (!response.ok) throw new Error(data.error || 'コマンドを実行できませんでした (HTTP ' + response.status + ')');
+        var markdown = data.response || '（応答なし）';
+        resultArea.innerHTML = parseMd(markdown);
         return true;
       });
     }).catch(function(err) {
-      previewArea.value = '実行に失敗しました: ' + (err.message || err);
+      resultArea.className = 'preview-area error';
+      resultArea.textContent = '実行に失敗しました。通信状態を確認して再度お試しください。' + NL + '詳細: ' + (err.message || err);
       return false;
     }).then(function(result) {
       previewInput.disabled = false;
