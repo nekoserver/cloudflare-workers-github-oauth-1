@@ -45,6 +45,8 @@ h1 { color: var(--text-strong); font-size: 20px; margin: 0 0 4px; }
   padding: 14px 16px; margin-bottom: 14px; min-width: 0;
 }
 .panel h2 { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.panel-heading h2 { margin: 0; }
 .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .row label { min-width: 110px; color: var(--text-muted); }
 input, select, textarea {
@@ -118,8 +120,6 @@ ${getMarkdownPreviewCSS()}
 .slash-list button:hover { background: var(--hover); }
 .slash-empty { color: var(--text-muted); padding: 3px 6px; }
 .slash-page { text-align: center; color: var(--text-muted); font-size: 11px; padding-bottom: 3px; }
-.copy-mode-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.copy-mode-row label { color: var(--text-muted); }
 .typewriter-box { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; cursor: pointer; }
 .typewriter-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .typewriter-box[hidden] { display: none; }
@@ -172,19 +172,17 @@ ${getMarkdownPreviewCSS()}
 
 <div>
   <div class="panel">
-    <h2>プレビュー</h2>
-    <div class="copy-mode-row">
-      <label for="copyModeToggle">候補選択時の動作</label>
-      <button type="button" id="copyModeToggle" class="btn" role="switch" aria-checked="false" data-testid="copy-mode-toggle">default</button>
-      <span class="hint">default: 入力欄へそのままコピー / typewriter: 表示後、タップして入力欄へコピー</span>
+    <div class="panel-heading">
+      <h2>プレビュー</h2>
+      <button type="button" id="copyModeToggle" class="btn" role="switch" aria-label="default/typewriterを切り替える" aria-checked="false" data-testid="copy-mode-toggle">default</button>
     </div>
     <div class="preview-wrap">
       <textarea id="previewArea" readonly aria-label="テキストエリア(プレビュー)">本文エリア</textarea>
+      <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="preview-anchor" id="previewAnchor">
         <button type="button" class="btn" id="previewSlashButton" aria-label="入力をスラッシュに置き換える" hidden>/</button>
         <input id="previewInput" placeholder="/ でコマンド" autocomplete="off" aria-label="コマンド入力欄">
       </div>
-      <div id="nekoResult" class="preview-area" aria-live="polite" aria-label="コマンド実行結果" hidden></div>
       <div class="typewriter-box" id="typewriterOutput" role="button" tabindex="0" aria-label="表示されたコマンドをコマンド入力欄へコピー" hidden>
         <p class="typewriter-line"><span id="typewriterText" data-testid="typewriter-text"></span><span class="typewriter-cursor" aria-hidden="true">▌</span></p>
       </div>

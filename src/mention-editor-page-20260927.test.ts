@@ -72,6 +72,25 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(html).toMatch(/\.tab-edit\.dragging\s*\{\s*border: 2px dashed var\(--danger\)/);
   });
 
+  it('実行結果を入力窓の上に置き、モード切替だけをプレビュー見出しの右端に置く', () => {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    const result = document.getElementById('nekoResult')!;
+    const inputRow = document.getElementById('previewAnchor')!;
+    const heading = document.querySelector('.panel-heading')!;
+    const toggle = document.getElementById('copyModeToggle')!;
+    const visibleDocument = document.cloneNode(true) as Document;
+    visibleDocument.querySelectorAll('script, style').forEach((element) => element.remove());
+    const visibleText = visibleDocument.body.textContent;
+
+    expect(result.nextElementSibling).toBe(inputRow);
+    expect(heading.firstElementChild?.textContent).toBe('プレビュー');
+    expect(heading.lastElementChild).toBe(toggle);
+    expect(visibleText).not.toContain('候補選択時の動作');
+    expect(visibleText).not.toContain('入力欄へそのままコピー');
+    expect(visibleText).not.toContain('表示後、タップして入力欄へコピー');
+  });
+
   it('script内のJSに構文エラーがなく、Markdown結果だけを安全な共通パーサー経由で描画する', () => {
     const m = /<script>([\s\S]*?)<\/script>/.exec(html);
     expect(m).toBeTruthy();
