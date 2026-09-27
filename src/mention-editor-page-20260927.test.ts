@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { getMentionEditorPage } from './views/mentionEditor';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 
@@ -60,8 +61,9 @@ describe('getMentionEditorPage: HTML構造', () => {
   });
 
   it('タブと候補のセクションをドラッグして並べ替えられる', () => {
-    expect(html).toContain("handle.draggable = true");
-    expect(html).toContain("box.classList.add('dragging')");
+    expect(html).toContain("handle.addEventListener('pointerdown'");
+    expect(html).toContain('setTimeout(activateTabDrag, 450)');
+    expect(html).toContain("draggedTab.classList.add('dragging')");
     expect(html).toContain("tabsEditor.insertBefore(draggedTab");
     expect(html).toContain('.tab-edit.dragging { border: 2px dashed var(--danger)');
   });
@@ -71,6 +73,50 @@ describe('getMentionEditorPage: HTML構造', () => {
     expect(m).toBeTruthy();
     expect(() => new Function(m![1])).not.toThrow();
     expect(m![1]).not.toContain('innerHTML');
+  });
+});
+
+describe('タブのポインタードラッグ', () => {
+  function fire(window: any, target: Element, type: string, init: Record<string, number>) {
+    const event = new window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries(init)) Object.defineProperty(event, key, { value });
+    target.dispatchEvent(event);
+  }
+
+  function loadPage() {
+    const dom = new JSDOM(getMentionEditorPage('tester'), {
+      runScripts: 'dangerously',
+      url: 'https://example.com/mention-editor',
+      beforeParse(window) {
+        window.fetch = (() => Promise.resolve({ ok: true, json: () => Promise.resolve({ documents: [] }) })) as any;
+      },
+    });
+    const boxes = Array.from(dom.window.document.querySelectorAll('.tab-edit')) as HTMLElement[];
+    boxes.forEach((box, index) => {
+      box.setPointerCapture = () => undefined;
+      box.getBoundingClientRect = () => ({ x: 0, y: index * 100, top: index * 100, bottom: index * 100 + 80, left: 0, right: 400, width: 400, height: 80, toJSON() {} });
+    });
+    return { dom, boxes };
+  }
+
+  it('ハンドルを押して別セクションへ動かすと赤枠を表示して並べ替える', () => {
+    const { dom, boxes } = loadPage();
+    const handle = boxes[0].querySelector('.drag-handle')!;
+    fire(dom.window, handle, 'pointerdown', { pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    expect(boxes[0].classList.contains('dragging')).toBe(true);
+    fire(dom.window, boxes[1], 'pointermove', { pointerId: 1, clientX: 10, clientY: 170 });
+    expect(boxes[1].classList.contains('drop-after')).toBe(true);
+    fire(dom.window, boxes[1], 'pointerup', { pointerId: 1, clientX: 10, clientY: 170 });
+    expect((dom.window.document.querySelectorAll('.tab-label')[1] as HTMLInputElement).value).toBe('テキスト');
+  });
+
+  it('セクション内を長押しすると赤いドラッグ枠を表示する', async () => {
+    const { dom, boxes } = loadPage();
+    const items = boxes[0].querySelector('.tab-items')!;
+    fire(dom.window, items, 'pointerdown', { pointerId: 2, button: 0, clientX: 300, clientY: 70 });
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 470));
+    expect(boxes[0].classList.contains('dragging')).toBe(true);
+    fire(dom.window, boxes[0], 'pointercancel', { pointerId: 2, clientX: 300, clientY: 70 });
   });
 });
 
