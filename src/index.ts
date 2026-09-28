@@ -15,6 +15,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
+import { getThreadTrackerPage } from './views/threadTracker';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
@@ -5885,6 +5886,11 @@ app.get('/aichat', authMiddleware, async (c) => {
   }));
 });
 
+/** AIチャットの成長中スレッドをツリーから追跡するページ。 */
+app.get('/thread-tracker', authMiddleware, (c) => {
+  return c.html(getThreadTrackerPage(c.get('user').sub));
+});
+
 /**
  * AI チャット API（認証が必要）
  */
@@ -7264,6 +7270,36 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
       previousCount: row.previous_count,
       growth: row.growth,
       latestActivityAt: row.latest_activity_at,
+    })),
+  });
+});
+
+/** 所有ユーザーの1スレッドに属するターンを時系列で返す。 */
+app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const threadId = c.req.param('threadId');
+  if (!isThreadId(threadId)) return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, question, answer, model, source, created_at
+       FROM ai_chat_shares
+      WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
+      ORDER BY created_at ASC, id ASC`
+  ).bind(user.sub, threadId).all<{
+    id: string; question: string; answer: string; model: string | null;
+    source: string | null; created_at: string;
+  }>();
+  if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
+  return jsonUtf8({
+    threadId,
+    turns: (rows.results ?? []).map((row) => ({
+      id: row.id,
+      question: row.question,
+      answer: row.answer,
+      model: row.model,
+      source: row.source,
+      createdAt: row.created_at,
     })),
   });
 });
