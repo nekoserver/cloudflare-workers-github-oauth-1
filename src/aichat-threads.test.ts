@@ -42,6 +42,7 @@ describe('thread persistence and growth API wiring', () => {
   const indexSource = fs.readFileSync(path.join(root, 'src/index.ts'), 'utf8');
   const pageSource = fs.readFileSync(path.join(root, 'src/views/aichat.ts'), 'utf8');
   const migration = fs.readFileSync(path.join(root, 'migrations/0165_add_thread_id_to_ai_chat_shares.sql'), 'utf8');
+  const seedMigration = fs.readFileSync(path.join(root, 'migrations/0166_seed_ai_chat_threads.sql'), 'utf8');
 
   it('keeps legacy rows nullable and adds the owner/thread/time index', () => {
     expect(migration).toContain('ADD COLUMN thread_id TEXT');
@@ -63,5 +64,14 @@ describe('thread persistence and growth API wiring', () => {
     expect(indexSource).toContain('指定されたスレッドは存在しません');
     expect(pageSource).toContain('threadId: currentThreadId');
     expect(pageSource).toContain('if (data.threadId) currentThreadId = data.threadId');
+  });
+
+  it('seeds one visible three-turn thread for users without thread history', () => {
+    expect(seedMigration).toContain('FROM user_sessions AS sessions');
+    expect(seedMigration).toContain("'thread-seed-' || sessions.id || '-' || turns.turn_number");
+    expect(seedMigration).toContain("printf('%032x', sessions.id)");
+    expect(seedMigration).toContain('existing.user_id = sessions.user_id');
+    expect(seedMigration).toContain('existing.thread_id IS NOT NULL');
+    expect(seedMigration.match(/UNION ALL/g)).toHaveLength(2);
   });
 });
