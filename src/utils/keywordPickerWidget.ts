@@ -133,10 +133,10 @@ export function renderKeyPickerCss(): string {
 export function renderKeyPickerHtml(): string {
   return `
   <div class="kp-overlay" id="kpOverlay">
-    <div class="kp-modal" role="dialog" aria-modal="true">
+    <div class="kp-modal" role="dialog" aria-modal="true" aria-labelledby="kpTitle">
       <div class="kp-header">
         <div class="kp-header-draggable" id="kpDragHandle">
-          <span class="kp-title">🔑 検索キーワードを選ぶ</span>
+          <span class="kp-title" id="kpTitle">🔑 検索キーワードを選ぶ</span>
         </div>
         <button class="kp-max-btn" id="kpMaxBtn" aria-label="最大化">⛶</button>
         <button class="kp-close-btn" id="kpCloseBtn" aria-label="閉じる">✕</button>
@@ -178,6 +178,10 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     var triggerBtn  = document.getElementById(${JSON.stringify(triggerBtnId)});
     var targetInput = document.getElementById(${JSON.stringify(targetInputId)});
     if (!kpOverlay || !kpModal || !kpCats || !kpBody || !targetInput) return;
+    if (triggerBtn) {
+      triggerBtn.setAttribute('aria-controls', 'kpOverlay');
+      triggerBtn.setAttribute('aria-expanded', 'false');
+    }
 
     var kpViewMode = 'multi';
     var kpMultiLabelsMap = null;
@@ -509,6 +513,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
 
     function kpOpen() {
       kpOverlay.classList.add('open');
+      if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
       if (kpItems.length > 0) {
         kpSyncGroupSelection();
         kpApply();
@@ -533,7 +538,10 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       }).catch(function() { kpBody.innerHTML = '<div class="kp-msg">取得に失敗しました</div>'; });
     }
 
-    function kpClose() { kpOverlay.classList.remove('open'); }
+    function kpClose() {
+      kpOverlay.classList.remove('open');
+      if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
+    }
 
     kpCats.addEventListener('click', function(e) {
       var btn = e.target.closest('.kp-cat-btn');

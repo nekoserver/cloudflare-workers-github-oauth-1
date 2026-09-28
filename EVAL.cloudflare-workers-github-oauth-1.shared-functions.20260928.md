@@ -14,6 +14,8 @@
 
 **総合判定: 部分合格。** 共通化の成功例は十分にあり、特に文字列生成型の Worker view に合わせた「CSS / HTML / Script を返す関数」という方式は定着している。ただし、すべてを一つの巨大 UI フレームワークへ寄せるべきではない。次に行うなら、まず modal stack と開閉契約、次にブラウザー側 escape / safe rendering、最後に fetch エラー処理の順で、小さい契約と characterization test を先に作るべきである。
 
+**SF-01〜06 実施後の再評価**: 総合判定は引き続き部分合格だが、Phase 0 の不確実性は下がった。quick-add の backdrop / Escape、browser escape の実装差、keyword picker の accessibility 契約を自動テストで固定し、見どころ modal と read-only fetch の差分を下記に明文化した。一方、共通 modal runtime、browser safety helper、request helper 自体はまだ作っていないため、候補を「共通化済み」へ昇格させる段階ではない。
+
 ---
 
 ## 2. 判定基準
@@ -251,6 +253,41 @@ GET の再取得と、登録・通知・削除など副作用を持つ POST の�
 - 調査タスクは表を埋めた時点、テストタスクは対象 test の単独実行が通った時点を完了とする。全件対応や共通 helper の設計開始を完了条件へ混ぜない。
 - それぞれ独立した PR とし、未マージ PR の branch を基点に次のタスクを開始しない。
 
+### 6.2 SF-01〜06 の完了結果と再評価
+
+| ID | 状態 | 成果と再評価 |
+|---|:---:|---|
+| SF-01 | 完了 | `countdownQuickAdd.test.ts` で backdrop 自体と panel 内 click の差を固定した。 |
+| SF-02 | 完了 | open 中の Escape だけが close し、closed 状態では行生成などの副作用を起こさないことを固定した。実装に不足していた Escape listener も最小範囲で追加した。 |
+| SF-03 | 完了 | 下表の6観点で比較した。DOM を動的生成する基本構造は同じで移植可能だが、公開関数名と z-index 関数名に adapter が必要である。 |
+| SF-04 | 完了 | `browserEscapeCompatibility.test.ts` に `& < > " '`、空文字、`null` 相当の表形式 fixture を追加した。4文字の escape と apostrophe 非変換は一致するが、Markdown の `esc` は `null` で `TypeError`、repositories の `escHtml` は文字列 `null` を返す差を確認した。 |
+| SF-05 | 完了 | `repositories.ts` の read-only `checkHistoryExists()` を最初の `requestJson` 採用候補に特定し、下表に error contract を記録した。 |
+| SF-06 | 完了 | keyword picker に dialog の accessible name、trigger の `aria-controls`、開閉同期する `aria-expanded` を追加し、専用 jsdom test で固定した。 |
+
+#### SF-03: 世界遺産「見どころ」モーダルの依存契約比較
+
+| 観点 | 共通 module | `webglHeritage` 内実装 | 移行判定 |
+|---|---|---|---|
+| DOM id | 固定 id を使わず毎回要素を生成 | 同左 | そのまま移行可能 |
+| open / close | `openHeritageMitokoroModal`; close button / backdrop で overlay を remove | `openHeritageMitokoroCacheModal`; close 手段は同じ | 呼び出し関数名の adapter が必要 |
+| Markdown parser | 呼び出し側の `parseMd` を前提 | `getMarkdownParserScript()` を同じ script 内へ埋め込み | そのまま移行可能 |
+| `getNextZ` | private な `heritageMitokoroGetNextZ()` | page 内 `getNextZ()` | 計算は同等。名前衝突を避ける adapter が必要 |
+| Escape | 未対応 | 未対応 | 挙動維持ならそのまま。runtime 移行時に共通追加する |
+| backdrop | `e.target === overlay` のときだけ close | 同左 | そのまま移行可能 |
+
+#### SF-05: `checkHistoryExists()` の read-only error contract
+
+| ケース | 現在の表示 | helper 導入後に期待する表示 |
+|---|---|---|
+| non-JSON 2xx | JSON parse reject を catch し、既存表示のまま | inline status に「履歴を確認できません」を通知し、既存内容は保持 |
+| 401 | `null` 扱いで履歴 row を非表示 | session 切れを区別し、login 導線を呼び出し側 callback で提示 |
+| 429 | `null` 扱いで履歴 row を非表示 | retry-after を尊重し、再試行可能な一時エラーとして表示 |
+| 500 | `null` 扱いで履歴 row を非表示 | server error として表示し、データ無しと区別 |
+| abort | catch で無視し、既存表示のまま | user / navigation 起因の abort は無表示、timeout 起因なら timeout と表示 |
+| network error | catch で無視し、既存表示のまま | offline / network error として表示し、手動再試行を可能にする |
+
+この endpoint は GET で副作用がなく、現状の silent failure と「履歴なし」が混同されているため、最初の `requestJson` 採用候補に適する。401 redirect や retry は helper が自動実行せず、判別可能な error を callback へ返す。
+
 ---
 
 ## 7. 推奨ロードマップ
@@ -326,7 +363,22 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
   -> 9 files
 ```
 
-この EVAL ではコードを変更していないため、アプリケーション test suite は実行対象外とした。`npm run typecheck` は実行したが、既存 test file 群の型エラー（`aichat-slash-s.test.ts`、`answer-graph-first-person-mode.test.ts`、heritage journey tests ほか）により不合格だった。今回追加した Markdown は TypeScript の検査対象ではなく、既存エラーの修正は本評価の scope に含めていない。文書中の数値は基準点の静的スナップショットであり、将来の完了判定では同じコマンドを再実行して差分を測る。
+初回 EVAL ではコードを変更していなかったため、アプリケーション test suite は実行対象外とした。初回の `npm run typecheck` は既存 test file 群の型エラー（`aichat-slash-s.test.ts`、`answer-graph-first-person-mode.test.ts`、heritage journey tests ほか）により不合格だった。
+
+SF-01〜06 完了後は次を実行し、対象3ファイル・31 test の成功を確認した。
+
+```text
+npx vitest run src/utils/countdownQuickAdd.test.ts src/utils/keywordPickerWidget.test.ts src/utils/browserEscapeCompatibility.test.ts
+  -> 3 files passed, 31 tests passed
+
+rg -n -e "mitokoro" -e "getNextZ" -e "Escape" -e "markdown" src/utils/heritageMitokoroModal.ts src/views/webglHeritage.ts
+  -> SF-03 の6観点を比較
+
+rg -n -e "fetch\\(" -e "response\\.ok" -e "\\.json\\(" -e "\\.text\\(" src/views/repositories.ts
+  -> SF-05 の error contract を確認
+```
+
+第3節および第10節の参照数は初回基準点のスナップショットとして残す。再評価で増えた専用 test の import 数と混同しないため、実利用画面数の昇格根拠には用いない。
 
 ---
 
@@ -374,10 +426,12 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 
 | Phase | 判定 | 主な作業 | 明示された確認数・採用数 |
 |---:|:---:|---|---:|
-| 0 | ○ | modal inventory と characterization test | inventory 8観点、移行候補1件 |
+| 0 | ○ | modal inventory と characterization test | quick-add 3操作契約、見どころ modal 6観点、移行候補1件を確認済み |
 | 1 | △ | modal runtime の最小導入 | 基本責務5個、先行1画面、再利用確認の2画面目 |
 | 2 | △ | browser-side escape の比較と段階移行 | fixture 比較、読み込み順確認、画面単位の移行 |
 | 3 | △ | request / async UI helper | response matrix 6ケース、read-only API から採用 |
 | 4 | △ | 方式別 WASM adapter | 起動方式3分類、各方式1ページずつ移行 |
 
 最終的な完了判定は、(1) 性質の異なる実利用先が最低2つ、または再利用予定の明文化、(2) 旧実装の削除、(3) success 以外を含む境界テスト、(4) 操作と response contract の維持、(5) accessibility と untrusted input の非悪化、という5条件で行う。
+
+再評価時点では Phase 0 の個別確認は完了したが、Phase 1〜4 の production helper 導入と旧実装削除は未着手である。したがって modal stack、browser-side safety、request helper の判定は `×`、世界遺産 modal と keyword picker の判定は `△` を維持する。
