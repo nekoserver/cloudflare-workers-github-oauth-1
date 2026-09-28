@@ -39,6 +39,9 @@ describe('getCountdownQuickAddModalHTML', () => {
     expect(html).toContain('id="countdownQaAddRowBtn"');
     expect(html).toContain('id="countdownQaSaveBtn"');
     expect(html).toContain('id="countdownQaCancelBtn"');
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('aria-labelledby="countdownQaDragHandle"');
   });
 });
 
@@ -60,13 +63,13 @@ describe('getCountdownQuickAddModalScript', () => {
     expect(script).toContain('window.openCountdownQuickAddModal = function() {};');
   });
 
-  it('ドラッグハンドルへのpointerイベント配線と、開くたびに動的算出するz-indexロジックを含む', () => {
+  it('ドラッグハンドルへのpointerイベント配線と、共通modal runtimeを含む', () => {
     const script = getCountdownQuickAddModalScript();
     expect(script).toContain("dragHandle.addEventListener('pointerdown'");
     expect(script).toContain("dragHandle.addEventListener('pointermove'");
     expect(script).toContain("dragHandle.addEventListener('pointerup'");
-    expect(script).toContain('function getNextZIndex()');
-    expect(script).toContain("overlay.style.zIndex = String(getNextZIndex())");
+    expect(script).toContain('window.ModalRuntime.register');
+    expect(script).toContain("id: 'countdown-quick-add'");
   });
 });
 

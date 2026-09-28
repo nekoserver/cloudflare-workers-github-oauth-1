@@ -14,7 +14,7 @@
 
 **総合判定: 部分合格。** 共通化の成功例は十分にあり、特に文字列生成型の Worker view に合わせた「CSS / HTML / Script を返す関数」という方式は定着している。ただし、すべてを一つの巨大 UI フレームワークへ寄せるべきではない。次に行うなら、まず modal stack と開閉契約、次にブラウザー側 escape / safe rendering、最後に fetch エラー処理の順で、小さい契約と characterization test を先に作るべきである。
 
-**SF-01〜06 実施後の再評価**: 総合判定は引き続き部分合格だが、Phase 0 の不確実性は下がった。quick-add の backdrop / Escape、browser escape の実装差、keyword picker の accessibility 契約を自動テストで固定し、見どころ modal と read-only fetch の差分を下記に明文化した。一方、共通 modal runtime、browser safety helper、request helper 自体はまだ作っていないため、候補を「共通化済み」へ昇格させる段階ではない。
+**2026-09-28 再評価（modal runtime 導入後）**: 総合判定は引き続き部分合格だが、Phase 1 は最小導入と2つ目の利用先まで完了した。`modalRuntime.ts` に stack、open / close、最前面化、Escape、backdrop、focus 復帰を集約し、性質の異なる `countdownQuickAdd` と `keywordPickerWidget` を移行した。専用 test で2枚同時表示、最前面だけの Escape close、panel click、backdrop click、focus 復帰、z-index を固定している。これにより modal 基本ライフサイクルは `×` から `△` へ昇格する。一方、残る多数の modal は未移行で、browser safety helper と request helper も未実装のため、総合判定を完全合格にはしない。
 
 ---
 
@@ -106,11 +106,22 @@ UI 以外にも、次の境界は既に共通化されている。
 
 ## 4. 共通化した方がよいもの
 
-### 4.1 modal stack と基本ライフサイクル（優先度: 最優先）
+### 4.1 modal stack と基本ライフサイクル（進捗: 最小 runtime 導入済み）
 
-#### 現状
+#### 再評価時点の現状
 
-個別 modal は多数存在し、少なくとも以下がページごとに再実装されている。
+`src/utils/modalRuntime.ts` を新設し、次の共通契約を実装した。
+
+- `register()` が返す controller の `open()` / `close()` / `bringToFront()` / `isOpen()`
+- runtime 全体の `topmost()` / `bringToFront(id)` / `close(id)`
+- 複数 modal の stack と動的 z-index
+- 最前面 modal だけを閉じる Escape
+- backdrop 自体の click と panel 内 click の区別
+- close 後の opener への focus 復帰
+
+`countdownQuickAdd` と `keywordPickerWidget` は個別の open / close、Escape、backdrop、z-index 処理を削除してこの runtime を利用する。quick-add には同時に `role="dialog"`、`aria-modal="true"`、`aria-labelledby` を追加した。runtime script は guard 付きのため、同じページで複数 component が埋め込んでも global listener と stack は一つになる。
+
+ただし、個別 modal はなお多数存在し、少なくとも以下がページごとに再実装されている。
 
 - overlay の表示 / 非表示（`display`、class、`hidden`、native `<dialog>` が混在）
 - 背景クリックで閉じる処理
@@ -122,23 +133,24 @@ UI 以外にも、次の境界は既に共通化されている。
 
 静的検索では `getNextZ...` 定義が25ファイル、Escape 判定が13ファイル、`openModal` / `closeModal` という同名定義だけでも各4ファイルに存在する。名前が違う同等処理はこの数に含まれない。
 
-#### 推奨する共通化範囲
+#### 実装した共通化範囲
 
-最初から見た目や本文まで統合せず、`getModalRuntimeScript()` のような小さい runtime を設ける。
+見た目や本文は統合せず、`getModalRuntimeScript()` という小さい runtime を設けた。
 
 ```ts
 type ModalRegistration = {
-  overlayId: string;
-  panelId: string;
-  closeButtonIds?: string[];
+  id: string;
+  overlay: HTMLElement;
+  closeButtons?: HTMLElement[];
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   restoreFocus?: boolean;
-  lockBodyScroll?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
 };
 ```
 
-runtime が提供する契約は `open(id)`、`close(id)`、`bringToFront(id)`、`topmost()` に絞る。drag / resize は optional plugin とし、native `<dialog>` と overlay modal を一度に同じ DOM 実装へ変換しない。
+registration ごとの controller は `open()`、`close()`、`bringToFront()`、`isOpen()` を、runtime 全体は `close(id)`、`bringToFront(id)`、`topmost()` を提供する。drag / resize は個別実装のままとし、native `<dialog>` と overlay modal を一度に同じ DOM 実装へ変換しない。
 
 #### 先に固定すべきテスト
 
@@ -148,7 +160,7 @@ runtime が提供する契約は `open(id)`、`close(id)`、`bringToFront(id)`�
 4. `role="dialog"` / `aria-modal` / accessible name を持つ。
 5. drag 後も viewport 外へ完全に消えない。
 
-**期待効果**: z-index 衝突、複数 keydown listener、アクセシビリティ差、閉じ方の不一致をまとめて減らせる。
+**再評価**: 先行2部品では z-index 算出と keydown listener が共通 runtime に一本化され、閉じ方と focus 復帰も同じ契約になった。残りの modal は characterization test を追加してから段階移行するため、現時点の判定は部分完了（`△`）とする。
 
 ### 4.2 browser-side escape と safe DOM rendering（優先度: 高）
 
@@ -298,7 +310,7 @@ GET の再取得と、登録・通知・削除など副作用を持つ POST の�
 2. 移行第1号を、機能が単純で専用 DOM テストがある modal から一つ選ぶ。
 3. 現在の操作を jsdom または Playwright test で固定する。
 
-### Phase 1: modal runtime の最小導入
+### Phase 1: modal runtime の最小導入（完了）
 
 1. stack、open / close、Escape、backdrop、focus restore だけ実装する。
 2. 一画面のみ移行し、既存テストと a11y contract test を通す。
@@ -378,6 +390,16 @@ rg -n -e "fetch\\(" -e "response\\.ok" -e "\\.json\\(" -e "\\.text\\(" src/views
   -> SF-05 の error contract を確認
 ```
 
+modal runtime 導入後は次を実行した。
+
+```text
+npx vitest run src/utils/modalRuntime.test.ts src/utils/countdownQuickAdd.test.ts src/utils/keywordPickerWidget.test.ts
+  -> 3 files passed, 33 tests passed
+
+npm run typecheck
+  -> 成功
+```
+
 第3節および第10節の参照数は初回基準点のスナップショットとして残す。再評価で増えた専用 test の import 数と混同しないため、実利用画面数の昇格根拠には用いない。
 
 ---
@@ -405,7 +427,7 @@ rg -n -e "fetch\\(" -e "response\\.ok" -e "\\.json\\(" -e "\\.text\\(" src/views
 | 部分完了 | 世界遺産「見どころ」モーダル | △ | 2ファイル参照、採用画面1・未移行画面1 | `heritageJourney` は共通 module を利用する一方、`webglHeritage` はページ内実装を保持しており、正本の統一は未完了。 |
 | 部分完了 | キーワードピッカー | △ | 1ファイル参照、主な採用先1画面 | 再利用可能な CSS / HTML / JS と callback 契約はあるが、複数画面で重複を置換した実績はまだない。 |
 | 完了 | 認証・署名・入力検証・ドメイン処理 | ○ | 本文で14ファイル／moduleを列挙、参照数は未集計 | 認証、session、redirect、GitHub / Slack 署名、CF Access、AI model、WASM、Jev を意味の安定した小さい契約へ分離済み。 |
-| 最優先候補 | modal stack と基本ライフサイクル | × | `getNextZ...` 25ファイル、Escape 13ファイル、`openModal` / `closeModal` 各4ファイル | stack、open / close、Escape、backdrop、focus restore を小さい runtime にする。drag / resize は optional とし、先に5項目の操作テストを固定する。 |
+| 部分完了 | modal stack と基本ライフサイクル | △ | 共通利用2部品、runtime test 5件。初回時点は `getNextZ...` 25ファイル、Escape 13ファイル | stack、open / close、最前面化、Escape、backdrop、focus restore を runtime 化した。drag / resize は個別のまま、残る modal は段階移行する。 |
 | 高優先候補 | browser-side escape / safe DOM rendering | × | `function escapeHtml` 9ファイル、`function esc(` 9ファイル | script generator で安全な text / URL 処理を共有する。`innerHTML` は全面禁止せず、trusted template との境界を検査する。 |
 | 高優先候補 | fetch / JSON / error response helper | × | 想定する異常系6種（non-JSON、401、429、500、abort、network error） | status、JSON / text、timeout を揃える。401 policy と副作用 request の retry は呼び出し側に残す。 |
 | 中〜高優先候補 | toast / inline status / loading state | × | 最小 helper 2個 | `setAsyncButtonState` と `announce` に分け、`aria-live`、連打抑止、解除、error 保持の状態遷移を共有する。 |
@@ -427,11 +449,11 @@ rg -n -e "fetch\\(" -e "response\\.ok" -e "\\.json\\(" -e "\\.text\\(" src/views
 | Phase | 判定 | 主な作業 | 明示された確認数・採用数 |
 |---:|:---:|---|---:|
 | 0 | ○ | modal inventory と characterization test | quick-add 3操作契約、見どころ modal 6観点、移行候補1件を確認済み |
-| 1 | △ | modal runtime の最小導入 | 基本責務5個、先行1画面、再利用確認の2画面目 |
+| 1 | ○ | modal runtime の最小導入 | 基本責務6個、先行 `countdownQuickAdd`、2つ目 `keywordPickerWidget`、runtime test 5件 |
 | 2 | △ | browser-side escape の比較と段階移行 | fixture 比較、読み込み順確認、画面単位の移行 |
 | 3 | △ | request / async UI helper | response matrix 6ケース、read-only API から採用 |
 | 4 | △ | 方式別 WASM adapter | 起動方式3分類、各方式1ページずつ移行 |
 
 最終的な完了判定は、(1) 性質の異なる実利用先が最低2つ、または再利用予定の明文化、(2) 旧実装の削除、(3) success 以外を含む境界テスト、(4) 操作と response contract の維持、(5) accessibility と untrusted input の非悪化、という5条件で行う。
 
-再評価時点では Phase 0 の個別確認は完了したが、Phase 1〜4 の production helper 導入と旧実装削除は未着手である。したがって modal stack、browser-side safety、request helper の判定は `×`、世界遺産 modal と keyword picker の判定は `△` を維持する。
+再評価時点では Phase 0 と Phase 1 が完了した。modal stack は production helper を2部品へ導入し、その2部品の旧 lifecycle 実装も削除したため `△` へ昇格する。Phase 2〜4 は未着手なので browser-side safety と request helper は `×`、世界遺産 modal と keyword picker は `△` を維持する。
