@@ -22,6 +22,27 @@ function makeDb(rows: Array<Record<string, unknown>>) {
   };
 }
 
+function makeFailingDb(message: string) {
+  return {
+    prepare(sql: string) {
+      return {
+        bind() {
+          return {
+            async first() {
+              if (sql.includes('FROM user_sessions')) {
+                return { last_activity_at: new Date().toISOString(), revoked_at: null, idle_timeout_seconds: null };
+              }
+              return null;
+            },
+            async all() { throw new Error(message); },
+            async run() { return { success: true }; },
+          };
+        },
+      };
+    },
+  };
+}
+
 async function authCookie(): Promise<string> {
   return 'auth_token=' + await createJWT({ sub: 'alice' }, SECRET, 60) + '; last_activity=' + Date.now();
 }
@@ -53,5 +74,19 @@ describe('GET /api/aichat/threads/:threadId', () => {
   it('他ユーザーの行がなく空なら404を返す', async () => {
     const res = await app.request('/api/aichat/threads/' + THREAD_ID, { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb([]) });
     expect(res.status).toBe(404);
+  });
+
+  it('DBエラーの詳細を汎用サーバーエラーで隠さない', async () => {
+    const res = await app.request('/api/aichat/threads/' + THREAD_ID, { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeFailingDb('no such column: thread_id') });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'スレッドの取得に失敗しました: no such column: thread_id' });
+  });
+});
+
+describe('GET /api/aichat/threads/growing', () => {
+  it('DBエラーの詳細をページへ返す', async () => {
+    const res = await app.request('/api/aichat/threads/growing?limit=50', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeFailingDb('no such column: thread_id') });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: '成長中スレッドの取得に失敗しました: no such column: thread_id' });
   });
 });
