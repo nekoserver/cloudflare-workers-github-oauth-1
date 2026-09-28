@@ -3344,6 +3344,24 @@ export function resolveLogicalFkTargetCol(fromTable: string, fromCol: string): s
 }
 
 /**
+ * クライアントから指定されたリレーションが、アプリケーションで宣言済みの
+ * 論理FKと完全に一致するかを判定する。
+ *
+ * FK検証APIはテーブルの行サンプルを返すため、識別子の構文チェックだけでは
+ * 任意テーブルを読み出せてしまう。参照元・参照先カラムまで照合し、ER図に
+ * 掲載している関係だけを検証対象に制限する。
+ */
+export function isDeclaredLogicalFkRelation(
+  fromTable: string,
+  fromCol: string,
+  toTable: string,
+  toCol: string,
+): boolean {
+  return COLUMN_FK_TARGETS[fromTable]?.[fromCol] === toTable
+    && resolveLogicalFkTargetCol(fromTable, fromCol) === toCol;
+}
+
+/**
  * `table_column_keys` の DB行を `COLUMN_FK_TARGETS` 相当の構造にマージする。
  *
  * 設計上の問題:
@@ -19341,19 +19359,35 @@ app.post('/api/status/fk-verify', authMiddleware, async (c) => {
   }
 
   try {
+    // 論理FKまたはDBに実在する物理FKだけを許可する。識別子として安全な文字列でも、
+    // 任意のテーブル同士を指定して行データを取得できる状態にはしない。
+    let isDeclaredRelation = isDeclaredLogicalFkRelation(fromTable, fromCol, toTable, toCol);
+    if (!isDeclaredRelation) {
+      const physicalFks = await db
+        .prepare(`PRAGMA foreign_key_list(${fromTable})`)
+        .all<{ table: string; from: string; to: string }>();
+      isDeclaredRelation = (physicalFks.results ?? []).some(
+        (fk) => fk.table === toTable && fk.from === fromCol && fk.to === toCol,
+      );
+    }
+    if (!isDeclaredRelation) {
+      return jsonUtf8({ error: 'Relation is not declared as a foreign key' }, 400);
+    }
+
     const joinSql = `SELECT f.${fromCol} AS fk_value, f.rowid AS from_rowid, t.rowid AS to_rowid FROM ${fromTable} f INNER JOIN ${toTable} t ON f.${fromCol} = t.${toCol} ORDER BY RANDOM() LIMIT 5`;
     const joinResult = await db.prepare(joinSql).all<{ fk_value: string; from_rowid: number; to_rowid: number }>();
     const matched = joinResult.results ?? [];
 
-    const orphanSql = `SELECT f.${fromCol} AS fk_value FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE t.${toCol} IS NULL LIMIT 5`;
+    const orphanSql = `SELECT f.${fromCol} AS fk_value FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE f.${fromCol} IS NOT NULL AND t.${toCol} IS NULL LIMIT 5`;
     const orphanResult = await db.prepare(orphanSql).all<{ fk_value: string }>();
     const orphans = orphanResult.results ?? [];
 
-    const countSql = `SELECT COUNT(*) AS total FROM ${fromTable}`;
+    // NULLはSQLiteのFK違反ではないため、検証母数と孤立件数の双方から除外する。
+    const countSql = `SELECT COUNT(*) AS total FROM ${fromTable} WHERE ${fromCol} IS NOT NULL`;
     const countResult = await db.prepare(countSql).first<{ total: number }>();
     const totalFrom = countResult?.total ?? 0;
 
-    const orphanCountSql = `SELECT COUNT(*) AS total FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE t.${toCol} IS NULL`;
+    const orphanCountSql = `SELECT COUNT(*) AS total FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE f.${fromCol} IS NOT NULL AND t.${toCol} IS NULL`;
     const orphanCountResult = await db.prepare(orphanCountSql).first<{ total: number }>();
     const orphanCount = orphanCountResult?.total ?? 0;
 
