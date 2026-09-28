@@ -960,6 +960,7 @@ export function getAiChatPage(user: {
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
           <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
+          <a href="/thread-tracker" class="dropdown-item">🧵 スレッド追跡</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/function-changelog" class="dropdown-item">🔖 関数辞典</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
