@@ -1,6 +1,6 @@
 import { escapeHtml } from '../utils/html';
 
-/** AI chat threads represented as an expandable repository-style tree. */
+/** Search and continue AI responses that belong to a persistent re-question thread. */
 export function getThreadTrackerPage(username: string): string {
   const safeUsername = escapeHtml(username);
   return `<!DOCTYPE html>
@@ -8,60 +8,37 @@ export function getThreadTrackerPage(username: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>スレッド追跡ツリー</title>
+  <title>再質問スレッド検索</title>
   <style>
-    :root { color-scheme:dark; --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --selected:#1f6feb33; --positive:#3fb950; --negative:#f85149; }
-    @media (prefers-color-scheme:light) { :root { color-scheme:light; --bg:#f6f8fa; --panel:#fff; --border:#d0d7de; --text:#24292f; --muted:#57606a; --accent:#0969da; --selected:#ddf4ff; --positive:#1a7f37; --negative:#cf222e; } }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    header { height:58px; padding:0 20px; display:flex; align-items:center; gap:14px; border-bottom:1px solid var(--border); background:var(--panel); }
-    header h1 { margin:0; font-size:17px; flex:1; } header a { color:var(--accent); text-decoration:none; } .user { color:var(--muted); font-size:12px; }
-    main { height:calc(100vh - 58px); display:grid; grid-template-columns:minmax(280px,36%) 1fr; }
-    .sidebar { border-right:1px solid var(--border); overflow:auto; background:var(--panel); }
-    .toolbar { position:sticky; top:0; z-index:2; padding:14px; border-bottom:1px solid var(--border); background:var(--panel); }
-    .toolbar-row { display:flex; gap:8px; align-items:center; } .toolbar strong { flex:1; }
-    .thread-search { width:100%; margin-top:10px; border:1px solid var(--border); border-radius:6px; padding:8px 10px; color:var(--text); background:var(--bg); outline:none; }
-    .thread-search:focus { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent); }
-    button { border:1px solid var(--border); border-radius:6px; padding:6px 10px; color:var(--text); background:var(--bg); cursor:pointer; } button:hover { border-color:var(--accent); }
-    .window { margin-top:6px; color:var(--muted); font-size:11px; }
-    #tree { list-style:none; padding:8px; margin:0; } .thread { margin-bottom:2px; }
-    .thread-button { width:100%; display:grid; grid-template-columns:18px 1fr auto; gap:6px; align-items:center; padding:7px 8px; border:0; text-align:left; background:transparent; }
-    .thread-button.active { background:var(--selected); } .thread-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; }
-    .badge { min-width:24px; border-radius:999px; padding:1px 7px; text-align:center; color:var(--positive); border:1px solid color-mix(in srgb,var(--positive) 45%,transparent); font-size:11px; }
-    .turns { list-style:none; margin:0 0 5px 16px; padding:0 0 0 13px; border-left:1px solid var(--border); } .turns[hidden] { display:none; }
-    .turn-button { width:100%; border:0; padding:5px 7px; display:flex; gap:7px; text-align:left; background:transparent; }
-    .turn-button.active { color:var(--accent); background:var(--selected); } .turn-index { color:var(--muted); flex:none; } .turn-question { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .content { overflow:auto; padding:24px; } .empty { height:100%; display:grid; place-items:center; color:var(--muted); text-align:center; }
-    .detail { max-width:900px; margin:auto; } .detail-head { margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--border); }
-    .detail-head h2 { margin:0 0 8px; font-size:18px; } .meta { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:12px; }
-    .bubble { margin:14px 0; padding:16px 18px; border:1px solid var(--border); border-radius:10px; background:var(--panel); white-space:pre-wrap; overflow-wrap:anywhere; }
-    .bubble.answer { border-left:3px solid var(--accent); } .bubble-label { margin-bottom:8px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; }
-    .status { padding:20px; color:var(--muted); } .error { color:var(--negative); }
-    @media (max-width:700px) { main { height:auto; min-height:calc(100vh - 58px); grid-template-columns:1fr; } .sidebar { max-height:46vh; border-right:0; border-bottom:1px solid var(--border); } .content { min-height:54vh; padding:16px; } .user { display:none; } }
+    :root{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent-bg:#1f6feb22;--danger:#f85149}
+    @media(prefers-color-scheme:light){:root{color-scheme:light;--bg:#f6f8fa;--panel:#fff;--border:#d0d7de;--text:#24292f;--muted:#57606a;--accent:#0969da;--accent-bg:#ddf4ff;--danger:#cf222e}}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    header{height:58px;padding:0 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border);background:var(--panel)}header h1{margin:0;font-size:17px;flex:1}a{color:var(--accent);text-decoration:none}.user{color:var(--muted);font-size:12px}
+    main{max-width:1120px;margin:auto;padding:30px 24px 60px}.intro h2{margin:0 0 5px;font-size:24px}.intro p{margin:0;color:var(--muted)}
+    .search-panel{margin:22px 0 14px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}.search-row{display:flex;gap:8px}.search{flex:1;min-width:0;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:15px;outline:none}.search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+    button,.button{border:1px solid var(--border);border-radius:7px;padding:8px 12px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit}.primary{border-color:var(--accent);background:var(--accent);color:#fff}.hint,.summary{color:var(--muted);font-size:12px}.hint{margin-top:8px}.summary{margin:0 2px 10px}
+    .results{display:grid;gap:12px}.response-card{border:1px solid var(--border);border-radius:11px;background:var(--panel);overflow:hidden}.card-main{width:100%;display:block;padding:16px 18px;border:0;border-radius:0;background:transparent;text-align:left}.card-main:hover{background:var(--accent-bg)}.card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}.id{font:12px ui-monospace,SFMono-Regular,monospace;color:var(--accent)}.model{margin-left:auto;color:var(--muted);font-size:11px}.question{font-weight:650;margin-bottom:5px}.answer-preview{color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.detail{padding:0 18px 18px;border-top:1px solid var(--border)}.detail[hidden]{display:none}.label{margin:15px 0 5px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.08em}.body{white-space:pre-wrap;overflow-wrap:anywhere}.answer{padding:13px;border-left:3px solid var(--accent);background:var(--bg)}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:16px}.followup{flex:1 1 380px}.followup label{display:block;margin-bottom:5px;font-size:12px;font-weight:600}.followup textarea{width:100%;min-height:70px;resize:vertical;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}.continue{margin-bottom:1px}.empty{padding:54px 20px;border:1px dashed var(--border);border-radius:11px;color:var(--muted);text-align:center}.error{color:var(--danger)}
+    @media(max-width:650px){header{padding:0 14px}.user{display:none}main{padding:22px 14px}.intro h2{font-size:20px}.search-row{align-items:stretch}.search-row button{padding:8px}.card-top{align-items:flex-start}.model{max-width:35%;text-align:right}}
   </style>
 </head>
 <body>
-  <header><h1>🧵 スレッド追跡ツリー</h1><span class="user">${safeUsername}</span><a href="/aichat">AIチャット</a><a href="/welcome">ホーム</a></header>
+  <header><h1>🧵 再質問スレッド検索</h1><span class="user">${safeUsername}</span><a href="/aichat">AIチャット</a><a href="/welcome">ホーム</a></header>
   <main>
-    <aside class="sidebar" aria-label="スレッドツリー">
-      <div class="toolbar"><div class="toolbar-row"><strong>スレッド（全期間）</strong><button id="reload" type="button">↻ 更新</button></div><input id="threadSearch" class="thread-search" type="search" placeholder="質問・回答・スレッドIDを検索" aria-label="スレッドを検索" autocomplete="off"><div id="window" class="window">過去ログを読み込んでいます</div></div>
-      <div id="treeStatus" class="status">読み込み中…</div><ul id="tree"></ul>
-    </aside>
-    <section id="content" class="content"><div class="empty">左のツリーからスレッドを選択してください。<br>各スレッドを展開すると、質問ターンを追跡できます。</div></section>
+    <section class="intro"><h2>AI応答を探して、続きを質問</h2><p>再質問IDが付いた過去のAI応答を、質問・回答・IDから検索できます。</p></section>
+    <section class="search-panel" aria-label="AI応答検索"><div class="search-row"><input id="responseSearch" class="search" type="search" placeholder="質問、回答、再質問IDを検索" aria-label="AI応答を検索" autocomplete="off"><button id="reload" type="button">↻ 更新</button></div><div class="hint">検索結果を開くと回答全文を閲覧し、そのスレッドへ追加質問できます。</div></section>
+    <p id="summary" class="summary" aria-live="polite">再質問IDのある応答を読み込んでいます…</p><div id="results" class="results"></div>
   </main>
   <script>
-    var treeEl=document.getElementById('tree'), statusEl=document.getElementById('treeStatus'), contentEl=document.getElementById('content'), searchEl=document.getElementById('threadSearch'), allThreads=[];
+    var searchEl=document.getElementById('responseSearch'),resultsEl=document.getElementById('results'),summaryEl=document.getElementById('summary'),allResponses=[];
     function esc(value){var d=document.createElement('div');d.textContent=String(value==null?'':value);return d.innerHTML;}
-    function shortId(id){return id.slice(0,8)+'…'+id.slice(-4);}
-    function fmt(date){try{return new Intl.DateTimeFormat('ja-JP',{dateStyle:'medium',timeStyle:'short'}).format(new Date(date));}catch(_){return date;}}
-    function showError(message){contentEl.innerHTML='<div class="empty error">'+esc(message)+'</div>';}
-    async function fetchJson(url){var res=await fetch(url,{credentials:'include'});var data=await res.json().catch(function(){return {};});if(!res.ok)throw new Error(data.error||('HTTP '+res.status));return data;}
-    async function loadThreads(){statusEl.hidden=false;statusEl.className='status';statusEl.textContent='過去ログを読み込み中…';treeEl.innerHTML='';try{var results=await Promise.all([fetchJson('/api/aichat/threads/seed'),fetchJson('/api/aichat/threads/growing?limit=50')]);var seed=results[0],growing=results[1],growthById={};growing.threads.forEach(function(x){growthById[x.threadId]=x;});allThreads=seed.threads.map(function(thread){return Object.assign(thread,growthById[thread.threadId]||{});});document.getElementById('window').textContent='全期間 '+allThreads.length+'スレッド（直近24時間に2ターン以上: '+growing.threads.length+'）';renderThreads();}catch(e){statusEl.className='status error';statusEl.textContent='取得失敗: '+e.message;}}
-    function renderThreads(){var q=searchEl.value.trim().toLocaleLowerCase();treeEl.innerHTML='';var shown=allThreads.filter(function(thread){if(!q)return true;return thread.threadId.toLocaleLowerCase().includes(q)||thread.turns.some(function(turn){return String(turn.question||'').toLocaleLowerCase().includes(q)||String(turn.answer||'').toLocaleLowerCase().includes(q);});});statusEl.hidden=shown.length>0;statusEl.className='status';statusEl.textContent=allThreads.length?(q?'一致するスレッドはありません。':'過去ログにスレッドはありません。'):'過去ログにスレッドはありません。';shown.forEach(renderThread);}
-    function renderThread(thread){var li=document.createElement('li');li.className='thread';var badge=thread.recentCount!=null?'<span class="badge" title="前期間 '+thread.previousCount+'件">+'+thread.growth+' / '+thread.recentCount+'</span>':'<span class="badge" title="全期間のターン数">'+thread.turns.length+'</span>';li.innerHTML='<button class="thread-button" type="button" aria-expanded="false"><span>▸</span><span class="thread-label" title="'+esc(thread.threadId)+'">'+esc(shortId(thread.threadId))+'</span>'+badge+'</button><ul class="turns" hidden></ul>';treeEl.appendChild(li);var button=li.querySelector('.thread-button'),turns=li.querySelector('.turns');button.addEventListener('click',function(){document.querySelectorAll('.thread-button').forEach(function(x){x.classList.remove('active');});button.classList.add('active');var opening=turns.hidden;turns.hidden=!opening;button.setAttribute('aria-expanded',String(opening));button.firstElementChild.textContent=opening?'▾':'▸';if(opening&&!turns.dataset.loaded)loadTurns(thread,turns);});}
-    function loadTurns(thread,turns){turns.dataset.loaded='true';thread.turns.forEach(function(turn,index){var li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='turn-button';button.innerHTML='<span class="turn-index">'+(index+1)+'</span><span class="turn-question">'+esc(turn.question)+'</span>';button.addEventListener('click',function(e){e.stopPropagation();document.querySelectorAll('.turn-button').forEach(function(x){x.classList.remove('active');});button.classList.add('active');renderTurn(thread.threadId,turn,index+1,thread.turns.length);});li.appendChild(button);turns.appendChild(li);});if(thread.turns[0])renderTurn(thread.threadId,thread.turns[0],1,thread.turns.length);}
-    function renderTurn(threadId,turn,index,total){contentEl.innerHTML='<article class="detail"><div class="detail-head"><h2>ターン '+index+' / '+total+'</h2><div class="meta"><span>thread: '+esc(threadId)+'</span><span>'+esc(fmt(turn.createdAt))+'</span><span>'+esc(turn.model||'model不明')+'</span><span>'+esc(turn.source||'source不明')+'</span></div></div><div class="bubble"><div class="bubble-label">QUESTION</div>'+esc(turn.question)+'</div><div class="bubble answer"><div class="bubble-label">ANSWER</div>'+esc(turn.answer)+'</div></article>';}
-    searchEl.addEventListener('input',renderThreads);document.getElementById('reload').addEventListener('click',loadThreads);loadThreads();
+    function fmt(value){try{return new Intl.DateTimeFormat('ja-JP',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}catch(_){return value||'';}}
+    function shortId(id){return id.length>18?id.slice(0,10)+'…'+id.slice(-6):id;}
+    async function fetchJson(url){var res=await fetch(url,{credentials:'include'}),data=await res.json().catch(function(){return {};});if(!res.ok)throw new Error(data.error||('HTTP '+res.status));return data;}
+    async function loadResponses(){summaryEl.textContent='再質問IDのある応答を読み込んでいます…';resultsEl.innerHTML='';try{var data=await fetchJson('/api/aichat/threads/seed');allResponses=[];(data.threads||[]).forEach(function(thread){(thread.turns||[]).forEach(function(turn,index){allResponses.push({threadId:thread.threadId,turn:turn,index:index+1,total:thread.turns.length});});});allResponses.sort(function(a,b){return String(b.turn.createdAt).localeCompare(String(a.turn.createdAt));});renderResponses();}catch(e){summaryEl.textContent='取得に失敗しました';resultsEl.innerHTML='<div class="empty error">'+esc(e.message)+'</div>';}}
+    function renderResponses(){var q=searchEl.value.trim().toLocaleLowerCase();var shown=allResponses.filter(function(item){return !q||[item.threadId,item.turn.question,item.turn.answer,item.turn.model].some(function(v){return String(v||'').toLocaleLowerCase().includes(q);});});summaryEl.textContent=(q?'検索結果 ':'再質問IDのあるAI応答 ')+shown.length+'件';resultsEl.innerHTML='';if(!shown.length){resultsEl.innerHTML='<div class="empty">該当するAI応答はありません。<br>別のキーワードまたは再質問IDをお試しください。</div>';return;}shown.forEach(renderResponse);}
+    function renderResponse(item){var t=item.turn,card=document.createElement('article');card.className='response-card';card.innerHTML='<button class="card-main" type="button" aria-expanded="false"><div class="card-top"><span class="id" title="'+esc(item.threadId)+'">再質問ID '+esc(shortId(item.threadId))+'</span><span class="model">'+esc(t.model||'model不明')+' · '+esc(fmt(t.createdAt))+'</span></div><div class="question">'+esc(t.question||'(質問なし)')+'</div><div class="answer-preview">'+esc(t.answer||'(応答なし)')+'</div></button><div class="detail" hidden><div class="label">QUESTION · '+item.index+' / '+item.total+'</div><div class="body">'+esc(t.question)+'</div><div class="label">AI RESPONSE</div><div class="body answer">'+esc(t.answer)+'</div><div class="actions"><div class="followup"><label>この応答への追加質問</label><textarea placeholder="続けて質問したい内容を入力"></textarea></div><button class="continue primary" type="button">AIチャットで質問する →</button><a class="button" href="/aichat?threadId='+encodeURIComponent(item.threadId)+'">このスレッドを開く</a></div></div>';resultsEl.appendChild(card);var main=card.querySelector('.card-main'),detail=card.querySelector('.detail'),textarea=card.querySelector('textarea');main.addEventListener('click',function(){var opening=detail.hidden;detail.hidden=!opening;main.setAttribute('aria-expanded',String(opening));if(opening)textarea.focus();});card.querySelector('.continue').addEventListener('click',function(){var draft=textarea.value.trim();var url='/aichat?threadId='+encodeURIComponent(item.threadId);if(draft)url+='&draft='+encodeURIComponent(draft);location.href=url;});}
+    searchEl.addEventListener('input',renderResponses);document.getElementById('reload').addEventListener('click',loadResponses);loadResponses();
   </script>
 </body>
 </html>`;

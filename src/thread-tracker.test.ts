@@ -48,16 +48,23 @@ async function authCookie(): Promise<string> {
 }
 
 describe('thread tracker page', () => {
-  it('ツリーUIと追跡APIの呼び出しを含み、ユーザー名をescapeする', () => {
+  it('再質問ID付きAI応答の検索・閲覧・追加質問UIを含み、ユーザー名をescapeする', () => {
     const html = getThreadTrackerPage('<alice>');
-    expect(html).toContain('スレッド追跡ツリー');
-    expect(html).toContain('/api/aichat/threads/growing?limit=50');
+    expect(html).toContain('再質問スレッド検索');
     expect(html).toContain('/api/aichat/threads/seed');
-    expect(html).toContain('/api/aichat/threads/');
-    expect(html).toContain('id="threadSearch"');
-    expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
+    expect(html).toContain('id="responseSearch"');
+    expect(html).toContain('質問、回答、再質問IDを検索');
+    expect(html).toContain('この応答への追加質問');
+    expect(html).toContain('AIチャットで質問する');
+    expect(html).toContain("searchEl.addEventListener('input',renderResponses)");
     expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
+  });
+
+  it('追加質問時に再質問IDと下書きをAIチャットへ引き継ぐ', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("'/aichat?threadId='+encodeURIComponent(item.threadId)");
+    expect(html).toContain("'&draft='+encodeURIComponent(draft)");
   });
 });
 
