@@ -173,6 +173,25 @@ describe('window.openCountdownQuickAddModal: 実DOMでの登録フロー(単発)
     expect(overlay.className).toContain('open');
   });
 
+  it('開いているときにEscapeを押すとモーダルが閉じる', () => {
+    (window as any).openCountdownQuickAddModal();
+    const overlay = window.document.getElementById('countdownQuickAddOverlay')!;
+
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(overlay.className).not.toContain('open');
+  });
+
+  it('閉じているときのEscapeは状態を変更しない', () => {
+    const overlay = window.document.getElementById('countdownQuickAddOverlay')!;
+    const before = overlay.className;
+
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(overlay.className).toBe(before);
+    expect(window.document.querySelectorAll('.qa-row-entry')).toHaveLength(0);
+  });
+
   it('要素が無いページではopenCountdownQuickAddModalを呼んでも例外にならない', () => {
     const emptyDom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously' });
     emptyDom.window.eval(getCountdownQuickAddModalScript());

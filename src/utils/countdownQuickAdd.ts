@@ -310,6 +310,9 @@ export function getCountdownQuickAddModalScript(): string {
       overlay.addEventListener('click', function(ev) {
         if (ev.target === overlay) closeModal();
       });
+      document.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+      });
 
       // 各行を検証してevents配列を組み立てる。1件でも不正ならnullを返し、
       // showError()でどの行が問題かを伝える(部分登録を避けるため全件検証してから送信する)。
