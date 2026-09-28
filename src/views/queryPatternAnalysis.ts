@@ -196,8 +196,9 @@ export function getQueryPatternAnalysisPage(
     </div>
     <pre class="sql-code"><code id="table-sql-code"></code></pre>
   </dialog>
-  ${getThemeToggleScript()}
   <script>
+    ${getThemeToggleScript()}
+
     var sqlDialog = document.getElementById('table-sql-dialog');
     var sqlDialogTitle = document.getElementById('table-sql-dialog-title');
     var sqlCode = document.getElementById('table-sql-code');
