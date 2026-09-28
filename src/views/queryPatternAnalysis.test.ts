@@ -32,4 +32,9 @@ describe('getQueryPatternAnalysisPage', () => {
     expect(html).toContain("sqlDialog.querySelector('.sql-dialog-close').addEventListener");
     expect(html).toContain('if (event.target === sqlDialog) sqlDialog.close()');
   });
+
+  it('テーマ切り替え処理をscript要素内に描画する', () => {
+    expect(html).toMatch(/<script>\s+function toggleTheme\(\)/);
+    expect(html).not.toMatch(/<\/dialog>\s+function toggleTheme\(\)/);
+  });
 });
