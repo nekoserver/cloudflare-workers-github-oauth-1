@@ -7220,8 +7220,9 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
   }
 
   const window = buildThreadGrowthWindow(new Date());
-  const rows = await c.env.DB.prepare(
-    `WITH thread_counts AS (
+  try {
+    const rows = await c.env.DB.prepare(
+      `WITH thread_counts AS (
        SELECT
          thread_id,
          SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS recent_count,
@@ -7245,33 +7246,38 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
      WHERE recent_count >= 2
      ORDER BY growth DESC, recent_count DESC, latest_activity_at DESC, thread_id ASC
      LIMIT ?`
-  ).bind(
-    window.recentFrom, window.until,
-    window.previousFrom, window.recentFrom,
-    user.sub, window.previousFrom, window.until,
-    limit
-  ).all<{
-    thread_id: string;
-    recent_count: number;
-    previous_count: number;
-    growth: number;
-    latest_activity_at: string;
-  }>();
+    ).bind(
+      window.recentFrom, window.until,
+      window.previousFrom, window.recentFrom,
+      user.sub, window.previousFrom, window.until,
+      limit
+    ).all<{
+      thread_id: string;
+      recent_count: number;
+      previous_count: number;
+      growth: number;
+      latest_activity_at: string;
+    }>();
 
-  return jsonUtf8({
-    window: {
-      previous: { from: window.previousFrom, until: window.recentFrom },
-      recent: { from: window.recentFrom, until: window.until },
-    },
-    limit,
-    threads: (rows.results ?? []).map((row) => ({
-      threadId: row.thread_id,
-      recentCount: row.recent_count,
-      previousCount: row.previous_count,
-      growth: row.growth,
-      latestActivityAt: row.latest_activity_at,
-    })),
-  });
+    return jsonUtf8({
+      window: {
+        previous: { from: window.previousFrom, until: window.recentFrom },
+        recent: { from: window.recentFrom, until: window.until },
+      },
+      limit,
+      threads: (rows.results ?? []).map((row) => ({
+        threadId: row.thread_id,
+        recentCount: row.recent_count,
+        previousCount: row.previous_count,
+        growth: row.growth,
+        latestActivityAt: row.latest_activity_at,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Growing AI chat threads query failed', { userId: user.sub, error: message });
+    return jsonUtf8({ error: '成長中スレッドの取得に失敗しました: ' + message }, 500);
+  }
 });
 
 /** 所有ユーザーの1スレッドに属するターンを時系列で返す。 */
@@ -7281,27 +7287,33 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
   const threadId = c.req.param('threadId');
   if (!isThreadId(threadId)) return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
 
-  const rows = await c.env.DB.prepare(
-    `SELECT id, question, answer, model, source, created_at
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, question, answer, model, source, created_at
        FROM ai_chat_shares
       WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
-  ).bind(user.sub, threadId).all<{
-    id: string; question: string; answer: string; model: string | null;
-    source: string | null; created_at: string;
-  }>();
-  if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
-  return jsonUtf8({
-    threadId,
-    turns: (rows.results ?? []).map((row) => ({
-      id: row.id,
-      question: row.question,
-      answer: row.answer,
-      model: row.model,
-      source: row.source,
-      createdAt: row.created_at,
-    })),
-  });
+    ).bind(user.sub, threadId).all<{
+      id: string; question: string; answer: string; model: string | null;
+      source: string | null; created_at: string;
+    }>();
+    if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
+    return jsonUtf8({
+      threadId,
+      turns: (rows.results ?? []).map((row) => ({
+        id: row.id,
+        question: row.question,
+        answer: row.answer,
+        model: row.model,
+        source: row.source,
+        createdAt: row.created_at,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('AI chat thread turns query failed', { userId: user.sub, threadId, error: message });
+    return jsonUtf8({ error: 'スレッドの取得に失敗しました: ' + message }, 500);
+  }
 });
 
 app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
