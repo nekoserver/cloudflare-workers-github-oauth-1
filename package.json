@@ -5,7 +5,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run db:migrate:remote && npm run deploy:worker",
+    "deploy:worker": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply workers-github-oauth --local",
     "db:migrate:remote": "wrangler d1 migrations apply workers-github-oauth --remote",
     "db:migrate:remote:manual": "wrangler d1 execute workers-github-oauth --remote --file=./migrations/0001_create_user_sessions.sql && wrangler d1 execute workers-github-oauth --remote --file=./migrations/0002_add_display_name.sql && wrangler d1 execute workers-github-oauth --remote --file=./migrations/0003_add_github_access_token.sql",
