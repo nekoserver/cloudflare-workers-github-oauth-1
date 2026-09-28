@@ -304,3 +304,57 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 ```
 
 この EVAL ではコードを変更していないため、アプリケーション test suite は実行対象外とした。`npm run typecheck` は実行したが、既存 test file 群の型エラー（`aichat-slash-s.test.ts`、`answer-graph-first-person-mode.test.ts`、heritage journey tests ほか）により不合格だった。今回追加した Markdown は TypeScript の検査対象ではなく、既存エラーの修正は本評価の scope に含めていない。文書中の数値は基準点の静的スナップショットであり、将来の完了判定では同じコマンドを再実行して差分を測る。
+
+---
+
+## 9. 要素別サマリー
+
+### 9.1 判定記号
+
+| 記号 | 意味 |
+|---|---|
+| ○ | 共通化済み、または現状の分離方針を維持する |
+| △ | 一部共通化済み、もしくは条件を限定して共通化する |
+| × | 未共通化で優先的な改善候補、または一律の共通化を行わない |
+
+参照数は第8節の静的検索結果であり、テストを含む「参照ファイル数」である。参照数を個別集計していない要素は、数値を推測せず「未集計」と明記した。重複数は類似処理の定義を持つファイル数であり、参照数とは異なる。
+
+### 9.2 共通化済み要素と追加候補
+
+| 区分 | 要素 | 判定 | 参照数・重複数などの具体値 | 要約 |
+|---|---|:---:|---:|---|
+| 完了 | 共通テーマとテーマ切替 | ○ | 41ファイル参照 | CSS custom properties、初期 Cookie 読み込み、toggle UI、保存 script を共通化済み。modal は色変数のみが対象で、構造と操作は含まない。 |
+| 完了 | サーバー側 HTML エスケープ | ○ | 39ファイル参照、5文字種を escape | `& < > " '` を `escapeHtml()` の一つの契約で処理する。ブラウザー内 helper とは実行境界が異なる。 |
+| 完了 | Markdown parser / preview CSS | ○ | 16ファイル参照、専用テスト2系統 | parser script と preview CSS を共通化し、危険な URL scheme の拒否も集約している。 |
+| 完了 | カウントダウン共通 UI / ドメイン処理 | ○ | widget 4ファイル、quick-add 3ファイル、関連 module 4個 | widget、登録 modal、登録処理、期限計算を機能単位で分離し、widget と quick-add にはそれぞれ専用テストがある。 |
+| 部分完了 | 世界遺産「見どころ」モーダル | △ | 2ファイル参照、採用画面1・未移行画面1 | `heritageJourney` は共通 module を利用する一方、`webglHeritage` はページ内実装を保持しており、正本の統一は未完了。 |
+| 部分完了 | キーワードピッカー | △ | 1ファイル参照、主な採用先1画面 | 再利用可能な CSS / HTML / JS と callback 契約はあるが、複数画面で重複を置換した実績はまだない。 |
+| 完了 | 認証・署名・入力検証・ドメイン処理 | ○ | 本文で14ファイル／moduleを列挙、参照数は未集計 | 認証、session、redirect、GitHub / Slack 署名、CF Access、AI model、WASM、Jev を意味の安定した小さい契約へ分離済み。 |
+| 最優先候補 | modal stack と基本ライフサイクル | × | `getNextZ...` 25ファイル、Escape 13ファイル、`openModal` / `closeModal` 各4ファイル | stack、open / close、Escape、backdrop、focus restore を小さい runtime にする。drag / resize は optional とし、先に5項目の操作テストを固定する。 |
+| 高優先候補 | browser-side escape / safe DOM rendering | × | `function escapeHtml` 9ファイル、`function esc(` 9ファイル | script generator で安全な text / URL 処理を共有する。`innerHTML` は全面禁止せず、trusted template との境界を検査する。 |
+| 高優先候補 | fetch / JSON / error response helper | × | 想定する異常系6種（non-JSON、401、429、500、abort、network error） | status、JSON / text、timeout を揃える。401 policy と副作用 request の retry は呼び出し側に残す。 |
+| 中〜高優先候補 | toast / inline status / loading state | × | 最小 helper 2個 | `setAsyncButtonState` と `announce` に分け、`aria-live`、連打抑止、解除、error 保持の状態遷移を共有する。 |
+| 中優先候補 | WASM loader と実行状態 | △ | 起動方式3種、例示ページ群5種 | Rust `wasm-bindgen`、Go `wasm_exec`、raw WebAssembly を別 adapter とし、fetch、fallback、状態 callback だけを薄く共有する。 |
+| 中優先候補 | form validation / date-time normalization | △ | 推奨変換 helper 3個 | rule は統合せず、required text、有限数、local date-time から ISO への変換だけを共有する。 |
+| 中優先候補 | API error response と監査ログ | △ | response factory案1個、共通 field 3個 | 内部 `/api/*` のみに限定し、code、user-safe message、correlation id を揃える。OAuth / webhook は別契約を維持する。 |
+
+### 9.3 一律に共通化しない境界
+
+| 要素 | 判定 | 具体値 | 維持する境界 |
+|---|:---:|---:|---|
+| modal の本文・全レイアウト | × | 異なる用途5種（検索、確認、gallery、scoreboard、native dialog） | lifecycle と accessibility primitive までを共有し、本文 DOM と CSS class は一種類へ統一しない。 |
+| `getNextZ()` の固定値化 | × | 現在25ファイルに類似定義 | 固定 z-index へ一括置換せず、既存 modal と共存可能な stack counter または DOM 最大値を使う。 |
+| GitHub / Slack 署名検証器の一本化 | × | 外部サービス2種 | algorithm の類似だけで公開 API を統合せず、header、timestamp、base string の契約を分離する。 |
+| 全 fetch の同一 retry policy | × | request 分類2種（read-only、副作用あり） | retry は自動化せず、idempotency を確認した呼び出し側だけが opt-in する。 |
+
+### 9.4 実施順序と数値目標
+
+| Phase | 判定 | 主な作業 | 明示された確認数・採用数 |
+|---:|:---:|---|---:|
+| 0 | ○ | modal inventory と characterization test | inventory 8観点、移行候補1件 |
+| 1 | △ | modal runtime の最小導入 | 基本責務5個、先行1画面、再利用確認の2画面目 |
+| 2 | △ | browser-side escape の比較と段階移行 | fixture 比較、読み込み順確認、画面単位の移行 |
+| 3 | △ | request / async UI helper | response matrix 6ケース、read-only API から採用 |
+| 4 | △ | 方式別 WASM adapter | 起動方式3分類、各方式1ページずつ移行 |
+
+最終的な完了判定は、(1) 性質の異なる実利用先が最低2つ、または再利用予定の明文化、(2) 旧実装の削除、(3) success 以外を含む境界テスト、(4) 操作と response contract の維持、(5) accessibility と untrusted input の非悪化、という5条件で行う。
