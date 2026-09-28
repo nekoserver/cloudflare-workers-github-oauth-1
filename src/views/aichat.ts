@@ -7145,6 +7145,9 @@ export function getAiChatPage(user: {
     var chatImagePreviewImg = document.getElementById('chatImagePreviewImg');
     var chatImagePreviewRemove = document.getElementById('chatImagePreviewRemove');
     var pendingImageDataUrl = null;
+    // ページを開いている間の後続ターンを、回答単位のconversation_hashとは
+    // 別の永続スレッドへ束ねる。再読み込み後は新しい会話として開始する。
+    var currentThreadId = null;
 
     chatInput.addEventListener('input', function() {
       chatInput.style.height = 'auto';
@@ -8108,7 +8111,7 @@ ${getRubyWasmLoaderScript()}
       chatSendBtn.disabled = true;
       var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
-      var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' };
+      var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox', threadId: currentThreadId };
       if (attachedImage) {
         payload.image = attachedImage;
         payload.preferMoondream = aichatPreferMoondream;
@@ -8175,6 +8178,7 @@ ${getRubyWasmLoaderScript()}
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
             }
+            if (data.threadId) currentThreadId = data.threadId;
           }
         })
         .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
