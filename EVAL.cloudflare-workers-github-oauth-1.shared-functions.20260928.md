@@ -230,7 +230,30 @@ GET の再取得と、登録・通知・削除など副作用を持つ POST の�
 
 ---
 
-## 6. 推奨ロードマップ
+## 6. 小一時間で完了できる独立タスク
+
+以下は、ロードマップを **1件あたり30〜60分程度** でレビュー可能な成果物へ分割した候補である。見積もりを守るため、共通 runtime や helper の本実装・既存画面の移行は含めず、調査範囲またはテスト対象を1〜2ファイルに限定する。各タスクはほかのタスクを前提とせず、着手時点の最新 default branch から個別に開始できる。
+
+| ID | 目安 | タスク | 変更対象の目安 | 完了条件 | 確認コマンド |
+|---|---:|---|---|---|---|
+| SF-01 | 30〜45分 | `countdownQuickAdd` の modal 操作契約を characterization test に追加する | `src/utils/countdownQuickAdd.test.ts` | backdrop 自体の click では閉じ、panel 内 click では閉じないことを各1ケース固定する。runtime への移行や production code の変更は行わない。 | `npx vitest run src/utils/countdownQuickAdd.test.ts` |
+| SF-02 | 30〜45分 | `countdownQuickAdd` の Escape 契約を固定する | `src/utils/countdownQuickAdd.test.ts` | open 中の Escape で閉じるケースと、閉じている状態の Escape が副作用を起こさないケースを追加する。focus restore の新規実装は別タスクとする。 | `npx vitest run src/utils/countdownQuickAdd.test.ts` |
+| SF-03 | 45〜60分 | 世界遺産「見どころ」モーダル2実装の依存契約を比較表にする | 本 EVAL、`src/utils/heritageMitokoroModal.ts`、`src/views/webglHeritage.ts`（調査のみ） | DOM id、open / close、Markdown parser、`getNextZ`、Escape、backdrop の6観点を表にし、「そのまま移行可能」「adapter が必要」を明記する。実装統合は行わない。 | `rg -n -e "mitokoro" -e "getNextZ" -e "Escape" -e "markdown" src/utils/heritageMitokoroModal.ts src/views/webglHeritage.ts` |
+| SF-04 | 45〜60分 | browser-side escape の互換 fixture を1組作る | 新規の専用 test、`src/utils/markdownRenderer.ts` と `src/views/repositories.ts`（比較対象） | `& < > \" '`、空文字、`null` 相当の入力について両実装の出力差を表形式の test case で可視化する。helper の共通化や呼び出し元置換は行わない。 | `npx vitest run <追加したtestファイル>` |
+| SF-05 | 30〜45分 | read-only fetch を1本選び、error contract を棚卸しする | 本 EVAL、選んだ view 1ファイル（調査のみ） | non-JSON、401、429、500、abort、network error の6ケースについて「現在の表示」と「期待する表示」を埋め、最初の `requestJson` 採用候補を1本だけ特定する。helper 実装は行わない。 | `rg -n -e "fetch\\(" -e "response\\.ok" -e "\\.json\\(" -e "\\.text\\(" <選んだviewファイル>` |
+| SF-06 | 45〜60分 | keyword picker の accessibility 契約をテストで固定する | `src/utils/keywordPickerWidget.ts`、新規または既存の専用 test | trigger と picker の関連付け、accessible name、開閉時の `aria-expanded` の現状を検査する。欠けている属性の実装まで同時に行う場合も、この3項目以外へ scope を広げない。 | `npx vitest run <keywordPickerWidgetのtestファイル>` |
+
+### 6.1 着手ルール
+
+- 最初に選ぶなら、既存の専用 test があり変更範囲を予測しやすい **SF-01** とする。
+- SF-01 と SF-02 は同じ test ファイルを触るため、同時並行の別 PR にはしない。両方を一つのPRにまとめる場合も、合計60分を超えそうなら片方だけに戻す。
+- `<追加したtestファイル>` と `<選んだviewファイル>` は着手時に実在するパスへ置き換え、PR 本文に記録する。
+- 調査タスクは表を埋めた時点、テストタスクは対象 test の単独実行が通った時点を完了とする。全件対応や共通 helper の設計開始を完了条件へ混ぜない。
+- それぞれ独立した PR とし、未マージ PR の branch を基点に次のタスクを開始しない。
+
+---
+
+## 7. 推奨ロードマップ
 
 ### Phase 0: characterization（実装変更なし）
 
@@ -266,7 +289,7 @@ GET の再取得と、登録・通知・削除など副作用を持つ POST の�
 
 ---
 
-## 7. 完了条件
+## 8. 完了条件
 
 共通関数を新設しただけでは完了としない。各テーマで次を満たした時点を完了とする。
 
@@ -279,7 +302,7 @@ GET の再取得と、登録・通知・削除など副作用を持つ POST の�
 
 ---
 
-## 8. 調査コマンドと結果
+## 9. 調査コマンドと結果
 
 ```text
 find src -maxdepth 2 -type f -name '*.ts' ! -name '*.test.ts' | sort
@@ -307,9 +330,9 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 
 ---
 
-## 9. 要素別サマリー
+## 10. 要素別サマリー
 
-### 9.1 判定記号
+### 10.1 判定記号
 
 | 記号 | 意味 |
 |---|---|
@@ -317,9 +340,9 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 | △ | 一部共通化済み、もしくは条件を限定して共通化する |
 | × | 未共通化で優先的な改善候補、または一律の共通化を行わない |
 
-参照数は第8節の静的検索結果であり、テストを含む「参照ファイル数」である。参照数を個別集計していない要素は、数値を推測せず「未集計」と明記した。重複数は類似処理の定義を持つファイル数であり、参照数とは異なる。
+参照数は第9節の静的検索結果であり、テストを含む「参照ファイル数」である。参照数を個別集計していない要素は、数値を推測せず「未集計」と明記した。重複数は類似処理の定義を持つファイル数であり、参照数とは異なる。
 
-### 9.2 共通化済み要素と追加候補
+### 10.2 共通化済み要素と追加候補
 
 | 区分 | 要素 | 判定 | 参照数・重複数などの具体値 | 要約 |
 |---|---|:---:|---:|---|
@@ -338,7 +361,7 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 | 中優先候補 | form validation / date-time normalization | △ | 推奨変換 helper 3個 | rule は統合せず、required text、有限数、local date-time から ISO への変換だけを共有する。 |
 | 中優先候補 | API error response と監査ログ | △ | response factory案1個、共通 field 3個 | 内部 `/api/*` のみに限定し、code、user-safe message、correlation id を揃える。OAuth / webhook は別契約を維持する。 |
 
-### 9.3 一律に共通化しない境界
+### 10.3 一律に共通化しない境界
 
 | 要素 | 判定 | 具体値 | 維持する境界 |
 |---|:---:|---:|---|
@@ -347,7 +370,7 @@ rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
 | GitHub / Slack 署名検証器の一本化 | × | 外部サービス2種 | algorithm の類似だけで公開 API を統合せず、header、timestamp、base string の契約を分離する。 |
 | 全 fetch の同一 retry policy | × | request 分類2種（read-only、副作用あり） | retry は自動化せず、idempotency を確認した呼び出し側だけが opt-in する。 |
 
-### 9.4 実施順序と数値目標
+### 10.4 実施順序と数値目標
 
 | Phase | 判定 | 主な作業 | 明示された確認数・採用数 |
 |---:|:---:|---|---:|
