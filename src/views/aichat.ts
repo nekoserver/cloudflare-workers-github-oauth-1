@@ -7146,9 +7146,13 @@ export function getAiChatPage(user: {
     var chatImagePreviewImg = document.getElementById('chatImagePreviewImg');
     var chatImagePreviewRemove = document.getElementById('chatImagePreviewRemove');
     var pendingImageDataUrl = null;
-    // ページを開いている間の後続ターンを、回答単位のconversation_hashとは
-    // 別の永続スレッドへ束ねる。再読み込み後は新しい会話として開始する。
-    var currentThreadId = null;
+    // thread-trackerから開いた場合は既存の再質問IDを引き継ぐ。それ以外は
+    // ページを開いている間に発行されたIDで後続ターンを束ねる。
+    var trackerParams = new URLSearchParams(location.search);
+    var requestedThreadId = trackerParams.get('threadId') || '';
+    var currentThreadId = /^[0-9a-f]{32}$/i.test(requestedThreadId) ? requestedThreadId : null;
+    var trackerDraft = trackerParams.get('draft');
+    if (trackerDraft) chatInput.value = trackerDraft;
 
     chatInput.addEventListener('input', function() {
       chatInput.style.height = 'auto';
