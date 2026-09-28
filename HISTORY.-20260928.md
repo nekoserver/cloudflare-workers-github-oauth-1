@@ -8,6 +8,18 @@
 - **変更種別**: `A` = 追加、`M` = 更新、`D` = 削除、`Rxxx` = リネーム（類似度）
 - リポジトリが shallow clone のため、shallow 境界のコミットは全ファイルが追加扱いになる可能性があり、表から除外しています。
 
+## 補うべき情報
+
+この表を再現可能な変更履歴として利用するには、次の情報を補う必要があります（上ほど優先度が高いものです）。
+
+1. **調査基準点と対象範囲**: 調査時の `HEAD`（`e54ee91`）だけでなく、開始コミット、終了コミット、対象ブランチ、`--all` / `--first-parent` の有無を明記する。現状は shallow clone が複数の履歴断片を持つため、「境界を除外した」だけでは収録範囲を再現できない。
+2. **完全履歴での再調査**: `git fetch --unshallow` 後に同じ抽出を再実行し、2026-09-12〜23など表に行がない期間が「変更なし」なのか「取得されていない履歴」なのかを確定する。特に `2299c58` は現在の `HEAD` から到達不能な shallow オブジェクトであり、通常の `git log` だけでは再取得できない。
+3. **抽出条件の厳密化**: 「ルート直下」「大文字始まり」を判定するパス条件、merge commit の扱い、リネーム検出オプション（例: `--find-renames`）を、実行コマンドまたはスクリプトとして残す。
+4. **日付の定義**: YMD が author date / committer date のどちらか、タイムゾーンは何かを明記する。同日内の「コミットログ順」も、トポロジカル順・日時順・first-parent 順のどれかを指定する。
+5. **リネーム元の記録**: `R099` の行は移動先だけでなく、`API.cloudflare-workers-github-oauth-1.latest.md` から `API.cloudflare-workers-github-oauth-1.20260924.md` への変更であることを表内に示す。
+6. **要約の根拠と確度**: 右側3列はコミットメッセージだけから確定できない内容を含むため、差分や本文を確認した要約か、メッセージからの推定かを区別する。
+7. **更新方針**: このHISTORY自身の追加・更新コミットを収録対象にするか、スナップショット日以後の追記方法、重複・欠落を検査する手順を定める。
+
 | YMD / コミットハッシュ | SPEC | EVAL | NOTICE | REPORT | その他大文字ファイル | 何に対して | なにをおこない（方法） | 何を得たのか（成果 / 効果） |
 |---|---|---|---|---|---|---|---|---|
 | **20260928**<br>[`ae56c61`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ae56c61f0cb8785ece62efd37a53d2b50e9ddbb9)<br><sub>Document PR 2117 foreign key review</sub> | — | — | — | `A` [REPORT.cloudflare-workers-github-oauth-1.FK-VERIFY.20260928.md](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/blob/ae56c61f0cb8785ece62efd37a53d2b50e9ddbb9/REPORT.cloudflare-workers-github-oauth-1.FK-VERIFY.20260928.md) | — | PR #2117の外部キー検証 | レビュー内容と検証手順をREPORTとして記録 | 外部キーの整合性確認結果と今後の参照資料を獲得 |
