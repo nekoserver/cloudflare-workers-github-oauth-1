@@ -1,0 +1,306 @@
+# EVAL: 共通関数化の実績と追加候補（モーダルほか、2026-09-28）
+
+**評価対象**: 現在の `src/views`、`src/utils`、`src/middleware` と、それらを固定するテスト。これまでの開発で既に共通関数・共通部品になったものと、ページ内に類似実装が残り、今後共通化する価値があるものを棚卸しする。
+
+**基準点**: 2026-09-28 の `bcbf1e1`。本書は実装変更の SPEC ではなく、静的調査に基づく専用 EVAL である。単語の出現数だけで共通化を決めず、責務、呼び出し元、アクセシビリティ、セキュリティ、および変更時の回帰範囲を評価した。
+
+---
+
+## 1. 結論
+
+共通関数化は「未着手」ではない。テーマ、サーバー側 HTML エスケープ、Markdown、カウントダウン部品、世界遺産の見どころモーダル、キーワードピッカー、認証・署名検証、WASM 起動設定などは既に `src/utils` へ切り出され、複数画面または複数 endpoint から利用されている。
+
+一方、**モーダルの土台そのもの**は共通化済みとは判定できない。個別機能のモーダルが共通部品化された例はあるが、overlay、開閉、Escape、背景クリック、focus、scroll lock、z-index、drag、最大化といった横断的ライフサイクルは各 view 内に残っている。静的検索では `getNextZ...` 定義を持つファイルが25、Escape キー判定を持つファイルが13あり、挙動差と修正漏れの温床になっている。
+
+**総合判定: 部分合格。** 共通化の成功例は十分にあり、特に文字列生成型の Worker view に合わせた「CSS / HTML / Script を返す関数」という方式は定着している。ただし、すべてを一つの巨大 UI フレームワークへ寄せるべきではない。次に行うなら、まず modal stack と開閉契約、次にブラウザー側 escape / safe rendering、最後に fetch エラー処理の順で、小さい契約と characterization test を先に作るべきである。
+
+---
+
+## 2. 判定基準
+
+本評価では次を満たすものを「共通関数化完了」とした。
+
+1. ページ固有ファイルの外に、明示的な責務を持つ実装がある。
+2. 呼び出し元がその実装を import または埋め込み、同じ契約を利用している。
+3. 単なる定数の移動ではなく、重複しやすい処理または UI 一式を隠蔽している。
+4. 少なくとも実利用または専用テストのどちらかを確認できる。
+
+反対に、次は「未完了」または「候補」とした。
+
+- 共通 CSS 変数だけがあり、開閉処理はページごとに異なる。
+- 名前が似ていても、操作契約が異なるものを無理に統合する必要がある。
+- 1画面にしか存在せず、近い将来の再利用先も明確でない。
+- 抽象化すると文字列生成と DOM 実行環境の境界が見えにくくなる。
+
+件数は次の `rg -l ... | wc -l` によるスナップショットであり、AST による意味解析ではない。テストファイルも import 件数に含むため、採用画面数ではなく「リポジトリ内で契約が参照されている広がり」の指標として扱う。
+
+---
+
+## 3. 共通関数化が完了しているもの
+
+### 3.1 共通テーマとテーマ切替（完了度: 高）
+
+`src/utils/theme.ts` は次を一つの責務にまとめている。
+
+- light / dark の CSS custom properties
+- 初期描画前の Cookie 読み込み
+- toggle button の HTML / CSS
+- Cookie 保存を含む切替 script
+
+`theme` の参照は41ファイルで確認できる。モーダル背景色も `--modal-overlay` として定義されているため、色の共通化は完了している。ただし modal の構造・操作まで共通化したことを意味しない。
+
+**評価**: 採用範囲が広く、ページごとの色定義を減らしている。今後 modal 基盤を作る場合も、この変数を正本にする。
+
+### 3.2 サーバー側 HTML エスケープ（完了度: 高）
+
+`src/utils/html.ts` の `escapeHtml()` は `& < > " '` を一貫して escape し、39ファイルから参照されている。Worker がテンプレート文字列で HTML を組み立てる現構成に対して、適切な小さい共通関数である。
+
+**評価**: サーバー側の正本として維持する。後述するページ内 `esc()` はブラウザーへ埋め込まれるコードなので、この TypeScript 関数をそのまま呼べない点を区別する必要がある。
+
+### 3.3 Markdown parser / preview CSS（完了度: 高）
+
+`src/utils/markdownRenderer.ts` は、ブラウザーへ埋め込む parser script と preview CSS を提供する。16ファイルに参照があり、`src/utils/markdownRenderer.test.ts` と `src/markdown-parser-script-shared.test.ts` で共通 parser の契約が検査されている。
+
+**評価**: HTML escape 後に Markdown を適用し、危険な URL scheme を拒否する責務が一か所に集約されている。各画面が独自 Markdown 実装へ戻らないようにする。
+
+### 3.4 カウントダウンの共通 UI（完了度: 高）
+
+- `src/utils/countdownWidget.ts`: 右下 widget の CSS / HTML / Script
+- `src/utils/countdownQuickAdd.ts`: 日時・ラベルの単件 / 一括登録 modal
+- `src/utils/countdownRegister.ts`: 登録処理
+- `src/utils/countdown.ts`: 期限計算などのドメイン処理
+
+widget は4ファイル、quick-add は3ファイルから参照され、それぞれ専用テストがある。quick-add は modal であるが、これは「カウントダウン登録機能一式」の共通化であり、汎用 modal shell の共通化ではない。
+
+**評価**: 機能単位の vertical component として成功している。API payload、UI、callback の境界が明示され、再利用側が DOM 詳細を持たない。
+
+### 3.5 世界遺産「見どころ」モーダル（完了度: 中）
+
+`src/utils/heritageMitokoroModal.ts` は、元の 3D 地球儀画面にあった回答取得・Markdown 表示を再利用可能な形へ切り出し、`heritageJourney` が import している。CSS と Script を返す現在の view 構成に合う。一方、基準点の `webglHeritage` はこの module を import せず、元のページ内実装を保持している。
+
+**評価**: ユースケース固有 modal を再利用できる形にした実績ではあるが、正本への完全統一は未完了である。両画面の挙動差を characterization test で確認し、同じ契約なら `webglHeritage` も module 利用へ移す。parser と `getNextZ()` を呼び出し側環境に要求するため、依存契約をテストまたは型でさらに可視化する余地もある。
+
+### 3.6 キーワードピッカー（完了度: 中）
+
+`src/utils/keywordPickerWidget.ts` は CSS / HTML / JS と target input、trigger、選択後 callback の設定をまとめている。現時点の直接採用先は主に `functionChangelog` で、実装は再利用可能でも複数画面への展開実績は限定的である。
+
+**評価**: 「共通化の器」は完成しているが、「重複を実際に置換した」度合いは今後の採用状況を見て再評価する。利用先を増やすためだけの強制移行はしない。
+
+### 3.7 認証、署名、入力検証、ドメイン処理（完了度: 高）
+
+UI 以外にも、次の境界は既に共通化されている。
+
+- `src/middleware/auth.ts`: route の認証境界
+- `src/utils/session.ts`、`jwt.ts`、`cookie.ts`、`returnTo.ts`: session と redirect
+- `src/utils/githubWebhook.ts`、`slackSignature.ts`: raw body に対する署名検証
+- `src/utils/cfAuthAccess.ts`: cf-auth payload / access 判定
+- `src/utils/aichatModelConfig.ts`: model ごとの設定と色
+- `src/utils/wasmModuleConfig.ts` と `src/data/wasmModuleRegistry.ts`: WASM module の一覧と起動可否
+- `src/utils/jevEvaluation.ts`、`jevAnswerValues.ts`、`jevRecursiveDrilldown.ts`: Jev の評価ロジック
+
+**評価**: endpoint から純粋関数や外部 I/O 境界を分離する方向は進んでいる。今後も「似た endpoint を一つの巨大 handler にする」のではなく、検証・変換・署名など意味の安定した小さな契約を共有する。
+
+---
+
+## 4. 共通化した方がよいもの
+
+### 4.1 modal stack と基本ライフサイクル（優先度: 最優先）
+
+#### 現状
+
+個別 modal は多数存在し、少なくとも以下がページごとに再実装されている。
+
+- overlay の表示 / 非表示（`display`、class、`hidden`、native `<dialog>` が混在）
+- 背景クリックで閉じる処理
+- Escape キーで閉じる処理
+- 開くたびに最前面へ出す `getNextZ...`
+- drag / maximize / resize
+- body scroll lock
+- close 後の focus 復帰
+
+静的検索では `getNextZ...` 定義が25ファイル、Escape 判定が13ファイル、`openModal` / `closeModal` という同名定義だけでも各4ファイルに存在する。名前が違う同等処理はこの数に含まれない。
+
+#### 推奨する共通化範囲
+
+最初から見た目や本文まで統合せず、`getModalRuntimeScript()` のような小さい runtime を設ける。
+
+```ts
+type ModalRegistration = {
+  overlayId: string;
+  panelId: string;
+  closeButtonIds?: string[];
+  closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
+  restoreFocus?: boolean;
+  lockBodyScroll?: boolean;
+};
+```
+
+runtime が提供する契約は `open(id)`、`close(id)`、`bringToFront(id)`、`topmost()` に絞る。drag / resize は optional plugin とし、native `<dialog>` と overlay modal を一度に同じ DOM 実装へ変換しない。
+
+#### 先に固定すべきテスト
+
+1. 同時に2枚開いた場合、Escape は最前面だけを閉じる。
+2. backdrop 内の panel click では閉じず、backdrop 自体の click だけで閉じる。
+3. close 後は opener へ focus を戻す。
+4. `role="dialog"` / `aria-modal` / accessible name を持つ。
+5. drag 後も viewport 外へ完全に消えない。
+
+**期待効果**: z-index 衝突、複数 keydown listener、アクセシビリティ差、閉じ方の不一致をまとめて減らせる。
+
+### 4.2 browser-side escape と safe DOM rendering（優先度: 高）
+
+#### 現状
+
+共通 `escapeHtml()` がある一方、埋め込み script 内には `function escapeHtml` を持つファイルが9、`function esc(` を持つファイルが9ある。ブラウザーコードはサーバー側関数を直接 import できないため、重複が生じる構造上の理由はあるが、文字・戻り値・URL handling が揃っている保証は弱い。
+
+#### 推奨
+
+`getBrowserHtmlSafetyScript()` のような script generator を用意し、`escapeHtmlText`、`safeExternalUrl`、可能なら `textContent` を使う helper を提供する。既存 `markdownRenderer` 内の `esc()` と衝突しない名前・一度だけ定義する guard を決める。
+
+**注意**: `innerHTML` を全面禁止する置換ではない。Markdown や表組みは HTML 生成が必要なので、trusted template と untrusted value の境界をテストで固定する。
+
+### 4.3 fetch / JSON / error response の client helper（優先度: 高）
+
+多数の埋め込み script が `fetch → status 判定 → json/text → message 表示` を個別に持つ。API が HTML error page や空 body を返した場合の挙動、401 時の login 誘導、AbortController の扱いが画面ごとにずれやすい。
+
+#### 推奨
+
+- `requestJson(url, init, { timeoutMs })`
+- JSON でない error body も安全に message 化
+- `response.ok` と application-level `{ success:false }` を区別
+- timeout / abort / network error を区別
+
+認証切れで常に redirect すべきとは限らないため、401 policy は helper 内で固定せず callback とする。
+
+### 4.4 toast / inline status / loading state（優先度: 中〜高）
+
+成功、失敗、処理中の表示は aichat、repositories、WASM 各画面などで独立している。全画面のデザインを同じにする必要はないが、`aria-live`、連打抑止、一定時間後の解除、error の保持という状態遷移は共有できる。
+
+#### 推奨
+
+まず `setAsyncButtonState(button, state)` と `announce(message, level)` の2つへ分ける。巨大な toast manager にせず、表示先 element は呼び出し側から渡す。
+
+### 4.5 WASM loader と実行状態（優先度: 中）
+
+`factorWasm`、`sha256Wasm`、`sqlxWasm`、`gronWasm`、Go WASM 系などは、module 自体の server helper / registry は共通化が進む一方、ブラウザー側の fetch、MIME fallback、instantiate、loading / error UI はページ固有部分が残る。
+
+#### 推奨
+
+Rust `wasm-bindgen`、Go `wasm_exec`、生 WebAssembly は起動方式が異なるため、一つの loader へ無理に統合しない。方式別に次の薄い adapter を作る。
+
+- fetch と `response.ok` の検証
+- `instantiateStreaming` 失敗時に許容する fallback 条件
+- module URL と init function の注入
+- loading / ready / failed の状態 callback
+
+### 4.6 form validation / date-time normalization（優先度: 中）
+
+カウントダウンでは既に validation が集約されているが、他の modal / form は trim、必須判定、日時、数値範囲、error 表示を個別に行う。HTML constraint validation を基本に、サーバー側 validation を正本とし、クライアント helper は UX 補助に限定する。
+
+**共通化してはいけない境界**: validation rule 自体を汎用関数へ押し込まず、`readRequiredText`、`readFiniteNumber`、`toIsoFromLocalInput` のような変換だけを共有する。
+
+### 4.7 API error response と監査ログ（優先度: 中）
+
+server endpoint 側では status と JSON shape の組み立てが広範囲にある。`jsonError(code, message, status)` のような response factory は候補だが、OAuth callback、Slack、GitHub webhook は外部サービスが要求する response contract が異なる。
+
+#### 推奨
+
+内部 `/api/*` のみに scope を限定し、machine-readable code、user-safe message、request correlation id を揃える。外部 webhook と OAuth は別 adapter のままにする。
+
+---
+
+## 5. 現時点では共通化しない方がよいもの
+
+### 5.1 modal の本文・レイアウト全部
+
+検索、確認、画像 gallery、回答詳細、resize 可能な scoreboard、native dialog は要件が異なる。共通化対象は lifecycle と accessibility primitive までとし、本文 DOM や CSS class を一種類へ統一しない。
+
+### 5.2 すべての `getNextZ()` を単純な固定値へ置換
+
+固定 z-index は既存ページの stack context と衝突する。共通 runtime は現在の DOM から最大値を求めるか、自身が管理する stack counter を持ち、既存 modal と段階移行中も共存できる必要がある。
+
+### 5.3 GitHub と Slack の署名検証器の一本化
+
+HMAC-SHA256 と timing-safe compare は似ているが、header format、timestamp replay protection、base string が異なる。内部の byte / hex helper は共有候補でも、公開 API は `verifyGitHubWebhookSignature` と `verifySlackSignature` のまま分ける方が誤用を防ぐ。
+
+### 5.4 すべての fetch を同じ retry policy にする
+
+GET の再取得と、登録・通知・削除など副作用を持つ POST の再送は同じではない。helper が自動 retry するのではなく、idempotency を確認した呼び出し側だけが opt-in する。
+
+---
+
+## 6. 推奨ロードマップ
+
+### Phase 0: characterization（実装変更なし）
+
+1. modal inventory を `overlayId / close methods / Escape / backdrop / focus / z-index / drag / resize` で表にする。
+2. 移行第1号を、機能が単純で専用 DOM テストがある modal から一つ選ぶ。
+3. 現在の操作を jsdom または Playwright test で固定する。
+
+### Phase 1: modal runtime の最小導入
+
+1. stack、open / close、Escape、backdrop、focus restore だけ実装する。
+2. 一画面のみ移行し、既存テストと a11y contract test を通す。
+3. 二画面目で API が本当に再利用可能か確認してから安定化する。
+
+### Phase 2: 安全な文字列処理
+
+1. browser-side escape の差分を fixture で比較する。
+2. Markdown parser との名前・読み込み順を確定する。
+3. 手書き `esc` を一括置換せず、出力が一致する画面から移行する。
+
+### Phase 3: request / async UI helper
+
+1. JSON / non-JSON / 401 / 429 / 500 / abort の matrix test を作る。
+2. read-only API から採用する。
+3. 副作用 POST は idempotency の有無を明示してから採用する。
+
+### Phase 4: 方式別 WASM adapter
+
+1. Rust / Go / raw module を分類する。
+2. MIME fallback の既知回帰を fixture 化する。
+3. 各方式で一ページずつ移行し、初期化時間と error 表示を比較する。
+
+各 Phase は独立した PR にする。未マージ PR を基点に次の PR を作らず、前段が必要なら default branch へマージされた後に次を開始する。
+
+---
+
+## 7. 完了条件
+
+共通関数を新設しただけでは完了としない。各テーマで次を満たした時点を完了とする。
+
+- 少なくとも性質の異なる2つの実利用先がある、または再利用予定が明文化されている。
+- 旧実装を削除し、同じ責務の正本が一つになっている。
+- success だけでなく error、close、競合などの境界テストがある。
+- 共通化前のユーザー操作と response contract を維持する。
+- accessibility と untrusted input の扱いが悪化していない。
+- 共通 helper の障害が全ページへ波及するリスクに見合うテストがある。
+
+---
+
+## 8. 調査コマンドと結果
+
+```text
+find src -maxdepth 2 -type f -name '*.ts' ! -name '*.test.ts' | sort
+  -> 実装ファイルを views / utils / middleware / data 単位で棚卸し
+
+rg -l "utils/<module>|./<module>|../utils/<module>" src --glob '*.ts' | wc -l
+  -> theme 41, html 39, markdownRenderer 16,
+     countdownQuickAdd 3, heritageMitokoroModal 2,
+     keywordPickerWidget 1, countdownWidget 4
+
+rg -l "function getNextZ" src/views src/utils --glob '*.ts' | wc -l
+  -> 25 files
+
+rg -l "Escape patterns" src/views src/utils --glob '*.ts' | wc -l
+  -> 13 files
+
+rg -l "function escapeHtml" src/views src/utils --glob '*.ts' | wc -l
+  -> 9 files
+
+rg -l "function esc\\(" src/views src/utils --glob '*.ts' | wc -l
+  -> 9 files
+```
+
+この EVAL ではコードを変更していないため、アプリケーション test suite は実行対象外とした。`npm run typecheck` は実行したが、既存 test file 群の型エラー（`aichat-slash-s.test.ts`、`answer-graph-first-person-mode.test.ts`、heritage journey tests ほか）により不合格だった。今回追加した Markdown は TypeScript の検査対象ではなく、既存エラーの修正は本評価の scope に含めていない。文書中の数値は基準点の静的スナップショットであり、将来の完了判定では同じコマンドを再実行して差分を測る。
