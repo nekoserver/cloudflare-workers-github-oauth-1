@@ -7280,6 +7280,58 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
   }
 });
 
+/** ツリーの初期データとして、所有ユーザーの過去スレッドを期間制限なしで返す。 */
+app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, thread_id, question, answer, model, source, created_at
+       FROM ai_chat_shares
+       WHERE user_id = ?
+         AND thread_id IS NOT NULL
+         AND deleted_at IS NULL
+       ORDER BY thread_id ASC, created_at ASC, id ASC`
+    ).bind(user.sub).all<{
+      id: string; thread_id: string; question: string; answer: string;
+      model: string | null; source: string | null; created_at: string;
+    }>();
+
+    const threads = new Map<string, {
+      threadId: string;
+      latestActivityAt: string;
+      turns: Array<{ id: string; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
+    }>();
+    for (const row of rows.results ?? []) {
+      let thread = threads.get(row.thread_id);
+      if (!thread) {
+        thread = { threadId: row.thread_id, latestActivityAt: row.created_at, turns: [] };
+        threads.set(row.thread_id, thread);
+      }
+      thread.latestActivityAt = row.created_at;
+      thread.turns.push({
+        id: row.id,
+        question: row.question,
+        answer: row.answer,
+        model: row.model,
+        source: row.source,
+        createdAt: row.created_at,
+      });
+    }
+
+    return jsonUtf8({
+      threads: Array.from(threads.values()).sort((a, b) =>
+        b.latestActivityAt.localeCompare(a.latestActivityAt) || a.threadId.localeCompare(b.threadId)
+      ),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('AI chat thread seed query failed', { userId: user.sub, error: message });
+    return jsonUtf8({ error: 'スレッドのシードデータ取得に失敗しました: ' + message }, 500);
+  }
+});
+
 /** 所有ユーザーの1スレッドに属するターンを時系列で返す。 */
 app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
   const user = c.get('user');

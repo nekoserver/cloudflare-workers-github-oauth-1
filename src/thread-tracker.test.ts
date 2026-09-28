@@ -52,9 +52,38 @@ describe('thread tracker page', () => {
     const html = getThreadTrackerPage('<alice>');
     expect(html).toContain('スレッド追跡ツリー');
     expect(html).toContain('/api/aichat/threads/growing?limit=50');
+    expect(html).toContain('/api/aichat/threads/seed');
     expect(html).toContain('/api/aichat/threads/');
+    expect(html).toContain('id="threadSearch"');
+    expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
     expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
+  });
+});
+
+describe('GET /api/aichat/threads/seed', () => {
+  it('期間制限なしの過去ログをスレッドごとのシードデータへ整形する', async () => {
+    const rows = [
+      { id: 'share-1', thread_id: THREAD_ID, question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
+      { id: 'share-2', thread_id: THREAD_ID, question: '続き', answer: '続きの回答', model: 'gemma', source: 'textbox', created_at: '2025-01-02T00:00:00.000Z' },
+    ];
+    const res = await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb(rows) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ threads: [{
+      threadId: THREAD_ID,
+      latestActivityAt: '2025-01-02T00:00:00.000Z',
+      turns: rows.map((row) => ({ id: row.id, question: row.question, answer: row.answer, model: row.model, source: row.source, createdAt: row.created_at })),
+    }] });
+  });
+
+  it('期間条件を使わず、所有者と未削除行だけを取得する', async () => {
+    let capturedSql = '';
+    const db = { prepare(sql: string) { capturedSql = sql; return { bind() { return { async first() { return { last_activity_at: new Date().toISOString(), revoked_at: null, idle_timeout_seconds: null }; }, async all() { return { results: [] }; }, async run() { return { success: true }; } }; } }; } };
+    await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: db });
+    expect(capturedSql).toContain('user_id = ?');
+    expect(capturedSql).toContain('thread_id IS NOT NULL');
+    expect(capturedSql).toContain('deleted_at IS NULL');
+    expect(capturedSql).not.toContain('created_at >=');
   });
 });
 
