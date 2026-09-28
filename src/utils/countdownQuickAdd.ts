@@ -17,10 +17,11 @@
  * ウィジェットがタイマー完了トーストに「index/total」形式で表示できるようにする)。
  *
  * 画面中央に表示する最前面のモーダルで、タイトル部分(#countdownQaDragHandle)を
- * ドラッグして自由に移動できる(CLAUDE.mdルール26に従い、z-indexは開くたびに
- * 自前のgetNextZIndex()で動的に算出する。ホストページの他のgetNextZ()実装には
- * 依存しない)。開き直すと前回の移動位置は破棄され、常に画面中央から始まる。
+ * ドラッグして自由に移動できる。z-index と基本ライフサイクルは modalRuntime が
+ * 管理する。開き直すと前回の移動位置は破棄され、常に画面中央から始まる。
  */
+
+import { getModalRuntimeScript } from './modalRuntime';
 
 /** <style>内に展開する、クイック登録モーダルのCSS。 */
 export function getCountdownQuickAddModalCSS(): string {
@@ -121,7 +122,7 @@ export function getCountdownQuickAddModalCSS(): string {
 export function getCountdownQuickAddModalHTML(): string {
   return `
   <div id="countdownQuickAddOverlay">
-    <div id="countdownQuickAddPanel">
+    <div id="countdownQuickAddPanel" role="dialog" aria-modal="true" aria-labelledby="countdownQaDragHandle">
       <div class="qa-title" id="countdownQaDragHandle" title="ドラッグで移動できます">予定を登録</div>
       <div id="countdownQaRows"></div>
       <button type="button" class="qa-add-row-btn" id="countdownQaAddRowBtn">+ もう1件追加</button>
@@ -144,6 +145,7 @@ export function getCountdownQuickAddModalHTML(): string {
  */
 export function getCountdownQuickAddModalScript(): string {
   return `
+    ${getModalRuntimeScript()}
     (function() {
       var overlay = document.getElementById('countdownQuickAddOverlay');
       var panel = document.getElementById('countdownQuickAddPanel');
@@ -158,19 +160,6 @@ export function getCountdownQuickAddModalScript(): string {
         return;
       }
       var pendingOnSaved = null;
-
-      // このモーダルは任意のページに埋め込まれる部品(CLAUDE.mdルール26: 新しい
-      // モーダルは常にgetNextZ()で動的にz-indexを算出する)。ホストページが
-      // 独自のgetNextZ()を持つとは限らないため、自前で最前面のz-indexを算出する。
-      function getNextZIndex() {
-        var max = 2000;
-        document.querySelectorAll('[data-overlay]').forEach(function(el) {
-          if (el === overlay) return;
-          var z = parseInt(el.style.zIndex, 10) || 0;
-          if (z > max) max = z;
-        });
-        return max + 100;
-      }
 
       // 画面内にパネルを収めるため、指定位置(left/top)をビューポート内にクランプする。
       function clampPanelPosition(left, top, panelWidth, panelHeight) {
@@ -282,9 +271,15 @@ export function getCountdownQuickAddModalScript(): string {
       }
 
       function closeModal() {
-        overlay.classList.remove('open');
-        pendingOnSaved = null;
+        modalController.close();
       }
+
+      var modalController = window.ModalRuntime.register({
+        id: 'countdown-quick-add',
+        overlay: overlay,
+        closeButtons: [cancelBtn],
+        onClose: function() { pendingOnSaved = null; },
+      });
 
       function showError(message) {
         errorEl.textContent = message;
@@ -301,18 +296,8 @@ export function getCountdownQuickAddModalScript(): string {
         panel.style.left = '';
         panel.style.top = '';
         panel.style.margin = '';
-        overlay.style.zIndex = String(getNextZIndex());
-        overlay.setAttribute('data-overlay', '');
-        overlay.classList.add('open');
+        modalController.open();
       };
-
-      cancelBtn.addEventListener('click', closeModal);
-      overlay.addEventListener('click', function(ev) {
-        if (ev.target === overlay) closeModal();
-      });
-      document.addEventListener('keydown', function(ev) {
-        if (ev.key === 'Escape' && overlay.classList.contains('open')) closeModal();
-      });
 
       // 各行を検証してevents配列を組み立てる。1件でも不正ならnullを返し、
       // showError()でどの行が問題かを伝える(部分登録を避けるため全件検証してから送信する)。

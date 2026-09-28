@@ -10,6 +10,8 @@
  *   3. <script> 内に renderKeyPickerJs({ targetInputId: 'mySearchInput', triggerBtnId: 'myBtn' }) を埋め込む
  */
 
+import { getModalRuntimeScript } from './modalRuntime';
+
 export interface KeyPickerOptions {
   /** キーワードが選択されたとき値を注入する input 要素の id */
   targetInputId: string;
@@ -165,6 +167,7 @@ export function renderKeyPickerHtml(): string {
 export function renderKeyPickerJs(opts: KeyPickerOptions): string {
   const { targetInputId, triggerBtnId, afterSelectJs = '' } = opts;
   return `
+  ${getModalRuntimeScript()}
   (function() {
     var kpOverlay   = document.getElementById('kpOverlay');
     var kpModal     = kpOverlay ? kpOverlay.querySelector('.kp-modal') : null;
@@ -187,6 +190,13 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     var kpMultiLabelsMap = null;
 
     var kpIsMaximized = false;
+    var kpController = window.ModalRuntime.register({
+      id: 'keyword-picker',
+      overlay: kpOverlay,
+      closeButtons: kpCloseBtn ? [kpCloseBtn] : [],
+      onOpen: function() { if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true'); },
+      onClose: function() { if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false'); },
+    });
 
     function kpToggleMaximize() {
       kpIsMaximized = !kpIsMaximized;
@@ -512,8 +522,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     }
 
     function kpOpen() {
-      kpOverlay.classList.add('open');
-      if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
+      kpController.open();
       if (kpItems.length > 0) {
         kpSyncGroupSelection();
         kpApply();
@@ -539,8 +548,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     }
 
     function kpClose() {
-      kpOverlay.classList.remove('open');
-      if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
+      kpController.close();
     }
 
     kpCats.addEventListener('click', function(e) {
@@ -566,10 +574,5 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       kpApply();
     });
     if (triggerBtn) triggerBtn.addEventListener('click', kpOpen);
-    kpCloseBtn.addEventListener('click', kpClose);
-    kpOverlay.addEventListener('click', function(e) { if (e.target === kpOverlay) kpClose(); });
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && kpOverlay.classList.contains('open')) { e.stopPropagation(); kpClose(); }
-    });
   }());`;
 }
