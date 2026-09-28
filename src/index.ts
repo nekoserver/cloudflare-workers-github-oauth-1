@@ -79,6 +79,7 @@ import {
 } from './utils/ghAttach';
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
 import { getD1BindingCount, validateD1BindingValues } from './utils/d1QueryBindings';
+import { buildThreadGrowthWindow, createThreadId, isThreadId, parseGrowingThreadLimit } from './utils/aichatThreads';
 import {
   buildGithubRepositoryApiUrl,
   buildGithubTreeApiUrl,
@@ -5920,7 +5921,7 @@ async function logNekoMultiSearchResults(
 
 type AichatRequestBody = {
   message?: string; model?: string; systemPromptMode?: string;
-  source?: string; image?: string; preferMoondream?: boolean;
+  source?: string; image?: string; preferMoondream?: boolean; threadId?: string;
 };
 
 async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
@@ -6319,6 +6320,21 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const rawSource = (body.source ?? '').trim();
   const source = rawSource === 'textbox' ? 'textbox' : 'api';
 
+  const requestedThreadId = (body.threadId ?? '').trim();
+  if (requestedThreadId && !isThreadId(requestedThreadId)) {
+    return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
+  }
+  const threadId = requestedThreadId || createThreadId();
+  if (requestedThreadId) {
+    if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+    const ownedThread = await c.env.DB.prepare(
+      'SELECT 1 AS found FROM ai_chat_shares WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL LIMIT 1'
+    ).bind(user.sub, requestedThreadId).first<{ found: number }>();
+    if (!ownedThread) {
+      return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
+    }
+  }
+
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
@@ -6382,9 +6398,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const questionHash = await computeQuestionHash(user.sub, message);
       const imageId = image ? (await registerOrGetAichatImage(c.env.DB, user.sub, image)).id : null;
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, imageId).run();
-      return { shareId, userHash, conversationHash, questionHash };
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, imageId, threadId).run();
+      return { shareId, userHash, conversationHash, questionHash, threadId };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
         error: saveErr instanceof Error ? saveErr.message : 'Unknown',
@@ -7183,8 +7199,75 @@ app.get('/api/aichat/qsearch/latest-answer', authMiddleware, async (c) => {
 });
 
 /**
- * AIチャット共有履歴の全文検索 API（認証が必要）
+ * 所有ユーザー内で、直近24時間のターン増分が大きいスレッドを返す。
+ * 境界は [from, until) とし、実行時刻以降の行は数えない。
  */
+app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  let limit: number;
+  try {
+    limit = parseGrowingThreadLimit(c.req.query('limit'));
+  } catch (error) {
+    return jsonUtf8({ error: error instanceof Error ? error.message : 'limitが不正です' }, 400);
+  }
+
+  const window = buildThreadGrowthWindow(new Date());
+  const rows = await c.env.DB.prepare(
+    `WITH thread_counts AS (
+       SELECT
+         thread_id,
+         SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS recent_count,
+         SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS previous_count,
+         MAX(created_at) AS latest_activity_at
+       FROM ai_chat_shares
+       WHERE user_id = ?
+         AND thread_id IS NOT NULL
+         AND deleted_at IS NULL
+         AND created_at >= ?
+         AND created_at < ?
+       GROUP BY thread_id
+     )
+     SELECT
+       thread_id,
+       recent_count,
+       previous_count,
+       recent_count - previous_count AS growth,
+       latest_activity_at
+     FROM thread_counts
+     WHERE recent_count >= 2
+     ORDER BY growth DESC, recent_count DESC, latest_activity_at DESC, thread_id ASC
+     LIMIT ?`
+  ).bind(
+    window.recentFrom, window.until,
+    window.previousFrom, window.recentFrom,
+    user.sub, window.previousFrom, window.until,
+    limit
+  ).all<{
+    thread_id: string;
+    recent_count: number;
+    previous_count: number;
+    growth: number;
+    latest_activity_at: string;
+  }>();
+
+  return jsonUtf8({
+    window: {
+      previous: { from: window.previousFrom, until: window.recentFrom },
+      recent: { from: window.recentFrom, until: window.until },
+    },
+    limit,
+    threads: (rows.results ?? []).map((row) => ({
+      threadId: row.thread_id,
+      recentCount: row.recent_count,
+      previousCount: row.previous_count,
+      growth: row.growth,
+      latestActivityAt: row.latest_activity_at,
+    })),
+  });
+});
+
 app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
