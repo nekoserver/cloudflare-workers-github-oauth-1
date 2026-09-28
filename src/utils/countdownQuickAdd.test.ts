@@ -154,6 +154,25 @@ describe('window.openCountdownQuickAddModal: 実DOMでの登録フロー(単発)
     expect(window.document.getElementById('countdownQuickAddOverlay')!.className).not.toContain('open');
   });
 
+  it('バックドロップ自体をクリックするとモーダルが閉じる', () => {
+    (window as any).openCountdownQuickAddModal();
+    const overlay = window.document.getElementById('countdownQuickAddOverlay')!;
+
+    overlay.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    expect(overlay.className).not.toContain('open');
+  });
+
+  it('パネル内をクリックしてもモーダルは閉じない', () => {
+    (window as any).openCountdownQuickAddModal();
+    const overlay = window.document.getElementById('countdownQuickAddOverlay')!;
+    const panel = window.document.getElementById('countdownQuickAddPanel')!;
+
+    panel.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    expect(overlay.className).toContain('open');
+  });
+
   it('要素が無いページではopenCountdownQuickAddModalを呼んでも例外にならない', () => {
     const emptyDom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously' });
     emptyDom.window.eval(getCountdownQuickAddModalScript());
