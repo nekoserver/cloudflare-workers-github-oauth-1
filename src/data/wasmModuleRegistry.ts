@@ -26,14 +26,14 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     id: 'wrangler',
     name: 'wrangler (BLAKE3, Rust)',
     description:
-      'Cloudflare Wrangler CLIが静的アセットの内容ハッシュ生成に使用するblake3-wasm。アプリ固有のWASMだけを手動登録していたため一覧から漏れていた依存モジュールで、npmのwranglerコマンドからNode.js向けWASMとして読み込まれる',
-    wasmPath: 'node_modules/blake3-wasm/dist/wasm/nodejs/blake3_js_bg.wasm',
+      'Cloudflare Wrangler CLIが依存するblake3-wasm。このWorkerでは/cf-dashboardの取得結果の改変検知ID生成にwebビルドを再利用しており、Wranglerのdeploy --dry-runでWorkerバンドルに実際に同梱されることを確認済み',
+    wasmPath: 'node_modules/blake3-wasm/dist/wasm/web/blake3_js_bg.wasm',
     sourceDir: 'node_modules/blake3-wasm',
     // 外部依存のソースはリポジトリに含めないため、バージョンと完全性ハッシュを
     // 確認できるlockfileをソース表示の対象にする。
     sourceFile: 'package-lock.json',
     approxSize: '約34KB',
-    sizeBytes: 34405,
+    sizeBytes: 34384,
     builtAt: '2026-09-15',
   },
   {
