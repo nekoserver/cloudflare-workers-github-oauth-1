@@ -61,6 +61,9 @@ describe('thread tracker page', () => {
     expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
     expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
+    const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+    expect(script).toBeDefined();
+    expect(() => new Function(script!)).not.toThrow();
   });
 
   it('追加質問をページ内から再質問ID付きで直接送信する', () => {
@@ -69,6 +72,26 @@ describe('thread tracker page', () => {
     expect(html).toContain("threadId:thread.threadId||''");
     expect(html).toContain("status.textContent='送信中…'");
     expect(html).toContain("thread.turns.push({question:message,answer:data.response||'(応答なし)'");
+  });
+
+  it('追加回答の完了時に元スレッドへ戻り、成長を通知する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("if(twoPane)revealGrownThread(thread)");
+    expect(html).toContain("card.classList.add('has-growth','thread-grew')");
+    expect(html).toContain("card.scrollIntoView({behavior:'smooth',block:'center'})");
+    expect(html).toContain('新規 +1ターン');
+    expect(html).toContain('@keyframes thread-grew');
+    expect(html).toContain('@media(prefers-reduced-motion:reduce)');
+  });
+
+  it('右ペインは最新回答で上書きし、左スワイプまたはボタンで元質問を表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('class="turn-deck"');
+    expect(html).toContain('data-turn-view="\'+label+\'"');
+    expect(html).toContain('← 左スワイプで元の質問を表示');
+    expect(html).toContain("if(delta<-45)show(1)");
+    expect(html).toContain("else if(delta>45)show(0)");
+    expect(html).toContain('data-slide="1" aria-pressed="false">元の質問');
   });
 });
 
@@ -138,8 +161,9 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(300px,40%\) minmax\(0,1fr\)/);
     expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:-30px}');
     expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 74px\)[^}]*overflow:hidden/);
-    expect(html).toContain('<div class="turns">\'+turns+\'</div>');
-    expect(html).toMatch(/\.detail-pane \.turns\{[^}]*flex:1;min-height:0[^}]*overflow:hidden/);
+    expect(html).toContain('<div class="turn-deck">\'+slides+\'</div>');
+    expect(html).toMatch(/\.turn-deck\{[^}]*flex:1;min-height:0[^}]*overflow:hidden/);
+    expect(html).toMatch(/\.turn-slide\.active\{display:flex/);
     expect(html).toMatch(/\.detail-pane \.markdown\.answer\{[^}]*flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain/);
     expect(html).not.toContain('スレッドを俯瞰して、続きを質問');
     expect(html).not.toContain('各カードで質問の流れを確認できます');
