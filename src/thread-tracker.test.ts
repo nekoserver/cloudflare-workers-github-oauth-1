@@ -74,6 +74,17 @@ describe('thread tracker page', () => {
     expect(html).toContain("thread.turns.push({question:message,answer:data.response||'(応答なし)'");
   });
 
+  it('送信受付後は波状SVGを表示し、完了まで二重投稿を防ぐ', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('class="send-wave"');
+    expect(html).toContain('@keyframes send-wave-flow');
+    expect(html).toContain("if(submitting)return");
+    expect(html).toContain("submitting=true;form.setAttribute('aria-busy','true');button.disabled=true");
+    expect(html).toContain("button.setAttribute('aria-label','送信中');button.innerHTML=wave");
+    expect(html).toContain("submitting=false;form.removeAttribute('aria-busy')");
+    expect(html).toContain('button.innerHTML=sendLabel');
+  });
+
   it('追加回答の完了時に元スレッドへ戻り、成長を通知する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain("if(twoPane)revealGrownThread(thread)");
