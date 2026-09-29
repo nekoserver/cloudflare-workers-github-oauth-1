@@ -111,6 +111,12 @@ describe('thread tracker page', () => {
     expect(html).toContain('function parseMd(src)');
   });
 
+  it('追加質問フォームを右ペインの最下部に寄せ、空の送信状態は余白を取らない', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toMatch(/\.actions\{[^}]*flex:none;[^}]*margin-top:auto;[^}]*padding-top:12px/);
+    expect(html).toContain('.send-status:empty{display:none}');
+  });
+
   it('conversation_hashで投稿を直接呼び出し、質問一覧から各投稿へ切り替える', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain("requestedConversationHash=new URLSearchParams(location.search).get('conversationHash')||''");
