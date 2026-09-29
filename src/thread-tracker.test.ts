@@ -262,6 +262,16 @@ describe('thread tracker page', () => {
     expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
   });
 
+  it('元の質問見出しを削除し、質問文のJevスコアがある場合だけ詰めて表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('function jevScoreHtml(turn)');
+    expect(html).toContain('Jevスコア: ');
+    expect(html).toContain("heading=index===0?jevScoreHtml(turn)");
+    expect(html).not.toContain("context+'<h3>'+esc(label)+' · 質問 '");
+    expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);
+    expect(html).toMatch(/\.turn-slide \.turn\{[^}]*margin-top:0/);
+  });
+
   it('DBで割り当てられたモデル色を既定色より優先する', () => {
     const html = getThreadTrackerPage('alice', { '@cf/google/gemma-4-26b-a4b-it': '#123abc' });
     expect(html).toContain('"@cf/google/gemma-4-26b-a4b-it":"#123abc"');
@@ -304,6 +314,9 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(capturedSql).toContain('deleted_at IS NULL');
     expect(capturedSql).toContain('conversation_hash');
     expect(capturedSql).toContain('question_hash');
+    expect(capturedSql).toContain("e.target_type = 'source_question'");
+    expect(capturedSql).toContain('evaluated_share.question_hash = recent_shares.question_hash');
+    expect(capturedSql).toContain('AS question_jev_scores');
     expect(capturedSql).not.toContain('created_at >=');
     expect(capturedSql).toContain('ORDER BY created_at DESC, id DESC');
     expect(capturedSql).toContain('LIMIT 100');
