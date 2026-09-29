@@ -13,9 +13,9 @@ describe('wranglerが利用するWASMのモジュール一覧への登録', () =
     expect(packageLock.packages['node_modules/wrangler'].dependencies?.['blake3-wasm']).toBe('2.1.5');
     expect(wrangler).toMatchObject({
       id: 'wrangler',
-      wasmPath: 'node_modules/blake3-wasm/dist/wasm/nodejs/blake3_js_bg.wasm',
+      wasmPath: 'node_modules/blake3-wasm/dist/wasm/web/blake3_js_bg.wasm',
       sourceFile: 'package-lock.json',
-      sizeBytes: 34405,
+      sizeBytes: 34384,
     });
     expect(statSync(wrangler!.wasmPath).size).toBe(wrangler!.sizeBytes);
     expect(WASM_MODULE_REGISTRY.filter((module) => module.id === 'wrangler')).toHaveLength(1);
