@@ -7300,6 +7300,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
     const threads = new Map<string, {
       threadId: string | null;
+      createdAt: string;
       latestActivityAt: string;
       turns: Array<{ id: string; conversationHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
     }>();
@@ -7308,7 +7309,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       const groupKey = row.thread_id ?? `legacy:${row.id}`;
       let thread = threads.get(groupKey);
       if (!thread) {
-        thread = { threadId: row.thread_id, latestActivityAt: row.created_at, turns: [] };
+        thread = { threadId: row.thread_id, createdAt: row.created_at, latestActivityAt: row.created_at, turns: [] };
         threads.set(groupKey, thread);
       }
       thread.latestActivityAt = row.created_at;
@@ -7325,7 +7326,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
     return jsonUtf8({
       threads: Array.from(threads.values()).sort((a, b) =>
-        b.latestActivityAt.localeCompare(a.latestActivityAt) || (a.threadId ?? '').localeCompare(b.threadId ?? '')
+        b.createdAt.localeCompare(a.createdAt) || (a.threadId ?? '').localeCompare(b.threadId ?? '')
       ),
     });
   } catch (error) {

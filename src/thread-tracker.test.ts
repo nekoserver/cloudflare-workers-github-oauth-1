@@ -53,17 +53,17 @@ describe('thread tracker page', () => {
     expect(html).toContain('再質問スレッド検索');
     expect(html).toContain('/api/aichat/threads/seed');
     expect(html).toContain('id="responseSearch"');
-    expect(html).toContain('質問、回答、conversation_hashを検索');
-    expect(html).toContain('この応答への追加質問');
+    expect(html).toContain('質問・回答・モデルを検索');
+    expect(html).toContain('このスレッドへの追加質問');
     expect(html).toContain('AIチャットで質問する');
-    expect(html).toContain("searchEl.addEventListener('input',renderResponses)");
+    expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
     expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
   });
 
   it('追加質問時に再質問IDと下書きをAIチャットへ引き継ぐ', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain("if(item.threadId)url+='?threadId='+encodeURIComponent(item.threadId)");
+    expect(html).toContain("if(thread.threadId)url+='?threadId='+encodeURIComponent(thread.threadId)");
     expect(html).toContain("(url.indexOf('?')<0?'?':'&')+'draft='+encodeURIComponent(draft)");
   });
 });
@@ -78,6 +78,7 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ threads: [{
       threadId: THREAD_ID,
+      createdAt: '2025-01-01T00:00:00.000Z',
       latestActivityAt: '2025-01-02T00:00:00.000Z',
       turns: rows.map((row) => ({ id: row.id, conversationHash: row.conversation_hash, question: row.question, answer: row.answer, model: row.model, source: row.source, createdAt: row.created_at })),
     }] });
@@ -100,18 +101,19 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ threads: [{
       threadId: null,
+      createdAt: legacy.created_at,
       latestActivityAt: legacy.created_at,
       turns: [{ id: legacy.id, conversationHash: legacy.conversation_hash, question: legacy.question, answer: legacy.answer, model: legacy.model, source: legacy.source, createdAt: legacy.created_at }],
     }] });
   });
 
-  it('conversation_hashをフォルダ、質問と回答をファイルとして表示する', () => {
+  it('質問を俯瞰でき、conversation_hashを前面に出さず、2ペインでMarkdown詳細を表示する', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain('class="tree-folder"');
-    expect(html).toContain('質問.md');
-    expect(html).toContain('回答.md');
-    expect(html).toContain('item.turn.conversationHash');
-    expect(html).toContain("item.turn.conversationHash||item.turn.id");
+    expect(html).toContain('id="viewToggle"');
+    expect(html).toContain('class="questions"');
+    expect(html).toContain("workspace.classList.toggle('two-pane',twoPane)");
+    expect(html).toContain('class="markdown answer"');
+    expect(html).not.toContain('item.turn.conversationHash');
   });
 });
 
