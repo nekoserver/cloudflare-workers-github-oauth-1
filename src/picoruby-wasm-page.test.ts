@@ -59,6 +59,8 @@ describe('PicoRuby/WASM IRB page', () => {
   it('proxies modules, workers, and WASM from the same-origin IRB directory', () => {
     const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
+    expect(indexSource).toContain("app.get('/picoruby-wasm/irb', authMiddleware, proxyPicorubyIrbDocument)");
+    expect(indexSource).toContain("app.get('/picoruby-wasm/irb/', authMiddleware, proxyPicorubyIrbDocument)");
     expect(indexSource).toContain("app.get('/picoruby-wasm/irb/*', authMiddleware");
     expect(indexSource).toContain("new URL(assetPath, PICORUBY_WASM_IRB_URL)");
     expect(indexSource).toContain("upstream.headers.get('Content-Type')");

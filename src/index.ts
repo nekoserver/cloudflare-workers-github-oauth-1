@@ -12720,7 +12720,7 @@ app.get('/picoruby-wasm', authMiddleware, async (c) => {
   return c.html(getPicorubyWasmPage(user.sub));
 });
 
-app.get('/picoruby-wasm/irb/', authMiddleware, async (c) => {
+async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
   try {
     const upstream = await fetch(PICORUBY_WASM_IRB_URL, {
       headers: { Accept: 'text/html' },
@@ -12743,7 +12743,15 @@ app.get('/picoruby-wasm/irb/', authMiddleware, async (c) => {
   } catch {
     return c.text('PicoRuby IRB の読み込みに失敗しました。時間をおいて再度お試しください。', 502);
   }
-});
+}
+
+// Hono's wildcard route also matches the directory path without its trailing
+// slash. Browsers, bookmarks, and authentication return paths can all remove
+// that slash, so register both directory forms before the asset wildcard. If
+// the slashless request reaches the wildcard it otherwise has an empty asset
+// name and incorrectly renders "PicoRuby IRB asset not found." in the iframe.
+app.get('/picoruby-wasm/irb', authMiddleware, proxyPicorubyIrbDocument);
+app.get('/picoruby-wasm/irb/', authMiddleware, proxyPicorubyIrbDocument);
 
 // Proxy the complete official distribution, not just index.html. Loading the
 // HTML locally while leaving its modules and WASM cross-origin is fragile:
