@@ -13,6 +13,9 @@ export interface JWTPayload {
   exp: number; // 有効期限
 }
 
+const MAX_JWT_LENGTH = 16 * 1024;
+const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 /**
  * Base64URL エンコード
  */
@@ -35,6 +38,20 @@ function base64UrlDecode(str: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+function decodeJsonSegment(segment: string): unknown {
+  const decoded = base64UrlDecode(segment);
+  return JSON.parse(new TextDecoder().decode(decoded));
+}
+
+function isValidPayload(value: unknown): value is JWTPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.sub === 'string'
+    && payload.sub.length > 0
+    && Number.isSafeInteger(payload.iat)
+    && Number.isSafeInteger(payload.exp);
 }
 
 /**
@@ -89,12 +106,33 @@ export async function createJWT(
  */
 export async function verifyJWT(token: string, secret: string): Promise<JWTPayload | null> {
   try {
+    // Bound parsing/crypto work for attacker-controlled Authorization headers.
+    if (!token || token.length > MAX_JWT_LENGTH) {
+      return null;
+    }
+
     const parts = token.split('.');
     if (parts.length !== 3) {
       return null;
     }
 
     const [headerEncoded, payloadEncoded, signatureEncoded] = parts;
+    if (!headerEncoded || !payloadEncoded || !signatureEncoded
+      || !parts.every((part) => BASE64URL_PATTERN.test(part))) {
+      return null;
+    }
+
+    // Never infer the algorithm from the key or merely trust a valid signature:
+    // this verifier only accepts the exact JWT profile emitted by createJWT.
+    const header = decodeJsonSegment(headerEncoded);
+    if (!header || typeof header !== 'object' || Array.isArray(header)) {
+      return null;
+    }
+    const headerRecord = header as Record<string, unknown>;
+    if (headerRecord.alg !== 'HS256' || headerRecord.typ !== 'JWT') {
+      return null;
+    }
+
     const data = `${headerEncoded}.${payloadEncoded}`;
 
     // 署名を検証
@@ -111,13 +149,14 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
     }
 
     // ペイロードをデコード
-    const payloadData = base64UrlDecode(payloadEncoded);
-    const payloadString = new TextDecoder().decode(payloadData);
-    const payload: JWTPayload = JSON.parse(payloadString);
+    const payload = decodeJsonSegment(payloadEncoded);
+    if (!isValidPayload(payload)) {
+      return null;
+    }
 
-    // 有効期限を確認
+    // Reject a token at the expiry boundary as required by the JWT exp claim.
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp < now) {
+    if (payload.exp <= now) {
       return null;
     }
 
