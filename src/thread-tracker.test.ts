@@ -158,7 +158,23 @@ describe('thread tracker page', () => {
     expect(html).toContain("(turns.length>1?' has-followups':'')");
     expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
     expect(html).toContain('data-conversation-hash');
-    expect(html).toContain("+(i?'↳ ':'')+esc(t.question||'(質問なし)')");
+    expect(html).toContain("+(i?'↳ ':'')+esc(group.question)");
+  });
+
+  it('同じ質問文のモデル違いを1行に束ね、モデルごとの色丸を行頭に表示する', () => {
+    const html = getThreadTrackerPage('alice', {
+      'model-a': '#123456',
+      'model-b': '#abcdef',
+    });
+    expect(html).toContain('function groupQuestionTurns(turns)');
+    expect(html).toContain('byQuestion.get(question)');
+    expect(html).toContain('if(group.models.indexOf(model)<0)group.models.push(model)');
+    expect(html).toContain('groupQuestionTurns(turns).map(function(group,i)');
+    expect(html).toContain('class="model-dots"');
+    expect(html).toContain('class="model-dot"');
+    expect(html).toContain('MODEL_COLORS[model]');
+    expect(html).toContain('"model-a":"#123456"');
+    expect(html).toContain('"model-b":"#abcdef"');
   });
 
   it('POST直後の再取得に新規投稿がまだ無い場合も投稿を保持してターン数を増やす', () => {
@@ -204,7 +220,7 @@ describe('thread tracker page', () => {
 });
 
 describe('GET /api/aichat/threads/seed', () => {
-  it('期間制限なしの過去ログをスレッドごとのシードデータへ整形する', async () => {
+  it('新しい100件をスレッドごとのシードデータへ整形する', async () => {
     const rows = [
       { id: 'share-1', thread_id: THREAD_ID, conversation_hash: 'hash-1', question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
       { id: 'share-2', thread_id: THREAD_ID, conversation_hash: 'hash-2', question: '続き', answer: '続きの回答', model: 'gemma', source: 'textbox', created_at: '2025-01-02T00:00:00.000Z' },
@@ -219,7 +235,7 @@ describe('GET /api/aichat/threads/seed', () => {
     }] });
   });
 
-  it('期間条件を使わず、所有者のconversation_hash付き未削除行を取得する', async () => {
+  it('期間条件を使わず、所有者のconversation_hash付き未削除行を新しい順に100件取得する', async () => {
     let capturedSql = '';
     const db = { prepare(sql: string) { capturedSql = sql; return { bind() { return { async first() { return { last_activity_at: new Date().toISOString(), revoked_at: null, idle_timeout_seconds: null }; }, async all() { return { results: [] }; }, async run() { return { success: true }; } }; } }; } };
     await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: db });
@@ -228,6 +244,9 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(capturedSql).toContain('deleted_at IS NULL');
     expect(capturedSql).toContain('conversation_hash');
     expect(capturedSql).not.toContain('created_at >=');
+    expect(capturedSql).toContain('ORDER BY created_at DESC, id DESC');
+    expect(capturedSql).toContain('LIMIT 100');
+    expect(capturedSql).toContain('AS recent_shares');
   });
 
   it('thread_id導入前の回答も回答ごとの検索結果として返す', async () => {

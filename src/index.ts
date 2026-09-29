@@ -7300,10 +7300,15 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
   try {
     const rows = await c.env.DB.prepare(
       `SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
-       FROM ai_chat_shares
-       WHERE user_id = ?
-         AND conversation_hash IS NOT NULL
-         AND deleted_at IS NULL
+       FROM (
+         SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
+         FROM ai_chat_shares
+         WHERE user_id = ?
+           AND conversation_hash IS NOT NULL
+           AND deleted_at IS NULL
+         ORDER BY created_at DESC, id DESC
+         LIMIT 100
+       ) AS recent_shares
        ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
     ).bind(user.sub).all<{
       id: string; thread_id: string | null; conversation_hash: string; question: string; answer: string;
