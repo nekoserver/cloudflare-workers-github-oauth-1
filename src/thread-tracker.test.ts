@@ -63,8 +63,8 @@ describe('thread tracker page', () => {
 
   it('追加質問時に再質問IDと下書きをAIチャットへ引き継ぐ', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain("'/aichat?threadId='+encodeURIComponent(item.threadId)");
-    expect(html).toContain("'&draft='+encodeURIComponent(draft)");
+    expect(html).toContain("if(item.threadId)url+='?threadId='+encodeURIComponent(item.threadId)");
+    expect(html).toContain("(url.indexOf('?')<0?'?':'&')+'draft='+encodeURIComponent(draft)");
   });
 });
 
@@ -83,15 +83,26 @@ describe('GET /api/aichat/threads/seed', () => {
     }] });
   });
 
-  it('期間条件を使わず、所有者と未削除行だけを取得する', async () => {
+  it('期間条件を使わず、所有者のconversation_hash付き未削除行を取得する', async () => {
     let capturedSql = '';
     const db = { prepare(sql: string) { capturedSql = sql; return { bind() { return { async first() { return { last_activity_at: new Date().toISOString(), revoked_at: null, idle_timeout_seconds: null }; }, async all() { return { results: [] }; }, async run() { return { success: true }; } }; } }; } };
     await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: db });
     expect(capturedSql).toContain('user_id = ?');
-    expect(capturedSql).toContain('thread_id IS NOT NULL');
+    expect(capturedSql).toContain('conversation_hash IS NOT NULL');
     expect(capturedSql).toContain('deleted_at IS NULL');
     expect(capturedSql).toContain('conversation_hash');
     expect(capturedSql).not.toContain('created_at >=');
+  });
+
+  it('thread_id導入前の回答も回答ごとの検索結果として返す', async () => {
+    const legacy = { id: 'legacy-share', thread_id: null, conversation_hash: 'legacy-hash', question: '以前の質問', answer: '以前の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' };
+    const res = await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb([legacy]) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ threads: [{
+      threadId: null,
+      latestActivityAt: legacy.created_at,
+      turns: [{ id: legacy.id, conversationHash: legacy.conversation_hash, question: legacy.question, answer: legacy.answer, model: legacy.model, source: legacy.source, createdAt: legacy.created_at }],
+    }] });
   });
 
   it('conversation_hashをフォルダ、質問と回答をファイルとして表示する', () => {

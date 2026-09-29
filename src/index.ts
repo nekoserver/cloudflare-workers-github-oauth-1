@@ -7280,7 +7280,7 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
   }
 });
 
-/** ツリーの初期データとして、所有ユーザーの過去スレッドを期間制限なしで返す。 */
+/** ツリーの初期データとして、所有ユーザーのconversation_hash付き回答を期間制限なしで返す。 */
 app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -7290,24 +7290,26 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       `SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
        FROM ai_chat_shares
        WHERE user_id = ?
-         AND thread_id IS NOT NULL
+         AND conversation_hash IS NOT NULL
          AND deleted_at IS NULL
-       ORDER BY thread_id ASC, created_at ASC, id ASC`
+       ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
     ).bind(user.sub).all<{
-      id: string; thread_id: string; conversation_hash: string | null; question: string; answer: string;
+      id: string; thread_id: string | null; conversation_hash: string; question: string; answer: string;
       model: string | null; source: string | null; created_at: string;
     }>();
 
     const threads = new Map<string, {
-      threadId: string;
+      threadId: string | null;
       latestActivityAt: string;
       turns: Array<{ id: string; conversationHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
     }>();
     for (const row of rows.results ?? []) {
-      let thread = threads.get(row.thread_id);
+      // thread_id導入前の回答も検索結果から消さない。旧回答は回答ごとに独立表示する。
+      const groupKey = row.thread_id ?? `legacy:${row.id}`;
+      let thread = threads.get(groupKey);
       if (!thread) {
         thread = { threadId: row.thread_id, latestActivityAt: row.created_at, turns: [] };
-        threads.set(row.thread_id, thread);
+        threads.set(groupKey, thread);
       }
       thread.latestActivityAt = row.created_at;
       thread.turns.push({
@@ -7323,7 +7325,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
     return jsonUtf8({
       threads: Array.from(threads.values()).sort((a, b) =>
-        b.latestActivityAt.localeCompare(a.latestActivityAt) || a.threadId.localeCompare(b.threadId)
+        b.latestActivityAt.localeCompare(a.latestActivityAt) || (a.threadId ?? '').localeCompare(b.threadId ?? '')
       ),
     });
   } catch (error) {
