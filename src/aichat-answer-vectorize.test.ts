@@ -395,6 +395,25 @@ describe('vectorizeAnswerKeywords: 抽出キーワード群をshare_idに紐付�
     expect(results.map((r) => r.keyword)).toEqual(['C', 'A', 'B']);
   });
 
+  it('回答文のベクトルを渡すとキーワードごとのコサイン類似度スコアを返す', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([3, 4]);
+
+    const results = await vectorizeAnswerKeywords(
+      wrapD1(db) as never,
+      ai as never,
+      'u1',
+      's1',
+      ['東京駅'],
+      PLAMO_EMBEDDING_MODEL,
+      [3, 4],
+    );
+
+    expect(results).toEqual([
+      { keyword: '東京駅', alreadyRegistered: false, similarityScore: 1 },
+    ]);
+  });
+
   it('1件のベクタ化が失敗しても残りのキーワードの処理を続ける(1件の失敗で全体を巻き込まない)', async () => {
     const db = setupDb();
     const ai = { run: vi.fn().mockRejectedValueOnce(new Error('AI down')).mockResolvedValue({ data: [[1, 2]] }) };

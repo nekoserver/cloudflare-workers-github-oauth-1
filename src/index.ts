@@ -10138,12 +10138,22 @@ export function mergeKeywordOccurrenceWithCategory(
   });
 }
 
-export type AnswerKeywordVectorizationResult = { keyword: string; alreadyRegistered: boolean; error?: string };
+export type AnswerKeywordVectorizationResult = {
+  keyword: string;
+  alreadyRegistered: boolean;
+  /** PlaMoが生成した回答文とキーワードの埋め込み間のコサイン類似度。 */
+  similarityScore?: number;
+  error?: string;
+};
 
 /**
  * extractPrerequisiteTermsで抽出したキーワード群を1件ずつループし、
  * 各キーワードが既にその回答文(shareId)に紐付けてaichat_answer_keyword_vectors に
  * ベクタ化・登録済みかを判定する。未登録のものだけ新規にベクタ化して追記する。
+ * answerVectorが渡された場合は、回答文と各キーワードの埋め込みベクトルから
+ * コサイン類似度を計算し、キーワードごとのsimilarityScoreとして返す。
+ * PlaMo自体がスコアを直接返すわけではなく、同じモデル空間上のベクトルから
+ * 算出する値である。
  * 1件ずつ順番に処理した結果(登録済みだったか/新規登録したか)を、
  * 抽出順を保ったまま返す(フロントエンドがこの順序でループ演出を行うため)。
  */
@@ -10154,15 +10164,17 @@ export async function vectorizeAnswerKeywords(
   shareId: string,
   keywords: string[],
   model: string = PLAMO_EMBEDDING_MODEL,
+  answerVector?: number[],
 ): Promise<AnswerKeywordVectorizationResult[]> {
   const results: AnswerKeywordVectorizationResult[] = [];
   for (const keyword of keywords) {
     try {
       const alreadyRegistered = await isAnswerKeywordVectorized(db, userId, shareId, keyword, model);
-      if (!alreadyRegistered) {
-        await getOrComputeAnswerKeywordEmbedding(db, ai, userId, shareId, keyword, model);
-      }
-      results.push({ keyword, alreadyRegistered });
+      const keywordVector = await getOrComputeAnswerKeywordEmbedding(db, ai, userId, shareId, keyword, model);
+      const similarityScore = answerVector && answerVector.length > 0 && keywordVector.length === answerVector.length
+        ? cosineSimilarity(answerVector, keywordVector)
+        : undefined;
+      results.push({ keyword, alreadyRegistered, ...(similarityScore !== undefined ? { similarityScore } : {}) });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('vectorize-answer: keyword embedding failed', { shareId, keyword, error: message });
@@ -10818,7 +10830,7 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   }
 
   const keywordVectorization = keywords.length > 0
-    ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords, embeddingModel)
+    ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords, embeddingModel, vector)
     : [];
 
   return jsonUtf8({

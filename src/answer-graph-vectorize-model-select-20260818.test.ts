@@ -90,8 +90,15 @@ describe('POST /api/aichat/vectorize-answer: 埋め込みモデル選択', () =>
     }, makeEnv(db, ai));
 
     expect(res.status).toBe(200);
-    const bodyJson = await res.json() as { model: string };
+    const bodyJson = await res.json() as {
+      model: string;
+      keywordVectorization: Array<{ keyword: string; similarityScore?: number }>;
+    };
     expect(bodyJson.model).toBe('@cf/baai/bge-m3');
+    expect(bodyJson.keywordVectorization).toEqual([
+      { keyword: '用語1', alreadyRegistered: false, similarityScore: 1 },
+      { keyword: '用語2', alreadyRegistered: false, similarityScore: 1 },
+    ]);
     expect(ai.run).toHaveBeenCalledWith('@cf/baai/bge-m3', expect.anything());
   });
 
