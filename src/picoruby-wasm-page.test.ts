@@ -19,6 +19,25 @@ describe('PicoRuby/WASM IRB page', () => {
       .toBe('<base href="https://picoruby.github.io/wasm/"><main>IRB</main>');
   });
 
+  it('rewrites root-relative GitHub Pages assets that a base element cannot resolve', () => {
+    const upstreamHtml = `<html><head>
+      <script type="module" src="/wasm/index.js"></script>
+      <link href='/wasm/index.css' rel="stylesheet">
+      <link href=/wasm/favicon.svg rel="icon">
+      <style>.terminal { background: url(/wasm/background.png); }</style>
+      <script>const worker = \`/wasm/worker.js\`;</script>
+    </head></html>`;
+
+    const html = preparePicorubyIrbHtml(upstreamHtml);
+
+    expect(html).not.toMatch(/(?:["'`(=])\/wasm\//);
+    expect(html).toContain('src="https://picoruby.github.io/wasm/index.js"');
+    expect(html).toContain("href='https://picoruby.github.io/wasm/index.css'");
+    expect(html).toContain('href=https://picoruby.github.io/wasm/favicon.svg');
+    expect(html).toContain('url(https://picoruby.github.io/wasm/background.png)');
+    expect(html).toContain('`https://picoruby.github.io/wasm/worker.js`');
+  });
+
   it('allows only the proxied IRB response to be framed by this origin', () => {
     const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
