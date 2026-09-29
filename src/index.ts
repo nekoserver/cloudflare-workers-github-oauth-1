@@ -12739,8 +12739,14 @@ app.get('/picoruby-wasm/irb/', authMiddleware, async (c) => {
     return new Response(html, {
       headers: {
         'Content-Type': 'text/html; charset=UTF-8',
-        'Cache-Control': 'public, max-age=300',
-        'Content-Security-Policy': "default-src https://picoruby.github.io; style-src 'unsafe-inline' https://picoruby.github.io; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://picoruby.github.io; connect-src https://picoruby.github.io; img-src data: https://picoruby.github.io; font-src data: https://picoruby.github.io; base-uri https://picoruby.github.io; frame-ancestors 'self'; form-action 'none'",
+        'Cache-Control': 'no-store',
+        // PicoRuby's Emscripten runtime creates JavaScript functions and may
+        // start a blob-backed worker while booting. `wasm-unsafe-eval` only
+        // permits WebAssembly compilation; it does not permit either of those
+        // operations. Blocking them leaves the upstream page blank before IRB
+        // reaches window.prompt('>'), so allow exactly the additional runtime
+        // capabilities required by the official build.
+        'Content-Security-Policy': "default-src https://picoruby.github.io; style-src 'unsafe-inline' https://picoruby.github.io; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://picoruby.github.io; worker-src blob: https://picoruby.github.io; connect-src https://picoruby.github.io; img-src data: blob: https://picoruby.github.io; font-src data: https://picoruby.github.io; base-uri https://picoruby.github.io; frame-ancestors 'self'; form-action 'none'",
       },
     });
   } catch {

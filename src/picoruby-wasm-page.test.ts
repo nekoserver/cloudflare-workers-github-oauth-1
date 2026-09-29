@@ -27,6 +27,16 @@ describe('PicoRuby/WASM IRB page', () => {
     expect(indexSource).toContain("'wasm-unsafe-eval'");
   });
 
+  it('permits the JavaScript and worker features used while PicoRuby boots', () => {
+    const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    // wasm-unsafe-eval does not cover Emscripten's generated JavaScript or
+    // blob workers. Blocking either stops startup before prompt('>') runs.
+    expect(indexSource).toContain("script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://picoruby.github.io");
+    expect(indexSource).toContain("worker-src blob: https://picoruby.github.io");
+    expect(indexSource).toContain("'Cache-Control': 'no-store'");
+  });
+
   it('has a 44px sticky header and hides the loading state after IRB loads', () => {
     const html = getPicorubyWasmPage('rubyist');
 
