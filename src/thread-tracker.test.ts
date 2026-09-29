@@ -158,7 +158,7 @@ describe('thread tracker page', () => {
     expect(html).toContain("(turns.length>1?' has-followups':'')");
     expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
     expect(html).toContain('data-conversation-hash');
-    expect(html).toContain("+(i?'↳ ':'')+esc(group.question)");
+    expect(html).toContain("+'\">↳ '+esc(group.question)");
   });
 
   it('同じ質問文を1行に束ね、対応するモデルの色丸をスレッドアイコン位置に横並びで表示する', () => {
@@ -170,8 +170,9 @@ describe('thread tracker page', () => {
     expect(html).toContain('byQuestion.get(question)');
     expect(html).toContain('if(group.models.indexOf(model)<0)group.models.push(model)');
     expect(html).toContain('groups=groupQuestionTurns(turns)');
-    expect(html).toContain('questionModels=groups.reduce(function(models,group){return models.concat(group.models);},[])');
-    expect(html).toContain('questions=groups.map(function(group,i)');
+    expect(html).toContain('questionModels=groups.reduce(function(models,group){group.models.forEach(function(model){if(models.indexOf(model)<0)models.push(model);})');
+    expect(html).toContain('followupGroups=groups.slice(1)');
+    expect(html).toContain('questions=followupGroups.map(function(group)');
     expect(html).toContain('class="model-dots"');
     expect(html).toContain('class="model-dot"');
     expect(html).toContain('MODEL_COLORS[model]');
@@ -180,6 +181,15 @@ describe('thread tracker page', () => {
     expect(html).not.toContain("'+modelDots(group.models)+(i?'↳ ':'")
     expect(html).toContain('"model-a":"#123456"');
     expect(html).toContain('"model-b":"#abcdef"');
+    expect(html).toMatch(/\.model-dots\{[^}]*display:inline-flex;flex:none;flex-wrap:nowrap/);
+  });
+
+  it('カード見出しと質問一覧に同じ質問文を重複表示しない', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('followupGroups=groups.slice(1)');
+    expect(html).toContain("hasFollowupQuestions=followupGroups.length>0");
+    expect(html).toContain("(hasFollowupQuestions?'':' hidden')");
+    expect(html).not.toContain('questions=groups.map');
   });
 
   it('POST直後の再取得に新規投稿がまだ無い場合も投稿を保持してターン数を増やす', () => {
