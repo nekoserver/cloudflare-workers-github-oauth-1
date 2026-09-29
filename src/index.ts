@@ -357,7 +357,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
-import { getPicorubyWasmPage } from './views/picorubyWasm';
+import { getPicorubyWasmPage, PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getSqlxWasmPage } from './views/sqlxWasm';
@@ -4930,7 +4930,9 @@ app.use('/*', async (c, next) => {
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('X-Frame-Options', 'DENY');
+  // PicoRuby IRB proxy is intentionally embedded by the same-origin shell.
+  // Every other response remains non-embeddable.
+  headers.set('X-Frame-Options', c.req.path === '/picoruby-wasm/irb/' ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -12701,9 +12703,31 @@ app.get('/picoruby-wasm', authMiddleware, async (c) => {
   const user = c.get('user');
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src https://picoruby.github.io; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getPicorubyWasmPage(user.sub));
+});
+
+app.get('/picoruby-wasm/irb/', authMiddleware, async (c) => {
+  try {
+    const upstream = await fetch(PICORUBY_WASM_IRB_URL, {
+      headers: { Accept: 'text/html' },
+    });
+    if (!upstream.ok) {
+      return c.text(`PicoRuby IRB の読み込みに失敗しました (${upstream.status})。`, 502);
+    }
+
+    const html = preparePicorubyIrbHtml(await upstream.text());
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'public, max-age=300',
+        'Content-Security-Policy': "default-src https://picoruby.github.io; style-src 'unsafe-inline' https://picoruby.github.io; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://picoruby.github.io; connect-src https://picoruby.github.io; img-src data: https://picoruby.github.io; font-src data: https://picoruby.github.io; base-uri https://picoruby.github.io; frame-ancestors 'self'; form-action 'none'",
+      },
+    });
+  } catch {
+    return c.text('PicoRuby IRB の読み込みに失敗しました。時間をおいて再度お試しください。', 502);
+  }
 });
 
 app.get('/wasm-modules', authMiddleware, async (c) => {

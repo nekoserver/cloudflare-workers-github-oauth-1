@@ -1,6 +1,21 @@
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
-const PICORUBY_WASM_IRB_URL = 'https://picoruby.github.io/wasm/';
+export const PICORUBY_WASM_IRB_URL = 'https://picoruby.github.io/wasm/';
+export const PICORUBY_WASM_IRB_PROXY_PATH = '/picoruby-wasm/irb/';
+
+/**
+ * The upstream IRB uses window.prompt() for input. Current browsers suppress
+ * JavaScript dialogs in a cross-origin iframe, even when allow-modals is set.
+ * Serving the document from our origin avoids that restriction. A base element
+ * keeps the upstream page's relative JS/WASM asset URLs pointed at GitHub Pages.
+ */
+export function preparePicorubyIrbHtml(html: string): string {
+  const base = `<base href="${PICORUBY_WASM_IRB_URL}">`;
+  if (/<head(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (head) => `${head}${base}`);
+  }
+  return `${base}${html}`;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -96,8 +111,8 @@ export function getPicorubyWasmPage(username: string): string {
     <section class="terminal-card" aria-label="PicoRuby IRB">
       <div class="terminal-bar" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="terminal-title">picoruby.wasm — irb</span></div>
       <div class="loading" id="loadingStatus" role="status"><div><div class="spinner"></div>PicoRuby IRB を読み込んでいます…</div></div>
-      <!-- 公式IRBは各コマンドの入力にwindow.prompt()を使うため、sandboxにはallow-modalsが必要。 -->
-      <iframe id="picorubyIrb" title="PicoRuby WebAssembly IRB" src="${PICORUBY_WASM_IRB_URL}" sandbox="allow-scripts allow-same-origin allow-forms allow-modals" referrerpolicy="no-referrer" allow="clipboard-read; clipboard-write"></iframe>
+      <!-- 公式IRBはwindow.prompt()を使うため、ブラウザーがダイアログを拒否しないようHTMLだけを同一オリジン経由で表示する。 -->
+      <iframe id="picorubyIrb" title="PicoRuby WebAssembly IRB" src="${PICORUBY_WASM_IRB_PROXY_PATH}" referrerpolicy="no-referrer" allow="clipboard-read; clipboard-write"></iframe>
     </section>
   </main>
   <script>
