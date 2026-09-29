@@ -59,6 +59,14 @@ describe('getQueryBuilderPage: HTML構造', () => {
     expect(html).toContain('setResultExpanded(resultBody.hidden)');
   });
 
+  it('conversation_hashは省略せず折り返し、末尾にコピーボタンを表示する', () => {
+    expect(html).toContain('.conversation-hash-cell { white-space: normal !important; max-width: none !important;');
+    expect(html).toContain('overflow-wrap: anywhere; word-break: break-all');
+    expect(html).toContain("keys[c] === 'conversation_hash'");
+    expect(html).toContain("copyHash.className = 'btn copy-hash-btn'");
+    expect(html).toContain("copyHash.setAttribute('aria-label', 'conversation_hashをコピー')");
+  });
+
   it('取り出し方の行末にテーブル用サンプルクエリボタンを備える', () => {
     expect(html).toContain('>このテーブルのサンプルクエリを呼び出す</button>');
     expect(html).toContain("$('btnSampleQuery').addEventListener('click'");
@@ -181,5 +189,41 @@ describe('絞り込み条件の追加', () => {
     opSelect.value = 'is_null';
     opSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
     expect(row.querySelector('.filter-value')).toBeNull();
+  });
+});
+
+describe('実行結果', () => {
+  it('conversation_hashを全文表示し、行末のアイコンからコピーできる', async () => {
+    const hash = 'conversation_hash_abcdefghijklmnopqrstuvwxyz_0123456789';
+    const copied: string[] = [];
+    const dom = loadPage(async (input: unknown) => {
+      if (String(input).includes('/columns?')) {
+        return { ok: true, json: async () => ({ columns: [{ name: 'conversation_hash', type: 'TEXT', notNull: false, primaryKey: false }] }) };
+      }
+      return { ok: true, json: async () => ({ sql: 'SELECT conversation_hash', params: [], rows: [{ conversation_hash: hash }] }) };
+    });
+    const window = dom.window as any;
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText: async (value: string) => { copied.push(value); } },
+      configurable: true,
+    });
+
+    const select = window.document.getElementById('tableSelect') as HTMLSelectElement;
+    select.value = 'user_sessions';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (window.document.getElementById('btnRun') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const cell = window.document.querySelector('.conversation-hash-cell') as HTMLElement;
+    expect(cell.textContent).toContain(hash);
+    const copyButton = cell.querySelector('.copy-hash-btn') as HTMLButtonElement;
+    expect(copyButton.getAttribute('aria-label')).toBe('conversation_hashをコピー');
+    copyButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(copied).toEqual([hash]);
+    expect(window.document.getElementById('status').textContent).toBe('conversation_hashをコピーしました');
   });
 });
