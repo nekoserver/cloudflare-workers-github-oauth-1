@@ -267,11 +267,18 @@ describe('thread tracker page', () => {
     expect(html).toContain('function jevScoreHtml(turn)');
     expect(html).toContain('Jevスコア: ');
     expect(html).toContain("heading=index===0?'':'<h3>'");
-    expect(html).toContain("+'\">'+jevScoreHtml(turn)+context+heading+'<div class=\"markdown question\"");
+    expect(html).toContain("questionId+jevScoreHtml(turn)+context+heading+'<div class=\"markdown question\"");
     expect(html).not.toContain("heading=index===0?jevScoreHtml(turn)");
     expect(html).not.toContain("context+'<h3>'+esc(label)+' · 質問 '");
     expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);
     expect(html).toMatch(/\.turn-slide \.turn\{[^}]*margin-top:0/);
+  });
+
+  it('表示中の質問文IDをJevスコアと同じ最上段へ常に表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('class="question-id">質問文ID: ');
+    expect(html).toContain("esc(turn.id||'(不明)')");
+    expect(html).toContain('questionId+jevScoreHtml(turn)');
   });
 
   it('DBで割り当てられたモデル色を既定色より優先する', () => {
@@ -292,6 +299,21 @@ describe('thread tracker page', () => {
 });
 
 describe('GET /api/aichat/threads/seed', () => {
+  it('表示中の質問文IDと同じshare_idに保存された回答Jevスコアを返す', async () => {
+    const row = {
+      id: 'question-share-id', thread_id: THREAD_ID, conversation_hash: 'hash-1', question_hash: 'question-hash',
+      question: '質問', answer: '回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z',
+      question_jev_scores: '1:0.9,7:0.25',
+    };
+    const res = await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb([row]) });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { threads: Array<{ turns: Array<{ id: string; questionJevScores: Array<{ labelId: number; value: number }> }> }> };
+    expect(body.threads[0].turns[0]).toMatchObject({
+      id: 'question-share-id',
+      questionJevScores: [{ labelId: 1, value: 0.9 }, { labelId: 7, value: 0.25 }],
+    });
+  });
+
   it('新しい100件をスレッドごとのシードデータへ整形する', async () => {
     const rows = [
       { id: 'share-1', thread_id: THREAD_ID, conversation_hash: 'hash-1', question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
@@ -316,8 +338,9 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(capturedSql).toContain('deleted_at IS NULL');
     expect(capturedSql).toContain('conversation_hash');
     expect(capturedSql).toContain('question_hash');
-    expect(capturedSql).toContain("e.target_type = 'source_question'");
-    expect(capturedSql).toContain('evaluated_share.question_hash = recent_shares.question_hash');
+    expect(capturedSql).toContain("e.target_type = 'answer'");
+    expect(capturedSql).toContain('e.share_id = recent_shares.id');
+    expect(capturedSql).not.toContain('evaluated_share.question_hash = recent_shares.question_hash');
     expect(capturedSql).toContain('AS question_jev_scores');
     expect(capturedSql).not.toContain('created_at >=');
     expect(capturedSql).toContain('ORDER BY created_at DESC, id DESC');
