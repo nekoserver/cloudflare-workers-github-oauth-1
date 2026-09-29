@@ -74,6 +74,25 @@ describe('thread tracker page', () => {
     expect(html).toContain("thread.turns.push({id:data.shareId||'',conversationHash:data.conversationHash||'',question:message,answer:data.response||'(応答なし)'");
   });
 
+  it('投稿ボタン上のモデル一覧はGemma-4を既定にし、選択モデルを投稿へ渡す', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('class="model-picker"');
+    expect(html).toContain('aria-label="言語モデルを選択"');
+    expect(html).toContain('@cf/google/gemma-4-26b-a4b-it');
+    expect(html).toContain('Gemma-4');
+    expect(html).toContain("selectedModel='@cf/google/gemma-4-26b-a4b-it'");
+    expect(html).toContain('model:selectedModel');
+    expect(html).toMatch(/\.model-menu\{[^}]*bottom:calc\(100% \+ 6px\)/);
+  });
+
+  it('右ペインの回答は共通Markdownパーサーで描画する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('var renderMarkdown=(function()');
+    expect(html).toContain("renderMarkdown(turn.answer||'(応答なし)')");
+    expect(html).toContain('class="markdown answer preview-area"');
+    expect(html).toContain('function parseMd(src)');
+  });
+
   it('conversation_hashで投稿を直接呼び出し、質問一覧から各投稿へ切り替える', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain("requestedConversationHash=new URLSearchParams(location.search).get('conversationHash')||''");
@@ -187,7 +206,7 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain('id="viewToggle"');
     expect(html).toContain('class="questions"');
     expect(html).toContain("workspace.classList.toggle('two-pane',twoPane)");
-    expect(html).toContain('class="markdown answer"');
+    expect(html).toContain('class="markdown answer preview-area"');
     expect(html).not.toContain('item.turn.conversationHash');
   });
 
