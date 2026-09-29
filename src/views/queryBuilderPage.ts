@@ -103,6 +103,10 @@ select.wide, input.wide { flex: 1; min-width: 160px; }
 table.result-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
 table.result-table th, table.result-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 table.result-table th { background: var(--hover); position: sticky; top: 0; }
+.conversation-hash-cell { white-space: normal !important; max-width: none !important; overflow: visible !important; text-overflow: clip !important; }
+.conversation-hash-value { display: flex; align-items: flex-start; gap: 6px; min-width: 320px; }
+.conversation-hash-value code { flex: 1; min-width: 0; color: inherit; overflow-wrap: anywhere; word-break: break-all; }
+.copy-hash-btn { flex: 0 0 auto; padding: 1px 5px; font-size: 15px; line-height: 1.25; }
 .result-wrap { overflow: auto; max-height: 420px; }
 [hidden] { display: none !important; }
 </style>
@@ -459,12 +463,41 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
       for (var c = 0; c < keys.length; c++) {
         var td = document.createElement('td');
         var v = rows[r][keys[c]];
-        td.textContent = v === null || v === undefined ? '' : String(v);
+        var textValue = v === null || v === undefined ? '' : String(v);
+        if (keys[c] === 'conversation_hash' && textValue) {
+          td.className = 'conversation-hash-cell';
+          var hashValue = document.createElement('span');
+          hashValue.className = 'conversation-hash-value';
+          var hashCode = document.createElement('code');
+          hashCode.textContent = textValue;
+          var copyHash = document.createElement('button');
+          copyHash.type = 'button';
+          copyHash.className = 'btn copy-hash-btn';
+          copyHash.textContent = '\u29C9';
+          copyHash.title = 'conversation_hashをコピー';
+          copyHash.setAttribute('aria-label', 'conversation_hashをコピー');
+          copyHash.setAttribute('data-copy-value', textValue);
+          hashValue.appendChild(hashCode);
+          hashValue.appendChild(copyHash);
+          td.appendChild(hashValue);
+        } else {
+          td.textContent = textValue;
+        }
         tr.appendChild(td);
       }
       resultTbody.appendChild(tr);
     }
   }
+
+  resultTbody.addEventListener('click', function(event) {
+    var target = event.target;
+    if (!target || !target.classList || !target.classList.contains('copy-hash-btn')) return;
+    navigator.clipboard.writeText(target.getAttribute('data-copy-value') || '').then(function() {
+      setStatus('conversation_hashをコピーしました', 'ok');
+    }, function(err) {
+      setStatus('コピーに失敗しました: ' + err, 'error');
+    });
+  });
 
   function appendJsonToken(value, kind) {
     var span = document.createElement('span');
