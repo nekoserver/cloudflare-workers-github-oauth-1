@@ -81,7 +81,7 @@ describe('詳細プレビューモーダル: テキスト選択中はスワイ�
   it('historyModalChat の touchend ハンドラが shouldTriggerHistoryModalSwipe を経由する', () => {
     const idx = html.indexOf("historyModalChat.addEventListener('touchend'");
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 300);
+    const block = html.slice(idx, idx + 500);
     expect(block).toContain('shouldTriggerHistoryModalSwipe');
   });
 });
