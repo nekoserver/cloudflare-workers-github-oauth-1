@@ -6,21 +6,23 @@ const html = getAiChatPage({
   aiChatModel: 'claude-sonnet-4-6',
 });
 
-describe('詳細プレビューモーダル: 最大化中のピンチアウト表示', () => {
+describe('詳細プレビューモーダル: 最大化中のダブルタップ表示', () => {
   it('最大化中にframes-hiddenを付けると上下のフレームだけを非表示にする', () => {
     expect(html).toContain('.history-modal.fullscreen.frames-hidden > .history-modal-head');
     expect(html).toContain('.history-modal.fullscreen.frames-hidden > .history-modal-foot');
   });
 
-  it('2本指の間隔が24pxを超えて広がったときだけフレームを隠す', () => {
-    const touchStart = html.indexOf("historyModalChat.addEventListener('touchstart'");
-    const touchEnd = html.indexOf("historyModalChat.addEventListener('touchend'", touchStart);
-    const handlers = html.slice(touchStart, touchEnd + 500);
+  it('最大化中にチャット本文をダブルタップしたときだけフレームを隠す', () => {
+    const doubleTapStart = html.indexOf("historyModalChat.addEventListener('dblclick'");
+    const handler = html.slice(doubleTapStart, doubleTapStart + 400);
 
-    expect(handlers).toContain("e.touches.length === 2 && historyModal.classList.contains('fullscreen')");
-    expect(handlers).toContain('distance - historyPinchStartDistance > 24');
-    expect(handlers).toContain("historyModal.classList.add('frames-hidden')");
-    expect(handlers).toContain('if (historyPinchGestureActive)');
+    expect(doubleTapStart).toBeGreaterThan(-1);
+    expect(handler).toContain("if (!historyModal.classList.contains('fullscreen')) return");
+    expect(handler).toContain("historyModal.classList.add('frames-hidden')");
+    expect(handler).toContain('e.preventDefault()');
+    expect(handler).toContain('e.stopPropagation()');
+    expect(html).not.toContain('historyPinchGestureActive');
+    expect(html).not.toContain('historyTouchDistance');
   });
 
   it('フレーム非表示中の再タップで表示を戻し、そのタップ先の操作は実行しない', () => {
