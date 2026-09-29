@@ -613,6 +613,10 @@ export function getAiChatPage(user: {
       width: 100%; height: 100%; max-height: 100%;
       border-radius: 0; border: none;
     }
+    .history-modal.fullscreen.frames-hidden > .history-modal-head,
+    .history-modal.fullscreen.frames-hidden > .history-modal-foot {
+      display: none;
+    }
     .history-modal-head {
       flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
       padding: 10px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color);
@@ -3144,6 +3148,16 @@ export function getAiChatPage(user: {
     var historyModalSwipeIndex = 0;
     var historyModalSwipeDataCache = {};
     var historySwipeTouchStartX = 0;
+    var historyPinchStartDistance = 0;
+    var historyPinchGestureActive = false;
+    var historyFramesRestoreBlockedUntil = 0;
+
+    function historyTouchDistance(touches) {
+      if (!touches || touches.length < 2) return 0;
+      var dx = touches[0].clientX - touches[1].clientX;
+      var dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    }
 
     function renderHistoryModalModelDots() {
       if (historyModalSwipeItems.length <= 1) return;
@@ -3224,13 +3238,43 @@ export function getAiChatPage(user: {
     }
 
     historyModalChat.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 2 && historyModal.classList.contains('fullscreen')) {
+        historyPinchStartDistance = historyTouchDistance(e.touches);
+        historyPinchGestureActive = true;
+        return;
+      }
       historySwipeTouchStartX = e.touches[0].clientX;
     }, { passive: true });
 
+    historyModalChat.addEventListener('touchmove', function(e) {
+      if (!historyPinchGestureActive || e.touches.length !== 2) return;
+      var distance = historyTouchDistance(e.touches);
+      if (distance - historyPinchStartDistance > 24) {
+        historyModal.classList.add('frames-hidden');
+        // ピンチ直後にブラウザが生成するclickで即座に元へ戻らないようにする。
+        historyFramesRestoreBlockedUntil = Date.now() + 500;
+      }
+    }, { passive: true });
+
     historyModalChat.addEventListener('touchend', function(e) {
+      if (historyPinchGestureActive) {
+        if (e.touches.length === 0) {
+          historyPinchGestureActive = false;
+          historyPinchStartDistance = 0;
+        }
+        return;
+      }
       var dx = e.changedTouches[0].clientX - historySwipeTouchStartX;
       if (shouldTriggerHistoryModalSwipe(dx)) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
     });
+
+    historyModal.addEventListener('click', function(e) {
+      if (!historyModal.classList.contains('frames-hidden')) return;
+      if (Date.now() < historyFramesRestoreBlockedUntil) return;
+      historyModal.classList.remove('frames-hidden');
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
 
     function shouldIgnoreHistorySwipeKey(e) {
       if (e.isComposing) return true;
@@ -3282,6 +3326,7 @@ export function getAiChatPage(user: {
       historyModalBackdrop.style.zIndex = '';
       historyModalBackdrop.classList.remove('fullscreen');
       historyModal.classList.remove('fullscreen');
+      historyModal.classList.remove('frames-hidden');
     }
 
     function clearHistorySelection() {
@@ -3982,6 +4027,7 @@ export function getAiChatPage(user: {
         historyModalBackdrop.setAttribute('aria-hidden', 'true');
         historyModalBackdrop.classList.remove('fullscreen');
         historyModal.classList.remove('fullscreen');
+        historyModal.classList.remove('frames-hidden');
         openReAskResponseModal(selectedModel, question);
       });
       var noBtn = document.createElement('button');
@@ -4941,6 +4987,7 @@ export function getAiChatPage(user: {
     historyModalFullscreenBtn.addEventListener('click', function() {
       var isFullscreen = historyModal.classList.toggle('fullscreen');
       historyModalBackdrop.classList.toggle('fullscreen', isFullscreen);
+      if (!isFullscreen) historyModal.classList.remove('frames-hidden');
     });
     historyModalBackdrop.addEventListener('click', function(e) {
       if (e.target === historyModalBackdrop) {
