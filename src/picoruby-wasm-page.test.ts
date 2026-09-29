@@ -12,11 +12,11 @@ describe('PicoRuby/WASM IRB page', () => {
     expect(html).toContain('referrerpolicy="no-referrer"');
   });
 
-  it('keeps relative upstream assets on the official PicoRuby site', () => {
+  it('keeps relative upstream assets under the same-origin proxy', () => {
     expect(preparePicorubyIrbHtml('<html><head><title>IRB</title></head></html>'))
-      .toContain('<head><base href="https://picoruby.github.io/wasm/">');
+      .toContain('<head><base href="/picoruby-wasm/irb/">');
     expect(preparePicorubyIrbHtml('<main>IRB</main>'))
-      .toBe('<base href="https://picoruby.github.io/wasm/"><main>IRB</main>');
+      .toBe('<base href="/picoruby-wasm/irb/"><main>IRB</main>');
   });
 
   it('rewrites root-relative GitHub Pages assets that a base element cannot resolve', () => {
@@ -31,17 +31,17 @@ describe('PicoRuby/WASM IRB page', () => {
     const html = preparePicorubyIrbHtml(upstreamHtml);
 
     expect(html).not.toMatch(/(?:["'`(=])\/wasm\//);
-    expect(html).toContain('src="https://picoruby.github.io/wasm/index.js"');
-    expect(html).toContain("href='https://picoruby.github.io/wasm/index.css'");
-    expect(html).toContain('href=https://picoruby.github.io/wasm/favicon.svg');
-    expect(html).toContain('url(https://picoruby.github.io/wasm/background.png)');
-    expect(html).toContain('`https://picoruby.github.io/wasm/worker.js`');
+    expect(html).toContain('src="/picoruby-wasm/irb/index.js"');
+    expect(html).toContain("href='/picoruby-wasm/irb/index.css'");
+    expect(html).toContain('href=/picoruby-wasm/irb/favicon.svg');
+    expect(html).toContain('url(/picoruby-wasm/irb/background.png)');
+    expect(html).toContain('`/picoruby-wasm/irb/worker.js`');
   });
 
   it('allows only the proxied IRB response to be framed by this origin', () => {
     const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
-    expect(indexSource).toContain("c.req.path === '/picoruby-wasm/irb/' ? 'SAMEORIGIN' : 'DENY'");
+    expect(indexSource).toContain("c.req.path.startsWith('/picoruby-wasm/irb/') ? 'SAMEORIGIN' : 'DENY'");
     expect(indexSource).toContain("frame-ancestors 'self'");
     expect(indexSource).toContain("'wasm-unsafe-eval'");
   });
@@ -51,9 +51,17 @@ describe('PicoRuby/WASM IRB page', () => {
 
     // wasm-unsafe-eval does not cover Emscripten's generated JavaScript or
     // blob workers. Blocking either stops startup before prompt('>') runs.
-    expect(indexSource).toContain("script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://picoruby.github.io");
-    expect(indexSource).toContain("worker-src blob: https://picoruby.github.io");
+    expect(indexSource).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'");
+    expect(indexSource).toContain("worker-src 'self' blob:");
     expect(indexSource).toContain("'Cache-Control': 'no-store'");
+  });
+
+  it('proxies modules, workers, and WASM from the same-origin IRB directory', () => {
+    const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    expect(indexSource).toContain("app.get('/picoruby-wasm/irb/*', authMiddleware");
+    expect(indexSource).toContain("new URL(assetPath, PICORUBY_WASM_IRB_URL)");
+    expect(indexSource).toContain("upstream.headers.get('Content-Type')");
   });
 
   it('has a 44px sticky header and hides the loading state after IRB loads', () => {
