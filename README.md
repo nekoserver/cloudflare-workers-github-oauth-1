@@ -224,6 +224,24 @@ Wranglerが依存するBLAKE3 WASMで算出したダイジェストも表示さ�
 npm install
 ```
 
+### PicoRuby/wasm の IRB 開発環境
+
+PicoRuby/wasm で IRB を動かすためのソースと JavaScript 依存関係は、次のコマンドで
+リポジトリ内の `.vendor/picoruby-wasm` にインストールできます。
+
+```bash
+npm run picoruby:install
+```
+
+インストーラーは公式の `picoruby/wasm` リポジトリをサブモジュール込みで取得し、
+そのリポジトリの lockfile がある場合は `npm ci`、ない場合は `npm install` を実行します。
+再実行すると既存の checkout を更新します。別の ref や配置先を使う場合は
+`PICORUBY_WASM_REF`、`PICORUBY_WASM_DIR` で上書きできます。
+
+```bash
+PICORUBY_WASM_REF=v1.0.0 PICORUBY_WASM_DIR=/tmp/picoruby-wasm npm run picoruby:install
+```
+
 ### 2. GitHub OAuth App の作成
 
 [GitHub Settings > Developer settings > OAuth Apps](https://github.com/settings/applications/new) で OAuth App を作成し、以下を設定：
