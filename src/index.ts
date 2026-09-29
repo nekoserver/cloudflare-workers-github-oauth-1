@@ -7348,12 +7348,12 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, question, answer, model, source, created_at
+      `SELECT id, conversation_hash, question, answer, model, source, created_at
        FROM ai_chat_shares
       WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
     ).bind(user.sub, threadId).all<{
-      id: string; question: string; answer: string; model: string | null;
+      id: string; conversation_hash: string | null; question: string; answer: string; model: string | null;
       source: string | null; created_at: string;
     }>();
     if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
@@ -7361,6 +7361,7 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
       threadId,
       turns: (rows.results ?? []).map((row) => ({
         id: row.id,
+        conversationHash: row.conversation_hash,
         question: row.question,
         answer: row.answer,
         model: row.model,

@@ -71,7 +71,16 @@ describe('thread tracker page', () => {
     expect(html).toContain("fetch('/api/aichat'");
     expect(html).toContain("threadId:thread.threadId||''");
     expect(html).toContain("status.textContent='送信中…'");
-    expect(html).toContain("thread.turns.push({id:data.shareId||'',question:message,answer:data.response||'(応答なし)'");
+    expect(html).toContain("thread.turns.push({id:data.shareId||'',conversationHash:data.conversationHash||'',question:message,answer:data.response||'(応答なし)'");
+  });
+
+  it('conversation_hashで投稿を直接呼び出し、質問一覧から各投稿へ切り替える', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("requestedConversationHash=new URLSearchParams(location.search).get('conversationHash')||''");
+    expect(html).toContain('data-conversation-hash');
+    expect(html).toContain("url.searchParams.set('conversationHash',turn.conversationHash)");
+    expect(html).toContain('function findTurnByConversationHash(hash)');
+    expect(html).toContain('openConversation(requestedConversationHash,false)');
   });
 
   it('送信受付後は波状SVGを表示し、完了まで二重投稿を防ぐ', () => {
@@ -103,7 +112,8 @@ describe('thread tracker page', () => {
     expect(html).toContain("fetchJson('/api/aichat/threads/'+encodeURIComponent(thread.threadId))");
     expect(html).toContain("(turns.length>1?' has-followups':'')");
     expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
-    expect(html).toContain("return '<li>'+(i?'↳ ':'')+esc(t.question||'(質問なし)')+'</li>'");
+    expect(html).toContain('data-conversation-hash');
+    expect(html).toContain("+(i?'↳ ':'')+esc(t.question||'(質問なし)')");
   });
 
   it('右ペインは最新回答で上書きし、左スワイプまたはボタンで元質問を表示する', () => {
@@ -210,10 +220,10 @@ describe('GET /api/aichat/threads/seed', () => {
 
 describe('GET /api/aichat/threads/:threadId', () => {
   it('本人のターンだけを時系列レスポンスへ整形する', async () => {
-    const rows = [{ id: 'share-1', question: '最初の質問', answer: '回答', model: 'gemma', source: 'textbox', created_at: '2026-09-28T00:00:00.000Z' }];
+    const rows = [{ id: 'share-1', conversation_hash: 'conversation-1', question: '最初の質問', answer: '回答', model: 'gemma', source: 'textbox', created_at: '2026-09-28T00:00:00.000Z' }];
     const res = await app.request('/api/aichat/threads/' + THREAD_ID, { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb(rows) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ threadId: THREAD_ID, turns: [{ id: 'share-1', question: '最初の質問', answer: '回答', model: 'gemma', source: 'textbox', createdAt: '2026-09-28T00:00:00.000Z' }] });
+    expect(await res.json()).toEqual({ threadId: THREAD_ID, turns: [{ id: 'share-1', conversationHash: 'conversation-1', question: '最初の質問', answer: '回答', model: 'gemma', source: 'textbox', createdAt: '2026-09-28T00:00:00.000Z' }] });
   });
 
   it('不正なthreadIdをDB照会前に拒否する', async () => {
