@@ -262,11 +262,13 @@ describe('thread tracker page', () => {
     expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
   });
 
-  it('元の質問見出しを削除し、質問文のJevスコアがある場合だけ詰めて表示する', () => {
+  it('元の質問見出しを削除し、表示中の各質問文のJevスコアがある場合だけ最上段へ詰めて表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('function jevScoreHtml(turn)');
     expect(html).toContain('Jevスコア: ');
-    expect(html).toContain("heading=index===0?jevScoreHtml(turn)");
+    expect(html).toContain("heading=index===0?'':'<h3>'");
+    expect(html).toContain("+'\">'+jevScoreHtml(turn)+context+heading+'<div class=\"markdown question\"");
+    expect(html).not.toContain("heading=index===0?jevScoreHtml(turn)");
     expect(html).not.toContain("context+'<h3>'+esc(label)+' · 質問 '");
     expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);
     expect(html).toMatch(/\.turn-slide \.turn\{[^}]*margin-top:0/);
