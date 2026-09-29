@@ -155,7 +155,7 @@ describe('thread tracker page', () => {
     expect(html).toContain('function sortThreads()');
     expect(html).toContain('thread.latestActivityAt=now');
     expect(html).toContain("fetchJson('/api/aichat/threads/'+encodeURIComponent(thread.threadId))");
-    expect(html).toContain("(turns.length>1?' has-followups':'')");
+    expect(html).toContain("(hasFollowupQuestions?' has-followups':'')");
     expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
     expect(html).toContain('data-conversation-hash');
     expect(html).toContain("+'\">↳ '+esc(group.question)");
@@ -182,6 +182,17 @@ describe('thread tracker page', () => {
     expect(html).toContain('"model-a":"#123456"');
     expect(html).toContain('"model-b":"#abcdef"');
     expect(html).toMatch(/\.model-dots\{[^}]*display:inline-flex;flex:none;flex-wrap:nowrap/);
+  });
+
+  it('同じ質問から短時間に作られたモデル別スレッドを1枚のカードへまとめる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('function mergeParallelThreads(threads)');
+    expect(html).toContain('windowMs=10*60*1000');
+    expect(html).toContain('root===candidateRoot');
+    expect(html).toContain('target.turns=target.turns.concat(thread.turns||[])');
+    expect(html).toContain('allThreads=mergeParallelThreads(data.threads||[])');
+    expect(html).toContain("'+groups.length+'ターン");
+    expect(html).toContain("(hasFollowupQuestions?' has-followups':'')");
   });
 
   it('カード見出しと質問一覧に同じ質問文を重複表示しない', () => {
