@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TABLE_COLUMN_KEYS, TABLE_GROUP_MAP, COLUMN_FK_TARGETS } from './index';
+import { getAiChatPage } from './views/aichat';
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '..', 'migrations');
 const INDEX_SRC = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf-8');
@@ -192,5 +193,17 @@ describe('追加質問リンク削除 UI', () => {
     expect(AICHAT_VIEW_SRC).toContain('class="subquery-link-delete"');
     expect(AICHAT_VIEW_SRC).toContain('この追加質問を削除しますか？');
     expect(AICHAT_VIEW_SRC).toContain("method: 'DELETE'");
+  });
+
+  it('確認メッセージの改行を生成済み JavaScript でエスケープする', () => {
+    const html = getAiChatPage({
+      username: 'testuser',
+      aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    });
+    const scripts = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/g), (match) => match[1]);
+    const script = scripts.find((source) => source.includes('この追加質問を削除しますか？'));
+
+    expect(script).toContain("この追加質問を削除しますか？\\nこの操作は取り消せません。");
+    expect(() => new Function(script ?? '')).not.toThrow();
   });
 });
