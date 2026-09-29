@@ -7305,6 +7305,16 @@ app.get('/api/aichat/threads/growing', authMiddleware, async (c) => {
   }
 });
 
+function parseThreadQuestionJevScores(serialized: string | null): Array<{ labelId: number; value: number }> {
+  if (!serialized) return [];
+  return serialized.split(',').flatMap((entry) => {
+    const separator = entry.indexOf(':');
+    const labelId = Number(entry.slice(0, separator));
+    const value = Number(entry.slice(separator + 1));
+    return separator > 0 && Number.isFinite(labelId) && Number.isFinite(value) ? [{ labelId, value }] : [];
+  });
+}
+
 /** ツリーの初期データとして、所有ユーザーのconversation_hash付き回答を期間制限なしで返す。 */
 app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -7312,7 +7322,15 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
+      `SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at,
+              (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
+                 FROM jev_evaluations e
+                 JOIN ai_chat_shares evaluated_share ON evaluated_share.id = e.share_id
+                WHERE e.target_type = 'source_question'
+                  AND e.user_id = ?
+                  AND evaluated_share.user_id = ?
+                  AND (e.share_id = recent_shares.id
+                    OR (recent_shares.question_hash IS NOT NULL AND evaluated_share.question_hash = recent_shares.question_hash))) AS question_jev_scores
        FROM (
          SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
          FROM ai_chat_shares
@@ -7323,16 +7341,16 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
          LIMIT 100
        ) AS recent_shares
        ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
-    ).bind(user.sub).all<{
+    ).bind(user.sub, user.sub, user.sub).all<{
       id: string; thread_id: string | null; conversation_hash: string; question_hash: string | null; question: string; answer: string;
-      model: string | null; source: string | null; created_at: string;
+      model: string | null; source: string | null; created_at: string; question_jev_scores: string | null;
     }>();
 
     const threads = new Map<string, {
       threadId: string | null;
       createdAt: string;
       latestActivityAt: string;
-      turns: Array<{ id: string; conversationHash: string | null; questionHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
+      turns: Array<{ id: string; conversationHash: string | null; questionHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string; questionJevScores?: Array<{ labelId: number; value: number }> }>;
     }>();
     for (const row of rows.results ?? []) {
       // thread_id導入前の回答も検索結果から消さない。旧回答は回答ごとに独立表示する。
@@ -7343,6 +7361,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
         threads.set(groupKey, thread);
       }
       thread.latestActivityAt = row.created_at;
+      const questionJevScores = parseThreadQuestionJevScores(row.question_jev_scores);
       thread.turns.push({
         id: row.id,
         conversationHash: row.conversation_hash,
@@ -7352,6 +7371,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
         model: row.model,
         source: row.source,
         createdAt: row.created_at,
+        ...(questionJevScores.length ? { questionJevScores } : {}),
       });
     }
 
@@ -7376,13 +7396,21 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, conversation_hash, question_hash, question, answer, model, source, created_at
-       FROM ai_chat_shares
-      WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
+      `SELECT s.id, s.conversation_hash, s.question_hash, s.question, s.answer, s.model, s.source, s.created_at,
+              (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
+                 FROM jev_evaluations e
+                 JOIN ai_chat_shares evaluated_share ON evaluated_share.id = e.share_id
+                WHERE e.target_type = 'source_question'
+                  AND e.user_id = ?
+                  AND evaluated_share.user_id = ?
+                  AND (e.share_id = s.id
+                    OR (s.question_hash IS NOT NULL AND evaluated_share.question_hash = s.question_hash))) AS question_jev_scores
+       FROM ai_chat_shares s
+      WHERE s.user_id = ? AND s.thread_id = ? AND s.deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
-    ).bind(user.sub, threadId).all<{
+    ).bind(user.sub, user.sub, user.sub, threadId).all<{
       id: string; conversation_hash: string | null; question_hash: string | null; question: string; answer: string; model: string | null;
-      source: string | null; created_at: string;
+      source: string | null; created_at: string; question_jev_scores: string | null;
     }>();
     if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
     return jsonUtf8({
@@ -7396,6 +7424,9 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
         model: row.model,
         source: row.source,
         createdAt: row.created_at,
+        ...(parseThreadQuestionJevScores(row.question_jev_scores).length
+          ? { questionJevScores: parseThreadQuestionJevScores(row.question_jev_scores) }
+          : {}),
       })),
     });
   } catch (error) {
