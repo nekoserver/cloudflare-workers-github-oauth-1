@@ -241,15 +241,15 @@ describe('thread tracker page', () => {
     expect(html).toContain('thread.turns=savedTurns');
   });
 
-  it('右ペインは全質問回答ペアを保持し、左右スワイプまたはボタンで順番に表示する', () => {
+  it('右ペインは全質問回答ペアを保持し、案内行を表示せず左右スワイプで順番に表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('class="turn-deck"');
     expect(html).toContain('data-turn-view="\'+label+\'"');
     expect(html).toContain('turns.map(function(turn,index)');
-    expect(html).toContain('← 左右にスワイプして各投稿を表示 →');
+    expect(html).not.toContain('← 左右にスワイプして各投稿を表示 →');
+    expect(html).not.toContain('class="turn-nav"');
     expect(html).toContain("if(delta<-45)show(activeIndex+1)");
     expect(html).toContain("else if(delta>45)show(activeIndex-1)");
-    expect(html).toContain('data-slide="\'+index+\'"');
   });
 
   it('右ペインでは作成日時・投稿数・モデル名を表示せず、モデル色を質問枠へ使う', () => {
