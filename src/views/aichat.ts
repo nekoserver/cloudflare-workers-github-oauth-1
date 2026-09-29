@@ -3148,16 +3148,6 @@ export function getAiChatPage(user: {
     var historyModalSwipeIndex = 0;
     var historyModalSwipeDataCache = {};
     var historySwipeTouchStartX = 0;
-    var historyPinchStartDistance = 0;
-    var historyPinchGestureActive = false;
-    var historyFramesRestoreBlockedUntil = 0;
-
-    function historyTouchDistance(touches) {
-      if (!touches || touches.length < 2) return 0;
-      var dx = touches[0].clientX - touches[1].clientX;
-      var dy = touches[0].clientY - touches[1].clientY;
-      return Math.hypot(dx, dy);
-    }
 
     function renderHistoryModalModelDots() {
       if (historyModalSwipeItems.length <= 1) return;
@@ -3238,39 +3228,23 @@ export function getAiChatPage(user: {
     }
 
     historyModalChat.addEventListener('touchstart', function(e) {
-      if (e.touches.length === 2 && historyModal.classList.contains('fullscreen')) {
-        historyPinchStartDistance = historyTouchDistance(e.touches);
-        historyPinchGestureActive = true;
-        return;
-      }
       historySwipeTouchStartX = e.touches[0].clientX;
     }, { passive: true });
 
-    historyModalChat.addEventListener('touchmove', function(e) {
-      if (!historyPinchGestureActive || e.touches.length !== 2) return;
-      var distance = historyTouchDistance(e.touches);
-      if (distance - historyPinchStartDistance > 24) {
-        historyModal.classList.add('frames-hidden');
-        // ピンチ直後にブラウザが生成するclickで即座に元へ戻らないようにする。
-        historyFramesRestoreBlockedUntil = Date.now() + 500;
-      }
-    }, { passive: true });
-
     historyModalChat.addEventListener('touchend', function(e) {
-      if (historyPinchGestureActive) {
-        if (e.touches.length === 0) {
-          historyPinchGestureActive = false;
-          historyPinchStartDistance = 0;
-        }
-        return;
-      }
       var dx = e.changedTouches[0].clientX - historySwipeTouchStartX;
       if (shouldTriggerHistoryModalSwipe(dx)) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
     });
 
+    historyModalChat.addEventListener('dblclick', function(e) {
+      if (!historyModal.classList.contains('fullscreen')) return;
+      historyModal.classList.add('frames-hidden');
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
     historyModal.addEventListener('click', function(e) {
       if (!historyModal.classList.contains('frames-hidden')) return;
-      if (Date.now() < historyFramesRestoreBlockedUntil) return;
       historyModal.classList.remove('frames-hidden');
       e.preventDefault();
       e.stopPropagation();
