@@ -132,8 +132,11 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain("document.cookie=VIEW_COOKIE+'='+(twoPane?'1':'0')");
     expect(html).toContain("mainContent.classList.toggle('two-pane-mode',twoPane)");
     expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(300px,40%\) minmax\(0,1fr\)/);
-    expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5}');
-    expect(html).toMatch(/\.detail-pane\{[^}]*height:calc\(100dvh - 118px\)[^}]*overflow-y:auto;overscroll-behavior:contain/);
+    expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:-30px}');
+    expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 74px\)[^}]*overflow:hidden/);
+    expect(html).toContain('<div class="turns">\'+turns+\'</div>');
+    expect(html).toMatch(/\.detail-pane \.turns\{[^}]*flex:1;min-height:0[^}]*overflow:hidden/);
+    expect(html).toMatch(/\.detail-pane \.markdown\.answer\{[^}]*flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain/);
     expect(html).not.toContain('スレッドを俯瞰して、続きを質問');
     expect(html).not.toContain('各カードで質問の流れを確認できます');
   });
