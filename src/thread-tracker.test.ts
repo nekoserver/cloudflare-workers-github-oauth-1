@@ -161,7 +161,7 @@ describe('thread tracker page', () => {
     expect(html).toContain("+(i?'↳ ':'')+esc(group.question)");
   });
 
-  it('同じ質問文のモデル違いを1行に束ね、モデルごとの色丸を行頭に表示する', () => {
+  it('同じ質問文を1行に束ね、対応するモデルの色丸をスレッドアイコン位置に横並びで表示する', () => {
     const html = getThreadTrackerPage('alice', {
       'model-a': '#123456',
       'model-b': '#abcdef',
@@ -169,10 +169,15 @@ describe('thread tracker page', () => {
     expect(html).toContain('function groupQuestionTurns(turns)');
     expect(html).toContain('byQuestion.get(question)');
     expect(html).toContain('if(group.models.indexOf(model)<0)group.models.push(model)');
-    expect(html).toContain('groupQuestionTurns(turns).map(function(group,i)');
+    expect(html).toContain('groups=groupQuestionTurns(turns)');
+    expect(html).toContain('questionModels=groups.reduce(function(models,group){return models.concat(group.models);},[])');
+    expect(html).toContain('questions=groups.map(function(group,i)');
     expect(html).toContain('class="model-dots"');
     expect(html).toContain('class="model-dot"');
     expect(html).toContain('MODEL_COLORS[model]');
+    expect(html).toContain('<div class="card-top">\'+modelDots(questionModels)+\'<span class="title">');
+    expect(html).not.toContain('<span aria-hidden="true">🧵</span>');
+    expect(html).not.toContain("'+modelDots(group.models)+(i?'↳ ':'")
     expect(html).toContain('"model-a":"#123456"');
     expect(html).toContain('"model-b":"#abcdef"');
   });
