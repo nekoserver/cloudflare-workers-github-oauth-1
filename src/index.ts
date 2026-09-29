@@ -7327,12 +7327,9 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       `SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at,
               (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
                  FROM jev_evaluations e
-                 JOIN ai_chat_shares evaluated_share ON evaluated_share.id = e.share_id
-                WHERE e.target_type = 'source_question'
+                WHERE e.target_type = 'answer'
                   AND e.user_id = ?
-                  AND evaluated_share.user_id = ?
-                  AND (e.share_id = recent_shares.id
-                    OR (recent_shares.question_hash IS NOT NULL AND evaluated_share.question_hash = recent_shares.question_hash))) AS question_jev_scores
+                  AND e.share_id = recent_shares.id) AS question_jev_scores
        FROM (
          SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
          FROM ai_chat_shares
@@ -7343,7 +7340,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
          LIMIT 100
        ) AS recent_shares
        ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
-    ).bind(user.sub, user.sub, user.sub).all<{
+    ).bind(user.sub, user.sub).all<{
       id: string; thread_id: string | null; conversation_hash: string; question_hash: string | null; question: string; answer: string;
       model: string | null; source: string | null; created_at: string; question_jev_scores: string | null;
     }>();
@@ -7401,16 +7398,13 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
       `SELECT s.id, s.conversation_hash, s.question_hash, s.question, s.answer, s.model, s.source, s.created_at,
               (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
                  FROM jev_evaluations e
-                 JOIN ai_chat_shares evaluated_share ON evaluated_share.id = e.share_id
-                WHERE e.target_type = 'source_question'
+                WHERE e.target_type = 'answer'
                   AND e.user_id = ?
-                  AND evaluated_share.user_id = ?
-                  AND (e.share_id = s.id
-                    OR (s.question_hash IS NOT NULL AND evaluated_share.question_hash = s.question_hash))) AS question_jev_scores
+                  AND e.share_id = s.id) AS question_jev_scores
        FROM ai_chat_shares s
       WHERE s.user_id = ? AND s.thread_id = ? AND s.deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
-    ).bind(user.sub, user.sub, user.sub, threadId).all<{
+    ).bind(user.sub, user.sub, threadId).all<{
       id: string; conversation_hash: string | null; question_hash: string | null; question: string; answer: string; model: string | null;
       source: string | null; created_at: string; question_jev_scores: string | null;
     }>();
