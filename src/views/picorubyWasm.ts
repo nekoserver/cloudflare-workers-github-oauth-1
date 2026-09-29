@@ -96,7 +96,8 @@ export function getPicorubyWasmPage(username: string): string {
     <section class="terminal-card" aria-label="PicoRuby IRB">
       <div class="terminal-bar" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="terminal-title">picoruby.wasm — irb</span></div>
       <div class="loading" id="loadingStatus" role="status"><div><div class="spinner"></div>PicoRuby IRB を読み込んでいます…</div></div>
-      <iframe id="picorubyIrb" title="PicoRuby WebAssembly IRB" src="${PICORUBY_WASM_IRB_URL}" sandbox="allow-scripts allow-same-origin allow-forms" referrerpolicy="no-referrer" allow="clipboard-read; clipboard-write"></iframe>
+      <!-- 公式IRBは各コマンドの入力にwindow.prompt()を使うため、sandboxにはallow-modalsが必要。 -->
+      <iframe id="picorubyIrb" title="PicoRuby WebAssembly IRB" src="${PICORUBY_WASM_IRB_URL}" sandbox="allow-scripts allow-same-origin allow-forms allow-modals" referrerpolicy="no-referrer" allow="clipboard-read; clipboard-write"></iframe>
     </section>
   </main>
   <script>
