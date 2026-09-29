@@ -94,6 +94,12 @@ describe('thread tracker page', () => {
     expect(html).toContain('data-slide="1" aria-pressed="false">元の質問');
   });
 
+  it('右ペインでは日付の上に質問タイトルを重複表示しない', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).not.toContain("return '<h2>'+esc(latest.question||'質問なし')+'</h2>");
+    expect(html).toContain("return '<div class=\"meta\">作成 '+esc(fmt(thread.createdAt))");
+  });
+
   it('追加質問を元スレッドへの返信として青線で示し、元の質問を参照できる', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('.thread-reply{');
