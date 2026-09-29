@@ -98,9 +98,9 @@ describe('thread tracker page', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).not.toContain('<header>');
     expect(html).toMatch(/main\{width:100%;padding:16px\}/);
-    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(280px,min\(34vw,420px\)\) minmax\(0,1fr\)/);
+    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(260px,min\(30vw,380px\)\) minmax\(0,1fr\);column-gap:8px;align-items:start;padding:8px/);
     expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:0}');
-    expect(html).toMatch(/\.detail-pane\{[^}]*height:calc\(100dvh - 32px\)/);
+    expect(html).toMatch(/\.detail-pane\{[^}]*height:calc\(100dvh - 16px\)[^}]*padding:12px/);
   });
 
   it('右ペインの回答は共通Markdownパーサーで描画する', () => {
@@ -209,14 +209,15 @@ describe('thread tracker page', () => {
     expect(html).toContain('thread.turns=savedTurns');
   });
 
-  it('右ペインは最新回答で上書きし、左スワイプまたはボタンで元質問を表示する', () => {
+  it('右ペインは全質問回答ペアを保持し、左右スワイプまたはボタンで順番に表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('class="turn-deck"');
     expect(html).toContain('data-turn-view="\'+label+\'"');
-    expect(html).toContain('← 左スワイプで元の質問を表示');
-    expect(html).toContain("if(delta<-45)show(1)");
-    expect(html).toContain("else if(delta>45)show(0)");
-    expect(html).toContain('data-slide="1" aria-pressed="false">元の質問');
+    expect(html).toContain('turns.map(function(turn,index)');
+    expect(html).toContain('← 左右にスワイプして各投稿を表示 →');
+    expect(html).toContain("if(delta<-45)show(activeIndex+1)");
+    expect(html).toContain("else if(delta>45)show(activeIndex-1)");
+    expect(html).toContain('data-slide="\'+index+\'"');
   });
 
   it('右ペインでは作成日時・投稿数・モデル名を表示せず、モデル色を質問枠へ使う', () => {
@@ -234,14 +235,15 @@ describe('thread tracker page', () => {
     expect(html).toContain('"@cf/google/gemma-4-26b-a4b-it":"#123abc"');
   });
 
-  it('追加質問を元スレッドへの返信として青線で示し、元の質問を参照できる', () => {
+  it('元投稿以外の全質問回答ペアを青線で示し、各ペアから元投稿を参照できる', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('.thread-reply{');
     expect(html).toContain('border-left:4px solid var(--accent)');
-    expect(html).toContain('↳ 元スレッドへの返信');
-    expect(html).toContain('data-parent-thread>元の質問を参照');
-    expect(html).toContain("if(parentLink)parentLink.addEventListener('click',function(){show(1);})");
-    expect(html).toContain("(isReply?' thread-reply':'')");
+    expect(html).toContain('↳ 元投稿への返信');
+    expect(html).toContain('data-parent-thread>元投稿を表示');
+    expect(html).toContain("parentLinks=root.querySelectorAll('[data-parent-thread]')");
+    expect(html).toContain("parentLinks.forEach(function(parentLink){parentLink.addEventListener('click',function(){show(0);});})");
+    expect(html).toContain('turnHtml(turn,index,label,index===activeIndex,index>0)');
   });
 });
 
@@ -311,10 +313,10 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain("twoPane=document.cookie.split(';').some");
     expect(html).toContain("document.cookie=VIEW_COOKIE+'='+(twoPane?'1':'0')");
     expect(html).toContain("mainContent.classList.toggle('two-pane-mode',twoPane)");
-    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(280px,min\(34vw,420px\)\) minmax\(0,1fr\)/);
+    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(260px,min\(30vw,380px\)\) minmax\(0,1fr\);column-gap:8px;align-items:start;padding:8px/);
     expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:0}');
-    expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 32px\)[^}]*overflow:hidden/);
-    expect(html).toContain('<div class="turn-deck">\'+slides+\'</div>');
+    expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 16px\)[^}]*overflow:hidden[^}]*padding:12px/);
+    expect(html).toContain('<div class="turn-deck" data-active-slide="\'+activeIndex+\'">\'+slides+\'</div>');
     expect(html).toMatch(/\.turn-deck\{[^}]*flex:1;min-height:0[^}]*overflow:hidden/);
     expect(html).toMatch(/\.turn-slide\.active\{display:flex/);
     expect(html).toMatch(/\.detail-pane \.markdown\.answer\{[^}]*flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain/);
