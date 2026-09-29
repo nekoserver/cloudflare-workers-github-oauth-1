@@ -48,7 +48,7 @@ async function authCookie(): Promise<string> {
 }
 
 describe('thread tracker page', () => {
-  it('再質問ID付きAI応答の検索・閲覧・追加質問UIを含み、ユーザー名をescapeする', () => {
+  it('再質問ID付きAI応答の検索・閲覧・追加質問UIを含む', () => {
     const html = getThreadTrackerPage('<alice>');
     expect(html).toContain('再質問スレッド検索');
     expect(html).toContain('/api/aichat/threads/seed');
@@ -59,7 +59,6 @@ describe('thread tracker page', () => {
     expect(html).not.toContain('AIチャットで質問する');
     expect(html).not.toContain('このスレッドを開く');
     expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
-    expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
     const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
     expect(script).toBeDefined();
@@ -80,9 +79,28 @@ describe('thread tracker page', () => {
     expect(html).toContain('aria-label="言語モデルを選択"');
     expect(html).toContain('@cf/google/gemma-4-26b-a4b-it');
     expect(html).toContain('Gemma-4');
-    expect(html).toContain("selectedModel='@cf/google/gemma-4-26b-a4b-it'");
+    expect(html).toContain("DEFAULT_MODEL='@cf/google/gemma-4-26b-a4b-it'");
+    expect(html).toContain('selectedModel=DEFAULT_MODEL');
     expect(html).toContain('model:selectedModel');
     expect(html).toMatch(/\.model-menu\{[^}]*bottom:calc\(100% \+ 6px\)/);
+  });
+
+  it('選択した言語モデルをCookieへ保存し、次回表示時に復元する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("MODEL_COOKIE='thread_tracker_model'");
+    expect(html).toContain('savedModel=readCookie(MODEL_COOKIE)');
+    expect(html).toContain("option.getAttribute('data-model')===savedModel");
+    expect(html).toContain("document.cookie=MODEL_COOKIE+'='+encodeURIComponent(selectedModel)");
+    expect(html).toContain('Max-Age=31536000; SameSite=Lax; Secure');
+  });
+
+  it('トップバナーを撤去し、右ペインへ画面幅と高さを最大限割り当てる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).not.toContain('<header>');
+    expect(html).toMatch(/main\{width:100%;padding:16px\}/);
+    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(280px,min\(34vw,420px\)\) minmax\(0,1fr\)/);
+    expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:0}');
+    expect(html).toMatch(/\.detail-pane\{[^}]*height:calc\(100dvh - 32px\)/);
   });
 
   it('右ペインの回答は共通Markdownパーサーで描画する', () => {
@@ -225,9 +243,9 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain("twoPane=document.cookie.split(';').some");
     expect(html).toContain("document.cookie=VIEW_COOKIE+'='+(twoPane?'1':'0')");
     expect(html).toContain("mainContent.classList.toggle('two-pane-mode',twoPane)");
-    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(300px,40%\) minmax\(0,1fr\)/);
-    expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:-30px}');
-    expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 74px\)[^}]*overflow:hidden/);
+    expect(html).toMatch(/\.two-pane-mode\{display:grid;grid-template-columns:minmax\(280px,min\(34vw,420px\)\) minmax\(0,1fr\)/);
+    expect(html).toContain('.two-pane-mode .detail-pane{grid-column:2;grid-row:1/5;margin-top:0}');
+    expect(html).toMatch(/\.detail-pane\{[^}]*top:0[^}]*height:calc\(100dvh - 32px\)[^}]*overflow:hidden/);
     expect(html).toContain('<div class="turn-deck">\'+slides+\'</div>');
     expect(html).toMatch(/\.turn-deck\{[^}]*flex:1;min-height:0[^}]*overflow:hidden/);
     expect(html).toMatch(/\.turn-slide\.active\{display:flex/);
