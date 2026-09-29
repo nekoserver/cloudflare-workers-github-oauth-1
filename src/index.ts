@@ -7287,21 +7287,21 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, thread_id, question, answer, model, source, created_at
+      `SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
        FROM ai_chat_shares
        WHERE user_id = ?
          AND thread_id IS NOT NULL
          AND deleted_at IS NULL
        ORDER BY thread_id ASC, created_at ASC, id ASC`
     ).bind(user.sub).all<{
-      id: string; thread_id: string; question: string; answer: string;
+      id: string; thread_id: string; conversation_hash: string | null; question: string; answer: string;
       model: string | null; source: string | null; created_at: string;
     }>();
 
     const threads = new Map<string, {
       threadId: string;
       latestActivityAt: string;
-      turns: Array<{ id: string; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
+      turns: Array<{ id: string; conversationHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
     }>();
     for (const row of rows.results ?? []) {
       let thread = threads.get(row.thread_id);
@@ -7312,6 +7312,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       thread.latestActivityAt = row.created_at;
       thread.turns.push({
         id: row.id,
+        conversationHash: row.conversation_hash,
         question: row.question,
         answer: row.answer,
         model: row.model,

@@ -53,7 +53,7 @@ describe('thread tracker page', () => {
     expect(html).toContain('再質問スレッド検索');
     expect(html).toContain('/api/aichat/threads/seed');
     expect(html).toContain('id="responseSearch"');
-    expect(html).toContain('質問、回答、再質問IDを検索');
+    expect(html).toContain('質問、回答、conversation_hashを検索');
     expect(html).toContain('この応答への追加質問');
     expect(html).toContain('AIチャットで質問する');
     expect(html).toContain("searchEl.addEventListener('input',renderResponses)");
@@ -71,15 +71,15 @@ describe('thread tracker page', () => {
 describe('GET /api/aichat/threads/seed', () => {
   it('期間制限なしの過去ログをスレッドごとのシードデータへ整形する', async () => {
     const rows = [
-      { id: 'share-1', thread_id: THREAD_ID, question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
-      { id: 'share-2', thread_id: THREAD_ID, question: '続き', answer: '続きの回答', model: 'gemma', source: 'textbox', created_at: '2025-01-02T00:00:00.000Z' },
+      { id: 'share-1', thread_id: THREAD_ID, conversation_hash: 'hash-1', question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
+      { id: 'share-2', thread_id: THREAD_ID, conversation_hash: 'hash-2', question: '続き', answer: '続きの回答', model: 'gemma', source: 'textbox', created_at: '2025-01-02T00:00:00.000Z' },
     ];
     const res = await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb(rows) });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ threads: [{
       threadId: THREAD_ID,
       latestActivityAt: '2025-01-02T00:00:00.000Z',
-      turns: rows.map((row) => ({ id: row.id, question: row.question, answer: row.answer, model: row.model, source: row.source, createdAt: row.created_at })),
+      turns: rows.map((row) => ({ id: row.id, conversationHash: row.conversation_hash, question: row.question, answer: row.answer, model: row.model, source: row.source, createdAt: row.created_at })),
     }] });
   });
 
@@ -90,7 +90,17 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(capturedSql).toContain('user_id = ?');
     expect(capturedSql).toContain('thread_id IS NOT NULL');
     expect(capturedSql).toContain('deleted_at IS NULL');
+    expect(capturedSql).toContain('conversation_hash');
     expect(capturedSql).not.toContain('created_at >=');
+  });
+
+  it('conversation_hashをフォルダ、質問と回答をファイルとして表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('class="tree-folder"');
+    expect(html).toContain('質問.md');
+    expect(html).toContain('回答.md');
+    expect(html).toContain('item.turn.conversationHash');
+    expect(html).toContain("item.turn.conversationHash||item.turn.id");
   });
 });
 
