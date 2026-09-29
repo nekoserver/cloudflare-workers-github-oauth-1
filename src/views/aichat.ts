@@ -613,8 +613,14 @@ export function getAiChatPage(user: {
       width: 100%; height: 100%; max-height: 100%;
       border-radius: 0; border: none;
     }
-    .history-modal.fullscreen.frames-hidden > .history-modal-head,
     .history-modal.fullscreen.frames-hidden > .history-modal-foot {
+      display: none;
+    }
+    .history-modal.fullscreen.frames-hidden > .history-modal-head {
+      position: absolute; top: 8px; right: 8px; z-index: 1;
+      padding: 0; background: transparent; border: none;
+    }
+    .history-modal.fullscreen.frames-hidden > .history-modal-head > :not(.history-modal-fullscreen-btn) {
       display: none;
     }
     .history-modal-head {
@@ -3148,16 +3154,6 @@ export function getAiChatPage(user: {
     var historyModalSwipeIndex = 0;
     var historyModalSwipeDataCache = {};
     var historySwipeTouchStartX = 0;
-    var historyPinchStartDistance = 0;
-    var historyPinchGestureActive = false;
-    var historyFramesRestoreBlockedUntil = 0;
-
-    function historyTouchDistance(touches) {
-      if (!touches || touches.length < 2) return 0;
-      var dx = touches[0].clientX - touches[1].clientX;
-      var dy = touches[0].clientY - touches[1].clientY;
-      return Math.hypot(dx, dy);
-    }
 
     function renderHistoryModalModelDots() {
       if (historyModalSwipeItems.length <= 1) return;
@@ -3238,43 +3234,13 @@ export function getAiChatPage(user: {
     }
 
     historyModalChat.addEventListener('touchstart', function(e) {
-      if (e.touches.length === 2 && historyModal.classList.contains('fullscreen')) {
-        historyPinchStartDistance = historyTouchDistance(e.touches);
-        historyPinchGestureActive = true;
-        return;
-      }
       historySwipeTouchStartX = e.touches[0].clientX;
     }, { passive: true });
 
-    historyModalChat.addEventListener('touchmove', function(e) {
-      if (!historyPinchGestureActive || e.touches.length !== 2) return;
-      var distance = historyTouchDistance(e.touches);
-      if (distance - historyPinchStartDistance > 24) {
-        historyModal.classList.add('frames-hidden');
-        // ピンチ直後にブラウザが生成するclickで即座に元へ戻らないようにする。
-        historyFramesRestoreBlockedUntil = Date.now() + 500;
-      }
-    }, { passive: true });
-
     historyModalChat.addEventListener('touchend', function(e) {
-      if (historyPinchGestureActive) {
-        if (e.touches.length === 0) {
-          historyPinchGestureActive = false;
-          historyPinchStartDistance = 0;
-        }
-        return;
-      }
       var dx = e.changedTouches[0].clientX - historySwipeTouchStartX;
       if (shouldTriggerHistoryModalSwipe(dx)) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
     });
-
-    historyModal.addEventListener('click', function(e) {
-      if (!historyModal.classList.contains('frames-hidden')) return;
-      if (Date.now() < historyFramesRestoreBlockedUntil) return;
-      historyModal.classList.remove('frames-hidden');
-      e.preventDefault();
-      e.stopPropagation();
-    }, true);
 
     function shouldIgnoreHistorySwipeKey(e) {
       if (e.isComposing) return true;
@@ -3327,6 +3293,7 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.remove('fullscreen');
       historyModal.classList.remove('fullscreen');
       historyModal.classList.remove('frames-hidden');
+      historyModalFullscreenBtn.textContent = '⬜︎';
     }
 
     function clearHistorySelection() {
@@ -4028,6 +3995,7 @@ export function getAiChatPage(user: {
         historyModalBackdrop.classList.remove('fullscreen');
         historyModal.classList.remove('fullscreen');
         historyModal.classList.remove('frames-hidden');
+        historyModalFullscreenBtn.textContent = '⬜︎';
         openReAskResponseModal(selectedModel, question);
       });
       var noBtn = document.createElement('button');
@@ -4985,9 +4953,10 @@ export function getAiChatPage(user: {
       clearHistorySelection();
     });
     historyModalFullscreenBtn.addEventListener('click', function() {
-      var isFullscreen = historyModal.classList.toggle('fullscreen');
-      historyModalBackdrop.classList.toggle('fullscreen', isFullscreen);
-      if (!isFullscreen) historyModal.classList.remove('frames-hidden');
+      var isFrameless = historyModal.classList.toggle('frames-hidden');
+      historyModal.classList.toggle('fullscreen', isFrameless);
+      historyModalBackdrop.classList.toggle('fullscreen', isFrameless);
+      historyModalFullscreenBtn.textContent = isFrameless ? '🔲' : '⬜︎';
     });
     historyModalBackdrop.addEventListener('click', function(e) {
       if (e.target === historyModalBackdrop) {
