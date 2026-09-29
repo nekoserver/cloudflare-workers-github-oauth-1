@@ -93,6 +93,16 @@ describe('thread tracker page', () => {
     expect(html).toContain("else if(delta>45)show(0)");
     expect(html).toContain('data-slide="1" aria-pressed="false">元の質問');
   });
+
+  it('追加質問を元スレッドへの返信として青線で示し、元の質問を参照できる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('.thread-reply{');
+    expect(html).toContain('border-left:4px solid var(--accent)');
+    expect(html).toContain('↳ 元スレッドへの返信');
+    expect(html).toContain('data-parent-thread>元の質問を参照');
+    expect(html).toContain("if(parentLink)parentLink.addEventListener('click',function(){show(1);})");
+    expect(html).toContain("(isReply?' thread-reply':'')");
+  });
 });
 
 describe('GET /api/aichat/threads/seed', () => {
