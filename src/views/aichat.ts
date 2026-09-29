@@ -3555,7 +3555,7 @@ export function getAiChatPage(user: {
       var deleteBtn = e.target.closest('.subquery-link-delete');
       if (!deleteBtn) return;
       var linkId = deleteBtn.getAttribute('data-link-id');
-      if (!linkId || !window.confirm('この追加質問を削除しますか？\nこの操作は取り消せません。')) return;
+      if (!linkId || !window.confirm('この追加質問を削除しますか？\\nこの操作は取り消せません。')) return;
       deleteBtn.disabled = true;
       deleteBtn.textContent = '削除中...';
       fetch('/api/aichat/share-subquery-links/' + encodeURIComponent(linkId), {
