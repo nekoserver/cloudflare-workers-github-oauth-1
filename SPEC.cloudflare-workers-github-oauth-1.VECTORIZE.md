@@ -2,7 +2,9 @@
 
 ## AIチャットキーワードのベクタ化 仕様まとめ
 
-**対象**: `aichat_keyword_embeddings` / `aichat_keyword_category_suggestions` / `aichat_answer_category_scores` の各D1テーブル、埋め込み計算・キャッシュ関数群（`src/index.ts` の `getOrComputeKeywordEmbedding` 系）、ZTツリー（Zanzibar形式分類ツリー）・キーワード分類のAI推薦・`/answer-graph` の色分け機能 — このリポジトリにおける「ベクタ化」がどのように保存・運用されているかを一望できるようにする。
+**最終更新**: 2026-09-29
+
+**対象**: `aichat_keyword_embeddings` / `aichat_answer_vectors` / `aichat_answer_keyword_vectors` / `aichat_keyword_category_suggestions` / `aichat_answer_category_scores` の各D1テーブル、埋め込み計算・キャッシュ関数群、ZTツリー（Zanzibar形式分類ツリー）・キーワード分類のAI推薦・`/answer-graph` の回答ベクタ化と色分け機能 — このリポジトリにおける「ベクタ化」がどのように保存・運用されているかを一望できるようにする。
 
 ---
 
@@ -11,7 +13,7 @@
 Cloudflare の **Vectorize**（専用ベクトルDB製品、`env.VECTORIZE.insert()` 等のAPIを持つ）は本リポジトリでは一切使用していない。
 
 - `wrangler.toml` に `[[vectorize]]` バインディングは存在しない（バインディングは `[[d1_databases]]` と `[[analytics_engine_datasets]]` のみ）
-- ベクトル本体は **D1（`aichat_keyword_embeddings` テーブル）に `BLOB` カラムとして直接保存**している
+- ベクトル本体は **D1（`aichat_keyword_embeddings`、`aichat_answer_vectors`、`aichat_answer_keyword_vectors` 等）に `BLOB` カラムとして直接保存**している
 - 埋め込み計算そのものは **Cloudflare Workers AI**（`env.AI.run(model, ...)`）のテキスト埋め込みモデルを使う
 
 「Vectorizeのmetadataに元テキストを入れておく」という一般論はこのリポジトリには当てはまらない。D1スキーマでは埋め込み対象の原文（キーワード）自体が最初から `keyword` カラムという一次データであり、`(user_id, keyword)` にユニークインデックスも張られているため、Vectorizeのmetadata（非構造化JSON、フィルタ用途止まり）より強い形で参照・検索できる。詳細な経緯は [`SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md`](./SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md) の第13章を参照。
@@ -100,6 +102,49 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_unique ON ai
 CREATE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_share ON aichat_answer_category_scores(share_id);
 ```
 
+### 2-4. `aichat_answer_vectors`（migration `0094`）
+
+AIチャットの回答文全体を、回答ID・ユーザー・モデル単位でキャッシュする。`/answer-graph` の「この回答文をベクタ化する」操作とAIチャットの✂️フローから生成される。
+
+```sql
+CREATE TABLE IF NOT EXISTS aichat_answer_vectors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_vectors_unique
+  ON aichat_answer_vectors(user_id, share_id, model);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_vectors_share
+  ON aichat_answer_vectors(share_id);
+```
+
+### 2-5. `aichat_answer_keyword_vectors`（migration `0095`）
+
+回答文から抽出した「理解に必要な予備知識キーワード」を、元の回答IDに紐付けてキャッシュする。同じキーワードでも回答文が異なれば別レコードであり、汎用キーワードキャッシュの `aichat_keyword_embeddings` とは用途・キーが異なる。
+
+```sql
+CREATE TABLE IF NOT EXISTS aichat_answer_keyword_vectors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_unique
+  ON aichat_answer_keyword_vectors(user_id, share_id, keyword, model);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share
+  ON aichat_answer_keyword_vectors(share_id);
+```
+
+`0095` は現時点では個別の `migrations/0095_*.sql` ファイルではなく、`src/index.ts` の `STATUS_MIGRATION_SQL` に定義されている。
+
 ---
 
 ## 3. 現在使用している埋め込みモデル
@@ -132,8 +177,8 @@ export const KEYWORD_EMBEDDING_MODELS = [BGE_M3_MODEL, PLAMO_EMBEDDING_MODEL, GE
 
 ### 4-1. キャッシュキーと粒度
 
-- ベクタ化の単位は**キーワード（単語・短いフレーズ）単位**。質問文・回答文まるごとのベクタ化は行っていない
-- キャッシュキーは `(user_id, keyword)` の組。ユーザーをまたいだベクトル共有はしない（テナント分離）
+- 汎用キーワードは `(user_id, keyword)`、回答文全体は `(user_id, share_id, model)`、回答由来キーワードは `(user_id, share_id, keyword, model)` の粒度でキャッシュする。ユーザーをまたいだベクトル共有はしない（テナント分離）
+- 質問文そのものはベクタ化しないが、回答文全体は `aichat_answer_vectors` に保存する
 - 同じキーワードでも**モデルが違えば別ベクトル**として扱う（主系列＝bge-m3、サブ系列＝plamo/gemma）。モデル不一致の行はキャッシュヒットとみなさず再計算する（`getOrComputeKeywordEmbeddingForModel`、`src/index.ts:6538`のコメント参照）
 - 履歴は持たない。同一キーワード・同一モデルへの再登録は `UPDATE` で上書きされる（`ON CONFLICT(user_id, keyword) DO UPDATE SET ...`）
 
@@ -148,7 +193,7 @@ export function blobToFloats(blob: ArrayBuffer): number[] {
 }
 ```
 
-`number[]` を `Float32Array` のバイト列に変換してD1の `BLOB` カラムへ格納する（32bit浮動小数点、リトルエンディアン）。
+`number[]` を `Float32Array` のバイト列に変換してD1の `BLOB` カラムへ格納する（32bit浮動小数点）。
 
 ### 4-3. 類似度計算
 
@@ -170,6 +215,9 @@ D1側にベクトル検索機能（ANN等）は無いため、類似度計算は
 | 似ているキーワードの提示（埋め込みキャッシュモーダルの🔍分析） | `/api/aichat/keyword-embeddings/similar` | サーバー側フォールバック `0.85`。UIスライダーのデフォルトは `75%`（Cookie記憶、1%刻み）。**両者は意図的に独立**した値 |
 | キーワード→中分類のAI推薦 | `pickBestCategorySuggestion` | 閾値なし（全カテゴリ中の最大類似度を1件だけ返す「参考情報」。確定分類は書き換えない） |
 | `/answer-graph` のノード色分け | `aichat_answer_category_scores` 経由 | 同上のロジックを回答単位に適用 |
+| 回答文と予備知識キーワードの関連度 | `vectorizeAnswerKeywords` | 閾値なし。両者を同一モデルで埋め込み、コサイン類似度を `similarityScore` としてAPI応答に含める |
+
+`similarityScore` は PlaMo 等のモデルが直接返すスコアではない。`POST /api/aichat/vectorize-answer` が取得した回答ベクトルと、各キーワードベクトルを `cosineSimilarity` に渡して算出する。ベクトルが空、または次元数が異なる場合はスコアを省略する。スコア自体はD1へ保存せず、そのリクエストの応答で返す。
 
 短い単語のベクトルは類似度が高く出やすい（anisotropy、異方性）問題があるため、閾値をユーザー調整可能なスライダーにしてある（詳細は [`SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md`](./SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md) 第13章）。
 
@@ -193,6 +241,11 @@ D1側にベクトル検索機能（ANN等）は無いため、類似度計算は
 |---|---|
 | `getOrComputeKeywordEmbedding(db, ai, userId, keyword, source, model)` | bge-m3（主系列）のキャッシュ取得・未キャッシュ時はAI呼び出しの上で保存 |
 | `getOrComputeKeywordEmbeddingForModel(db, ai, userId, keyword, model)` | モデル名に応じて主系列/サブ系列いずれかに振り分けてキャッシュ取得・保存。plamo/gemma利用時も主系列(bge-m3)の行は必ず確保する |
+| `getOrComputeAnswerEmbedding(db, ai, userId, shareId, answerText, model)` | 回答文全体のキャッシュ取得・未キャッシュ時の埋め込み生成と `aichat_answer_vectors` への保存 |
+| `getOrComputeAnswerKeywordEmbedding(db, ai, userId, shareId, keyword, model)` | 回答由来キーワードのキャッシュ取得・未キャッシュ時の生成と `aichat_answer_keyword_vectors` への保存 |
+| `vectorizeAnswerKeywords(..., answerVector?)` | 抽出順を保って回答由来キーワードを登録する。回答ベクトルが渡された場合は各キーワードとのコサイン類似度も返す。1件の失敗は他の処理を止めない |
+| `isAnswerVectorized` / `isAnswerKeywordVectorized` / `hasAnswerKeywordVectors` | 回答・回答由来キーワードの登録状態を判定し、`/answer-graph` のUIを切り替える |
+| `listAnswerKeywordVectors` | 回答に紐づくキーワードを重複なしで一覧取得する |
 | `embedTextWithModel(ai, model, text)` / `embedTextsWithModelBatch(ai, model, texts)` | Workers AI呼び出しの薄いラッパー（単発/バッチ） |
 | `registerKeywordEmbeddings(...)` | ZTモーダルの「登録する」ボタンから複数キーワードをまとめて登録。1件の失敗が他を止めないよう結果を`results`に記録して継続 |
 | `lookupKeywordEmbedding(...)` / `listKeywordEmbeddingsOverview(...)` | 既存キャッシュの参照・一覧表示用（埋め込みキャッシュモーダルの📖一覧） |
@@ -201,7 +254,45 @@ D1側にベクトル検索機能（ANN等）は無いため、類似度計算は
 
 ---
 
-## 6. 関連ドキュメント
+## 6. 回答文ベクタ化API
+
+### `POST /api/aichat/vectorize-answer`
+
+- 認証、D1、Workers AIバインディングが必要
+- bodyは `{ shareId, model?, forcePlamo? }`
+- `model` には `KEYWORD_EMBEDDING_MODELS` の3モデルのみ指定可能。省略時はPlaMo
+- `forcePlamo: true` はAIチャットの✂️フロー専用で、`model` の値にかかわらずPlaMoへ固定する
+- 回答文の埋め込みを保存した後、`@cf/google/gemma-4-26b-a4b-it` で予備知識キーワードを抽出する。抽出は20秒でタイムアウトし、失敗しても回答文のベクタ化成功は取り消さず `_keywordsWarning` を返す
+- 抽出キーワードは同じ埋め込みモデルで順次ベクタ化される。各結果は `keyword`、`alreadyRegistered`、成功時の `similarityScore`（回答文とのコサイン類似度）、失敗時の `error` を持つ
+
+主な成功応答は次の形になる。
+
+```json
+{
+  "vectorized": true,
+  "model": "@cf/pfnet/plamo-embedding-1b",
+  "dim": 2048,
+  "keywords": ["予備知識"],
+  "keywordVectorization": [
+    {
+      "keyword": "予備知識",
+      "alreadyRegistered": false,
+      "similarityScore": 0.82
+    }
+  ],
+  "_keywordsWarning": null
+}
+```
+
+`dim` と `similarityScore` の数値は説明用の例であり、固定値ではない。
+
+### `GET /api/aichat/answer-keywords?shareId=...`
+
+回答に紐づく抽出済みキーワードを返す。レスポンスには単純な `keywords` に加え、AIチャット検索ログ上の出現回数と確定カテゴリの有無・表示色をマージした `keywordOccurrences` が含まれる。
+
+---
+
+## 7. 関連ドキュメント
 
 - ZTツリー・埋め込みキャッシュモーダルUIの開発経緯: [`SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md`](./SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md) 第13章
 - ZTボタン経由検索と左サイドパネル検索の精度差（本ドキュメントのベクタ化とは別軸の、文字列一致検索の話）: 同ファイル 13-1節
