@@ -1,16 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { getPicorubyWasmPage } from './views/picorubyWasm';
+import { readFileSync } from 'node:fs';
+import { getPicorubyWasmPage, preparePicorubyIrbHtml } from './views/picorubyWasm';
 
 describe('PicoRuby/WASM IRB page', () => {
-  it('embeds the official PicoRuby WASM IRB and permits its prompt dialog', () => {
+  it('embeds the official PicoRuby WASM IRB through the same-origin endpoint', () => {
     const html = getPicorubyWasmPage('rubyist');
 
-    expect(html).toContain('src="https://picoruby.github.io/wasm/"');
+    expect(html).toContain('src="/picoruby-wasm/irb/"');
     expect(html).toContain('title="PicoRuby WebAssembly IRB"');
-    // PicoRuby/wasm reads each IRB command with window.prompt(). Sandboxed
-    // frames suppress that dialog unless allow-modals is explicitly granted.
-    expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-forms allow-modals"');
+    expect(html).not.toContain('sandbox=');
     expect(html).toContain('referrerpolicy="no-referrer"');
+  });
+
+  it('keeps relative upstream assets on the official PicoRuby site', () => {
+    expect(preparePicorubyIrbHtml('<html><head><title>IRB</title></head></html>'))
+      .toContain('<head><base href="https://picoruby.github.io/wasm/">');
+    expect(preparePicorubyIrbHtml('<main>IRB</main>'))
+      .toBe('<base href="https://picoruby.github.io/wasm/"><main>IRB</main>');
+  });
+
+  it('allows only the proxied IRB response to be framed by this origin', () => {
+    const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    expect(indexSource).toContain("c.req.path === '/picoruby-wasm/irb/' ? 'SAMEORIGIN' : 'DENY'");
+    expect(indexSource).toContain("frame-ancestors 'self'");
+    expect(indexSource).toContain("'wasm-unsafe-eval'");
   });
 
   it('has a 44px sticky header and hides the loading state after IRB loads', () => {
