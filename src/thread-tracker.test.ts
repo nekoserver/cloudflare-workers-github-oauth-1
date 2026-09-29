@@ -71,7 +71,7 @@ describe('thread tracker page', () => {
     expect(html).toContain("fetch('/api/aichat'");
     expect(html).toContain("threadId:thread.threadId||''");
     expect(html).toContain("status.textContent='送信中…'");
-    expect(html).toContain("thread.turns.push({question:message,answer:data.response||'(応答なし)'");
+    expect(html).toContain("thread.turns.push({id:data.shareId||'',question:message,answer:data.response||'(応答なし)'");
   });
 
   it('送信受付後は波状SVGを表示し、完了まで二重投稿を防ぐ', () => {
@@ -87,12 +87,23 @@ describe('thread tracker page', () => {
 
   it('追加回答の完了時に元スレッドへ戻り、成長を通知する', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain("if(twoPane)revealGrownThread(thread)");
+    expect(html).toContain(".then(function(){revealGrownThread(thread);})");
     expect(html).toContain("card.classList.add('has-growth','thread-grew')");
-    expect(html).toContain("card.scrollIntoView({behavior:'smooth',block:'center'})");
+    expect(html).toContain("card.scrollIntoView({behavior:'smooth',block:'start'})");
     expect(html).toContain('新規 +1ターン');
     expect(html).toContain('@keyframes thread-grew');
     expect(html).toContain('@media(prefers-reduced-motion:reduce)');
+  });
+
+  it('追加投稿を最新アクティビティ順の先頭へ移し、再読込後も青線と質問一覧を表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('function activityAt(thread)');
+    expect(html).toContain('function sortThreads()');
+    expect(html).toContain('thread.latestActivityAt=now');
+    expect(html).toContain("fetchJson('/api/aichat/threads/'+encodeURIComponent(thread.threadId))");
+    expect(html).toContain("(turns.length>1?' has-followups':'')");
+    expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
+    expect(html).toContain("return '<li>'+(i?'↳ ':'')+esc(t.question||'(質問なし)')+'</li>'");
   });
 
   it('右ペインは最新回答で上書きし、左スワイプまたはボタンで元質問を表示する', () => {

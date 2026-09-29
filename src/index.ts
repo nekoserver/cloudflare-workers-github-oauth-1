@@ -6412,7 +6412,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         error: saveErr instanceof Error ? saveErr.message : 'Unknown',
         user: user.sub,
       });
-      return {};
+      return { saveError: saveErr instanceof Error ? saveErr.message : String(saveErr) };
     }
   };
 
@@ -6425,6 +6425,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     try {
       const { text: response, usage } = await runAi(model);
       const saved = await autoSave(response, model, usage);
+      if ('saveError' in saved && requestedThreadId) {
+        return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saved.saveError }, 500);
+      }
       const isFallback = i > 0;
       return jsonUtf8({
         response,
@@ -6434,7 +6437,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           ? { fallbackUsed: true, primaryError: lastErr instanceof Error ? lastErr.message : String(lastErr) }
           : {}),
         ...usage,
-        ...saved,
+        ...('saveError' in saved ? {} : saved),
       });
     } catch (err) {
       logger.warn(
