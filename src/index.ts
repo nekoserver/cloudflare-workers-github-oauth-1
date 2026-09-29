@@ -7311,9 +7311,9 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
+      `SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
        FROM (
-         SELECT id, thread_id, conversation_hash, question, answer, model, source, created_at
+         SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
          FROM ai_chat_shares
          WHERE user_id = ?
            AND conversation_hash IS NOT NULL
@@ -7323,7 +7323,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
        ) AS recent_shares
        ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
     ).bind(user.sub).all<{
-      id: string; thread_id: string | null; conversation_hash: string; question: string; answer: string;
+      id: string; thread_id: string | null; conversation_hash: string; question_hash: string | null; question: string; answer: string;
       model: string | null; source: string | null; created_at: string;
     }>();
 
@@ -7331,7 +7331,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       threadId: string | null;
       createdAt: string;
       latestActivityAt: string;
-      turns: Array<{ id: string; conversationHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
+      turns: Array<{ id: string; conversationHash: string | null; questionHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string }>;
     }>();
     for (const row of rows.results ?? []) {
       // thread_id導入前の回答も検索結果から消さない。旧回答は回答ごとに独立表示する。
@@ -7345,6 +7345,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       thread.turns.push({
         id: row.id,
         conversationHash: row.conversation_hash,
+        questionHash: row.question_hash,
         question: row.question,
         answer: row.answer,
         model: row.model,
@@ -7374,12 +7375,12 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, conversation_hash, question, answer, model, source, created_at
+      `SELECT id, conversation_hash, question_hash, question, answer, model, source, created_at
        FROM ai_chat_shares
       WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
     ).bind(user.sub, threadId).all<{
-      id: string; conversation_hash: string | null; question: string; answer: string; model: string | null;
+      id: string; conversation_hash: string | null; question_hash: string | null; question: string; answer: string; model: string | null;
       source: string | null; created_at: string;
     }>();
     if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
@@ -7388,6 +7389,7 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
       turns: (rows.results ?? []).map((row) => ({
         id: row.id,
         conversationHash: row.conversation_hash,
+        questionHash: row.question_hash,
         question: row.question,
         answer: row.answer,
         model: row.model,

@@ -124,6 +124,17 @@ describe('thread tracker page', () => {
     expect(html).toContain('function parseMd(src)');
   });
 
+  it('質問に登録された追加質問を取得し、対応する各回答の直後にリンク表示する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("fetchJson('/api/aichat/share-subquery-links/all')");
+    expect(html).toContain('function attachSubqueries(threads,items)');
+    expect(html).toContain('(turn.questionHash&&byHash.get(turn.questionHash))||byQuestion.get(turn.question)||[]');
+    expect(html).toContain('function subqueriesHtml(turn)');
+    expect(html).toContain('aria-label="この回答の追加質問"');
+    expect(html).toContain("renderMarkdown(turn.answer||'(応答なし)')+'</div>'+subqueriesHtml(turn)");
+    expect(html).toContain("url.protocol==='https:'||url.protocol==='http:'");
+  });
+
   it('追加質問フォームを右ペインの最下部に寄せ、空の送信状態は余白を取らない', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toMatch(/\.actions\{[^}]*flex:none;[^}]*margin-top:auto;[^}]*padding-top:12px/);
@@ -292,6 +303,7 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(capturedSql).toContain('conversation_hash IS NOT NULL');
     expect(capturedSql).toContain('deleted_at IS NULL');
     expect(capturedSql).toContain('conversation_hash');
+    expect(capturedSql).toContain('question_hash');
     expect(capturedSql).not.toContain('created_at >=');
     expect(capturedSql).toContain('ORDER BY created_at DESC, id DESC');
     expect(capturedSql).toContain('LIMIT 100');
