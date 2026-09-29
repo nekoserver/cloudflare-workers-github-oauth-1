@@ -26,13 +26,14 @@ describe('historyModalの全画面表示切り替えボタン', () => {
     expect(html.slice(fullscreenIdx, fullscreenIdx + 200)).toContain('⬜︎');
   });
 
-  it('クリックで.history-modalと.history-modal-backdropのfullscreenクラスをtoggleする', () => {
+  it('クリックでフレームなし全画面表示を切り替える', () => {
     const html = getAiChatPage(minimalUser);
     const start = html.indexOf("historyModalFullscreenBtn.addEventListener('click'");
     expect(start).toBeGreaterThan(-1);
-    const body = html.slice(start, start + 300);
-    expect(body).toContain("historyModal.classList.toggle('fullscreen')");
-    expect(body).toContain("historyModalBackdrop.classList.toggle('fullscreen'");
+    const body = html.slice(start, start + 600);
+    expect(body).toContain("historyModal.classList.toggle('frames-hidden')");
+    expect(body).toContain("historyModal.classList.toggle('fullscreen', isFrameless)");
+    expect(body).toContain("historyModalBackdrop.classList.toggle('fullscreen', isFrameless)");
   });
 
   it('モーダルを閉じる箇所(closeHistoryModal・再質問確認後の遷移)でfullscreenクラスをリセットする', () => {
