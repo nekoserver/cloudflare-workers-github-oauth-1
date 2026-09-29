@@ -55,16 +55,20 @@ describe('thread tracker page', () => {
     expect(html).toContain('id="responseSearch"');
     expect(html).toContain('質問・回答・モデルを検索');
     expect(html).toContain('このスレッドへの追加質問');
-    expect(html).toContain('AIチャットで質問する');
+    expect(html).toContain('type="submit">送信</button>');
+    expect(html).not.toContain('AIチャットで質問する');
+    expect(html).not.toContain('このスレッドを開く');
     expect(html).toContain("searchEl.addEventListener('input',renderThreads)");
     expect(html).toContain('&lt;alice&gt;');
     expect(html).not.toContain('<alice>');
   });
 
-  it('追加質問時に再質問IDと下書きをAIチャットへ引き継ぐ', () => {
+  it('追加質問をページ内から再質問ID付きで直接送信する', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain("if(thread.threadId)url+='?threadId='+encodeURIComponent(thread.threadId)");
-    expect(html).toContain("(url.indexOf('?')<0?'?':'&')+'draft='+encodeURIComponent(draft)");
+    expect(html).toContain("fetch('/api/aichat'");
+    expect(html).toContain("threadId:thread.threadId||''");
+    expect(html).toContain("status.textContent='送信中…'");
+    expect(html).toContain("thread.turns.push({question:message,answer:data.response||'(応答なし)'");
   });
 });
 
