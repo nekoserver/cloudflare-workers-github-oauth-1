@@ -5887,8 +5887,17 @@ app.get('/aichat', authMiddleware, async (c) => {
 });
 
 /** AIチャットの成長中スレッドをツリーから追跡するページ。 */
-app.get('/thread-tracker', authMiddleware, (c) => {
-  return c.html(getThreadTrackerPage(c.get('user').sub));
+app.get('/thread-tracker', authMiddleware, async (c) => {
+  let modelColors: Record<string, string> = {};
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+      for (const row of rows.results ?? []) modelColors[row.model_id] = row.color;
+    } catch {
+      logger.warn('thread-tracker aichat_model_colors query failed, using default assignments');
+    }
+  }
+  return c.html(getThreadTrackerPage(c.get('user').sub, modelColors));
 });
 
 /**

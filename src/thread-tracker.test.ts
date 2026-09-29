@@ -70,7 +70,7 @@ describe('thread tracker page', () => {
     expect(html).toContain("fetch('/api/aichat'");
     expect(html).toContain("threadId:thread.threadId||''");
     expect(html).toContain("status.textContent='送信中…'");
-    expect(html).toContain("thread.turns.push({id:data.shareId||'',conversationHash:data.conversationHash||'',question:message,answer:data.response||'(応答なし)'");
+    expect(html).toContain("postedTurn={id:data.shareId||'',conversationHash:data.conversationHash||'',question:message,answer:data.response||'(応答なし)'");
   });
 
   it('投稿ボタン上のモデル一覧はGemma-4を既定にし、選択モデルを投稿へ渡す', () => {
@@ -131,6 +131,14 @@ describe('thread tracker page', () => {
     expect(html).toContain('button.innerHTML=sendLabel');
   });
 
+  it('更新中も波状SVGを表示して更新ボタンの二重操作を防ぐ', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("if(reloading)return;reloading=true;reloadButton.disabled=true");
+    expect(html).toContain("reloadButton.setAttribute('aria-label','更新中');reloadButton.innerHTML=wave");
+    expect(html).toContain("finally{if(fromReload){reloading=false;reloadButton.disabled=false");
+    expect(html).toContain("reloadButton.addEventListener('click',function(){loadThreads(true);})");
+  });
+
   it('追加回答の完了時に元スレッドへ戻り、成長を通知する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain(".then(function(){revealGrownThread(thread);})");
@@ -153,6 +161,12 @@ describe('thread tracker page', () => {
     expect(html).toContain("+(i?'↳ ':'')+esc(t.question||'(質問なし)')");
   });
 
+  it('POST直後の再取得に新規投稿がまだ無い場合も投稿を保持してターン数を増やす', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("if(!savedTurns.some(function(turn){return postedTurn.conversationHash&&turn.conversationHash===postedTurn.conversationHash;}))savedTurns.push(postedTurn)");
+    expect(html).toContain('thread.turns=savedTurns');
+  });
+
   it('右ペインは最新回答で上書きし、左スワイプまたはボタンで元質問を表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('class="turn-deck"');
@@ -163,10 +177,19 @@ describe('thread tracker page', () => {
     expect(html).toContain('data-slide="1" aria-pressed="false">元の質問');
   });
 
-  it('右ペインでは日付の上に質問タイトルを重複表示しない', () => {
+  it('右ペインでは作成日時・投稿数・モデル名を表示せず、モデル色を質問枠へ使う', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).not.toContain("return '<h2>'+esc(latest.question||'質問なし')+'</h2>");
-    expect(html).toContain("return '<div class=\"meta\">作成 '+esc(fmt(thread.createdAt))");
+    expect(html).not.toContain("return '<div class=\"meta\">作成 '+esc(fmt(thread.createdAt))");
+    expect(html).not.toContain("esc(turn.model||'model不明')");
+    expect(html).toContain('MODEL_COLORS[turn.model]');
+    expect(html).toContain('class="markdown question" style="--question-model-color:');
+    expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
+  });
+
+  it('DBで割り当てられたモデル色を既定色より優先する', () => {
+    const html = getThreadTrackerPage('alice', { '@cf/google/gemma-4-26b-a4b-it': '#123abc' });
+    expect(html).toContain('"@cf/google/gemma-4-26b-a4b-it":"#123abc"');
   });
 
   it('追加質問を元スレッドへの返信として青線で示し、元の質問を参照できる', () => {
