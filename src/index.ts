@@ -357,6 +357,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
+import { getPicorubyWasmPage } from './views/picorubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getSqlxWasmPage } from './views/sqlxWasm';
@@ -12663,6 +12664,15 @@ app.get('/ruby-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getRubyWasmPage(user.sub));
+});
+
+app.get('/picoruby-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src https://picoruby.github.io; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getPicorubyWasmPage(user.sub));
 });
 
 app.get('/wasm-modules', authMiddleware, async (c) => {
