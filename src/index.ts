@@ -4932,7 +4932,7 @@ app.use('/*', async (c, next) => {
   headers.set('X-Content-Type-Options', 'nosniff');
   // PicoRuby IRB proxy is intentionally embedded by the same-origin shell.
   // Every other response remains non-embeddable.
-  headers.set('X-Frame-Options', c.req.path === '/picoruby-wasm/irb/' ? 'SAMEORIGIN' : 'DENY');
+  headers.set('X-Frame-Options', c.req.path.startsWith('/picoruby-wasm/irb/') ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -12734,17 +12734,45 @@ app.get('/picoruby-wasm/irb/', authMiddleware, async (c) => {
       headers: {
         'Content-Type': 'text/html; charset=UTF-8',
         'Cache-Control': 'no-store',
-        // PicoRuby's Emscripten runtime creates JavaScript functions and may
-        // start a blob-backed worker while booting. `wasm-unsafe-eval` only
-        // permits WebAssembly compilation; it does not permit either of those
-        // operations. Blocking them leaves the upstream page blank before IRB
-        // reaches window.prompt('>'), so allow exactly the additional runtime
-        // capabilities required by the official build.
-        'Content-Security-Policy': "default-src https://picoruby.github.io; style-src 'unsafe-inline' https://picoruby.github.io; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://picoruby.github.io; worker-src blob: https://picoruby.github.io; connect-src https://picoruby.github.io; img-src data: blob: https://picoruby.github.io; font-src data: https://picoruby.github.io; base-uri https://picoruby.github.io; frame-ancestors 'self'; form-action 'none'",
+        // Keep every runtime request on this origin. Besides avoiding module
+        // CORS failures, this makes URLs created by Emscripten (WASM, workers,
+        // and support files) follow the same authenticated proxy path.
+        'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'self'; form-action 'none'",
       },
     });
   } catch {
     return c.text('PicoRuby IRB の読み込みに失敗しました。時間をおいて再度お試しください。', 502);
+  }
+});
+
+// Proxy the complete official distribution, not just index.html. Loading the
+// HTML locally while leaving its modules and WASM cross-origin is fragile:
+// nested imports, workers, and Emscripten-generated fetches do not all share
+// the same CORS behaviour. The wildcard stays below the exact HTML route so
+// relative URLs from the injected <base> resolve here.
+app.get('/picoruby-wasm/irb/*', authMiddleware, async (c) => {
+  const assetPath = c.req.path.slice('/picoruby-wasm/irb/'.length);
+  if (!assetPath || assetPath.startsWith('/') || assetPath.includes('\\') || assetPath.split('/').includes('..')) {
+    return c.text('PicoRuby IRB asset not found.', 404);
+  }
+
+  try {
+    const upstreamUrl = new URL(assetPath, PICORUBY_WASM_IRB_URL);
+    if (upstreamUrl.origin !== new URL(PICORUBY_WASM_IRB_URL).origin) {
+      return c.text('PicoRuby IRB asset not found.', 404);
+    }
+    const upstream = await fetch(upstreamUrl, { headers: { Accept: c.req.header('Accept') ?? '*/*' } });
+    if (!upstream.ok || !upstream.body) {
+      return c.text(`PicoRuby IRB asset の読み込みに失敗しました (${upstream.status})。`, 502);
+    }
+
+    const headers = new Headers({
+      'Cache-Control': 'public, max-age=300',
+      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream',
+    });
+    return new Response(upstream.body, { status: 200, headers });
+  } catch {
+    return c.text('PicoRuby IRB asset の読み込みに失敗しました。', 502);
   }
 });
 

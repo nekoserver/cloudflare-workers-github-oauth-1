@@ -7,18 +7,19 @@ export const PICORUBY_WASM_IRB_PROXY_PATH = '/picoruby-wasm/irb/';
  * The upstream IRB uses window.prompt() for input. Current browsers suppress
  * JavaScript dialogs in a cross-origin iframe, even when allow-modals is set.
  * Serving the document from our origin avoids that restriction. A base element
- * keeps the upstream page's relative JS/WASM asset URLs pointed at GitHub Pages.
+ * keeps relative JS/WASM asset URLs under the same-origin distribution proxy.
  */
 export function preparePicorubyIrbHtml(html: string): string {
-  const base = `<base href="${PICORUBY_WASM_IRB_URL}">`;
+  const base = `<base href="${PICORUBY_WASM_IRB_PROXY_PATH}">`;
   // GitHub Pages projects commonly emit root-relative URLs (for example,
   // `/wasm/index.js`). A <base> element does not affect those URLs, so without
   // this rewrite the proxied document asks this Worker for its unrelated
-  // `/wasm/*` static files and PicoRuby never reaches the first prompt.
+  // `/wasm/*` static files instead of the distribution proxy, and PicoRuby
+  // never reaches the first prompt.
   const withUpstreamAssetUrls = html
-    .replace(/(["'`])\/wasm\//g, `$1${PICORUBY_WASM_IRB_URL}`)
-    .replace(/(\b(?:src|href)\s*=\s*)\/wasm\//gi, `$1${PICORUBY_WASM_IRB_URL}`)
-    .replace(/(url\(\s*)\/wasm\//gi, `$1${PICORUBY_WASM_IRB_URL}`);
+    .replace(/(["'`])\/wasm\//g, `$1${PICORUBY_WASM_IRB_PROXY_PATH}`)
+    .replace(/(\b(?:src|href)\s*=\s*)\/wasm\//gi, `$1${PICORUBY_WASM_IRB_PROXY_PATH}`)
+    .replace(/(url\(\s*)\/wasm\//gi, `$1${PICORUBY_WASM_IRB_PROXY_PATH}`);
   if (/<head(?:\s[^>]*)?>/i.test(html)) {
     return withUpstreamAssetUrls.replace(/<head(\s[^>]*)?>/i, (head) => `${head}${base}`);
   }
