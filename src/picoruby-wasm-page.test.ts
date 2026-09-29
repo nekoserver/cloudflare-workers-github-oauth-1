@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { getPicorubyWasmPage } from './views/picorubyWasm';
 
 describe('PicoRuby/WASM IRB page', () => {
-  it('embeds the official PicoRuby WASM IRB with a restricted sandbox', () => {
+  it('embeds the official PicoRuby WASM IRB and permits its prompt dialog', () => {
     const html = getPicorubyWasmPage('rubyist');
 
     expect(html).toContain('src="https://picoruby.github.io/wasm/"');
     expect(html).toContain('title="PicoRuby WebAssembly IRB"');
-    expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-forms"');
+    // PicoRuby/wasm reads each IRB command with window.prompt(). Sandboxed
+    // frames suppress that dialog unless allow-modals is explicitly granted.
+    expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-forms allow-modals"');
     expect(html).toContain('referrerpolicy="no-referrer"');
   });
 
