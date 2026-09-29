@@ -173,3 +173,24 @@ describe('POST /api/aichat/share-subquery-links エンドポイント', () => {
     expect(handler).toContain('OR IGNORE');
   });
 });
+
+describe('DELETE /api/aichat/share-subquery-links/:id エンドポイント', () => {
+  it('ログインユーザー自身の追加質問リンクだけを削除する', () => {
+    const idx = INDEX_SRC.indexOf("app.delete('/api/aichat/share-subquery-links/:id'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 900);
+    expect(handler).toContain('DELETE FROM aichat_share_subquery_links');
+    expect(handler).toContain('user_id = ?');
+    expect(handler).toContain('Not found');
+  });
+});
+
+describe('追加質問リンク削除 UI', () => {
+  const AICHAT_VIEW_SRC = fs.readFileSync(path.resolve(__dirname, 'views', 'aichat.ts'), 'utf-8');
+
+  it('過去ログの追加質問リンクに削除ボタンと確認を表示する', () => {
+    expect(AICHAT_VIEW_SRC).toContain('class="subquery-link-delete"');
+    expect(AICHAT_VIEW_SRC).toContain('この追加質問を削除しますか？');
+    expect(AICHAT_VIEW_SRC).toContain("method: 'DELETE'");
+  });
+});

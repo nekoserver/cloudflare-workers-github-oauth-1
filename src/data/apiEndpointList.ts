@@ -25,6 +25,7 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/share-subquery-links', desc: '質問のサブクエリリンク一覧' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/share-subquery-links/all', desc: '全サブクエリリンク（質問別）' },
   { group: 'AI チャット', method: 'POST', path: '/api/aichat/share-subquery-links', desc: 'サブクエリリンク登録' },
+  { group: 'AI チャット', method: 'DELETE', path: '/api/aichat/share-subquery-links/:id', desc: 'サブクエリリンク削除' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/share-keywords', desc: '共有のキーワード一覧' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares-by-question', desc: '質問テキストで共有検索' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares-by-question-hash', desc: '質問ハッシュで共有検索' },
