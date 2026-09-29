@@ -55,6 +55,8 @@ describe('thread tracker page', () => {
     expect(html).toContain('id="responseSearch"');
     expect(html).toContain('質問・回答・モデルを検索');
     expect(html).toContain('このスレッドへの追加質問');
+    expect(html).toContain('placeholder="このスレッドへの追加質問"');
+    expect(html).not.toContain('<label>このスレッドへの追加質問</label>');
     expect(html).toContain('type="submit">送信</button>');
     expect(html).not.toContain('AIチャットで質問する');
     expect(html).not.toContain('このスレッドを開く');
@@ -125,6 +127,8 @@ describe('thread tracker page', () => {
   it('追加質問フォームを右ペインの最下部に寄せ、空の送信状態は余白を取らない', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toMatch(/\.actions\{[^}]*flex:none;[^}]*margin-top:auto;[^}]*padding-top:12px/);
+    expect(html).toContain('.model-trigger,.continue,.followup textarea{height:var(--control-height)}');
+    expect(html).toContain('.followup textarea{display:block;width:100%;min-height:var(--control-height);resize:none');
     expect(html).toContain('.send-status:empty{display:none}');
   });
 
