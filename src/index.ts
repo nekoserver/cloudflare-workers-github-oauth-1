@@ -436,7 +436,7 @@ import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
-import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
+import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
 import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
@@ -6340,6 +6340,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
   }
   const threadId = requestedThreadId || createThreadId();
+  let threadHistory: AiThreadTurn[] = [];
   if (requestedThreadId) {
     if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
     const ownedThread = await c.env.DB.prepare(
@@ -6348,6 +6349,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     if (!ownedThread) {
       return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
     }
+    const historyRows = await c.env.DB.prepare(
+      `SELECT question, answer
+       FROM ai_chat_shares
+       WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC, id DESC
+       LIMIT 12`
+    ).bind(user.sub, requestedThreadId).all<AiThreadTurn>();
+    threadHistory = (historyRows.results ?? []).reverse();
   }
 
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
@@ -6357,7 +6366,10 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     if (model === AICHAT_MOONDREAM3_MODEL && image) {
       runParams = buildMoondream3RunParams(image, message);
     } else {
-      const textMessages = buildAiMessages(message, systemPromptMode);
+      const textMessages = addThreadHistoryToAiMessages(
+        buildAiMessages(message, systemPromptMode),
+        threadHistory
+      );
       const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
       const baseParams = { messages, max_tokens: maxTokens };
       runParams = getModelRunParams(model, baseParams);

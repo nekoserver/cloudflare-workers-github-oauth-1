@@ -73,6 +73,17 @@ describe('thread tracker page', () => {
     expect(html).toContain("postedTurn={id:data.shareId||'',conversationHash:data.conversationHash||'',question:message,answer:data.response||'(応答なし)'");
   });
 
+  it('追加質問で所有者の過去ターンを取得し、AI入力の会話文脈に使う', () => {
+    const source = require('node:fs').readFileSync(require('node:path').resolve(__dirname, 'index.ts'), 'utf8');
+    const route = source.slice(source.indexOf("app.post('/api/aichat'"), source.indexOf("app.post('/api/aichat/moondream-analysis'"));
+    expect(route).toContain('SELECT question, answer');
+    expect(route).toContain('WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL');
+    expect(route).toContain('ORDER BY created_at DESC, id DESC');
+    expect(route).toContain('LIMIT 12');
+    expect(route).toContain('addThreadHistoryToAiMessages(');
+    expect(route).toContain('threadHistory');
+  });
+
   it('投稿ボタン上のモデル一覧はGemma-4を既定にし、選択モデルを投稿へ渡す', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('class="model-picker"');
