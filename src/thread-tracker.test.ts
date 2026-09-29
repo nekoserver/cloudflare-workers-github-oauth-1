@@ -115,6 +115,15 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain('class="markdown answer"');
     expect(html).not.toContain('item.turn.conversationHash');
   });
+
+  it('2ペイン切替前に個別回答を閉じ、質問一覧を▲▼で再表示できる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("if(nextTwoPane)closeInlineDetails()");
+    expect(html).toContain("main.setAttribute('aria-expanded','false')");
+    expect(html).toContain('class="questions-toggle"');
+    expect(html).toContain("questionToggle.textContent=opening?'▲':'▼'");
+    expect(html).toContain("questionList.hidden=!opening");
+  });
 });
 
 describe('GET /api/aichat/threads/:threadId', () => {
