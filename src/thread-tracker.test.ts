@@ -124,6 +124,16 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).toContain("questionToggle.textContent=opening?'▲':'▼'");
     expect(html).toContain("questionList.hidden=!opening");
   });
+
+  it('2ペイン状態をCookieへ保存し、検索欄と右ペインのスクロール範囲を切り替える', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain("VIEW_COOKIE='thread_tracker_two_pane'");
+    expect(html).toContain("twoPane=document.cookie.split(';').some");
+    expect(html).toContain("document.cookie=VIEW_COOKIE+'='+(twoPane?'1':'0')");
+    expect(html).toContain("mainContent.classList.toggle('two-pane-mode',twoPane)");
+    expect(html).toMatch(/\.two-pane-mode \.search-panel\{width:max\(300px,40%\)\}/);
+    expect(html).toMatch(/\.detail-pane\{[^}]*height:calc\(100vh - 32px\)[^}]*overscroll-behavior-y:contain/);
+  });
 });
 
 describe('GET /api/aichat/threads/:threadId', () => {
