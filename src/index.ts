@@ -8496,6 +8496,24 @@ app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
 });
 
 /**
+ * 質問×サブクエリリンク削除 API
+ *
+ * id だけではなく user_id でも絞り込み、他ユーザーが登録したリンクを
+ * 推測した連番で削除できないようにする。
+ */
+app.delete('/api/aichat/share-subquery-links/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return jsonUtf8({ error: '有効な id は必須です' }, 400);
+  const result = await c.env.DB.prepare(
+    `DELETE FROM aichat_share_subquery_links WHERE id = ? AND user_id = ?`
+  ).bind(id, user.sub).run();
+  if ((result.meta?.changes ?? 0) === 0) return jsonUtf8({ error: 'Not found' }, 404);
+  return jsonUtf8({ ok: true });
+});
+
+/**
  * サブクエリを持つ全質問一覧 API（question 単位でグループ集計）
  */
 app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {

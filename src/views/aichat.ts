@@ -653,6 +653,11 @@ export function getAiChatPage(user: {
     .subqueries-add-form { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
     .subqueries-add-msg { font-size: 12px; color: var(--text-muted); }
     .subquery-select-item:hover { background: var(--bg-secondary) !important; }
+    .subquery-link-delete {
+      margin-left: auto; padding: 2px 6px; border: 1px solid var(--border-color); border-radius: 5px;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; white-space: nowrap;
+    }
+    .subquery-link-delete:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.08); }
     .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
     .history-modal-date { font-size: 11px; color: var(--text-muted); }
     .history-modal-date-link {
@@ -3538,12 +3543,40 @@ export function getAiChatPage(user: {
         html += '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;" title="' + escHtml(item.model || '') + '"></span>';
         html += '<span style="color:var(--text-muted);">' + escHtml(item.query) + '</span>';
         html += '<a href="' + escHtml(item.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);text-decoration:none;font-size:11px;">🔗 開く</a>';
+        html += '<button type="button" class="subquery-link-delete" data-link-id="' + escHtml(String(item.id)) + '" aria-label="追加質問「' + escHtml(item.query) + '」を削除" title="この追加質問を削除">🗑 削除</button>';
         html += '</div>';
       });
       html += '</div>';
       historyModalSubqueryLinks.innerHTML = html;
       historyModalSubqueryLinks.style.display = 'block';
     }
+
+    historyModalSubqueryLinks.addEventListener('click', function(e) {
+      var deleteBtn = e.target.closest('.subquery-link-delete');
+      if (!deleteBtn) return;
+      var linkId = deleteBtn.getAttribute('data-link-id');
+      if (!linkId || !window.confirm('この追加質問を削除しますか？\nこの操作は取り消せません。')) return;
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = '削除中...';
+      fetch('/api/aichat/share-subquery-links/' + encodeURIComponent(linkId), {
+        method: 'DELETE', credentials: 'same-origin'
+      })
+        .then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok || !d.ok) throw new Error(d.error || '削除に失敗しました');
+            return d;
+          });
+        })
+        .then(function() {
+          sidebarSubqueries = null;
+          loadSubqueryLinks(currentHistoryQuestion);
+        })
+        .catch(function(err) {
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = '🗑 削除';
+          window.alert(err && err.message ? err.message : '削除に失敗しました');
+        });
+    });
 
     function loadSubqueryLinks(question) {
       fetch('/api/aichat/share-subquery-links?question=' + encodeURIComponent(question), {
