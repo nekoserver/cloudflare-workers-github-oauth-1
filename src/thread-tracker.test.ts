@@ -444,6 +444,37 @@ describe('GET /api/aichat/threads/seed', () => {
     expect(html).not.toContain('スレッドを俯瞰して、続きを質問');
     expect(html).not.toContain('各カードで質問の流れを確認できます');
   });
+
+  it('ナイトモードボタンを持ち、押すたびにCookieへ保存する', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('id="nightModeToggle"');
+    expect(html).toContain("THEME_COOKIE='thread_tracker_theme'");
+    // 押した瞬間の現在値(data-theme属性が無ければOS設定から判定)から反転させる
+    expect(html).toContain("var current=document.documentElement.getAttribute('data-theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')");
+    expect(html).toContain("var next=current==='dark'?'light':'dark'");
+    expect(html).toContain("document.cookie=THEME_COOKIE+'='+next+'; Path=/; Max-Age=31536000; SameSite=Lax; Secure'");
+    expect(html).toContain('nightModeToggle.addEventListener');
+  });
+
+  it('保存済みのテーマCookieを読み込んでdata-theme属性へ反映し、ボタンの状態を合わせる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('function applyTheme(theme)');
+    expect(html).toContain("document.documentElement.setAttribute('data-theme',theme)");
+    expect(html).toContain("document.documentElement.removeAttribute('data-theme')");
+    expect(html).toContain("applyTheme(readCookie(THEME_COOKIE))");
+    expect(html).toContain("nightModeToggle.setAttribute('aria-pressed',String(isDark))");
+  });
+
+  it('data-theme属性の有無でOS設定より明示指定を優先するCSSになっている', () => {
+    const html = getThreadTrackerPage('alice');
+    // OS側がlightでも、data-theme属性が付いていれば常にそちらが勝つ(ルールの後勝ち)
+    expect(html).toMatch(/@media\(prefers-color-scheme:light\)\{:root:not\(\[data-theme\]\)\{color-scheme:light;/);
+    expect(html).toMatch(/:root\[data-theme="light"\]\{color-scheme:light;/);
+    expect(html).toMatch(/:root\[data-theme="dark"\]\{color-scheme:dark;/);
+    const lightOverrideIndex = html.indexOf(':root[data-theme="light"]{color-scheme:light;');
+    const mediaQueryIndex = html.indexOf('@media(prefers-color-scheme:light)');
+    expect(lightOverrideIndex).toBeGreaterThan(mediaQueryIndex);
+  });
 });
 
 describe('GET /api/aichat/threads/:threadId', () => {
