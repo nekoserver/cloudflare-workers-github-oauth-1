@@ -357,7 +357,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
-import { getPicorubyWasmPage, PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
+import { PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getSqlxWasmPage } from './views/sqlxWasm';
@@ -4930,11 +4930,7 @@ app.use('/*', async (c, next) => {
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  // PicoRuby IRB proxy is intentionally embedded by the same-origin shell.
-  // Every other response remains non-embeddable.
-  const isPicorubyIrb = c.req.path === '/picoruby-wasm/irb'
-    || c.req.path.startsWith('/picoruby-wasm/irb/');
-  headers.set('X-Frame-Options', isPicorubyIrb ? 'SAMEORIGIN' : 'DENY');
+  headers.set('X-Frame-Options', 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -12714,12 +12710,11 @@ app.get('/ruby-wasm', authMiddleware, async (c) => {
 });
 
 app.get('/picoruby-wasm', authMiddleware, async (c) => {
-  const user = c.get('user');
-  c.header(
-    'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
-  );
-  return c.html(getPicorubyWasmPage(user.sub));
+  // Run the official IRB as the top-level document. Its input loop uses
+  // window.prompt(), which browsers may suppress inside an iframe even when
+  // the framed response is same-origin. Avoiding the iframe also removes the
+  // extra /irb navigation that previously surfaced as a 404 in production.
+  return proxyPicorubyIrbDocument(c);
 });
 
 async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
@@ -12736,15 +12731,13 @@ async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variabl
       headers: {
         'Content-Type': 'text/html; charset=UTF-8',
         'Cache-Control': 'no-store',
-        // Keep every runtime request on this origin. Besides avoiding module
-        // CORS failures, this makes URLs created by Emscripten (WASM, workers,
-        // and support files) follow the same authenticated proxy path.
+        // Runtime assets are loaded from the official HTTPS distribution.
         // The official page imports parts of the runtime from HTTPS package
         // endpoints. Restricting this proxied copy to `self` silently blocks
         // those imports, so execution stops before IRB calls prompt('>').
-        // Keep framing same-origin-only while allowing the upstream runtime's
-        // HTTPS module/fetch dependency graph to load.
-        'Content-Security-Policy': "default-src 'self' https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:; worker-src 'self' blob: https:; connect-src 'self' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'self'; form-action 'none'",
+        // Disallow framing while allowing the upstream runtime's HTTPS
+        // module/fetch dependency graph to load.
+        'Content-Security-Policy': "default-src 'self' https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:; worker-src 'self' blob: https:; connect-src 'self' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; base-uri https://picoruby.github.io; frame-ancestors 'none'; form-action 'none'",
       },
     });
   } catch {

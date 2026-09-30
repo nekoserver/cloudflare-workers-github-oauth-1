@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import app from './index';
+import { createJWT } from './utils/jwt';
 import { getPicorubyWasmPage, preparePicorubyIrbHtml } from './views/picorubyWasm';
 import { findWasmModule, WASM_MODULE_REGISTRY } from './data/wasmModuleRegistry';
 
 describe('PicoRuby/WASM IRB page', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('is listed once in the WASM module catalog with its upstream source', () => {
     expect(WASM_MODULE_REGISTRY.filter((module) => module.id === 'picoruby')).toHaveLength(1);
     expect(findWasmModule('picoruby')).toMatchObject({
@@ -20,11 +24,11 @@ describe('PicoRuby/WASM IRB page', () => {
     expect(html).toContain('referrerpolicy="no-referrer"');
   });
 
-  it('keeps relative upstream assets under the same-origin proxy', () => {
+  it('resolves relative upstream assets against the official distribution', () => {
     expect(preparePicorubyIrbHtml('<html><head><title>IRB</title></head></html>'))
-      .toContain('<head><base href="/picoruby-wasm/irb/">');
+      .toContain('<head><base href="https://picoruby.github.io/wasm/">');
     expect(preparePicorubyIrbHtml('<main>IRB</main>'))
-      .toBe('<base href="/picoruby-wasm/irb/"><main>IRB</main>');
+      .toBe('<base href="https://picoruby.github.io/wasm/"><main>IRB</main>');
   });
 
   it('rewrites root-relative GitHub Pages assets that a base element cannot resolve', () => {
@@ -39,20 +43,18 @@ describe('PicoRuby/WASM IRB page', () => {
     const html = preparePicorubyIrbHtml(upstreamHtml);
 
     expect(html).not.toMatch(/(?:["'`(=])\/wasm\//);
-    expect(html).toContain('src="/picoruby-wasm/irb/index.js"');
-    expect(html).toContain("href='/picoruby-wasm/irb/index.css'");
-    expect(html).toContain('href=/picoruby-wasm/irb/favicon.svg');
-    expect(html).toContain('url(/picoruby-wasm/irb/background.png)');
-    expect(html).toContain('`/picoruby-wasm/irb/worker.js`');
+    expect(html).toContain('src="https://picoruby.github.io/wasm/index.js"');
+    expect(html).toContain("href='https://picoruby.github.io/wasm/index.css'");
+    expect(html).toContain('href=https://picoruby.github.io/wasm/favicon.svg');
+    expect(html).toContain('url(https://picoruby.github.io/wasm/background.png)');
+    expect(html).toContain('`https://picoruby.github.io/wasm/worker.js`');
   });
 
-  it('allows only the proxied IRB response to be framed by this origin', () => {
+  it('prevents the top-level IRB document from being framed', () => {
     const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
-    expect(indexSource).toContain("c.req.path === '/picoruby-wasm/irb'");
-    expect(indexSource).toContain("c.req.path.startsWith('/picoruby-wasm/irb/')");
-    expect(indexSource).toContain("headers.set('X-Frame-Options', isPicorubyIrb ? 'SAMEORIGIN' : 'DENY')");
-    expect(indexSource).toContain("frame-ancestors 'self'");
+    expect(indexSource).toContain("headers.set('X-Frame-Options', 'DENY')");
+    expect(indexSource).toContain("frame-ancestors 'none'");
     expect(indexSource).toContain("'wasm-unsafe-eval'");
   });
 
@@ -76,6 +78,34 @@ describe('PicoRuby/WASM IRB page', () => {
     expect(indexSource).toContain("new URL(assetPath, PICORUBY_WASM_IRB_URL)");
     expect(indexSource).toContain("upstream.headers.get('Content-Type')");
   });
+
+  it('serves the IRB document directly at the public page route', () => {
+    const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+
+    expect(indexSource).toContain("app.get('/picoruby-wasm', authMiddleware, async (c) => {");
+    expect(indexSource).toContain('return proxyPicorubyIrbDocument(c);');
+    expect(indexSource).toContain("base-uri https://picoruby.github.io");
+    expect(indexSource).toContain("frame-ancestors 'none'");
+  });
+
+  it.each(['/picoruby-wasm', '/picoruby-wasm/irb', '/picoruby-wasm/irb/'])(
+    'returns the upstream IRB document at %s instead of a 404',
+    async (path) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+        '<html><head></head><body>PicoRuby IRB</body></html>',
+        { status: 200, headers: { 'Content-Type': 'text/html' } },
+      )));
+      const token = await createJWT({ sub: 'rubyist' }, 'test-secret');
+
+      const response = await app.request(path, {
+        headers: { Authorization: `Bearer ${token}` },
+      }, { JWT_SECRET: 'test-secret' });
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('PicoRuby IRB');
+      expect(response.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+    },
+  );
 
   it('has a 44px sticky header and hides the loading state after IRB loads', () => {
     const html = getPicorubyWasmPage('rubyist');
