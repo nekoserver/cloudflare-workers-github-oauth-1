@@ -135,6 +135,19 @@ describe('thread tracker page', () => {
     expect(html).toContain("url.protocol==='https:'||url.protocol==='http:'");
   });
 
+  it('左上の3列スタイルボタンと左端の垂直タブでスタイルモーダルを開閉でき、2ペインの説明文は表示しない', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('id="threeColumnStyleButton"');
+    expect(html).toContain('id="threeColumnStyleModal"');
+    expect(html).toContain('id="threeColumnStyleTab"');
+    expect(html).toContain('class="style-sheet-tab"');
+    expect(html).toContain('aria-controls="threeColumnStyleModal"');
+    expect(html).toContain('function setStyleSheetOpen(open)');
+    expect(html).toContain("styleTab.addEventListener('click'");
+    expect(html).toContain("styleModal.addEventListener('click'");
+    expect(html).not.toContain('2ペインでは、左で選んだスレッドの質問と回答を右にMarkdown表示します。');
+  });
+
   it('右端の入力窓タブで固定コンポーザーを開閉し、タブを上下にドラッグできる', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('id="composerTab"');
