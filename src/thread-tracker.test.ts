@@ -135,6 +135,19 @@ describe('thread tracker page', () => {
     expect(html).toContain("url.protocol==='https:'||url.protocol==='http:'");
   });
 
+  it('右端の入力窓タブで固定コンポーザーを開閉し、タブを上下にドラッグできる', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('id="composerTab"');
+    expect(html).toContain('class="composer-tab"');
+    expect(html).toContain('aria-label="入力窓を表示"');
+    expect(html).toContain('.two-pane-mode.composer-open .detail-pane .actions');
+    expect(html).toContain("function setComposerOpen(open)");
+    expect(html).toContain("composerTab.addEventListener('pointerdown'");
+    expect(html).toContain("composerTab.addEventListener('pointermove'");
+    expect(html).toContain("composerTab.style.top=top+'px'");
+    expect(html).toContain("composerTab.addEventListener('pointerup'");
+  });
+
   it('追加質問フォームを右ペインの最下部に寄せ、空の送信状態は余白を取らない', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toMatch(/\.actions\{[^}]*flex:none;[^}]*margin-top:auto;[^}]*padding-top:12px/);
