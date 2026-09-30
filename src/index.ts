@@ -357,7 +357,6 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
-import { getPicorubyWasmPage, PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getSqlxWasmPage } from './views/sqlxWasm';
@@ -12707,88 +12706,6 @@ app.get('/ruby-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh; connect-src 'self' https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getRubyWasmPage(user.sub));
-});
-
-app.get('/picoruby-wasm', authMiddleware, async (c) => {
-  // Never make the page itself depend on the upstream GitHub Pages response.
-  // A transient/upstream 404 must not turn our /picoruby-wasm route into an
-  // error page; the IRB frame can independently fall back to the official URL.
-  const user = c.get('user');
-  c.header(
-    'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self' https://picoruby.github.io; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
-  );
-  return c.html(getPicorubyWasmPage(user.sub));
-});
-
-async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
-  try {
-    const upstream = await fetch(PICORUBY_WASM_IRB_URL, {
-      headers: { Accept: 'text/html' },
-    });
-    if (!upstream.ok) {
-      // GitHub Pages can return 404 to a Worker subrequest while the same URL
-      // remains available to a browser. Let the browser request it directly
-      // rather than replacing the IRB with a permanent-looking error page.
-      return c.redirect(PICORUBY_WASM_IRB_URL, 302);
-    }
-
-    const html = preparePicorubyIrbHtml(await upstream.text());
-    return new Response(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=UTF-8',
-        'Cache-Control': 'no-store',
-        // Runtime assets are loaded from the official HTTPS distribution.
-        // The official page imports parts of the runtime from HTTPS package
-        // endpoints. Restricting this proxied copy to `self` silently blocks
-        // those imports, so execution stops before IRB calls prompt('>').
-        // Disallow framing while allowing the upstream runtime's HTTPS
-        // module/fetch dependency graph to load.
-        'Content-Security-Policy': "default-src 'self' https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:; worker-src 'self' blob: https:; connect-src 'self' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; base-uri https://picoruby.github.io; frame-ancestors 'none'; form-action 'none'",
-      },
-    });
-  } catch {
-    return c.redirect(PICORUBY_WASM_IRB_URL, 302);
-  }
-}
-
-// Hono's wildcard route also matches the directory path without its trailing
-// slash. Browsers, bookmarks, and authentication return paths can all remove
-// that slash, so register both directory forms before the asset wildcard. If
-// the slashless request reaches the wildcard it otherwise has an empty asset
-// name and incorrectly renders "PicoRuby IRB asset not found." in the iframe.
-app.get('/picoruby-wasm/irb', authMiddleware, proxyPicorubyIrbDocument);
-app.get('/picoruby-wasm/irb/', authMiddleware, proxyPicorubyIrbDocument);
-
-// Proxy the complete official distribution, not just index.html. Loading the
-// HTML locally while leaving its modules and WASM cross-origin is fragile:
-// nested imports, workers, and Emscripten-generated fetches do not all share
-// the same CORS behaviour. The wildcard stays below the exact HTML route so
-// relative URLs from the injected <base> resolve here.
-app.get('/picoruby-wasm/irb/*', authMiddleware, async (c) => {
-  const assetPath = c.req.path.slice('/picoruby-wasm/irb/'.length);
-  if (!assetPath || assetPath.startsWith('/') || assetPath.includes('\\') || assetPath.split('/').includes('..')) {
-    return c.text('PicoRuby IRB asset not found.', 404);
-  }
-
-  try {
-    const upstreamUrl = new URL(assetPath, PICORUBY_WASM_IRB_URL);
-    if (upstreamUrl.origin !== new URL(PICORUBY_WASM_IRB_URL).origin) {
-      return c.text('PicoRuby IRB asset not found.', 404);
-    }
-    const upstream = await fetch(upstreamUrl, { headers: { Accept: c.req.header('Accept') ?? '*/*' } });
-    if (!upstream.ok || !upstream.body) {
-      return c.text(`PicoRuby IRB asset の読み込みに失敗しました (${upstream.status})。`, 502);
-    }
-
-    const headers = new Headers({
-      'Cache-Control': 'public, max-age=300',
-      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream',
-    });
-    return new Response(upstream.body, { status: 200, headers });
-  } catch {
-    return c.text('PicoRuby IRB asset の読み込みに失敗しました。', 502);
-  }
 });
 
 app.get('/wasm-modules', authMiddleware, async (c) => {

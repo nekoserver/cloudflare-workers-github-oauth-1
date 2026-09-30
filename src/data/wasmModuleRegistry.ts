@@ -25,19 +25,6 @@ export type WasmModuleInfo = {
 
 export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
   {
-    id: 'picoruby',
-    name: 'PicoRuby IRB (WebAssembly)',
-    description:
-      'PicoRuby公式のWebAssembly版IRBを/picoruby-wasmページから利用する。ランタイムと配布アセットはpicoruby/wasmリポジトリで管理され、このWorkerは同一オリジンの認証付きプロキシを介して読み込む',
-    wasmPath: 'PicoRuby/wasm公式配布アセット',
-    sourceDir: 'picoruby/wasm',
-    sourceFile: 'README.md',
-    approxSize: '外部配布',
-    sizeBytes: 0,
-    builtAt: '外部配布',
-    repoFullName: 'picoruby/wasm',
-  },
-  {
     id: 'wrangler',
     name: 'wrangler (BLAKE3, Rust)',
     description:

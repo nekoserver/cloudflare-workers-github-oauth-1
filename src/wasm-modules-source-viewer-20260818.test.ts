@@ -136,25 +136,6 @@ describe('GET /api/wasm-modules/source', () => {
     expect(body.githubUrl).toContain('wasm/sha256-wasm/src/lib.rs');
   });
 
-  it('外部モジュールはそのGitHubリポジトリからソースを取得する', async () => {
-    const authHeader = await makeAuthHeader();
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('# PicoRuby WASM') });
-    vi.stubGlobal('fetch', fetchMock);
-    const res = await app.request(
-      '/api/wasm-modules/source?id=picoruby',
-      { headers: { Authorization: authHeader } },
-      { JWT_SECRET, DB: createMockDb('gh-token-abc') }
-    );
-
-    expect(res.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.github.com/repos/picoruby/wasm/contents/README.md',
-      expect.any(Object)
-    );
-    const body = (await res.json()) as { githubUrl: string };
-    expect(body.githubUrl).toBe('https://github.com/picoruby/wasm/blob/main/README.md');
-  });
-
   it('GitHub APIが401(Bad credentials)を返す場合は401と再ログインを促すメッセージを返す(保存されたトークン自体が失効しているケース)', async () => {
     const authHeader = await makeAuthHeader();
     const fetchMock = vi.fn().mockResolvedValue({
