@@ -262,16 +262,24 @@ describe('thread tracker page', () => {
     expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
   });
 
-  it('元の質問見出しを削除し、表示中の各質問文のJevスコアがある場合だけ最上段へ詰めて表示する', () => {
+  it('投稿・質問の見出しを削除し、表示中の各質問文のJevスコアがある場合だけ最上段へ詰めて表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('function jevScoreHtml(turn)');
     expect(html).toContain('Jevスコア: ');
-    expect(html).toContain("heading=index===0?'':'<h3>'");
-    expect(html).toContain("questionId+jevScoreHtml(turn)+context+heading+'<div class=\"markdown question\"");
-    expect(html).not.toContain("heading=index===0?jevScoreHtml(turn)");
-    expect(html).not.toContain("context+'<h3>'+esc(label)+' · 質問 '");
+    expect(html).toContain("questionId+jevScoreHtml(turn)+context+'<div class=\"markdown question\"");
+    expect(html).not.toContain("+' · 質問 '+");
+    expect(html).not.toContain('heading=index===0');
     expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);
     expect(html).toMatch(/\.turn-slide \.turn\{[^}]*margin-top:0/);
+  });
+
+  it('Jevスコアはラベル番号と区切りを省き、0.8以上を緑、0.5以上0.8未満を黄色にする', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).not.toContain("esc(score.labelId)+'='+esc(score.value)");
+    expect(html).not.toContain(".join(' · ')");
+    expect(html).toContain("value>=0.8?'jev-score-high':(value>=0.5?'jev-score-medium':'')");
+    expect(html).toContain('.jev-score-high{color:#3fb950}');
+    expect(html).toContain('.jev-score-medium{color:#d29922}');
   });
 
   it('表示中の質問文IDをJevスコアと同じ最上段へ常に表示する', () => {
