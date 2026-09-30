@@ -6,6 +6,15 @@ import { getAiChatPage } from './views/aichat';
 const user = { username: 'sse-user', aiChatModel: 'claude-sonnet-4-6', modelColors: {} };
 
 describe('AI chat SSE integration', () => {
+  it('生成したインラインスクリプトがブラウザで構文エラーにならない', () => {
+    const html = getAiChatPage(user);
+    const scripts = Array.from(html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi));
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      if (script[1].trim()) expect(() => new Function(script[1])).not.toThrow();
+    }
+  });
+
   it('APIは明示的なstream要求だけをSSE化し、JSON互換性を維持する', () => {
     const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
     const route = source.slice(source.indexOf("app.post('/api/aichat'"), source.indexOf("app.post('/api/aichat/moondream-analysis'"));
