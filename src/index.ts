@@ -4932,7 +4932,9 @@ app.use('/*', async (c, next) => {
   headers.set('X-Content-Type-Options', 'nosniff');
   // PicoRuby IRB proxy is intentionally embedded by the same-origin shell.
   // Every other response remains non-embeddable.
-  headers.set('X-Frame-Options', c.req.path.startsWith('/picoruby-wasm/irb/') ? 'SAMEORIGIN' : 'DENY');
+  const isPicorubyIrb = c.req.path === '/picoruby-wasm/irb'
+    || c.req.path.startsWith('/picoruby-wasm/irb/');
+  headers.set('X-Frame-Options', isPicorubyIrb ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -12737,7 +12739,12 @@ async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variabl
         // Keep every runtime request on this origin. Besides avoiding module
         // CORS failures, this makes URLs created by Emscripten (WASM, workers,
         // and support files) follow the same authenticated proxy path.
-        'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'self'; form-action 'none'",
+        // The official page imports parts of the runtime from HTTPS package
+        // endpoints. Restricting this proxied copy to `self` silently blocks
+        // those imports, so execution stops before IRB calls prompt('>').
+        // Keep framing same-origin-only while allowing the upstream runtime's
+        // HTTPS module/fetch dependency graph to load.
+        'Content-Security-Policy': "default-src 'self' https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https:; worker-src 'self' blob: https:; connect-src 'self' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'self'; form-action 'none'",
       },
     });
   } catch {
