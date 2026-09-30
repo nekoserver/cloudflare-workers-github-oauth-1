@@ -8171,12 +8171,12 @@ ${getRubyWasmLoaderScript()}
       function consumeBlock(block) {
         var eventName = 'message';
         var dataLines = [];
-        block.split(/\r?\n/).forEach(function(line) {
+        block.split(/\\r?\\n/).forEach(function(line) {
           if (line.indexOf('event:') === 0) eventName = line.slice(6).trim();
           if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).trimStart());
         });
         if (!dataLines.length) return;
-        var data = JSON.parse(dataLines.join('\n'));
+        var data = JSON.parse(dataLines.join('\\n'));
         if (eventName === 'start') metadata = Object.assign(metadata, data);
         if (eventName === 'delta' && data.text) onDelta(data.text, metadata);
         if (eventName === 'done') metadata = Object.assign(metadata, data);
@@ -8185,7 +8185,7 @@ ${getRubyWasmLoaderScript()}
       function pump() {
         return reader.read().then(function(result) {
           buffer += decoder.decode(result.value, { stream: !result.done });
-          var blocks = buffer.split(/\r?\n\r?\n/);
+          var blocks = buffer.split(/\\r?\\n\\r?\\n/);
           buffer = result.done ? '' : (blocks.pop() || '');
           blocks.forEach(consumeBlock);
           if (result.done) return metadata;
