@@ -49,7 +49,9 @@ describe('PicoRuby/WASM IRB page', () => {
   it('allows only the proxied IRB response to be framed by this origin', () => {
     const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
-    expect(indexSource).toContain("c.req.path.startsWith('/picoruby-wasm/irb/') ? 'SAMEORIGIN' : 'DENY'");
+    expect(indexSource).toContain("c.req.path === '/picoruby-wasm/irb'");
+    expect(indexSource).toContain("c.req.path.startsWith('/picoruby-wasm/irb/')");
+    expect(indexSource).toContain("headers.set('X-Frame-Options', isPicorubyIrb ? 'SAMEORIGIN' : 'DENY')");
     expect(indexSource).toContain("frame-ancestors 'self'");
     expect(indexSource).toContain("'wasm-unsafe-eval'");
   });
@@ -61,6 +63,7 @@ describe('PicoRuby/WASM IRB page', () => {
     // blob workers. Blocking either stops startup before prompt('>') runs.
     expect(indexSource).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'");
     expect(indexSource).toContain("worker-src 'self' blob:");
+    expect(indexSource).toContain("connect-src 'self' https:");
     expect(indexSource).toContain("'Cache-Control': 'no-store'");
   });
 
