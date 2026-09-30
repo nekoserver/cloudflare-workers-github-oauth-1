@@ -190,7 +190,7 @@ describe('thread tracker page', () => {
     expect(html).toContain("(hasFollowupQuestions?' has-followups':'')");
     expect(html).toContain('.thread-card.has-followups{border-left:4px solid var(--accent)}');
     expect(html).toContain('data-conversation-hash');
-    expect(html).toContain("+subqueryIndicator(group)+'↳ '+esc(group.question)");
+    expect(html).toContain("class=\"question-row'+subqueryQuestionClass(group)+'\"");
   });
 
   it('同じ質問文を1行に束ね、対応するモデルの色丸をスレッドアイコン位置に横並びで表示する', () => {
@@ -208,7 +208,7 @@ describe('thread tracker page', () => {
     expect(html).toContain('class="model-dots"');
     expect(html).toContain('class="model-dot"');
     expect(html).toContain('MODEL_COLORS[model]');
-    expect(html).toContain("<div class=\"card-top\">'+subqueryIndicator(groups[0])+modelDots(questionModels)+'<span class=\"title\">");
+    expect(html).toContain("<div class=\"card-top'+subqueryQuestionClass(groups[0])+'\"");
     expect(html).not.toContain('<span aria-hidden="true">🧵</span>');
     expect(html).not.toContain("'+modelDots(group.models)+(i?'↳ ':'")
     expect(html).toContain('"model-a":"#123456"');
@@ -216,15 +216,17 @@ describe('thread tracker page', () => {
     expect(html).toMatch(/\.model-dots\{[^}]*display:inline-flex;flex:none;flex-wrap:nowrap/);
   });
 
-  it('束ねた質問文IDのどれかに追加質問があれば、左ペインの質問文行頭へ青色インジケータを表示する', () => {
+  it('束ねた質問文IDのどれかに追加質問があれば、左ペインの質問枠の左辺を青色にする', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('hasSubqueries:false');
     expect(html).toContain("if((turn.subqueries||[]).length)group.hasSubqueries=true");
-    expect(html).toContain('function subqueryIndicator(group)');
-    expect(html).toContain('class="subquery-indicator" role="img" aria-label="追加質問あり"');
-    expect(html).toContain("subqueryIndicator(groups[0])+modelDots(questionModels)+'<span class=\"title\">'");
-    expect(html).toContain("subqueryIndicator(group)+'↳ '+esc(group.question)");
-    expect(html).toMatch(/\.subquery-indicator\{[^}]*background:var\(--accent\)/);
+    expect(html).toContain('function subqueryQuestionClass(group)');
+    expect(html).toContain("group&&group.hasSubqueries?' question-has-subqueries':''");
+    expect(html).toContain("class=\"question-row'+subqueryQuestionClass(group)+'\"");
+    expect(html).toContain("<div class=\"card-top'+subqueryQuestionClass(groups[0])+'\"");
+    expect(html).toContain("group.hasSubqueries?' title=\"追加質問あり\"':'')");
+    expect(html).toMatch(/\.question-has-subqueries\{[^}]*border-left:4px solid var\(--accent\)/);
+    expect(html).not.toContain('subquery-indicator');
   });
 
   it('同じ質問から短時間に作られたモデル別スレッドを1枚のカードへまとめる', () => {
