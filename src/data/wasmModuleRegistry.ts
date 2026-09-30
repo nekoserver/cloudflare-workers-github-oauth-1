@@ -19,9 +19,24 @@ export type WasmModuleInfo = {
   // どちらも推測値ではなく実際のファイル/git履歴から確認した値を入れること。
   sizeBytes: number;
   builtAt: string;
+  /** ソースが本体リポジトリ以外にある場合のGitHubリポジトリ名。 */
+  repoFullName?: string;
 };
 
 export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
+  {
+    id: 'picoruby',
+    name: 'PicoRuby IRB (WebAssembly)',
+    description:
+      'PicoRuby公式のWebAssembly版IRBを/picoruby-wasmページから利用する。ランタイムと配布アセットはpicoruby/wasmリポジトリで管理され、このWorkerは同一オリジンの認証付きプロキシを介して読み込む',
+    wasmPath: 'PicoRuby/wasm公式配布アセット',
+    sourceDir: 'picoruby/wasm',
+    sourceFile: 'README.md',
+    approxSize: '外部配布',
+    sizeBytes: 0,
+    builtAt: '外部配布',
+    repoFullName: 'picoruby/wasm',
+  },
   {
     id: 'wrangler',
     name: 'wrangler (BLAKE3, Rust)',
