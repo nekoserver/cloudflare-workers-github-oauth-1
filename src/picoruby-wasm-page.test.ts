@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { getPicorubyWasmPage, preparePicorubyIrbHtml } from './views/picorubyWasm';
+import { findWasmModule, WASM_MODULE_REGISTRY } from './data/wasmModuleRegistry';
 
 describe('PicoRuby/WASM IRB page', () => {
+  it('is listed once in the WASM module catalog with its upstream source', () => {
+    expect(WASM_MODULE_REGISTRY.filter((module) => module.id === 'picoruby')).toHaveLength(1);
+    expect(findWasmModule('picoruby')).toMatchObject({
+      repoFullName: 'picoruby/wasm',
+      sourceFile: 'README.md',
+    });
+  });
   it('embeds the official PicoRuby WASM IRB through the same-origin endpoint', () => {
     const html = getPicorubyWasmPage('rubyist');
 

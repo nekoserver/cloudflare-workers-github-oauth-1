@@ -12879,9 +12879,10 @@ app.get('/api/wasm-modules', authMiddleware, async (c) => {
   const modulesWithDates = accessToken
     ? await Promise.all(
         modules.map(async (m) => {
+          const repoFullName = m.repoFullName ?? WASM_MODULES_REPO_FULL_NAME;
           const [sourceUpdatedAt, wasmBuiltAt] = await Promise.all([
-            fetchLatestCommitDateForPath(accessToken, WASM_MODULES_REPO_FULL_NAME, m.sourceFile),
-            fetchLatestCommitDateForPath(accessToken, WASM_MODULES_REPO_FULL_NAME, m.wasmPath),
+            fetchLatestCommitDateForPath(accessToken, repoFullName, m.sourceFile),
+            fetchLatestCommitDateForPath(accessToken, repoFullName, m.wasmPath),
           ]);
           return { ...m, sourceUpdatedAt, wasmBuiltAt };
         })
@@ -12904,7 +12905,8 @@ app.get('/api/wasm-modules/source', authMiddleware, async (c) => {
   if (!accessToken) {
     return jsonUtf8({ error: 'GitHubアクセストークンが未設定のためソースを取得できません' }, 503);
   }
-  const result = await fetchFileContent(accessToken, WASM_MODULES_REPO_FULL_NAME, mod.sourceFile);
+  const repoFullName = mod.repoFullName ?? WASM_MODULES_REPO_FULL_NAME;
+  const result = await fetchFileContent(accessToken, repoFullName, mod.sourceFile);
   if (!result.ok) {
     logger.warn('Failed to fetch wasm module source from GitHub', {
       moduleId,
@@ -12926,7 +12928,7 @@ app.get('/api/wasm-modules/source', authMiddleware, async (c) => {
   return jsonUtf8({
     path: mod.sourceFile,
     content: result.content,
-    githubUrl: `https://github.com/${WASM_MODULES_REPO_FULL_NAME}/blob/main/${mod.sourceFile}`,
+    githubUrl: `https://github.com/${repoFullName}/blob/main/${mod.sourceFile}`,
   });
 });
 
