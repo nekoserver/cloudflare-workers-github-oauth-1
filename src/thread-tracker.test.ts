@@ -262,11 +262,11 @@ describe('thread tracker page', () => {
     expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
   });
 
-  it('投稿・質問の見出しを削除し、表示中の各質問文のJevスコアがある場合だけ最上段へ詰めて表示する', () => {
+  it('投稿・質問の見出しを削除し、表示中の各質問文のJevスコア値がある場合だけ最上段へ詰めて表示する', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('function jevScoreHtml(turn)');
-    expect(html).toContain('Jevスコア: ');
-    expect(html).toContain("questionId+jevScoreHtml(turn)+context+'<div class=\"markdown question\"");
+    expect(html).not.toContain('Jevスコア: ');
+    expect(html).toContain("jevScoreHtml(turn)+context+'<div class=\"markdown question\"");
     expect(html).not.toContain("+' · 質問 '+");
     expect(html).not.toContain('heading=index===0');
     expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);
@@ -282,11 +282,11 @@ describe('thread tracker page', () => {
     expect(html).toContain('.jev-score-medium{color:#d29922}');
   });
 
-  it('表示中の質問文IDをJevスコアと同じ最上段へ常に表示する', () => {
+  it('表示中の質問文IDは表示しない', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain('class="question-id">質問文ID: ');
-    expect(html).toContain("esc(turn.id||'(不明)')");
-    expect(html).toContain('questionId+jevScoreHtml(turn)');
+    expect(html).not.toContain('質問文ID: ');
+    expect(html).not.toContain('class="question-id"');
+    expect(html).not.toContain("esc(turn.id||'(不明)')");
   });
 
   it('DBで割り当てられたモデル色を既定色より優先する', () => {
