@@ -357,7 +357,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getRubyWasmPage, getRubyWasmVersionInfo } from './views/rubyWasm';
-import { PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
+import { getPicorubyWasmPage, PICORUBY_WASM_IRB_URL, preparePicorubyIrbHtml } from './views/picorubyWasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getSqlcWasmPage } from './views/sqlcWasm';
 import { getSqlxWasmPage } from './views/sqlxWasm';
@@ -12710,11 +12710,15 @@ app.get('/ruby-wasm', authMiddleware, async (c) => {
 });
 
 app.get('/picoruby-wasm', authMiddleware, async (c) => {
-  // Run the official IRB as the top-level document. Its input loop uses
-  // window.prompt(), which browsers may suppress inside an iframe even when
-  // the framed response is same-origin. Avoiding the iframe also removes the
-  // extra /irb navigation that previously surfaced as a 404 in production.
-  return proxyPicorubyIrbDocument(c);
+  // Never make the page itself depend on the upstream GitHub Pages response.
+  // A transient/upstream 404 must not turn our /picoruby-wasm route into an
+  // error page; the IRB frame can independently fall back to the official URL.
+  const user = c.get('user');
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self' https://picoruby.github.io; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getPicorubyWasmPage(user.sub));
 });
 
 async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
@@ -12723,7 +12727,10 @@ async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variabl
       headers: { Accept: 'text/html' },
     });
     if (!upstream.ok) {
-      return c.text(`PicoRuby IRB の読み込みに失敗しました (${upstream.status})。`, 502);
+      // GitHub Pages can return 404 to a Worker subrequest while the same URL
+      // remains available to a browser. Let the browser request it directly
+      // rather than replacing the IRB with a permanent-looking error page.
+      return c.redirect(PICORUBY_WASM_IRB_URL, 302);
     }
 
     const html = preparePicorubyIrbHtml(await upstream.text());
@@ -12741,7 +12748,7 @@ async function proxyPicorubyIrbDocument(c: Context<{ Bindings: Bindings; Variabl
       },
     });
   } catch {
-    return c.text('PicoRuby IRB の読み込みに失敗しました。時間をおいて再度お試しください。', 502);
+    return c.redirect(PICORUBY_WASM_IRB_URL, 302);
   }
 }
 

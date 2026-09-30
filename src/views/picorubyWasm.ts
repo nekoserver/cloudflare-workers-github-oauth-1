@@ -74,6 +74,7 @@ export function getPicorubyWasmPage(username: string): string {
     h1 { margin: 0 0 7px; font-size: clamp(20px, 4vw, 30px); }
     .intro p { margin: 0; color: var(--text-secondary); line-height: 1.65; }
     .hint { margin-top: 9px; font-size: 13px; color: var(--text-muted); }
+    .direct-link { color: var(--accent-color); font-weight: 700; }
     .terminal-card {
       position: relative; overflow: hidden; min-height: 640px; height: calc(100dvh - 190px);
       border: 1px solid var(--border-color); border-radius: 14px; background: var(--code-bg);
@@ -116,6 +117,7 @@ export function getPicorubyWasmPage(username: string): string {
       <h1 id="pageTitle">ブラウザで PicoRuby IRB</h1>
       <p>PicoRuby の WebAssembly ランタイムを読み込み、インタラクティブな Ruby をこのページで実行できます。</p>
       <p class="hint">プロンプトが表示されたら Ruby の式を入力して Enter を押してください。初回の読み込みには少し時間がかかることがあります。</p>
+      <p class="hint">入力ダイアログが表示されない場合は、<a class="direct-link" href="${PICORUBY_WASM_IRB_URL}">公式IRBを直接開く</a>をご利用ください。</p>
     </section>
     <section class="terminal-card" aria-label="PicoRuby IRB">
       <div class="terminal-bar" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="terminal-title">picoruby.wasm — irb</span></div>
