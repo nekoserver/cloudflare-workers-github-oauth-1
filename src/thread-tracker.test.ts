@@ -140,7 +140,10 @@ describe('thread tracker page', () => {
     expect(html).toContain('id="composerTab"');
     expect(html).toContain('class="composer-tab"');
     expect(html).toContain('aria-label="入力窓を表示"');
-    expect(html).toContain('.two-pane-mode.composer-open .detail-pane .actions');
+    expect(html).toContain('.composer-open .thread-card.selected .actions,.two-pane-mode .detail-pane .actions');
+    expect(html).toContain("selectThread(thread,card);var opening=detail.hidden");
+    expect(html).toContain("if(open&&!selectedThread)");
+    expect(html).toContain("composerRoot=twoPane?detailPane:resultsEl.querySelector('.thread-card.selected')");
     expect(html).toContain("function setComposerOpen(open)");
     expect(html).toContain("composerTab.addEventListener('pointerdown'");
     expect(html).toContain("composerTab.addEventListener('pointermove'");
