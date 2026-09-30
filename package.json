@@ -13,7 +13,6 @@
     "wasm:build:tree": "bash scripts/build-tree-wasm.sh",
     "wasm:build:msb": "bash scripts/build-msb-wasm.sh",
     "wasm:build:sqlx": "bash scripts/build-sqlx-wasm.sh",
-    "picoruby:install": "bash scripts/install-picoruby-wasm.sh",
     "branches:audit": "bash scripts/audit-local-branches.sh",
     "branches:cleanup": "bash scripts/audit-local-branches.sh --delete-merged",
     "test:branches": "bash scripts/audit-local-branches.test.sh",
