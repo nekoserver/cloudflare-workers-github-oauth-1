@@ -376,6 +376,8 @@ import { getWineSearchPage } from './views/wineSearch';
 import { WINE_VECTOR_SEED, type WineSeedRow } from './data/wineVectors';
 import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadata';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
+import { getWebhookSlackSettingPage } from './views/webhookSlackSettingPage';
+import { buildWebhookSettingChecks, toWebhookLogDisplayRows, type WebhookLogRawRow } from './utils/webhookSlackSettingDiagnostics';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -13659,6 +13661,21 @@ app.get('/workflow/:no', authMiddleware, async (c) => {
   }
   const steps = await loadWorkflowSteps(c.env.DB, workflowNo);
   return c.html(getWorkflowPage(user.sub, workflows, { workflow, steps }, hierarchy));
+});
+
+app.get('/wh-setting_github-to-slack', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const checks = buildWebhookSettingChecks(c.env);
+
+  let recentPushLogs: ReturnType<typeof toWebhookLogDisplayRows> = [];
+  if (c.env.DB) {
+    const { results } = await c.env.DB.prepare(
+      `SELECT event_type, status, payload, error, received_at FROM webhook_log WHERE event_type = 'push' ORDER BY received_at DESC LIMIT 20`
+    ).all<WebhookLogRawRow>();
+    recentPushLogs = toWebhookLogDisplayRows(results ?? []);
+  }
+
+  return c.html(getWebhookSlackSettingPage(user.sub, checks, recentPushLogs));
 });
 
 app.get('/api/workflow', authMiddleware, async (c) => {
