@@ -145,6 +145,18 @@ export interface GitHubWebhookPullRequestPayload {
   sender?: { login?: string };
 }
 
+/** GitHub Webhook の push イベントペイロード */
+export interface GitHubWebhookPushPayload {
+  ref?: string;
+  deleted?: boolean;
+  compare?: string;
+  commits?: Array<{ id?: string; message?: string }>;
+  head_commit?: { id?: string; message?: string } | null;
+  pusher?: { name?: string };
+  repository?: { full_name?: string };
+  sender?: { login?: string };
+}
+
 /** Resend Webhook のペイロード */
 export interface ResendWebhookPayload {
   type?: string;
