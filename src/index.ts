@@ -434,7 +434,8 @@ import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
-import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
+import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
+import { buildPushNotificationText } from './utils/githubPushNotify';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
@@ -20600,6 +20601,29 @@ app.post('/webhook/github', async (c) => {
             prUrl: pr.html_url,
           });
           await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing', repository: repositoryFullName }, unexpectedPrErrorMessage);
+        }
+      }
+    }
+  }
+
+  // push イベント: 通知先(Slack/外部Worker=cf-auth)へ転送
+  // (従来pull_request・installation(_repositories)・repository(created)以外の
+  // イベントはwebhook_logへ記録されるのみで通知が飛んでいなかった。rails-root
+  // 等、リポジトリwebhookの既定イベントであるpushが通知に反映されないという
+  // 報告を受けて追加)
+  if (eventType === 'push') {
+    const pushPayload = payload as unknown as GitHubWebhookPushPayload;
+    const pushNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
+    if (isNotifyConfigured(pushNotifyConfig)) {
+      const text = buildPushNotificationText(pushPayload);
+      if (text) {
+        try {
+          await dispatchNotification(pushNotifyConfig, { text });
+        } catch (error) {
+          logger.error('Notification failed for push webhook', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            repositoryFullName,
+          });
         }
       }
     }
