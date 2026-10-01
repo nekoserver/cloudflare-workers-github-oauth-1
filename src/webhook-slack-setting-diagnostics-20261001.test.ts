@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildWebhookSettingChecks,
   extractRepositoryFromWebhookLogPayload,
+  fetchCfAuthSettingChecks,
   toWebhookLogDisplayRows,
 } from './utils/webhookSlackSettingDiagnostics';
 
@@ -118,5 +119,65 @@ describe('toWebhookLogDisplayRows', () => {
 
   it('空配列は空配列を返す', () => {
     expect(toWebhookLogDisplayRows([])).toEqual([]);
+  });
+});
+
+describe('fetchCfAuthSettingChecks', () => {
+  it('CF_AUTH Service Bindingが無ければbinding_missingを返す(例外にしない)', async () => {
+    const result = await fetchCfAuthSettingChecks(undefined, 'secret');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('binding_missing');
+  });
+
+  it('NOTIFY_WORKER_SECRETが無ければsecret_missingを返す(fetchしない)', async () => {
+    const fetchFn = vi.fn();
+    const result = await fetchCfAuthSettingChecks({ fetch: fetchFn }, undefined);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('secret_missing');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('cf-auth側の/settings-checkをBearer認証付きで呼び、真偽値をそのまま返す', async () => {
+    const checks = {
+      ingestSecretSet: true,
+      webhookSecretSet: true,
+      googleClientIdSet: true,
+      googleClientSecretSet: true,
+      githubClientIdSet: true,
+      githubClientSecretSet: true,
+      cookieSecretIsDefault: false,
+    };
+    let receivedAuth: string | null = null;
+    const fetchFn = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      receivedAuth = (init?.headers as Record<string, string>)?.Authorization ?? null;
+      return new Response(JSON.stringify(checks), { status: 200 });
+    });
+    const result = await fetchCfAuthSettingChecks({ fetch: fetchFn }, 'shared-secret');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.checks).toEqual(checks);
+    expect(receivedAuth).toBe('Bearer shared-secret');
+  });
+
+  it('cf-auth側が401等を返したらhttp_errorを返す(secretの食い違いを検出できる)', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }));
+    const result = await fetchCfAuthSettingChecks({ fetch: fetchFn }, 'wrong-secret');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('http_error');
+  });
+
+  it('レスポンス形式が不正ならinvalid_responseを返す(例外にしない)', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ unexpected: true }), { status: 200 }));
+    const result = await fetchCfAuthSettingChecks({ fetch: fetchFn }, 'secret');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('invalid_response');
+  });
+
+  it('fetch自体が例外を投げてもhttp_errorとして返す(例外を外へ伝播させない)', async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    const result = await fetchCfAuthSettingChecks({ fetch: fetchFn }, 'secret');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errorCode).toBe('http_error');
   });
 });

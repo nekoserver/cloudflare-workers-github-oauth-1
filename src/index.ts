@@ -377,7 +377,7 @@ import { WINE_VECTOR_SEED, type WineSeedRow } from './data/wineVectors';
 import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadata';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWebhookSlackSettingPage } from './views/webhookSlackSettingPage';
-import { buildWebhookSettingChecks, toWebhookLogDisplayRows, type WebhookLogRawRow } from './utils/webhookSlackSettingDiagnostics';
+import { buildWebhookSettingChecks, fetchCfAuthSettingChecks, toWebhookLogDisplayRows, type WebhookLogRawRow } from './utils/webhookSlackSettingDiagnostics';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -13675,7 +13675,9 @@ app.get('/wh-setting_github-to-slack', authMiddleware, async (c) => {
     recentPushLogs = toWebhookLogDisplayRows(results ?? []);
   }
 
-  return c.html(getWebhookSlackSettingPage(user.sub, checks, recentPushLogs));
+  const cfAuthChecks = await fetchCfAuthSettingChecks(c.env.CF_AUTH, c.env.NOTIFY_WORKER_SECRET);
+
+  return c.html(getWebhookSlackSettingPage(user.sub, checks, recentPushLogs, cfAuthChecks));
 });
 
 app.get('/api/workflow', authMiddleware, async (c) => {

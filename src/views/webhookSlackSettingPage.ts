@@ -1,6 +1,6 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import type { WebhookLogDisplayRow, WebhookSettingChecks } from '../utils/webhookSlackSettingDiagnostics';
+import type { CfAuthSettingCheckResult, WebhookLogDisplayRow, WebhookSettingChecks } from '../utils/webhookSlackSettingDiagnostics';
 
 function badge(ok: boolean, labelTrue = '設定済み', labelFalse = '未設定'): string {
   const cls = ok ? 'wh-badge wh-badge-ok' : 'wh-badge wh-badge-ng';
@@ -25,6 +25,32 @@ function renderChecksTable(checks: WebhookSettingChecks): string {
   </table>`;
 }
 
+function renderCfAuthChecksSection(result: CfAuthSettingCheckResult): string {
+  if (!result.ok) {
+    const reasonLabel: Record<typeof result.errorCode, string> = {
+      binding_missing: 'CF_AUTH Service Bindingが本体Workerのwrangler.tomlに設定されていません',
+      secret_missing: 'NOTIFY_WORKER_SECRETが未設定のため、cf-auth側を問い合わせられません',
+      http_error: 'cf-auth側への問い合わせに失敗しました(cf-auth側のINGEST_SECRETが本体のNOTIFY_WORKER_SECRETと一致しているか確認してください)',
+      invalid_response: 'cf-auth側のレスポンス形式が想定と異なります(cf-authが古いバージョンのままデプロイされている可能性があります)',
+    };
+    return `<p class="wh-empty">❌ cf-auth側の設定状況を取得できませんでした: ${escapeHtml(reasonLabel[result.errorCode])}</p>
+      <p class="wh-note">詳細: ${escapeHtml(result.detail)}</p>`;
+  }
+  const c = result.checks;
+  return `<table class="wh-table">
+    <tbody>
+      <tr><th>INGEST_SECRET(本体のNOTIFY_WORKER_SECRETと値が一致している必要がある)</th><td>${badge(c.ingestSecretSet)}</td></tr>
+      <tr><th>WEBHOOK_SECRET(経路B: cf-auth→本体Worker)</th><td>${badge(c.webhookSecretSet)}</td></tr>
+      <tr><th>GOOGLE_CLIENT_ID</th><td>${badge(c.googleClientIdSet)}</td></tr>
+      <tr><th>GOOGLE_CLIENT_SECRET</th><td>${badge(c.googleClientSecretSet)}</td></tr>
+      <tr><th>GITHUB_CLIENT_ID</th><td>${badge(c.githubClientIdSet)}</td></tr>
+      <tr><th>GITHUB_CLIENT_SECRET</th><td>${badge(c.githubClientSecretSet)}</td></tr>
+      <tr><th>COOKIE_SECRET</th><td>${badge(!c.cookieSecretIsDefault, '固有の値に変更済み', 'wrangler.tomlのデフォルト値のまま(要変更)')}</td></tr>
+    </tbody>
+  </table>
+  <p class="wh-note">✅ cf-auth側へのService Binding経由の問い合わせに成功しました(secretの値自体は本体Worker側にも返ってきません)。</p>`;
+}
+
 function renderRecentLogsTable(rows: WebhookLogDisplayRow[]): string {
   if (rows.length === 0) {
     return `<p class="wh-empty">直近のpush webhook受信ログはありません(まだ一度もpushイベントを受信していないか、webhook_logテーブルが空です)。</p>`;
@@ -45,7 +71,12 @@ function renderRecentLogsTable(rows: WebhookLogDisplayRow[]): string {
   </table>`;
 }
 
-export function getWebhookSlackSettingPage(username: string, checks: WebhookSettingChecks, recentPushLogs: WebhookLogDisplayRow[]): string {
+export function getWebhookSlackSettingPage(
+  username: string,
+  checks: WebhookSettingChecks,
+  recentPushLogs: WebhookLogDisplayRow[],
+  cfAuthChecks: CfAuthSettingCheckResult
+): string {
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -155,12 +186,10 @@ export function getWebhookSlackSettingPage(username: string, checks: WebhookSett
     </div>
 
     <div class="wh-card">
-      <h2 style="margin-top:0;border-top:none">5. cf-auth側で手動確認が必要な項目(本体Workerからはチェック不可)</h2>
-      <ul class="wh-manual-list">
-        <li><code>INGEST_SECRET</code>が設定されており、値が本体の<code>NOTIFY_WORKER_SECRET</code>と<strong>完全に一致</strong>しているか(<code>wrangler secret put INGEST_SECRET</code>)</li>
-        <li>cf-auth(Cloudflare Workers Build)が最新のmainブランチへデプロイ済みか</li>
-        <li><code>/wspace</code>ページの「その他のWebhook通知」セクションに対象リポジトリの行が実際に増えているか</li>
-      </ul>
+      <h2 style="margin-top:0;border-top:none">5. cf-auth側の設定状況(Service Binding経由の実チェック)</h2>
+      ${renderCfAuthChecksSection(cfAuthChecks)}
+      <p class="wh-note">本体Workerが<code>CF_AUTH</code>というService Bindingでcf-authを直接呼び出し、<code>GET /settings-check</code>(<code>/ingest</code>と同じ<code>INGEST_SECRET</code>で認証)の結果をそのまま表示しています。secretの値そのものはどちらのWorkerのレスポンスにも含まれません。</p>
+      <p class="wh-note">このチェックでは確認できない項目: cf-auth(Cloudflare Workers Build)が最新のmainブランチへデプロイ済みか、<code>/wspace</code>ページの「その他のWebhook通知」セクションに対象リポジトリの行が実際に増えているか、は別途ご自身で確認してください。</p>
     </div>
 
     <div class="wh-card">
