@@ -131,10 +131,14 @@ describe('POST /api/tree-view-repos-external', () => {
     const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
     expect(res.status).toBe(200);
     const body = await res.json() as { repos: Array<{ repoName: string }> };
-    expect(body.repos.map((r) => r.repoName)).toEqual(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/dynamicneko']);
+    expect(body.repos.map((r) => r.repoName)).toEqual([
+      'nekoserver/cloudflare-workers-github-oauth-1',
+      'nekoserver/dynamicneko',
+      'nekoserver/rails-root',
+    ]);
   });
 
-  it('D1が空でも組み込みの2リポジトリを一覧に返す', async () => {
+  it('D1が空でも組み込みの3リポジトリを一覧に返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
@@ -143,6 +147,7 @@ describe('POST /api/tree-view-repos-external', () => {
     expect(body.repos.map((r) => r.repoName)).toEqual([
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
+      'nekoserver/rails-root',
     ]);
   });
 });

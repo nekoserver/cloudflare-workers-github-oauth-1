@@ -1,0 +1,360 @@
+{
+  "name": "nekoserver/rails-root",
+  "type": "dir",
+  "children": [
+    {
+      "name": "Gemfile",
+      "type": "file"
+    },
+    {
+      "name": "Gemfile.lock",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "Rakefile",
+      "type": "file"
+    },
+    {
+      "name": "app",
+      "type": "dir",
+      "children": [
+        {
+          "name": "assets",
+          "type": "dir",
+          "children": [
+            {
+              "name": "stylesheets",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application.css",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "controllers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_controller.rb",
+              "type": "file"
+            },
+            {
+              "name": "home_controller.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "helpers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_helper.rb",
+              "type": "file"
+            },
+            {
+              "name": "home_helper.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "jobs",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_job.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "mailers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_mailer.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "models",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_record.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "views",
+          "type": "dir",
+          "children": [
+            {
+              "name": "home",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "index.html.erb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "layouts",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "mailer.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "mailer.text.erb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "pwa",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "manifest.json.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "service-worker.js",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bin",
+      "type": "dir",
+      "children": [
+        {
+          "name": "brakeman",
+          "type": "file"
+        },
+        {
+          "name": "bundler-audit",
+          "type": "file"
+        },
+        {
+          "name": "ci",
+          "type": "file"
+        },
+        {
+          "name": "dev",
+          "type": "file"
+        },
+        {
+          "name": "rails",
+          "type": "file"
+        },
+        {
+          "name": "rake",
+          "type": "file"
+        },
+        {
+          "name": "rubocop",
+          "type": "file"
+        },
+        {
+          "name": "setup",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "config",
+      "type": "dir",
+      "children": [
+        {
+          "name": "application.rb",
+          "type": "file"
+        },
+        {
+          "name": "boot.rb",
+          "type": "file"
+        },
+        {
+          "name": "bundler-audit.yml",
+          "type": "file"
+        },
+        {
+          "name": "cable.yml",
+          "type": "file"
+        },
+        {
+          "name": "ci.rb",
+          "type": "file"
+        },
+        {
+          "name": "credentials.yml.enc",
+          "type": "file"
+        },
+        {
+          "name": "database.yml",
+          "type": "file"
+        },
+        {
+          "name": "environment.rb",
+          "type": "file"
+        },
+        {
+          "name": "environments",
+          "type": "dir",
+          "children": [
+            {
+              "name": "development.rb",
+              "type": "file"
+            },
+            {
+              "name": "production.rb",
+              "type": "file"
+            },
+            {
+              "name": "test.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "initializers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "assets.rb",
+              "type": "file"
+            },
+            {
+              "name": "content_security_policy.rb",
+              "type": "file"
+            },
+            {
+              "name": "filter_parameter_logging.rb",
+              "type": "file"
+            },
+            {
+              "name": "inflections.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "locales",
+          "type": "dir",
+          "children": [
+            {
+              "name": "en.yml",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "puma.rb",
+          "type": "file"
+        },
+        {
+          "name": "routes.rb",
+          "type": "file"
+        },
+        {
+          "name": "storage.yml",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "config.ru",
+      "type": "file"
+    },
+    {
+      "name": "db",
+      "type": "dir",
+      "children": [
+        {
+          "name": "seeds.rb",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "public",
+      "type": "dir",
+      "children": [
+        {
+          "name": "400.html",
+          "type": "file"
+        },
+        {
+          "name": "404.html",
+          "type": "file"
+        },
+        {
+          "name": "406-unsupported-browser.html",
+          "type": "file"
+        },
+        {
+          "name": "422.html",
+          "type": "file"
+        },
+        {
+          "name": "500.html",
+          "type": "file"
+        },
+        {
+          "name": "icon.png",
+          "type": "file"
+        },
+        {
+          "name": "icon.svg",
+          "type": "file"
+        },
+        {
+          "name": "robots.txt",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "type": "dir",
+      "children": [
+        {
+          "name": "controllers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "home_controller_test.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "test_helper.rb",
+          "type": "file"
+        }
+      ]
+    }
+  ]
+}
