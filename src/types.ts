@@ -38,6 +38,13 @@ export type Bindings = {
    * wrangler.tomlの[[services]]でcf-authをbindingすること。
    */
   CF_AUTH?: Fetcher;
+  /**
+   * /neko askgkが、tunnels.rbへのHMAC署名付きPOSTを代行させるrust-worker-sqlx-d1
+   * (/tunnel-signer/sendエンドポイント)へのService Binding。公開URLへの通常fetch()
+   * は*.workers.dev同士だとCloudflareにHTTP 404 error code: 1042で拒否されるため、
+   * wrangler.tomlの[[services]]でrust-worker-sqlx-d1をbindingすること。
+   */
+  RUST_WORKER?: Fetcher;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   /** dynamicnekoのNew SnippetウィジェットがPOST /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
