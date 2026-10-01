@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { askTunnelSigner } from './tunnelSignerAsk';
+import { askTunnelSigner, resolveAskgkCommand } from './tunnelSignerAsk';
 
 function makeFetcher(fetchImpl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   return { fetch: vi.fn(fetchImpl) };
@@ -70,5 +70,45 @@ describe('askTunnelSigner', () => {
       sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ status: 'healthy' }) })
     );
     await expect(askTunnelSigner(fetcher, 'x')).rejects.toThrow(/reply/);
+  });
+
+  it('"models-list"は"cf ai models list"へ変換してtunnelsへ渡す', async () => {
+    const fetcher = makeFetcher(async (_input, init) => {
+      const sentBody = JSON.parse(String(init?.body));
+      const innerPayload = JSON.parse(sentBody.body);
+      expect(innerPayload.message).toBe('cf ai models list');
+      return sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'ok' }) });
+    });
+    await askTunnelSigner(fetcher, 'models-list');
+  });
+
+  it('エイリアス前後の空白は無視して変換する', async () => {
+    const fetcher = makeFetcher(async (_input, init) => {
+      const sentBody = JSON.parse(String(init?.body));
+      const innerPayload = JSON.parse(sentBody.body);
+      expect(innerPayload.message).toBe('cf ai models list');
+      return sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'ok' }) });
+    });
+    await askTunnelSigner(fetcher, '  models-list  ');
+  });
+});
+
+describe('resolveAskgkCommand', () => {
+  it('登録済みエイリアスを実コマンドへ変換する', () => {
+    expect(resolveAskgkCommand('models-list')).toBe('cf ai models list');
+  });
+
+  /** 故障シナリオ: エイリアス表に無い自由記述の質問文まで書き換えてしまうと、
+   * 通常の/neko askgk <質問文>が意図しないコマンド扱いになってしまう。 */
+  it('未登録の文字列は変換せずそのまま返す', () => {
+    expect(resolveAskgkCommand('げんき？')).toBe('げんき？');
+  });
+
+  it('前後の空白を取り除いてから照合する', () => {
+    expect(resolveAskgkCommand('  models-list  ')).toBe('cf ai models list');
+  });
+
+  it('大文字小文字は区別する(完全一致のみ変換)', () => {
+    expect(resolveAskgkCommand('Models-List')).toBe('Models-List');
   });
 });
