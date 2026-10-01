@@ -13,6 +13,9 @@ import { createJWT } from './utils/jwt';
 //   (3) secretの値そのものがHTMLに埋め込まれて漏洩する
 //   (4) getThemeToggleScript()を<script>タグで囲み忘れ、JS関数の本体が
 //       そのまま画面上の可視テキストとして出力されてしまう
+//   (5) CF_AUTH Service Bindingが無い/cf-auth側が異常を返した場合に
+//       ページ全体が例外で落ちる(本体Worker単体の設定チェックに影響しない)
+//   (6) cf-auth側から取得した真偽値が正しく表示に反映されない
 
 const JWT_SECRET = 'test-secret';
 
@@ -77,6 +80,41 @@ describe('GET /wh-setting_github-to-slack', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('直近のpush webhook受信ログはありません');
+  });
+
+  it('CF_AUTH Service Bindingが無くても例外にならず、未取得の旨を表示する', async () => {
+    const auth = await makeAuthHeader();
+    const res = await app.request('/wh-setting_github-to-slack', { headers: { Authorization: auth } }, { JWT_SECRET });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('cf-auth側の設定状況を取得できませんでした');
+  });
+
+  it('CF_AUTH Service Bindingがあれば、cf-auth側の/settings-checkを呼び結果を表示する', async () => {
+    const auth = await makeAuthHeader();
+    const cfAuthFetch = async () =>
+      new Response(
+        JSON.stringify({
+          ingestSecretSet: true,
+          webhookSecretSet: true,
+          googleClientIdSet: true,
+          googleClientSecretSet: true,
+          githubClientIdSet: true,
+          githubClientSecretSet: true,
+          cookieSecretIsDefault: true,
+        }),
+        { status: 200 }
+      );
+    const res = await app.request(
+      '/wh-setting_github-to-slack',
+      { headers: { Authorization: auth } },
+      { JWT_SECRET, NOTIFY_WORKER_SECRET: 'shared-secret', CF_AUTH: { fetch: cfAuthFetch } }
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('cf-auth側へのService Binding経由の問い合わせに成功しました');
+    expect(html).toContain('wrangler.tomlのデフォルト値のまま(要変更)');
+    expect(html).not.toContain('shared-secret');
   });
 
   it('テーマ切替スクリプトは<script>タグ内に収まっており、可視テキストとして出力されない', async () => {

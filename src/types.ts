@@ -32,6 +32,12 @@ export type Bindings = {
    * [[services]]でdynamicnekoをbindingすること(URLではなくFetcher)。
    */
   DYNAMICNEKO?: Fetcher;
+  /**
+   * /wh-setting_github-to-slackページが、cf-auth(dynamicneko/cf-auth)側の
+   * 設定状況(secretの有無)を横並びで比較表示するためのService Binding。
+   * wrangler.tomlの[[services]]でcf-authをbindingすること。
+   */
+  CF_AUTH?: Fetcher;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   /** dynamicnekoのNew SnippetウィジェットがPOST /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */

@@ -105,6 +105,13 @@ binding = "AI"
 binding = "DYNAMICNEKO"
 service = "dynamicneko"
 
+# cf-auth（dynamicneko/cf-authサブディレクトリ、別デプロイのWorker）への直接呼び出し。
+# /wh-setting_github-to-slackページがcf-auth側の設定状況(secretの有無)を横比較表示する
+# ために使う。上と同じ理由でService Binding経由にする。
+[[services]]
+binding = "CF_AUTH"
+service = "cf-auth"
+
 # オブザーバビリティ設定
 [observability]
 enabled = true
