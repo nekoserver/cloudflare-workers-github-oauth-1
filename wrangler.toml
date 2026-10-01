@@ -105,6 +105,12 @@ binding = "AI"
 binding = "DYNAMICNEKO"
 service = "dynamicneko"
 
+# rust-worker-sqlx-d1への直接呼び出し。/neko askgkがtunnels.rbへのHMAC署名付き
+# POST代行(/tunnel-signer/send)を呼ぶ。上と同じ理由でService Binding経由にする。
+[[services]]
+binding = "RUST_WORKER"
+service = "rust-worker-sqlx-d1"
+
 # cf-auth（dynamicneko/cf-authサブディレクトリ、別デプロイのWorker）への直接呼び出し。
 # /wh-setting_github-to-slackページがcf-auth側の設定状況(secretの有無)を横比較表示する
 # ために使う。上と同じ理由でService Binding経由にする。

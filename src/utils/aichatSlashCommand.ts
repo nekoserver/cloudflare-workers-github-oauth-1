@@ -185,6 +185,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
+    '| /neko askgk <質問文> | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
@@ -244,6 +245,20 @@ export function formatDynamicWorkerPingResult(reply: string): string {
     return '## ダイナミックWorker起動確認 (dynamicneko)\n✅ hello → world (LOADER.load()経由で使い捨てisolateが正常に応答しました)';
   }
   return `## ダイナミックWorker起動確認 (dynamicneko)\n⚠️ 想定外の応答: ${reply}`;
+}
+
+/**
+ * `/neko askgk <質問文>` の結果を表示する。質問文と回答文(reply)をMarkdownの
+ * 見出し・引用ブロックで区切り、replyに含まれる改行はそのまま維持する
+ * (Slackのmrkdwnは\nをそのまま改行として表示するため、エスケープ・置換は不要)。
+ */
+export function formatAskgkResult(question: string, reply: string): string {
+  return [
+    '## /neko askgk',
+    `**質問**: ${question}`,
+    '',
+    reply,
+  ].join('\n');
 }
 
 /**
@@ -983,6 +998,8 @@ export type AichatSlashCommandDeps = {
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
+  /** `/neko askgk <質問文>` 用。rust-worker-sqlx-d1の/tunnel-signer経由でtunnels.rbへ質問を送り、replyを返す */
+  askTunnelSigner?: (message: string) => Promise<string>;
   /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */
   loadMentionEditorRuby?: (filename: string) => Promise<string | null>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
@@ -1948,6 +1965,27 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatDynamicWorkerPingResult(outcome.value) };
   }
 
+  if (subcommand === 'askgk') {
+    const question = parts.slice(2).join(' ').trim();
+    if (!question) {
+      return { handled: true, response: '❌ 質問文を指定してください: /neko askgk <質問文>' };
+    }
+    if (!deps.askTunnelSigner) {
+      return { handled: true, response: '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.askTunnelSigner(question), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko askgk がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko askgk でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatAskgkResult(question, outcome.value) };
+  }
+
   if (subcommand === 'jev') {
     return { handled: true, response: formatJevCreditsInfo() };
   }
@@ -2017,6 +2055,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko ruby, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko askgk, /neko ruby, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
