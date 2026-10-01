@@ -1,5 +1,6 @@
 import cloudflareWorkersGithubOauth1TreeJson from '../data/cloudflare-workers-github-oauth-1.tree.json';
 import dynamicnekoTreeJson from '../data/dynamicneko.tree.json';
+import railsRootTreeJson from '../data/rails-root.tree.json';
 
 // /tree-view(dynamicneko)のサイドバーツリーを、GitHub Trees APIの結果から
 // 構築するための純粋関数群。以前はdynamicneko側にgit ls-treeの結果を
@@ -83,9 +84,10 @@ export function resolveNextTreeViewSnapshot(
 export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnapshotNode>> = {
   'nekoserver/cloudflare-workers-github-oauth-1': cloudflareWorkersGithubOauth1TreeJson as TreeViewSnapshotNode,
   'nekoserver/dynamicneko': dynamicnekoTreeJson as TreeViewSnapshotNode,
+  'nekoserver/rails-root': railsRootTreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-09-24T08:38:29.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-01T00:00:00.000Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
 

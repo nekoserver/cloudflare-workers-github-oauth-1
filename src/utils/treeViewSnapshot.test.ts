@@ -99,10 +99,11 @@ describe('resolveNextTreeViewSnapshot', () => {
 });
 
 describe('EMBEDDED_TREE_VIEW_SNAPSHOTS', () => {
-  it('/neko treeで採取した2リポジトリだけをシードとして持つ', () => {
+  it('/neko treeで採取した3リポジトリだけをシードとして持つ', () => {
     expect(Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS).sort()).toEqual([
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
+      'nekoserver/rails-root',
     ]);
     for (const [repoName, tree] of Object.entries(EMBEDDED_TREE_VIEW_SNAPSHOTS)) {
       expect(tree).toMatchObject({ name: repoName, type: 'dir' });
