@@ -438,6 +438,7 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
 import { buildPushNotificationText } from './utils/githubPushNotify';
+import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
@@ -15727,14 +15728,10 @@ app.post('/api/jev-vuln-score-external', async (c) => {
   });
 });
 
-// commit-summary-externalが要約対象として受け付けるリポジトリ(SPEC.COMMITDB.md/
-// CLAUDE.mdルール24で repo_commit_index の対象として挙げている3repoと同じ)。
-// repoNameはリクエストボディから受け取るが、この一覧に無い値は拒否する。
-const COMMIT_SUMMARY_ALLOWED_REPOS = [
-  'nekoserver/cloudflare-workers-github-oauth-1',
-  'nekoserver/dynamicneko',
-  'nekoserver/cf-auth',
-] as const;
+// commit-summary-external等が要約対象として受け付けるリポジトリは、固定配列
+// ではなくrepo_commit_indexテーブルから都度取得する(loadCommitSummaryAllowedRepos、
+// src/utils/commitSummaryAllowedRepos.ts)。repoNameはリクエストボディから
+// 受け取るが、この一覧に無い値は拒否する。
 
 /**
  * dynamicnekoの/tree-viewコミット履歴モーダルの「要約」ボタン用。
@@ -15776,8 +15773,9 @@ app.post('/api/commit-summary-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  if (!commitSummaryAllowedRepos.includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
   }
 
   try {
@@ -15946,8 +15944,9 @@ app.post('/api/jev-test-score-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  if (!commitSummaryAllowedRepos.includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
   }
 
   const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
@@ -16079,8 +16078,9 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   const login = auth.login as string;
 
   const repoName = (body?.repoName ?? '').trim();
-  if (!(COMMIT_SUMMARY_ALLOWED_REPOS as readonly string[]).includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${COMMIT_SUMMARY_ALLOWED_REPOS.join(', ')}` }, 400);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  if (!commitSummaryAllowedRepos.includes(repoName)) {
+    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
   }
 
   try {
