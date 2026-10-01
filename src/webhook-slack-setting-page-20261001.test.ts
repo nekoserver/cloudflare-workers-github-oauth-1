@@ -11,6 +11,8 @@ import { createJWT } from './utils/jwt';
 //       認証は必須)
 //   (2) DBが無い/webhook_logが空でも例外で落ちる
 //   (3) secretの値そのものがHTMLに埋め込まれて漏洩する
+//   (4) getThemeToggleScript()を<script>タグで囲み忘れ、JS関数の本体が
+//       そのまま画面上の可視テキストとして出力されてしまう
 
 const JWT_SECRET = 'test-secret';
 
@@ -75,5 +77,16 @@ describe('GET /wh-setting_github-to-slack', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('直近のpush webhook受信ログはありません');
+  });
+
+  it('テーマ切替スクリプトは<script>タグ内に収まっており、可視テキストとして出力されない', async () => {
+    const auth = await makeAuthHeader();
+    const res = await app.request('/wh-setting_github-to-slack', { headers: { Authorization: auth } }, { JWT_SECRET });
+    const html = await res.text();
+    const scriptContents = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    expect(scriptContents.some((s) => s.includes('function toggleTheme()'))).toBe(true);
+    // 最後の</script>より後ろ(bodyの可視領域)に関数定義の文字列が漏れていないこと
+    const afterLastScript = html.slice(html.lastIndexOf('</script>'));
+    expect(afterLastScript).not.toContain('function toggleTheme()');
   });
 });

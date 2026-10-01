@@ -169,7 +169,9 @@ export function getWebhookSlackSettingPage(username: string, checks: WebhookSett
       <p class="wh-note">この一覧は経路Aの到達(3節のステップ1〜2)だけを示します。ここに行があっても、4節の送信可否が「送信されない」なら経路Cへは転送されていません。</p>
     </div>
   </div>
-  ${getThemeToggleScript()}
+  <script>
+    ${getThemeToggleScript()}
+  </script>
 </body>
 </html>`;
 }
