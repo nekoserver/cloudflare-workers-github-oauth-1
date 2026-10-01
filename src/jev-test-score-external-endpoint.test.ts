@@ -102,10 +102,21 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       value REAL NOT NULL,
       computed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE installation_permissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      installation_id INTEGER NOT NULL,
+      repo_name TEXT,
+      repository_selection TEXT NOT NULL DEFAULT 'selected',
+      permissions TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
   }
+  db.prepare(
+    `INSERT INTO installation_permissions (installation_id, repo_name, updated_at) VALUES (1, ?, datetime('now'))`
+  ).run(REPO_NAME);
   return db;
 }
 
