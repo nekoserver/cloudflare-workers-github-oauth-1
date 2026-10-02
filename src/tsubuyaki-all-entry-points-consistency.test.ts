@@ -136,3 +136,96 @@ describe('つぶやき投稿の3入口: notification_settings.slack_enabled=0で
     expect(body.text).toBe('✅ Slackに投稿しました');
   });
 });
+
+/**
+ * 「つぶやき投稿」の3入口は、NOTIFY_TARGET/NOTIFY_WORKER_URL/NOTIFY_WORKER_SECRET
+ * (resolveNotifyConfigが分岐に使う、自動通知専用の設定スイッチ)の値に一切依存せず、
+ * 常に本体Worker自身のSLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDで直接Slackへ投稿する。
+ *
+ * これをコメントの説明だけでなくテストコードで保証する: NOTIFY_TARGET='worker'を
+ * 設定し、かつ外部Worker中継(NOTIFY_WORKER_URL)が叩かれれば200を返す状態に
+ * しておいても、実際に叩かれるのはSlack APIのURL(chat.postMessage)であり、
+ * NOTIFY_WORKER_URLは一度も呼ばれないことを検証する(CLAUDE.mdルール37:
+ * 未承認の設定スイッチが紛れ込んでいないことをテストコードで保証する)。
+ */
+describe('つぶやき投稿の3入口: NOTIFY_TARGET等の自動通知向け設定には一切依存しない', () => {
+  const workerRelayEnv = {
+    NOTIFY_TARGET: 'worker',
+    NOTIFY_WORKER_URL: 'https://notify.example.com/hook',
+    NOTIFY_WORKER_SECRET: 'worker-relay-secret',
+  };
+
+  it('POST /api/tsubuyaki はNOTIFY_TARGET=workerが設定されていてもSlack APIへ直接POSTする(外部Worker中継は呼ばれない)', async () => {
+    const calledUrls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+      calledUrls.push(String(url));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }));
+    const authHeader = await makeAuthHeader();
+    const res = await app.request(
+      '/api/tsubuyaki',
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'こんにちは' }),
+      },
+      { JWT_SECRET, DB: makeSlackDisabledDb(), SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', ...workerRelayEnv }
+    );
+    expect(res.status).toBe(200);
+    expect(calledUrls).toEqual(['https://slack.com/api/chat.postMessage']);
+    expect(calledUrls).not.toContain(workerRelayEnv.NOTIFY_WORKER_URL);
+  });
+
+  it('POST /api/tsubuyaki-external はNOTIFY_TARGET=workerが設定されていてもSlack APIへ直接POSTする(外部Worker中継は呼ばれない)', async () => {
+    const calledUrls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+      calledUrls.push(String(url));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }));
+    const token = await makeUserToken('octocat@example.com');
+    const res = await app.request(
+      '/api/tsubuyaki-external',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AICHAT_EXTERNAL_SECRET}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userToken: token, text: 'こんにちは' }),
+      },
+      {
+        AICHAT_EXTERNAL_SECRET,
+        AICHAT_USER_TOKEN_SECRET,
+        DB: makeSlackDisabledDb({ allowedEmail: 'octocat@example.com', githubLogin: 'octocat' }),
+        SLACK_OAUTH_TOKEN: 'xoxb-dummy',
+        SLACK_CHANNEL_ID: 'C123',
+        ...workerRelayEnv,
+      }
+    );
+    expect(res.status).toBe(200);
+    expect(calledUrls).toEqual(['https://slack.com/api/chat.postMessage']);
+    expect(calledUrls).not.toContain(workerRelayEnv.NOTIFY_WORKER_URL);
+  });
+
+  it('Slackスラッシュコマンド /pts はNOTIFY_TARGET=workerが設定されていてもSlack APIへ直接POSTする(外部Worker中継は呼ばれない)', async () => {
+    const calledUrls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+      calledUrls.push(String(url));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }));
+    const rawBody = 'command=%2Fpts&text=こんにちは&user_name=tester';
+    const timestamp = nowTimestamp();
+    const signature = await signSlackForm(rawBody, timestamp, SLACK_SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/commands',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeSlackDisabledDb() as never, ...workerRelayEnv }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { text: string };
+    expect(body.text).toBe('✅ Slackに投稿しました');
+    expect(calledUrls).toEqual(['https://slack.com/api/chat.postMessage']);
+    expect(calledUrls).not.toContain(workerRelayEnv.NOTIFY_WORKER_URL);
+  });
+});
