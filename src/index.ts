@@ -3840,6 +3840,30 @@ async function resolveNotifyConfigWithSetting(env: Bindings): Promise<ReturnType
   return config;
 }
 
+/**
+ * /tsubuyaki・/pts(Slackスラッシュコマンド)専用の直接投稿。
+ * resolveNotifyConfig/dispatchNotificationはNOTIFY_TARGET(='worker'なら
+ * 外部Worker中継)やnotification_settings.slack_enabledを経由する汎用の
+ * 通知ディスパッチだが、これらはいずれも「ログイン失敗・PR要約等の自動通知」
+ * 向けの切り替えであり、本体Worker自身が持つSLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID
+ * でユーザーが明示的に投稿するこの操作には無関係(むしろ不要な迂回を生む)。
+ * そのためこの関数は常にこのWorker自身からSlack APIを直接呼ぶ。
+ */
+async function sendTsubuyakiToSlack(
+  env: Bindings,
+  message: { text: string; blocks?: Record<string, unknown>[] }
+): Promise<{ ok: boolean; status?: number; error?: string }> {
+  if (!env.SLACK_OAUTH_TOKEN || !env.SLACK_CHANNEL_ID) {
+    return { ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' };
+  }
+  return postSlackMessage({
+    token: env.SLACK_OAUTH_TOKEN,
+    channel: env.SLACK_CHANNEL_ID,
+    text: message.text,
+    blocks: message.blocks,
+  });
+}
+
 async function logCfAuthAccessResult(
   db: D1Database | undefined,
   username: string,
@@ -11166,12 +11190,10 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
   const message = buildFreeTextSlackMessage(displayName, validated.text);
   const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
   const blocks = buildFreeTextSlackBlocks(displayName, validated.text, template);
-  // notification_settings.slack_enabledは「ログイン失敗・PR要約等の自動通知」を
-  // 黙らせるオプトアウトであり、ユーザーがボタンを押して明示的に投稿するこの
-  // 操作とは無関係(resolveNotifyConfigWithSettingではなくresolveNotifyConfigを
-  // 直接使い、このフラグを参照しない)。
-  const notifyConfig = resolveNotifyConfig(c.env);
-  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
+  // resolveNotifyConfig/dispatchNotification(NOTIFY_TARGET経由で外部Worker中継
+  // する場合がある汎用ディスパッチ)は使わず、本体Worker自身のSlack secretで
+  // 直接投稿する(このWorkerが書き込むのに他のWorkerを経由する理由が無いため)。
+  const result = await sendTsubuyakiToSlack(c.env, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
     const status = result.status === undefined ? 503 : 502;
@@ -11240,10 +11262,8 @@ app.post('/api/tsubuyaki-external', async (c) => {
   const message = buildFreeTextSlackMessage(login, validated.text);
   const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
   const blocks = buildFreeTextSlackBlocks(login, validated.text, template);
-  // notification_settings.slack_enabledは自動通知の抑制用オプトアウトであり、
-  // ユーザーが明示的に投稿するこの操作とは無関係(/api/tsubuyakiと同じ理由)。
-  const notifyConfig = resolveNotifyConfig(c.env);
-  const result = await dispatchNotification(notifyConfig, { text: message, blocks });
+  // 本体Worker自身のSlack secretで直接投稿する(/api/tsubuyakiと同じ理由)。
+  const result = await sendTsubuyakiToSlack(c.env, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
     const status = result.status === undefined ? 503 : 502;
@@ -22544,10 +22564,8 @@ app.post('/slack/commands', async (c) => {
 
   if (command === '/pts') {
     const text = (form.get('text') || '').trim();
-    // notification_settings.slack_enabledは自動通知の抑制用オプトアウトであり、
-    // ユーザーがSlackから明示的に打つこのコマンドとは無関係(/api/tsubuyakiと同じ理由)。
-    const notifyConfig = resolveNotifyConfig(c.env);
-    const sendNotification = (message: { text: string }) => dispatchNotification(notifyConfig, message);
+    // 本体Worker自身のSlack secretで直接投稿する(/api/tsubuyakiと同じ理由)。
+    const sendNotification = (message: { text: string }) => sendTsubuyakiToSlack(c.env, message);
 
     if (text.toLowerCase() === 'f1') {
       const result = await handleF1ScheduleSlashCommand({
