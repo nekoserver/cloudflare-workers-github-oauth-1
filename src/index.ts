@@ -11166,7 +11166,11 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
   const message = buildFreeTextSlackMessage(displayName, validated.text);
   const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
   const blocks = buildFreeTextSlackBlocks(displayName, validated.text, template);
-  const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
+  // notification_settings.slack_enabledは「ログイン失敗・PR要約等の自動通知」を
+  // 黙らせるオプトアウトであり、ユーザーがボタンを押して明示的に投稿するこの
+  // 操作とは無関係(resolveNotifyConfigWithSettingではなくresolveNotifyConfigを
+  // 直接使い、このフラグを参照しない)。
+  const notifyConfig = resolveNotifyConfig(c.env);
   const result = await dispatchNotification(notifyConfig, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
@@ -11236,7 +11240,9 @@ app.post('/api/tsubuyaki-external', async (c) => {
   const message = buildFreeTextSlackMessage(login, validated.text);
   const template = isSlackPostTemplateId(body?.template) ? body.template : 'plain';
   const blocks = buildFreeTextSlackBlocks(login, validated.text, template);
-  const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
+  // notification_settings.slack_enabledは自動通知の抑制用オプトアウトであり、
+  // ユーザーが明示的に投稿するこの操作とは無関係(/api/tsubuyakiと同じ理由)。
+  const notifyConfig = resolveNotifyConfig(c.env);
   const result = await dispatchNotification(notifyConfig, { text: message, blocks });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
