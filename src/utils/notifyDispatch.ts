@@ -10,7 +10,7 @@ export type NotifyTarget = 'slack' | 'worker';
 
 export type NotifyEnv = {
   NOTIFY_TARGET?: string;
-  SLACK_OAUTH_TOKEN?: string;
+  SOT?: string;
   SLACK_CHANNEL_ID?: string;
   NOTIFY_WORKER_URL?: string;
   NOTIFY_WORKER_SECRET?: string;
@@ -41,7 +41,7 @@ export function resolveNotifyTarget(env: Pick<NotifyEnv, 'NOTIFY_TARGET'>): Noti
 export function resolveNotifyConfig(env: NotifyEnv): NotifyConfig {
   return {
     target: resolveNotifyTarget(env),
-    slackToken: env.SLACK_OAUTH_TOKEN,
+    slackToken: env.SOT,
     slackChannel: env.SLACK_CHANNEL_ID,
     workerUrl: env.NOTIFY_WORKER_URL,
     workerSecret: env.NOTIFY_WORKER_SECRET,
@@ -64,7 +64,7 @@ function describeMissingConfig(config: NotifyConfig): string {
   if (config.target === 'worker') {
     return '通知先Workerが設定されていません（NOTIFY_WORKER_URL が未設定）';
   }
-  return 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）';
+  return 'Slack連携が設定されていません（SOT / SLACK_CHANNEL_ID が未設定）';
 }
 
 async function sendToWorker(config: NotifyConfig, message: NotifyMessage, fetchImpl: typeof fetch): Promise<NotifyResult> {

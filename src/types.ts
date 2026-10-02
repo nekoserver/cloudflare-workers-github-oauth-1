@@ -13,7 +13,7 @@ export type Bindings = {
   ANALYTICS?: AnalyticsEngineDataset;
   RESEND_WEBHOOK_SECRET?: string;
   SLACK_SIGNING_SECRET?: string;
-  SLACK_OAUTH_TOKEN?: string;
+  SOT?: string;
   SLACK_CLIENT_SECRET?: string;
   SLACK_CLIENT_ID?: string;
   SLACK_CHANNEL_ID?: string;

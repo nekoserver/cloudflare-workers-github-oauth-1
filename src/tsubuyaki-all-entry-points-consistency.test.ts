@@ -91,7 +91,7 @@ describe('つぶやき投稿の3入口: notification_settings.slack_enabled=0で
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'こんにちは' }),
       },
-      { JWT_SECRET, DB: makeSlackDisabledDb(), SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
+      { JWT_SECRET, DB: makeSlackDisabledDb(), SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
     );
     expect(res.status).toBe(200);
   });
@@ -110,7 +110,7 @@ describe('つぶやき投稿の3入口: notification_settings.slack_enabled=0で
         AICHAT_EXTERNAL_SECRET,
         AICHAT_USER_TOKEN_SECRET,
         DB: makeSlackDisabledDb({ allowedEmail: 'octocat@example.com', githubLogin: 'octocat' }),
-        SLACK_OAUTH_TOKEN: 'xoxb-dummy',
+        SOT: 'xoxb-dummy',
         SLACK_CHANNEL_ID: 'C123',
       }
     );
@@ -129,7 +129,7 @@ describe('つぶやき投稿の3入口: notification_settings.slack_enabled=0で
         headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
         body: rawBody,
       },
-      { SLACK_SIGNING_SECRET, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeSlackDisabledDb() as never }
+      { SLACK_SIGNING_SECRET, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeSlackDisabledDb() as never }
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { text: string };
@@ -140,7 +140,7 @@ describe('つぶやき投稿の3入口: notification_settings.slack_enabled=0で
 /**
  * 「つぶやき投稿」の3入口は、NOTIFY_TARGET/NOTIFY_WORKER_URL/NOTIFY_WORKER_SECRET
  * (resolveNotifyConfigが分岐に使う、自動通知専用の設定スイッチ)の値に一切依存せず、
- * 常に本体Worker自身のSLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDで直接Slackへ投稿する。
+ * 常に本体Worker自身のSOT/SLACK_CHANNEL_IDで直接Slackへ投稿する。
  *
  * これをコメントの説明だけでなくテストコードで保証する: NOTIFY_TARGET='worker'を
  * 設定し、かつ外部Worker中継(NOTIFY_WORKER_URL)が叩かれれば200を返す状態に
@@ -169,7 +169,7 @@ describe('つぶやき投稿の3入口: NOTIFY_TARGET等の自動通知向け設
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'こんにちは' }),
       },
-      { JWT_SECRET, DB: makeSlackDisabledDb(), SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', ...workerRelayEnv }
+      { JWT_SECRET, DB: makeSlackDisabledDb(), SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', ...workerRelayEnv }
     );
     expect(res.status).toBe(200);
     expect(calledUrls).toEqual(['https://slack.com/api/chat.postMessage']);
@@ -194,7 +194,7 @@ describe('つぶやき投稿の3入口: NOTIFY_TARGET等の自動通知向け設
         AICHAT_EXTERNAL_SECRET,
         AICHAT_USER_TOKEN_SECRET,
         DB: makeSlackDisabledDb({ allowedEmail: 'octocat@example.com', githubLogin: 'octocat' }),
-        SLACK_OAUTH_TOKEN: 'xoxb-dummy',
+        SOT: 'xoxb-dummy',
         SLACK_CHANNEL_ID: 'C123',
         ...workerRelayEnv,
       }
@@ -220,7 +220,7 @@ describe('つぶやき投稿の3入口: NOTIFY_TARGET等の自動通知向け設
         headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
         body: rawBody,
       },
-      { SLACK_SIGNING_SECRET, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeSlackDisabledDb() as never, ...workerRelayEnv }
+      { SLACK_SIGNING_SECRET, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeSlackDisabledDb() as never, ...workerRelayEnv }
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { text: string };

@@ -76,10 +76,10 @@ describe('handleF1ScheduleSlashCommand', () => {
 
   it('通知先が未設定(sendNotificationがエラーを返す)の場合はその理由を含むエラーメッセージを返す', async () => {
     const deps = baseDeps();
-    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' });
+    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'Slack連携が設定されていません（SOT / SLACK_CHANNEL_ID が未設定）' });
     const result = await handleF1ScheduleSlashCommand(deps);
     expect(result.status).toBe(200);
-    expect(result.body?.text).toContain('SLACK_OAUTH_TOKEN');
+    expect(result.body?.text).toContain('SOT');
   });
 
   it('sendNotification が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {

@@ -44,7 +44,7 @@ describe('buildWebhookSettingChecks', () => {
   it('NOTIFY_TARGET=slackでslackToken/slackChannelが両方揃っていればisNotifyConfigured=true', () => {
     const checks = buildWebhookSettingChecks({
       NOTIFY_TARGET: 'slack',
-      SLACK_OAUTH_TOKEN: 'xoxb-test',
+      SOT: 'xoxb-test',
       SLACK_CHANNEL_ID: 'C123',
     });
     expect(checks.isNotifyConfigured).toBe(true);
@@ -53,7 +53,7 @@ describe('buildWebhookSettingChecks', () => {
   it('NOTIFY_TARGET=slackでslackTokenだけ設定されていてもisNotifyConfigured=false(片方欠けると不成立)', () => {
     const checks = buildWebhookSettingChecks({
       NOTIFY_TARGET: 'slack',
-      SLACK_OAUTH_TOKEN: 'xoxb-test',
+      SOT: 'xoxb-test',
     });
     expect(checks.isNotifyConfigured).toBe(false);
   });
@@ -62,7 +62,7 @@ describe('buildWebhookSettingChecks', () => {
     const checks = buildWebhookSettingChecks({
       GITHUB_WEBHOOK_SECRET: 'super-secret-value',
       NOTIFY_WORKER_SECRET: 'another-secret',
-      SLACK_OAUTH_TOKEN: 'xoxb-leak-check',
+      SOT: 'xoxb-leak-check',
     });
     const serialized = JSON.stringify(checks);
     expect(serialized).not.toContain('super-secret-value');

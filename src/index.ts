@@ -3845,7 +3845,7 @@ async function resolveNotifyConfigWithSetting(env: Bindings): Promise<ReturnType
  * resolveNotifyConfig/dispatchNotificationはNOTIFY_TARGET(='worker'なら
  * 外部Worker中継)やnotification_settings.slack_enabledを経由する汎用の
  * 通知ディスパッチだが、これらはいずれも「ログイン失敗・PR要約等の自動通知」
- * 向けの切り替えであり、本体Worker自身が持つSLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID
+ * 向けの切り替えであり、本体Worker自身が持つSOT/SLACK_CHANNEL_ID
  * でユーザーが明示的に投稿するこの操作には無関係(むしろ不要な迂回を生む)。
  * そのためこの関数は常にこのWorker自身からSlack APIを直接呼ぶ。
  */
@@ -3853,11 +3853,11 @@ async function sendTsubuyakiToSlack(
   env: Bindings,
   message: { text: string; blocks?: Record<string, unknown>[] }
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
-  if (!env.SLACK_OAUTH_TOKEN || !env.SLACK_CHANNEL_ID) {
-    return { ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' };
+  if (!env.SOT || !env.SLACK_CHANNEL_ID) {
+    return { ok: false, error: 'Slack連携が設定されていません（SOT / SLACK_CHANNEL_ID が未設定）' };
   }
   return postSlackMessage({
-    token: env.SLACK_OAUTH_TOKEN,
+    token: env.SOT,
     channel: env.SLACK_CHANNEL_ID,
     text: message.text,
     blocks: message.blocks,
@@ -4815,7 +4815,7 @@ async function flagPublicKeySecurityEvent(
     }
   }
 
-  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackToken = c.env.SOT;
   const slackChannel = c.env.SLACK_CHANNEL_ID;
   if (slackToken && slackChannel) {
     postSlackMessage({
@@ -22323,7 +22323,7 @@ app.get('/api/repositories/search/keyword-multi-labels-all', authMiddleware, asy
 /**
  * Slackメンション/メッセージショートカットからのAI応答依頼を処理する共通処理。
  * トークン解決順序: D1のslack_installations（OAuthで動的取得したbotトークン）優先
- * → 環境変数SLACK_OAUTH_TOKENにフォールバック。
+ * → 環境変数SOTにフォールバック。
  * /slack/event（app_mention）と /slack/interactions（message_action）の両方から呼ばれる。
  */
 /**
@@ -22434,7 +22434,7 @@ async function dispatchSlackAiReply(
   env: Bindings,
   task: SlackAiReplyTask
 ): Promise<void> {
-  let slackToken = env.SLACK_OAUTH_TOKEN;
+  let slackToken = env.SOT;
   const db = env.DB;
   if (db && task.teamId) {
     try {
@@ -22484,7 +22484,7 @@ app.post('/slack/interactions', async (c) => {
 
   const result = await handleSlackInteraction({
     signingSecret: c.env.SLACK_SIGNING_SECRET,
-    slackToken: c.env.SLACK_OAUTH_TOKEN,
+    slackToken: c.env.SOT,
     rawBody,
     timestamp: c.req.header('X-Slack-Request-Timestamp'),
     signature: c.req.header('X-Slack-Signature'),

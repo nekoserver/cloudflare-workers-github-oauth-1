@@ -100,7 +100,7 @@ describe('POST /slack/commands', () => {
         headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
         body: rawBody,
       },
-      { SLACK_SIGNING_SECRET, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeEnabledDb() as never }
+      { SLACK_SIGNING_SECRET, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeEnabledDb() as never }
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { response_type: string; text: string };

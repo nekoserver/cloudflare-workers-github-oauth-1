@@ -7,7 +7,7 @@
  * dynamicnekoからのService Binding経由の呼び出し用に別ルートとして公開する。
  * NOTIFY_TARGET/notification_settings.slack_enabledは自動通知向けの切り替えで
  * あり、この明示的な投稿操作とは無関係なため参照しない(本体Worker自身の
- * SLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDで直接Slackへ投稿する)。認可はjev-score-external等と同じ
+ * SOT/SLACK_CHANNEL_IDで直接Slackへ投稿する)。認可はjev-score-external等と同じ
  * 「Bearer secret(AICHAT_EXTERNAL_SECRET)→userToken(署名付きJWT)のsubを
  * emailとして検証→dynamicneko_aichat_allowed_usersで許可確認→
  * 登録済みgithub_loginを表示名に使う(本文の生emailやloginは信用しない)」の順。
@@ -19,7 +19,7 @@
  *   (4) 本文が空/長すぎる場合でもSlackへ投稿されてしまう
  *   (5) 許可済みメールアドレスだがgithub_login未登録の場合にemailそのものを
  *       表示名に使う等、事故る形でSlackに投稿されてしまう
- *   (6) Slack secret(SLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID)が未設定/送信失敗した
+ *   (6) Slack secret(SOT/SLACK_CHANNEL_ID)が未設定/送信失敗した
  *       場合にok:trueを返してしまう(握りつぶし)
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -72,7 +72,7 @@ function makeEnv(overrides: {
     DB: wrapD1(db),
     AICHAT_EXTERNAL_SECRET: SECRET,
     AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET,
-    SLACK_OAUTH_TOKEN: overrides.slackOauthToken ?? 'xoxb-dummy',
+    SOT: overrides.slackOauthToken ?? 'xoxb-dummy',
     SLACK_CHANNEL_ID: overrides.slackChannelId ?? 'C123',
   } as unknown as Parameters<typeof app.request>[2];
 }
