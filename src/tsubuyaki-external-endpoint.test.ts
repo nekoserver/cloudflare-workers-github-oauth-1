@@ -19,8 +19,8 @@
  *   (4) 本文が空/長すぎる場合でもSlackへ投稿されてしまう
  *   (5) 許可済みメールアドレスだがgithub_login未登録の場合にemailそのものを
  *       表示名に使う等、事故る形でSlackに投稿されてしまう
- *   (6) 通知先(Slack/外部Worker)が未設定/送信失敗した場合にok:trueを返して
- *       しまう(握りつぶし)
+ *   (6) Slack secret(SLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID)が未設定/送信失敗した
+ *       場合にok:trueを返してしまう(握りつぶし)
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
