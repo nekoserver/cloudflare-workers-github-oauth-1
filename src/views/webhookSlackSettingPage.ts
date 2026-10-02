@@ -15,7 +15,7 @@ function renderChecksTable(checks: WebhookSettingChecks): string {
       <tr><th>NOTIFY_TARGET(現在値)</th><td>${targetBadge}</td></tr>
       <tr><th>NOTIFY_WORKER_URL</th><td>${badge(checks.notifyWorkerUrlSet)}</td></tr>
       <tr><th>NOTIFY_WORKER_SECRET</th><td>${badge(checks.notifyWorkerSecretSet)}</td></tr>
-      <tr><th>SLACK_OAUTH_TOKEN</th><td>${badge(checks.slackTokenSet)}</td></tr>
+      <tr><th>SOT</th><td>${badge(checks.slackTokenSet)}</td></tr>
       <tr><th>SLACK_CHANNEL_ID</th><td>${badge(checks.slackChannelSet)}</td></tr>
       <tr class="wh-table-summary">
         <th>現在のNOTIFY_TARGET設定で、実際に通知が送信されうるか</th>
@@ -175,7 +175,7 @@ export function getWebhookSlackSettingPage(
     return NOTIFY_WORKER_URLが設定されているか   ← slack_enabledは見ない
   else (target === 'slack' または未設定):
     if slack_enabled === false (D1のユーザー設定、既定OFF): return false
-    return SLACK_OAUTH_TOKEN && SLACK_CHANNEL_IDが両方あるか</code></pre>
+    return SOT && SLACK_CHANNEL_IDが両方あるか</code></pre>
       <p class="wh-note"><code>NOTIFY_TARGET</code>は<strong>本体Worker全体で1つだけ</strong>の設定であり、リポジトリ単位・イベント種別単位では切り替えられない。<code>worker</code>に設定するとSlackへの投稿は(slack_enabledの値によらず)一切行われなくなる。</p>
     </div>
 

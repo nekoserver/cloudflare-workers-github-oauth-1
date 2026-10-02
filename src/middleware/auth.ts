@@ -73,7 +73,7 @@ export function checkRevoked(row: { revoked_at: string | null | undefined; last_
 }
 
 function notifyRevokedAccess(c: Context<{ Bindings: Bindings; Variables: Variables }>, source: string, userId: string) {
-  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackToken = c.env.SOT;
   const slackChannel = c.env.SLACK_CHANNEL_ID;
   if (!slackToken || !slackChannel) return;
   const path = c.req.path;
@@ -116,7 +116,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
   const payload = await verifyJWT(tokenInfo.token, secret);
   if (!payload) {
     // 不審なアクセス: 無効なJWTトークンでのアクセス試行をSlackに通知
-    const slackToken = c.env.SLACK_OAUTH_TOKEN;
+    const slackToken = c.env.SOT;
     const slackChannel = c.env.SLACK_CHANNEL_ID;
     if (slackToken && slackChannel) {
       const path = c.req.path;

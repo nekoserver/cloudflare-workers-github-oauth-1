@@ -5,7 +5,7 @@
  * PR要約・cf-auth通知等の「自動で飛ぶ通知」をユーザーが黙らせるためのオプトアウト
  * であり、ユーザーが明示的にボタンを押して投稿するこの操作とは無関係だった。
  * 以前はresolveNotifyConfigWithSetting経由でこのフラグを参照してしまっており、
- * SLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDをsecretで設定済みでもslack_enabledが0の
+ * SOT/SLACK_CHANNEL_IDをsecretで設定済みでもslack_enabledが0の
  * ままだと「Slack連携が設定されていません」という誤解を招くエラーで投稿できな
  * かった(実際にはsecretの問題ではなくD1のユーザーオプションの問題)。
  * resolveNotifyConfig(フラグを参照しない版)に切り替え、slack_enabledの値に
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関係に投稿できる', () => {
-  it('D1のslack_enabledが0でも、SLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDが設定済みなら実際にSlack APIを呼び200を返す', async () => {
+  it('D1のslack_enabledが0でも、SOT/SLACK_CHANNEL_IDが設定済みなら実際にSlack APIを呼び200を返す', async () => {
     const db = createMockDb({ slackEnabled: 0 });
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -62,7 +62,7 @@ describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関�
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'こんにちは' }),
       },
-      { JWT_SECRET, DB: db, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
+      { JWT_SECRET, DB: db, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
@@ -82,12 +82,12 @@ describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関�
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'こんにちは' }),
       },
-      { JWT_SECRET, DB: db, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
+      { JWT_SECRET, DB: db, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
     );
     expect(res.status).toBe(200);
   });
 
-  it('D1のslack_enabledが1でSLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDも設定済みなら、実際にSlack APIを呼び200を返す', async () => {
+  it('D1のslack_enabledが1でSOT/SLACK_CHANNEL_IDも設定済みなら、実際にSlack APIを呼び200を返す', async () => {
     const db = createMockDb({ slackEnabled: 1 });
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -99,7 +99,7 @@ describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関�
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'こんにちは' }),
       },
-      { JWT_SECRET, DB: db, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
+      { JWT_SECRET, DB: db, SOT: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123' }
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
@@ -107,7 +107,7 @@ describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関�
     expect(fetchMock).toHaveBeenCalled();
   });
 
-  it('SLACK_OAUTH_TOKEN自体が未設定なら、slack_enabledの値に関わらず503エラーを返す(こちらは本当にsecret側の問題)', async () => {
+  it('SOT自体が未設定なら、slack_enabledの値に関わらず503エラーを返す(こちらは本当にsecret側の問題)', async () => {
     const db = createMockDb({ slackEnabled: 1 });
     const authHeader = await makeAuthHeader();
     const res = await app.request(
@@ -121,6 +121,6 @@ describe('POST /api/tsubuyaki: notification_settings.slack_enabledとは無関�
     );
     expect(res.status).toBe(503);
     const body = (await res.json()) as { ok: boolean; error: string };
-    expect(body.error).toBe('Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）');
+    expect(body.error).toBe('Slack連携が設定されていません（SOT / SLACK_CHANNEL_ID が未設定）');
   });
 });

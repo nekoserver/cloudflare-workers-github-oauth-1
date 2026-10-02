@@ -63,7 +63,7 @@ export function formatSlackAiReplyText(aiResult: { ok: true; text: string } | { 
  */
 export async function handleSlackAppMention(deps: SlackMentionReplyDeps): Promise<SlackMentionReplyResult> {
   if (!deps.slackToken) {
-    return { posted: false, error: 'SLACK_OAUTH_TOKEN is not configured' };
+    return { posted: false, error: 'SOT is not configured' };
   }
 
   const cleanedText = stripBotMentions(deps.text);

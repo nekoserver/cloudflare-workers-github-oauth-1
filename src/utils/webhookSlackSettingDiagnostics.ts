@@ -19,7 +19,7 @@ export type WebhookSettingEnv = {
   NOTIFY_TARGET?: string;
   NOTIFY_WORKER_URL?: string;
   NOTIFY_WORKER_SECRET?: string;
-  SLACK_OAUTH_TOKEN?: string;
+  SOT?: string;
   SLACK_CHANNEL_ID?: string;
 };
 
@@ -27,7 +27,7 @@ export function buildWebhookSettingChecks(env: WebhookSettingEnv): WebhookSettin
   const notifyTarget: 'slack' | 'worker' = env.NOTIFY_TARGET === 'worker' ? 'worker' : 'slack';
   const notifyWorkerUrlSet = !!env.NOTIFY_WORKER_URL;
   const notifyWorkerSecretSet = !!env.NOTIFY_WORKER_SECRET;
-  const slackTokenSet = !!env.SLACK_OAUTH_TOKEN;
+  const slackTokenSet = !!env.SOT;
   const slackChannelSet = !!env.SLACK_CHANNEL_ID;
 
   // src/utils/notifyDispatch.ts の isNotifyConfigured() と同じロジック。

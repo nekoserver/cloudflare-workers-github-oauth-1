@@ -306,7 +306,7 @@ wrangler secret put GITHUB_CLIENT_SECRET
 wrangler secret put GITHUB_WEBHOOK_SECRET
 
 # Slack 通知用
-wrangler secret put SLACK_OAUTH_TOKEN
+wrangler secret put SOT
 wrangler secret put SLACK_CHANNEL_ID
 
 # Resend Webhook 署名検証用
@@ -390,7 +390,7 @@ GitHub App の **「Install App」** フローでは、コールバックが `/a
 | `GITHUB_CLIENT_SECRET` | 必須 | GitHub OAuth App のクライアントシークレット |
 | `ENVIRONMENT` | - | 実行環境（development / production） |
 | `GITHUB_WEBHOOK_SECRET` | - | GitHub App Webhook 署名検証用シークレット |
-| `SLACK_OAUTH_TOKEN` | - | Slack Bot トークン（通知用） |
+| `SOT` | - | Slack Bot トークン（通知用） |
 | `SLACK_CHANNEL_ID` | - | Slack 通知先チャンネル ID |
 | `SLACK_SIGNING_SECRET` | - | Slack 署名検証用シークレット |
 | `SLACK_CLIENT_ID` | - | Slack App クライアント ID |

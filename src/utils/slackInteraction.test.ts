@@ -172,7 +172,7 @@ describe('handleSlackInteraction', () => {
     expect(result.steps).toContain('error');
   });
 
-  it('SLACK_OAUTH_TOKEN未設定の場合、errorステップで終了する', async () => {
+  it('SOT未設定の場合、errorステップで終了する', async () => {
     const deps = makeDeps({ slackToken: undefined });
     const result = await handleSlackInteraction(deps);
 

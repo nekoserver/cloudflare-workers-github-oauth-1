@@ -24,7 +24,7 @@ describe('resolveNotifyConfig', () => {
   it('環境変数からslack設定とworker設定の両方を読み取る', () => {
     const config = resolveNotifyConfig({
       NOTIFY_TARGET: 'worker',
-      SLACK_OAUTH_TOKEN: 'xoxb-token',
+      SOT: 'xoxb-token',
       SLACK_CHANNEL_ID: 'C123',
       NOTIFY_WORKER_URL: 'https://notify.example.workers.dev/ingest',
       NOTIFY_WORKER_SECRET: 'shh',
@@ -70,7 +70,7 @@ describe('sendNotification', () => {
     const fetchImpl = vi.fn();
     const result = await sendNotification({ target: 'slack' }, { text: 'hi' }, { postSlackMessage, fetchImpl });
     expect(result.ok).toBe(false);
-    expect(result.error).toContain('SLACK_OAUTH_TOKEN');
+    expect(result.error).toContain('SOT');
     expect(postSlackMessage).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
   });

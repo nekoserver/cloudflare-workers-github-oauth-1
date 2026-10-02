@@ -115,7 +115,7 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
   await log('action_matched', `action_id=${actionId}, requestId=${requestId}`);
 
   if (!deps.slackToken) {
-    await log('error', 'SLACK_OAUTH_TOKEN not configured');
+    await log('error', 'SOT not configured');
     return { status: 200, steps };
   }
 

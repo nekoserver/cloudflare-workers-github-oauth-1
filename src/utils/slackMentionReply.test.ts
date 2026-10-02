@@ -45,11 +45,11 @@ describe('handleSlackAppMention', () => {
     postMessage: vi.fn().mockResolvedValue({ ok: true }),
   });
 
-  it('SLACK_OAUTH_TOKENが未設定の場合は投稿せずエラーを返す', async () => {
+  it('SOTが未設定の場合は投稿せずエラーを返す', async () => {
     const deps = baseDeps();
     deps.slackToken = undefined;
     const result = await handleSlackAppMention(deps);
-    expect(result).toEqual({ posted: false, error: 'SLACK_OAUTH_TOKEN is not configured' });
+    expect(result).toEqual({ posted: false, error: 'SOT is not configured' });
     expect(deps.postMessage).not.toHaveBeenCalled();
   });
 
