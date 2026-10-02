@@ -22544,7 +22544,9 @@ app.post('/slack/commands', async (c) => {
 
   if (command === '/pts') {
     const text = (form.get('text') || '').trim();
-    const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
+    // notification_settings.slack_enabledは自動通知の抑制用オプトアウトであり、
+    // ユーザーがSlackから明示的に打つこのコマンドとは無関係(/api/tsubuyakiと同じ理由)。
+    const notifyConfig = resolveNotifyConfig(c.env);
     const sendNotification = (message: { text: string }) => dispatchNotification(notifyConfig, message);
 
     if (text.toLowerCase() === 'f1') {
