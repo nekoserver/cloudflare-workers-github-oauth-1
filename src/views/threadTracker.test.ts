@@ -54,12 +54,30 @@ describe('getThreadTrackerPage', () => {
 
   it('モーダルを適用せずに閉じるとプレビューは保存前の状態に戻る', () => {
     expect(html).toContain('function setCssThemeOpen(');
-    expect(html).toMatch(/applyCssTheme\(savedCssTheme\)/);
+    expect(html).toMatch(/applyCssTheme\(savedCssKey\)/);
   });
 
-  it('複数のスタイルシートプリセットを切り替えられる', () => {
+  it('dynamicnekoのai-panel(StylePicker enhanced)と同レベルの選択肢数(色テーマ+画面全体フィルター)を持つ', () => {
     expect(html).toContain('CSS_THEME_PRESETS');
-    const presetCount = (html.match(/\{id:'[a-z]+',label:/g) || []).length;
-    expect(presetCount).toBeGreaterThanOrEqual(2);
+    const presetCount = (html.match(/\{kind:'(?:style|fx)',id:'[a-z-]+',label:/g) || []).length;
+    expect(presetCount).toBeGreaterThanOrEqual(29);
+  });
+
+  it('dynamicnekoのStylePicker(enhanced)にある色テーマ・画面全体フィルターのidが一通り揃っている', () => {
+    const expectedStyleIds = ['minimal', 'paper', 'sunset', 'ember', 'candy', 'ocean', 'terminal', 'matrix', 'neon', 'hologram', 'dracula', 'glitch', 'aurora', 'lined'];
+    const expectedFxIds = ['glass', 'mono', 'rounded', 'tracking', 'crosshair', 'blueprint', 'neon-text', 'selection', 'grayscale', 'invert', 'blur', 'hue-rotate'];
+    expectedStyleIds.forEach((id) => expect(html).toContain(`{kind:'style',id:'${id}'`));
+    expectedFxIds.forEach((id) => expect(html).toContain(`{kind:'fx',id:'${id}'`));
+    // sepia・crtはstyle/fx両方に存在するため、kind付きで両方を確認する
+    expect(html).toContain("{kind:'style',id:'crt'");
+    expect(html).toContain("{kind:'fx',id:'crt'");
+    expect(html).toContain("{kind:'fx',id:'sepia'");
+  });
+
+  it('色テーマ(style)選択と画面全体フィルター(fx)選択は排他的に切り替わる(dynamicnekoと同じ挙動)', () => {
+    expect(html).toContain("document.documentElement.setAttribute('data-css-fx',id)");
+    expect(html).toContain("document.documentElement.removeAttribute('data-css-style')");
+    expect(html).toContain("document.documentElement.setAttribute('data-css-style',id)");
+    expect(html).toContain("document.documentElement.removeAttribute('data-css-fx')");
   });
 });
