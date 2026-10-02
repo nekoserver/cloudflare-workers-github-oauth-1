@@ -47,12 +47,25 @@ describe('getTsubuyakiPage', () => {
     expect(html).toContain('MAX_LEN = 3000');
   });
 
-  it('多数のBlock Kitテンプレートを選択して投稿できる', () => {
-    const cardCount = (html.match(/class="template-card/g) || []).length;
-    expect(cardCount).toBeGreaterThanOrEqual(25);
+  it('多数のBlock Kitテンプレートが左サイドバーのアイコンから選択できる', () => {
+    const iconCount = (html.match(/class="sidebar-icon/g) || []).length;
+    expect(iconCount).toBeGreaterThanOrEqual(25);
     expect(html).toContain('Block Kit テンプレート');
     expect(html).toContain('data-template="incident"');
     expect(html).toContain('data-template="approval"');
+    expect(html).toContain('id="templateSidebar"');
     expect(html).toContain('template: selectedTemplate');
+  });
+
+  it('テンプレート選択後、スニペットプレビューとRun▶ボタンで投稿に適用する', () => {
+    expect(html).toContain('id="snippetCode"');
+    expect(html).toContain('id="applyTemplateButton"');
+    expect(html).toContain('Run▶');
+    expect(html).toContain('selectedTemplate = previewTemplate.id');
+  });
+
+  it('各テンプレートのBlock Kitスニペット(JSON)がサーバー側で埋め込まれている', () => {
+    expect(html).toContain('var TEMPLATES = ');
+    expect(html).toContain('"snippet"');
   });
 });

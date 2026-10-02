@@ -1,14 +1,34 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { SLACK_POST_TEMPLATES } from '../utils/freeTextSlackPost';
+import { SLACK_POST_TEMPLATES, buildFreeTextSlackBlocks, buildFreeTextSlackMessage } from '../utils/freeTextSlackPost';
+
+const PREVIEW_DISPLAY_NAME = 'あなたの表示名';
+const PREVIEW_TEXT = '（ここに入力した本文が入ります）';
+
+function buildTemplateSnippet(templateId: typeof SLACK_POST_TEMPLATES[number]['id']): string {
+  if (templateId === 'plain') {
+    return JSON.stringify({ text: buildFreeTextSlackMessage(PREVIEW_DISPLAY_NAME, PREVIEW_TEXT) }, null, 2);
+  }
+  const blocks = buildFreeTextSlackBlocks(PREVIEW_DISPLAY_NAME, PREVIEW_TEXT, templateId);
+  return JSON.stringify(blocks, null, 2);
+}
 
 export function getTsubuyakiPage(username: string): string {
   const safeUsername = escapeHtml(username);
-  const templateCards = SLACK_POST_TEMPLATES.map((template, index) => `
-        <button type="button" class="template-card${index === 0 ? ' selected' : ''}" data-template="${template.id}" aria-pressed="${index === 0 ? 'true' : 'false'}">
-          <span class="template-emoji">${template.emoji}</span>
-          <span><strong>${template.title}</strong><small>${template.description}</small></span>
+
+  const sidebarIcons = SLACK_POST_TEMPLATES.map((template, index) => `
+        <button type="button" class="sidebar-icon${index === 0 ? ' selected' : ''}" data-template="${template.id}" title="${escapeHtml(template.title)} - ${escapeHtml(template.description)}" aria-pressed="${index === 0 ? 'true' : 'false'}">
+          <span>${template.emoji}</span>
         </button>`).join('');
+
+  const templatesPayload = SLACK_POST_TEMPLATES.map((template) => ({
+    id: template.id,
+    emoji: template.emoji,
+    title: template.title,
+    description: template.description,
+    snippet: buildTemplateSnippet(template.id),
+  }));
+  const templatesJson = JSON.stringify(templatesPayload).replace(/<\/script/gi, '<\\/script');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -60,29 +80,55 @@ export function getTsubuyakiPage(username: string): string {
     .dropdown-item:hover { background: var(--dropdown-hover); }
     .dropdown-item.switch-account { color: var(--accent-color); }
     .dropdown-item.logout { color: var(--danger-color); }
-    .container { max-width: 640px; margin: 0 auto; padding: 48px 32px; }
+
+    .layout { display: flex; align-items: flex-start; }
+    .template-sidebar {
+      flex: 0 0 64px; width: 64px; position: sticky; top: 0;
+      height: calc(100vh - 73px); overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 16px 8px; background: var(--card-bg); border-right: 1px solid var(--border-color);
+    }
+    .sidebar-icon {
+      width: 48px; height: 48px; flex: 0 0 auto; border-radius: 10px;
+      border: 1px solid var(--input-border); background: var(--input-bg);
+      font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--text-primary);
+    }
+    .sidebar-icon:hover { border-color: var(--accent-color); }
+    .sidebar-icon.selected { border-color: var(--accent-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent); }
+
+    .container { flex: 1; max-width: 640px; margin: 0 auto; padding: 48px 32px; }
     .post-card {
       background: var(--card-bg); border-radius: 16px;
       box-shadow: 0 20px 60px var(--card-shadow); padding: 48px;
     }
     .post-title { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
     .post-subtitle { font-size: 15px; color: var(--text-muted); margin-bottom: 28px; }
-    .template-heading { font-size: 14px; color: var(--text-secondary); margin-bottom: 10px; }
-    .template-grid {
-      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
-      max-height: 260px; overflow-y: auto; padding: 2px 4px 12px 2px; margin-bottom: 18px;
+
+    .snippet-heading { font-size: 14px; color: var(--text-secondary); margin-bottom: 10px; }
+    .snippet-card { margin-bottom: 18px; }
+    .snippet-info { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .snippet-emoji { font-size: 22px; }
+    .snippet-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .snippet-desc { font-size: 12px; color: var(--text-muted); }
+    .snippet-code-wrap { position: relative; }
+    .snippet-code-wrap .snippet-code { padding-right: 78px; }
+    .snippet-code {
+      margin: 0; padding: 12px; overflow: auto; max-height: 220px;
+      border: 1px solid var(--border-color); border-radius: 8px; background: var(--code-bg);
+      color: var(--text-primary); white-space: pre-wrap; word-break: break-word;
+      font: 12px/1.6 'Monaco', 'Courier New', monospace;
     }
-    .template-card {
-      display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px;
-      border: 1px solid var(--input-border); border-radius: 9px; text-align: left;
-      background: var(--input-bg); color: var(--text-primary); cursor: pointer;
+    .snippet-run-button {
+      position: absolute; top: 8px; right: 8px; z-index: 1;
+      border: 1px solid var(--success-color); border-radius: 7px; padding: 6px 9px;
+      background: var(--card-bg); color: var(--success-color); cursor: pointer;
+      font: 700 12px/1.4 'Monaco', 'Courier New', monospace;
     }
-    .template-card:hover { border-color: var(--accent-color); }
-    .template-card.selected { border-color: var(--accent-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent); }
-    .template-emoji { font-size: 21px; flex: 0 0 auto; }
-    .template-card strong, .template-card small { display: block; }
-    .template-card strong { font-size: 13px; }
-    .template-card small { color: var(--text-muted); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snippet-run-button:hover, .snippet-run-button:focus-visible { background: var(--success-color); color: white; }
+    .applied-template { font-size: 12px; color: var(--text-muted); margin: 10px 0 0; }
+    .applied-template strong { color: var(--text-primary); }
+
     textarea {
       width: 100%; min-height: 160px; resize: vertical;
       background: var(--input-bg); color: var(--text-primary);
@@ -112,9 +158,13 @@ export function getTsubuyakiPage(username: string): string {
     }
     .back-link:hover { text-decoration: underline; }
     @media (max-width: 560px) {
+      .layout { flex-direction: column; }
+      .template-sidebar {
+        flex: 0 0 auto; width: 100%; height: auto; position: static;
+        flex-direction: row; overflow-x: auto; overflow-y: hidden;
+      }
       .container { padding: 24px 14px; }
       .post-card { padding: 26px 18px; }
-      .template-grid { grid-template-columns: 1fr; max-height: 300px; }
     }
   </style>
 </head>
@@ -144,22 +194,39 @@ export function getTsubuyakiPage(username: string): string {
     </div>
   </nav>
 
-  <div class="container">
-    <div class="post-card">
-      <h1 class="post-title">📮 つぶやき投稿</h1>
-      <p class="post-subtitle">自由に書いた一言をSlackに投稿できます。</p>
+  <div class="layout">
+    <aside class="template-sidebar" id="templateSidebar" aria-label="Block Kit テンプレート一覧（${SLACK_POST_TEMPLATES.length}種類）">
+${sidebarIcons}
+    </aside>
 
-      <h2 class="template-heading">Block Kit テンプレート（${SLACK_POST_TEMPLATES.length}種類）</h2>
-      <div class="template-grid" id="templateGrid" aria-label="投稿テンプレート">
-${templateCards}
+    <div class="container">
+      <div class="post-card">
+        <h1 class="post-title">📮 つぶやき投稿</h1>
+        <p class="post-subtitle">自由に書いた一言をSlackに投稿できます。</p>
+
+        <h2 class="snippet-heading">Block Kit テンプレート（${SLACK_POST_TEMPLATES.length}種類）— 左のアイコンから選ぶとここにプレビューが表示されます</h2>
+        <div class="snippet-card">
+          <div class="snippet-info">
+            <span class="snippet-emoji" id="snippetEmoji">💬</span>
+            <div>
+              <div class="snippet-title" id="snippetTitle">フリーメッセージ</div>
+              <div class="snippet-desc" id="snippetDesc">自由な内容をそのまま共有</div>
+            </div>
+          </div>
+          <div class="snippet-code-wrap">
+            <pre class="snippet-code" id="snippetCode"></pre>
+            <button type="button" class="snippet-run-button" id="applyTemplateButton" title="このテンプレートを使う">Run▶︎</button>
+          </div>
+          <p class="applied-template" id="appliedTemplateLabel">使用中のテンプレート: <strong>💬 フリーメッセージ</strong></p>
+        </div>
+
+        <textarea id="freeText" placeholder="ここに投稿したい内容を書いてください…" maxlength="3000"></textarea>
+        <div class="char-count" id="charCount">0 / 3000</div>
+        <button class="post-btn" id="postBtn" onclick="postToSlack()">📮 Slackに投稿する</button>
+        <div class="status-msg" id="statusMsg"></div>
+
+        <a href="/welcome" class="back-link">← ホームに戻る</a>
       </div>
-
-      <textarea id="freeText" placeholder="ここに投稿したい内容を書いてください…" maxlength="3000"></textarea>
-      <div class="char-count" id="charCount">0 / 3000</div>
-      <button class="post-btn" id="postBtn" onclick="postToSlack()">📮 Slackに投稿する</button>
-      <div class="status-msg" id="statusMsg"></div>
-
-      <a href="/welcome" class="back-link">← ホームに戻る</a>
     </div>
   </div>
 
@@ -175,24 +242,60 @@ ${templateCards}
       if (!icon.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
     });
 
+    var TEMPLATES = ${templatesJson};
     var freeTextEl = document.getElementById('freeText');
     var charCountEl = document.getElementById('charCount');
     var postBtnEl = document.getElementById('postBtn');
     var statusMsgEl = document.getElementById('statusMsg');
-    var selectedTemplate = 'plain';
+    var snippetEmojiEl = document.getElementById('snippetEmoji');
+    var snippetTitleEl = document.getElementById('snippetTitle');
+    var snippetDescEl = document.getElementById('snippetDesc');
+    var snippetCodeEl = document.getElementById('snippetCode');
+    var appliedTemplateLabelEl = document.getElementById('appliedTemplateLabel');
+    var previewTemplate = TEMPLATES[0];
+    var selectedTemplate = TEMPLATES[0].id;
     var MAX_LEN = 3000;
 
-    document.getElementById('templateGrid').addEventListener('click', function(e) {
-      var card = e.target.closest('.template-card');
-      if (!card) return;
-      selectedTemplate = card.dataset.template;
-      document.querySelectorAll('.template-card').forEach(function(item) {
-        var selected = item === card;
+    function findTemplate(id) {
+      for (var i = 0; i < TEMPLATES.length; i++) {
+        if (TEMPLATES[i].id === id) return TEMPLATES[i];
+      }
+      return TEMPLATES[0];
+    }
+
+    function renderPreview(template) {
+      previewTemplate = template;
+      snippetEmojiEl.textContent = template.emoji;
+      snippetTitleEl.textContent = template.title;
+      snippetDescEl.textContent = template.description;
+      snippetCodeEl.textContent = template.snippet;
+    }
+
+    function renderAppliedLabel() {
+      var template = findTemplate(selectedTemplate);
+      appliedTemplateLabelEl.innerHTML = '使用中のテンプレート: <strong>' + template.emoji + ' ' + template.title + '</strong>';
+    }
+
+    document.getElementById('templateSidebar').addEventListener('click', function(e) {
+      var icon = e.target.closest('.sidebar-icon');
+      if (!icon) return;
+      var template = findTemplate(icon.dataset.template);
+      renderPreview(template);
+      document.querySelectorAll('.sidebar-icon').forEach(function(item) {
+        var selected = item === icon;
         item.classList.toggle('selected', selected);
         item.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
+    });
+
+    document.getElementById('applyTemplateButton').addEventListener('click', function() {
+      selectedTemplate = previewTemplate.id;
+      renderAppliedLabel();
       freeTextEl.focus();
     });
+
+    renderPreview(TEMPLATES[0]);
+    renderAppliedLabel();
 
     freeTextEl.addEventListener('input', function() {
       var len = freeTextEl.value.length;
