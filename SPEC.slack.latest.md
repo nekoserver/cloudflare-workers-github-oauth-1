@@ -180,10 +180,35 @@ cf-auth連携の完成、Slackスラッシュコマンド・Events APIによる�
 
 ---
 
-## 現在地(2026-09-11時点)まとめ
+## 2026年10月 — 「つぶやき投稿」Slack未配信バグの調査・修正とUI刷新
 
-- **受信系(Slack→Worker)**: `POST /slack/interactions`(ボタン・ショートカット)、`POST /slack/event`(Events API・メンション)、`POST /slack/commands`(スラッシュコマンド`/pts`)の3経路。すべて`verifySlackSignature`で署名検証。
-- **送信系(Worker→Slack)**: `src/utils/notifyDispatch.ts`の`sendNotification`に一本化。`NOTIFY_TARGET`でSlack/外部Workerを切替可能、D1の`notification_settings`(デフォルトOFF)でユーザーが一括ON/OFFできる。
+<details>
+<summary><strong>10/1 〜 10/2 週</strong> — slack_enabledゲート誤適用の修正、直接送信化、Secret名リネーム、UI刷新(8件)</summary>
+
+詳細な経緯(誤った仮説の提示とユーザーからの訂正を含む)は
+[`SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md`](SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md)
+に記録。ここでは要点のみ。
+
+| 日付 | コミット | やったこと(変更) | 可能になったこと |
+|---|---|---|---|
+| 10-02 | [`f68c8f6`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f68c8f6) | `/tsubuyaki`: `notification_settings.slack_enabled`(自動通知向けのユーザーオプトアウト、デフォルトOFF)による誤ったブロックを撤廃 | ユーザーが明示的に押す投稿操作が、自動通知用トグルの状態に関わらず動作するようになった |
+| 10-02 | [`da6c48a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/da6c48a) | Slackスラッシュコマンド`/pts`も同じ修正から漏れていたため追加対応 | 3入口すべてが一貫して動作するようになった |
+| 10-02 | [`18c46b0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/18c46b0) | `/tsubuyaki`・`/pts`を`sendTsubuyakiToSlack()`に統一し、`NOTIFY_TARGET`/`resolveNotifyConfig`/`dispatchNotification`を一切経由せず本体Worker自身のSlack secretで直接投稿する方式に変更 | 通知先切替ロジック(他の9箇所以上で使われる正当な機能)と、この明示的投稿操作との結合が完全に断たれた |
+| 10-02 | [`2d7c2a6`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2d7c2a6) | 3入口が`slack_enabled=0`でも成功することを検証する横断回帰テストを追加 | 今後いずれか1入口だけ直し忘れる回帰を機械的に検出できるようになった |
+| 10-02 | [`88e1866`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/88e1866) | 3入口が`NOTIFY_TARGET`等に一切依存しないことをテストコードで保証(`fetch`先がSlack APIのみであることを検証) | 設計意図(自動通知向け設定からの独立)がコメントだけでなくテストでも保証されるようになった |
+| 10-02 | [`21633ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/21633ba) | ユーザーがデプロイ済みsecretを`SLACK_OAUTH_TOKEN`→`SOT`に改名したことを受け、コード側の参照名を全箇所`SOT`にリネーム | 上記すべての修正後も再現していた本当の原因(secret名の不一致)が解消した |
+| 10-02 | [`5893859`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5893859) | `/tsubuyaki`のBlock Kitテンプレート28種類の巨大な2列グリッドを左の縦型アイコンサイドバーへ移動し、選択するとJSONスニペットがプレビューされ右肩の`Run▶︎`で適用する方式に変更 | 投稿フォームが画面上部の圧迫から解放され、他ページと統一感のあるUIになった |
+| 10-02 | (未マージ) | CLAUDE.mdルール37「ユーザーが承認していない環境変数・設定スイッチを勝手に追加するな」をPR [#2224](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2224)として提出(draft) | 今回のような誤った仮説提示・無断の設定スイッチ追加を防ぐ運用ルールが明文化される見込み |
+
+</details>
+
+---
+
+## 現在地(2026-10-02時点)まとめ
+
+- **受信系(Slack→Worker)**: `POST /slack/interactions`(ボタン・ショートカット)、`POST /slack/event`(Events API・メンション)、`POST /slack/commands`(スラッシュコマンド`/pts`、サブコマンド`f1`あり。これ以外のコマンド名は固定の「未対応」メッセージを返すのみ)の3経路。すべて`verifySlackSignature`で署名検証。
+- **送信系(Worker→Slack)**: 大半は`src/utils/notifyDispatch.ts`の`sendNotification`に一本化(`NOTIFY_TARGET`でSlack/外部Workerを切替可能、D1の`notification_settings`デフォルトOFFでユーザーが一括ON/OFFできる)。ただし`/tsubuyaki`・`/api/tsubuyaki-external`・`/pts`の3入口は2026-10-02時点でこの仕組みから独立しており、`sendTsubuyakiToSlack()`経由で`env.SOT`/`env.SLACK_CHANNEL_ID`を直接参照して投稿する(テストで保証済み)。
+- **Slack Bot トークンのenv変数名**: 2026-10-02に`SLACK_OAUTH_TOKEN`から`SOT`へリネーム済み。新しいコードは`env.SOT`を参照すること。
 - **データ非依存性**: PR要約・cf-authアクセス判定などのD1記録はSlack設定の有無に依存せず常時実行される(07-05 `97b877a`で分離済み)。
 - **既知の制約(テストで固定済み)**: モーダル内ではURLボタンが使えずmrkdwnリンクで代替する必要がある(`600ccd3`・`d9d6118`)。
 - **将来方針**: ベンダーロックイン回避のため、Slackから別Worker(Altワーカー)への段階的移行が計画されている(`5b3d32a`、`276f13c`)。
@@ -198,4 +223,5 @@ cf-auth連携の完成、Slackスラッシュコマンド・Events APIによる�
 | [`SPEC.cloudflare-workers-github-oauth-1.AltSlackWorker.md`](SPEC.cloudflare-workers-github-oauth-1.AltSlackWorker.md) | Slackからの段階的移行先(Altワーカー)の設計 |
 | [`NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md`](NOTICE.cloudflare-workers-github-oauth-1.setup-pr-summary.md) | PR要約パイプライン全体(Slack以外のGitHub/Workers AI/D1部分含む)の経緯 |
 | [`SPEC.cloudflare-workers-github-oauth-1.20260328.md`](SPEC.cloudflare-workers-github-oauth-1.20260328.md) | AI要約→Slack通知+HTMLワークフローの設計(2026-03-28時点、8割完成時点の記録) |
+| [`SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md`](SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md) | 「つぶやき投稿」Slack未配信バグの調査・修正・Secret名リネーム・UI刷新の詳細経緯(2026-10-02時点) |
 | [`auth-flow.html`](auth-flow.html) | 認証・Revokeフロー図。通知(Slack/外部Worker切替・既定OFF)の分岐箇所を含む |
