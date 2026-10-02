@@ -15,6 +15,36 @@ describe('getThreadTrackerPage', () => {
     expect(count).toBeGreaterThan(0);
   });
 
+  function extractModelRank(): (model: string) => number {
+    const source = html.match(/function modelRank\(model\)\{([^}]*)\}/);
+    expect(source).not.toBeNull();
+    return new Function('model', source![1]) as (model: string) => number;
+  }
+
+  it('モデル色丸の表示順はQWEN→GEMMA4→Llama→その他(先に登場した順)になる', () => {
+    const modelRank = extractModelRank();
+    expect(typeof modelRank).toBe('function');
+    const models = [
+      '@cf/ibm-granite/granite-4.0-h-micro',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/google/gemma-4-26b-a4b-it',
+      '@cf/qwen/qwen3.8-27b',
+    ];
+    const sorted = [...models].sort((a, b) => modelRank(a) - modelRank(b));
+    expect(sorted).toEqual([
+      '@cf/qwen/qwen3.8-27b',
+      '@cf/google/gemma-4-26b-a4b-it',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/ibm-granite/granite-4.0-h-micro',
+    ]);
+  });
+
+  it('該当モデルが一部しかなくても相対順序(QWEN→GEMMA4→Llama)は保たれる', () => {
+    const modelRank = extractModelRank();
+    const sorted = ['@cf/meta/llama-3.1-8b-instruct-fp8', '@cf/qwen/qwen3.8-27b'].sort((a, b) => modelRank(a) - modelRank(b));
+    expect(sorted).toEqual(['@cf/qwen/qwen3.8-27b', '@cf/meta/llama-3.1-8b-instruct-fp8']);
+  });
+
   it('「スレッド一覧と選択した質問・回答を並べて表示します」の説明文は削除されている', () => {
     expect(html).not.toContain('スレッド一覧と選択した質問・回答を並べて表示します');
   });
