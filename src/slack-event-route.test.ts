@@ -1,92 +1,151 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+/**
+ * POST /slack/eventの実際のHTTPレスポンスを検証する振る舞いテスト。
+ * dispatchSlackAiReplyはindex.ts内のローカル関数でモジュール外へexportされて
+ * いないため、直接呼び出すユニットテストはできない。代わりにapp_mentionイベントを
+ * 送った際にレスポンス自体(200・本文なし)が壊れないことまでをapp.request()で検証する
+ * (waitUntilでの非同期後続処理はテスト環境のexecutionCtx制約により実行されない)。
+ */
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import app from './index';
 
-const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+const SIGNING_SECRET = 'test-signing-secret';
 
-const eventBlock = (() => {
-  const idx = src.indexOf("app.post('/slack/event'");
-  const end = src.indexOf('\n});', idx) + 4;
-  return src.slice(idx, end);
-})();
+async function signSlackRequest(rawBody: string, timestamp: string, signingSecret: string): Promise<string> {
+  const sigBasestring = `v0:${timestamp}:${rawBody}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(signingSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sigBasestring));
+  return 'v0=' + Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
-const dispatchBlock = (() => {
-  const idx = src.indexOf('async function dispatchSlackAiReply(');
-  const end = src.indexOf('\n}', idx) + 2;
-  return src.slice(idx, end);
-})();
+function nowTimestamp(): string {
+  return String(Math.floor(Date.now() / 1000));
+}
 
-describe("POST /slack/event", () => {
-  it('署名・タイムスタンプ・シークレットをhandleSlackEventに渡す', () => {
-    expect(eventBlock).toContain('timestamp: c.req.header(');
-    expect(eventBlock).toContain('signature: c.req.header(');
-    expect(eventBlock).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
-    expect(eventBlock).toContain('verifySignature: verifySlackSignature');
-  });
-
-  it('署名検証失敗(401)の場合は本文なしで401を返す', () => {
-    expect(eventBlock).toMatch(/if \(result\.status === 401\) \{\s*return c\.text\('', 401\);/);
-  });
-
-  it('不正なJSON(400)の場合は本文なしで400を返す', () => {
-    expect(eventBlock).toMatch(/if \(result\.status === 400\) \{\s*return c\.text\('', 400\);/);
-  });
-
-  it('url_verificationのchallengeが返ってきた場合はJSONとしてそのまま返す', () => {
-    expect(eventBlock).toMatch(/if \(result\.body\) \{\s*return c\.json\(result\.body, 200\);/);
-  });
-
-  it('それ以外は本文なしで200を返す(確認応答)', () => {
-    expect(eventBlock).toContain("return c.text('', 200);");
-  });
-
-  it('app_mentionイベント(自App自身の発言を除く)をdispatchSlackAiReplyへディスパッチする', () => {
-    expect(eventBlock).toContain("mentionEvent.type === 'app_mention'");
-    expect(eventBlock).toContain('dispatchSlackAiReply(c.env, {');
-  });
-
-  it('SLACK_BOT_USER_ID未設定時は従来通りbot_id付きイベントを一律除外する(安全側デフォルト)', () => {
-    expect(eventBlock).toContain('const selfUserId = c.env.SLACK_BOT_USER_ID;');
-    expect(eventBlock).toContain('const isSelfMention = selfUserId');
-    expect(eventBlock).toMatch(/selfUserId\s*\?\s*mentionEvent\?\.user === selfUserId\s*:\s*Boolean\(mentionEvent\?\.bot_id\)/);
-  });
-
-  it('SLACK_BOT_USER_ID設定時はevent.userで自App自身の発言だけを除外し、他Bot経由のメンションは処理する', () => {
-    expect(eventBlock).toContain('!isSelfMention');
-  });
-
-  it('waitUntilでバックグラウンド実行し、Slackへの200応答をブロックしない', () => {
-    expect(eventBlock).toContain('safeWaitUntil(c, ');
-  });
-
-  it('スレッド返信のため thread_ts(無ければts)をスレッドIDとして渡す', () => {
-    expect(eventBlock).toContain('threadTs: mentionEvent.thread_ts ?? mentionEvent.ts');
-  });
-
-  it('team_idをdispatchSlackAiReplyに渡す（D1トークン解決のため）', () => {
-    expect(eventBlock).toContain('teamId: result.eventCallback?.team_id');
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
-describe('dispatchSlackAiReply', () => {
-  it('Slackトークンの解決はslack_installations(D1)を優先しSLACK_OAUTH_TOKENにフォールバックする', () => {
-    expect(dispatchBlock).toContain('let slackToken = env.SLACK_OAUTH_TOKEN;');
-    expect(dispatchBlock).toContain('SELECT access_token FROM slack_installations WHERE team_id = ?');
-    expect(dispatchBlock).toContain('slackToken = row.access_token;');
+describe('POST /slack/event', () => {
+  it('SLACK_SIGNING_SECRET未設定の場合は本文なしで401を返す', async () => {
+    const res = await app.request('/slack/event', { method: 'POST', body: '{}' }, {});
+    expect(res.status).toBe(401);
+    expect(await res.text()).toBe('');
   });
 
-  it('D1参照に失敗してもフォールバックして処理を継続する（握りつぶさずログに記録）', () => {
-    expect(dispatchBlock).toMatch(/catch \(dbError\) \{\s*logger\.warn\('Failed to look up Slack installation token, falling back to env'/);
+  it('署名が不正な場合は本文なしで401を返す', async () => {
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': nowTimestamp(), 'X-Slack-Signature': 'v0=invalid' },
+        body: '{}',
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(401);
   });
 
-  it('AIバインディング未設定時はaiRunが分かりやすいエラーで拒否する', () => {
-    expect(dispatchBlock).toContain("Promise.reject(new Error('AI バインディングが未設定です'))");
+  it('署名が正しいが本文が不正なJSONの場合は本文なしで400を返す', async () => {
+    const rawBody = '{not-json';
+    const timestamp = nowTimestamp();
+    const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('');
   });
 
-  it('handleSlackAppMentionを呼び出す', () => {
-    expect(dispatchBlock).toContain('handleSlackAppMention({');
+  it('url_verificationのchallengeをそのままJSONで返す(Slack App登録時のURL検証)', async () => {
+    const rawBody = JSON.stringify({ type: 'url_verification', challenge: 'abc123' });
+    const timestamp = nowTimestamp();
+    const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ challenge: 'abc123' });
   });
 
-  it('返信投稿に失敗した場合はエラーをログに記録する（握りつぶさない）', () => {
-    expect(dispatchBlock).toMatch(/if \(!mentionResult\.posted\) \{\s*logger\.error\('Slack AI reply failed'/);
+  it('app_mentionイベント(自App自身の発言ではない)を受けても本文なしで200を返す(即時ACK、実処理はバックグラウンド)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const rawBody = JSON.stringify({
+      type: 'event_callback',
+      team_id: 'T1',
+      event: { type: 'app_mention', user: 'U_OTHER', text: '<@BOT> 質問です', channel: 'C1', ts: '123.456' },
+    });
+    const timestamp = nowTimestamp();
+    const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('');
+  });
+
+  it('bot_id付きのapp_mention(SLACK_BOT_USER_ID未設定時は自App自身とみなして除外)でも本文なしで200を返す', async () => {
+    const rawBody = JSON.stringify({
+      type: 'event_callback',
+      team_id: 'T1',
+      event: { type: 'app_mention', bot_id: 'B1', text: 'hi', channel: 'C1', ts: '123.456' },
+    });
+    const timestamp = nowTimestamp();
+    const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('');
+  });
+
+  it('app_mention以外のイベント種別でも本文なしで200を返す(確認応答のみ)', async () => {
+    const rawBody = JSON.stringify({
+      type: 'event_callback',
+      team_id: 'T1',
+      event: { type: 'message', text: 'hi', channel: 'C1', ts: '123.456' },
+    });
+    const timestamp = nowTimestamp();
+    const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/event',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET: SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('');
   });
 });

@@ -1,116 +1,146 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+/**
+ * GET /tsubuyaki・POST /slack/commandsの実際のHTTPレスポンスを検証する振る舞いテスト。
+ * (POST /api/tsubuyakiの通知分岐はtsubuyaki-notify-behavior.test.tsで実動作テスト済み)
+ *
+ * 旧版はsrc/index.tsをソーステキストとして読み、特定の文字列が含まれるかだけを
+ * 検証していた(実際にリクエストを送ったときの挙動は未検証)。
+ */
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import app from './index';
+import { createJWT } from './utils/jwt';
 
-const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+const JWT_SECRET = 'test-secret';
+const SLACK_SIGNING_SECRET = 'test-signing-secret';
 
-const getBlock = (() => {
-  const idx = src.indexOf("app.get('/tsubuyaki'");
-  const end = src.indexOf('\n});', idx) + 4;
-  return src.slice(idx, end);
-})();
+async function makeAuthHeader(sub = 'test-user') {
+  const token = await createJWT({ sub, name: 'Test' }, JWT_SECRET);
+  return `Bearer ${token}`;
+}
 
-const postBlock = (() => {
-  const idx = src.indexOf("app.post('/api/tsubuyaki'");
-  const end = src.indexOf('\n});', idx) + 4;
-  return src.slice(idx, end);
-})();
+async function signSlackForm(rawBody: string, timestamp: string, signingSecret: string): Promise<string> {
+  const sigBasestring = `v0:${timestamp}:${rawBody}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(signingSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sigBasestring));
+  return 'v0=' + Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
-const slashCommandBlock = (() => {
-  const idx = src.indexOf("app.post('/slack/commands'");
-  const end = src.indexOf('\n});', idx) + 4;
-  return src.slice(idx, end);
-})();
+function nowTimestamp(): string {
+  return String(Math.floor(Date.now() / 1000));
+}
 
-describe('GET /tsubuyaki', () => {
-  it('authMiddleware で保護されている', () => {
-    expect(getBlock).toContain('authMiddleware');
-  });
+function makeEnabledDb() {
+  return {
+    prepare: (_sql: string) => ({
+      first: async () => ({ slack_enabled: 1 }),
+      bind: (..._params: unknown[]) => ({ first: async () => ({ slack_enabled: 1 }) }),
+    }),
+  };
+}
 
-  it('getTsubuyakiPage にログインユーザー名を渡してHTMLを返す', () => {
-    expect(getBlock).toContain('getTsubuyakiPage(user.sub)');
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
-describe('POST /api/tsubuyaki', () => {
-  it('authMiddleware で保護されている', () => {
-    expect(postBlock).toContain('authMiddleware');
+describe('GET /tsubuyaki', () => {
+  it('未ログインの場合はログインページへリダイレクトされる(authMiddlewareで保護されている)', async () => {
+    const res = await app.request('/tsubuyaki', {}, { JWT_SECRET });
+    expect(res.status).not.toBe(200);
   });
 
-  it('validateFreeText で本文を検証し、不正な場合は400を返す', () => {
-    expect(postBlock).toContain('validateFreeText(body?.text)');
-    expect(postBlock).toContain("return c.json({ ok: false, error: validated.error }, 400);");
-  });
-
-  it('通知先(Slack/外部Worker)はresolveNotifyConfig/dispatchNotificationで解決する（NOTIFY_TARGETで切替可能）', () => {
-    expect(postBlock).toContain('const notifyConfig = await resolveNotifyConfigWithSetting(c.env);');
-    expect(postBlock).toContain('const result = await dispatchNotification(notifyConfig, { text: message, blocks });');
-  });
-
-  it('送信先が未設定の場合は503、送信を試みて失敗した場合は502でエラー内容を返す（握りつぶさない）', () => {
-    expect(postBlock).toMatch(/const status = result\.status === undefined \? 503 : 502;/);
-    expect(postBlock).toMatch(/if \(!result\.ok\) \{[\s\S]*?return c\.json\(\{ ok: false, error: result\.error[\s\S]*?\}, status\);/);
-  });
-
-  it('成功時は ok:true を返す', () => {
-    expect(postBlock).toContain('return c.json({ ok: true });');
-  });
-
-  it('buildFreeTextSlackMessage に表示名(name優先・無ければsub)と本文を渡す', () => {
-    expect(postBlock).toContain('const displayName = user.name || user.sub;');
-    expect(postBlock).toContain('buildFreeTextSlackMessage(displayName, validated.text)');
+  it('ログイン済みの場合は200でHTMLを返す', async () => {
+    const authHeader = await makeAuthHeader();
+    const res = await app.request('/tsubuyaki', { headers: { Authorization: authHeader } }, { JWT_SECRET });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
   });
 });
 
 describe('POST /slack/commands', () => {
-  it('command フィールドで /pts にディスパッチする', () => {
-    expect(slashCommandBlock).toContain("command === '/pts'");
-    expect(slashCommandBlock).toContain('handleTsubuyakiSlashCommand(');
+  it('未対応のコマンドにはephemeralで案内メッセージを200で返す', async () => {
+    const res = await app.request(
+      '/slack/commands',
+      { method: 'POST', body: 'command=%2Funknown' },
+      {}
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { response_type: string; text: string };
+    expect(body.response_type).toBe('ephemeral');
+    expect(body.text).toContain('未対応のコマンドです');
   });
 
-  it('署名情報と通知送信関数(sendNotification)を handleTsubuyakiSlashCommand に渡す', () => {
-    expect(slashCommandBlock).toContain('const notifyConfig = await resolveNotifyConfigWithSetting(c.env);');
-    expect(slashCommandBlock).toContain('timestamp: c.req.header(');
-    expect(slashCommandBlock).toContain('signature: c.req.header(');
-    expect(slashCommandBlock).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
-    expect(slashCommandBlock).toContain('verifySignature: verifySlackSignature');
-    expect(slashCommandBlock).toContain('sendNotification,');
+  it('/pts コマンドで署名が不正な場合は401を返す', async () => {
+    const rawBody = 'command=%2Fpts&text=&user_name=tester';
+    const res = await app.request(
+      '/slack/commands',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': nowTimestamp(), 'X-Slack-Signature': 'v0=invalid' },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET }
+    );
+    expect(res.status).toBe(401);
   });
 
-  it('body が null（署名検証失敗）の場合は401を返す', () => {
-    expect(slashCommandBlock).toMatch(/if \(!result\.body\) \{\s*return c\.text\('', 401\);/);
+  it('/pts コマンド(text=f1以外)は投稿が成功すればephemeralで成功メッセージを返す', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const rawBody = 'command=%2Fpts&text=こんにちは&user_name=tester';
+    const timestamp = nowTimestamp();
+    const signature = await signSlackForm(rawBody, timestamp, SLACK_SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/commands',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET, SLACK_OAUTH_TOKEN: 'xoxb-dummy', SLACK_CHANNEL_ID: 'C123', DB: makeEnabledDb() as never }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { response_type: string; text: string };
+    expect(body.text).toBe('✅ Slackに投稿しました');
   });
 
-  it('未対応のコマンドにはephemeralで案内メッセージを返す(200)', () => {
-    expect(slashCommandBlock).toContain("response_type: 'ephemeral'");
-    expect(slashCommandBlock).toContain('未対応のコマンドです');
+  it('/pts コマンド(text=f1以外)で通知先未設定の場合はephemeralで失敗メッセージを返す(握りつぶさない)', async () => {
+    const rawBody = 'command=%2Fpts&text=こんにちは&user_name=tester';
+    const timestamp = nowTimestamp();
+    const signature = await signSlackForm(rawBody, timestamp, SLACK_SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/commands',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { response_type: string; text: string };
+    expect(body.text).toContain('❌');
+    expect(body.text).toContain('投稿に失敗しました');
   });
 
-  it('/pts f1 (text=f1) は handleF1ScheduleSlashCommand にディスパッチする', () => {
-    expect(slashCommandBlock).toContain("text.toLowerCase() === 'f1'");
-    expect(slashCommandBlock).toContain('handleF1ScheduleSlashCommand(');
-  });
-
-  it('F1コマンドの分岐は text判定より前に handleTsubuyakiSlashCommand を呼ばない', () => {
-    const f1Idx = slashCommandBlock.indexOf('handleF1ScheduleSlashCommand(');
-    const tsubuyakiIdx = slashCommandBlock.indexOf('handleTsubuyakiSlashCommand(');
-    expect(f1Idx).toBeGreaterThan(-1);
-    expect(tsubuyakiIdx).toBeGreaterThan(f1Idx);
-  });
-
-  it('F1コマンドにも署名情報・巡回データ・現在時刻・通知送信関数を渡す', () => {
-    const f1Idx = slashCommandBlock.indexOf('handleF1ScheduleSlashCommand(');
-    const block = slashCommandBlock.slice(f1Idx, f1Idx + 500);
-    expect(block).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
-    expect(block).toContain('circuits: F1_CIRCUITS');
-    expect(block).toContain('now: new Date()');
-    expect(block).toContain('verifySignature: verifySlackSignature');
-    expect(block).toContain('sendNotification,');
-  });
-
-  it('sendNotification は resolveNotifyConfig の結果を dispatchNotification に渡すクロージャである（Slack/外部Workerの切替の要）', () => {
-    const idx = slashCommandBlock.indexOf('const sendNotification = ');
-    expect(idx).toBeGreaterThan(-1);
-    const line = slashCommandBlock.slice(idx, idx + 150);
-    expect(line).toContain('dispatchNotification(notifyConfig, message)');
+  it('/pts f1 コマンドはF1スケジュール処理にディスパッチされ、署名が正しければ200を返す', async () => {
+    const rawBody = 'command=%2Fpts&text=f1&user_name=tester';
+    const timestamp = nowTimestamp();
+    const signature = await signSlackForm(rawBody, timestamp, SLACK_SIGNING_SECRET);
+    const res = await app.request(
+      '/slack/commands',
+      {
+        method: 'POST',
+        headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+        body: rawBody,
+      },
+      { SLACK_SIGNING_SECRET }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { response_type: string };
+    expect(body.response_type).toBe('ephemeral');
   });
 });
