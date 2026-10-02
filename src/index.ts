@@ -27,6 +27,7 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { TABLE_PAGE_MAP } from './data/tablePageMap';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { getTestFileCatalogPage, type TestFileCatalogRow } from './views/testFileCatalog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
 import { getCallGraphPage } from './views/callGraph';
@@ -687,6 +688,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_snapshot_refresh_log', migration: '0152', description: 'tree-view-snapshot-refresh-external(「今すぐ更新」ボタン)の呼び出し履歴。ユーザー単位のレート制限(10分あたり5回)に使う', syncPolicy: 'auto' },
   { name: 'tree_view_update_log', migration: '0155', description: 'tree-view更新の実行履歴。cron/手動の実行元と、スナップショットに変更があったかを記録する', syncPolicy: 'auto' },
   { name: 'mention_editor_documents', migration: '0163', description: '/mention-editorで作成した設定JSONをタイトル付きでユーザーごとに保存する', syncPolicy: 'auto' },
+  { name: 'test_file_catalog', migration: '0165', description: '全リポジトリのテストファイル一覧: 何をテストしているか・評価(A+〜E-)・作成日・最終評価日', syncPolicy: 'manual' },
   { name: 'jev_keyword_boundary_labels', migration: '0158', description: '【非推奨・migration 0159で削除済み】「このキーワードをユーザーは理解済みか」を問う境界線トラッカー用ラベルのマスターだったが、自己申告は根拠が曖昧なため、既存のaichat_keyword_category_map(未分類=境界線の外側)を根拠にする方式へ置き換えた', syncPolicy: 'manual' },
   { name: 'jev_keyword_boundary_evaluations', migration: '0158', description: '【非推奨・migration 0159で削除済み】回答文から切り出したキーワードの未理解/理解済み状態を自己申告で保持していたが、既存のaichat_keyword_category_map(分類済みかどうか)を根拠にする方式へ置き換えた', syncPolicy: 'auto' },
 ];
@@ -2567,6 +2569,18 @@ CREATE INDEX IF NOT EXISTS idx_mention_editor_documents_user_updated ON mention_
   evaluated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_table_pattern_scores_unique ON jev_table_pattern_scores(table_name, judgment_code);`,
+  '0165': `CREATE TABLE IF NOT EXISTS test_file_catalog (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  test_count INTEGER NOT NULL,
+  test_summary TEXT NOT NULL,
+  test_types TEXT NOT NULL,
+  grade TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_evaluated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_test_file_catalog_repo_path ON test_file_catalog (repo_name, file_path);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -19144,6 +19158,59 @@ app.get('/function-changelog', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return new Response('Failed to render function-changelog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+// /test-file-catalog: 全リポジトリのテストファイル評価カタログ(test_file_catalog)を
+// 集計・検索できるページ。クエリパラメータ(repo/grade/q/sort)はGETで、
+// 絞り込みのたびにサーバー側で再クエリ・再レンダリングする(SPA化はしない)。
+app.get('/test-file-catalog', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  const filterRepo = c.req.query('repo')?.trim() || null;
+  const filterGrade = c.req.query('grade')?.trim() || null;
+  const filterQuery = c.req.query('q')?.trim() ?? '';
+  const sort = c.req.query('sort')?.trim() || 'file_path';
+
+  try {
+    const reposResult = await db.prepare(
+      `SELECT DISTINCT repo_name FROM test_file_catalog ORDER BY repo_name`
+    ).all<{ repo_name: string }>();
+    const allRepos = (reposResult.results ?? []).map(r => r.repo_name);
+
+    const conditions: string[] = [];
+    const bindings: string[] = [];
+    if (filterRepo) {
+      conditions.push('repo_name = ?');
+      bindings.push(filterRepo);
+    }
+    if (filterGrade) {
+      conditions.push('grade = ?');
+      bindings.push(filterGrade);
+    }
+    if (filterQuery) {
+      conditions.push('(file_path LIKE ? OR test_summary LIKE ? OR test_types LIKE ?)');
+      const like = `%${filterQuery}%`;
+      bindings.push(like, like, like);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const stmt = db.prepare(
+      `SELECT repo_name, file_path, test_count, test_summary, test_types, grade, created_at, last_evaluated_at
+       FROM test_file_catalog ${whereClause}`
+    );
+    const rowsResult = bindings.length > 0 ? await stmt.bind(...bindings).all<TestFileCatalogRow>() : await stmt.all<TestFileCatalogRow>();
+    const rows = rowsResult.results ?? [];
+
+    const html = getTestFileCatalogPage({ rows, allRepos, filterRepo, filterGrade, filterQuery, sort });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (error) {
+    logger.warn('Failed to render test-file-catalog', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render test-file-catalog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 
