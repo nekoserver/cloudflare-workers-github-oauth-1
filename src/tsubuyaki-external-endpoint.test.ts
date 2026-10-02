@@ -3,9 +3,11 @@
  *
  * 対象: dynamicnekoの/slack-postページ(React版つぶやき投稿)向けのexternal API。
  * 本体Workerの内部版(Cookie認証、POST /api/tsubuyaki)と同じロジック
- * (validateFreeText/buildFreeTextSlackMessage/resolveNotifyConfigWithSetting/
- * dispatchNotification)を、dynamicnekoからのService Binding経由の呼び出し用に
- * 別ルートとして公開する。認可はjev-score-external等と同じ
+ * (validateFreeText/buildFreeTextSlackMessage/sendTsubuyakiToSlack)を、
+ * dynamicnekoからのService Binding経由の呼び出し用に別ルートとして公開する。
+ * NOTIFY_TARGET/notification_settings.slack_enabledは自動通知向けの切り替えで
+ * あり、この明示的な投稿操作とは無関係なため参照しない(本体Worker自身の
+ * SLACK_OAUTH_TOKEN/SLACK_CHANNEL_IDで直接Slackへ投稿する)。認可はjev-score-external等と同じ
  * 「Bearer secret(AICHAT_EXTERNAL_SECRET)→userToken(署名付きJWT)のsubを
  * emailとして検証→dynamicneko_aichat_allowed_usersで許可確認→
  * 登録済みgithub_loginを表示名に使う(本文の生emailやloginは信用しない)」の順。
@@ -62,15 +64,16 @@ function setupDb(allowedUsers: Record<string, string | null>): DatabaseSync {
 
 function makeEnv(overrides: {
   db?: DatabaseSync;
-  notifyWorkerUrl?: string;
+  slackOauthToken?: string;
+  slackChannelId?: string;
 } = {}) {
   const db = overrides.db ?? setupDb({ 'octocat@example.com': 'octocat' });
   return {
     DB: wrapD1(db),
     AICHAT_EXTERNAL_SECRET: SECRET,
     AICHAT_USER_TOKEN_SECRET: USER_TOKEN_SECRET,
-    NOTIFY_TARGET: 'worker',
-    NOTIFY_WORKER_URL: overrides.notifyWorkerUrl ?? 'https://notify.example.com/hook',
+    SLACK_OAUTH_TOKEN: overrides.slackOauthToken ?? 'xoxb-dummy',
+    SLACK_CHANNEL_ID: overrides.slackChannelId ?? 'C123',
   } as unknown as Parameters<typeof app.request>[2];
 }
 
@@ -128,9 +131,9 @@ describe('POST /api/tsubuyaki-external', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('通知先が未設定の場合は503を返す(握りつぶさない)', async () => {
+  it('Slackのsecretが未設定の場合は503を返す(握りつぶさない)', async () => {
     const token = await makeUserToken('octocat@example.com');
-    const res = await postRoute(makeEnv({ notifyWorkerUrl: '' }), { userToken: token, text: 'こんにちは' });
+    const res = await postRoute(makeEnv({ slackOauthToken: '' }), { userToken: token, text: 'こんにちは' });
     expect(res.status).toBe(503);
     const body = await res.json() as { ok: boolean; error: string };
     expect(body.ok).toBe(false);
@@ -144,11 +147,11 @@ describe('POST /api/tsubuyaki-external', () => {
     expect(res.status).toBe(502);
   });
 
-  it('正常系: 許可済みユーザーの投稿をgithub_login表示名でSlack(NOTIFY_TARGET経由)へ送信しok:trueを返す', async () => {
+  it('正常系: 許可済みユーザーの投稿をgithub_login表示名で直接Slackへ送信しok:trueを返す', async () => {
     let receivedBody: unknown = null;
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       receivedBody = JSON.parse(String(init?.body ?? '{}'));
-      return new Response('ok', { status: 200 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
     const token = await makeUserToken('octocat@example.com');
@@ -165,7 +168,7 @@ describe('POST /api/tsubuyaki-external', () => {
     let receivedBody: unknown = null;
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       receivedBody = JSON.parse(String(init?.body ?? '{}'));
-      return new Response('ok', { status: 200 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
     const token = await makeUserToken('octocat@example.com');
