@@ -91,6 +91,16 @@ describe('askTunnelSigner', () => {
     });
     await askTunnelSigner(fetcher, '  models-list  ');
   });
+
+  it('"settings"は半角スペースを含まない「設定状況」へ変換してtunnelsへ渡す', async () => {
+    const fetcher = makeFetcher(async (_input, init) => {
+      const sentBody = JSON.parse(String(init?.body));
+      const innerPayload = JSON.parse(sentBody.body);
+      expect(innerPayload.message).toBe('設定状況');
+      return sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'ok' }) });
+    });
+    await askTunnelSigner(fetcher, 'settings');
+  });
 });
 
 describe('resolveAskgkCommand', () => {
@@ -110,5 +120,9 @@ describe('resolveAskgkCommand', () => {
 
   it('大文字小文字は区別する(完全一致のみ変換)', () => {
     expect(resolveAskgkCommand('Models-List')).toBe('Models-List');
+  });
+
+  it('"settings"を「設定状況」へ変換する(半角スペースを含む表現を打たせないための措置)', () => {
+    expect(resolveAskgkCommand('settings')).toBe('設定状況');
   });
 });

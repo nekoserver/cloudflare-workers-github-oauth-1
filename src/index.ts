@@ -22463,6 +22463,7 @@ async function dispatchSlackAiReply(
       : () => Promise.reject(new Error('AI バインディングが未設定です')),
     postMessage: postSlackMessage,
     saveShare: db ? (params) => saveSlackAiShare(db, task.teamId, params) : undefined,
+    askTunnelSigner: askgkDep(env),
   });
   if (!mentionResult.posted) {
     logger.error('Slack AI reply failed', { error: mentionResult.error, channel: task.channel });

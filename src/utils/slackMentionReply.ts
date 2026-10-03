@@ -29,7 +29,32 @@ export type SlackMentionReplyDeps = {
    * 返信結果に影響させない(失敗してもSlack応答自体は成功として扱う)。
    */
   saveShare?: SlackSaveShareFn;
+  /**
+   * `/neko askgk <質問文>` サブコマンド用。rust-worker-sqlx-d1の
+   * /tunnel-signer経由でtunnelsへ質問を送りreplyを返す(index.tsのaskgkDepと
+   * 同じ関数)。未設定(Service Binding無し)の場合はPOST /api/aichat側と同じ
+   * 「現在利用できません」文言を返す。
+   */
+  askTunnelSigner?: (message: string) => Promise<string>;
 };
+
+const ASKGK_MENTION_PREFIX = '/neko askgk';
+
+/**
+ * メンション本文(ボットメンション除去済み)が`/neko askgk`サブコマンドかどうかを
+ * 判定し、該当する場合は質問文を取り出す。先頭が`/neko askgk`に完全一致または
+ * スペース区切りで続く場合のみ対象とし、他の`/neko`サブコマンドや
+ * `/neko askgkxxx`のような紛らわしい文字列には反応しない。
+ */
+export function parseAskgkMentionCommand(cleanedText: string): { question: string } | null {
+  if (cleanedText === ASKGK_MENTION_PREFIX) {
+    return { question: '' };
+  }
+  if (cleanedText.startsWith(ASKGK_MENTION_PREFIX + ' ')) {
+    return { question: cleanedText.slice(ASKGK_MENTION_PREFIX.length).trim() };
+  }
+  return null;
+}
 
 export type SlackMentionReplyResult =
   | { posted: true }
@@ -57,6 +82,30 @@ export function formatSlackAiReplyText(aiResult: { ok: true; text: string } | { 
 }
 
 /**
+ * `/neko askgk <質問文>` サブコマンドの応答文を組み立てる。POST /api/aichat側の
+ * 同コマンド(interpretAichatSlashCommand)と同じ文言・分岐(質問文なし/未設定/
+ * エラー/成功)を踏襲する。
+ */
+async function resolveAskgkMentionReply(
+  question: string,
+  askTunnelSigner: ((message: string) => Promise<string>) | undefined
+): Promise<string> {
+  if (!question) {
+    return '❌ 質問文を指定してください: /neko askgk <質問文>';
+  }
+  if (!askTunnelSigner) {
+    return '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)';
+  }
+  try {
+    const reply = await askTunnelSigner(question);
+    return `**質問**: ${question}\n\n${reply}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return `❌ /neko askgk でエラーが発生しました: ${message}`;
+  }
+}
+
+/**
  * Slackの app_mention イベントを処理する。
  * メンション本文をAIチャットに渡して応答を取得し、同じスレッドに返信する。
  * AI応答取得に失敗した場合もエラー内容をSlackへ返信する（記録＝戻り値、通知＝Slack返信）。
@@ -72,6 +121,18 @@ export async function handleSlackAppMention(deps: SlackMentionReplyDeps): Promis
       token: deps.slackToken,
       channel: deps.channel,
       text: '❓ 質問内容が空です。メンションと一緒に聞きたいことを書いてください。',
+      thread_ts: deps.threadTs,
+    });
+    return result.ok ? { posted: true } : { posted: false, error: result.error ?? 'Unknown error' };
+  }
+
+  const askgkCommand = parseAskgkMentionCommand(cleanedText);
+  if (askgkCommand) {
+    const replyText = await resolveAskgkMentionReply(askgkCommand.question, deps.askTunnelSigner);
+    const result = await deps.postMessage({
+      token: deps.slackToken,
+      channel: deps.channel,
+      text: replyText,
       thread_ts: deps.threadTs,
     });
     return result.ok ? { posted: true } : { posted: false, error: result.error ?? 'Unknown error' };
