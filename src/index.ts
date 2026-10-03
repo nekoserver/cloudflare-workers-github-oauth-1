@@ -472,7 +472,7 @@ import {
   resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
 import {
@@ -5993,6 +5993,10 @@ async function logNekoMultiSearchResults(
 type AichatRequestBody = {
   message?: string; model?: string; systemPromptMode?: string;
   source?: string; image?: string; preferMoondream?: boolean; threadId?: string; stream?: boolean;
+  // 色丸ドロップダウンの「パラメータ調整」モーダルから送られる任意の上書き値。
+  // resolveAichatRunOverridesがAICHAT_TUNABLE_MODELS(Gemma-4・Qwenのみ)に
+  // 限って適用し、それ以外のモデルでは無視する。
+  maxTokens?: number; temperature?: number;
 };
 
 async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
@@ -6418,7 +6422,11 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
 
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
-    const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+    const defaultMaxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+    const { maxTokens, temperature } = resolveAichatRunOverrides(model, defaultMaxTokens, {
+      maxTokens: body.maxTokens,
+      temperature: body.temperature,
+    });
     let runParams: unknown;
     if (model === AICHAT_MOONDREAM3_MODEL && image) {
       runParams = buildMoondream3RunParams(image, message);
@@ -6428,7 +6436,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         threadHistory
       );
       const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
-      const baseParams = { messages, max_tokens: maxTokens };
+      const baseParams = temperature === undefined
+        ? { messages, max_tokens: maxTokens }
+        : { messages, max_tokens: maxTokens, temperature };
       runParams = getModelRunParams(model, baseParams);
     }
     const result = await c.env.AI!.run(
@@ -6507,12 +6517,18 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     for (let i = 0; i < candidates.length; i++) {
       const model = candidates[i];
       try {
-        const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+        const defaultMaxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+        const { maxTokens, temperature } = resolveAichatRunOverrides(model, defaultMaxTokens, {
+          maxTokens: body.maxTokens,
+          temperature: body.temperature,
+        });
         const textMessages = addThreadHistoryToAiMessages(buildAiMessages(message, systemPromptMode), threadHistory);
         const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
         const baseParams = model === AICHAT_MOONDREAM3_MODEL && image
           ? buildMoondream3RunParams(image, message)
-          : getModelRunParams(model, { messages, max_tokens: maxTokens });
+          : getModelRunParams(model, temperature === undefined
+              ? { messages, max_tokens: maxTokens }
+              : { messages, max_tokens: maxTokens, temperature });
         const upstream = await c.env.AI!.run(
           model as Parameters<typeof c.env.AI.run>[0],
           { ...(baseParams as Record<string, unknown>), stream: true } as Parameters<typeof c.env.AI.run>[1]

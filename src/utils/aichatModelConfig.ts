@@ -75,3 +75,55 @@ export function getModelRunParams(
   const extra = AICHAT_MODEL_EXTRA_PARAMS[model];
   return extra ? { ...base, ...extra } : base;
 }
+
+// AIチャットの色丸ドロップダウンから「パラメータ調整」モーダルを開ける対象
+// モデル(ユーザー要望2026-10-03: よく使うGemma-4とQwenだけで良いとのこと)。
+// 対象外のモデルに対してmaxTokens/temperatureが送られてきても無視する
+// (resolveAichatRunOverrides参照)。
+export const AICHAT_TUNABLE_MODELS: readonly string[] = [
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/qwen/qwen3.8-27b',
+];
+
+export function isAichatTunableModel(model: string): boolean {
+  return AICHAT_TUNABLE_MODELS.includes(model);
+}
+
+// temperatureはWorkers AIのchat系モデルが受け付ける一般的な範囲(0〜2)に
+// クランプする。範囲外の値をそのまま渡すとモデル側で400になる場合がある。
+export const AICHAT_TEMPERATURE_MIN = 0;
+export const AICHAT_TEMPERATURE_MAX = 2;
+
+export type AichatRunOverrides = { maxTokens?: unknown; temperature?: unknown };
+export type AichatResolvedRunParams = { maxTokens: number; temperature?: number };
+
+/**
+ * パラメータ調整モーダルから送られてきたmaxTokens/temperatureを、対象
+ * モデル(AICHAT_TUNABLE_MODELS)に限って適用する。
+ * - 対象外のモデルの場合はoverridesを一切見ず、デフォルトのmaxTokensだけを返す
+ *   (他モデルへパラメータ調整機能が及ばないようにする)。
+ * - maxTokensはデフォルト値(AICHAT_MODEL_MAX_TOKENS[model])を上限として
+ *   クランプする(ユーザーがデフォルトより大きい値を指定して、サーバー側の
+ *   コスト・レイテンシ上限を超えさせないため)。下限は1。
+ * - temperatureは0〜2にクランプする。
+ * - 数値として不正な値(NaN・文字列・未指定)は無視し、デフォルトのまま扱う。
+ */
+export function resolveAichatRunOverrides(
+  model: string,
+  defaultMaxTokens: number,
+  overrides: AichatRunOverrides
+): AichatResolvedRunParams {
+  if (!isAichatTunableModel(model)) return { maxTokens: defaultMaxTokens };
+
+  let maxTokens = defaultMaxTokens;
+  if (typeof overrides.maxTokens === 'number' && Number.isFinite(overrides.maxTokens)) {
+    maxTokens = Math.min(defaultMaxTokens, Math.max(1, Math.floor(overrides.maxTokens)));
+  }
+
+  let temperature: number | undefined;
+  if (typeof overrides.temperature === 'number' && Number.isFinite(overrides.temperature)) {
+    temperature = Math.min(AICHAT_TEMPERATURE_MAX, Math.max(AICHAT_TEMPERATURE_MIN, overrides.temperature));
+  }
+
+  return temperature === undefined ? { maxTokens } : { maxTokens, temperature };
+}
