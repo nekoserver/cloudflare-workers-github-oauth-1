@@ -82,6 +82,16 @@ describe('askTunnelSigner', () => {
     await askTunnelSigner(fetcher, 'models-list');
   });
 
+  it('"tunnels-list"は"cf tunnels list"へ変換してtunnelsへ渡す', async () => {
+    const fetcher = makeFetcher(async (_input, init) => {
+      const sentBody = JSON.parse(String(init?.body));
+      const innerPayload = JSON.parse(sentBody.body);
+      expect(innerPayload.message).toBe('cf tunnels list');
+      return sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'ok' }) });
+    });
+    await askTunnelSigner(fetcher, 'tunnels-list');
+  });
+
   it('エイリアス前後の空白は無視して変換する', async () => {
     const fetcher = makeFetcher(async (_input, init) => {
       const sentBody = JSON.parse(String(init?.body));
@@ -124,6 +134,10 @@ describe('resolveAskgkCommand', () => {
 
   it('"settings"を「設定状況」へ変換する(半角スペースを含む表現を打たせないための措置)', () => {
     expect(resolveAskgkCommand('settings')).toBe('設定状況');
+  });
+
+  it('"tunnels-list"を"cf tunnels list"へ変換する(models-listと同じパターン)', () => {
+    expect(resolveAskgkCommand('tunnels-list')).toBe('cf tunnels list');
   });
 
   /**

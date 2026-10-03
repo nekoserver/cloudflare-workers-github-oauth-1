@@ -19,6 +19,7 @@ const ASKGK_COMMAND_ALIASES: Readonly<Record<string, string>> = {
   // 「設定状況」という日本語そのものを解釈するコマンドのため、半角スペースを
   // 含む表現を打たせずに済むよう、スペース無しの短いエイリアスを用意する。
   settings: '設定状況',
+  'tunnels-list': 'cf tunnels list',
 };
 
 /**
