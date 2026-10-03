@@ -63,7 +63,9 @@ Slackから`/neko askgk settings`相当を呼べるようにするには、Slack
 
 ## 関連コミット
 
-(本SPEC作成時点でブランチ`claude/askgk-settings-alias`で作業中、コミット・PR未作成)
+| コミット | 内容 |
+|---|---|
+| [`4aaf224`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/4aaf224) | `settings`エイリアス追加、Slackの`@メンション`からの`/neko askgk`対応(PR [#2235](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2235)) |
 
 ---
 
@@ -74,3 +76,18 @@ Slackから`/neko askgk settings`相当を呼べるようにするには、Slack
 - Slack対応は`/neko askgk`サブコマンドのみに限定した初期スコープ。他の`/neko`
   サブコマンド(`search`等)はSlackの`@メンション`からはまだ呼べない
   (詳細はPLANファイルの「3. スコープ外」参照)
+
+---
+
+## 追記(2026-10-03): `sysstats`・`routines`(エイリアス不要)
+
+`settings`に続き、`/neko askgk sysstats`・`/neko askgk routines`という要望があったが、
+こちらは**`ASKGK_COMMAND_ALIASES`への登録(=エイリアス変換)は不要**と確認した。
+`resolveAskgkCommand()`は登録の無い文字列をそのまま通す実装のため、`sysstats`・
+`routines`という英単語自体をただのデータとしてtunnel-signer経由でそのまま送れば、
+先方(tunnels側Bot)が内部的に意味解釈する。
+
+- `src/utils/tunnelSignerAsk.test.ts`に、この2語が変換されずそのまま渡ることを
+  回帰として固定するテストを追加(将来誤ってエイリアス登録してしまうと検出できる)
+- `/neko help`の`askgk`行にも両コマンドが変換されずそのまま送られる旨を追記
+- コードの実動作としては無変更(`ASKGK_COMMAND_ALIASES`に新規エントリなし)
