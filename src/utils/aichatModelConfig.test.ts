@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { AICHAT_MODEL_MAX_TOKENS, AICHAT_MODEL_EXTRA_PARAMS, getModelRunParams, AICHAT_COLOR_PALETTE, assignModelColors } from './aichatModelConfig';
+import {
+  AICHAT_MODEL_MAX_TOKENS,
+  AICHAT_MODEL_EXTRA_PARAMS,
+  getModelRunParams,
+  AICHAT_COLOR_PALETTE,
+  assignModelColors,
+  AICHAT_TUNABLE_MODELS,
+  isAichatTunableModel,
+  resolveAichatRunOverrides,
+} from './aichatModelConfig';
 
 describe('AICHAT_COLOR_PALETTE', () => {
   it('パレットに16色以上の色が定義されている', () => {
@@ -90,8 +99,8 @@ describe('AICHAT_MODEL_MAX_TOKENS', () => {
     expect(AICHAT_MODEL_MAX_TOKENS['@cf/meta/llama-3.3-70b-instruct-fp8-fast']).toBeUndefined();
   });
 
-  it('qwen3.8-27b は 4096 トークンを返す（Cloudflare Workers AIのモデルページに合わせて明示設定）', () => {
-    expect(AICHAT_MODEL_MAX_TOKENS['@cf/qwen/qwen3.8-27b']).toBe(4096);
+  it('qwen3.8-27b は 8192 トークンを返す（旧4096では応答が見切れる報告のため倍に引き上げ、2026-10-03）', () => {
+    expect(AICHAT_MODEL_MAX_TOKENS['@cf/qwen/qwen3.8-27b']).toBe(8192);
   });
 });
 
@@ -136,5 +145,54 @@ describe('getModelRunParams', () => {
     const base = { messages: [{ role: 'user', content: 'test' }], max_tokens: 65536 };
     const result = getModelRunParams('@cf/google/gemma-4-26b-a4b-it', base);
     expect(result.messages).toEqual(base.messages);
+  });
+});
+
+describe('AICHAT_TUNABLE_MODELS / isAichatTunableModel', () => {
+  it('Gemma-4とQwenの2モデルだけがパラメータ調整の対象', () => {
+    expect(AICHAT_TUNABLE_MODELS).toEqual(['@cf/google/gemma-4-26b-a4b-it', '@cf/qwen/qwen3.8-27b']);
+    expect(isAichatTunableModel('@cf/google/gemma-4-26b-a4b-it')).toBe(true);
+    expect(isAichatTunableModel('@cf/qwen/qwen3.8-27b')).toBe(true);
+    expect(isAichatTunableModel('@cf/meta/llama-3.3-70b-instruct-fp8-fast')).toBe(false);
+  });
+});
+
+describe('resolveAichatRunOverrides', () => {
+  it('対象外モデルはoverridesを無視し、デフォルトのmaxTokensだけを返す', () => {
+    const result = resolveAichatRunOverrides('@cf/meta/llama-3.3-70b-instruct-fp8-fast', 4096, {
+      maxTokens: 100,
+      temperature: 1.5,
+    });
+    expect(result).toEqual({ maxTokens: 4096 });
+  });
+
+  it('対象モデルは有効な範囲内のmaxTokens/temperatureをそのまま適用する', () => {
+    const result = resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, {
+      maxTokens: 2048,
+      temperature: 0.7,
+    });
+    expect(result).toEqual({ maxTokens: 2048, temperature: 0.7 });
+  });
+
+  it('maxTokensはデフォルト値を超える指定をデフォルト値へクランプする（コスト・レイテンシ上限を超えさせない）', () => {
+    const result = resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, { maxTokens: 999999 });
+    expect(result.maxTokens).toBe(8192);
+  });
+
+  it('maxTokensは1未満の指定を1へクランプする', () => {
+    const result = resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, { maxTokens: -5 });
+    expect(result.maxTokens).toBe(1);
+  });
+
+  it('temperatureは0〜2の範囲外を境界値へクランプする', () => {
+    expect(resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, { temperature: -1 }).temperature).toBe(0);
+    expect(resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, { temperature: 5 }).temperature).toBe(2);
+  });
+
+  it('不正な値（文字列・NaN・未指定）はデフォルトのまま扱い、エラーにしない', () => {
+    expect(resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, {})).toEqual({ maxTokens: 8192 });
+    expect(
+      resolveAichatRunOverrides('@cf/qwen/qwen3.8-27b', 8192, { maxTokens: 'abc', temperature: NaN })
+    ).toEqual({ maxTokens: 8192 });
   });
 });

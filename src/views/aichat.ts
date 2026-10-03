@@ -10,6 +10,7 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
+import { AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -46,6 +47,17 @@ export function getAiChatPage(user: {
   const modelColorsJson = JSON.stringify(user.modelColors ?? {});
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
   const modelListJson = JSON.stringify(modelList.map(m => ({ value: m.value, label: m.label })));
+  // 色丸ドロップダウンの「⚙」からパラメータ調整モーダルを開けるのは
+  // AICHAT_TUNABLE_MODELS(よく使うGemma-4・Qwenのみ、ユーザー要望2026-10-03)に
+  // 限る。各モデルのmaxTokensスライダーの上限は、サーバー側のデフォルト値
+  // (AICHAT_MODEL_MAX_TOKENS)をそのまま使う(クライアント側でそれより大きい
+  // 値を送ってもresolveAichatRunOverridesでクランプされるが、UI上も最初から
+  // 送れないようにしておく)。
+  const aichatTunableModelConfigJson = JSON.stringify(
+    Object.fromEntries(
+      AICHAT_TUNABLE_MODELS.map((m) => [m, { maxTokens: AICHAT_MODEL_MAX_TOKENS[m] ?? 4096 }])
+    )
+  );
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -454,6 +466,23 @@ export function getAiChatPage(user: {
     .model-dot-dropdown-item:hover { background: var(--bg-secondary); }
     .model-dot-dropdown-item.selected { font-weight: 600; background: var(--bg-secondary); }
     .model-dot-dropdown-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .model-dot-dropdown-item-label { flex: 1; min-width: 0; }
+    .model-dot-dropdown-tune-btn {
+      flex-shrink: 0; border: none; background: transparent; cursor: pointer;
+      font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+      color: var(--text-muted);
+    }
+    .model-dot-dropdown-tune-btn:hover { background: var(--border-color); }
+    .aichat-tune-field { margin-bottom: 14px; }
+    .aichat-tune-field label {
+      display: flex; justify-content: space-between; font-size: 12px;
+      font-weight: 600; margin-bottom: 4px; color: var(--text-primary);
+    }
+    .aichat-tune-field input[type="range"] { width: 100%; }
+    .aichat-tune-field input[type="number"] {
+      width: 100%; padding: 6px 8px; font-size: 12px; border-radius: 6px;
+      border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);
+    }
     .sidebar-result-item.has-subquery .result-swipe-inner { background: rgba(56, 189, 248, 0.10); }
     .sidebar-result-item.has-subquery .result-swipe-inner:hover { background: rgba(56, 189, 248, 0.18); }
     .result-swipe-inner {
@@ -8023,6 +8052,12 @@ export function getAiChatPage(user: {
 
     var MODEL_COLORS = ${modelColorsJson};
     var MODEL_LIST = ${modelListJson};
+    // パラメータ調整モーダル(⚙)の対象モデルとmaxTokensの上限(サーバー側の
+    // デフォルト値、AICHAT_MODEL_MAX_TOKENSと同じ)。よく使うGemma-4・Qwenの
+    // 2モデルだけが対象(ユーザー要望2026-10-03)。
+    var AICHAT_TUNABLE_MODEL_CONFIG = ${aichatTunableModelConfigJson};
+    var AICHAT_TEMPERATURE_MIN = ${AICHAT_TEMPERATURE_MIN};
+    var AICHAT_TEMPERATURE_MAX = ${AICHAT_TEMPERATURE_MAX};
     // テキストプロンプトに添付画像がある場合、選択中のモデルより優先して
     // moondream(/api/moondream-analyzeと同じ内部モデル)へ問い合わせるかどうか。
     // /settingsページのトグルで変更され、Cookie(aichat_prefer_moondream)に
@@ -8055,9 +8090,26 @@ export function getAiChatPage(user: {
         dot.className = 'model-dot-dropdown-dot';
         dot.style.background = MODEL_COLORS[m.value] || 'var(--border-color)';
         var lbl = document.createElement('span');
+        lbl.className = 'model-dot-dropdown-item-label';
         lbl.textContent = m.label;
         item.appendChild(dot);
         item.appendChild(lbl);
+        // パラメータ調整(⚙)は対象モデル(AICHAT_TUNABLE_MODEL_CONFIG、
+        // よく使うGemma-4・Qwenのみ)だけに表示する(ユーザー要望2026-10-03)。
+        if (AICHAT_TUNABLE_MODEL_CONFIG[m.value]) {
+          var tuneBtn = document.createElement('button');
+          tuneBtn.type = 'button';
+          tuneBtn.className = 'model-dot-dropdown-tune-btn';
+          tuneBtn.textContent = '⚙';
+          tuneBtn.title = m.label + ' のパラメータを調整';
+          tuneBtn.setAttribute('aria-label', m.label + ' のパラメータを調整');
+          tuneBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeModelDotDropdown();
+            openAichatTuneModal(m.value, m.label);
+          });
+          item.appendChild(tuneBtn);
+        }
         item.addEventListener('click', function() {
           lastModel = m.value;
           modelSelect.value = m.value;
@@ -8066,6 +8118,115 @@ export function getAiChatPage(user: {
         });
         modelDotDropdown.appendChild(item);
       });
+    }
+
+    // モデルごとのパラメータ調整値(maxTokens/temperature)。Cookieに保存し、
+    // 送信時(chatForm submit)に、選択中のモデルが対象(AICHAT_TUNABLE_MODEL_CONFIG)
+    // であればpayloadへ含める。未調整(デフォルトのまま)のモデルはキー自体を
+    // 持たず、payloadにも含めない(サーバー側のデフォルト値を使わせる)。
+    var AICHAT_TUNE_COOKIE = 'aichat_model_tune_params';
+
+    function readAichatTuneParams() {
+      var match = document.cookie.match('(^|;)\\s*' + AICHAT_TUNE_COOKIE + '=([^;]*)');
+      if (!match) return {};
+      try {
+        var parsed = JSON.parse(decodeURIComponent(match[2]));
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function writeAichatTuneParams(all) {
+      document.cookie = AICHAT_TUNE_COOKIE + '=' + encodeURIComponent(JSON.stringify(all)) + '; path=/; max-age=' + (60 * 60 * 24 * 365) + '; SameSite=Lax';
+    }
+
+    function getAichatTuneParamsForModel(model) {
+      var all = readAichatTuneParams();
+      return all[model] || null;
+    }
+
+    function openAichatTuneModal(model, label) {
+      var config = AICHAT_TUNABLE_MODEL_CONFIG[model];
+      if (!config) return;
+      var current = getAichatTuneParamsForModel(model) || {};
+      var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+      var title = document.createElement('div');
+      title.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:14px;';
+      title.textContent = label + ' のパラメータ調整';
+      box.appendChild(title);
+
+      var maxTokensField = document.createElement('div');
+      maxTokensField.className = 'aichat-tune-field';
+      var maxTokensLabel = document.createElement('label');
+      var maxTokensValue = document.createElement('span');
+      var initialMaxTokens = (typeof current.maxTokens === 'number' && current.maxTokens > 0) ? current.maxTokens : config.maxTokens;
+      maxTokensValue.textContent = String(initialMaxTokens);
+      maxTokensLabel.appendChild(document.createTextNode('max_tokens（上限 ' + config.maxTokens + '）'));
+      maxTokensLabel.appendChild(maxTokensValue);
+      var maxTokensInput = document.createElement('input');
+      maxTokensInput.type = 'range';
+      maxTokensInput.min = '1';
+      maxTokensInput.max = String(config.maxTokens);
+      maxTokensInput.step = '1';
+      maxTokensInput.value = String(initialMaxTokens);
+      maxTokensInput.addEventListener('input', function() { maxTokensValue.textContent = maxTokensInput.value; });
+      maxTokensField.appendChild(maxTokensLabel);
+      maxTokensField.appendChild(maxTokensInput);
+      box.appendChild(maxTokensField);
+
+      var temperatureField = document.createElement('div');
+      temperatureField.className = 'aichat-tune-field';
+      var temperatureLabel = document.createElement('label');
+      var temperatureValue = document.createElement('span');
+      var initialTemperature = (typeof current.temperature === 'number') ? current.temperature : 1;
+      temperatureValue.textContent = initialTemperature.toFixed(1);
+      temperatureLabel.appendChild(document.createTextNode('temperature'));
+      temperatureLabel.appendChild(temperatureValue);
+      var temperatureInput = document.createElement('input');
+      temperatureInput.type = 'range';
+      temperatureInput.min = String(AICHAT_TEMPERATURE_MIN);
+      temperatureInput.max = String(AICHAT_TEMPERATURE_MAX);
+      temperatureInput.step = '0.1';
+      temperatureInput.value = String(initialTemperature);
+      temperatureInput.addEventListener('input', function() { temperatureValue.textContent = parseFloat(temperatureInput.value).toFixed(1); });
+      temperatureField.appendChild(temperatureLabel);
+      temperatureField.appendChild(temperatureInput);
+      box.appendChild(temperatureField);
+
+      var btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      var resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.textContent = 'デフォルトに戻す';
+      resetBtn.style.cssText = 'flex:1;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;';
+      resetBtn.addEventListener('click', function() {
+        var all = readAichatTuneParams();
+        delete all[model];
+        writeAichatTuneParams(all);
+        document.body.removeChild(overlay);
+      });
+      var saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.textContent = '保存';
+      saveBtn.style.cssText = 'flex:1;padding:8px;border-radius:6px;border:none;background:var(--accent-color,#667eea);color:#fff;cursor:pointer;font-size:12px;font-weight:600;';
+      saveBtn.addEventListener('click', function() {
+        var all = readAichatTuneParams();
+        all[model] = { maxTokens: parseInt(maxTokensInput.value, 10), temperature: parseFloat(temperatureInput.value) };
+        writeAichatTuneParams(all);
+        document.body.removeChild(overlay);
+      });
+      btnRow.appendChild(resetBtn);
+      btnRow.appendChild(saveBtn);
+      box.appendChild(btnRow);
+
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
     }
 
     function openModelDotDropdown() {
@@ -8223,6 +8384,16 @@ ${getRubyWasmLoaderScript()}
       if (attachedImage) {
         payload.image = attachedImage;
         payload.preferMoondream = aichatPreferMoondream;
+      }
+      // 色丸ドロップダウンの「⚙」で保存したパラメータ調整値(対象モデルの
+      // 場合のみ)をpayloadへ含める。未調整・対象外モデルの場合は何も
+      // 付けず、サーバー側のデフォルト値のまま動かす。
+      if (AICHAT_TUNABLE_MODEL_CONFIG[lastModel]) {
+        var tuneParams = getAichatTuneParamsForModel(lastModel);
+        if (tuneParams) {
+          if (typeof tuneParams.maxTokens === 'number') payload.maxTokens = tuneParams.maxTokens;
+          if (typeof tuneParams.temperature === 'number') payload.temperature = tuneParams.temperature;
+        }
       }
 
       var assistantBubbleEl = null;
