@@ -125,4 +125,19 @@ describe('resolveAskgkCommand', () => {
   it('"settings"を「設定状況」へ変換する(半角スペースを含む表現を打たせないための措置)', () => {
     expect(resolveAskgkCommand('settings')).toBe('設定状況');
   });
+
+  /**
+   * "sysstats"・"routines"はsettingsと異なり、先方(tunnels側Bot)がそのままの
+   * 英単語を受け取っても内部的に解釈できるため、エイリアス変換は不要
+   * (ASKGK_COMMAND_ALIASESに登録しない)。ただのデータとしてそのまま
+   * tunnel-signer経由で渡ればよく、この「変換せずそのまま通る」こと自体を
+   * 回帰として固定する(将来誤ってエイリアス登録してしまうと壊れる動作)。
+   */
+  it('"sysstats"はエイリアス変換せずそのまま渡す', () => {
+    expect(resolveAskgkCommand('sysstats')).toBe('sysstats');
+  });
+
+  it('"routines"はエイリアス変換せずそのまま渡す', () => {
+    expect(resolveAskgkCommand('routines')).toBe('routines');
+  });
 });
