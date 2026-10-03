@@ -49,11 +49,17 @@ describe('getThreadTrackerPage', () => {
     expect(html).not.toContain('スレッド一覧と選択した質問・回答を並べて表示します');
   });
 
-  it('ナイトモードボタンは画面上部(.intro)ではなく3列スタイルモーダルの中にある', () => {
-    const introMatch = html.match(/<section class="intro"[\s\S]*?<\/section>/);
-    expect(introMatch).not.toBeNull();
-    expect(introMatch![0]).not.toContain('id="nightModeToggle"');
+  it('「▦ 3列スタイル」ボタン(threeColumnStyleButton)は撤去されている', () => {
+    expect(html).not.toContain('id="threeColumnStyleButton"');
+    expect(html).not.toContain('▦ 3列スタイル');
+  });
 
+  it('3列スタイルモーダルは左の垂直タブ(threeColumnStyleTab)から開く', () => {
+    expect(html).toContain('id="threeColumnStyleTab"');
+    expect(html).toContain("styleTab.addEventListener('click'");
+  });
+
+  it('ナイトモードボタンは3列スタイルモーダルの中にある', () => {
     const modalMatch = html.match(/<div id="threeColumnStyleModal"[\s\S]*?<\/div>\s*<button id="composerTab"/);
     expect(modalMatch).not.toBeNull();
     expect(modalMatch![0]).toContain('id="nightModeToggle"');
@@ -109,5 +115,33 @@ describe('getThreadTrackerPage', () => {
     expect(html).toContain("document.documentElement.removeAttribute('data-css-style')");
     expect(html).toContain("document.documentElement.setAttribute('data-css-style',id)");
     expect(html).toContain("document.documentElement.removeAttribute('data-css-fx')");
+  });
+
+  it('2ペインモード時、検索窓(searchPanel)は画面左の垂直タブ(searchPanelTab)でトグル開閉できる', () => {
+    expect(html).toContain('id="searchPanelTab"');
+    expect(html).toContain('aria-controls="searchPanel"');
+    expect(html).toContain('id="searchPanel"');
+    expect(html).toContain("searchPanelTab.addEventListener('click'");
+    expect(html).toMatch(/function setSearchPanelOpen\(open\)\{searchPanelEl\.hidden=!open/);
+  });
+
+  it('検索窓タブは2ペインモードの時だけ表示される(通常モードでは固定navbarなので不要)', () => {
+    expect(html).toMatch(/\.search-panel-tab\{[^}]*display:none/);
+    expect(html).toMatch(/\.two-pane-mode \.search-panel-tab\{display:block\}/);
+  });
+
+  it('2ペイン状態が解除されている通常モードでは、検索窓はスクロールの影響を受けない固定navbarになる', () => {
+    const baseRuleMatch = html.match(/(?<!\.two-pane-mode )\.search-panel\{[^}]*\}/);
+    expect(baseRuleMatch).not.toBeNull();
+    expect(baseRuleMatch![0]).toContain('position:fixed');
+    expect(baseRuleMatch![0]).toContain('top:0');
+  });
+
+  it('2ペインモードでは検索窓の固定navbar配置が解除され、通常のグリッド内配置に戻る', () => {
+    expect(html).toMatch(/\.two-pane-mode \.search-panel\{position:static/);
+  });
+
+  it('ビューモードが切り替わるたびに検索窓は表示状態にリセットされる(閉じたまま固定navbarに取り残されない)', () => {
+    expect(html).toMatch(/function applyViewMode\(\)\{[^}]*setSearchPanelOpen\(true\)/);
   });
 });
