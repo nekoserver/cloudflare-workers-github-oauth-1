@@ -186,6 +186,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
@@ -255,7 +256,7 @@ export function formatDynamicWorkerPingResult(reply: string): string {
 export function formatAskgkResult(question: string, reply: string): string {
   return [
     '## /neko askgk',
-    `**質問**: ${question}`,
+    `**質問**: ${question || '(引数なし)'}`,
     '',
     reply,
   ].join('\n');
@@ -1966,10 +1967,10 @@ export async function interpretAichatSlashCommand(
   }
 
   if (subcommand === 'askgk') {
+    // tunnel-signerファイルに渡すヘルプコマンドは「/neko askgk」(引数なし、空文字
+    // のまま渡す)と「/neko askgk help」(エイリアス変換せず"help"のまま渡す)の
+    // 2通りで、どちらもローカルではエラーにせずそのままaskTunnelSignerへ渡す。
     const question = parts.slice(2).join(' ').trim();
-    if (!question) {
-      return { handled: true, response: '❌ 質問文を指定してください: /neko askgk <質問文>' };
-    }
     if (!deps.askTunnelSigner) {
       return { handled: true, response: '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
     }
