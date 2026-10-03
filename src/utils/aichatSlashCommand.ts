@@ -185,7 +185,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
-    '| /neko askgk <質問文> | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。/neko askgk settings は「設定状況」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /neko askgk <質問文> | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
