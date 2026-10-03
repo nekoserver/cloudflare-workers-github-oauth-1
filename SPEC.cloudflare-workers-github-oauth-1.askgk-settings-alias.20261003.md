@@ -91,3 +91,21 @@ Slackから`/neko askgk settings`相当を呼べるようにするには、Slack
   回帰として固定するテストを追加(将来誤ってエイリアス登録してしまうと検出できる)
 - `/neko help`の`askgk`行にも両コマンドが変換されずそのまま送られる旨を追記
 - コードの実動作としては無変更(`ASKGK_COMMAND_ALIASES`に新規エントリなし)
+
+---
+
+## 追記(2026-10-03): ヘルプコマンド(引数なし・`help`)のローカルブロック解除
+
+tunnel-signerファイルに渡すヘルプコマンドは「`/neko askgk`」(引数なし、空文字のまま
+渡す)と「`/neko askgk help`」(エイリアス変換せず`"help"`のまま渡す)の2通りと確認した。
+
+- 従来は引数なしの`/neko askgk`を**ローカルで**「❌ 質問文を指定してください」と
+  エラー表示しブロックしていた(`src/utils/aichatSlashCommand.ts`・
+  `src/utils/slackMentionReply.ts`の両方)。これを撤廃し、空文字のまま
+  `askTunnelSigner`へ渡してtunnels側のヘルプ応答を表示するよう変更した
+  (`askTunnelSigner`未設定時は引き続き「現在利用できません」を表示する)
+- `"help"`自体は既存の`sysstats`・`routines`と同様エイリアス不要でそのまま渡る
+  ため、この変更以前から動作していた(ローカルの空文字ブロックのみが障害だった)
+- `formatAskgkResult`(`/api/aichat`側)・`resolveAskgkMentionReply`(Slack
+  `@メンション`側)の両方で、質問文が空文字の場合の表示を`(引数なし)`にした
+- `/neko help`にも「`/neko askgk (引数なし) / /neko askgk help`」の行を追記

@@ -170,15 +170,36 @@ describe('handleSlackAppMention', () => {
       expect(postedArgs.text).toContain('rust-worker-sqlx-d1応答異常: HTTP 500');
     });
 
-    it('質問文が無い場合("/neko askgk"のみ)は案内メッセージを返しaskTunnelSignerを呼ばない', async () => {
+    it('引数なし("/neko askgk"のみ)の場合も空文字のままaskTunnelSignerへ渡しヘルプ応答を返信する(tunnel-signerファイルに渡すヘルプコマンドの1つ)', async () => {
       const deps = baseDeps();
       deps.text = '<@U12345> /neko askgk';
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('使われない');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('利用可能なコマンド一覧...');
       const result = await handleSlackAppMention(deps);
       expect(result).toEqual({ posted: true });
-      expect(deps.askTunnelSigner).not.toHaveBeenCalled();
+      expect(deps.askTunnelSigner).toHaveBeenCalledWith('');
       const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
-      expect(postedArgs.text).toContain('質問文を指定してください');
+      expect(postedArgs.text).not.toContain('質問文を指定してください');
+      expect(postedArgs.text).toContain('利用可能なコマンド一覧...');
+    });
+
+    it('引数なしでもaskTunnelSigner未設定時は「現在利用できません」と返信する', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk';
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('現在利用できません');
+    });
+
+    it('"/neko askgk help"はエイリアス変換せず"help"のままaskTunnelSignerへ渡す(tunnel-signerファイルに渡すヘルプコマンドのもう1つ)', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk help';
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('利用可能なコマンド一覧...');
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      expect(deps.askTunnelSigner).toHaveBeenCalledWith('help');
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('利用可能なコマンド一覧...');
     });
 
     it('askTunnelSignerが設定されていても askgk 以外の本文は従来通りAI応答になる(回帰)', async () => {

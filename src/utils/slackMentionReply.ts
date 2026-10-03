@@ -90,15 +90,15 @@ async function resolveAskgkMentionReply(
   question: string,
   askTunnelSigner: ((message: string) => Promise<string>) | undefined
 ): Promise<string> {
-  if (!question) {
-    return '❌ 質問文を指定してください: /neko askgk <質問文>';
-  }
+  // tunnel-signerファイルに渡すヘルプコマンドは「/neko askgk」(引数なし、空文字
+  // のまま渡す)と「/neko askgk help」(エイリアス変換せず"help"のまま渡す)の
+  // 2通りで、どちらもここではエラーにせずそのままaskTunnelSignerへ渡す。
   if (!askTunnelSigner) {
     return '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)';
   }
   try {
     const reply = await askTunnelSigner(question);
-    return `**質問**: ${question}\n\n${reply}`;
+    return `**質問**: ${question || '(引数なし)'}\n\n${reply}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return `❌ /neko askgk でエラーが発生しました: ${message}`;
