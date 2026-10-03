@@ -473,6 +473,7 @@ import {
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
+import { isInstallationPermissionsUpdateAction } from './utils/installationPermissionsAction';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
 import {
@@ -20311,7 +20312,7 @@ app.post('/webhook/github', async (c) => {
           ).bind(installationId).run();
 
           logger.info('Deleted installation permissions from D1', { installationId, action });
-        } else if (action === 'created' || action === 'new_permissions_accepted' || action === 'unsuspend') {
+        } else if (isInstallationPermissionsUpdateAction(action)) {
           // インストール作成 or 権限承認 or 再開
           if (repositorySelection === 'all') {
             // "All repositories" → repo_name を NULL で1レコード
