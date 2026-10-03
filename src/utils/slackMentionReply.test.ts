@@ -134,4 +134,70 @@ describe('handleSlackAppMention', () => {
     const result = await handleSlackAppMention(deps);
     expect(result).toEqual({ posted: true });
   });
+
+  describe('/neko askgk サブコマンド', () => {
+    it('本文が"/neko askgk <質問文>"の場合はAIを呼ばずaskTunnelSignerへ渡し、結果をそのまま返信する', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk settings';
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('設定は正常です');
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      expect(deps.aiRun).not.toHaveBeenCalled();
+      expect(deps.askTunnelSigner).toHaveBeenCalledWith('settings');
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('設定は正常です');
+      expect(postedArgs.channel).toBe('C999');
+      expect(postedArgs.thread_ts).toBe('1700000000.000100');
+    });
+
+    it('askTunnelSigner未設定の場合は「現在利用できません」と返信する(AIチャット側と同じ文言)', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk settings';
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      expect(deps.aiRun).not.toHaveBeenCalled();
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('現在利用できません');
+    });
+
+    it('askTunnelSignerが失敗した場合はエラー内容を含めて返信する(握りつぶさない)', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk settings';
+      deps.askTunnelSigner = vi.fn().mockRejectedValue(new Error('rust-worker-sqlx-d1応答異常: HTTP 500'));
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('rust-worker-sqlx-d1応答異常: HTTP 500');
+    });
+
+    it('質問文が無い場合("/neko askgk"のみ)は案内メッセージを返しaskTunnelSignerを呼ばない', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk';
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('使われない');
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      expect(deps.askTunnelSigner).not.toHaveBeenCalled();
+      const [[postedArgs]] = vi.mocked(deps.postMessage).mock.calls;
+      expect(postedArgs.text).toContain('質問文を指定してください');
+    });
+
+    it('askTunnelSignerが設定されていても askgk 以外の本文は従来通りAI応答になる(回帰)', async () => {
+      const deps = baseDeps();
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('使われない');
+      const result = await handleSlackAppMention(deps);
+      expect(result).toEqual({ posted: true });
+      expect(deps.askTunnelSigner).not.toHaveBeenCalled();
+      expect(deps.aiRun).toHaveBeenCalled();
+    });
+
+    it('askgk結果はsaveShareへ渡さない(AIチャット側の/neko askgkもai_chat_sharesに保存しない仕様と揃える)', async () => {
+      const deps = baseDeps();
+      deps.text = '<@U12345> /neko askgk settings';
+      deps.askTunnelSigner = vi.fn().mockResolvedValue('設定は正常です');
+      const saveShare = vi.fn().mockResolvedValue(undefined);
+      deps.saveShare = saveShare;
+      await handleSlackAppMention(deps);
+      expect(saveShare).not.toHaveBeenCalled();
+    });
+  });
 });
