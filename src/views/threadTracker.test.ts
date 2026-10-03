@@ -110,4 +110,35 @@ describe('getThreadTrackerPage', () => {
     expect(html).toContain("document.documentElement.setAttribute('data-css-style',id)");
     expect(html).toContain("document.documentElement.removeAttribute('data-css-fx')");
   });
+
+  it('各ボタンは自身のスタイル/フィルターをインラインstyleでプレビュー表示する', () => {
+    expect(html).toContain('STYLE_SWATCHES');
+    expect(html).toContain('FX_PREVIEWS');
+    expect(html).toContain('function presetPreviewStyle(');
+    expect(html).toMatch(/data-css-id="'\+preset\.id\+'"\s+style="'\+esc\(presetPreviewStyle\(preset\)\)/);
+  });
+
+  it('ボタンの可視テキストは短縮ラベル、aria-label/titleは完全なラベルを使う(「(画面全体)」等が見た目の文字数を圧迫しない)', () => {
+    expect(html).toContain('short:');
+    expect(html).toMatch(/aria-label="'\+esc\(preset\.label\)/);
+    expect(html).toMatch(/esc\(preset\.short\)\+'<\/button>/);
+  });
+
+  it('選択肢グリッドはauto-fitで列数が可変になり、狭い場合は4列相当まで詰められる(固定3列ではない)', () => {
+    expect(html).toMatch(/\.css-theme-options\{[^}]*grid-template-columns:repeat\(auto-fit,minmax\(\d+px,1fr\)\)/);
+  });
+
+  it('CSS選択モーダルはヘッダーをドラッグして自由に移動できる', () => {
+    expect(html).toContain('CSS_MODAL_POS_COOKIE');
+    expect(html).toContain("cssThemeHead.addEventListener('pointerdown'");
+    expect(html).toContain("cssThemeHead.addEventListener('pointermove'");
+    expect(html).toContain("cssThemeHead.addEventListener('pointerup'");
+    expect(html).toMatch(/document\.cookie=CSS_MODAL_POS_COOKIE/);
+  });
+
+  it('モーダルを開いたとき、保存済みの位置があれば復元する', () => {
+    expect(html).toContain('function readCssModalPos(');
+    expect(html).toContain('function applyCssModalPos(');
+    expect(html).toMatch(/applyCssModalPos\(readCssModalPos\(\)\)/);
+  });
 });
