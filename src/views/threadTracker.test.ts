@@ -118,6 +118,24 @@ describe('getThreadTrackerPage', () => {
     expect(html).toContain("document.documentElement.removeAttribute('data-css-fx')");
   });
 
+  it('選択ボタンはテーマ固有の配色を保ち、選択したテーマだけを適用・保存する', () => {
+    const dom = openSearchPage();
+    const { document } = dom.window;
+    document.getElementById('cssThemeButton')!.click();
+    const paper = document.querySelector<HTMLElement>('[data-css-kind="style"][data-css-id="paper"]')!;
+    const terminal = document.querySelector<HTMLElement>('[data-css-kind="style"][data-css-id="terminal"]')!;
+    expect(dom.window.getComputedStyle(paper).getPropertyValue('--bg')).toBe('#f7f1e3');
+    expect(dom.window.getComputedStyle(terminal).getPropertyValue('--bg')).toBe('#000');
+    paper.click();
+    expect(document.documentElement.getAttribute('data-css-style')).toBe('paper');
+    const selected = document.querySelector('[data-css-id="paper"]')!;
+    expect(selected.getAttribute('aria-checked')).toBe('true');
+    expect(dom.window.getComputedStyle(document.querySelector('[data-css-id="terminal"]')!).getPropertyValue('--bg')).toBe('#000');
+    document.getElementById('cssThemeApply')!.click();
+    expect(document.cookie).toContain('thread_tracker_css_theme=style%3Apaper');
+    dom.window.close();
+  });
+
   it('2ペインモード時、検索窓(searchPanel)は画面左の垂直タブ(searchPanelTab)でトグル開閉できる', () => {
     expect(html).toContain('id="searchPanelTab"');
     expect(html).toContain('aria-controls="searchPanel"');
