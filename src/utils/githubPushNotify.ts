@@ -97,3 +97,46 @@ export function buildPushCompareDiffUrl(payload: GitHubWebhookPushPayload): stri
   if (!payload.compare) return null;
   return `${payload.compare}.diff`;
 }
+
+/**
+ * マージコミットのメッセージ(例: "Merge pull request #123 from owner/branch")
+ * からPR番号を抜き出す。マージコミットでなければnull。
+ */
+export function extractPrNumberFromMergeCommitMessage(message: string): number | null {
+  const m = message.match(/^Merge pull request #(\d+) from /);
+  return m ? Number(m[1]) : null;
+}
+
+export type PushRepoCommitIndexEntry = {
+  commitHash: string;
+  commitMessage: string;
+  githubPrNumber: number | null;
+};
+
+/**
+ * pushイベントのcommits配列から、repo_commit_index(SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md
+ * 参照)へ追記する行データを組み立てる純粋関数。
+ *
+ * 背景(2026-10-04): repo_commit_indexはPRマージのたびに手動でSQLを実行して
+ * 追記する運用(CLAUDE.mdルール24)だったが、セッション中に何度もPRをマージした
+ * にもかかわらず一度もこの手順を実行しておらず、記録が途切れていた。
+ * pushイベントは既にcommits配列を受け取っているため、ここから自動で
+ * repo_commit_indexへ追記できるようにし、手動運用を不要にする。
+ *
+ * id(コミットSHA)・message のどちらかが欠けている要素は除外する
+ * (GitHubの通常のpush payloadでは両方必ず入るが、型定義上optionalなため)。
+ */
+export function buildPushRepoCommitIndexEntries(payload: GitHubWebhookPushPayload): PushRepoCommitIndexEntry[] {
+  if (payload.deleted) return [];
+  const commits = Array.isArray(payload.commits) ? payload.commits : [];
+  const entries: PushRepoCommitIndexEntry[] = [];
+  for (const c of commits) {
+    if (typeof c.id !== 'string' || !c.id || typeof c.message !== 'string' || !c.message) continue;
+    entries.push({
+      commitHash: c.id,
+      commitMessage: c.message,
+      githubPrNumber: extractPrNumberFromMergeCommitMessage(c.message),
+    });
+  }
+  return entries;
+}

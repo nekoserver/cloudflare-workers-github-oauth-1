@@ -451,7 +451,7 @@ import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
-import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl } from './utils/githubPushNotify';
+import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
 import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
@@ -20871,6 +20871,37 @@ app.post('/webhook/github', async (c) => {
           repositoryFullName,
         });
         await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'push_summary', repository: repositoryFullName }, error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    // repo_commit_index(SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md参照)への
+    // 自動追記。従来はPRマージ毎に手動でSQLを実行する運用(CLAUDE.mdルール24)だったが、
+    // 手動実行を忘れると記録が途切れる(2026-10-04、実際にこのセッション中の複数PR
+    // マージ分が未反映のまま途切れていたことが判明)。pushイベントは既にcommits配列を
+    // 持っているため、ここで自動追記することでルール24の手動運用を不要にする。
+    // AI要約(summaryInput)の成否とは無関係に、取得できたコミットは記録する。
+    if (repositoryFullName && c.env.DB) {
+      const entries = buildPushRepoCommitIndexEntries(pushPayload);
+      if (entries.length > 0) {
+        try {
+          const db = c.env.DB;
+          const maxSeqResult = await db.prepare(
+            'SELECT MAX(seq_num) as maxSeq FROM repo_commit_index WHERE repo_name = ?'
+          ).bind(repositoryFullName).first<{ maxSeq: number | null }>();
+          let nextSeq = (maxSeqResult?.maxSeq ?? 0) + 1;
+          for (const entry of entries) {
+            await db.prepare(
+              'INSERT OR IGNORE INTO repo_commit_index (commit_hash, seq_num, github_pr_number, commit_message, repo_name) VALUES (?, ?, ?, ?, ?)'
+            ).bind(entry.commitHash, nextSeq, entry.githubPrNumber, entry.commitMessage, repositoryFullName).run();
+            nextSeq += 1;
+          }
+        } catch (error) {
+          logger.error('Failed to update repo_commit_index for push webhook', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            repositoryFullName,
+          });
+          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'repo_commit_index', repository: repositoryFullName }, error instanceof Error ? error.message : 'Unknown error');
+        }
       }
     }
   }

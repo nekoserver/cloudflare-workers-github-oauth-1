@@ -225,4 +225,50 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(response.status).toBe(200);
     expect(inserts.some((i) => i.sql.includes('INSERT INTO ai_summary_log'))).toBe(false);
   });
+
+  it('pushのcommitsをrepo_commit_indexへ自動追記し、マージコミットのPR番号も記録する', async () => {
+    // 2026-10-04追加: repo_commit_index(CLAUDE.mdルール24)はPRマージ毎に手動で
+    // SQLを実行する運用だったが、手動実行を忘れると記録が途切れる実害があった
+    // ため、pushイベント受信時に自動追記するようにした。
+    vi.stubGlobal('fetch', vi.fn());
+    const { db, inserts } = recordingDb();
+
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
+      commits: [
+        { id: 'aaaa', message: 'fix: typo' },
+        { id: 'bbbb', message: 'Merge pull request #42 from nekoserver/some-branch' },
+      ],
+    });
+
+    const response = await postPushWebhook(body, { GITHUB_WEBHOOK_SECRET: secret, DB: db });
+
+    expect(response.status).toBe(200);
+    const indexInserts = inserts.filter((i) => i.sql.includes('INSERT OR IGNORE INTO repo_commit_index'));
+    expect(indexInserts).toHaveLength(2);
+    expect(indexInserts[0]!.bindings).toEqual(['aaaa', 1, null, 'fix: typo', 'nekoserver/rails-root']);
+    expect(indexInserts[1]!.bindings).toEqual([
+      'bbbb',
+      2,
+      42,
+      'Merge pull request #42 from nekoserver/some-branch',
+      'nekoserver/rails-root',
+    ]);
+  });
+
+  it('commitsが空のpushではrepo_commit_indexへ何も追記しない', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const { db, inserts } = recordingDb();
+
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
+      commits: [],
+    });
+
+    const response = await postPushWebhook(body, { GITHUB_WEBHOOK_SECRET: secret, DB: db });
+    expect(response.status).toBe(200);
+    expect(inserts.some((i) => i.sql.includes('repo_commit_index'))).toBe(false);
+  });
 });
