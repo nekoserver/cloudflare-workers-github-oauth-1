@@ -98,6 +98,11 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(sentText).toContain('nekoserver/rails-root');
     expect(sentText).toContain('main');
     expect(sentText).toContain('okiraku');
+    // channelにSlackチャンネル名ではなくリポジトリ名を渡す。cf-auth側の/ingestが
+    // これをalt_notify_ingest_log.channelへ保存し、リポジトリ単位で絞り込める
+    // ようにするため(2026-10-04、rails-rootのpushコミットがcf-auth側で
+    // リポジトリ別に読み出せなかった不具合の修正)。
+    expect((receivedBody as { channel: string }).channel).toBe('nekoserver/rails-root');
   });
 
   it('通知先が未設定の場合は通知をスキップするが200は返す(処理は止めない)', async () => {

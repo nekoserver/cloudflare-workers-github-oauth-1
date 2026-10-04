@@ -20761,7 +20761,11 @@ app.post('/webhook/github', async (c) => {
       const text = buildPushNotificationText(pushPayload);
       if (text) {
         try {
-          await dispatchNotification(pushNotifyConfig, { text });
+          // channelにリポジトリ名を渡す(NOTIFY_TARGET=workerのときだけ使われる。
+          // 省略するとAltワーカー側のchannel欄がSlackチャンネル名になり、
+          // リポジトリ単位でのフィルタが一切できなくなる。rails-root等、
+          // 直接pushされたコミットがcf-auth側で読み出せない原因だった)
+          await dispatchNotification(pushNotifyConfig, { text, channel: repositoryFullName ?? undefined });
         } catch (error) {
           logger.error('Notification failed for push webhook', {
             error: error instanceof Error ? error.message : 'Unknown error',

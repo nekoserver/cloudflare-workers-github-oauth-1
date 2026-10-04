@@ -116,6 +116,31 @@ describe('sendNotification', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('target=worker でmessage.channelを指定するとslackChannelより優先してAltワーカーへ渡す(リポジトリ別フィルタ用)', async () => {
+    // rails-rootのpush通知がcf-auth側でリポジトリ単位に絞り込めなかった不具合
+    // (channelが常にSlackチャンネル名になっていた)の修正。push通知はここに
+    // repositoryFullNameを渡す。
+    const postSlackMessage = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue({ status: 200, text: async () => '' });
+    const config = { target: 'worker' as const, workerUrl: 'https://notify.example.workers.dev/ingest', slackChannel: 'C123' };
+    await sendNotification(config, { text: 'hello', channel: 'nekoserver/rails-root' }, { postSlackMessage, fetchImpl });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.channel).toBe('nekoserver/rails-root');
+  });
+
+  it('target=slack ではmessage.channelを無視し、常にslackChannelを使う', async () => {
+    const postSlackMessage = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchImpl = vi.fn();
+    const config = { target: 'slack' as const, slackToken: 'xoxb-token', slackChannel: 'C123' };
+    await sendNotification(config, { text: 'hello', channel: 'nekoserver/rails-root' }, { postSlackMessage, fetchImpl });
+
+    expect(postSlackMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'C123' })
+    );
+  });
+
   it('worker宛の送信でsecret未設定ならAuthorizationヘッダを付けない', async () => {
     const postSlackMessage = vi.fn();
     const fetchImpl = vi.fn().mockResolvedValue({ status: 200, text: async () => '' });

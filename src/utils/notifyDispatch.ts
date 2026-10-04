@@ -30,6 +30,15 @@ export type NotifyMessage = {
   text: string;
   blocks?: Record<string, unknown>[];
   thread_ts?: string;
+  /**
+   * target='worker'のときだけ使う、Altワーカー(/ingest)側のchannel欄の上書き値。
+   * 省略時はconfig.slackChannel(Slackチャンネル名)がそのまま入ってしまい、
+   * Altワーカー側でリポジトリ単位の絞り込みができない(2026-10-04、
+   * rails-rootのpush通知がcf-authのリポジトリ別フィードに出ない不具合で判明)。
+   * pushイベント等、リポジトリに紐づく通知ではrepositoryFullNameを渡すこと。
+   * target='slack'では無視される(Slackのchannelは常にconfig.slackChannel)。
+   */
+  channel?: string;
 };
 
 export type NotifyResult = SlackPostResult;
@@ -76,7 +85,7 @@ async function sendToWorker(config: NotifyConfig, message: NotifyMessage, fetchI
         ...(config.workerSecret ? { Authorization: `Bearer ${config.workerSecret}` } : {}),
       },
       body: JSON.stringify({
-        channel: config.slackChannel,
+        channel: message.channel ?? config.slackChannel,
         text: message.text,
         blocks: message.blocks,
         thread_ts: message.thread_ts,
