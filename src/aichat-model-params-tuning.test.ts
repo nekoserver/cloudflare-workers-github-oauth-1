@@ -59,7 +59,7 @@ describe('POST /api/aichat: パラメータ調整モーダルのmaxTokens/temper
     expect(calledParams.temperature).toBe(0.3);
   });
 
-  it('対象モデルでも、デフォルト値を超えるmaxTokensはデフォルト値へクランプされる', async () => {
+  it.each([16384, 999999])('対象モデルのmaxTokens=%iは新しい上限16384でAI.run()へ渡る', async (maxTokens) => {
     const run = vi.fn(async (_model: string, _params: unknown) => ({ response: '了解しました' }));
     const authHeader = await makeAuthHeader();
     const res = await app.request(
@@ -67,13 +67,13 @@ describe('POST /api/aichat: パラメータ調整モーダルのmaxTokens/temper
       {
         method: 'POST',
         headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'こんにちは', model: '@cf/qwen/qwen3.8-27b', maxTokens: 999999 }),
+        body: JSON.stringify({ message: 'こんにちは', model: '@cf/qwen/qwen3.8-27b', maxTokens }),
       },
       { JWT_SECRET, DB: makeDb() as never, AI: { run } as never }
     );
     expect(res.status).toBe(200);
     const [, calledParams] = run.mock.calls[0] as [string, { max_tokens?: number }];
-    expect(calledParams.max_tokens).toBe(8192);
+    expect(calledParams.max_tokens).toBe(16384);
   });
 
   it('対象外のモデル(llama-3.3-70b)の場合、maxTokens/temperatureを指定しても無視される', async () => {

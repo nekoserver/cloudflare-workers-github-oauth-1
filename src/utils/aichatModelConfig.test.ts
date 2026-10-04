@@ -99,8 +99,8 @@ describe('AICHAT_MODEL_MAX_TOKENS', () => {
     expect(AICHAT_MODEL_MAX_TOKENS['@cf/meta/llama-3.3-70b-instruct-fp8-fast']).toBeUndefined();
   });
 
-  it('qwen3.8-27b は 8192 トークンを返す（旧4096では応答が見切れる報告のため倍に引き上げ、2026-10-03）', () => {
-    expect(AICHAT_MODEL_MAX_TOKENS['@cf/qwen/qwen3.8-27b']).toBe(8192);
+  it('qwen3.8-27b のパラメータ調整上限は 16384 トークン', () => {
+    expect(AICHAT_MODEL_MAX_TOKENS['@cf/qwen/qwen3.8-27b']).toBe(16384);
   });
 });
 

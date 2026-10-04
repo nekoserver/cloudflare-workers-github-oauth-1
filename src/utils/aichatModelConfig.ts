@@ -42,15 +42,9 @@ export function assignModelColors(
 
 export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
   '@cf/google/gemma-4-26b-a4b-it': 65536,
-  // 以前は4096にしていたが、AIチャットページで応答が見切れる(途中で
-  // 打ち切られる)と報告された。このモデルはデフォルトでreasoning
-  // (thinking)が強めに働き、最終回答の前に消費される思考トークンが
-  // 多いため、4096では最終回答まで届かない場合がある。Cloudflare側の
-  // 実際の上限はこの環境からdevelopers.cloudflare.comへ直接アクセスできず
-  // 未確認のため、まずは倍の8192へ上げた(ユーザー確認済み、2026-10-03)。
-  // これでも見切れる場合や400エラーになる場合は、実際のCloudflare
-  // モデルページの値を確認して調整すること。
-  '@cf/qwen/qwen3.8-27b': 8192,
+  // パラメータ調整モーダルとサーバー側の上限を16384に引き上げる
+  // (ユーザー指定、2026-10-04)。パラメータ未指定時もこの値を使う。
+  '@cf/qwen/qwen3.8-27b': 16384,
 };
 
 /**
