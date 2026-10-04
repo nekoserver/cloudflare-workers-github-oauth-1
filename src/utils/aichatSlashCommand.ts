@@ -1246,6 +1246,16 @@ export function formatMlbTodayScheduleResult(games: MlbTodayGame[], filterLabel:
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
 
+/**
+ * `/neko askgk` 専用のタイムアウト。D1検索等(AICHAT_SEARCH_TIMEOUT_MS=8秒)と
+ * 違い、askgkの経路は 本体Worker → rust-worker-sqlx-d1(Service Binding) →
+ * (HMAC署名して公開fetch) → tunnels.rb(自宅ネットワーク上、Cloudflare Tunnel
+ * 経由) → 先方Botの応答生成、という複数ホップを挟む。先方Botが内部でAIモデルを
+ * 呼んで回答を生成している場合、8秒では往復しきれずタイムアウトする報告が
+ * あったため、Jev(外部AI連携、AICHAT_JEV_TIMEOUT_MS=60秒)と同じ長さに揃えた。
+ */
+export const ASKGK_TIMEOUT_MS = 60_000;
+
 type RaceOutcome<T> =
   | { status: 'ok'; value: T }
   | { status: 'timeout' }
@@ -1982,11 +1992,11 @@ export async function interpretAichatSlashCommand(
     if (!deps.askTunnelSigner) {
       return { handled: true, response: '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
     }
-    const outcome = await raceWithTimeout(deps.askTunnelSigner(question), AICHAT_SEARCH_TIMEOUT_MS);
+    const outcome = await raceWithTimeout(deps.askTunnelSigner(question), ASKGK_TIMEOUT_MS);
     if (outcome.status === 'timeout') {
       return {
         handled: true,
-        response: `❌ /neko askgk がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+        response: `❌ /neko askgk がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
       };
     }
     if (outcome.status === 'error') {
