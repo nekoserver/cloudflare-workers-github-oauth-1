@@ -855,3 +855,48 @@ describe('/neko mlb', () => {
     expect(result).toEqual({ handled: true, response: '❌ /neko mlb でエラーが発生しました: upstream error' });
   });
 });
+
+describe('/neko askgk claude_prompt="..."', () => {
+  const now = new Date('2026-10-04T12:00:00Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+
+  it('claude_prompt="<質問文>"から質問文を取り出し、スペースを保持したままaskTunnelSignerへ渡す', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('にゃーん');
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="元気 ですか"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(askTunnelSigner).toHaveBeenCalledWith('元気 ですか');
+    expect(result).toEqual({ handled: true, response: expect.stringContaining('にゃーん') });
+  });
+
+  it('値中のエスケープされた引用符を元に戻してから渡す', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="\\"引用\\"テスト"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(askTunnelSigner).toHaveBeenCalledWith('"引用"テスト');
+  });
+
+  it('結果をMarkdown見出し・質問欄付きで表示する', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      response: '## /neko askgk\n**質問**: テスト質問\n\n回答本文',
+    });
+  });
+
+  it('claude_prompt=形式でなければ従来通り全文を自由記述の質問文として渡す(後方互換)', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    await interpretAichatSlashCommand('/neko askgk 元気？', now, { ...unusedDeps, askTunnelSigner });
+    expect(askTunnelSigner).toHaveBeenCalledWith('元気？');
+  });
+});
