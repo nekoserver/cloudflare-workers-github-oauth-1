@@ -229,6 +229,7 @@ ${getMarkdownPreviewCSS()}
       <button type="button" class="btn primary" id="btnCopy">コピー</button>
       <button type="button" class="btn" id="btnDownload">ダウンロード</button>
       <button type="button" class="btn" id="btnImport">JSONを読み込む</button>
+      <button type="button" class="btn primary" id="btnSaveJson">保存</button>
     </div>
     <div id="status" role="status"></div>
   </div>
@@ -237,7 +238,7 @@ ${getMarkdownPreviewCSS()}
 
 <div class="save-modal" id="saveModal" hidden role="dialog" aria-modal="true" aria-labelledby="saveModalTitle">
   <div class="save-dialog">
-    <h2 id="saveModalTitle">Rubyファイルを保存</h2>
+    <h2 id="saveModalTitle">ファイルを保存</h2>
     <label for="saveTitle">ファイル名</label>
     <input id="saveTitle" maxlength="100" autocomplete="off">
     <div id="titleStatus" class="hint" role="alert"></div>
@@ -981,7 +982,8 @@ ${getMarkdownParserScript()}
     });
   }
 
-  function saveDocument(title) {
+  function saveDocument(title, documentId) {
+    if (documentId === undefined) documentId = currentDocumentId;
     var parsed;
     try { parsed = JSON.parse(jsonOut.value); } catch (err) {
       setStatus('[BAD_JSON] JSONとして読めません: ' + err.message, 'error');
@@ -992,8 +994,8 @@ ${getMarkdownParserScript()}
       setStatus('[' + checked.errorCode + '] ' + checked.detail, 'error');
       return Promise.resolve();
     }
-    var payload = currentDocumentId
-      ? { id: currentDocumentId, config: checked.value }
+    var payload = documentId
+      ? { id: documentId, config: checked.value }
       : { title: title, config: checked.value };
     $('btnConfirmSave').disabled = true;
     return fetch('/api/mention-editor/documents', {
@@ -1088,6 +1090,19 @@ ${getMarkdownParserScript()}
 
   $('btnSave').addEventListener('click', function() {
     if (parsedRubySource !== previewArea.value) return;
+    openSaveModal();
+  });
+  $('btnSaveJson').addEventListener('click', function() {
+    var selectedId = $('savedDocuments').value;
+    var selected = savedDocuments.find(function(item) { return item.id === selectedId; });
+    if (selectedId) {
+      if (!selected) { setStatus('保存先のファイルが見つかりません', 'error'); return; }
+      if (window.confirm('「' + selected.title + '」に上書き保存しますか？')) {
+        saveDocument(selected.title, selected.id);
+      }
+      return;
+    }
+    currentDocumentId = null;
     openSaveModal();
   });
   $('btnCancelSave').addEventListener('click', function() { $('saveModal').hidden = true; });
