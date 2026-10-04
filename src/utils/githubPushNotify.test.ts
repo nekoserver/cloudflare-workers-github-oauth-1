@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPushSummaryInput } from './githubPushNotify';
+import { buildPushSummaryInput, buildPushCompareDiffUrl } from './githubPushNotify';
 import type { GitHubWebhookPushPayload } from '../types';
 
 // 対象: buildPushSummaryInput(pushイベント→AI要約への入力組み立て)。
@@ -52,5 +52,18 @@ describe('buildPushSummaryInput', () => {
     const payload: GitHubWebhookPushPayload = { commits: [{ id: 'a', message: 'x' }] };
     const result = buildPushSummaryInput(payload);
     expect(result?.title).toBe('(不明)ブランチへのpush(1件のコミット)');
+  });
+});
+
+describe('buildPushCompareDiffUrl', () => {
+  it('compareがある場合は末尾に.diffを付けたURLを返す', () => {
+    const payload: GitHubWebhookPushPayload = {
+      compare: 'https://github.com/nekoserver/rails-root/compare/a...b',
+    };
+    expect(buildPushCompareDiffUrl(payload)).toBe('https://github.com/nekoserver/rails-root/compare/a...b.diff');
+  });
+
+  it('compareが無い場合はnullを返す', () => {
+    expect(buildPushCompareDiffUrl({})).toBeNull();
   });
 });

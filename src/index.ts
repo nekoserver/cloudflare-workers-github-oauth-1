@@ -451,7 +451,7 @@ import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
-import { buildPushNotificationText, buildPushSummaryInput } from './utils/githubPushNotify';
+import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl } from './utils/githubPushNotify';
 import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
@@ -20804,13 +20804,37 @@ app.post('/webhook/github', async (c) => {
           });
         }
 
+        // PRと同じようにdiffを実際に取得する(2026-10-04、「Diff長欄が常に0で
+        // 本来あるべき姿になっていない」という指摘を受けて、コミットメッセージ
+        // だけでなく実際の差分もAI要約の根拠にするよう変更)。
+        let trimmedDiff = '';
+        let diffLength = 0;
+        const githubToken = c.env.GITHUB_TOKEN;
+        const pushDiffUrl = buildPushCompareDiffUrl(pushPayload);
+        if (!githubToken) {
+          logger.warn('GITHUB_TOKEN is not configured, skipping push diff fetch', { repositoryFullName });
+        } else if (!pushDiffUrl) {
+          logger.warn('Push compare URL is missing', { repositoryFullName });
+        } else {
+          try {
+            const diffResult = await fetchPrDiff({ diffUrl: pushDiffUrl, githubToken });
+            trimmedDiff = diffResult.trimmedDiff;
+            diffLength = diffResult.diffLength;
+          } catch (error) {
+            logger.warn('Failed to fetch push diff', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              repositoryFullName,
+            });
+          }
+        }
+
         const pipelineResult = await runSummaryPipeline({
           ai: c.env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
           model: aiModel,
           fallbackModel: FALLBACK_AI_MODEL,
           title: summaryInput.title,
           description: summaryInput.description,
-          trimmedDiff: '',
+          trimmedDiff,
           designSpec: '',
         });
         if (!pipelineResult.success) {
@@ -20835,7 +20859,7 @@ app.post('/webhook/github', async (c) => {
           pushPayload.compare ?? null,
           pipelineResult.usedModel,
           pipelineResult.summary !== '' ? pipelineResult.summary : null,
-          0,
+          diffLength,
           0,
           now.toISOString(),
           pipelineResult.fallbackUsed ? 1 : 0,

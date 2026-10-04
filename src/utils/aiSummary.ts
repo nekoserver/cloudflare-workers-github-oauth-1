@@ -600,15 +600,16 @@ export function formatSummaryPrLink(row: Pick<SummaryModalRow, 'pr_number' | 'pr
 /**
  * /view・/ai-summary/:id のDiff長欄を組み立てる。
  *
- * push由来の要約はdiff本体を取得しておらずdiff_lengthが常に0になるため、
- * 「0 文字」とだけ出すと「差分を取得したが空だった」ように見えて誤解を招く
- * (実際には取得自体を行っていない)。pr_numberがnull(push)のときは
- * 「取得していない」ことを明示する。
+ * 2026-10-04: 当初push由来(pr_number=null)はdiff本体を取得していなかった
+ * ため、ここでpr_numberの有無による特別表示(「取得していません」)を
+ * 行っていた。その後pushでもPRと同じくcompare URLから実際にdiffを取得する
+ * ように変更したため(buildPushCompareDiffUrl参照)、push/PRを区別する
+ * 必要が無くなった。diff_lengthが0なのは、取得自体を省略した場合
+ * (GITHUB_TOKEN未設定時、PRでも同様)と実際に差分が空だった場合を
+ * 区別できないが、これはpush対応前からPRにも元々あった制約であり、
+ * push固有の問題ではない。
  */
-export function formatSummaryDiffLength(row: Pick<SummaryModalRow, 'pr_number' | 'diff_length'>): string {
-  if (row.pr_number == null) {
-    return '(push: 差分は取得していません)';
-  }
+export function formatSummaryDiffLength(row: Pick<SummaryModalRow, 'diff_length'>): string {
   return `${row.diff_length ?? 0} 文字`;
 }
 

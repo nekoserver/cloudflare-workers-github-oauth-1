@@ -176,6 +176,41 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(bindings[7]).toBe('https://github.com/nekoserver/rails-root/compare/a...b');
   });
 
+  it('GITHUB_TOKEN設定時、pushのcompare URLから実際にdiffを取得してdiff_lengthに反映する', async () => {
+    // 2026-10-04追加: 当初はコスト面からdiff取得を省略していたが、
+    // 「PRと同じようにあるべき姿にしてほしい」という要望を受けて、
+    // PRと同じfetchPrDiffをcompare URL(末尾に.diffを付けたもの)に対して
+    // 呼び出し、実際の差分をAI要約の根拠・diff_lengthの実値にするよう変更した。
+    let requestedDiffUrl = '';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('.diff')) {
+        requestedDiffUrl = url;
+        return new Response('diff --git a/x b/x\n+added line\n', { status: 200 });
+      }
+      return new Response('ok', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { db, inserts } = recordingDb();
+
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
+      pusher: { name: 'okiraku' },
+      commits: [{ id: 'a', message: 'feat: add login' }],
+      compare: 'https://github.com/nekoserver/rails-root/compare/a...b',
+    });
+
+    const response = await postPushWebhook(body, { GITHUB_WEBHOOK_SECRET: secret, DB: db, GITHUB_TOKEN: 'gh-token' });
+
+    expect(response.status).toBe(200);
+    expect(requestedDiffUrl).toBe('https://github.com/nekoserver/rails-root/compare/a...b.diff');
+    const insert = inserts.find((i) => i.sql.includes('INSERT INTO ai_summary_log'));
+    const bindings = insert!.bindings;
+    const diffText = 'diff --git a/x b/x\n+added line\n';
+    expect(bindings[10]).toBe(diffText.length);
+  });
+
   it('commitsが空のpush(ブランチ作成直後等)ではai_summary_logへ記録しない', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const { db, inserts } = recordingDb();

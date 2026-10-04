@@ -60,9 +60,8 @@ export type PushSummaryInput = {
  * (ingestログとしての生テキストは別PRで読めるようにしたが、それは
  * 「要約」とは別物)。
  *
- * diff本体は取得しない(push 1件ごとにGitHub APIでcompare差分を取得する
- * コスト・失敗シナリオを増やさないため)。コミットメッセージの一覧だけを
- * AIに渡し、何が行われたかの要約を生成する。
+ * diff本体は呼び出し元が`buildPushCompareDiffUrl`で取得したものを別途渡す
+ * (この関数はコミットメッセージ一覧からtitle/descriptionを組み立てるだけ)。
  */
 export function buildPushSummaryInput(payload: GitHubWebhookPushPayload): PushSummaryInput | null {
   if (payload.deleted) return null;
@@ -80,4 +79,21 @@ export function buildPushSummaryInput(payload: GitHubWebhookPushPayload): PushSu
     title: `${branch}ブランチへのpush(${messages.length}件のコミット)`,
     description: messages.map((m) => `- ${m}`).join('\n'),
   };
+}
+
+/**
+ * pushイベントのcompare URL(例: https://github.com/owner/repo/compare/a...b)
+ * から、PRのdiff_urlと同じ形式(プレーンテキストdiff)で取得できるURLを組み立てる。
+ * GitHubはcompareページのURLに".diff"を付けるとunified diff形式で返す仕様を
+ * PRの".diff"エンドポイントと同様に提供しているため、fetchPrDiff(既存のPR用
+ * diff取得関数、汎用的にdiffUrl文字列を受け取るだけ)をそのまま再利用できる。
+ *
+ * 2026-10-04: 当初はコスト(push毎のGitHub API呼び出し)を理由にdiff取得自体を
+ * 省略し、Diff長欄を「取得していません」という特別表示にしていたが、
+ * 「PRと同じようにあるべき姿にしてほしい」という要望を受けて、実際にdiffを
+ * 取得しAI要約の根拠にするよう変更した。
+ */
+export function buildPushCompareDiffUrl(payload: GitHubWebhookPushPayload): string | null {
+  if (!payload.compare) return null;
+  return `${payload.compare}.diff`;
 }
