@@ -168,3 +168,30 @@ Service Binding化で1042エラーは解消したが、次に`HTTP 401 Unauthori
 4. 200が返っているのに見えない場合、**受信側が実際にデータを永続化し、かつそれを表示する経路が存在するか**を疑う(5節の事故と同じパターン)。
 5. コードを直しても直らない場合、そもそも該当ブランチがマージ・デプロイされているか確認する。このリポジトリ・dynamicnekoともClaude Codeセッションから`wrangler deploy`はできないため、PRマージだけでは本番に反映されない。**さらに、マージすれば自動デプロイされる想定のリポジトリでは、そのworkflowファイルがリポジトリルートの`.github/workflows/`に正しく置かれているかも確認する**(8節)。GitHub Actionsタブで実際に該当のワークフロー実行が記録されているかを見るのが一番早い。
 6. **本体Worker以外のWorkerを新たに直接呼ぶ処理を実装するときは、公開`fetch()`ではなくService Bindingを先に検討し、送受信両側の環境変数名を実装前に突き合わせる**(9節)。`HTTP 404 error code: 1042`が出たら1042専用の原因(`*.workers.dev`同士の直接fetch)を、`HTTP 401`が出たら変数名の食い違いをまず疑う。
+
+## 11. 経路Cの`channel`欄がSlackチャンネル名固定で、Altワーカー側のリポジトリ別絞り込みに使えなかった事故
+
+**対象**: `src/utils/notifyDispatch.ts`の`sendToWorker`(経路C送信)と、dynamicneko/cf-authの`/wspace`(リポジトリ別フィード表示)。
+
+5節の「write-onlyなデータストア」事故とは別の、同じ根っこ(経路Cのペイロードが受信側で意味のある形になっているかを確認していなかった)から生えた問題。
+
+### 症状
+
+rails-rootのように、PRを経由せず直接pushされるリポジトリのコミットが、dynamicneko/cf-authの`/wspace`でリポジトリ別に絞り込んで表示できなかった(そもそもチャンネル一覧にも出てこない)。
+
+### 原因
+
+1. `sendToWorker()`が送るJSONの`channel`欄は、常に`config.slackChannel`(=`SLACK_CHANNEL_ID`、Slack用のチャンネルID)を入れていた。`NOTIFY_TARGET=worker`運用ではSlackへは送らないため、この値は本来無意味だが、そのままAltワーカー側の`alt_notify_ingest_log.channel`へ保存されていた。
+2. push通知はリポジトリ名(例: `nekoserver/rails-root`)を`channel`として送ってほしい箇所だったが、`dispatchNotification`の呼び出し側(`/webhook/github`のpushハンドラ)はそれを渡す手段(`NotifyMessage`にそのようなフィールド)が存在しなかった。
+3. dynamicneko/cf-auth側の`/wspace`は、`?repo=`でリポジトリ絞り込み中は`alt_notify_ingest_log`を常に空配列として扱っており(5節の修正で「未リンクのingestログ」自体は表示できるようになっていたが、リポジトリ別絞り込みには対応していなかった)、チャンネル一覧(`getChannels`)も`ai_summary_log`(PRサマリー)しか見ていなかった。PRサマリーを一度も生成していないリポジトリは、どう絞り込んでもpushコミットの通知が見える経路が無かった。
+
+### 修正(2026-10-04)
+
+- `NotifyMessage`に`channel?: string`を追加し、`target='worker'`のときだけ`message.channel ?? config.slackChannel`を使うようにした(`target='slack'`では従来通り`config.slackChannel`固定)。
+- pushハンドラは`dispatchNotification(pushNotifyConfig, { text, channel: repositoryFullName })`とし、リポジトリ名を渡すようにした。
+- dynamicneko/cf-auth側は、`getChannels`を`ai_summary_log`と`alt_notify_ingest_log.channel`のUNIONに変更し、PRサマリーが無いリポジトリもチャンネル一覧に出るようにした。また`getUnlinkedIngestLogByChannel(db, channel, limit)`を追加し、リポジトリ絞り込み中でも`channel`が一致するingestログ行を表示するようにした。
+
+### 教訓
+
+- 経路Cの固定ペイロード(4節)は「送信側が決め打ちで埋める値」と「呼び出し元ごとに変えたい値」が混在していた。**固定ペイロードに見えても、呼び出し元の種類によって意味が変わるフィールド(ここでは`channel`)がないか疑うこと。**
+- 受信側の絞り込みUI(ここではリポジトリ別フィード)を実装・変更するときは、**そのUIが参照するテーブルに、絞り込みキー(ここではリポジトリ名)が実際に入る経路があるかを送信側のコードまで遡って確認する**こと。UI側だけ見て「表示条件を直せば直る」と判断すると、そもそもデータが来ていないケースを見逃す。
