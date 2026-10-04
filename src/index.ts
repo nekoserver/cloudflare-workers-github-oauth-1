@@ -2582,6 +2582,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_table_pattern_scores_unique ON jev_tab
   last_evaluated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_test_file_catalog_repo_path ON test_file_catalog (repo_name, file_path);`,
+  '0166': `ALTER TABLE ai_chat_shares ADD COLUMN codex_session_id TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -6357,6 +6358,79 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
+    // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
+    // (ai_chat_sharesへmodel='codex'として保存し、✂️/📔ボタン・左サイドパネル
+    // 検索(qsearch)を通常のAI回答と同様に使えるようにする、2026-10-04
+    // ユーザー要望)。それ以外のスラッシュコマンドは従来通り`local/neko`
+    // (ai_chat_sharesへは保存しない、ローカル完結のコマンド応答)のまま。
+    if (slashCommand.codexAskgk && c.env.DB) {
+      const db = c.env.DB;
+      const answer = slashCommand.response;
+      // tunnels.rb(先方)から実トークン数は得られないため、文字数からの
+      // 簡易推定値を使う(✂️/📔ボタン表示に使うusage.total_tokens等の
+      // 「値が存在すること」の条件を満たすためのものであり、厳密な
+      // トークン数ではない)。
+      const usage = {
+        input_tokens: Math.max(1, Math.ceil(message.length / 4)),
+        output_tokens: Math.max(1, Math.ceil(answer.length / 4)),
+        total_tokens: Math.max(1, Math.ceil((message.length + answer.length) / 4)),
+      };
+
+      try {
+        const usernameBytes = new TextEncoder().encode(user.sub);
+        const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+        const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+          .map((b) => b.toString(16).padStart(2, '0')).join('');
+        const tokenBytes = new Uint8Array(8);
+        crypto.getRandomValues(tokenBytes);
+        const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+        const now = new Date().toISOString();
+        const conversationHash = await computeConversationHash(user.sub, message, answer, 'codex', now);
+        const questionHash = await computeQuestionHash(user.sub, message);
+        const codexSource = (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api';
+
+        await db.prepare(
+          'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(
+          shareId, user.sub, userHash, message, answer, 'codex', now, conversationHash, questionHash,
+          usage.input_tokens, usage.output_tokens, usage.total_tokens, codexSource, slashCommand.codexAskgk.sessionId
+        ).run();
+
+        // codexモデルにまだ色が割り当てられていなければ、未使用の色から割り当てる
+        // (aichatModelConfig.tsのassignModelColorsを/aichatページと同じパターンで再利用)。
+        try {
+          const colorRows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+          const existingColors: Record<string, string> = {};
+          for (const row of colorRows.results ?? []) existingColors[row.model_id] = row.color;
+          const { newAssignments } = assignModelColors(existingColors, [{ value: 'codex', label: 'Codex' }]);
+          for (const a of newAssignments) {
+            await db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+              .bind(a.model_id, a.color, a.label).run();
+          }
+        } catch (colorErr) {
+          logger.warn('Failed to assign color for codex askgk model', {
+            error: colorErr instanceof Error ? colorErr.message : 'Unknown',
+          });
+        }
+
+        return jsonUtf8({
+          response: answer,
+          usedModel: 'codex',
+          systemPromptMode,
+          usage,
+          shareId,
+        });
+      } catch (saveErr) {
+        logger.error('Failed to save codex askgk response to ai_chat_shares', {
+          error: saveErr instanceof Error ? saveErr.message : 'Unknown',
+          user: user.sub,
+        });
+        // 保存に失敗しても回答自体は表示する(保存できなかった旨は
+        // 握りつぶさずログに残す。CLAUDE.mdルール8)。
+        return jsonUtf8({ response: answer, usedModel: 'codex', systemPromptMode });
+      }
+    }
+
     return jsonUtf8({
       response: slashCommand.response,
       usedModel: 'local/neko',
@@ -18172,6 +18246,7 @@ app.get('/status', authMiddleware, async (c) => {
     { migration: '0028', table: 'ai_summary_log', column: 'fallback_used',       sql: 'ALTER TABLE ai_summary_log ADD COLUMN fallback_used INTEGER DEFAULT 0;' },
     { migration: '0028', table: 'ai_summary_log', column: 'primary_model',      sql: 'ALTER TABLE ai_summary_log ADD COLUMN primary_model TEXT;' },
     { migration: '0154', table: 'd1_query_catalog', column: 'sync_generation', sql: STATUS_MIGRATION_SQL['0154'] },
+    { migration: '0166', table: 'ai_chat_shares', column: 'codex_session_id', sql: STATUS_MIGRATION_SQL['0166'] },
   ];
 
   const data: CacheStatusData = {

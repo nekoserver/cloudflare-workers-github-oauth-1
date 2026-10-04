@@ -887,16 +887,25 @@ describe('/neko askgk claude_prompt="..."', () => {
     expect(askTunnelSigner).toHaveBeenCalledWith('claude_prompt="\\"引用\\"テスト"');
   });
 
-  it('結果をMarkdown見出し・質問欄付きで表示する(質問欄には送信した生テキストそのものを表示)', async () => {
+  // 2026-10-04: ◯◯_prompt="..."形式では「## /neko askgk」見出しと
+  // 「**質問**: ...」行は冗長(送信した質問自体は画面上に既に見えているため)
+  // なので表示せず、回答本文だけを返す。
+  it('◯◯_prompt="..."形式では見出し・質問欄を付けず回答本文だけを返す', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
     const result = await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="テスト質問"',
       now,
       { ...unusedDeps, askTunnelSigner }
     );
+    expect(result).toEqual({ handled: true, response: '回答本文' });
+  });
+
+  it('◯◯_prompt="..."形式でない場合は従来通り見出し・質問欄付きのMarkdownを返す', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
+    const result = await interpretAichatSlashCommand('/neko askgk テスト質問', now, { ...unusedDeps, askTunnelSigner });
     expect(result).toEqual({
       handled: true,
-      response: '## /neko askgk\n**質問**: claude_prompt="テスト質問"\n\n回答本文',
+      response: '## /neko askgk\n**質問**: テスト質問\n\n回答本文',
     });
   });
 
@@ -930,5 +939,42 @@ describe('/neko askgk claude_prompt="..."', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // codex_prompt="..."専用: Codex CLIのバナー(workdir〜reasoning)・session id行を
+  // 除去し、session idはcodexAskgkメタデータとして返す(表示はしない)。
+  // index.ts側がこれを使ってai_chat_sharesへmodel='codex'として保存する。
+  it('codex_prompt="..."ではバナー・session idを除去し、codexAskgkメタデータでsession idを返す', async () => {
+    const reply = [
+      'workdir: /home/user/repo',
+      'reasoning effort: high',
+      'session id: codex-session-abc',
+      '実際の回答',
+    ].join('\n');
+    const askTunnelSigner = vi.fn().mockResolvedValue(reply);
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk codex_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      response: '実際の回答',
+      codexAskgk: { sessionId: 'codex-session-abc' },
+    });
+  });
+
+  it('codex_prompt="..."でsession idが見つからない場合はcodexAskgk.sessionIdがnullになる', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('バナーもsession idも無い回答');
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk codex_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      response: 'バナーもsession idも無い回答',
+      codexAskgk: { sessionId: null },
+    });
   });
 });

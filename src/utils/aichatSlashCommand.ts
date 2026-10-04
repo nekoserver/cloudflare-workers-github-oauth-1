@@ -1,4 +1,5 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
+import { parseCodexAskgkReply } from './codexAskgkReply';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
 import type { TreeFormatOptions } from './treeWasmServer';
@@ -1282,11 +1283,21 @@ async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<Race
   return result;
 }
 
+/**
+ * `/neko askgk codex_prompt="..."` 専用のメタデータ。index.ts側でこれが
+ * 存在する場合、通常のAI応答と同じ経路(ai_chat_sharesへの保存・モデル名
+ * 'codex'としての表示・✂️/📔ボタン・左サイドパネルからの検索)に乗せる。
+ */
+export type CodexAskgkMeta = {
+  /** codex側のsession id(バナー除去後の本文からは取り除いた値)。無ければnull。 */
+  sessionId: string | null;
+};
+
 export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta }
   | { handled: false };
 
 /**
@@ -2001,6 +2012,24 @@ export async function interpretAichatSlashCommand(
     }
     if (outcome.status === 'error') {
       return { handled: true, response: `❌ /neko askgk でエラーが発生しました: ${outcome.message}` };
+    }
+
+    // `◯◯_prompt="<質問文>"` 形式では、「## /neko askgk」見出しと
+    // 「**質問**: ◯◯_prompt="..."」行は冗長(質問自体は送信済みで見れば
+    // わかる)なので表示しない。codex_prompt="..."の場合はさらに、
+    // Codex CLIのバナー(workdir〜reasoning)とsession id行を取り除き、
+    // session idは表示からは除くがcodexAskgkメタデータとして呼び出し元
+    // (index.ts)へ返す。呼び出し元はこれを使ってai_chat_sharesへ
+    // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
+    // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
+    const promptArgMatch = question.match(/^(\w+)_prompt="/);
+    if (promptArgMatch) {
+      const modelTag = promptArgMatch[1].toLowerCase();
+      if (modelTag === 'codex') {
+        const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
+        return { handled: true, response: answer, codexAskgk: { sessionId } };
+      }
+      return { handled: true, response: outcome.value.trim() };
     }
     return { handled: true, response: formatAskgkResult(question, outcome.value) };
   }

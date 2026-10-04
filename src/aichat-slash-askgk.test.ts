@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { formatAskgkResult, interpretAichatSlashCommand } from './utils/aichatSlashCommand';
+import { describe, expect, it, vi } from 'vitest';
+import { formatAskgkResult, interpretAichatSlashCommand, ASKGK_TIMEOUT_MS } from './utils/aichatSlashCommand';
 
 describe('/neko askgk', () => {
   it('askTunnelSignerのreplyをそのまま表示する', async () => {
@@ -96,14 +96,23 @@ describe('/neko askgk', () => {
   });
 
   it('タイムアウト時はタイムアウトメッセージを表示する', async () => {
-    const result = await interpretAichatSlashCommand('/neko askgk x', new Date('2026-10-01T00:00:00.000Z'), {
-      fetchLatestCommitAgentLog: async () => null,
-      askTunnelSigner: () => new Promise(() => {}),
-    });
-    expect(result.handled).toBe(true);
-    if (!result.handled) throw new Error('not handled');
-    expect(result.response).toContain('タイムアウト');
-  }, 10000);
+    // ASKGK_TIMEOUT_MS(60秒、2026-10-04にAICHAT_SEARCH_TIMEOUT_MSから分離)を
+    // 実時間で待たないよう、fake timersで即座に進める。
+    vi.useFakeTimers();
+    try {
+      const promise = interpretAichatSlashCommand('/neko askgk x', new Date('2026-10-01T00:00:00.000Z'), {
+        fetchLatestCommitAgentLog: async () => null,
+        askTunnelSigner: () => new Promise(() => {}),
+      });
+      await vi.advanceTimersByTimeAsync(ASKGK_TIMEOUT_MS);
+      const result = await promise;
+      expect(result.handled).toBe(true);
+      if (!result.handled) throw new Error('not handled');
+      expect(result.response).toContain('タイムアウト');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('未対応コマンドのヘルプに /neko askgk を含める', async () => {
     const result = await interpretAichatSlashCommand('/neko unknown', new Date('2026-10-01T00:00:00.000Z'), {
