@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { getThreadTrackerPage } from './threadTracker';
 
 describe('getThreadTrackerPage', () => {
@@ -137,8 +138,73 @@ describe('getThreadTrackerPage', () => {
     expect(baseRuleMatch![0]).toContain('top:0');
   });
 
-  it('2ペインモードでは検索窓の固定navbar配置が解除され、通常のグリッド内配置に戻る', () => {
-    expect(html).toMatch(/\.two-pane-mode \.search-panel\{position:static/);
+  it('2ペインモードでも検索窓は画面に固定される', () => {
+    expect(html).toMatch(/\.two-pane-mode \.search-panel\{position:fixed/);
+  });
+
+  function openSearchPage(position = '{"x":120,"y":160}') {
+    return new JSDOM(html, {
+      url: 'https://example.com/thread-tracker',
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        window.document.cookie = 'thread_tracker_two_pane=1; Path=/';
+        window.document.cookie = 'thread_tracker_search_position=' + encodeURIComponent(position) + '; Path=/';
+        Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false }) });
+        Object.defineProperty(window, 'fetch', { value: async () => ({ ok: true, json: async () => ({ threads: [], items: [] }) }) });
+        Object.defineProperty(window.HTMLElement.prototype, 'offsetWidth', { get: () => 520 });
+        Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', { get: () => 100 });
+        window.HTMLElement.prototype.setPointerCapture = () => {};
+        window.HTMLElement.prototype.hasPointerCapture = () => false;
+      },
+    });
+  }
+
+  it('スクロール後の再表示とリロードでCookieの画面座標を復元する', () => {
+    const dom = openSearchPage();
+    const { document } = dom.window;
+    const panel = document.getElementById('searchPanel')!;
+    const tab = document.getElementById('searchPanelTab')!;
+    expect(panel.style.left).toBe('120px');
+    expect(panel.style.top).toBe('160px');
+    tab.click();
+    Object.defineProperty(dom.window, 'scrollY', { value: 1500 });
+    tab.click();
+    expect(panel.hidden).toBe(false);
+    expect(panel.style.top).toBe('160px');
+    expect(document.activeElement?.id).toBe('responseSearch');
+    const handle = document.getElementById('searchPanelDragHandle')!;
+    const pointer = (type: string, x: number, y: number) => {
+      const event = new dom.window.MouseEvent(type, { clientX: x, clientY: y, button: 0 });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      handle.dispatchEvent(event);
+    };
+    pointer('pointerdown', 130, 170);
+    pointer('pointermove', 230, 220);
+    pointer('pointerup', 230, 220);
+    expect(panel.style.left).toBe('220px');
+    expect(panel.style.top).toBe('210px');
+    const cookie = document.cookie.split('; ').find(value => value.startsWith('thread_tracker_search_position='))!;
+    const restored = openSearchPage(decodeURIComponent(cookie.split('=')[1]));
+    expect(restored.window.document.getElementById('searchPanel')!.style.top).toBe('210px');
+    dom.window.close();
+    restored.window.close();
+  });
+
+  it('不正なCookieは初期位置に戻し、画面外の位置はリサイズ時も補正する', () => {
+    const invalid = openSearchPage('{"x":"wrong","y":null}');
+    expect(invalid.window.document.getElementById('searchPanel')!.style.left).toBe('48px');
+    invalid.window.close();
+    const dom = openSearchPage('{"x":9999,"y":-100}');
+    const panel = dom.window.document.getElementById('searchPanel')!;
+    expect(panel.style.left).toBe('496px');
+    expect(panel.style.top).toBe('8px');
+    Object.defineProperty(dom.window, 'innerWidth', { value: 600 });
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
+    expect(panel.style.left).toBe('72px');
+    dom.window.document.getElementById('viewToggle')!.click();
+    expect(panel.style.left).toBe('');
+    expect(panel.style.top).toBe('');
+    dom.window.close();
   });
 
   it('ビューモードが切り替わるたびに検索窓は表示状態にリセットされる(閉じたまま固定navbarに取り残されない)', () => {
