@@ -451,7 +451,7 @@ import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
-import { buildPushNotificationText } from './utils/githubPushNotify';
+import { buildPushNotificationText, buildPushSummaryInput } from './utils/githubPushNotify';
 import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
@@ -20772,6 +20772,81 @@ app.post('/webhook/github', async (c) => {
             repositoryFullName,
           });
         }
+      }
+    }
+
+    // push用のAI要約をai_summary_logへ記録する(2026-10-04追加)。
+    // 従来はpushイベントについて通知テキスト(Slack/Altワーカー向け)しか
+    // 作っておらず、ai_summary_logには一切記録していなかった。rails-root等、
+    // PRを経由せず直接pushされるリポジトリは、cf-auth側の/wspaceメインフィード
+    // (ai_summary_logをrepo_full_nameで絞り込むだけの既存ロジック、cf-auth側の
+    // コード変更は不要)に「要約」が永久に出てこなかった原因。
+    // diffは取得しない(push毎にGitHub APIを呼ぶコスト・失敗シナリオを
+    // 増やさないため)。コミットメッセージ一覧だけをAIに渡す。
+    const summaryInput = repositoryFullName ? buildPushSummaryInput(pushPayload) : null;
+    if (summaryInput && c.env.DB) {
+      try {
+        const db = c.env.DB;
+        const now = new Date();
+        const eventDate = now.toISOString().slice(0, 10);
+        const requestId = crypto.randomUUID();
+        const aiModel = resolveAiModel(c.env.AI_MODEL);
+
+        let dailySeq = 1;
+        try {
+          const countResult = await db.prepare(
+            'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
+          ).bind(eventDate).first<{ cnt: number }>();
+          dailySeq = (countResult?.cnt ?? 0) + 1;
+        } catch (error) {
+          logger.warn('Failed to get daily AI summary count for push summary', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+
+        const pipelineResult = await runSummaryPipeline({
+          ai: c.env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
+          model: aiModel,
+          fallbackModel: FALLBACK_AI_MODEL,
+          title: summaryInput.title,
+          description: summaryInput.description,
+          trimmedDiff: '',
+          designSpec: '',
+        });
+        if (!pipelineResult.success) {
+          logger.warn('AI summary pipeline failed for push webhook', {
+            summary: pipelineResult.summary,
+            repositoryFullName,
+          });
+        }
+
+        await db.prepare(`
+          INSERT INTO ai_summary_log
+            (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at, fallback_used, primary_model)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          requestId,
+          dailySeq,
+          eventDate,
+          'push_summary',
+          repositoryFullName,
+          null,
+          'push',
+          pushPayload.compare ?? null,
+          pipelineResult.usedModel,
+          pipelineResult.summary !== '' ? pipelineResult.summary : null,
+          0,
+          0,
+          now.toISOString(),
+          pipelineResult.fallbackUsed ? 1 : 0,
+          aiModel
+        ).run();
+      } catch (error) {
+        logger.error('Failed to insert ai_summary_log for push webhook', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          repositoryFullName,
+        });
+        await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'push_summary', repository: repositoryFullName }, error instanceof Error ? error.message : 'Unknown error');
       }
     }
   }
