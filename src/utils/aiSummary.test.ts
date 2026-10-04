@@ -1364,9 +1364,9 @@ describe('Slack Block Kit 制約: buildSummaryFallbackBlocks', () => {
 //
 // 背景(2026-10-04): push由来の要約(pr_number=null、pr_urlはcompare URL)を
 // 追加した際、修正前のコードは常に`PR #${row.pr_number}`を出していたため
-// 「PR #null」と表示されていた。Diff長も「0 文字」とだけ出ると、push由来の
-// 「取得していない」状態と、PRでdiff取得が実際に0文字だった状態を
-// 区別できなかった。
+// 「PR #null」と表示されていた。その後pushでも実際にcompare URLからdiffを
+// 取得するようになった(buildPushCompareDiffUrl)ため、formatSummaryDiffLength
+// はPR/pushを区別せずdiff_lengthをそのまま表示する(pr_numberは受け取らない)。
 describe('formatSummaryPrLink', () => {
   it('pr_numberがある場合はPR #番号のリンクを返す', () => {
     const result = formatSummaryPrLink({ pr_number: 42, pr_url: 'https://github.com/x/y/pull/42' });
@@ -1391,17 +1391,11 @@ describe('formatSummaryPrLink', () => {
 });
 
 describe('formatSummaryDiffLength', () => {
-  it('PR由来(pr_numberあり)ではdiff_lengthをそのまま文字数として表示する', () => {
-    expect(formatSummaryDiffLength({ pr_number: 1, diff_length: 123 })).toBe('123 文字');
+  it('diff_lengthをそのまま文字数として表示する(PR/push共通)', () => {
+    expect(formatSummaryDiffLength({ diff_length: 123 })).toBe('123 文字');
   });
 
-  it('PR由来でdiff_lengthがnullなら0文字として表示する', () => {
-    expect(formatSummaryDiffLength({ pr_number: 1, diff_length: null })).toBe('0 文字');
-  });
-
-  it('push由来(pr_numberがnull)では「0 文字」ではなく未取得である旨を表示する', () => {
-    const result = formatSummaryDiffLength({ pr_number: null, diff_length: 0 });
-    expect(result).not.toBe('0 文字');
-    expect(result).toContain('取得していません');
+  it('diff_lengthがnullなら0文字として表示する', () => {
+    expect(formatSummaryDiffLength({ diff_length: null })).toBe('0 文字');
   });
 });
