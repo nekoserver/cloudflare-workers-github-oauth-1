@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { askTunnelSigner, resolveAskgkCommand, parseAskgkClaudePromptArg } from './tunnelSignerAsk';
+import { askTunnelSigner, resolveAskgkCommand } from './tunnelSignerAsk';
 
 function makeFetcher(fetchImpl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   return { fetch: vi.fn(fetchImpl) };
@@ -153,43 +153,5 @@ describe('resolveAskgkCommand', () => {
 
   it('"routines"はエイリアス変換せずそのまま渡す', () => {
     expect(resolveAskgkCommand('routines')).toBe('routines');
-  });
-});
-
-describe('parseAskgkClaudePromptArg', () => {
-  it('claude_prompt="..."から質問文を取り出す', () => {
-    expect(parseAskgkClaudePromptArg('claude_prompt="元気？"')).toBe('元気？');
-  });
-
-  it('値中のエスケープされた引用符(\\")を元に戻す', () => {
-    expect(parseAskgkClaudePromptArg('claude_prompt="\\"引用\\"のテスト"')).toBe('"引用"のテスト');
-  });
-
-  it('値中のエスケープされたバックスラッシュ(\\\\)を元に戻す', () => {
-    // 生の入力テキストは claude_prompt="C:\\path" (バックスラッシュ2文字)。
-    // JS文字列リテラルでは1文字のバックスラッシュを\\と書くため、ソース上は
-    // 4つの\が2文字のバックスラッシュを表す。
-    expect(parseAskgkClaudePromptArg('claude_prompt="C:\\\\path"')).toBe('C:\\path');
-  });
-
-  it('値にスペースを含められる', () => {
-    expect(parseAskgkClaudePromptArg('claude_prompt="hello world"')).toBe('hello world');
-  });
-
-  it('claude_prompt="で始まらない入力はnullを返す(従来の自由記述形式はこちらを通る)', () => {
-    expect(parseAskgkClaudePromptArg('models-list')).toBeNull();
-    expect(parseAskgkClaudePromptArg('元気？')).toBeNull();
-  });
-
-  it('閉じクォートが無い場合はnullを返す', () => {
-    expect(parseAskgkClaudePromptArg('claude_prompt="閉じていない')).toBeNull();
-  });
-
-  it('前後の空白を無視してから判定する', () => {
-    expect(parseAskgkClaudePromptArg('  claude_prompt="x"  ')).toBe('x');
-  });
-
-  it('空文字列の値も正しく取り出す', () => {
-    expect(parseAskgkClaudePromptArg('claude_prompt=""')).toBe('');
   });
 });

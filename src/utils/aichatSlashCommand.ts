@@ -1,5 +1,4 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
-import { parseAskgkClaudePromptArg } from './tunnelSignerAsk';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
 import type { TreeFormatOptions } from './treeWasmServer';
@@ -186,7 +185,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
-    '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式では引用符内にスペースや\\"でエスケープした引用符を含められます。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式は接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
@@ -1972,14 +1971,14 @@ export async function interpretAichatSlashCommand(
     // のまま渡す)と「/neko askgk help」(エイリアス変換せず"help"のまま渡す)の
     // 2通りで、どちらもローカルではエラーにせずそのままaskTunnelSignerへ渡す。
     //
-    // `claude_prompt="<質問文>"` 形式(引用符内にスペース・エスケープされた
-    // 引用符を含められる)にも対応する。`parts`は空白区切りのため引用符内の
-    // スペースを保持できないので、ここでは元のtrimmed文字列からaskgkの後ろの
-    // 生テキストを取り出してから解析する。
+    // `claude_prompt="<質問文>"` 形式を含め、`parts.slice(2).join(' ')`は
+    // 空白区切りのため引用符内のスペースや元の空白を保持できない(また
+    // "claude_prompt="という接頭語自体を解析・除去すると、先方(tunnels.rb)が
+    // この接頭語を見て自由記述の質問と区別しているため、剥がしてはならない)。
+    // そのため、元のtrimmed文字列からaskgkの後ろの生テキストをそのまま
+    // (接頭語ごと)askTunnelSignerへ渡す。
     const rawArgsMatch = trimmed.match(/^\/neko\s+askgk\s*([\s\S]*)$/i);
-    const rawArgsText = rawArgsMatch ? rawArgsMatch[1] : '';
-    const claudePromptArg = parseAskgkClaudePromptArg(rawArgsText);
-    const question = claudePromptArg ?? parts.slice(2).join(' ').trim();
+    const question = (rawArgsMatch ? rawArgsMatch[1] : '').trim();
     if (!deps.askTunnelSigner) {
       return { handled: true, response: '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
     }
