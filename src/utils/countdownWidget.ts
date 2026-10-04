@@ -52,6 +52,10 @@ export function getCountdownWidgetCSS(): string {
     }
     #countdownWidget.visible { display: block; }
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
+    .countdown-widget-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    #countdownWidgetToggle { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font: inherit; touch-action: manipulation; }
+    #countdownWidgetTimers[hidden] { display: none; }
+    #countdownWidget.collapsed .countdown-widget-titlebar { margin-bottom: 0; }
     .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
     .widget-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .widget-label[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
@@ -98,6 +102,7 @@ export function getCountdownWidgetCSS(): string {
 export function getCountdownWidgetHTML(): string {
   return `
   <div id="countdownWidget">
+    <div class="countdown-widget-titlebar"><span>カウントダウン</span><button id="countdownWidgetToggle" type="button" aria-controls="countdownWidgetTimers" aria-expanded="true" aria-label="すべてのカウントダウンを閉じる">▲</button></div>
     <div id="countdownWidgetTimers"></div>
   </div>
   <div id="countdownToast"></div>
@@ -120,6 +125,7 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
     (function() {
       var widget = document.getElementById('countdownWidget');
       var timersEl = document.getElementById('countdownWidgetTimers');
+      var toggleEl = document.getElementById('countdownWidgetToggle');
       var toastEl = document.getElementById('countdownToast');
       if (!widget || !timersEl) return;
       var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
@@ -167,6 +173,7 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       var dragState = null; // { pointerId, offsetX, offsetY }
 
       function onPointerDown(ev) {
+        if (ev.target.closest('button, a') || ev.button !== 0) return;
         var rect = widget.getBoundingClientRect();
         dragState = {
           pointerId: ev.pointerId,
@@ -204,6 +211,19 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       widget.addEventListener('pointerup', onPointerUp);
       widget.addEventListener('pointercancel', onPointerUp);
       restorePosition();
+
+      if (toggleEl) toggleEl.addEventListener('click', function() {
+        var open = timersEl.hidden;
+        timersEl.hidden = !open;
+        widget.classList.toggle('collapsed', !open);
+        toggleEl.textContent = open ? '▲' : '▼';
+        toggleEl.setAttribute('aria-expanded', String(open));
+        toggleEl.setAttribute('aria-label', open ? 'すべてのカウントダウンを閉じる' : 'すべてのカウントダウンを開く');
+        var rect = widget.getBoundingClientRect();
+        var clamped = clampPosition(rect.left, rect.top, rect.width, rect.height, window.innerWidth, window.innerHeight);
+        applyPosition(clamped.left, clamped.top);
+        savePosition(clamped.left, clamped.top);
+      });
 
       function pad2(n) { return String(n).padStart(2, '0'); }
 

@@ -124,6 +124,38 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
     expect(Array.from(timers).every((timer) => Boolean(timer.querySelector('.widget-clock')?.textContent))).toBe(true);
   });
 
+  it('タイトルバーで全パネルを閉じて再表示でき、閉じたままAPI更新しても状態を保つ', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ events: [
+      { id: 1, label: '最初', targetAt: '2098-01-01T00:00:00.000Z' },
+      { id: 2, label: '次', targetAt: '2099-01-01T00:00:00.000Z' },
+    ] }) });
+    (window as any).fetch = fetchMock;
+    const intervals: Array<() => void> = [];
+    (window as any).setInterval = (callback: () => void) => { intervals.push(callback); return 0; };
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+    const widget = window.document.getElementById('countdownWidget')!;
+    const button = window.document.getElementById('countdownWidgetToggle')!;
+    const panels = window.document.getElementById('countdownWidgetTimers')!;
+    expect(button.textContent).toBe('▲');
+    button.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    expect(widget.classList.contains('dragging')).toBe(false);
+    button.click();
+    expect(panels.hidden).toBe(true);
+    expect(button.textContent).toBe('▼');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    intervals[1]();
+    await flushMicrotasks();
+    expect(panels.hidden).toBe(true);
+    expect(widget.classList.contains('visible')).toBe(true);
+    expect(panels.children).toHaveLength(2);
+    button.click();
+    expect(panels.hidden).toBe(false);
+    expect(button.textContent).toBe('▲');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('残り時間が0以下になった瞬間、単発予定はトーストに「#id ok」を表示する', async () => {
     const window = setupDom() as unknown as Window & typeof globalThis;
     const pastTargetAt = new Date(Date.now() - 1000).toISOString();
