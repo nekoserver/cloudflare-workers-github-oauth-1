@@ -353,3 +353,52 @@ NOTICEファイル群(`NOTICE.cloudflare-workers-github-oauth-1.*.md`)には
 「知らないと損する」落とし穴の記録が蓄積されている(shallow clone・
 PWA・N+1問題・GitHub webhook経路等)。調査を始める前に索引
 (`CLAUDE.md`内の「個別トピックの索引」)を確認すること。
+
+---
+
+## 14. 直近のセッション変更履歴(新しい順、2026-10-03〜10-04)
+
+**対象**: このセッションでGitHub webhook/通知経路(`src/utils/notifyDispatch.ts`・
+`/webhook/github`)に加えた2件の変更。コミットログを新しい方から辿った順に記載する。
+
+### 2026-10-04: push通知のchannelをSlackチャンネル名固定からリポジトリ名に変更(PR #2242、未マージ)
+
+**対象**: `src/utils/notifyDispatch.ts`の`sendToWorker`、`/webhook/github`のpushハンドラ。
+ブランチ`claude/push-webhook-cf-auth-channel-20261004`。
+
+#### 旧来のSlack通知との比較
+
+| 観点 | 旧来(Slack直接投稿、`NOTIFY_TARGET`未設定時) | `NOTIFY_TARGET=worker`(Altワーカー経由)での旧実装 | 今回の修正後 |
+|---|---|---|---|
+| 送信先 | Slack `chat.postMessage`(`postSlackMessage`) | dynamicneko/cf-authの`/ingest` | 同左(変更なし) |
+| `channel`欄の意味 | Slackの投稿先チャンネルID(`SLACK_CHANNEL_ID`)。Slackの仕様上、他の値を入れても意味を持たない | `config.slackChannel`(`SLACK_CHANNEL_ID`)が**そのままコピーされていた** | pushイベントでは`repositoryFullName`(例: `nekoserver/rails-root`)を渡す。他の通知種別(installation等)は従来通り`config.slackChannel` |
+| 受信側がchannelをどう使うか | Slack自体がチャンネルとして解釈(投稿先の決定) | cf-auth側は値の意味を検証せず`alt_notify_ingest_log.channel`へそのまま保存するだけ | 同左(保存ロジック自体は不変)。保存される**値の意味**が変わった |
+| リポジトリ単位の絞り込み可否 | 不可(Slackは1チャンネルにまとめて投稿する設計で、そもそもリポジトリ別に分ける仕組みがない) | 不可(`channel`に無関係な固定値が入っていたため、cf-auth側で`channel = リポジトリ名`の絞り込みができなかった) | **可能になった**(`channel`に実際のリポジトリ名が入るため、cf-auth側のPR #300で追加した`getUnlinkedIngestLogByChannel`で絞り込める) |
+
+つまり、Slack直接投稿という旧来の経路は「全リポジトリの通知が1つのチャンネルに流れ込む」設計であり、そもそもリポジトリ別に分離する発想がなかった。`NOTIFY_TARGET=worker`はその制約を外すために作られた経路のはずだったが、実装時に`channel`欄へ機械的に`config.slackChannel`を流用してしまい、「Slack向けの値をそのままAltワーカー向けにも使う」という旧来の発想を引き継いだまま、本来の目的(リポジトリ別の構造化データ)を果たせていなかった。今回、`NotifyMessage.channel`という呼び出し元ごとの上書き値を導入し、pushイベントだけリポジトリ名を渡すようにしたことで、ようやく「Altワーカー経由ならリポジトリ別に読める」という`NOTIFY_TARGET=worker`本来の狙いが実現した。
+
+#### やったこと
+
+1. CLAUDE.mdルール10/12に従い、まずD1の実データで裏取りしようとしたが、このClaude Codeセッションには`CLOUDFLARE_API_TOKEN`が無く`wrangler d1 execute --remote`が使えないため、D1への直接問い合わせは断念し、コード読解(`/webhook/github`のpush分岐→`notifyDispatch.ts`→cf-authの`/ingest`→`feed.ts`の`getFeed`/`getChannels`)だけで原因を特定した。
+2. `NotifyMessage`に`channel?: string`を追加し、`sendToWorker`で`message.channel ?? config.slackChannel`を使うよう変更(`target='slack'`では無視され、Slack自体の挙動は変えない)。
+3. pushハンドラで`channel: repositoryFullName`を渡すよう変更。
+4. 既存の`webhook-github-push-notify-20261001.test.ts`(2026-10-01に追加されたテスト、ちょうど`nekoserver/rails-root`をサンプルに使っていた)にアサーションを追加する形で検証した。
+
+#### 得たもの(教訓)
+
+- 「固定ペイロードに見える送信処理」でも、呼び出し元の種類(installation通知 / push通知 / cf-authアクセス判定通知等)によって本来意味が変わるべきフィールドが、実装の都合で1つの値に押し込められていないかを疑う視点。今回は`channel`がまさにそれだった。
+- Slack向けの値(チャンネルID)とAltワーカー向けの値(リポジトリ名)は、たまたま同じJSONキー名(`channel`)を共有していたために「同じ値を流用すればよい」と誤解されやすい。**キー名が同じでも、送信先ごとに値の意味が違う可能性を確認すること**。
+- D1に直接アクセスできない開発環境でも、送信側→受信側のコードを順にたどることで、実データを見ずに原因を特定できるケースがある(ただし本来はルール10/12の通りD1の実データ確認が先であるべきで、今回は環境制約による例外対応)。
+
+### 2026-10-03: GitHub App既存インストールへの追加リポジトリがinstallation_permissionsへ反映されない不具合を修正(`06e955c`、マージ済み)
+
+**対象**: `/webhook/github`の`installation`/`installation_repositories`イベント処理。
+
+#### やったこと
+
+`installation_repositories`イベント(既存インストールへのリポジトリ追加/削除時にGitHubが送る、`action=added/removed`)の判定が、`installation`イベント用の`action`値(`created`/`new_permissions_accepted`/`unsuspend`)しかカバーしておらず、後から追加したリポジトリが`installation_permissions`(D1)へ反映されない不具合を修正した。判定ロジックを`isInstallationPermissionsUpdateAction`として関数に切り出し、`added`/`removed`を追加した。
+
+#### 得たもの(教訓)
+
+- GitHubの似た名前の2つのイベント(`installation`と`installation_repositories`)は、`action`フィールドの値集合が異なる。片方だけを想定した判定ロジックは、もう片方のイベントが届いたときに静かに無視してしまう(エラーにならないため気づきにくい)。
+- この修正自体はコードのpushだけで即時反映されるわけではなく、GitHub App側が次に該当Webhookを再送するタイミング(または手動でのアクセス再設定)まで待つ必要がある、という運用上の制約も判明した。
