@@ -572,6 +572,46 @@ export type SummaryModalRow = {
   primary_model?: string | null;
 };
 
+function escHtmlForSummaryLink(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * /view・/ai-summary/:id のPR表示欄を組み立てる。
+ *
+ * push由来の要約(event_type='push_summary')はpr_numberがnullで、pr_urlには
+ * PRのURLではなくpushのcompare URLが入る。この関数を導入する前は
+ * `PR #${row.pr_number}`をpr_numberの有無に関わらず常に出していたため、
+ * push由来の行では文字通り「PR #null」と表示されていた(2026-10-04発覚)。
+ */
+export function formatSummaryPrLink(row: Pick<SummaryModalRow, 'pr_number' | 'pr_url'>): string {
+  if (row.pr_number == null) {
+    return row.pr_url ? `<a href="${escHtmlForSummaryLink(row.pr_url)}">比較を見る</a>` : '(PRなし)';
+  }
+  return row.pr_url
+    ? `<a href="${escHtmlForSummaryLink(row.pr_url)}">PR #${row.pr_number}</a>`
+    : `PR #${row.pr_number}`;
+}
+
+/**
+ * /view・/ai-summary/:id のDiff長欄を組み立てる。
+ *
+ * push由来の要約はdiff本体を取得しておらずdiff_lengthが常に0になるため、
+ * 「0 文字」とだけ出すと「差分を取得したが空だった」ように見えて誤解を招く
+ * (実際には取得自体を行っていない)。pr_numberがnull(push)のときは
+ * 「取得していない」ことを明示する。
+ */
+export function formatSummaryDiffLength(row: Pick<SummaryModalRow, 'pr_number' | 'diff_length'>): string {
+  if (row.pr_number == null) {
+    return '(push: 差分は取得していません)';
+  }
+  return `${row.diff_length ?? 0} 文字`;
+}
+
 export type SlackModalView = {
   type: 'modal';
   title: { type: 'plain_text'; text: string };

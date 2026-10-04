@@ -12,6 +12,8 @@ import {
   sanitizeBoxDrawing,
   detectCommitAgentFromText,
   detectCommitAgentFromPrText,
+  formatSummaryPrLink,
+  formatSummaryDiffLength,
   WORKER_BASE_URL,
   DEFAULT_AI_MODEL,
   type AiBinding,
@@ -1354,5 +1356,52 @@ describe('Slack Block Kit 制約: buildSummaryFallbackBlocks', () => {
     const result = buildSummaryFallbackBlocks({ ...baseRow, summary: null });
     expect(result.text.length).toBeGreaterThan(0);
     expect(result.text).toContain('要約なし');
+  });
+});
+
+// 対象: formatSummaryPrLink / formatSummaryDiffLength
+// (/view・/ai-summary/:idのPR欄・Diff長欄組み立て)。
+//
+// 背景(2026-10-04): push由来の要約(pr_number=null、pr_urlはcompare URL)を
+// 追加した際、修正前のコードは常に`PR #${row.pr_number}`を出していたため
+// 「PR #null」と表示されていた。Diff長も「0 文字」とだけ出ると、push由来の
+// 「取得していない」状態と、PRでdiff取得が実際に0文字だった状態を
+// 区別できなかった。
+describe('formatSummaryPrLink', () => {
+  it('pr_numberがある場合はPR #番号のリンクを返す', () => {
+    const result = formatSummaryPrLink({ pr_number: 42, pr_url: 'https://github.com/x/y/pull/42' });
+    expect(result).toBe('<a href="https://github.com/x/y/pull/42">PR #42</a>');
+  });
+
+  it('pr_numberがあってpr_urlが無い場合はリンク無しでPR #番号を返す', () => {
+    const result = formatSummaryPrLink({ pr_number: 42, pr_url: null });
+    expect(result).toBe('PR #42');
+  });
+
+  it('pr_numberがnull(push由来)でpr_urlがある場合は「PR #null」にならず比較リンクを返す', () => {
+    const result = formatSummaryPrLink({ pr_number: null, pr_url: 'https://github.com/x/y/compare/a...b' });
+    expect(result).not.toContain('null');
+    expect(result).toBe('<a href="https://github.com/x/y/compare/a...b">比較を見る</a>');
+  });
+
+  it('pr_numberもpr_urlも無い場合は(PRなし)を返す', () => {
+    const result = formatSummaryPrLink({ pr_number: null, pr_url: null });
+    expect(result).toBe('(PRなし)');
+  });
+});
+
+describe('formatSummaryDiffLength', () => {
+  it('PR由来(pr_numberあり)ではdiff_lengthをそのまま文字数として表示する', () => {
+    expect(formatSummaryDiffLength({ pr_number: 1, diff_length: 123 })).toBe('123 文字');
+  });
+
+  it('PR由来でdiff_lengthがnullなら0文字として表示する', () => {
+    expect(formatSummaryDiffLength({ pr_number: 1, diff_length: null })).toBe('0 文字');
+  });
+
+  it('push由来(pr_numberがnull)では「0 文字」ではなく未取得である旨を表示する', () => {
+    const result = formatSummaryDiffLength({ pr_number: null, diff_length: 0 });
+    expect(result).not.toBe('0 文字');
+    expect(result).toContain('取得していません');
   });
 });
