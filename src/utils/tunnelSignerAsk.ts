@@ -33,46 +33,6 @@ export function resolveAskgkCommand(input: string): string {
 }
 
 /**
- * `/neko askgk claude_prompt="<質問文>"` 形式の引数から質問文を取り出す。
- * 従来の自由記述形式(`/neko askgk <質問文>`)と両立させるため、`claude_prompt="`
- * で始まらない入力はnullを返し、呼び出し元は従来通り全文をそのまま質問文として
- * 扱う(後方互換、既存の挙動を壊さない)。
- *
- * 値中の `\"` は `"` に、`\\` は `\` に戻す(JSON文字列リテラルと同じ規則)。
- * 閉じクォートが無い場合(引用符の対応が壊れている)はnullを返す。
- *
- * ここで取り出した質問文は、呼び出し元がaskTunnelSignerへ渡す際に
- * JSON.stringifyされる(tunnelSignerAsk.ts askTunnelSigner参照)ため、
- * rust-worker-sqlx-d1へ送るAPIペイロード上で改めて正しくエスケープされる。
- */
-export function parseAskgkClaudePromptArg(rawArgs: string): string | null {
-  const trimmed = rawArgs.trim();
-  const prefix = 'claude_prompt="';
-  if (!trimmed.startsWith(prefix)) return null;
-
-  const body = trimmed.slice(prefix.length);
-  let value = '';
-  let i = 0;
-  while (i < body.length) {
-    const ch = body[i];
-    if (ch === '\\' && i + 1 < body.length) {
-      const next = body[i + 1];
-      if (next === '"' || next === '\\') {
-        value += next;
-        i += 2;
-        continue;
-      }
-    }
-    if (ch === '"') {
-      return value;
-    }
-    value += ch;
-    i += 1;
-  }
-  return null;
-}
-
-/**
  * `/neko askgk <質問文>` の実処理。rust-worker-sqlx-d1(本リポジトリと同じ
  * Cloudflareアカウント内の別Worker)のPOST /tunnel-signer/sendをService
  * Binding経由で呼ぶ。
@@ -84,6 +44,12 @@ export function parseAskgkClaudePromptArg(rawArgs: string): string | null {
  * 公開URLへの通常fetch()ではなくService Bindingを使う理由は
  * dynamicWorkerPing.tsと同じ(*.workers.dev同士の直接fetch()はCloudflareに
  * HTTP 404 error code: 1042で拒否される)。
+ *
+ * `message`は呼び出し元(aichatSlashCommand.ts)が`/neko askgk`の後ろの生テキストを
+ * そのまま渡す想定。`claude_prompt="..."`のような接頭語付きの文字列が来ても、
+ * ここで解析・除去してはならない — tunnels.rb側がこの接頭語を見て自由記述の
+ * 質問と区別しているため(2026-10-04、接頭語を剥がして渡してしまい先方の
+ * 判定が効かなくなる不具合があった)。
  */
 export async function askTunnelSigner(fetcher: AskFetcher, message: string): Promise<string> {
   const payload = JSON.stringify({ status: 'healthy', format: 'json', message: resolveAskgkCommand(message) });

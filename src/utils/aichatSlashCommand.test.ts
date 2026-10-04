@@ -860,28 +860,33 @@ describe('/neko askgk claude_prompt="..."', () => {
   const now = new Date('2026-10-04T12:00:00Z');
   const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
 
-  it('claude_prompt="<質問文>"から質問文を取り出し、スペースを保持したままaskTunnelSignerへ渡す', async () => {
+  // tunnels.rb(先方)が`claude_prompt="..."`という接頭語そのものを見て、
+  // 自由記述の質問と区別している。そのため、ここで接頭語を解析・除去して
+  // 中身の値だけを渡してはならず、askgkの後ろの生テキストを丸ごと
+  // (接頭語・引用符を含めて)askTunnelSignerへ渡す(2026-10-04、
+  // 接頭語を剥がして渡してしまい先方の判定が効かなくなる不具合があった)。
+  it('claude_prompt="..."を接頭語ごとそのままaskTunnelSignerへ渡す', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('にゃーん');
     const result = await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="元気 ですか"',
       now,
       { ...unusedDeps, askTunnelSigner }
     );
-    expect(askTunnelSigner).toHaveBeenCalledWith('元気 ですか');
+    expect(askTunnelSigner).toHaveBeenCalledWith('claude_prompt="元気 ですか"');
     expect(result).toEqual({ handled: true, response: expect.stringContaining('にゃーん') });
   });
 
-  it('値中のエスケープされた引用符を元に戻してから渡す', async () => {
+  it('値中のエスケープされた引用符もそのまま(解釈せず)渡す', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('ok');
     await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="\\"引用\\"テスト"',
       now,
       { ...unusedDeps, askTunnelSigner }
     );
-    expect(askTunnelSigner).toHaveBeenCalledWith('"引用"テスト');
+    expect(askTunnelSigner).toHaveBeenCalledWith('claude_prompt="\\"引用\\"テスト"');
   });
 
-  it('結果をMarkdown見出し・質問欄付きで表示する', async () => {
+  it('結果をMarkdown見出し・質問欄付きで表示する(質問欄には送信した生テキストそのものを表示)', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
     const result = await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="テスト質問"',
@@ -890,13 +895,19 @@ describe('/neko askgk claude_prompt="..."', () => {
     );
     expect(result).toEqual({
       handled: true,
-      response: '## /neko askgk\n**質問**: テスト質問\n\n回答本文',
+      response: '## /neko askgk\n**質問**: claude_prompt="テスト質問"\n\n回答本文',
     });
   });
 
-  it('claude_prompt=形式でなければ従来通り全文を自由記述の質問文として渡す(後方互換)', async () => {
+  it('claude_prompt=形式でなくても従来通り全文を自由記述の質問文として渡す(後方互換)', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('ok');
     await interpretAichatSlashCommand('/neko askgk 元気？', now, { ...unusedDeps, askTunnelSigner });
     expect(askTunnelSigner).toHaveBeenCalledWith('元気？');
+  });
+
+  it('複数の空白を含む自由記述でも、元の空白をそのまま保持して渡す(parts.join(\' \')による潰れを防ぐ)', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    await interpretAichatSlashCommand('/neko askgk  元気    ですか', now, { ...unusedDeps, askTunnelSigner });
+    expect(askTunnelSigner).toHaveBeenCalledWith('元気    ですか');
   });
 });
