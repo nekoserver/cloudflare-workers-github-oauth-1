@@ -437,7 +437,7 @@ import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/
 import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, formatSummaryPrLink, formatSummaryDiffLength, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
@@ -25092,7 +25092,7 @@ app.get('/view', async (c) => {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
   const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
-  const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
+  const prLink = formatSummaryPrLink(row);
 
   const reviewRows = (reviews.results ?? []).map((r: any) =>
     `<tr><td>${escHtml(r.rating)}</td><td>${escHtml(r.reviewer_name ?? '')}</td><td>${escHtml(r.comment ?? '')}</td><td>${escHtml(r.created_at ?? '')}</td></tr>`
@@ -25113,7 +25113,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>モデル切替</dt><dd>${escHtml(describeModelSwitch(row))}</dd>
-<dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
+<dt>Diff長</dt><dd>${formatSummaryDiffLength(row)}</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
@@ -25218,7 +25218,7 @@ app.get('/ai-summary/:id', async (c) => {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
   const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
-  const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
+  const prLink = formatSummaryPrLink(row);
 
   const reviewRows = (reviews.results ?? []).map((r: any) =>
     `<tr><td>${escHtml(r.rating)}</td><td>${escHtml(r.reviewer_name ?? '')}</td><td>${escHtml(r.comment ?? '')}</td><td>${escHtml(r.created_at ?? '')}</td></tr>`
@@ -25239,7 +25239,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>モデル切替</dt><dd>${escHtml(describeModelSwitch(row))}</dd>
-<dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
+<dt>Diff長</dt><dd>${formatSummaryDiffLength(row)}</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
