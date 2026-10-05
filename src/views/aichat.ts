@@ -5295,7 +5295,12 @@ export function getAiChatPage(user: {
       var q = kwClassifySearchInput.value.trim().toLowerCase();
       kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
         var kw = (el.dataset.keyword || '').toLowerCase();
-        el.style.display = (!q || kw.indexOf(q) >= 0) ? '' : 'none';
+        // 大分類選択によるグレーアウト中分類の排除(classList、
+        // applyKwBadgeColors参照)と、検索窓によるフィルタは独立した2つの
+        // 条件なので、両方を満たした場合だけ表示する。
+        var matchesSearch = !q || kw.indexOf(q) >= 0;
+        var hiddenByGroupDim = el.classList.contains('kw-group-dim-hidden');
+        el.style.display = (matchesSearch && !hiddenByGroupDim) ? '' : 'none';
       });
     }
 
@@ -5373,6 +5378,7 @@ export function getAiChatPage(user: {
     }
 
     function applyKwBadgeColors() {
+      var dimmedCatIds = {};
       kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
         var el = kwEl, cid = el.dataset.catId;
         var catIds = [];
@@ -5415,12 +5421,27 @@ export function getAiChatPage(user: {
         catEl.style.setProperty('--kw-pal-cat', displayColor);
         catEl.style.setProperty('--kw-pal-cat-bg', displayColor + '22');
         catEl.classList.toggle('kw-cat-badge-dimmed', isDimmed);
+        if (isDimmed) dimmedCatIds[catId] = true;
         if (selectedCats[catId]) {
           catEl.classList.add('kw-cat-badge-active');
         } else {
           catEl.classList.remove('kw-cat-badge-active');
         }
       });
+      // 大分類選択中にグレーアウトされた(その大分類に属さない)中分類カテゴリの
+      // キーワードは、画面下のバッジ群エリアから一旦排除する。未分類
+      // キーワード(catIds.length === 0)はどの中分類にも属さないため対象外。
+      // 複数カテゴリに属すキーワードは、いずれか1つでも非グレーアウトの
+      // カテゴリに属していれば表示を維持する。
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
+        var el = kwEl, cid = el.dataset.catId;
+        var catIds = [];
+        try { catIds = JSON.parse(el.dataset.catIds || '[]'); } catch(e) {}
+        if (catIds.length === 0 && cid) catIds = [cid];
+        var allDimmed = catIds.length > 0 && catIds.every(function(id) { return dimmedCatIds[String(id)]; });
+        el.classList.toggle('kw-group-dim-hidden', allDimmed);
+      });
+      applyKwClassifySearchFilter();
     }
 
     function renderKwClassifyList() {
