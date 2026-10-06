@@ -16,7 +16,7 @@ it.each([false, true])('loads and searches logs after a production build (minify
       window.HTMLDialogElement.prototype.showModal = function() { this.setAttribute('open', ''); };
       window.HTMLDialogElement.prototype.close = function() { this.removeAttribute('open'); };
       window.HTMLElement.prototype.scrollIntoView = vi.fn();
-      window.fetch = vi.fn(async (url: any) => ({ ok: true, json: async () => String(url).endsWith('/keywords') ? { keywords: [{ keyword: '本番ビルド', count: 2 }] } : String(url).endsWith('/1') ? { answer: '## 回答\n\n**本番ビルド**' } : ({ items: [{ id: 1, has_keywords: true, question: 'MCPのキーを使うには？', thread_id: 'thread-1', created_at: '2026-10-07' }], nextCursor: null }) })) as any;
+      window.fetch = vi.fn(async (url: any) => ({ ok: true, json: async () => String(url).endsWith('/keywords') ? { keywords: [{ keyword: '本番ビルド', count: 2, categoryIds: [1] }], categories: [{ id: 1, name: '開発', count: 1, color: '#336699' }] } : String(url).endsWith('/1') ? { answer: '## 回答\n\n**本番ビルド**' } : ({ items: [{ id: 1, has_keywords: true, question: 'MCPのキーを使うには？', thread_id: 'thread-1', created_at: '2026-10-07' }], nextCursor: null }) })) as any;
     }
   });
   try {
@@ -30,6 +30,10 @@ it.each([false, true])('loads and searches logs after a production build (minify
     expect(question.querySelector('.markdown-body strong')?.textContent).toBe('本番ビルド');
     (question.querySelector('.keyword-key') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(dom.window.document.querySelector('.keyword-badge')?.textContent).toBe('本番ビルド(2)'));
+    const category = dom.window.document.querySelector('.keyword-category') as HTMLButtonElement;
+    expect(category.textContent).toBe('(1)開発');
+    category.click();
+    expect(dom.window.document.querySelector('.keyword-badge')?.classList.contains('keyword-category-highlight')).toBe(true);
     (dom.window.document.querySelector('.keyword-badge') as HTMLAnchorElement).click();
     await vi.waitFor(() => expect(question.querySelector('.keyword-hit')?.textContent).toBe('本番ビルド'));
     expect(errors).toEqual([]);

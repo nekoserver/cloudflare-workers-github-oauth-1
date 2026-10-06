@@ -11,7 +11,7 @@ function logId(id: number) { return 'abcdef' + (1000 - id).toString(16).padStart
 function fixture() {
   const sql = new DatabaseSync(':memory:');
   sql.exec('CREATE TABLE ai_chat_shares(id TEXT PRIMARY KEY, user_id TEXT, model TEXT, deleted_at TEXT, question TEXT, answer TEXT, thread_id TEXT, created_at TEXT)');
-  sql.exec('CREATE TABLE aichat_search_log(user_id TEXT, keyword TEXT, share_id TEXT)');
+  sql.exec('CREATE TABLE aichat_search_log(user_id TEXT, keyword TEXT, share_id TEXT); CREATE TABLE aichat_keyword_categories(id INTEGER, user_id TEXT, name TEXT, color TEXT); CREATE TABLE aichat_keyword_category_map(user_id TEXT, keyword TEXT, category_id INTEGER)');
   const insert = sql.prepare('INSERT INTO ai_chat_shares VALUES(?,?,?,?,?,?,?,?)');
   for (let id = 1; id <= 103; id++) insert.run(logId(id), 'alice', 'codex', null, '/neko askgk codex_prompt="質問' + id + '"', '回答' + id, 'thread-1', new Date(1700000000000 + Math.max(id, 4) * 1000).toISOString());
   insert.run(logId(104), 'bob', 'codex', null, 'private', 'secret', null, '2026-10-07');
@@ -52,12 +52,16 @@ describe('Codex question tree', () => {
       ('other-model','alice','other',NULL,'別モデル','MCP SQLite SQLite',NULL,'2026-10-08'),
       ('private-keywords','bob','codex',NULL,'秘密','MCP MCP MCP',NULL,'2026-10-08'),
       ('deleted-keywords','alice','codex','deleted','削除','MCP MCP MCP',NULL,'2026-10-08');
-      INSERT INTO aichat_search_log VALUES ('alice','MCP','keyword-answer'),('alice','MCP','other-model'),('alice','SQLite','keyword-answer'),('alice','不在','keyword-answer'),('bob','回答','private-keywords');`);
+      INSERT INTO aichat_search_log VALUES ('alice','MCP','keyword-answer'),('alice','MCP','other-model'),('alice','SQLite','keyword-answer'),('alice','不在','keyword-answer'),('bob','回答','private-keywords');
+      INSERT INTO aichat_keyword_categories VALUES (1,'alice','開発','#336699'),(2,'alice','データベース','#990000'),(3,'bob','秘密分類','#000000'),(4,'alice','無関係','#000000');
+      INSERT INTO aichat_keyword_category_map VALUES ('alice','MCP',1),('alice','SQLite',1),('alice','SQLite',2),('bob','MCP',3),('alice','MCP',3),('alice','不在',4);`);
     const list: any = await (await request('/api/mcp-sample/codex-questions')).json();
     expect(list.items.find((row: any) => row.id === 'keyword-answer').has_keywords).toBe(true);
     expect(list.items.find((row: any) => row.id === logId(103)).has_keywords).toBe(false);
     const data: any = await (await request('/api/mcp-sample/codex-questions/keyword-answer/keywords')).json();
-    expect(data.keywords).toEqual([{ keyword: 'MCP', count: 3 }, { keyword: 'SQLite', count: 3 }]);
+    expect(data.keywords).toEqual([{ keyword: 'MCP', count: 3, categoryIds: [1] }, { keyword: 'SQLite', count: 3, categoryIds: [1, 2] }]
+    );
+    expect(data.categories).toEqual([{ id: 1, name: '開発', color: '#336699', count: 2 }, { id: 2, name: 'データベース', color: '#990000', count: 1 }]);
     expect((await request('/api/mcp-sample/codex-questions/private-keywords/keywords')).status).toBe(404);
     expect((await request('/api/mcp-sample/codex-questions/deleted-keywords/keywords')).status).toBe(404);
     sql.close();

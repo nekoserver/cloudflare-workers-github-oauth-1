@@ -60,5 +60,25 @@ codexQuestionTreeRoutes.get('/api/mcp-sample/codex-questions/:id/keywords', auth
     FROM keywords k JOIN ai_chat_shares s ON s.user_id = ? AND s.deleted_at IS NULL AND instr(s.answer, k.keyword) > 0
     GROUP BY k.keyword ORDER BY count DESC, k.keyword ASC
   `).bind(userId, row.answer, userId).all<{ keyword: string; count: number }>();
-  return c.json({ keywords: result.results });
+  const memberships = await c.env.DB.prepare(`
+    SELECT DISTINCT m.keyword, c.id, c.name, c.color
+    FROM aichat_keyword_category_map m
+    JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = m.user_id
+    WHERE m.user_id = ? AND m.keyword <> '' AND instr(?, m.keyword) > 0
+      AND EXISTS (SELECT 1 FROM aichat_search_log k WHERE k.user_id = m.user_id AND k.keyword = m.keyword)
+    ORDER BY c.id
+  `).bind(userId, row.answer).all<{ keyword: string; id: number; name: string; color: string }>();
+  const keywordCategories = new Map<string, number[]>();
+  const categories = new Map<number, { id: number; name: string; color: string; keywords: Set<string> }>();
+  for (const membership of memberships.results) {
+    if (!categories.has(membership.id)) categories.set(membership.id, { id: membership.id, name: membership.name, color: membership.color, keywords: new Set() });
+    categories.get(membership.id)!.keywords.add(membership.keyword);
+    if (!keywordCategories.has(membership.keyword)) keywordCategories.set(membership.keyword, []);
+    keywordCategories.get(membership.keyword)!.push(membership.id);
+  }
+  return c.json({
+    keywords: result.results.map(item => ({ ...item, categoryIds: keywordCategories.get(item.keyword) || [] })),
+    categories: Array.from(categories.values()).map(({ keywords, ...category }) => ({ ...category, count: keywords.size }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+  });
 });
