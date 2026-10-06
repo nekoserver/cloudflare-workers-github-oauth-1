@@ -3782,6 +3782,7 @@ export function getAiChatPage(user: {
     var linkedQuestionsFilter = 'all';
     var linkedQuestionsSortOrder = 'default';
     var subqueriesAllItems = [];
+    var subqueriesAddedItems = [];
     var sqSelectedCats = {};
     var sqSelectedGroupId = null;
     var subqueriesCats = [];
@@ -4222,6 +4223,14 @@ export function getAiChatPage(user: {
     linkedQuestionsOverlay.addEventListener('click', function(e) { if (e.target === linkedQuestionsOverlay) closeLinkedQuestions(); });
 
     // ===== サブクエリ一覧 =====
+    function mergeSubqueryItems(items) {
+      var byId = new Map();
+      (items || []).concat(subqueriesAddedItems).forEach(function(item) {
+        byId.set(String(item.id), item);
+      });
+      return Array.from(byId.values());
+    }
+
     function readSubqueriesResponse(response) {
       return response.json().then(function(data) {
         if (!response.ok || data.error) throw new Error(data.error || 'サブクエリの読み出しに失敗しました');
@@ -4433,7 +4442,7 @@ export function getAiChatPage(user: {
       sqSelectedGroupId = null;
       subqueriesListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       Promise.allSettled([
-        fetch('/api/aichat/subqueries', { credentials: 'same-origin' }).then(readSubqueriesResponse),
+        fetch('/api/aichat/subqueries', { credentials: 'same-origin', cache: 'no-store' }).then(readSubqueriesResponse),
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
@@ -4443,7 +4452,7 @@ export function getAiChatPage(user: {
         var kwData    = results[1].status === 'fulfilled' ? results[1].value : {};
         var catData   = results[2].status === 'fulfilled' ? results[2].value : {};
         var groupData = results[3].status === 'fulfilled' ? results[3].value : {};
-        subqueriesAllItems = sqData.items || [];
+        subqueriesAllItems = mergeSubqueryItems(sqData.items);
         subqueriesCats = catData.categories || [];
         subqueriesGroups = (groupData.groups || []).slice().sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
         subqueriesKwCatMap = {};
@@ -4488,7 +4497,7 @@ export function getAiChatPage(user: {
       subqueriesAddSubmit.style.display = '';
       subqueriesAddMsg.textContent = '';
       if (!val) { subqueriesAddSubmit.style.display = 'none'; return; }
-      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+      fetch('/api/aichat/subqueries', { credentials: 'same-origin', cache: 'no-store' })
         .then(readSubqueriesResponse)
         .then(function(d) {
           var exists = (d.items || []).some(function(x) { return x.query === val; });
@@ -4519,13 +4528,14 @@ export function getAiChatPage(user: {
             sqSelectedCats = {};
             sqSelectedGroupId = null;
             if (d.item) {
-              subqueriesAllItems = subqueriesAllItems.filter(function(item) { return item.id !== d.item.id; });
-              subqueriesAllItems.push({ id: d.item.id, query: d.item.query, link_count: 0, keywords: [] });
+              subqueriesAddedItems = subqueriesAddedItems.filter(function(item) { return item.id !== d.item.id; });
+              subqueriesAddedItems.push({ id: d.item.id, query: d.item.query, link_count: 0, keywords: [] });
+              subqueriesAllItems = mergeSubqueryItems(subqueriesAllItems);
               renderSubqueriesList();
             }
-            fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+            fetch('/api/aichat/subqueries', { credentials: 'same-origin', cache: 'no-store' })
               .then(readSubqueriesResponse)
-              .then(function(d2) { subqueriesAllItems = d2.items || []; renderSubqueriesList(); })
+              .then(function(d2) { subqueriesAllItems = mergeSubqueryItems(d2.items); renderSubqueriesList(); })
               .catch(function(err) { subqueriesAddMsg.textContent = '追加しましたが、一覧の再取得に失敗しました: ' + err.message; });
           } else {
             subqueriesAddMsg.textContent = d.error || '追加に失敗しました';
@@ -4697,33 +4707,48 @@ export function getAiChatPage(user: {
       addSubqueryMsg.textContent = '';
       selectedSubqueryId = null;
       addSubqueryList.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+      function renderChoices(items) {
+        items = items.slice().sort(function(a, b) { return Number(b.id) - Number(a.id); });
+        if (items.length === 0) {
+          addSubqueryList.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
+          return;
+        }
+        var html = '';
+        items.forEach(function(item) {
+          html += '<div class="subquery-select-item" data-id="' + escHtml(String(item.id)) + '" data-query="' + escHtml(item.query) + '" style="padding:6px 8px;cursor:pointer;border-radius:4px;border:1px solid var(--border-color);">';
+          html += '<span style="color:var(--text-muted);margin-right:6px;">' + escHtml(String(item.id)) + '</span>' + escHtml(item.query);
+          html += '</div>';
+        });
+        addSubqueryList.innerHTML = html;
+        addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(el) {
+          el.addEventListener('click', function() {
+            addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(e2) {
+              e2.style.background = '';
+            });
+            el.style.background = 'var(--accent-color-light, rgba(102,126,234,0.12))';
+            selectedSubqueryId = Number(el.getAttribute('data-id'));
+            addSubquerySelected.value = el.getAttribute('data-query');
+          });
+        });
+      }
+      // 保存成功の応答で得た項目を再取得の完了前から選択できるようにする。
+      var knownItems = mergeSubqueryItems(subqueriesAllItems);
+      if (knownItems.length) renderChoices(knownItems);
+      fetch('/api/aichat/subqueries', { credentials: 'same-origin', cache: 'no-store' })
         .then(readSubqueriesResponse)
         .then(function(d) {
-          var items = d.items || [];
-          if (items.length === 0) {
-            addSubqueryList.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
-            return;
-          }
-          var html = '';
-          items.forEach(function(item) {
-            html += '<div class="subquery-select-item" data-id="' + escHtml(String(item.id)) + '" data-query="' + escHtml(item.query) + '" style="padding:6px 8px;cursor:pointer;border-radius:4px;border:1px solid var(--border-color);">';
-            html += '<span style="color:var(--text-muted);margin-right:6px;">' + escHtml(String(item.id)) + '</span>' + escHtml(item.query);
-            html += '</div>';
-          });
-          addSubqueryList.innerHTML = html;
-          addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(el) {
-            el.addEventListener('click', function() {
-              addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(e2) {
-                e2.style.background = '';
-              });
-              el.style.background = 'var(--accent-color-light, rgba(102,126,234,0.12))';
-              selectedSubqueryId = Number(el.getAttribute('data-id'));
-              addSubquerySelected.value = el.getAttribute('data-query');
-            });
-          });
+          subqueriesAllItems = mergeSubqueryItems(d.items);
+          renderChoices(subqueriesAllItems);
         })
-        .catch(function(err) { addSubqueryList.textContent = '取得に失敗しました: ' + err.message; });
+        .catch(function(err) {
+          var items = mergeSubqueryItems(subqueriesAllItems);
+          if (items.length) {
+            renderChoices(items);
+            addSubqueryMsg.textContent = '保存済みの候補を表示しています。再取得に失敗しました: ' + err.message;
+          } else {
+            addSubqueryList.textContent = '取得に失敗しました: ' + err.message;
+          }
+        });
     }
 
     function closeAddSubqueryModal() {

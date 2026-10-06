@@ -40,6 +40,7 @@ describe('新規サブクエリの保存から読み出し', () => {
     const saved = await added.json() as { item: { id: number; query: string }; inserted: boolean };
     expect(saved.inserted).toBe(true);
     const listed = await app.request('/api/aichat/subqueries', { headers }, env);
+    expect(listed.headers.get('Cache-Control')).toBe('no-store');
     const result = await listed.json() as { items: Array<{ id: number; query: string; link_count: number; keywords: unknown[] }> };
     expect(result.items).toHaveLength(101);
     expect(result.items).toContainEqual({ ...saved.item, link_count: 0, keywords: [] });

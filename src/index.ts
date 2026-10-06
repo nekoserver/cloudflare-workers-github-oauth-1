@@ -8659,6 +8659,7 @@ app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
  * サブクエリマスタ一覧取得 API
  */
 app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const [rows, kwRows] = await Promise.all([
     c.env.DB.prepare(

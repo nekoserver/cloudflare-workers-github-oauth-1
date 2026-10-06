@@ -2,10 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import { getAiChatPage } from './views/aichat';
 
-function setup(items: unknown[], apiError?: string) {
+function setup(items: unknown[], apiError?: string, savedItems: unknown[] = []) {
   document.body.innerHTML = '<div id="modal"></div><div id="list"></div><input id="selected"><input id="url"><div id="msg"></div>';
   const html = getAiChatPage({ username: 'test', aiChatModel: 'model' });
-  const reader = html.slice(html.indexOf('    function readSubqueriesResponse('), html.indexOf('    var subqueriesOverlay'));
+  const reader = html.slice(html.indexOf('    function mergeSubqueryItems('), html.indexOf('    var subqueriesOverlay'));
   const source = reader + html.slice(html.indexOf('    function openAddSubqueryModal('), html.indexOf('    function closeAddSubqueryModal('));
   const list = document.getElementById('list')!;
   const selected = document.getElementById('selected') as HTMLInputElement;
@@ -15,7 +15,7 @@ function setup(items: unknown[], apiError?: string) {
     getNextZ: () => 100, escHtml: (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     fetch: async () => ({ ok: !apiError, json: async () => apiError ? { error: apiError } : { items } }),
   };
-  const readSelection = new Function(...Object.keys(bindings), 'var selectedSubqueryId = null;\n' + source + '\nopenAddSubqueryModal(); return function() { return selectedSubqueryId; };')(...Object.values(bindings));
+  const readSelection = new Function(...Object.keys(bindings), 'var selectedSubqueryId = null; var subqueriesAllItems = []; var subqueriesAddedItems = ' + JSON.stringify(savedItems) + ';\n' + source + '\nopenAddSubqueryModal(); return function() { return selectedSubqueryId; };')(...Object.values(bindings));
   return { list, selected, readSelection };
 }
 
@@ -39,7 +39,7 @@ describe('新規サブクエリの選択', () => {
   });
   it('追加直後は分類フィルターを解除し、再取得失敗でも保存した質問を保持する', async () => {
     const html = getAiChatPage({ username: 'test', aiChatModel: 'model' });
-    const reader = html.slice(html.indexOf('    function readSubqueriesResponse('), html.indexOf('    var subqueriesOverlay'));
+    const reader = html.slice(html.indexOf('    function mergeSubqueryItems('), html.indexOf('    var subqueriesOverlay'));
     const handlerSource = html.slice(html.indexOf("    subqueriesAddSubmit.addEventListener('click'"), html.indexOf('    // ===== サブクエリ選択→質問一覧モーダル ====='));
     const button = document.createElement('button');
     const input = document.createElement('input'); input.value = '新しい質問';
@@ -54,7 +54,7 @@ describe('新規サブクエリの選択', () => {
       },
     };
     const state = new Function(...Object.keys(bindings),
-      'var subqueriesAllItems = []; var sqSelectedCats = { selected: true }; var sqSelectedGroupId = 3;\n' + reader + handlerSource +
+      'var subqueriesAllItems = []; var subqueriesAddedItems = []; var sqSelectedCats = { selected: true }; var sqSelectedGroupId = 3;\n' + reader + handlerSource +
       '\nreturn function() { return { items: subqueriesAllItems, categories: sqSelectedCats, group: sqSelectedGroupId }; };')(...Object.values(bindings));
     button.click();
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -65,7 +65,7 @@ describe('新規サブクエリの選択', () => {
 
   it('サブクエリ一覧を開く際のAPIエラーも未登録扱いにしない', async () => {
     const html = getAiChatPage({ username: 'test', aiChatModel: 'model' });
-    const reader = html.slice(html.indexOf('    function readSubqueriesResponse('), html.indexOf('    var subqueriesOverlay'));
+    const reader = html.slice(html.indexOf('    function mergeSubqueryItems('), html.indexOf('    var subqueriesOverlay'));
     const source = html.slice(html.indexOf('    function openSubqueries()'), html.indexOf('    function closeSubqueries()'));
     const body = document.createElement('div');
     const bindings = {
@@ -75,9 +75,35 @@ describe('新規サブクエリの選択', () => {
       fetch: async (url: string) => ({ ok: !url.endsWith('/subqueries'), json: async () => url.endsWith('/subqueries') ? { error: '一覧取得エラー' } : {} }),
       renderSubqueriesList: () => { throw new Error('失敗を空一覧として描画してはいけない'); },
     };
-    new Function(...Object.keys(bindings), 'var sqSelectedCats, sqSelectedGroupId;\n' + reader + source + '\nopenSubqueries();')(...Object.values(bindings));
+    new Function(...Object.keys(bindings), 'var sqSelectedCats, sqSelectedGroupId; var subqueriesAddedItems = [];\n' + reader + source + '\nopenSubqueries();')(...Object.values(bindings));
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(body.textContent).toBe('取得に失敗しました: 一覧取得エラー');
+  });
+
+  it('一覧APIの再取得結果に含まれなくても保存成功した項目を選択できる', async () => {
+    const { list, selected, readSelection } = setup([{ id: 1, query: '以前の質問' }], undefined, [{ id: 101, query: '保存成功した質問', link_count: 0, keywords: [] }]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const entry = list.querySelector<HTMLElement>('[data-id="101"]');
+    expect(entry).not.toBeNull();
+    entry!.click();
+    expect(selected.value).toBe('保存成功した質問');
+    expect(readSelection()).toBe(101);
+  });
+  it('新規追加した項目を先頭に表示し、同じIDを二重表示しない', async () => {
+    const fresh = { id: 101, query: '新しい質問', link_count: 0, keywords: [] };
+    const { list } = setup([{ id: 1, query: '利用済み', link_count: 100 }, fresh], undefined, [fresh]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(list.querySelector('.subquery-select-item')?.getAttribute('data-id')).toBe('101');
+    expect(list.querySelectorAll('[data-id="101"]')).toHaveLength(1);
+  });
+  it('再取得に失敗しても保存済みの項目を選べて、失敗も通知される', async () => {
+    const { list, selected } = setup([], '一覧APIの読み出し失敗', [{ id: 101, query: '保存済みの質問' }]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const entry = list.querySelector<HTMLElement>('[data-id="101"]');
+    expect(entry).not.toBeNull();
+    entry!.click();
+    expect(selected.value).toBe('保存済みの質問');
+    expect(document.getElementById('msg')!.textContent).toContain('一覧APIの読み出し失敗');
   });
 
 });
