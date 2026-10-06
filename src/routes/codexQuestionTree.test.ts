@@ -7,14 +7,15 @@ vi.mock('../middleware/auth', () => ({ authMiddleware: async (c: any, next: any)
 } }));
 import { codexQuestionTreeRoutes } from './codexQuestionTree';
 import { getCodexQuestionTreePage } from '../views/codexQuestionTree';
+function logId(id: number) { return 'abcdef' + (1000 - id).toString(16).padStart(26, '0'); }
 function fixture() {
   const sql = new DatabaseSync(':memory:');
-  sql.exec('CREATE TABLE ai_chat_shares(id INTEGER PRIMARY KEY, user_id TEXT, model TEXT, deleted_at TEXT, question TEXT, answer TEXT, thread_id TEXT, created_at TEXT)');
+  sql.exec('CREATE TABLE ai_chat_shares(id TEXT PRIMARY KEY, user_id TEXT, model TEXT, deleted_at TEXT, question TEXT, answer TEXT, thread_id TEXT, created_at TEXT)');
   const insert = sql.prepare('INSERT INTO ai_chat_shares VALUES(?,?,?,?,?,?,?,?)');
-  for (let id = 1; id <= 103; id++) insert.run(id, 'alice', 'codex', null, '/neko askgk codex_prompt="質問' + id + '"', '回答' + id, 'thread-1', '2026-10-07');
-  insert.run(104, 'bob', 'codex', null, 'private', 'secret', null, '2026-10-07');
-  insert.run(105, 'alice', 'other', null, 'other', 'answer', null, '2026-10-07');
-  insert.run(106, 'alice', 'codex', 'deleted', 'deleted', 'answer', null, '2026-10-07');
+  for (let id = 1; id <= 103; id++) insert.run(logId(id), 'alice', 'codex', null, '/neko askgk codex_prompt="質問' + id + '"', '回答' + id, 'thread-1', new Date(1700000000000 + Math.max(id, 4) * 1000).toISOString());
+  insert.run(logId(104), 'bob', 'codex', null, 'private', 'secret', null, '2026-10-07');
+  insert.run(logId(105), 'alice', 'other', null, 'other', 'answer', null, '2026-10-07');
+  insert.run(logId(106), 'alice', 'codex', 'deleted', 'deleted', 'answer', null, '2026-10-07');
   const DB = { prepare(query: string) { return { bind(...values: any[]) { return {
     async all() { return { results: sql.prepare(query).all(...values) }; },
     async first() { return sql.prepare(query).get(...values); }
@@ -22,16 +23,25 @@ function fixture() {
   return { sql, request: (url: string, auth = true) => codexQuestionTreeRoutes.request(url, { headers: auth ? { Authorization: 'test' } : {} }, { DB }) };
 }
 describe('Codex question tree', () => {
+  it('retrieves answers using the original hexadecimal text ID', async () => {
+    const { sql, request } = fixture();
+    try {
+      const response = await request('/api/mcp-sample/codex-questions/' + logId(103));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ id: logId(103), answer: '回答103' });
+    } finally { sql.close(); }
+  });
   it('paginates Codex logs without exposing other users, deleted rows or other models', async () => {
     const { sql, request } = fixture();
     const first = await request('/api/mcp-sample/codex-questions');
     expect(first.headers.get('Cache-Control')).toBe('no-store');
     const page: any = await first.json();
     expect(page.items).toHaveLength(100); expect(page.items[0].question).toBe('質問103');
-    const next: any = await (await request('/api/mcp-sample/codex-questions?before=' + page.nextCursor)).json();
+    const next: any = await (await request('/api/mcp-sample/codex-questions?before=' + encodeURIComponent(page.nextCursor))).json();
     expect(next.items).toHaveLength(3); expect(next.nextCursor).toBeNull();
-    for (const id of [104, 105, 106]) expect((await request('/api/mcp-sample/codex-questions/' + id)).status).toBe(404);
-    const row: any = await (await request('/api/mcp-sample/codex-questions/103')).json();
+    expect(new Set([...page.items, ...next.items].map(row => row.id)).size).toBe(103);
+    for (const id of [104, 105, 106]) expect((await request('/api/mcp-sample/codex-questions/' + logId(id))).status).toBe(404);
+    const row: any = await (await request('/api/mcp-sample/codex-questions/' + logId(103))).json();
     expect(row.answer).toBe('回答103'); expect(row.question).toBe('質問103'); sql.close();
   });
   it('requires authentication and validates pagination', async () => {

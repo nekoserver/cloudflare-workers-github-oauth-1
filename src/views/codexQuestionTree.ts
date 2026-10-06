@@ -50,8 +50,11 @@ export function getCodexQuestionTreeClientScript(): string {
             answer.textContent = '読み込み中…';
             for (const element of [title, text, answerTitle, answer]) content.appendChild(element);
             question.appendChild(content);
-            fetch('/api/mcp-sample/codex-questions/' + row.id).then(async response => {
-              if (!response.ok) throw new Error('回答を取得できませんでした');
+            fetch('/api/mcp-sample/codex-questions/' + encodeURIComponent(row.id)).then(async response => {
+              if (!response.ok) {
+                const messages = { 400: '質問IDが正しくありません', 401: 'ログインの有効期限が切れています。再ログインしてください', 404: '回答が見つかりません。削除された可能性があります', 503: 'データベースを利用できません' };
+                throw new Error('回答を取得できませんでした（HTTP ' + response.status + '）：' + (messages[response.status] || 'サーバーでエラーが発生しました'));
+              }
               const data = await response.json();
               answer.textContent = data.answer || '回答なし';
             }).catch(error => {
@@ -71,7 +74,7 @@ export function getCodexQuestionTreeClientScript(): string {
     more.disabled = true;
     status.textContent = '読み込み中…';
     try {
-      const response = await fetch('/api/mcp-sample/codex-questions' + (cursor === null ? '' : '?before=' + cursor));
+      const response = await fetch('/api/mcp-sample/codex-questions' + (cursor === null ? '' : '?before=' + encodeURIComponent(cursor)));
       if (!response.ok) throw new Error('ログを取得できませんでした。ログイン状態を確認してください。');
       const data = await response.json();
       rows = rows.concat(data.items);
