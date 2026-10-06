@@ -81,7 +81,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     expect(colorInsert!.values[0]).toBe('codex');
   });
 
-  it('claude_prompt="..."等(codex以外)は従来通りmodel=local/neko・ai_chat_sharesへは保存しない', async () => {
+  it('claude_promptの回答もmodel=neko/askgkとして保存する', async () => {
     const inserts: { sql: string }[] = [];
     const db = {
       prepare: (sql: string) => ({
@@ -100,8 +100,8 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     }, { JWT_SECRET: 'test-secret', DB: db, RUST_WORKER: rustWorkerFetcher('回答本文') });
 
     const body = await response.json() as { response: string; usedModel: string };
-    expect(body.usedModel).toBe('local/neko');
+    expect(body.usedModel).toBe('neko/askgk');
     expect(body.response).toBe('回答本文');
-    expect(inserts.some((i) => i.sql.includes('INSERT INTO ai_chat_shares'))).toBe(false);
+    expect(inserts.some((i) => i.sql.includes('INSERT INTO ai_chat_shares'))).toBe(true);
   });
 });

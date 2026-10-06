@@ -22,7 +22,7 @@ describe('AI chat SSE integration', () => {
     expect(route).toContain("'Content-Type': 'text/event-stream; charset=utf-8'");
     expect(route).toContain("encodeSseEvent('delta'");
     expect(route).toContain("encodeSseEvent('done'");
-    expect(route).toContain('autoSave(response, model, usage)');
+    expect(route).toContain('autoSave(response, model, usage, threadId)');
     expect(route).toContain("return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500)");
   });
 

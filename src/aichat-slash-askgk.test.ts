@@ -12,7 +12,8 @@ describe('/neko askgk', () => {
     });
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
-    expect(result.response).toContain('げんき？');
+    expect(result.response).toBe('にゃーん、元気だよ');
+    expect(result.saveAsAiResponse).toBe(true);
     expect(result.response).toContain('にゃーん、元気だよ');
   });
 
@@ -123,16 +124,9 @@ describe('/neko askgk', () => {
     expect(result.response).toContain('/neko askgk');
   });
 
-  it('formatAskgkResult: 質問文と回答文を見出し付きMarkdownで表示する', () => {
-    const text = formatAskgkResult('げんき？', 'にゃーん');
-    expect(text).toContain('## /neko askgk');
-    expect(text).toContain('げんき？');
-    expect(text).toContain('にゃーん');
-  });
-
-  it('formatAskgkResult: 質問文が空文字(引数なし)の場合は「(引数なし)」と表示する', () => {
-    const text = formatAskgkResult('', '利用可能なコマンド一覧...');
-    expect(text).toContain('(引数なし)');
-    expect(text).toContain('利用可能なコマンド一覧...');
+  it('本文にはreplyのみを返し、Markdownと改行を維持する', () => {
+    const reply = '## 回答\n\n- 項目1\n- 項目2';
+    expect(formatAskgkResult('codex_prompt="質問"', reply)).toBe(reply);
+    expect(formatAskgkResult('', reply)).toBe(reply);
   });
 });

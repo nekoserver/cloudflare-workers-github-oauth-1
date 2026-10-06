@@ -874,7 +874,7 @@ describe('/neko askgk claude_prompt="..."', () => {
       { ...unusedDeps, askTunnelSigner }
     );
     expect(askTunnelSigner).toHaveBeenCalledWith('claude_prompt="元気 ですか"');
-    expect(result).toEqual({ handled: true, response: expect.stringContaining('にゃーん') });
+    expect(result).toEqual({ handled: true, saveAsAiResponse: true, response: expect.stringContaining('にゃーん') });
   });
 
   it('値中のエスケープされた引用符もそのまま(解釈せず)渡す', async () => {
@@ -897,15 +897,16 @@ describe('/neko askgk claude_prompt="..."', () => {
       now,
       { ...unusedDeps, askTunnelSigner }
     );
-    expect(result).toEqual({ handled: true, response: '回答本文' });
+    expect(result).toEqual({ handled: true, saveAsAiResponse: true, response: '回答本文' });
   });
 
-  it('◯◯_prompt="..."形式でない場合は従来通り見出し・質問欄付きのMarkdownを返す', async () => {
+  it('通常の質問も回答本文だけを保存対象として返す', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
     const result = await interpretAichatSlashCommand('/neko askgk テスト質問', now, { ...unusedDeps, askTunnelSigner });
     expect(result).toEqual({
       handled: true,
-      response: '## /neko askgk\n**質問**: テスト質問\n\n回答本文',
+      saveAsAiResponse: true,
+      response: '回答本文',
     });
   });
 
@@ -959,6 +960,7 @@ describe('/neko askgk claude_prompt="..."', () => {
     );
     expect(result).toEqual({
       handled: true,
+      saveAsAiResponse: true,
       response: '実際の回答',
       codexAskgk: { sessionId: 'codex-session-abc' },
     });
@@ -973,6 +975,7 @@ describe('/neko askgk claude_prompt="..."', () => {
     );
     expect(result).toEqual({
       handled: true,
+      saveAsAiResponse: true,
       response: 'バナーもsession idも無い回答',
       codexAskgk: { sessionId: null },
     });

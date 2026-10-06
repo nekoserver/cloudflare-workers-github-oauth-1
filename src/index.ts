@@ -6050,6 +6050,33 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
+  const autoSave = async (response: string, usedModel: string, usage: AiUsage, threadId: string) => {
+    if (!c.env.DB) return {};
+    try {
+      const usernameBytes = new TextEncoder().encode(user.sub);
+      const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+      const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+      const tokenBytes = new Uint8Array(8);
+      crypto.getRandomValues(tokenBytes);
+      const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const now = new Date().toISOString();
+      const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
+      const questionHash = await computeQuestionHash(user.sub, message);
+      const imageId = image ? (await registerOrGetAichatImage(c.env.DB, user.sub, image)).id : null;
+      await c.env.DB.prepare(
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api', imageId, threadId).run();
+      return { shareId, userHash, conversationHash, questionHash, threadId };
+    } catch (saveErr) {
+      logger.warn('AI chat auto-save failed', {
+        error: saveErr instanceof Error ? saveErr.message : 'Unknown',
+        user: user.sub,
+      });
+      return { saveError: saveErr instanceof Error ? saveErr.message : String(saveErr) };
+    }
+  };
+
   const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
@@ -6358,14 +6385,27 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
+    const requestedThreadId = (body.threadId ?? '').trim();
+    if (slashCommand.saveAsAiResponse) {
+      if (requestedThreadId && !isThreadId(requestedThreadId)) {
+        return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
+      }
+      if (requestedThreadId) {
+        if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+        const ownedThread = await c.env.DB.prepare(
+          'SELECT 1 AS found FROM ai_chat_shares WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL LIMIT 1'
+        ).bind(user.sub, requestedThreadId).first<{ found: number }>();
+        if (!ownedThread) return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
+      }
+    }
     // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
     // (ai_chat_sharesへmodel='codex'として保存し、✂️/📔ボタン・左サイドパネル
     // 検索(qsearch)を通常のAI回答と同様に使えるようにする、2026-10-04
-    // ユーザー要望)。それ以外のスラッシュコマンドは従来通り`local/neko`
-    // (ai_chat_sharesへは保存しない、ローカル完結のコマンド応答)のまま。
+    // ユーザー要望)。Codex以外のaskgk応答は共通のautoSaveで保存する。
     if (slashCommand.codexAskgk && c.env.DB) {
       const db = c.env.DB;
       const answer = slashCommand.response;
+      const threadId = requestedThreadId || createThreadId();
       // tunnels.rb(先方)から実トークン数は得られないため、文字数からの
       // 簡易推定値を使う(✂️/📔ボタン表示に使うusage.total_tokens等の
       // 「値が存在すること」の条件を満たすためのものであり、厳密な
@@ -6390,10 +6430,10 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         const codexSource = (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api';
 
         await db.prepare(
-          'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).bind(
           shareId, user.sub, userHash, message, answer, 'codex', now, conversationHash, questionHash,
-          usage.input_tokens, usage.output_tokens, usage.total_tokens, codexSource, slashCommand.codexAskgk.sessionId
+          usage.input_tokens, usage.output_tokens, usage.total_tokens, codexSource, slashCommand.codexAskgk.sessionId, threadId
         ).run();
 
         // codexモデルにまだ色が割り当てられていなければ、未使用の色から割り当てる
@@ -6419,6 +6459,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           systemPromptMode,
           usage,
           shareId,
+          threadId,
         });
       } catch (saveErr) {
         logger.error('Failed to save codex askgk response to ai_chat_shares', {
@@ -6427,13 +6468,25 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         });
         // 保存に失敗しても回答自体は表示する(保存できなかった旨は
         // 握りつぶさずログに残す。CLAUDE.mdルール8)。
-        return jsonUtf8({ response: answer, usedModel: 'codex', systemPromptMode });
+        const saveError = saveErr instanceof Error ? saveErr.message : String(saveErr);
+        if (requestedThreadId) return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saveError }, 500);
+        return jsonUtf8({ response: answer, usedModel: 'codex', systemPromptMode, saveError });
       }
     }
 
+    let saved = {};
+    if (slashCommand.saveAsAiResponse) {
+      saved = await autoSave(slashCommand.response, 'neko/askgk', {
+        input_tokens: null, output_tokens: null, total_tokens: null,
+      }, requestedThreadId || createThreadId());
+      if ('saveError' in saved && requestedThreadId) {
+        return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saved.saveError }, 500);
+      }
+    }
     return jsonUtf8({
+      ...saved,
       response: slashCommand.response,
-      usedModel: 'local/neko',
+      usedModel: slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
       nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
@@ -6468,8 +6521,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     configuredModel,
     textFallbackModel,
   });
-  const rawSource = (body.source ?? '').trim();
-  const source = rawSource === 'textbox' ? 'textbox' : 'api';
 
   const requestedThreadId = (body.threadId ?? '').trim();
   if (requestedThreadId && !isThreadId(requestedThreadId)) {
@@ -6552,32 +6603,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return { text: cleaned, usage };
   };
 
-  const autoSave = async (response: string, usedModel: string, usage: AiUsage) => {
-    if (!c.env.DB) return {};
-    try {
-      const usernameBytes = new TextEncoder().encode(user.sub);
-      const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
-      const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
-        .map((b) => b.toString(16).padStart(2, '0')).join('');
-      const tokenBytes = new Uint8Array(8);
-      crypto.getRandomValues(tokenBytes);
-      const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-      const now = new Date().toISOString();
-      const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
-      const questionHash = await computeQuestionHash(user.sub, message);
-      const imageId = image ? (await registerOrGetAichatImage(c.env.DB, user.sub, image)).id : null;
-      await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, imageId, threadId).run();
-      return { shareId, userHash, conversationHash, questionHash, threadId };
-    } catch (saveErr) {
-      logger.warn('AI chat auto-save failed', {
-        error: saveErr instanceof Error ? saveErr.message : 'Unknown',
-        user: user.sub,
-      });
-      return { saveError: saveErr instanceof Error ? saveErr.message : String(saveErr) };
-    }
-  };
 
   const candidates = [primaryModel, fallbackModel, secondFallbackModel].filter(
     (m, i, arr): m is string => !!m && arr.indexOf(m) === i
@@ -6650,7 +6675,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
               }
               const response = stripThinkTags(rawResponse);
               if (!response) throw new Error(`AI returned empty streaming response [model=${model}]`);
-              const saved = await autoSave(response, model, usage);
+              const saved = await autoSave(response, model, usage, threadId);
               if ('saveError' in saved && requestedThreadId) {
                 throw new Error('追加質問をスレッドへ保存できませんでした: ' + saved.saveError);
               }
@@ -6698,7 +6723,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     const model = candidates[i];
     try {
       const { text: response, usage } = await runAi(model);
-      const saved = await autoSave(response, model, usage);
+      const saved = await autoSave(response, model, usage, threadId);
       if ('saveError' in saved && requestedThreadId) {
         return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saved.saveError }, 500);
       }

@@ -249,18 +249,9 @@ export function formatDynamicWorkerPingResult(reply: string): string {
   return `## ダイナミックWorker起動確認 (dynamicneko)\n⚠️ 想定外の応答: ${reply}`;
 }
 
-/**
- * `/neko askgk <質問文>` の結果を表示する。質問文と回答文(reply)をMarkdownの
- * 見出し・引用ブロックで区切り、replyに含まれる改行はそのまま維持する
- * (Slackのmrkdwnは\nをそのまま改行として表示するため、エスケープ・置換は不要)。
- */
-export function formatAskgkResult(question: string, reply: string): string {
-  return [
-    '## /neko askgk',
-    `**質問**: ${question || '(引数なし)'}`,
-    '',
-    reply,
-  ].join('\n');
+/** replyだけをMarkdown本文として返し、JSON解析済みの改行を維持する。 */
+export function formatAskgkResult(_question: string, reply: string): string {
+  return reply;
 }
 
 /**
@@ -1297,7 +1288,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; saveAsAiResponse?: boolean }
   | { handled: false };
 
 /**
@@ -2027,11 +2018,11 @@ export async function interpretAichatSlashCommand(
       const modelTag = promptArgMatch[1].toLowerCase();
       if (modelTag === 'codex') {
         const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
-        return { handled: true, response: answer, codexAskgk: { sessionId } };
+        return { handled: true, response: answer, saveAsAiResponse: true, codexAskgk: { sessionId } };
       }
-      return { handled: true, response: outcome.value.trim() };
+      return { handled: true, response: outcome.value.trim(), saveAsAiResponse: true };
     }
-    return { handled: true, response: formatAskgkResult(question, outcome.value) };
+    return { handled: true, response: formatAskgkResult(question, outcome.value), saveAsAiResponse: true };
   }
 
   if (subcommand === 'jev') {
