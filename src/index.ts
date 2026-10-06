@@ -3,6 +3,7 @@
  * GitHub OAuthとJWT認証の実装
  */
 
+import { formatCodexAskgkQuestion } from './utils/codexAskgkQuestion';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
@@ -6405,6 +6406,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     if (slashCommand.codexAskgk && c.env.DB) {
       const db = c.env.DB;
       const answer = slashCommand.response;
+      const question = formatCodexAskgkQuestion(message);
       const threadId = requestedThreadId || createThreadId();
       // tunnels.rb(先方)から実トークン数は得られないため、文字数からの
       // 簡易推定値を使う(✂️/📔ボタン表示に使うusage.total_tokens等の
@@ -6425,14 +6427,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         crypto.getRandomValues(tokenBytes);
         const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
         const now = new Date().toISOString();
-        const conversationHash = await computeConversationHash(user.sub, message, answer, 'codex', now);
-        const questionHash = await computeQuestionHash(user.sub, message);
+        const conversationHash = await computeConversationHash(user.sub, question, answer, 'codex', now);
+        const questionHash = await computeQuestionHash(user.sub, question);
         const codexSource = (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api';
 
         await db.prepare(
           'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).bind(
-          shareId, user.sub, userHash, message, answer, 'codex', now, conversationHash, questionHash,
+          shareId, user.sub, userHash, question, answer, 'codex', now, conversationHash, questionHash,
           usage.input_tokens, usage.output_tokens, usage.total_tokens, codexSource, slashCommand.codexAskgk.sessionId, threadId
         ).run();
 

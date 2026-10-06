@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
+import { computeQuestionHash, computeConversationHash } from './utils/conversationHash';
 import { getMarkdownParserScript } from './utils/markdownRenderer';
 
 describe('/neko askgk codex_prompt の応答ログ', () => {
   it.each([
-    { threadId: '', saveFails: false },
+    { threadId: '', saveFails: false, openQuote: '"' },
+    { threadId: '', saveFails: false, openQuote: '“' },
     { threadId: 'a'.repeat(32), saveFails: false },
     { threadId: 'a'.repeat(32), saveFails: true },
     { threadId: '', saveFails: true },
-  ])('replyの保存: threadId=$threadId, saveFails=$saveFails', async ({ threadId, saveFails }) => {
+  ])('replyの保存: threadId=$threadId, saveFails=$saveFails', async ({ threadId, saveFails, openQuote = '"' }) => {
     const reply = '## 回答\n\n1行目\n2行目\n\n- 項目';
-    const message = '/neko askgk codex_prompt="◯  詳しく\n説明してください"';
+    const question = '◯  詳しく\n説明してください';
+    const message = '/neko askgk codex_prompt=' + openQuote + question + '"';
     const inserts: unknown[][] = [];
     const DB = {
       prepare(sql: string) {
@@ -69,10 +72,11 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     if (threadId) expect(body.threadId).toBe(threadId);
     expect(inserts).toHaveLength(1);
     expect(inserts[0][0]).toBe(body.shareId);
-    expect(inserts[0][3]).toBe(message);
+    expect(inserts[0][3]).toBe(question);
     expect(inserts[0][1]).toBe('test-user');
     expect(inserts[0][7]).toMatch(/^[0-9a-f]{64}$/);
-    expect(inserts[0][8]).toMatch(/^[0-9a-f]{64}$/);
+    expect(inserts[0][8]).toBe(await computeQuestionHash('test-user', question));
+    expect(inserts[0][7]).toBe(await computeConversationHash('test-user', question, reply, 'codex', String(inserts[0][6])));
     expect(inserts[0][11]).toBeGreaterThan(0);
     expect(inserts[0][13]).toBeNull();
     expect(inserts[0][4]).toBe(reply);

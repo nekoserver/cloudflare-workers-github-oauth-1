@@ -1,6 +1,7 @@
 /**
  * AI チャットページのHTML
  */
+import { formatCodexAskgkQuestion } from '../utils/codexAskgkQuestion';
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
@@ -8389,17 +8390,20 @@ ${getRubyWasmLoaderScript()}
       return state.bubble;
     }
 
+    var formatCodexAskgkQuestion = ${formatCodexAskgkQuestion.toString()};
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
       var attachedImage = pendingImageDataUrl;
       if (!msg && !attachedImage) return;
-      appendBubble(msg, 'user', null, null, null, attachedImage);
+      var displayQuestion = formatCodexAskgkQuestion(msg);
+      appendBubble(displayQuestion, 'user', null, null, null, attachedImage);
       chatInput.value = '';
       chatInput.style.height = 'auto';
       clearAttachedImage();
       chatSendBtn.disabled = true;
-      var currentMsg = msg;
+      var currentMsg = displayQuestion;
       var thinking = appendBubble('考え中...', 'thinking');
       var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox', threadId: currentThreadId, stream: aichatStreamToggle.checked };
       if (attachedImage) {
