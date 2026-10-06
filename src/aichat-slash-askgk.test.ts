@@ -97,7 +97,7 @@ describe('/neko askgk', () => {
   });
 
   it('タイムアウト時はタイムアウトメッセージを表示する', async () => {
-    // ASKGK_TIMEOUT_MS(60秒、2026-10-04にAICHAT_SEARCH_TIMEOUT_MSから分離)を
+    // ASKGK_TIMEOUT_MS(120秒、2026-10-04にAICHAT_SEARCH_TIMEOUT_MSから分離)を
     // 実時間で待たないよう、fake timersで即座に進める。
     vi.useFakeTimers();
     try {
@@ -129,4 +129,27 @@ describe('/neko askgk', () => {
     expect(formatAskgkResult('codex_prompt="質問"', reply)).toBe(reply);
     expect(formatAskgkResult('', reply)).toBe(reply);
   });
+  it('120秒までは待機し、120秒でタイムアウトを返す', async () => {
+    vi.useFakeTimers();
+    try {
+      let settled = false;
+      const promise = interpretAichatSlashCommand('/neko askgk codex_status', new Date(), {
+        fetchLatestCommitAgentLog: async () => null,
+        askTunnelSigner: () => new Promise(() => {}),
+      }).then((result) => { settled = true; return result; });
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const result = await promise;
+      expect(result).toMatchObject({ handled: true, response: '❌ /neko askgk がタイムアウトしました(120秒以内に応答がありませんでした)' });
+    } finally { vi.useRealTimers(); }
+  });
+  it.each(['codex_status', 'codex_resume="session-1"', 'CODEX_HELP'])('codex_*はCodex応答として扱う: %s', async (argument) => {
+    const result = await interpretAichatSlashCommand('/neko askgk ' + argument, new Date(), {
+      fetchLatestCommitAgentLog: async () => null,
+      askTunnelSigner: async () => 'session id: abc\n回答',
+    });
+    expect(result).toMatchObject({ handled: true, response: '回答', saveAsAiResponse: true, codexAskgk: { sessionId: 'abc' } });
+  });
+
 });

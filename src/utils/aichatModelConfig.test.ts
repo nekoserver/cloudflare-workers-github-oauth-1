@@ -196,3 +196,17 @@ describe('resolveAichatRunOverrides', () => {
     ).toEqual({ maxTokens: 8192 });
   });
 });
+
+describe('Codexモデル色の重複防止', () => {
+  it('パレットを使い切っていてもCodexの色を重複させない', () => {
+    const existing = Object.fromEntries(AICHAT_COLOR_PALETTE.map((color, index) => ['model-' + index, color]));
+    const result = assignModelColors(existing, [{ value: 'codex', label: 'codex' }]);
+    expect(Object.values(existing)).not.toContain(result.merged.codex);
+    expect(result.merged.codex).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+  it('既存のCodex色が他モデルと被る場合はCodexだけ再割り当てする', () => {
+    const result = assignModelColors({ other: '#4f46e5', codex: '#4f46e5' }, [{ value: 'codex', label: 'codex' }]);
+    expect(result.merged.codex).not.toBe(result.merged.other);
+    expect(result.newAssignments).toHaveLength(1);
+  });
+});

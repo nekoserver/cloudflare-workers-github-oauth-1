@@ -1244,9 +1244,9 @@ export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
  * (HMAC署名して公開fetch) → tunnels.rb(自宅ネットワーク上、Cloudflare Tunnel
  * 経由) → 先方Botの応答生成、という複数ホップを挟む。先方Botが内部でAIモデルを
  * 呼んで回答を生成している場合、8秒では往復しきれずタイムアウトする報告が
- * あったため、Jev(外部AI連携、AICHAT_JEV_TIMEOUT_MS=60秒)と同じ長さに揃えた。
+ * あったため専用の待機時間を設け、Codexの応答生成を120秒まで待つ。
  */
-export const ASKGK_TIMEOUT_MS = 60_000;
+export const ASKGK_TIMEOUT_MS = 120_000;
 
 type RaceOutcome<T> =
   | { status: 'ok'; value: T }
@@ -1275,7 +1275,7 @@ async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<Race
 }
 
 /**
- * `/neko askgk codex_prompt="..."` 専用のメタデータ。index.ts側でこれが
+ * `/neko askgk codex_*` 専用のメタデータ。index.ts側でこれが
  * 存在する場合、通常のAI応答と同じ経路(ai_chat_sharesへの保存・モデル名
  * 'codex'としての表示・✂️/📔ボタン・左サイドパネルからの検索)に乗せる。
  */
@@ -2013,13 +2013,12 @@ export async function interpretAichatSlashCommand(
     // (index.ts)へ返す。呼び出し元はこれを使ってai_chat_sharesへ
     // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
     // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
+    if (/^codex_\w+\b/i.test(question)) {
+      const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
+      return { handled: true, response: answer, saveAsAiResponse: true, codexAskgk: { sessionId } };
+    }
     const promptArgMatch = question.match(/^(\w+)_prompt(?:\s*=\s*["“”]|$)/);
     if (promptArgMatch) {
-      const modelTag = promptArgMatch[1].toLowerCase();
-      if (modelTag === 'codex') {
-        const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
-        return { handled: true, response: answer, saveAsAiResponse: true, codexAskgk: { sessionId } };
-      }
       return { handled: true, response: outcome.value.trim(), saveAsAiResponse: true };
     }
     return { handled: true, response: formatAskgkResult(question, outcome.value), saveAsAiResponse: true };

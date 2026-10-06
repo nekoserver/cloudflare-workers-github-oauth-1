@@ -473,7 +473,7 @@ import {
   resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
 import { isInstallationPermissionsUpdateAction } from './utils/installationPermissionsAction';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5917,13 +5917,13 @@ app.get('/aichat', authMiddleware, async (c) => {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
   modelColors = merged;
   if (c.env.DB) {
     const db = c.env.DB;
     for (const a of newAssignments) {
       c.executionCtx.waitUntil(
-        db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+        db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
           .bind(a.model_id, a.color, a.label)
           .run()
           .catch(() => {})
@@ -6408,6 +6408,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       const answer = slashCommand.response;
       const question = formatCodexAskgkQuestion(message);
       const threadId = requestedThreadId || createThreadId();
+      let modelColor: string | undefined;
+      let modelColorError: string | undefined;
       // tunnels.rb(先方)から実トークン数は得られないため、文字数からの
       // 簡易推定値を使う(✂️/📔ボタン表示に使うusage.total_tokens等の
       // 「値が存在すること」の条件を満たすためのものであり、厳密な
@@ -6444,12 +6446,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           const colorRows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
           const existingColors: Record<string, string> = {};
           for (const row of colorRows.results ?? []) existingColors[row.model_id] = row.color;
-          const { newAssignments } = assignModelColors(existingColors, [{ value: 'codex', label: 'Codex' }]);
+          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
+          modelColor = merged.codex;
           for (const a of newAssignments) {
-            await db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+            await db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
               .bind(a.model_id, a.color, a.label).run();
           }
         } catch (colorErr) {
+          modelColorError = colorErr instanceof Error ? colorErr.message : String(colorErr);
           logger.warn('Failed to assign color for codex askgk model', {
             error: colorErr instanceof Error ? colorErr.message : 'Unknown',
           });
@@ -6458,6 +6462,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         return jsonUtf8({
           response: answer,
           usedModel: 'codex',
+          modelColor,
+          modelColorError,
+          userHash,
           systemPromptMode,
           usage,
           shareId,
@@ -6488,7 +6495,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({
       ...saved,
       response: slashCommand.response,
-      usedModel: slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko',
+      usedModel: slashCommand.codexAskgk ? 'codex' : slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko',
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
       nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
@@ -15277,14 +15284,14 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
     return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
   if (newAssignments.length > 0) {
     const db = c.env.DB;
     for (const a of newAssignments) {
       modelLabels[a.model_id] = a.label;
       safeWaitUntil(
         c,
-        db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+        db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
           .bind(a.model_id, a.color, a.label)
           .run()
           .catch(() => {})

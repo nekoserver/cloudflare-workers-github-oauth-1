@@ -1,3 +1,5 @@
+export const CODEX_ASKGK_MODEL = { value: 'codex', label: 'codex' };
+
 export const AICHAT_COLOR_PALETTE: readonly string[] = [
   '#4f46e5', // indigo
   '#0ea5e9', // sky
@@ -21,16 +23,24 @@ export function assignModelColors(
   existingColors: Record<string, string>,
   models: Array<{ value: string; label: string }>
 ): { merged: Record<string, string>; newAssignments: Array<{ model_id: string; color: string; label: string }> } {
-  const usedColors = new Set(Object.values(existingColors));
+  const usedColors = new Set(Object.values(existingColors).map(color => color.toLowerCase()));
   const merged: Record<string, string> = { ...existingColors };
   const newAssignments: Array<{ model_id: string; color: string; label: string }> = [];
 
   for (const model of models) {
-    if (merged[model.value]) continue;
+    const codexColorConflict = model.value === 'codex' && merged.codex &&
+      Object.entries(merged).some(([id, color]) => id !== 'codex' && color.toLowerCase() === merged.codex.toLowerCase());
+    if (merged[model.value] && !codexColorConflict) continue;
 
-    const color =
-      AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c)) ??
-      AICHAT_COLOR_PALETTE[newAssignments.length % AICHAT_COLOR_PALETTE.length];
+    let color = AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c));
+    if (!color) {
+      // パレットが埋まっていても既存モデルと同じ色を再利用しない。
+      let candidate = 0x5b8def;
+      do {
+        color = '#' + candidate.toString(16).padStart(6, '0');
+        candidate = (candidate + 0x3779b9) & 0xffffff;
+      } while (usedColors.has(color));
+    }
 
     merged[model.value] = color;
     usedColors.add(color);

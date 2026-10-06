@@ -11,7 +11,7 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
-import { AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
+import { CODEX_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -45,9 +45,12 @@ export function getAiChatPage(user: {
   const modelOptionsHtml = modelList
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
-  const modelColorsJson = JSON.stringify(user.modelColors ?? {});
+  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL]).merged);
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
-  const modelListJson = JSON.stringify(modelList.map(m => ({ value: m.value, label: m.label })));
+  const modelListJson = JSON.stringify([
+    ...modelList.filter(m => m.value !== 'codex').map(m => ({ value: m.value, label: m.label })),
+    { ...CODEX_ASKGK_MODEL, commandOnly: true },
+  ]);
   // 色丸ドロップダウンの「⚙」からパラメータ調整モーダルを開けるのは
   // AICHAT_TUNABLE_MODELS(よく使うGemma-4・Qwenのみ、ユーザー要望2026-10-03)に
   // 限る。各モデルのmaxTokensスライダーの上限は、サーバー側のデフォルト値
@@ -3992,6 +3995,7 @@ export function getAiChatPage(user: {
         }
       });
       MODEL_LIST.forEach(function(entry) {
+        if (entry.commandOnly && !Object.prototype.hasOwnProperty.call(cachedModelMap, entry.value)) return;
         var m = entry.value;
         var btn = document.createElement('button');
         var dotColor = MODEL_COLORS[m] || '';
@@ -8133,6 +8137,7 @@ export function getAiChatPage(user: {
           item.appendChild(tuneBtn);
         }
         item.addEventListener('click', function() {
+          if (m.commandOnly) { closeModelDotDropdown(); return; }
           lastModel = m.value;
           modelSelect.value = m.value;
           applyModelColor(lastModel);
@@ -8476,15 +8481,19 @@ ${getRubyWasmLoaderScript()}
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
+            if (data.modelColor) {
+              MODEL_COLORS[usedModel] = data.modelColor;
+              if (currentResults.length) renderSidebarResults();
+            }
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
             if (!assistantBubbleEl) {
-              assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
+              assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : usedModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
             } else {
-              var completedBubble = buildAssistantBubble(responseText, lastModel, data.fallbackUsed, respUsage, false, null, null, null, data.shareId);
+              var completedBubble = buildAssistantBubble(responseText, usedModel, data.fallbackUsed, respUsage, false, null, null, null, data.shareId);
               assistantBubbleEl.replaceWith(completedBubble);
               assistantBubbleEl = completedBubble;
             }

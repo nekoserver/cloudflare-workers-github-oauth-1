@@ -924,7 +924,7 @@ describe('/neko askgk claude_prompt="..."', () => {
 
   // askgkの経路(本体Worker→rust-worker-sqlx-d1→自宅ネットワーク上のtunnels.rb→
   // 先方Botの応答生成)は他のD1検索系コマンドより大幅に時間がかかりうるため、
-  // AICHAT_SEARCH_TIMEOUT_MS(8秒)より長いASKGK_TIMEOUT_MS(60秒)を使う
+  // AICHAT_SEARCH_TIMEOUT_MS(8秒)より長いASKGK_TIMEOUT_MS(120秒)を使う
   // (2026-10-04、8秒では実際にタイムアウトする報告があり専用の値に分離した)。
   it(`ASKGK_TIMEOUT_MS(${ASKGK_TIMEOUT_MS}ms)を超えて応答が無ければタイムアウト表示を返す`, async () => {
     vi.useFakeTimers();
