@@ -1,3 +1,4 @@
+import { getKeywordClassificationModalScript } from '../utils/keywordClassificationModal';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
@@ -37,11 +38,11 @@ export function getCodexQuestionTreeClientScript(): string {
     mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
     mark.focus({ preventScroll: true });
   }
-  async function showKeywords(row, question, loadAnswer) {
+  async function showKeywords(row, question, loadAnswer, classifiedKeyword) {
     const request = ++modalRequest;
     badges.textContent = '読み込み中…';
     categoryBadges.replaceChildren();
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     try {
       const response = await fetch('/api/mcp-sample/codex-questions/' + encodeURIComponent(row.id) + '/keywords');
       if (!response.ok) throw new Error('キーワードを取得できませんでした（HTTP ' + response.status + '）');
@@ -81,7 +82,29 @@ export function getCodexQuestionTreeClientScript(): string {
         const link = document.createElement('a');
         link.className = 'keyword-badge'; link.href = '#' + id;
         link.textContent = item.keyword + '(' + item.count + ')';
+        let pressTimer = null, suppressClick = false, pressStart = null;
+        function cancelPress() { clearTimeout(pressTimer); pressTimer = null; }
+        function classifyKeyword() {
+          suppressClick = true;
+          openKwClassifyModal(item.keyword, () => showKeywords(row, question, loadAnswer, item.keyword), { topLayer: true });
+        }
+        link.addEventListener('pointerdown', event => {
+          if (event.button !== 0 || event.isPrimary === false) return;
+          cancelPress(); suppressClick = false; pressStart = { x: event.clientX, y: event.clientY };
+          pressTimer = setTimeout(classifyKeyword, 550);
+        });
+        link.addEventListener('pointermove', event => {
+          if (pressStart && Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > 10) cancelPress();
+        });
+        for (const type of ['pointerup', 'pointercancel', 'pointerleave']) link.addEventListener(type, cancelPress);
+        link.addEventListener('contextmenu', event => event.preventDefault());
+        link.addEventListener('keydown', event => {
+          if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); classifyKeyword(); }
+        });
+        link.title = '長押しで分類（Shift+Enterでも開けます）';
         link.onclick = async event => {
+          cancelPress();
+          if (suppressClick) { event.preventDefault(); suppressClick = false; return; }
           event.preventDefault(); dialog.close();
           for (let element = question; element; element = element.parentElement) {
             if (element.tagName === 'DETAILS') element.open = true;
@@ -91,6 +114,11 @@ export function getCodexQuestionTreeClientScript(): string {
         };
         keywordLinks.push({ link, categoryIds: item.categoryIds || [] });
         badges.appendChild(link);
+      }
+      if (classifiedKeyword) {
+        const saved = data.keywords.find(item => item.keyword === classifiedKeyword);
+        const primary = saved && categoryButtons.find(item => (saved.categoryIds || []).includes(item.id));
+        if (primary) primary.button.click();
       }
       if (!data.keywords.length) badges.textContent = 'この回答に含まれる登録キーワードはありません。';
     } catch (error) { if (request === modalRequest && dialog.open) badges.textContent = error.message; }
@@ -191,7 +219,9 @@ export function getCodexQuestionTreeClientScript(): string {
 
 export function getCodexQuestionTreePage(): string {
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex質問ツリー · MCPサンプル</title>${getThemeInitScript()}<style>${getThemeCSS()}${getThemeToggleCSS()}
-  *{box-sizing:border-box}body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:system-ui,sans-serif}header{height:44px;position:sticky;top:0;background:var(--navbar-bg);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;padding:0 20px}main{max-width:1000px;margin:32px auto;padding:0 20px}h1{font-size:1.6rem}p,#status{color:var(--text-muted)}a{color:var(--accent-color)}input{width:100%;padding:12px;background:var(--input-bg);color:var(--text-primary);border:1px solid var(--input-border);border-radius:8px}details{margin:10px 0 10px 14px;border-left:1px solid var(--border-color);padding-left:12px}summary{cursor:pointer;padding:8px;overflow-wrap:anywhere;border-radius:6px}summary:hover{background:var(--bg-secondary)}summary:focus-visible,button:focus-visible{outline:2px solid var(--accent-color)}.question-content{background:var(--card-bg);padding:16px;border:1px solid var(--border-color);border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}button{padding:10px;background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:6px}.keyword-key{margin-left:8px;padding:2px 6px}.keyword-dialog{width:min(700px,calc(100vw - 24px));max-height:80vh;padding:20px;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg);color:var(--text-primary);overflow:auto}.keyword-dialog::backdrop{background:var(--modal-overlay)}.keyword-dialog-header{display:flex;justify-content:space-between;align-items:center;gap:12px}.keyword-dialog h2{font-size:1.2rem;margin:0}.keyword-categories:empty{display:none}.keyword-category{border-radius:16px;padding:6px 10px;max-width:100%;overflow-wrap:anywhere}.keyword-category[aria-pressed="true"]{outline:2px solid var(--accent-color);outline-offset:2px}.keyword-category-highlight{font-weight:700}.keyword-categories,.keyword-badges{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:flex-start;gap:8px;margin-top:18px}.keyword-badge{display:inline-block;padding:6px 10px;border:1px solid var(--border-color);border-radius:16px;background:var(--badge-bg);color:var(--accent-color);text-decoration:none;overflow-wrap:anywhere;max-width:100%}.keyword-hit{background:var(--badge-bg);color:var(--text-primary);outline:2px solid var(--accent-color);scroll-margin-top:70px}.keyword-badge:focus-visible{outline:2px solid var(--accent-color)}.markdown-body{line-height:1.7;overflow-wrap:anywhere;overflow-x:auto}.markdown-body p{color:var(--text-primary)}.markdown-body pre{background:var(--code-bg);padding:12px;overflow-x:auto;white-space:pre;font-family:monospace}.markdown-body code{background:var(--code-bg);font-family:monospace}.markdown-body table{border-collapse:collapse;max-width:100%}.markdown-body th,.markdown-body td{border:1px solid var(--border-color);padding:8px}.markdown-body blockquote{margin-left:0;padding-left:14px;border-left:3px solid var(--accent-color);color:var(--text-secondary)}.markdown-body img{max-width:100%;height:auto}#question-tree{margin-left:-14px}@media(max-width:600px){main{padding:0 12px}details{margin-left:6px;padding-left:6px}.question-content{padding:10px}}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:system-ui,sans-serif}header{height:44px;position:sticky;top:0;background:var(--navbar-bg);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;padding:0 20px}main{max-width:1000px;margin:32px auto;padding:0 20px}h1{font-size:1.6rem}p,#status{color:var(--text-muted)}a{color:var(--accent-color)}input{width:100%;padding:12px;background:var(--input-bg);color:var(--text-primary);border:1px solid var(--input-border);border-radius:8px}details{margin:10px 0 10px 14px;border-left:1px solid var(--border-color);padding-left:12px}summary{cursor:pointer;padding:8px;overflow-wrap:anywhere;border-radius:6px}summary:hover{background:var(--bg-secondary)}summary:focus-visible,button:focus-visible{outline:2px solid var(--accent-color)}.question-content{background:var(--card-bg);padding:16px;border:1px solid var(--border-color);border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}button{padding:10px;background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:6px}.keyword-key{margin-left:8px;padding:2px 6px}.keyword-dialog{width:min(700px,calc(100vw - 24px));max-height:80vh;padding:20px;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg);color:var(--text-primary);overflow:auto}.keyword-dialog::backdrop{background:var(--modal-overlay)}.keyword-dialog-header{display:flex;justify-content:space-between;align-items:center;gap:12px}.keyword-dialog h2{font-size:1.2rem;margin:0}.keyword-categories:empty{display:none}.keyword-category{border-radius:16px;padding:6px 10px;max-width:100%;overflow-wrap:anywhere}.keyword-category[aria-pressed="true"]{outline:2px solid var(--accent-color);outline-offset:2px}.keyword-category-highlight{font-weight:700}.keyword-categories,.keyword-badges{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:flex-start;gap:8px;margin-top:18px}.keyword-badge{touch-action:manipulation;user-select:none;-webkit-touch-callout:none;display:inline-block;padding:6px 10px;border:1px solid var(--border-color);border-radius:16px;background:var(--badge-bg);color:var(--accent-color);text-decoration:none;overflow-wrap:anywhere;max-width:100%}.keyword-hit{background:var(--badge-bg);color:var(--text-primary);outline:2px solid var(--accent-color);scroll-margin-top:70px}.keyword-badge:focus-visible{outline:2px solid var(--accent-color)}.markdown-body{line-height:1.7;overflow-wrap:anywhere;overflow-x:auto}.markdown-body p{color:var(--text-primary)}.markdown-body pre{background:var(--code-bg);padding:12px;overflow-x:auto;white-space:pre;font-family:monospace}.markdown-body code{background:var(--code-bg);font-family:monospace}.markdown-body table{border-collapse:collapse;max-width:100%}.markdown-body th,.markdown-body td{border:1px solid var(--border-color);padding:8px}.markdown-body blockquote{margin-left:0;padding-left:14px;border-left:3px solid var(--accent-color);color:var(--text-secondary)}.markdown-body img{max-width:100%;height:auto}#question-tree{margin-left:-14px}@media(max-width:600px){main{padding:0 12px}details{margin-left:6px;padding-left:6px}.question-content{padding:10px}}
   </style></head><body><header><strong>MCPサンプル</strong>${getThemeToggleHTML()}</header><main><p><a href="/thread-tracker">スレッド追跡</a> · <a href="/aichat">AIチャット</a></p><input id="search" type="search" aria-label="質問文で絞り込み" placeholder="質問文で絞り込み"><p id="status" role="status" aria-live="polite"></p><section id="question-tree" aria-label="Codex質問フォルダ"></section><button id="load-more">さらに読み込む</button></main><dialog id="keyword-dialog" class="keyword-dialog" aria-labelledby="keyword-dialog-title"><div class="keyword-dialog-header"><h2 id="keyword-dialog-title">回答のキーワード</h2><button id="keyword-close" type="button" aria-label="キーワードを閉じる">閉じる</button></div><div id="keyword-categories" class="keyword-categories" role="group" aria-label="中分類カテゴリ"></div><div id="keyword-badges" class="keyword-badges" role="status" aria-live="polite"></div></dialog><script>${getThemeToggleScript()}</script><script>${getMarkdownParserScript()}
+function getNextZ() { return 10000; }
+${getKeywordClassificationModalScript(true)}
 ${getCodexQuestionTreeClientScript()}</script></body></html>`;
 }

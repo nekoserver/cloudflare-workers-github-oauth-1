@@ -36,6 +36,10 @@ it.each([false, true])('loads and searches logs after a production build (minify
     expect(dom.window.document.querySelector('.keyword-badge')?.classList.contains('keyword-category-highlight')).toBe(true);
     (dom.window.document.querySelector('.keyword-badge') as HTMLAnchorElement).click();
     await vi.waitFor(() => expect(question.querySelector('.keyword-hit')?.textContent).toBe('本番ビルド'));
+    const badge = dom.window.document.querySelector('.keyword-badge') as HTMLAnchorElement;
+    badge.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }));
+    expect(dom.window.document.querySelector('dialog[data-overlay]')).not.toBeNull();
+    (dom.window.document.querySelector('dialog[data-overlay] button') as HTMLButtonElement).click();
     expect(errors).toEqual([]);
   } finally { dom.window.close(); }
 });
