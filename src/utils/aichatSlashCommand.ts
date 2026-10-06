@@ -2022,7 +2022,7 @@ export async function interpretAichatSlashCommand(
     // (index.ts)へ返す。呼び出し元はこれを使ってai_chat_sharesへ
     // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
     // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
-    const promptArgMatch = question.match(/^(\w+)_prompt="/);
+    const promptArgMatch = question.match(/^(\w+)_prompt(?:="|$)/);
     if (promptArgMatch) {
       const modelTag = promptArgMatch[1].toLowerCase();
       if (modelTag === 'codex') {
