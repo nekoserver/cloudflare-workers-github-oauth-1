@@ -17,6 +17,7 @@ import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getThreadTrackerPage } from './views/threadTracker';
+import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
@@ -5944,6 +5945,8 @@ app.get('/aichat', authMiddleware, async (c) => {
     aichatPreferMoondream: resolveAichatPreferMoondream(c.req.header('Cookie')),
   }));
 });
+
+app.route('/', codexQuestionTreeRoutes);
 
 /** AIチャットの成長中スレッドをツリーから追跡するページ。 */
 app.get('/thread-tracker', authMiddleware, async (c) => {

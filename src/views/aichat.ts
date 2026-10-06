@@ -1009,6 +1009,7 @@ export function getAiChatPage(user: {
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
           <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/thread-tracker" class="dropdown-item">🧵 スレッド追跡</a>
+          <a href="/mcp-codex-tree" class="dropdown-item">📁 Codex質問ツリー</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/function-changelog" class="dropdown-item">🔖 関数辞典</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
