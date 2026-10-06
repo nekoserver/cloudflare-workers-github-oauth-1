@@ -50,7 +50,7 @@ describe('Codex question tree', () => {
     expect((await request('/api/mcp-sample/codex-questions', false)).status).toBe(401);
     expect((await request('/api/mcp-sample/codex-questions?before=-1')).status).toBe(400); sql.close();
   });
-  it('opens full questions and answers safely from folder nodes', async () => {
+  it('opens Markdown answers safely without repeating the question above them', async () => {
     const dom = new JSDOM(getCodexQuestionTreePage(), { runScripts: 'dangerously', url: 'https://example.test', beforeParse(window) {
       window.fetch = vi.fn(async (url: any) => ({ ok: true, json: async () => String(url).endsWith('/7') ? { answer: '# 回答見出し\n\n- **項目**\n\n```js\nconst x = 1;\n```\n\n<script>bad()</script>' } : { items: [{ id: 7, question: '<img onerror=bad()>\n全文', created_at: '2026-10-07', thread_id: 'thread-1' }], nextCursor: null } })) as any;
     } });
@@ -61,7 +61,8 @@ describe('Codex question tree', () => {
     const question = dom.window.document.querySelectorAll('details')[2];
     question.open = true; question.dispatchEvent(new dom.window.Event('toggle'));
     await vi.waitFor(() => expect(question.querySelector('.markdown-body h1')?.textContent).toBe('回答見出し'));
-    expect(question.querySelector('pre')?.textContent).toBe('<img onerror=bad()>\n全文');
+    expect(question.querySelector('.question-content')?.firstElementChild?.textContent).toBe('Codexの回答');
+    expect(question.querySelector('.question-content > pre')).toBeNull();
     expect(question.querySelector('.markdown-body li strong')?.textContent).toBe('項目');
     expect(question.querySelector('.markdown-body pre code')?.textContent).toBe('const x = 1;');
     expect(question.querySelector('.markdown-body')?.textContent).toContain('<script>bad()</script>');

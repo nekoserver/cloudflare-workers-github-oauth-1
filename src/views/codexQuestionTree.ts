@@ -43,16 +43,12 @@ export function getCodexQuestionTreeClientScript(): string {
             question.dataset.loaded = 'true';
             const content = document.createElement('div');
             content.className = 'question-content';
-            const title = document.createElement('h3');
-            title.textContent = '質問';
-            const text = document.createElement('pre');
-            text.textContent = row.question;
             const answerTitle = document.createElement('h3');
             answerTitle.textContent = 'Codexの回答';
             const answer = document.createElement('div');
             answer.className = 'markdown-body';
             answer.textContent = '読み込み中…';
-            for (const element of [title, text, answerTitle, answer]) content.appendChild(element);
+            for (const element of [answerTitle, answer]) content.appendChild(element);
             question.appendChild(content);
             fetch('/api/mcp-sample/codex-questions/' + encodeURIComponent(row.id)).then(async response => {
               if (!response.ok) {
