@@ -38,7 +38,7 @@ export function getAiChatPage(user: {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const models = user.availableModels ?? DEFAULT_AICHAT_MODELS;
+  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => m.value !== 'codex'), CODEX_ASKGK_MODEL];
   const modelList = models.some(m => m.value === user.aiChatModel)
     ? models
     : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
@@ -8176,7 +8176,6 @@ export function getAiChatPage(user: {
           item.appendChild(tuneBtn);
         }
         item.addEventListener('click', function() {
-          if (m.commandOnly) { closeModelDotDropdown(); return; }
           lastModel = m.value;
           modelSelect.value = m.value;
           applyModelColor(lastModel);

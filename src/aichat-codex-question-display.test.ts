@@ -3,13 +3,13 @@ import { getAiChatPage } from './views/aichat';
 
 // 故障想定: 本文の引用符や改行を消す、または送信まで本文だけにしてCodexコマンドを壊す。
 describe('Codex質問のチャット表示と送信', () => {
-  it('Codexの色を凡例に含めるが通常のAIモデル選択には追加しない', () => {
+  it('Codexの色とモデル選択肢を含める', () => {
     const html = getAiChatPage({ username: 'test', aiChatModel: 'test-model', modelColors: { other: '#4f46e5' } });
     const list = JSON.parse(html.match(/var MODEL_LIST = (.*);/)![1]);
     const colors = JSON.parse(html.match(/var MODEL_COLORS = (.*);/)![1]);
     expect(list).toContainEqual({ value: 'codex', label: 'codex', commandOnly: true });
     expect(colors.codex).not.toBe(colors.other);
-    expect(html).not.toContain('<option value="codex"');
+    expect(html).toContain('<option value="codex"');
   });
   it.each(['"', '“'])('開始引用符%sの質問は本文だけを表示・共有し、送信コマンドは保持する', async (quote) => {
     const question = '◯  詳しく\n"引用"を説明してください';

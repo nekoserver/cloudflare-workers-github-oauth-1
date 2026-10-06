@@ -25,7 +25,7 @@ function rustWorkerFetcher(reply: string) {
 }
 
 describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
-  it.each(['codex_prompt="テスト質問"', 'codex_status'])('Codexとして保存し重複しない色を返す: %s', async (argument) => {
+  it.each(['codex_prompt="テスト質問"', 'codex_status', 'selected-codex'])('Codexとして保存し重複しない色を返す: %s', async (argument) => {
     const reply = [
       'workdir: /home/user/repo',
       'model: gpt-5-codex',
@@ -53,7 +53,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     const response = await app.request('/api/aichat', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: '/neko askgk ' + argument }),
+      body: JSON.stringify({ message: argument === 'selected-codex' ? '通常の質問' : '/neko askgk ' + argument, model: argument === 'selected-codex' ? 'codex' : undefined }),
     }, { JWT_SECRET: 'test-secret', DB: db, RUST_WORKER: rustWorkerFetcher(reply) });
 
     const body = await response.json() as {
@@ -74,6 +74,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     //  question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id)
     expect(shareInsert!.values[4]).toBe('実際の回答本文');
     expect(shareInsert!.values[5]).toBe('codex');
+    if (argument === 'selected-codex') expect(shareInsert!.values[3]).toBe('通常の質問');
     expect(shareInsert!.values[13]).toBe('codex-abc-123');
 
     const colorInsert = inserts.find((i) => i.sql.includes('INSERT INTO aichat_model_colors') && i.values[0] === 'codex');

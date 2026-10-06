@@ -6048,6 +6048,10 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
+  // 色丸で選択したCodexへの通常の質問は、Workers AIではなくaskgkへ送る。
+  if (body.model === 'codex' && message && !/^\/neko\b/i.test(message)) {
+    message = '/neko askgk codex_prompt="' + message + '"';
+  }
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
