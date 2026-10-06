@@ -52,13 +52,20 @@ describe('Codex question tree', () => {
   });
   it('opens full questions and answers safely from folder nodes', async () => {
     const dom = new JSDOM(getCodexQuestionTreePage(), { runScripts: 'dangerously', url: 'https://example.test', beforeParse(window) {
-      window.fetch = vi.fn(async (url: any) => ({ ok: true, json: async () => String(url).endsWith('/7') ? { answer: '<script>bad()</script>' } : { items: [{ id: 7, question: '<img onerror=bad()>\n全文', created_at: '2026-10-07', thread_id: 'thread-1' }], nextCursor: null } })) as any;
+      window.fetch = vi.fn(async (url: any) => ({ ok: true, json: async () => String(url).endsWith('/7') ? { answer: '# 回答見出し\n\n- **項目**\n\n```js\nconst x = 1;\n```\n\n<script>bad()</script>' } : { items: [{ id: 7, question: '<img onerror=bad()>\n全文', created_at: '2026-10-07', thread_id: 'thread-1' }], nextCursor: null } })) as any;
     } });
     await vi.waitFor(() => expect(dom.window.document.querySelectorAll('details')).toHaveLength(3));
+    const group = dom.window.document.querySelectorAll('details')[1];
+    expect(group.querySelector('summary')?.textContent).toContain('全文');
+    expect(group.querySelector('summary')?.textContent).not.toContain('thread-1');
     const question = dom.window.document.querySelectorAll('details')[2];
     question.open = true; question.dispatchEvent(new dom.window.Event('toggle'));
-    await vi.waitFor(() => expect(question.querySelectorAll('pre')[1]?.textContent).toBe('<script>bad()</script>'));
+    await vi.waitFor(() => expect(question.querySelector('.markdown-body h1')?.textContent).toBe('回答見出し'));
     expect(question.querySelector('pre')?.textContent).toBe('<img onerror=bad()>\n全文');
+    expect(question.querySelector('.markdown-body li strong')?.textContent).toBe('項目');
+    expect(question.querySelector('.markdown-body pre code')?.textContent).toBe('const x = 1;');
+    expect(question.querySelector('.markdown-body')?.textContent).toContain('<script>bad()</script>');
+    expect(question.querySelector('script')).toBeNull();
     expect(question.querySelector('img')).toBeNull(); dom.window.close();
   });
 });
