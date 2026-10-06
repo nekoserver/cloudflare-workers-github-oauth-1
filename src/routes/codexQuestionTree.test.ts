@@ -11,6 +11,7 @@ function logId(id: number) { return 'abcdef' + (1000 - id).toString(16).padStart
 function fixture() {
   const sql = new DatabaseSync(':memory:');
   sql.exec('CREATE TABLE ai_chat_shares(id TEXT PRIMARY KEY, user_id TEXT, model TEXT, deleted_at TEXT, question TEXT, answer TEXT, thread_id TEXT, created_at TEXT)');
+  sql.exec('CREATE TABLE aichat_search_log(user_id TEXT, keyword TEXT, share_id TEXT)');
   const insert = sql.prepare('INSERT INTO ai_chat_shares VALUES(?,?,?,?,?,?,?,?)');
   for (let id = 1; id <= 103; id++) insert.run(logId(id), 'alice', 'codex', null, '/neko askgk codex_prompt="質問' + id + '"', '回答' + id, 'thread-1', new Date(1700000000000 + Math.max(id, 4) * 1000).toISOString());
   insert.run(logId(104), 'bob', 'codex', null, 'private', 'secret', null, '2026-10-07');
@@ -43,6 +44,23 @@ describe('Codex question tree', () => {
     for (const id of [104, 105, 106]) expect((await request('/api/mcp-sample/codex-questions/' + logId(id))).status).toBe(404);
     const row: any = await (await request('/api/mcp-sample/codex-questions/' + logId(103))).json();
     expect(row.answer).toBe('回答103'); expect(row.question).toBe('質問103'); sql.close();
+  });
+  it('flags contained registered keywords and counts occurrences across owned live answers', async () => {
+    const { sql, request } = fixture();
+    sql.exec(`INSERT INTO ai_chat_shares VALUES
+      ('keyword-answer','alice','codex',NULL,'キーワード質問','MCP MCP SQLite','thread-2','2026-10-08'),
+      ('other-model','alice','other',NULL,'別モデル','MCP SQLite SQLite',NULL,'2026-10-08'),
+      ('private-keywords','bob','codex',NULL,'秘密','MCP MCP MCP',NULL,'2026-10-08'),
+      ('deleted-keywords','alice','codex','deleted','削除','MCP MCP MCP',NULL,'2026-10-08');
+      INSERT INTO aichat_search_log VALUES ('alice','MCP','keyword-answer'),('alice','MCP','other-model'),('alice','SQLite','keyword-answer'),('alice','不在','keyword-answer'),('bob','回答','private-keywords');`);
+    const list: any = await (await request('/api/mcp-sample/codex-questions')).json();
+    expect(list.items.find((row: any) => row.id === 'keyword-answer').has_keywords).toBe(true);
+    expect(list.items.find((row: any) => row.id === logId(103)).has_keywords).toBe(false);
+    const data: any = await (await request('/api/mcp-sample/codex-questions/keyword-answer/keywords')).json();
+    expect(data.keywords).toEqual([{ keyword: 'MCP', count: 3 }, { keyword: 'SQLite', count: 3 }]);
+    expect((await request('/api/mcp-sample/codex-questions/private-keywords/keywords')).status).toBe(404);
+    expect((await request('/api/mcp-sample/codex-questions/deleted-keywords/keywords')).status).toBe(404);
+    sql.close();
   });
   it('requires authentication and validates pagination', async () => {
     const { sql, request } = fixture();
