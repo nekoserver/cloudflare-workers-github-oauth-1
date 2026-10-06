@@ -63,7 +63,7 @@ describe('サブクエリ一覧モーダル(DOM実動作): 大分類選択時の
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
       if (u.includes('/api/aichat/subqueries')) {
-        return Promise.resolve({ json: () => Promise.resolve(sqResponse) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(sqResponse) });
       }
       if (u.includes('/api/aichat/keyword-categories-summary')) {
         return Promise.resolve({ json: () => Promise.resolve(catsResponse) });

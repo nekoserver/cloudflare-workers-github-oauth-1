@@ -8666,8 +8666,7 @@ app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
        FROM aichat_subqueries s
        LEFT JOIN aichat_share_subquery_links l ON l.subquery_id = s.id
        GROUP BY s.id, s.query
-       ORDER BY link_count DESC, s.id DESC
-       LIMIT 100`
+       ORDER BY link_count DESC, s.id DESC`
     ).all<{ id: number; query: string; link_count: number }>(),
     c.env.DB.prepare(
       `SELECT l.subquery_id, h.keyword, COUNT(*) AS cnt

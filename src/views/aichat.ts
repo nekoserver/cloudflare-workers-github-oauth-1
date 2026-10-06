@@ -4222,6 +4222,12 @@ export function getAiChatPage(user: {
     linkedQuestionsOverlay.addEventListener('click', function(e) { if (e.target === linkedQuestionsOverlay) closeLinkedQuestions(); });
 
     // ===== サブクエリ一覧 =====
+    function readSubqueriesResponse(response) {
+      return response.json().then(function(data) {
+        if (!response.ok || data.error) throw new Error(data.error || 'サブクエリの読み出しに失敗しました');
+        return data;
+      });
+    }
     var subqueriesOverlay = document.getElementById('subqueriesOverlay');
     var subqueriesClose = document.getElementById('subqueriesClose');
     var subqueriesAddBtn = document.getElementById('subqueriesAddBtn');
@@ -4427,12 +4433,13 @@ export function getAiChatPage(user: {
       sqSelectedGroupId = null;
       subqueriesListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       Promise.allSettled([
-        fetch('/api/aichat/subqueries', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/subqueries', { credentials: 'same-origin' }).then(readSubqueriesResponse),
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ]).then(function(results) {
-        var sqData    = results[0].status === 'fulfilled' ? results[0].value : {};
+        if (results[0].status === 'rejected') throw results[0].reason;
+        var sqData = results[0].value;
         var kwData    = results[1].status === 'fulfilled' ? results[1].value : {};
         var catData   = results[2].status === 'fulfilled' ? results[2].value : {};
         var groupData = results[3].status === 'fulfilled' ? results[3].value : {};
@@ -4455,7 +4462,7 @@ export function getAiChatPage(user: {
           if (kw.is_classified) subqueriesClassifiedSet[kw.keyword] = true;
         });
         renderSubqueriesList();
-      }).catch(function() { subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+      }).catch(function(err) { subqueriesListBody.textContent = '取得に失敗しました: ' + err.message; });
     }
 
     function closeSubqueries() {
@@ -4482,7 +4489,7 @@ export function getAiChatPage(user: {
       subqueriesAddMsg.textContent = '';
       if (!val) { subqueriesAddSubmit.style.display = 'none'; return; }
       fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
+        .then(readSubqueriesResponse)
         .then(function(d) {
           var exists = (d.items || []).some(function(x) { return x.query === val; });
           if (exists) {
@@ -4509,10 +4516,17 @@ export function getAiChatPage(user: {
             subqueriesAddMsg.textContent = '追加しました';
             subqueriesAddInput.value = '';
             subqueriesAddSubmit.style.display = 'none';
+            sqSelectedCats = {};
+            sqSelectedGroupId = null;
+            if (d.item) {
+              subqueriesAllItems = subqueriesAllItems.filter(function(item) { return item.id !== d.item.id; });
+              subqueriesAllItems.push({ id: d.item.id, query: d.item.query, link_count: 0, keywords: [] });
+              renderSubqueriesList();
+            }
             fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
-              .then(function(r2) { return r2.json(); })
+              .then(readSubqueriesResponse)
               .then(function(d2) { subqueriesAllItems = d2.items || []; renderSubqueriesList(); })
-              .catch(function() {});
+              .catch(function(err) { subqueriesAddMsg.textContent = '追加しましたが、一覧の再取得に失敗しました: ' + err.message; });
           } else {
             subqueriesAddMsg.textContent = d.error || '追加に失敗しました';
           }
@@ -4684,9 +4698,9 @@ export function getAiChatPage(user: {
       selectedSubqueryId = null;
       addSubqueryList.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
+        .then(readSubqueriesResponse)
         .then(function(d) {
-          var items = (d.items || []).slice(0, 20);
+          var items = d.items || [];
           if (items.length === 0) {
             addSubqueryList.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
             return;
@@ -4709,7 +4723,7 @@ export function getAiChatPage(user: {
             });
           });
         })
-        .catch(function() { addSubqueryList.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+        .catch(function(err) { addSubqueryList.textContent = '取得に失敗しました: ' + err.message; });
     }
 
     function closeAddSubqueryModal() {
