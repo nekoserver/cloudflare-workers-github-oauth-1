@@ -2792,7 +2792,7 @@ export function getAiChatPage(user: {
         var mw = ctx.measureText(match).width;
         ctx.fillStyle = 'rgba(102,126,234,0.30)';
         ctx.fillRect(cursorX, y - 13, mw, 17);
-        ctx.fillStyle = '#1a202c';
+        ctx.fillStyle = baseFill;
         ctx.fillText(match, cursorX, y);
         cursorX += mw;
         idx = pos + word.length;
@@ -2803,6 +2803,8 @@ export function getAiChatPage(user: {
     function drawCanvasSearch(list, keyword) {
       if (!canvasSearchCtx) return;
       var ctx = canvasSearchCtx;
+      var theme = getComputedStyle(canvasSearchCanvas);
+      function themeColor(name) { return theme.getPropertyValue(name).trim(); }
       var W = CANVAS_SEARCH_W;
       var innerW = W - CANVAS_SEARCH_PAD * 2 - 16;
       var items = [];
@@ -2832,11 +2834,11 @@ export function getAiChatPage(user: {
       canvasSearchCanvas.style.height = totalH + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      ctx.fillStyle = '#f7f8fa';
+      ctx.fillStyle = themeColor('--bg-secondary');
       ctx.fillRect(0, 0, W, totalH);
 
       if (items.length === 0) {
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = themeColor('--text-muted');
         ctx.font = '13px sans-serif';
         ctx.fillText('一致する質問・回答がありません', CANVAS_SEARCH_PAD, 30);
         return;
@@ -2844,8 +2846,8 @@ export function getAiChatPage(user: {
 
       var y = CANVAS_SEARCH_PAD;
       items.forEach(function(it) {
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#e2e8f0';
+        ctx.fillStyle = themeColor('--card-bg');
+        ctx.strokeStyle = themeColor('--border-color');
         ctx.lineWidth = 1;
         var cardTop = y;
         ctx.fillRect(CANVAS_SEARCH_PAD - 6, cardTop, W - (CANVAS_SEARCH_PAD - 6) * 2, it.height);
@@ -2854,23 +2856,33 @@ export function getAiChatPage(user: {
         var ty = y + CANVAS_SEARCH_LINE_H - 4;
         ctx.font = '700 13px sans-serif';
         it.qLines.forEach(function(line) {
-          ctx.fillStyle = '#1a202c';
+          ctx.fillStyle = themeColor('--text-primary');
           drawCanvasLineWithHighlight(ctx, line, CANVAS_SEARCH_PAD, ty, keyword);
           ty += CANVAS_SEARCH_LINE_H;
         });
         ctx.font = '12px sans-serif';
         it.aLines.forEach(function(line) {
-          ctx.fillStyle = '#4a5568';
+          ctx.fillStyle = themeColor('--text-secondary');
           drawCanvasLineWithHighlight(ctx, line, CANVAS_SEARCH_PAD, ty, keyword);
           ty += CANVAS_SEARCH_LINE_H;
         });
         ctx.font = '700 11px sans-serif';
-        ctx.fillStyle = it.hasKw ? '#667eea' : '#a0aec0';
+        ctx.fillStyle = themeColor(it.hasKw ? '--accent-color' : '--text-muted');
         ctx.fillText(it.kwLine, CANVAS_SEARCH_PAD, ty);
 
         y += it.height + 10;
       });
     }
+
+    // Canvasの描画済みピクセルはCSS変更だけでは更新されないため再描画する。
+    var canvasSearchThemeObserver = new MutationObserver(function() {
+      if (canvasSearchModal.classList.contains('open')) {
+        renderCanvasSearch(canvasSearchInput.value);
+      }
+    });
+    canvasSearchThemeObserver.observe(document.documentElement, {
+      attributes: true, attributeFilter: ['data-theme']
+    });
 
     function doDateLoad(date) {
       sidebarStatus.textContent = '読み込み中...';
