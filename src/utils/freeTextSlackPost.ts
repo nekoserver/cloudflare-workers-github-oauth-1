@@ -1,10 +1,14 @@
 const MAX_FREE_TEXT_LENGTH = 3000;
 
+export const TSUBUYAKI_SAMPLE_ACTION_ID = 'tsubuyaki_sample_reaction';
+export const TSUBUYAKI_SAMPLE_CHOICES = { understood: '確認しました', thanks: 'ありがとう' } as const;
+
 /**
  * /slack-post（つぶやき投稿）で利用できる Block Kit テンプレート。
  * ID は外部 UI からも送られるため、表示名とは分離して安定させる。
  */
 export const SLACK_POST_TEMPLATES = [
+  { id: 'interactive_sample', emoji: '🖱️', title: 'インタラクティブ投稿サンプル', description: 'Slackでボタンを押すと自分だけに確認メッセージが届く（集計・保存なし）' },
   { id: 'plain', emoji: '💬', title: 'フリーメッセージ', description: '自由な内容をそのまま共有' },
   { id: 'announcement', emoji: '📣', title: 'お知らせ', description: '全体への告知や重要な連絡' },
   { id: 'news', emoji: '📰', title: 'ニュース', description: '新着情報や社内ニュース' },
@@ -45,12 +49,19 @@ export function isSlackPostTemplateId(value: unknown): value is SlackPostTemplat
 export function buildFreeTextSlackBlocks(displayName: string, text: string, templateId: SlackPostTemplateId): Record<string, unknown>[] | undefined {
   if (templateId === 'plain') return undefined;
   const template = SLACK_POST_TEMPLATES.find((item) => item.id === templateId)!;
-  return [
+  const blocks: Record<string, unknown>[] = [
     { type: 'header', text: { type: 'plain_text', text: `${template.emoji} ${template.title}`, emoji: true } },
     { type: 'section', text: { type: 'mrkdwn', text } },
     { type: 'divider' },
     { type: 'context', elements: [{ type: 'mrkdwn', text: `投稿者: *${displayName}*` }] },
   ];
+  if (templateId === 'interactive_sample') {
+    blocks.splice(2, 0, { type: 'actions', elements: Object.entries(TSUBUYAKI_SAMPLE_CHOICES).map(([value, label]) => ({
+      type: 'button', action_id: TSUBUYAKI_SAMPLE_ACTION_ID + '_' + value,
+      text: { type: 'plain_text', text: label }, value,
+    })) });
+  }
+  return blocks;
 }
 
 export type FreeTextValidationResult =

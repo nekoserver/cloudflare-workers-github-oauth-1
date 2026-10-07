@@ -359,3 +359,36 @@ describe('handleSlackInteraction', () => {
     expect(call.text).toContain('概要: テスト');
   });
 });
+
+ describe('tsubuyaki interactive sample', () => {
+  it.each(['understood', 'thanks'])('署名検証後に%sの応答をバックグラウンド送信用に返す', async (value) => {
+    const deps = makeDeps({ slackToken: undefined, rawBody: buildPayload({ actions: [{
+      action_id: 'tsubuyaki_sample_reaction_' + value, value,
+    }] }) });
+    const result = await handleSlackInteraction(deps);
+    expect(result.status).toBe(200);
+    expect(result.sampleResponse?.responseUrl).toBe('https://hooks.slack.com/actions/T00/B00/xxx');
+    expect(result.sampleResponse?.text).toContain(value === 'thanks' ? 'ありがとう' : '確認しました');
+    expect(deps.dbQuery).not.toHaveBeenCalled();
+  });
+  it('署名不正なクリックには応答を送信しない', async () => {
+    const result = await handleSlackInteraction(makeDeps({
+      rawBody: buildPayload({ actions: [{ action_id: 'tsubuyaki_sample_reaction_thanks', value: 'thanks' }] }),
+      verifySignature: vi.fn().mockResolvedValue({ success: false }),
+    }));
+    expect(result.status).toBe(401);
+    expect(result.sampleResponse).toBeUndefined();
+  });
+  it.each([undefined, 'http://hooks.slack.com/actions/x', 'https://example.com/actions/x', 'https://hooks.slack.com.evil.test/actions/x'])('無効な応答URL %s には送信しない', async (response_url) => {
+    const result = await handleSlackInteraction(makeDeps({ rawBody: buildPayload({ response_url,
+      actions: [{ action_id: 'tsubuyaki_sample_reaction_thanks', value: 'thanks' }],
+    }) }));
+    expect(result.sampleResponse).toBeUndefined();
+  });
+  it('不明な選択値にはサンプル応答を返さない', async () => {
+    const result = await handleSlackInteraction(makeDeps({ rawBody: buildPayload({
+      actions: [{ action_id: 'tsubuyaki_sample_reaction_thanks', value: 'unknown' }],
+    }) }));
+    expect(result.sampleResponse).toBeUndefined();
+  });
+});

@@ -1,3 +1,4 @@
+import { TSUBUYAKI_SAMPLE_ACTION_ID, TSUBUYAKI_SAMPLE_CHOICES } from './freeTextSlackPost';
 import { openSlackModal, respondToInteraction } from './slack';
 import { buildSummaryModal, buildSummaryFallbackBlocks, type SummaryModalRow } from './aiSummary';
 
@@ -23,6 +24,7 @@ export type InteractionResult = {
   status: number;
   steps: string[];
   aiReplyTask?: SlackAiReplyTask;
+  sampleResponse?: { responseUrl: string; text: string };
 };
 
 /**
@@ -98,6 +100,27 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
 
   const action = interactionPayload.actions?.[0];
   const actionId = action?.action_id ?? 'none';
+
+  const sampleChoice = Object.entries(TSUBUYAKI_SAMPLE_CHOICES).find(([value]) =>
+    actionId === TSUBUYAKI_SAMPLE_ACTION_ID + '_' + value && action?.value === value);
+  if (sampleChoice) {
+    const responseUrl = interactionPayload.response_url;
+    // 署名検証済みでも送信先はSlackのHTTPS URLに限定する。
+    let validUrl = false;
+    try {
+      const url = new URL(responseUrl);
+      validUrl = url.protocol === 'https:' && url.hostname === 'hooks.slack.com'
+        && url.pathname.startsWith('/actions/') && !url.username && !url.password && !url.port;
+    } catch { /* 不正または欠落したURLには送信しない */ }
+    if (!validUrl) {
+      await log('error', 'invalid sample response_url');
+      return { status: 200, steps };
+    }
+    await log('tsubuyaki_sample_matched', sampleChoice[0]);
+    return { status: 200, steps, sampleResponse: {
+      responseUrl, text: '🖱️ サンプル応答:「' + sampleChoice[1] + '」を受け付けました。これは動作確認用で、回答の集計・保存は行いません。',
+    } };
+  }
 
   if (!action || actionId !== 'view_ai_summary_detail') {
     await log('skip', `action_id=${actionId}`);
