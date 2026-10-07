@@ -40,6 +40,7 @@ describe('tree-view cron更新通知', () => {
     const body = JSON.parse(options.body as string);
     expect(body.channel).toBe('C123');
     expect(body.text).toContain('2026/10/7 15:01:02');
+    expect(body.text).toContain('更新時間: 2026/10/7 15:01:02（日本時間）\n次回予定: 2026/10/7 21:00:00（日本時間）\n更新:');
     expect(body.text).toContain('更新: 1件 / 変更なし: 1件 / 失敗: 0件');
     expect(body.blocks[0].text.text).toContain('cronトリガー更新通知');
     expect(body.blocks.find((b: any) => b.type === 'actions').elements).toHaveLength(2);
@@ -48,11 +49,27 @@ describe('tree-view cron更新通知', () => {
 
   it.each(['missing', 'network'])('通知の%sエラーでも同期と次回予定登録を完了する', async (mode) => {
     vi.mocked(syncAllTreeViewSnapshots).mockResolvedValue({ ...result, failed: [{ repoName: 'test', error: 'failed' }] });
-    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: 'next' });
+    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: '2026-10-07T12:00:00Z' });
     const fetchMock = vi.fn().mockRejectedValue(new Error('network failed'));
     vi.stubGlobal('fetch', fetchMock);
     await expect(runCron(mode === 'missing' ? {} : { SOT: 'test', SLACK_CHANNEL_ID: 'C123' })).resolves.toBeUndefined();
     expect(registerNextTreeViewCronCountdown).toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(mode === 'missing' ? 0 : 1);
+  });
+
+  it('失敗したリポジトリと原因を次回予定とともにSlack本文へ表示する', async () => {
+    vi.mocked(syncAllTreeViewSnapshots).mockResolvedValue({
+      synced: [], skipped: [], failed: [{ repoName: '(all)', error: 'GITHUB_TOKENが未設定です' }],
+    });
+    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: '2026-10-07T18:00:00Z' });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+    await runCron({ SOT: 'test', SLACK_CHANNEL_ID: 'C123' });
+    const [, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.text).toContain('次回予定: 2026/10/8 3:00:00（日本時間）');
+    expect(body.text).toContain('失敗: 1件');
+    expect(body.text).toContain('失敗理由: (all): GITHUB_TOKENが未設定です');
+    expect(body.blocks.find((block: any) => block.type === 'section').text.text).toContain('失敗理由:');
   });
 });
