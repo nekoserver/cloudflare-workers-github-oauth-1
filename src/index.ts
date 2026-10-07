@@ -553,6 +553,7 @@ type StatusQueryExample = {
 };
 
 export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+  { name: 'aichat_keyword_registry', migration: '0167', description: 'キーワード初出台帳・新規切り出し日次統計', syncPolicy: 'manual' },
   { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定', syncPolicy: 'auto' },
   { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ', syncPolicy: 'readonly' },
   { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ', syncPolicy: 'auto' },
@@ -2585,6 +2586,66 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_jev_table_pattern_scores_unique ON jev_tab
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_test_file_catalog_repo_path ON test_file_catalog (repo_name, file_path);`,
   '0166': `ALTER TABLE ai_chat_shares ADD COLUMN codex_session_id TEXT;`,
+  '0167': `-- ユーザーごとの初出台帳。回答を削除しても初出統計は保持する。
+CREATE TABLE IF NOT EXISTS aichat_keyword_registry (
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  first_added_at TEXT NOT NULL,
+  first_share_id TEXT REFERENCES ai_chat_shares(id) ON DELETE SET NULL,
+  first_source TEXT NOT NULL CHECK (first_source IN ('answer_extraction', 'search', 'embedding', 'classification', 'legacy')),
+  PRIMARY KEY (user_id, keyword)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_registry_first_added
+  ON aichat_keyword_registry(user_id, first_source, first_added_at);
+
+-- 過去の出所は特定できないためlegacyとする。登録済みの語を再抽出しても新規に数えない。
+INSERT OR IGNORE INTO aichat_keyword_registry (user_id, keyword, first_added_at, first_share_id, first_source)
+SELECT user_id, keyword, MIN(added_at), NULL, 'legacy'
+FROM (
+  SELECT user_id, keyword, strftime('%Y-%m-%dT%H:%M:%fZ', computed_at) AS added_at FROM aichat_answer_keyword_vectors
+  UNION ALL
+  SELECT user_id, keyword, strftime('%Y-%m-%dT%H:%M:%fZ', first_searched_at) FROM aichat_search_log
+  UNION ALL
+  SELECT user_id, keyword, strftime('%Y-%m-%dT%H:%M:%fZ', created_at) FROM aichat_keyword_embeddings
+  UNION ALL
+  SELECT user_id, keyword, strftime('%Y-%m-%dT%H:%M:%fZ', created_at) FROM aichat_keyword_category_map
+)
+GROUP BY user_id, keyword;
+
+-- 保存と同じトランザクションで初出を記録。モデル・回答が違っても同じ語は1件だけ。
+CREATE TRIGGER IF NOT EXISTS aichat_keyword_registry_from_answer
+AFTER INSERT ON aichat_answer_keyword_vectors
+BEGIN
+  INSERT INTO aichat_keyword_registry (user_id, keyword, first_added_at, first_share_id, first_source)
+  VALUES (NEW.user_id, NEW.keyword, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.computed_at),
+    (SELECT id FROM ai_chat_shares WHERE id = NEW.share_id AND user_id = NEW.user_id), 'answer_extraction')
+  ON CONFLICT(user_id, keyword) DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS aichat_keyword_registry_from_search
+AFTER INSERT ON aichat_search_log
+BEGIN
+  INSERT INTO aichat_keyword_registry (user_id, keyword, first_added_at, first_share_id, first_source)
+  VALUES (NEW.user_id, NEW.keyword, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.first_searched_at), NULL, 'search')
+  ON CONFLICT(user_id, keyword) DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS aichat_keyword_registry_from_embedding
+AFTER INSERT ON aichat_keyword_embeddings
+BEGIN
+  INSERT INTO aichat_keyword_registry (user_id, keyword, first_added_at, first_share_id, first_source)
+  VALUES (NEW.user_id, NEW.keyword, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.created_at), NULL, 'embedding')
+  ON CONFLICT(user_id, keyword) DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS aichat_keyword_registry_from_classification
+AFTER INSERT ON aichat_keyword_category_map
+BEGIN
+  INSERT INTO aichat_keyword_registry (user_id, keyword, first_added_at, first_share_id, first_source)
+  VALUES (NEW.user_id, NEW.keyword, strftime('%Y-%m-%dT%H:%M:%fZ', NEW.created_at), NULL, 'classification')
+  ON CONFLICT(user_id, keyword) DO NOTHING;
+END;
+`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -8332,7 +8393,7 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
-  const [kwRows, qRows, apiModelRows, sourceRows] = await Promise.all([
+  const [kwRows, qRows, apiModelRows, sourceRows, newKeywordRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
        FROM aichat_search_history
@@ -8357,6 +8418,12 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
        WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ?
        GROUP BY source ORDER BY q_count DESC`
     ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>(),
+    c.env.DB.prepare(
+      `SELECT substr(first_added_at,1,10) AS date, COUNT(*) AS new_kw_count
+       FROM aichat_keyword_registry
+       WHERE user_id=? AND first_added_at LIKE ? AND first_source='answer_extraction'
+       GROUP BY date ORDER BY date`
+    ).bind(user.sub, `${month}%`).all<{ date: string; new_kw_count: number }>(),
   ]);
 
   const kwMap: Record<string, number> = {};
@@ -8375,10 +8442,13 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
 
   const sourceTotals = buildAichatSourceTotals(sourceRows.results ?? []);
 
-  const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap)]);
+  const newKwMap: Record<string, number> = {};
+  (newKeywordRows.results ?? []).forEach(r => { newKwMap[r.date] = r.new_kw_count; });
+  const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap), ...Object.keys(newKwMap)]);
   const days = Array.from(allDates).sort().map(date => ({
     date,
     kw_count: kwMap[date] ?? 0,
+    new_kw_count: newKwMap[date] ?? 0,
     models: qMap[date] ?? {},
   }));
 
