@@ -129,6 +129,40 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect((receivedBody as { channel: string }).channel).toBe('nekoserver/rails-root');
   });
 
+  it.each(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/rails-root'])(
+    'Slack ONでも%sのコミットログは送信せず本体D1に保存する', async (repo) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      const { db, inserts } = recordingDb();
+      const prepare = db.prepare.bind(db);
+      db.prepare = (sql: string) => {
+        const statement = prepare(sql);
+        if (sql.includes('SELECT slack_enabled')) {
+          statement.first = async () => ({ slack_enabled: 1 }) as never;
+        }
+        return statement;
+      };
+      const body = JSON.stringify({
+        ref: 'refs/heads/main', repository: { full_name: repo },
+        commits: [{ id: 'abc', message: 'fix: commit log' }],
+      });
+      const response = await postPushWebhook(body, {
+        GITHUB_WEBHOOK_SECRET: secret, DB: db, NOTIFY_TARGET: 'slack',
+        SOT: 'slack-token', SLACK_CHANNEL_ID: 'C123',
+        NOTIFY_WORKER_URL: 'https://cf-auth.example/ingest',
+      });
+      expect(response.status).toBe(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      const commit = inserts.find(i => i.sql.includes('INSERT OR IGNORE INTO repo_commit_index'));
+      expect(commit?.bindings).toEqual(['abc', 1, null, 'fix: commit log', repo]);
+      const summary = inserts.find(i => i.sql.includes('INSERT INTO ai_summary_log'));
+      expect(summary?.bindings[3]).toBe('push_summary');
+      expect(summary?.bindings[4]).toBe(repo);
+      expect(summary?.bindings[11]).toBe(0);
+      expect(inserts.some(i => i.sql.includes('INSERT INTO webhook_log'))).toBe(true);
+    }
+  );
+
   it('通知先が未設定の場合は通知をスキップするが200は返す(処理は止めない)', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
