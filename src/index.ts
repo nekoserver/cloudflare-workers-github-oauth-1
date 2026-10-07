@@ -10670,13 +10670,19 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, message: s
  * 一覧を作る純粋関数。1行1語を基本としつつ、モデルが箇条書き記号
  * (- ・ * 数字.)や読点区切りで返してきても拾えるようにし、前後の空白と
  * 重複を取り除く。
+ *
+ * モデルが用語をインラインコード記法(`用語`)で返してくることがあり、
+ * 前後に余分な「`」が残ってしまう(2026-10-07、ユーザー報告)。箇条書き記号の
+ * 除去後・空白trimの前後それぞれでバックティックも取り除いてから重複判定
+ * (seenへの追加)を行う — これにより同じ語のバックティック有無のゆらぎが
+ * 別語として二重に数えられることもなくなる。
  */
 export function parsePrerequisiteTermsResponse(raw: string): string[] {
   const cleaned = stripThinkTags(raw || '');
   const seen = new Set<string>();
   const terms: string[] = [];
   for (const line of cleaned.split(/[\n、,]/)) {
-    const term = line.replace(/^[\s\-*・0-9.、)）]+/, '').trim();
+    const term = line.replace(/^[\s\-*・0-9.、)）]+/, '').trim().replace(/^`+|`+$/g, '').trim();
     if (!term || seen.has(term)) continue;
     seen.add(term);
     terms.push(term);
