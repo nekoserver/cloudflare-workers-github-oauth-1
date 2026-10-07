@@ -17,9 +17,10 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # GitHubのnumeric IDは公開情報であり、デプロイ直後から管理者認可が機能するよう
 # このWorkerの管理者を明示する。複数人の場合はカンマ区切りで追加する。
 CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
-# 通知（GitHub Webhook通知・/pts等）の送信先スイッチ。"worker" にすると
-# 外部Workerへの送信に切り替わる。未設定・それ以外の値は従来どおり "slack"
-# NOTIFY_TARGET = "worker"
+# GitHub Webhook等の通知はcf-auth側で受信・記録する経路へ送る。
+# デプロイ時にも送信先を維持し、未設定時のSlack送信へ戻らないよう明示する。
+# /tsubuyaki・/pts・インタラクティブ投稿の返信は専用のSlack送信経路を使う。
+NOTIFY_TARGET = "worker"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
