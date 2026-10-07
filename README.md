@@ -410,9 +410,9 @@ GitHub App の **「Install App」** フローでは、コールバックが `/a
 | [ZANZIBAR（権限モデル）](ZANZIBAR.cloudflare-workers-github-oauth-1.md) | GitHub App 権限の Zanzibar 形式定義 |
 | [EVAL（実装評価）](EVAL.cloudflare-workers-github-oauth-1.20260316.md) | コード品質・セキュリティ評価 |
 
-### つぶやきのインタラクティブ投稿サンプル
+### cronトリガー更新通知
 
-`/tsubuyaki` の左サイドバーで「🖱️ インタラクティブ投稿サンプル」を選び、Run▶で適用して本文を投稿します。Slackの投稿には「確認しました」「ありがとう」のボタンが付き、同じチャンネルに、押した人とボタン名を通知します。元の投稿は残り、回答の集計・保存は行いません。
+`/tsubuyaki` の左サイドバーで「🖱️ cronトリガー更新通知」を選び、Run▶で適用して本文を投稿します。Run▶で本文に現在の日本時間を設定します。tree-viewのcron更新処理完了後も、この形式で更新時間・更新件数・変更なし件数・失敗件数をSlackへ自動投稿します。既存のtree-view実行履歴は引き続き記録されます。Slackの投稿には「確認しました」「ありがとう」のボタンが付き、同じチャンネルに、押した人とボタン名を通知します。元の投稿は残り、回答の集計・保存は行いません。
 
 Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本Workerの `https://<Workerのホスト名>/slack/interactions` に設定してください。既存の `SLACK_SIGNING_SECRET` でクリック通知の署名を検証します。投稿には既存のSlack送信設定（`SOT`・送信先チャンネル）が必要です。新しい環境変数やDBマイグレーションは不要です。
 

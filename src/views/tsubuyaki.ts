@@ -290,6 +290,10 @@ ${sidebarIcons}
 
     document.getElementById('applyTemplateButton').addEventListener('click', function() {
       selectedTemplate = previewTemplate.id;
+      if (selectedTemplate === 'interactive_sample') {
+        freeTextEl.value = '更新時間: ' + new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false }) + '（日本時間）';
+        freeTextEl.dispatchEvent(new Event('input'));
+      }
       renderAppliedLabel();
       freeTextEl.focus();
     });
