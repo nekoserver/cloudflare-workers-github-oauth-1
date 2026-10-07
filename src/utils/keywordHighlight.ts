@@ -8,12 +8,13 @@
  * を自前で用意すること(コンテナのclass名がページごとに異なるため)。
  */
 export function getKeywordHighlightScript(): string {
-  return `
+  // 生成先のJavaScriptに正規表現のエスケープをそのまま渡す。
+  return String.raw`
     function applyKeywordHighlight(el, keyword) {
       if (!keyword) return;
       var kwList = Array.isArray(keyword) ? keyword.filter(Boolean) : [keyword];
       if (kwList.length === 0) return;
-      var escaped = kwList.map(function(k) { return k.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&'); });
+      var escaped = kwList.map(function(k) { return k.replace(/[.*+?$^{}()|[\]\\]/g, '\\$&'); });
       var re = new RegExp(escaped.join('|'), 'gi');
       var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
       var nodes = [];
@@ -25,6 +26,8 @@ export function getKeywordHighlightScript(): string {
         var frag = document.createDocumentFragment();
         var last = 0, m;
         while ((m = re.exec(tn.nodeValue)) !== null) {
+          // 空文字一致では lastIndex が進まないため、無限ループを防ぐ。
+          if (m[0].length === 0) break;
           if (m.index > last) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last, m.index)));
           var mark = document.createElement('mark');
           mark.className = 'kw-highlight';
