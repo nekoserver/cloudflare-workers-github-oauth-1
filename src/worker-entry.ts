@@ -1,4 +1,5 @@
 import app, { syncAllTreeViewSnapshots } from './index';
+import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
 import type { Bindings } from './types';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
 
@@ -11,7 +12,13 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       Promise.all([
-        syncAllTreeViewSnapshots(env),
+        syncAllTreeViewSnapshots(env).then(async (result) => {
+          const notification = await notifyTreeViewCronUpdate(env, result, new Date());
+          if (!notification.ok) {
+            console.error('[scheduled] cron update notification failed', notification.error);
+          }
+          return result;
+        }),
         registerNextTreeViewCronCountdown(env.DB),
       ]).then(([result, countdown]) => {
         console.log('[scheduled] tree-view-snapshot sync', {
