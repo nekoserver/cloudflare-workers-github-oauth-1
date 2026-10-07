@@ -129,6 +129,39 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect((receivedBody as { channel: string }).channel).toBe('nekoserver/rails-root');
   });
 
+  it.each([undefined, 'slack'])('Slack OFFでもNOTIFY_TARGET=%sからcf-authへ転送し、コミットを記録する', async (target) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { db, inserts } = recordingDb();
+    const prepare = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (sql.includes('SELECT slack_enabled')) {
+        statement.first = async () => ({ slack_enabled: 0 }) as never;
+      }
+      return statement;
+    };
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { full_name: 'nekoserver/cloudflare-workers-github-oauth-1' },
+      commits: [{ id: 'abc', message: 'fix: commit log' }],
+    });
+    const response = await postPushWebhook(body, {
+      GITHUB_WEBHOOK_SECRET: secret, DB: db, NOTIFY_TARGET: target,
+      SOT: 'slack-token', SLACK_CHANNEL_ID: 'C123',
+      NOTIFY_WORKER_URL: 'https://cf-auth.example/ingest',
+      NOTIFY_WORKER_SECRET: 'worker-secret',
+    });
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('https://cf-auth.example/ingest');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer worker-secret');
+    expect(JSON.parse(String(init!.body)).channel).toBe('nekoserver/cloudflare-workers-github-oauth-1');
+    expect(inserts.some(i => i.sql.includes('INSERT INTO ai_summary_log'))).toBe(true);
+    expect(inserts.some(i => i.sql.includes('INSERT OR IGNORE INTO repo_commit_index'))).toBe(true);
+  });
+
   it.each(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/rails-root'])(
     'Slack ONでも%sのコミットログは送信せず本体D1に保存する', async (repo) => {
       const fetchMock = vi.fn();

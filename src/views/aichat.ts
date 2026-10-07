@@ -2653,6 +2653,7 @@ export function getAiChatPage(user: {
               + '</div>';
             html += '<div class="slm-model">モデル: ' + escHtml(modelShort) + '</div>';
             html += '<div class="slm-id">ID: ' + escHtml(e.shareId) + '</div>';
+            html += '<div class="slm-id">登録キーワード数: ' + (e.keywordCount || 0) + '語</div>';
             if (e.question) html += '<div class="slm-q">質問: ' + escHtml(e.question) + '</div>';
             html += '</div>';
           });
@@ -2680,6 +2681,12 @@ export function getAiChatPage(user: {
         .then(function(data) {
           searchLogApproveBtn.disabled = false;
           if (data.ok) {
+            Object.keys(data.keywordCounts || {}).forEach(function(id) {
+              currentResults.forEach(function(row) { if (String(row.id) === id) row.keywordCount = data.keywordCounts[id]; });
+            });
+            kwListCache = [];
+            if (sidebarKwModal.classList.contains('open')) openSidebarKeywordModal();
+            if (dailyStatsModal.classList.contains('open')) renderDailyStatsChart();
             openSearchLogRecordModal(searchLogCurrentKeyword, searchLogCurrentShareIds);
           } else {
             searchLogRecordModalBody.innerHTML = '<div style="color:#e53e3e;font-size:12px;">登録に失敗しました: ' + escHtml(String(data.error || '')) + '</div>';
@@ -6668,19 +6675,31 @@ export function getAiChatPage(user: {
     }
 
     function buildNewKeywordStatsHtml(days) {
-      var addedDays = (days || []).filter(function(day) { return (day.new_kw_count || 0) > 0; });
-      var total = addedDays.reduce(function(sum, day) { return sum + day.new_kw_count; }, 0);
-      var html = '<section aria-label="新規切り出しキーワード数" style="margin-top:16px;">';
-      html += '<div style="font-size:12px;font-weight:600;">新規切り出しキーワード数: ' + total + '語</div>';
-      html += '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 8px;">このユーザーで初めて登録された語。再抽出・モデル変更は重複計上しません。UTC日付・過去データは除外。</div>';
-      if (!addedDays.length) return html + '<div style="font-size:11px;color:var(--text-muted);">この月の新規切り出しは0語です</div></section>';
-      var maxCount = Math.max.apply(null, addedDays.map(function(day) { return day.new_kw_count; }));
-      html += '<table style="width:100%;font-size:11px;text-align:left;"><thead><tr><th>日付</th><th>新規追加数</th></tr></thead><tbody>';
+      var sources = [
+        { key: 'answer_extraction', label: '✂️切り出し' },
+        { key: 'search', label: '検索から追加' },
+        { key: 'embedding', label: '埋め込み登録' },
+        { key: 'classification', label: '分類から追加' }
+      ];
+      var addedDays = (days || []).filter(function(day) { return (day.added_kw_count || 0) > 0; });
+      var total = addedDays.reduce(function(sum, day) { return sum + day.added_kw_count; }, 0);
+      var html = '<section aria-label="新規追加キーワード数" style="margin-top:16px;">';
+      html += '<div style="font-size:12px;font-weight:600;">新規追加キーワード数: ' + total + '語</div>';
+      html += '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 8px;">このユーザーで初めて登録された語を、最初の追加経路で集計。複数回答への追加・再抽出は1語として数えます。UTC日付・過去データは除外。</div>';
+      if (!addedDays.length) return html + '<div style="font-size:11px;color:var(--text-muted);">この月の新規追加は0語です</div></section>';
+      html += '<div style="font-size:11px;margin-bottom:8px;">' + sources.map(function(source) {
+        var count = addedDays.reduce(function(sum, day) { return sum + ((day.added_kw_sources || {})[source.key] || 0); }, 0);
+        return source.label + ': ' + count + '語';
+      }).join(' / ') + '</div>';
+      html += '<div style="overflow-x:auto;"><table style="width:100%;font-size:11px;text-align:left;"><thead><tr><th>日付</th><th>合計</th>';
+      sources.forEach(function(source) { html += '<th>' + source.label + '</th>'; });
+      html += '</tr></thead><tbody>';
       addedDays.forEach(function(day) {
-        html += '<tr><td>' + escHtml(day.date) + '</td><td>' + day.new_kw_count + '語'
-          + '<span aria-hidden="true" style="display:block;height:6px;background:#22c55e;width:' + (day.new_kw_count / maxCount * 100).toFixed(1) + '%;"></span></td></tr>';
+        html += '<tr><td>' + escHtml(day.date) + '</td><td>' + day.added_kw_count + '語</td>';
+        sources.forEach(function(source) { html += '<td>' + ((day.added_kw_sources || {})[source.key] || 0) + '語</td>'; });
+        html += '</tr>';
       });
-      return html + '</tbody></table></section>';
+      return html + '</tbody></table></div></section>';
     }
 
     function renderDailyStatsChart() {

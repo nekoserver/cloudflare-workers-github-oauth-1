@@ -160,7 +160,7 @@ export function getWebhookSlackSettingPage(
         <li><span class="wh-step-title">署名検証</span><span class="wh-step-detail"><code>X-Hub-Signature-256</code>を<code>GITHUB_WEBHOOK_SECRET</code>で検証。失敗したら<code>webhook_log</code>にstatus=rejectedで記録し401を返す(ここで処理終了)。</span></li>
         <li><span class="wh-step-title">webhook_logへの無条件記録</span><span class="wh-step-detail">署名OKなら、event種別・action・repository.full_nameを<code>webhook_log</code>へstatus=okで記録する(この時点ではまだ通知先への転送は行わない)。</span></li>
         <li><span class="wh-step-title">イベント種別ごとの分岐</span><span class="wh-step-detail"><code>installation</code> / <code>installation_repositories</code> / <code>repository</code>(action=created) / <code>pull_request</code>(action=opened/synchronize) / <code>push</code> の5パターンだけが、この先の通知処理に進む。それ以外のイベント種別は記録されるのみで通知処理には進まない。</span></li>
-        <li><span class="wh-step-title">通知設定の解決</span><span class="wh-step-detail"><code>resolveNotifyConfigWithSetting(env)</code>を呼び、<code>NOTIFY_TARGET</code>環境変数と(slack時のみ)D1の<code>slack_enabled</code>ユーザーオプションから送信先を決定する。</span></li>
+        <li><span class="wh-step-title">通知設定の解決</span><span class="wh-step-detail"><code>resolveNotifyConfigWithSetting(env)</code>を呼び、<code>NOTIFY_TARGET</code>環境変数と(slack時のみ)D1の<code>slack_enabled</code>ユーザーオプションから送信先を決定する。SlackがOFFでも<code>NOTIFY_WORKER_URL</code>が設定されていれば外部Workerへ転送する。</span></li>
         <li><span class="wh-step-title">送信可否の判定</span><span class="wh-step-detail"><code>isNotifyConfigured()</code>が必要な設定が揃っているかだけを見る(下記3節の表と同じロジック)。揃っていなければ通知はスキップされるが、処理自体(D1記録・AI要約等)は継続する。</span></li>
         <li><span class="wh-step-title">dispatchNotification()の実行</span><span class="wh-step-detail"><code>target=slack</code>なら<code>postSlackMessage()</code>でSlack APIへ、<code>target=worker</code>なら<code>sendToWorker()</code>で経路C(cf-authの<code>/ingest</code>)へPOSTする。<strong>どちらか一方にしか送られない(fan-outではない)。</strong></span></li>
         <li><span class="wh-step-title">cf-auth側 /ingest での受信</span><span class="wh-step-detail">経路Cの場合、cf-auth側は<code>Authorization</code>ヘッダーを自身の<code>INGEST_SECRET</code>と突き合わせ、一致しなければ401で拒否する(値は本体の<code>NOTIFY_WORKER_SECRET</code>と同じである必要がある。変数名は違ってよい)。一致すれば<code>alt_notify_ingest_log</code>テーブルへ記録する。</span></li>
@@ -174,10 +174,11 @@ export function getWebhookSlackSettingPage(
   if target === 'worker':
     return NOTIFY_WORKER_URLが設定されているか   ← slack_enabledは見ない
   else (target === 'slack' または未設定):
-    if slack_enabled === false (D1のユーザー設定、既定OFF): return false
+    if slack_enabled === false (D1のユーザー設定、既定OFF):
+    NOTIFY_WORKER_URLがあればworkerへ転送、無ければreturn false
     return SOT && SLACK_CHANNEL_IDが両方あるか</code></pre>
       <p class="wh-note">pushイベントのコミットログはSlack通知のON/OFFに関係なく本体D1の<code>repo_commit_index</code>へ、AI要約は<code>ai_summary_log</code>へ保存する。pushイベントはSlackに送信せず、通知先が外部Workerの場合のみ転送する。</p>
-      <p class="wh-note"><code>NOTIFY_TARGET</code>は<strong>本体Worker全体で1つだけ</strong>の設定であり、リポジトリ単位・イベント種別単位では切り替えられない。<code>worker</code>に設定するとSlackへの投稿は(slack_enabledの値によらず)一切行われなくなる。</p>
+      <p class="wh-note"><code>NOTIFY_TARGET</code>は<strong>本体Worker全体で1つだけ</strong>の設定であり、リポジトリ単位・イベント種別単位では切り替えられない。SlackがOFFの場合は、設定済みの外部Workerへ転送を継続する。<code>worker</code>に設定するとSlackへの投稿は(slack_enabledの値によらず)一切行われなくなる。</p>
     </div>
 
     <div class="wh-card">
