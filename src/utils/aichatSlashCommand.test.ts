@@ -874,7 +874,7 @@ describe('/neko askgk claude_prompt="..."', () => {
       { ...unusedDeps, askTunnelSigner }
     );
     expect(askTunnelSigner).toHaveBeenCalledWith('claude_prompt="元気 ですか"');
-    expect(result).toEqual({ handled: true, saveAsAiResponse: true, response: expect.stringContaining('にゃーん') });
+    expect(result).toEqual({ handled: true, saveAsAiResponse: true, claudeAskgk: true, response: expect.stringContaining('にゃーん') });
   });
 
   it('値中のエスケープされた引用符もそのまま(解釈せず)渡す', async () => {
@@ -897,7 +897,7 @@ describe('/neko askgk claude_prompt="..."', () => {
       now,
       { ...unusedDeps, askTunnelSigner }
     );
-    expect(result).toEqual({ handled: true, saveAsAiResponse: true, response: '回答本文' });
+    expect(result).toEqual({ handled: true, saveAsAiResponse: true, claudeAskgk: true, response: '回答本文' });
   });
 
   it('通常の質問も回答本文だけを保存対象として返す', async () => {

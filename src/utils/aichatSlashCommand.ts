@@ -186,7 +186,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko sql impact <テーブル名> | D1クエリカタログからSQL変更影響を表示します |',
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
-    '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式は接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
@@ -1288,7 +1288,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; saveAsAiResponse?: boolean }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; claudeAskgk?: boolean; saveAsAiResponse?: boolean }
   | { handled: false };
 
 /**
@@ -2016,6 +2016,9 @@ export async function interpretAichatSlashCommand(
     if (/^codex_\w+\b/i.test(question)) {
       const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
       return { handled: true, response: answer, saveAsAiResponse: true, codexAskgk: { sessionId } };
+    }
+    if (/^claude_prompt\s*=\s*["“”]/i.test(question)) {
+      return { handled: true, response: outcome.value.trim(), saveAsAiResponse: true, claudeAskgk: true };
     }
     const promptArgMatch = question.match(/^(\w+)_prompt(?:\s*=\s*["“”]|$)/);
     if (promptArgMatch) {

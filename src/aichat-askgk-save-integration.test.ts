@@ -4,7 +4,7 @@ import { createJWT } from './utils/jwt';
 import { computeQuestionHash, computeConversationHash } from './utils/conversationHash';
 import { getMarkdownParserScript } from './utils/markdownRenderer';
 
-describe('/neko askgk codex_prompt の応答ログ', () => {
+describe('/neko askgk Codex/Claudeの応答ログ', () => {
   it.each([
     { threadId: '', saveFails: false, openQuote: '"' },
     { threadId: '', saveFails: false, openQuote: '“' },
@@ -13,10 +13,10 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     { threadId: 'a'.repeat(32), saveFails: false },
     { threadId: 'a'.repeat(32), saveFails: true },
     { threadId: '', saveFails: true },
-  ])('replyの保存: threadId=$threadId, saveFails=$saveFails', async ({ threadId, saveFails, openQuote = '"', missingThread = false }) => {
+  ].flatMap(testCase => ['codex', 'claude'].map(model => ({ ...testCase, model }))))('replyの保存: model=$model, threadId=$threadId, saveFails=$saveFails', async ({ model, threadId, saveFails, openQuote = '"', missingThread = false }) => {
     const reply = '## 回答\n\n1行目\n2行目\n\n- 項目';
     const question = '以下は Cursr VM の公式ドキュメントですが日本語に訳してから要約してください https://cursor.com/docs/cloud-agent/security';
-    const message = '/neko askgk codex_prompt=' + openQuote + question + (openQuote === '“' ? '”' : '"');
+    const message = '/neko askgk ' + model + '_prompt=' + openQuote + question + (openQuote === '“' ? '”' : '"');
     const inserts: unknown[][] = [];
     const DB = {
       prepare(sql: string) {
@@ -61,7 +61,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
         expect(await response.json()).toEqual({ error: '追加質問をスレッドへ保存できませんでした: DB write failed' });
       } else {
         expect(response.status).toBe(200);
-        expect(await response.json()).toMatchObject({ response: reply, usedModel: 'codex', saveError: 'DB write failed' });
+        expect(await response.json()).toMatchObject({ response: reply, usedModel: model, saveError: 'DB write failed' });
       }
       expect(inserts).toHaveLength(0);
       return;
@@ -69,7 +69,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { response: string; shareId: string; threadId: string; usedModel: string };
     expect(body.response).toBe(reply);
-    expect(body.usedModel).toBe('codex');
+    expect(body.usedModel).toBe(model);
     expect(body.threadId).toMatch(/^[0-9a-f]{32}$/);
     if (threadId && !missingThread) expect(body.threadId).toBe(threadId);
     if (missingThread) expect(body.threadId).not.toBe(threadId);
@@ -79,11 +79,11 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     expect(inserts[0][1]).toBe('test-user');
     expect(inserts[0][7]).toMatch(/^[0-9a-f]{64}$/);
     expect(inserts[0][8]).toBe(await computeQuestionHash('test-user', question));
-    expect(inserts[0][7]).toBe(await computeConversationHash('test-user', question, reply, 'codex', String(inserts[0][6])));
+    expect(inserts[0][7]).toBe(await computeConversationHash('test-user', question, reply, model, String(inserts[0][6])));
     expect(inserts[0][11]).toBeGreaterThan(0);
     expect(inserts[0][13]).toBeNull();
     expect(inserts[0][4]).toBe(reply);
-    expect(inserts[0][5]).toBe('codex');
+    expect(inserts[0][5]).toBe(model);
     expect(inserts[0][12]).toBe('textbox');
     expect(inserts[0][14]).toBe(body.threadId);
 
