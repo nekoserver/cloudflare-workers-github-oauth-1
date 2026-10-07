@@ -8,13 +8,15 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
   it.each([
     { threadId: '', saveFails: false, openQuote: '"' },
     { threadId: '', saveFails: false, openQuote: '“' },
+    { threadId: 'b'.repeat(32), saveFails: false, openQuote: '“', missingThread: true },
+    { threadId: 'b'.repeat(32), saveFails: true, openQuote: '“', missingThread: true },
     { threadId: 'a'.repeat(32), saveFails: false },
     { threadId: 'a'.repeat(32), saveFails: true },
     { threadId: '', saveFails: true },
-  ])('replyの保存: threadId=$threadId, saveFails=$saveFails', async ({ threadId, saveFails, openQuote = '"' }) => {
+  ])('replyの保存: threadId=$threadId, saveFails=$saveFails', async ({ threadId, saveFails, openQuote = '"', missingThread = false }) => {
     const reply = '## 回答\n\n1行目\n2行目\n\n- 項目';
-    const question = '◯  詳しく\n説明してください';
-    const message = '/neko askgk codex_prompt=' + openQuote + question + '"';
+    const question = '以下は Cursr VM の公式ドキュメントですが日本語に訳してから要約してください https://cursor.com/docs/cloud-agent/security';
+    const message = '/neko askgk codex_prompt=' + openQuote + question + (openQuote === '“' ? '”' : '"');
     const inserts: unknown[][] = [];
     const DB = {
       prepare(sql: string) {
@@ -22,7 +24,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
           all: async () => ({ results: [] }),
           bind(...args: unknown[]) {
             return {
-              first: async () => sql.includes('user_sessions') ? { revoked_at: null } : { found: 1 },
+              first: async () => sql.includes('user_sessions') ? { revoked_at: null } : missingThread && sql.includes('SELECT 1 AS found') ? null : { found: 1 },
               run: async () => {
                 if (sql.startsWith('INSERT INTO ai_chat_shares')) {
                   if (saveFails) throw new Error('DB write failed');
@@ -54,7 +56,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     }, { JWT_SECRET, DB, RUST_WORKER });
 
     if (saveFails) {
-      if (threadId) {
+      if (threadId && !missingThread) {
         expect(response.status).toBe(500);
         expect(await response.json()).toEqual({ error: '追加質問をスレッドへ保存できませんでした: DB write failed' });
       } else {
@@ -69,7 +71,8 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     expect(body.response).toBe(reply);
     expect(body.usedModel).toBe('codex');
     expect(body.threadId).toMatch(/^[0-9a-f]{32}$/);
-    if (threadId) expect(body.threadId).toBe(threadId);
+    if (threadId && !missingThread) expect(body.threadId).toBe(threadId);
+    if (missingThread) expect(body.threadId).not.toBe(threadId);
     expect(inserts).toHaveLength(1);
     expect(inserts[0][0]).toBe(body.shareId);
     expect(inserts[0][3]).toBe(question);
@@ -91,7 +94,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
     expect(html).toContain('1行目<br>2行目');
     expect(html).toContain('<li>項目</li>');
   });
-  it.each(['invalid', 'b'.repeat(32)])('無効または所有していないスレッドには保存しない: %s', async (threadId) => {
+  it.each(['invalid'])('形式が無効なスレッドには保存しない: %s', async (threadId) => {
     const run = vi.fn();
     const DB = { prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({
       first: async () => {
@@ -109,7 +112,7 @@ describe('/neko askgk codex_prompt の応答ログ', () => {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '/neko askgk codex_prompt="質問"', threadId }),
     }, { JWT_SECRET, DB, RUST_WORKER: { fetch: async () => new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: '回答' }) })) } });
-    expect(response.status).toBe(threadId === 'invalid' ? 400 : 404);
+    expect(response.status).toBe(400);
     expect(run).not.toHaveBeenCalled();
   });
 
