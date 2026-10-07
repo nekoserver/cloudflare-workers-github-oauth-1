@@ -8,6 +8,21 @@ const TUNNELS_URL = 'https://mynw.nekomaneki.work/lib/api/tunnels';
 export type AskFetcher = Pick<Fetcher, 'fetch'>;
 
 /**
+ * tunnels.rb側が応答に付けるようになったLLM種別情報(2026-10-07〜)。
+ * HTTPヘッダ(X-LLM-Engine/X-LLM-Model/X-LLM-Effort)は本リポジトリからtunnels.rb
+ * まで複数ホップのJSON文字列ラッピング(Service Binding→rust-worker-sqlx-d1→
+ * tunnels.rb)を経由するため実HTTPヘッダとしては届かない。代わりにtunnels.rb
+ * が応答JSON本体に含めるllm_model/llm_effortフィールドを読む。llm_engineに
+ * 相当するフィールドは無いため、エンジン名は呼び出し元(aichatSlashCommand.ts)が
+ * `◯◯_prompt="..."`の接頭語から判定する。
+ */
+export type AskTunnelSignerResult = {
+  reply: string;
+  llmModel?: string;
+  llmEffort?: string;
+};
+
+/**
  * `/neko askgk <コマンド>` の短縮エイリアス表。tunnels側が実際に解釈する
  * コマンド文字列は冗長なため(例: "cf ai models list")、Slack上で打ちやすい
  * 短縮形(例: "models-list")をここで実コマンドへ変換してから送る。
@@ -51,7 +66,7 @@ export function resolveAskgkCommand(input: string): string {
  * 質問と区別しているため(2026-10-04、接頭語を剥がして渡してしまい先方の
  * 判定が効かなくなる不具合があった)。
  */
-export async function askTunnelSigner(fetcher: AskFetcher, message: string): Promise<string> {
+export async function askTunnelSigner(fetcher: AskFetcher, message: string): Promise<AskTunnelSignerResult> {
   const payload = JSON.stringify({ status: 'healthy', format: 'json', message: resolveAskgkCommand(message) });
 
   const res = await fetcher.fetch(SEND_PATH, {
@@ -82,7 +97,7 @@ export async function askTunnelSigner(fetcher: AskFetcher, message: string): Pro
     throw new Error(`tunnels応答異常: HTTP ${sendResult.status} ${sendResult.body.slice(0, 200)}`);
   }
 
-  let upstream: { reply?: string };
+  let upstream: { reply?: string; llm_model?: unknown; llm_effort?: unknown };
   try {
     upstream = JSON.parse(sendResult.body);
   } catch {
@@ -92,5 +107,9 @@ export async function askTunnelSigner(fetcher: AskFetcher, message: string): Pro
   if (typeof upstream.reply !== 'string' || upstream.reply.length === 0) {
     throw new Error(`tunnelsの応答にreplyが含まれていません: ${sendResult.body.slice(0, 200)}`);
   }
-  return upstream.reply;
+  return {
+    reply: upstream.reply,
+    llmModel: typeof upstream.llm_model === 'string' && upstream.llm_model.length > 0 ? upstream.llm_model : undefined,
+    llmEffort: typeof upstream.llm_effort === 'string' && upstream.llm_effort.length > 0 ? upstream.llm_effort : undefined,
+  };
 }

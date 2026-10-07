@@ -139,7 +139,7 @@ describe('handleSlackAppMention', () => {
     it('本文が"/neko askgk <質問文>"の場合はAIを呼ばずaskTunnelSignerへ渡し、結果をそのまま返信する', async () => {
       const deps = baseDeps();
       deps.text = '<@U12345> /neko askgk settings';
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('設定は正常です');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue({ reply: '設定は正常です' });
       const result = await handleSlackAppMention(deps);
       expect(result).toEqual({ posted: true });
       expect(deps.aiRun).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe('handleSlackAppMention', () => {
     it('引数なし("/neko askgk"のみ)の場合も空文字のままaskTunnelSignerへ渡しヘルプ応答を返信する(tunnel-signerファイルに渡すヘルプコマンドの1つ)', async () => {
       const deps = baseDeps();
       deps.text = '<@U12345> /neko askgk';
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('利用可能なコマンド一覧...');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue({ reply: '利用可能なコマンド一覧...' });
       const result = await handleSlackAppMention(deps);
       expect(result).toEqual({ posted: true });
       expect(deps.askTunnelSigner).toHaveBeenCalledWith('');
@@ -194,7 +194,7 @@ describe('handleSlackAppMention', () => {
     it('"/neko askgk help"はエイリアス変換せず"help"のままaskTunnelSignerへ渡す(tunnel-signerファイルに渡すヘルプコマンドのもう1つ)', async () => {
       const deps = baseDeps();
       deps.text = '<@U12345> /neko askgk help';
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('利用可能なコマンド一覧...');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue({ reply: '利用可能なコマンド一覧...' });
       const result = await handleSlackAppMention(deps);
       expect(result).toEqual({ posted: true });
       expect(deps.askTunnelSigner).toHaveBeenCalledWith('help');
@@ -204,7 +204,7 @@ describe('handleSlackAppMention', () => {
 
     it('askTunnelSignerが設定されていても askgk 以外の本文は従来通りAI応答になる(回帰)', async () => {
       const deps = baseDeps();
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('使われない');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue({ reply: '使われない' });
       const result = await handleSlackAppMention(deps);
       expect(result).toEqual({ posted: true });
       expect(deps.askTunnelSigner).not.toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe('handleSlackAppMention', () => {
     it('askgk結果はsaveShareへ渡さない(AIチャット側の/neko askgkもai_chat_sharesに保存しない仕様と揃える)', async () => {
       const deps = baseDeps();
       deps.text = '<@U12345> /neko askgk settings';
-      deps.askTunnelSigner = vi.fn().mockResolvedValue('設定は正常です');
+      deps.askTunnelSigner = vi.fn().mockResolvedValue({ reply: '設定は正常です' });
       const saveShare = vi.fn().mockResolvedValue(undefined);
       deps.saveShare = saveShare;
       await handleSlackAppMention(deps);

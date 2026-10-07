@@ -7,7 +7,7 @@ describe('/neko askgk', () => {
       fetchLatestCommitAgentLog: async () => null,
       askTunnelSigner: async (message) => {
         expect(message).toBe('げんき？');
-        return 'にゃーん、元気だよ';
+        return { reply: 'にゃーん、元気だよ' };
       },
     });
     expect(result.handled).toBe(true);
@@ -23,7 +23,7 @@ describe('/neko askgk', () => {
     const replyWithNewlines = '1行目\n2行目\n\n3行目';
     const result = await interpretAichatSlashCommand('/neko askgk x', new Date('2026-10-01T00:00:00.000Z'), {
       fetchLatestCommitAgentLog: async () => null,
-      askTunnelSigner: async () => replyWithNewlines,
+      askTunnelSigner: async () => ({ reply: replyWithNewlines }),
     });
     expect(result.handled).toBe(true);
     if (!result.handled) throw new Error('not handled');
@@ -41,7 +41,7 @@ describe('/neko askgk', () => {
       fetchLatestCommitAgentLog: async () => null,
       askTunnelSigner: async (message) => {
         expect(message).toBe('');
-        return '利用可能なコマンド一覧...';
+        return { reply: '利用可能なコマンド一覧...' };
       },
     });
     expect(result.handled).toBe(true);
@@ -65,7 +65,7 @@ describe('/neko askgk', () => {
       fetchLatestCommitAgentLog: async () => null,
       askTunnelSigner: async (message) => {
         expect(message).toBe('help');
-        return '利用可能なコマンド一覧...';
+        return { reply: '利用可能なコマンド一覧...' };
       },
     });
     expect(result.handled).toBe(true);
@@ -147,7 +147,7 @@ describe('/neko askgk', () => {
   it.each(['codex_status', 'codex_resume="session-1"', 'CODEX_HELP'])('codex_*はCodex応答として扱う: %s', async (argument) => {
     const result = await interpretAichatSlashCommand('/neko askgk ' + argument, new Date(), {
       fetchLatestCommitAgentLog: async () => null,
-      askTunnelSigner: async () => 'session id: abc\n回答',
+      askTunnelSigner: async () => ({ reply: 'session id: abc\n回答' }),
     });
     expect(result).toMatchObject({ handled: true, response: '回答', saveAsAiResponse: true, codexAskgk: { sessionId: 'abc' } });
   });

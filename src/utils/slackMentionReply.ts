@@ -35,7 +35,7 @@ export type SlackMentionReplyDeps = {
    * 同じ関数)。未設定(Service Binding無し)の場合はPOST /api/aichat側と同じ
    * 「現在利用できません」文言を返す。
    */
-  askTunnelSigner?: (message: string) => Promise<string>;
+  askTunnelSigner?: (message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>;
 };
 
 const ASKGK_MENTION_PREFIX = '/neko askgk';
@@ -88,7 +88,7 @@ export function formatSlackAiReplyText(aiResult: { ok: true; text: string } | { 
  */
 async function resolveAskgkMentionReply(
   question: string,
-  askTunnelSigner: ((message: string) => Promise<string>) | undefined
+  askTunnelSigner: ((message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>) | undefined
 ): Promise<string> {
   // tunnel-signerファイルに渡すヘルプコマンドは「/neko askgk」(引数なし、空文字
   // のまま渡す)と「/neko askgk help」(エイリアス変換せず"help"のまま渡す)の
@@ -97,7 +97,7 @@ async function resolveAskgkMentionReply(
     return '❌ /neko askgk は現在利用できません(rust-worker-sqlx-d1連携未設定)';
   }
   try {
-    const reply = await askTunnelSigner(question);
+    const { reply } = await askTunnelSigner(question);
     return `**質問**: ${question || '(引数なし)'}\n\n${reply}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

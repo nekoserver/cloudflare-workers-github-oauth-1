@@ -14,8 +14,8 @@ describe('askTunnelSigner', () => {
     const fetcher = makeFetcher(async () =>
       sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'にゃーん' }) })
     );
-    const reply = await askTunnelSigner(fetcher, 'げんき？');
-    expect(reply).toBe('にゃーん');
+    const result = await askTunnelSigner(fetcher, 'げんき？');
+    expect(result.reply).toBe('にゃーん');
   });
 
   it('改行を含むreplyもそのまま(改行を潰さず)返す', async () => {
@@ -23,8 +23,45 @@ describe('askTunnelSigner', () => {
     const fetcher = makeFetcher(async () =>
       sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: replyWithNewlines }) })
     );
-    const reply = await askTunnelSigner(fetcher, '質問');
-    expect(reply).toBe(replyWithNewlines);
+    const result = await askTunnelSigner(fetcher, '質問');
+    expect(result.reply).toBe(replyWithNewlines);
+  });
+
+  // 対象: tunnels.rbが2026-10-07〜応答JSON本体に追加したllm_model/llm_effort。
+  // ヘッダ(X-LLM-Engine等)はService Binding越しのJSON文字列ラッピングの
+  // 都中では届かないため、この2フィールドのみ読む。
+  it('llm_model/llm_effortフィールドがあればそのまま返す', async () => {
+    const fetcher = makeFetcher(async () =>
+      sendResultResponse({
+        ok: true,
+        status: 200,
+        body: JSON.stringify({ reply: 'にゃーん', llm_model: 'claude-sonnet-5-5', llm_effort: 'medium' }),
+      })
+    );
+    const result = await askTunnelSigner(fetcher, 'げんき？');
+    expect(result).toEqual({ reply: 'にゃーん', llmModel: 'claude-sonnet-5-5', llmEffort: 'medium' });
+  });
+
+  it('llm_model/llm_effortが無い場合はundefinedになる(無い情報を書かない)', async () => {
+    const fetcher = makeFetcher(async () =>
+      sendResultResponse({ ok: true, status: 200, body: JSON.stringify({ reply: 'にゃーん' }) })
+    );
+    const result = await askTunnelSigner(fetcher, 'げんき？');
+    expect(result.llmModel).toBeUndefined();
+    expect(result.llmEffort).toBeUndefined();
+  });
+
+  it('llm_model/llm_effortが空文字や非文字列の場合もundefinedになる', async () => {
+    const fetcher = makeFetcher(async () =>
+      sendResultResponse({
+        ok: true,
+        status: 200,
+        body: JSON.stringify({ reply: 'にゃーん', llm_model: '', llm_effort: 42 }),
+      })
+    );
+    const result = await askTunnelSigner(fetcher, 'げんき？');
+    expect(result.llmModel).toBeUndefined();
+    expect(result.llmEffort).toBeUndefined();
   });
 
   it('Service Bindingのfetch()に/tunnel-signer/sendパスとmessageを含むJSON本文を渡す(公開fetchは使わない)', async () => {
