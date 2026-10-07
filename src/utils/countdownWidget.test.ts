@@ -93,7 +93,7 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
   });
 
   function setupDom() {
-    const dom = new JSDOM(`<!DOCTYPE html><body>${getCountdownWidgetHTML()}</body>`, { runScripts: 'dangerously' });
+    const dom = new JSDOM(`<!DOCTYPE html><body>${getCountdownWidgetHTML()}</body>`, { runScripts: 'dangerously', url: 'https://example.com/countdown' });
     openDoms.push(dom);
     return dom.window;
   }
@@ -195,6 +195,50 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
     toggle.click();
     expect(panels.hidden).toBe(false);
     expect(timers.every(timer => !timer.hidden)).toBe(true);
+  });
+
+  it('設定モーダルから閉じた時の表示を即時切り替え、Cookieから復元する', async () => {
+    async function start(cookie?: string) {
+      const window = setupDom() as unknown as Window & typeof globalThis;
+      if (cookie) window.document.cookie = cookie;
+      (window as any).fetch = vi.fn().mockResolvedValue({ json: async () => ({ events: [
+        { id: 1, label: '直近', targetAt: new Date(Date.now() + 86400000).toISOString() },
+        { id: 2, label: '先の予定', targetAt: new Date(Date.now() + 4 * 86400000).toISOString() },
+      ] }) });
+      (window as any).setInterval = () => 0;
+      window.eval(getCountdownWidgetScript());
+      await flushMicrotasks();
+      window.document.getElementById('countdownWidgetMode')!.click();
+      window.document.getElementById('countdownWidgetToggle')!.click();
+      return window;
+    }
+    const window = await start();
+    const checkbox = window.document.getElementById('countdownWidgetShowUrgent') as HTMLInputElement;
+    const panels = window.document.getElementById('countdownWidgetTimers')!;
+    const settings = window.document.getElementById('countdownWidgetSettings')!;
+    const dialog = window.document.getElementById('countdownWidgetSettingsDialog') as HTMLDialogElement;
+    dialog.showModal = vi.fn();
+    settings.click();
+    expect(dialog.showModal).toHaveBeenCalledOnce();
+    expect(settings.nextElementSibling?.id).toBe('countdownWidgetToggle');
+    expect(checkbox.checked).toBe(true);
+    expect(panels.hidden).toBe(false);
+    checkbox.click();
+    expect(panels.hidden).toBe(true);
+    expect(window.document.cookie).toContain('countdownWidgetShowUrgent=0');
+    const restored = await start(window.document.cookie);
+    expect((restored.document.getElementById('countdownWidgetShowUrgent') as HTMLInputElement).checked).toBe(false);
+    expect(restored.document.getElementById('countdownWidgetTimers')!.hidden).toBe(true);
+    window.document.getElementById('countdownWidgetToggle')!.click();
+    expect(panels.hidden).toBe(false);
+    window.document.getElementById('countdownWidgetToggle')!.click();
+    checkbox.click();
+    expect(panels.hidden).toBe(false);
+    expect(Array.from(panels.children).map(timer => (timer as HTMLElement).hidden)).toEqual([false, true]);
+    expect(window.document.cookie).toContain('countdownWidgetShowUrgent=1');
+    const enabled = await start(window.document.cookie);
+    expect((enabled.document.getElementById('countdownWidgetShowUrgent') as HTMLInputElement).checked).toBe(true);
+    expect(enabled.document.getElementById('countdownWidgetTimers')!.hidden).toBe(false);
   });
 
   it('残り時間が0以下になった瞬間、単発予定はトーストに「#id ok」を表示する', async () => {
