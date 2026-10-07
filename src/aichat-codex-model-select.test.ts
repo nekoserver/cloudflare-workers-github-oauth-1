@@ -11,8 +11,10 @@ describe('Codexのモデル色丸選択', () => {
     const list = JSON.parse(html.match(/var MODEL_LIST = (.*);/)![1]);
     const apply = html.slice(html.indexOf('    function applyModelColor('), html.indexOf('    var modelSelect ='));
     const build = html.slice(html.indexOf('    function buildModelDotDropdown()'), html.indexOf('    // モデルごとのパラメータ調整値'));
+    const fixedModelDotColors: Record<string, string> = { claude: '#f97316' };
     const bindings = {
       document, MODEL_COLORS: colors, MODEL_LIST: list, AICHAT_TUNABLE_MODEL_CONFIG: {},
+      getModelDotColor: (modelId: string) => fixedModelDotColors[modelId] || colors[modelId] || '',
       modelColorDot: document.getElementById('modelColorDot'), modelSelect: document.getElementById('modelSelect'),
       modelDotDropdown: document.getElementById('modelDotDropdown'), closeModelDotDropdown() {},
     };

@@ -21,14 +21,27 @@ export const AICHAT_COLOR_PALETTE: readonly string[] = [
 ];
 
 /**
- * 特定モデルに固定で割り当てる色。パレットの自動循環より優先する
- * (ユーザー指定、2026-10-07: claude用の色丸はオレンジにする)。
- * 他モデルが既にこの色を使っている場合は衝突を避けてパレット循環に
- * フォールバックする(下のfixedColorTaken判定)。
+ * 特定モデルに固定で割り当てる色。パレットの自動循環より優先し、かつ
+ * 他モデルとの「色の衝突回避」の対象からも除外する(ユーザー指定、
+ * 2026-10-07: claude用の色丸はオレンジにする)。
+ *
+ * 旧実装は「他モデルが既にこの色を使っていたら衝突回避でパレット循環に
+ * フォールバックする」という設計だったが、通常のパレット循環で既に
+ * 別のモデル(llama系等)が#f97316を獲得していた場合、claudeの固定色
+ * 割り当てそのものが「衝突」とみなされて毎回パレット循環側へ弾かれて
+ * しまい、オレンジに統一されない不具合があった(2026-10-07報告)。
+ * この関数ではFIXED_MODEL_COLORSの値を(1)通常のパレット循環からは
+ * 常に除外し(他モデルがこの色を新規に獲得できないようにする)、
+ * (2)固定色モデル自身は衝突判定を行わず常にこの色を使う、という
+ * 2点で対処する。
  */
 const FIXED_MODEL_COLORS: Readonly<Record<string, string>> = {
   claude: '#f97316', // オレンジ
 };
+
+const FIXED_MODEL_COLOR_VALUES = new Set(
+  Object.values(FIXED_MODEL_COLORS).map((c) => c.toLowerCase())
+);
 
 export function assignModelColors(
   existingColors: Record<string, string>,
@@ -39,23 +52,33 @@ export function assignModelColors(
   const newAssignments: Array<{ model_id: string; color: string; label: string }> = [];
 
   for (const model of models) {
-    const cliColorConflict = ['codex', 'claude'].includes(model.value) && merged[model.value] &&
+    const fixedColor = FIXED_MODEL_COLORS[model.value];
+
+    if (fixedColor) {
+      // 固定色モデルは衝突判定をせず常にこの色を使う。既に正しい値なら
+      // 何もしない(newAssignmentsにも入れない)。
+      if (merged[model.value]?.toLowerCase() === fixedColor.toLowerCase()) continue;
+      merged[model.value] = fixedColor;
+      usedColors.add(fixedColor.toLowerCase());
+      newAssignments.push({ model_id: model.value, color: fixedColor, label: model.label });
+      continue;
+    }
+
+    // codexは固定色を持たないが、CLIモデルとして過去に他モデルと色が
+    // 衝突した場合のみ再割り当てする(既存の挙動を維持)。
+    const cliColorConflict = model.value === 'codex' && merged[model.value] &&
       Object.entries(merged).some(([id, color]) => id !== model.value && color.toLowerCase() === merged[model.value].toLowerCase());
     if (merged[model.value] && !cliColorConflict) continue;
 
-    const fixedColor = FIXED_MODEL_COLORS[model.value];
-    const fixedColorTaken = fixedColor
-      ? Object.entries(merged).some(([id, color]) => id !== model.value && color.toLowerCase() === fixedColor.toLowerCase())
-      : false;
-
-    let color = fixedColor && !fixedColorTaken ? fixedColor : AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c));
+    // 固定色として予約されている値は、固定色を持たない他モデルには割り当てない。
+    let color = AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c) && !FIXED_MODEL_COLOR_VALUES.has(c.toLowerCase()));
     if (!color) {
-      // パレットが埋まっていても既存モデルと同じ色を再利用しない。
+      // パレットが埋まっていても既存モデルと同じ色・固定色を再利用しない。
       let candidate = 0x5b8def;
       do {
         color = '#' + candidate.toString(16).padStart(6, '0');
         candidate = (candidate + 0x3779b9) & 0xffffff;
-      } while (usedColors.has(color));
+      } while (usedColors.has(color) || FIXED_MODEL_COLOR_VALUES.has(color));
     }
 
     merged[model.value] = color;
