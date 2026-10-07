@@ -197,7 +197,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('models');
   });
 
@@ -205,7 +205,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('kw_count');
   });
 
@@ -213,7 +213,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('apiModelTotals');
   });
 
@@ -221,7 +221,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain("source='api'");
   });
 });
@@ -342,7 +342,7 @@ describe('日次統計グラフ: backend API sourceTotals', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('sourceTotals');
   });
 
@@ -350,7 +350,7 @@ describe('日次統計グラフ: backend API sourceTotals', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('GROUP BY source');
   });
 
@@ -358,7 +358,7 @@ describe('日次統計グラフ: backend API sourceTotals', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 3200);
+    const snippet = src.slice(idx, src.indexOf("app.get('/api/aichat/shares/by-date'", idx));
     expect(snippet).toContain('buildAichatSourceTotals(');
   });
 });

@@ -96,6 +96,13 @@ ORDER BY source, q_count DESC;
 既存4テーブルの語を、確認可能な最古の日時で `first_source='legacy'` として取り込む。
 過去の初回抽出日時・出所は保証できないため、日次の新規切り出し数には含めない。既存の語の再抽出は新規として扱わない。
 
-`GET /api/aichat/daily-stats` は `first_source='answer_extraction'` の初回日時をユーザー・月・UTC日付で集計し、`days[].new_kw_count` を返す。
-日次モーダルに月合計と日別件数を表示する。既存の `kw_count`（その日に検索した語の種類数）とは別の指標。
+`GET /api/aichat/daily-stats` は `legacy` を除く全経路の初回日時をユーザー・月・UTC日付で集計し、`days[].added_kw_count`（合計）と `days[].added_kw_sources`（最初の追加経路別内訳）を返す。従来の `days[].new_kw_count` は回答切り出しのみの件数として維持する。
+日次モーダルに新規追加の月合計と日別件数、✂️切り出し・検索・埋め込み・分類の内訳を表示する。既存の `kw_count`（その日に検索した語の種類数）とは別の指標。
 台帳はユーザーごとの語の初出のみを保持し、回答・モデル・分類の比較には従来の `aichat_answer_keyword_vectors`、`ai_chat_shares`、`aichat_keyword_category_map` を引き続き使う。
+
+
+検索窓からの追加は `/api/aichat/search-log/approve` の保存成功時に検索用トリガーで初出を記録する。
+同じ語を複数回答に追加しても、ユーザーの新規語は1語で、回答への紐付けは追加した回答の数だけ。
+承認APIは所有する未削除回答へ実際にINSERTされた行数を `RETURNING share_id` から返し、同じ語の再承認は0件となる。
+回答ごとのキーワード総数は保存済みの `aichat_search_log` を `COUNT(DISTINCT keyword)` で再集計して `keywordCounts` として返す。総数を回答レコードへ書き戻すカウンターは作らない。
+承認後は画面のキーワード一覧キャッシュを破棄し、開いている日次統計・キーワード一覧を再取得する。
