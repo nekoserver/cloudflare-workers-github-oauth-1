@@ -236,7 +236,7 @@ describe('thread tracker page', () => {
     expect(html).toContain('questions=followupGroups.map(function(group)');
     expect(html).toContain('class="model-dots"');
     expect(html).toContain('class="model-dot"');
-    expect(html).toContain('MODEL_COLORS[model]');
+    expect(html).toContain('getModelDotColor(model)');
     expect(html).toContain("<div class=\"card-top'+subqueryQuestionClass(groups[0])+'\"");
     expect(html).not.toContain('<span aria-hidden="true">🧵</span>');
     expect(html).not.toContain("'+modelDots(group.models)+(i?'↳ ':'")
@@ -299,9 +299,21 @@ describe('thread tracker page', () => {
     expect(html).not.toContain("return '<h2>'+esc(latest.question||'質問なし')+'</h2>");
     expect(html).not.toContain("return '<div class=\"meta\">作成 '+esc(fmt(thread.createdAt))");
     expect(html).not.toContain("esc(turn.model||'model不明')");
-    expect(html).toContain('MODEL_COLORS[turn.model]');
+    expect(html).toContain('getModelDotColor(turn.model)');
     expect(html).toContain('class="markdown question" style="--question-model-color:');
     expect(html).toContain('.markdown.question{border-color:var(--question-model-color,var(--border))');
+  });
+
+  // 対象: 右ペインの質問文枠の色とAIチャットのモデル選択モーダルの色丸を
+  // 一致させる。claudeはgetModelDotColor経由でAIチャット側と同じ固定色
+  // (オレンジ)を使う(2026-10-08、ユーザー要望)。
+  it('getModelDotColor関数がAIチャットの色丸ロジックと同じくclaudeをオレンジ固定で解決する', () => {
+    const html = getThreadTrackerPage('alice');
+    const idx = html.indexOf('FIXED_MODEL_DOT_COLORS');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain("claude:'#f97316'");
+    expect(snippet).toContain('function getModelDotColor(');
   });
 
   it('投稿・質問の見出しを削除し、表示中の各質問文のJevスコア値がある場合だけ最上段へ詰めて表示する', () => {
