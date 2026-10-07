@@ -6393,7 +6393,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
-    const requestedThreadId = (body.threadId ?? '').trim();
+    let requestedThreadId = (body.threadId ?? '').trim();
     if (slashCommand.saveAsAiResponse) {
       if (requestedThreadId && !isThreadId(requestedThreadId)) {
         return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
@@ -6403,7 +6403,12 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         const ownedThread = await c.env.DB.prepare(
           'SELECT 1 AS found FROM ai_chat_shares WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL LIMIT 1'
         ).bind(user.sub, requestedThreadId).first<{ found: number }>();
-        if (!ownedThread) return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
+        if (!ownedThread) {
+          if (!slashCommand.codexAskgk) return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
+          // Codexの回答は既に取得済み。削除済み・古いIDのために回答を失わず、
+          // 所有権を確認できないIDは再利用せず新しいスレッドへ保存する。
+          requestedThreadId = '';
+        }
       }
     }
     // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
