@@ -197,6 +197,40 @@ describe('resolveAichatRunOverrides', () => {
   });
 });
 
+describe('claudeの色丸固定(オレンジ)', () => {
+  it('claudeは常にオレンジ(#f97316)が割り当てられる', () => {
+    const { merged, newAssignments } = assignModelColors({}, [{ value: 'claude', label: 'claude' }]);
+    expect(merged.claude).toBe('#f97316');
+    expect(newAssignments).toEqual([{ model_id: 'claude', color: '#f97316', label: 'claude' }]);
+  });
+
+  it('他モデルと混在していてもclaudeはオレンジになる(パレット循環の対象外)', () => {
+    const { merged } = assignModelColors({}, [
+      { value: 'model-a', label: 'Model A' },
+      { value: 'claude', label: 'claude' },
+      { value: 'model-b', label: 'Model B' },
+    ]);
+    expect(merged.claude).toBe('#f97316');
+  });
+
+  it('既にclaudeがオレンジ以外の色を持っていて他モデルと衝突していなければ再割り当てしない(既存色保持が優先)', () => {
+    const { merged, newAssignments } = assignModelColors({ claude: '#4f46e5' }, [{ value: 'claude', label: 'claude' }]);
+    expect(merged.claude).toBe('#4f46e5');
+    expect(newAssignments).toHaveLength(0);
+  });
+
+  it('既に他モデルがオレンジを使っている場合はclaudeに別の色を割り当てる(衝突回避)', () => {
+    const { merged } = assignModelColors({ other: '#f97316' }, [{ value: 'claude', label: 'claude' }]);
+    expect(merged.claude).not.toBe('#f97316');
+    expect(merged.claude).not.toBe(merged.other);
+  });
+
+  it('claude以外のモデル(codex等)はオレンジ固定の対象にならず通常のパレット循環を使う', () => {
+    const { merged } = assignModelColors({}, [{ value: 'codex', label: 'codex' }]);
+    expect(merged.codex).toBe(AICHAT_COLOR_PALETTE[0]);
+  });
+});
+
 describe('Codexモデル色の重複防止', () => {
   it.each(['codex', 'claude'])('パレットを使い切っていても%sの色を重複させない', (model) => {
     const existing = Object.fromEntries(AICHAT_COLOR_PALETTE.map((color, index) => ['model-' + index, color]));
