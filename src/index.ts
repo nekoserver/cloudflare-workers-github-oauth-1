@@ -8419,11 +8419,11 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
        GROUP BY source ORDER BY q_count DESC`
     ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>(),
     c.env.DB.prepare(
-      `SELECT substr(first_added_at,1,10) AS date, COUNT(*) AS new_kw_count
+      `SELECT substr(first_added_at,1,10) AS date, first_source, COUNT(*) AS added_kw_count
        FROM aichat_keyword_registry
-       WHERE user_id=? AND first_added_at LIKE ? AND first_source='answer_extraction'
-       GROUP BY date ORDER BY date`
-    ).bind(user.sub, `${month}%`).all<{ date: string; new_kw_count: number }>(),
+       WHERE user_id=? AND first_added_at LIKE ? AND first_source != 'legacy'
+       GROUP BY date, first_source ORDER BY date, first_source`
+    ).bind(user.sub, `${month}%`).all<{ date: string; first_source: string; added_kw_count: number }>(),
   ]);
 
   const kwMap: Record<string, number> = {};
@@ -8443,12 +8443,21 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   const sourceTotals = buildAichatSourceTotals(sourceRows.results ?? []);
 
   const newKwMap: Record<string, number> = {};
-  (newKeywordRows.results ?? []).forEach(r => { newKwMap[r.date] = r.new_kw_count; });
-  const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap), ...Object.keys(newKwMap)]);
+  const addedKwMap: Record<string, number> = {};
+  const addedKwSources: Record<string, Record<string, number>> = {};
+  (newKeywordRows.results ?? []).forEach(r => {
+    addedKwMap[r.date] = (addedKwMap[r.date] ?? 0) + r.added_kw_count;
+    if (!addedKwSources[r.date]) addedKwSources[r.date] = {};
+    addedKwSources[r.date][r.first_source] = r.added_kw_count;
+    if (r.first_source === 'answer_extraction') newKwMap[r.date] = r.added_kw_count;
+  });
+  const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap), ...Object.keys(addedKwMap)]);
   const days = Array.from(allDates).sort().map(date => ({
     date,
     kw_count: kwMap[date] ?? 0,
     new_kw_count: newKwMap[date] ?? 0,
+    added_kw_count: addedKwMap[date] ?? 0,
+    added_kw_sources: addedKwSources[date] ?? {},
     models: qMap[date] ?? {},
   }));
 
@@ -8613,13 +8622,16 @@ app.post('/api/aichat/search-log/open-modal', authMiddleware, async (c) => {
   ).bind(user.sub, keyword, ...shareIds).all();
   const registeredSet = new Set(existing.results.map((r: any) => String(r.share_id)));
   const rows = await c.env.DB.prepare(
-    `SELECT s.id, s.question, s.model FROM ai_chat_shares s WHERE s.id IN (${placeholders}) AND s.deleted_at IS NULL`
-  ).bind(...shareIds).all();
+    `SELECT s.id, s.question, s.model FROM ai_chat_shares s WHERE s.id IN (${placeholders}) AND s.user_id = ? AND s.deleted_at IS NULL`
+  ).bind(...shareIds, user.sub).all();
+  const keywordCounts = await enrichSearchResultsWithKeywordCounts(c.env.DB, user.sub, rows.results.map((r: any) => ({ id: String(r.id) })));
+  const countsById = new Map(keywordCounts.map(row => [row.id, row.keywordCount]));
   const shareMap = new Map(rows.results.map((r: any) => [String(r.id), r]));
-  const entries = shareIds.map((id: string) => {
+  const entries = shareIds.filter((id: string) => shareMap.has(id)).map((id: string) => {
     const share = shareMap.get(id);
     return {
       shareId: id,
+      keywordCount: countsById.get(id) ?? 0,
       model: share ? String(share.model) : '',
       question: share ? String(share.question).slice(0, 100) : '',
       isNew: !registeredSet.has(id),
@@ -8634,19 +8646,24 @@ app.post('/api/aichat/search-log/approve', authMiddleware, async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{ keyword?: string; shareIds?: string[] }>();
   const keyword = (body.keyword ?? '').trim().slice(0, 200);
-  const shareIds = Array.isArray(body.shareIds) ? body.shareIds.slice(0, 50) : [];
+  const shareIds = Array.isArray(body.shareIds) ? [...new Set(body.shareIds.filter((id): id is string => typeof id === 'string' && id.length > 0))].slice(0, 50) : [];
   if (!keyword || !shareIds.length) return jsonUtf8({ ok: true, count: 0 });
   const now = new Date().toISOString();
   const stmts = shareIds.map((shareId: string) =>
     db.prepare(
       `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count)
-       VALUES (?, ?, ?, ?, ?, 1)
-       ON CONFLICT(user_id, keyword, share_id) DO NOTHING`
-    ).bind(user.sub, keyword, shareId, now, now)
+       SELECT ?, ?, id, ?, ?, 1 FROM ai_chat_shares
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+       ON CONFLICT(user_id, keyword, share_id) DO NOTHING
+       RETURNING share_id`
+    ).bind(user.sub, keyword, now, now, shareId, user.sub)
   );
   try {
-    await db.batch(stmts);
-    return jsonUtf8({ ok: true, count: shareIds.length });
+    const inserted = await db.batch<{ share_id: string }>(stmts);
+    const count = inserted.reduce((sum, result) => sum + (result.results?.length ?? 0), 0);
+    const counts = await enrichSearchResultsWithKeywordCounts(db, user.sub, shareIds.map(id => ({ id })));
+    const keywordCounts = Object.fromEntries(counts.map(row => [row.id, row.keywordCount]));
+    return jsonUtf8({ ok: true, count, keywordCounts });
   } catch (e: any) {
     return jsonUtf8({ ok: false, error: String(e?.message ?? e) }, 500);
   }
