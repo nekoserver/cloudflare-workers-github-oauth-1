@@ -56,6 +56,26 @@ describe('getKeywordHighlightScript', () => {
     expect(marks).toEqual(['ねこ', '鳥']);
   });
 
+  it.each(['&', '&&', 'a&b', '&や|', 'a&b|c', '|', 'a|', '.', '*', '+', '?', '^', '$', '{', '}', '(', ')', '[', ']', String.fromCharCode(92), '(a+)+$'])('正規表現の記号 %s を文字としてハイライトする', (keyword) => {
+    const { applyKeywordHighlight, clearKeywordHighlights } = evalScript();
+    const div = document.createElement('div');
+    const text = '前 ' + keyword + ' 後';
+    div.textContent = text;
+    applyKeywordHighlight(div, keyword);
+    expect(Array.from(div.querySelectorAll('.kw-highlight'), (mark) => mark.textContent)).toEqual([keyword]);
+    expect(div.textContent).toBe(text);
+    clearKeywordHighlights(div);
+    expect(div.textContent).toBe(text);
+  });
+
+  it('記号を含む複数キーワードでも空文字や別の文字に一致しない', () => {
+    const { applyKeywordHighlight } = evalScript();
+    const div = document.createElement('div');
+    div.textContent = 'a|b [ねこ] cXd c.d';
+    applyKeywordHighlight(div, ['a|b', '[ねこ]', 'c.d', '']);
+    expect(Array.from(div.querySelectorAll('.kw-highlight'), (mark) => mark.textContent)).toEqual(['a|b', '[ねこ]', 'c.d']);
+  });
+
   it('(DOM実動作) clearKeywordHighlightsで<mark>を元のテキストに戻す', () => {
     const { applyKeywordHighlight, clearKeywordHighlights } = evalScript();
     const div = document.createElement('div');
