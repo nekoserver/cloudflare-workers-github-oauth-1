@@ -18,6 +18,8 @@ import {
   interpretAichatSlashCommand,
   ASKGK_TIMEOUT_MS,
   getJstDateYmdHyphen,
+  formatAskgkLlmInfoLine,
+  appendAskgkLlmInfoLine,
   parseMlbFilterArgs,
   mlbFilterTeamIds,
   filterMlbGamesByDivision,
@@ -867,7 +869,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   // (接頭語・引用符を含めて)askTunnelSignerへ渡す(2026-10-04、
   // 接頭語を剥がして渡してしまい先方の判定が効かなくなる不具合があった)。
   it('claude_prompt="..."を接頭語ごとそのままaskTunnelSignerへ渡す', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('にゃーん');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: 'にゃーん' });
     const result = await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="元気 ですか"',
       now,
@@ -878,7 +880,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   });
 
   it('値中のエスケープされた引用符もそのまま(解釈せず)渡す', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: 'ok' });
     await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="\\"引用\\"テスト"',
       now,
@@ -891,7 +893,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   // 「**質問**: ...」行は冗長(送信した質問自体は画面上に既に見えているため)
   // なので表示せず、回答本文だけを返す。
   it('◯◯_prompt="..."形式では見出し・質問欄を付けず回答本文だけを返す', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文' });
     const result = await interpretAichatSlashCommand(
       '/neko askgk claude_prompt="テスト質問"',
       now,
@@ -901,7 +903,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   });
 
   it('通常の質問も回答本文だけを保存対象として返す', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('回答本文');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文' });
     const result = await interpretAichatSlashCommand('/neko askgk テスト質問', now, { ...unusedDeps, askTunnelSigner });
     expect(result).toEqual({
       handled: true,
@@ -911,13 +913,13 @@ describe('/neko askgk claude_prompt="..."', () => {
   });
 
   it('claude_prompt=形式でなくても従来通り全文を自由記述の質問文として渡す(後方互換)', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: 'ok' });
     await interpretAichatSlashCommand('/neko askgk 元気？', now, { ...unusedDeps, askTunnelSigner });
     expect(askTunnelSigner).toHaveBeenCalledWith('元気？');
   });
 
   it('複数の空白を含む自由記述でも、元の空白をそのまま保持して渡す(parts.join(\' \')による潰れを防ぐ)', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('ok');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: 'ok' });
     await interpretAichatSlashCommand('/neko askgk  元気    ですか', now, { ...unusedDeps, askTunnelSigner });
     expect(askTunnelSigner).toHaveBeenCalledWith('元気    ですか');
   });
@@ -929,7 +931,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   it(`ASKGK_TIMEOUT_MS(${ASKGK_TIMEOUT_MS}ms)を超えて応答が無ければタイムアウト表示を返す`, async () => {
     vi.useFakeTimers();
     try {
-      const askTunnelSigner = vi.fn(() => new Promise<string>(() => {}));
+      const askTunnelSigner = vi.fn(() => new Promise<{ reply: string }>(() => {}));
       const promise = interpretAichatSlashCommand('/neko askgk 元気？', now, { ...unusedDeps, askTunnelSigner });
       await vi.advanceTimersByTimeAsync(ASKGK_TIMEOUT_MS);
       const result = await promise;
@@ -952,7 +954,7 @@ describe('/neko askgk claude_prompt="..."', () => {
       'session id: codex-session-abc',
       '実際の回答',
     ].join('\n');
-    const askTunnelSigner = vi.fn().mockResolvedValue(reply);
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply });
     const result = await interpretAichatSlashCommand(
       '/neko askgk codex_prompt="テスト質問"',
       now,
@@ -967,7 +969,7 @@ describe('/neko askgk claude_prompt="..."', () => {
   });
 
   it('codex_prompt="..."でsession idが見つからない場合はcodexAskgk.sessionIdがnullになる', async () => {
-    const askTunnelSigner = vi.fn().mockResolvedValue('バナーもsession idも無い回答');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: 'バナーもsession idも無い回答' });
     const result = await interpretAichatSlashCommand(
       '/neko askgk codex_prompt="テスト質問"',
       now,
@@ -979,5 +981,92 @@ describe('/neko askgk claude_prompt="..."', () => {
       response: 'バナーもsession idも無い回答',
       codexAskgk: { sessionId: null },
     });
+  });
+
+  // 対象: tunnels.rbが2026-10-07〜応答に含めるようになったllm_model/llm_effort
+  // (ヘッダX-LLM-Engine等は複数ホップのJSON文字列ラッピングを経由するため
+  // ここには届かず、JSON本体のllm_model/llm_effortのみ読む)。
+  // Engineは`◯◯_prompt=`の接頭語から判定し、回答文の末尾に埋め込む。
+  it('claude_prompt="..."でllm_model/llm_effortが返れば回答文末尾にEngine/Model/Effortを埋め込む', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'claude-sonnet-5-5', llmEffort: 'medium' });
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      saveAsAiResponse: true,
+      claudeAskgk: true,
+      response: '回答本文\n\nEngine: Claude / Model: claude-sonnet-5-5 / Effort: medium',
+    });
+  });
+
+  it('codex_prompt="..."でllm_model/llm_effortが返ればバナー除去後の回答文末尾にEngine: Codexを埋め込む', async () => {
+    const reply = ['session id: codex-abc', '実際の回答'].join('\n');
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply, llmModel: 'gpt-6.1', llmEffort: 'high' });
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk codex_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      saveAsAiResponse: true,
+      response: '実際の回答\n\nEngine: Codex / Model: gpt-6.1 / Effort: high',
+      codexAskgk: { sessionId: 'codex-abc' },
+    });
+  });
+
+  it('llm_model/llm_effortが無い場合は何も埋め込まず従来通りの回答文のみを返す(無い情報を書かない)', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文' });
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({ handled: true, saveAsAiResponse: true, claudeAskgk: true, response: '回答本文' });
+  });
+
+  it('llm_modelのみ返れば末尾にModelだけ付き、Effortは付けない', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'claude-sonnet-5-5' });
+    const result = await interpretAichatSlashCommand(
+      '/neko askgk claude_prompt="テスト質問"',
+      now,
+      { ...unusedDeps, askTunnelSigner }
+    );
+    expect(result).toEqual({
+      handled: true,
+      saveAsAiResponse: true,
+      claudeAskgk: true,
+      response: '回答本文\n\nEngine: Claude / Model: claude-sonnet-5-5',
+    });
+  });
+
+  it('接頭語の無い通常の質問ではllm_model/llm_effortが返っても埋め込まない(Engine不明のため)', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'claude-sonnet-5-5', llmEffort: 'medium' });
+    const result = await interpretAichatSlashCommand('/neko askgk 元気？', now, { ...unusedDeps, askTunnelSigner });
+    expect(result.handled).toBe(true);
+    if (!result.handled) throw new Error('not handled');
+    expect(result.response).not.toContain('Engine:');
+  });
+});
+
+describe('formatAskgkLlmInfoLine / appendAskgkLlmInfoLine', () => {
+  it('llm_model/llm_effortどちらも無ければnullを返す', () => {
+    expect(formatAskgkLlmInfoLine('claude', undefined, undefined)).toBeNull();
+  });
+
+  it('接頭語の先頭を大文字化してEngineに表示する', () => {
+    expect(formatAskgkLlmInfoLine('codex', 'gpt-6.1', 'low')).toBe('Engine: Codex / Model: gpt-6.1 / Effort: low');
+  });
+
+  it('appendAskgkLlmInfoLineはinfoLineがnullなら元のreplyをそのまま返す', () => {
+    expect(appendAskgkLlmInfoLine('回答', 'claude', undefined, undefined)).toBe('回答');
+  });
+
+  it('appendAskgkLlmInfoLineはinfoLineがあればreplyの末尾に空行区切りで追記する', () => {
+    expect(appendAskgkLlmInfoLine('回答', 'claude', 'claude-sonnet-5-5', 'medium'))
+      .toBe('回答\n\nEngine: Claude / Model: claude-sonnet-5-5 / Effort: medium');
   });
 });

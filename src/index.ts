@@ -403,7 +403,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
-import { askTunnelSigner } from './utils/tunnelSignerAsk';
+import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
 
 /**
  * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
@@ -430,7 +430,7 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
  * 「現在利用できません」表示にフォールバックする。dwPingDepと同じ理由で
  * ここに切り出す(index.tsのテストの固定文字数ウィンドウ探索を押し出さないため)。
  */
-function askgkDep(env: Bindings): ((message: string) => Promise<string>) | undefined {
+function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
   return (message: string) => askTunnelSigner(fetcher, message);

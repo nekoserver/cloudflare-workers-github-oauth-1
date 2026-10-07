@@ -255,6 +255,28 @@ export function formatAskgkResult(_question: string, reply: string): string {
 }
 
 /**
+ * `/neko askgk ◯◯_prompt="..."` の応答末尾に付けるEngine/Model/Effort表示行を作る。
+ * tunnels.rbがllm_model/llm_effortのどちらも返さなかった場合はnullを返し、
+ * 何も付け足さない(無い情報を書かない。CLAUDE.mdルール8参照)。
+ * エンジン名はtunnels.rbの応答に含まれないため、接頭語(`◯◯_prompt=`の◯◯部分、
+ * 例: "claude"→"Claude"、"codex"→"Codex")の先頭を大文字化して表示する。
+ */
+export function formatAskgkLlmInfoLine(engineTag: string, llmModel?: string, llmEffort?: string): string | null {
+  if (!llmModel && !llmEffort) return null;
+  const engine = engineTag.length > 0 ? engineTag.charAt(0).toUpperCase() + engineTag.slice(1) : engineTag;
+  const parts = [`Engine: ${engine}`];
+  if (llmModel) parts.push(`Model: ${llmModel}`);
+  if (llmEffort) parts.push(`Effort: ${llmEffort}`);
+  return parts.join(' / ');
+}
+
+/** replyの末尾にformatAskgkLlmInfoLineの表示行を(あれば)追記する。 */
+export function appendAskgkLlmInfoLine(reply: string, engineTag: string, llmModel?: string, llmEffort?: string): string {
+  const infoLine = formatAskgkLlmInfoLine(engineTag, llmModel, llmEffort);
+  return infoLine ? `${reply}\n\n${infoLine}` : reply;
+}
+
+/**
  * `/neko jev` の表示内容。TypeSafe AI(Jev)の公式APIには残クレジットを取得する
  * エンドポイントが存在しない(公式Python SDKのソースを確認済み。存在するのは
  * POST /v1/systemoneとGET /v1/modelsのみで、使用量は各systemone呼び出しの
@@ -991,8 +1013,9 @@ export type AichatSlashCommandDeps = {
   fetchMlbTodaySchedule?: () => Promise<MlbTodayGame[]>;
   sqlImpactLookup?: (tableName: string) => Promise<SqlImpactCatalogRow[]>;
   pingDynamicWorker?: () => Promise<string>;
-  /** `/neko askgk <質問文>` 用。rust-worker-sqlx-d1の/tunnel-signer経由でtunnels.rbへ質問を送り、replyを返す */
-  askTunnelSigner?: (message: string) => Promise<string>;
+  /** `/neko askgk <質問文>` 用。rust-worker-sqlx-d1の/tunnel-signer経由でtunnels.rbへ質問を送り、
+   * reply本文と(tunnels.rbが応答に含めた場合のみ)llm_model/llm_effortを返す */
+  askTunnelSigner?: (message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>;
   /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */
   loadMentionEditorRuby?: (filename: string) => Promise<string | null>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
@@ -2014,17 +2037,20 @@ export async function interpretAichatSlashCommand(
     // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
     // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
     if (/^codex_\w+\b/i.test(question)) {
-      const { answer, sessionId } = parseCodexAskgkReply(outcome.value);
-      return { handled: true, response: answer, saveAsAiResponse: true, codexAskgk: { sessionId } };
+      const { answer, sessionId } = parseCodexAskgkReply(outcome.value.reply);
+      const response = appendAskgkLlmInfoLine(answer, 'codex', outcome.value.llmModel, outcome.value.llmEffort);
+      return { handled: true, response, saveAsAiResponse: true, codexAskgk: { sessionId } };
     }
     if (/^claude_prompt\s*=\s*["“”]/i.test(question)) {
-      return { handled: true, response: outcome.value.trim(), saveAsAiResponse: true, claudeAskgk: true };
+      const response = appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'claude', outcome.value.llmModel, outcome.value.llmEffort);
+      return { handled: true, response, saveAsAiResponse: true, claudeAskgk: true };
     }
     const promptArgMatch = question.match(/^(\w+)_prompt(?:\s*=\s*["“”]|$)/);
     if (promptArgMatch) {
-      return { handled: true, response: outcome.value.trim(), saveAsAiResponse: true };
+      const response = appendAskgkLlmInfoLine(outcome.value.reply.trim(), promptArgMatch[1], outcome.value.llmModel, outcome.value.llmEffort);
+      return { handled: true, response, saveAsAiResponse: true };
     }
-    return { handled: true, response: formatAskgkResult(question, outcome.value), saveAsAiResponse: true };
+    return { handled: true, response: formatAskgkResult(question, outcome.value.reply), saveAsAiResponse: true };
   }
 
   if (subcommand === 'jev') {
