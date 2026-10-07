@@ -136,12 +136,12 @@ describe('POST /slack/interactions', () => {
   });
 });
 
-it('サンプルの署名付きクリックを受け付け、本人だけへ応答し元の投稿を残す', async () => {
+it('サンプルの署名付きクリックを受け付け、チャンネルに操作ユーザーを通知し元の投稿を残す', async () => {
   const responseUrl = 'https://hooks.slack.com/actions/T00/B00/sample';
   const fetchMock = vi.fn(async () => new Response('ok', { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   const rawBody = 'payload=' + encodeURIComponent(JSON.stringify({
-    type: 'block_actions', response_url: responseUrl,
+    type: 'block_actions', response_url: responseUrl, user: { id: 'U123' },
     actions: [{ action_id: 'tsubuyaki_sample_reaction_understood', value: 'understood' }],
   }));
   const timestamp = nowTimestamp();
@@ -161,7 +161,7 @@ it('サンプルの署名付きクリックを受け付け、本人だけへ応�
   const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
   expect(url).toBe(responseUrl);
   expect(JSON.parse(options.body as string)).toEqual({
-    response_type: 'ephemeral', replace_original: false,
-    text: expect.stringContaining('確認しました'),
+    response_type: 'in_channel', replace_original: false,
+    text: '🖱️ <@U123> さんが「確認しました」を押しました。',
   });
 });

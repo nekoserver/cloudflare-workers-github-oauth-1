@@ -92,12 +92,13 @@ export async function updateSlackModal({ token, viewId, view }: UpdateSlackModal
 type RespondToInteractionParams = {
   responseUrl: string;
   text: string;
+  responseType?: 'ephemeral' | 'in_channel';
   blocks?: Record<string, unknown>[];
 };
 
-export async function respondToInteraction({ responseUrl, text, blocks }: RespondToInteractionParams): Promise<SlackPostResult> {
+export async function respondToInteraction({ responseUrl, text, blocks, responseType }: RespondToInteractionParams): Promise<SlackPostResult> {
   const body: Record<string, unknown> = {
-    response_type: 'ephemeral',
+    response_type: responseType ?? 'ephemeral',
     replace_original: false,
     text,
   };
