@@ -53,7 +53,7 @@ export function getCountdownWidgetCSS(): string {
     #countdownWidget.visible { display: block; }
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .countdown-widget-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    #countdownWidgetToggle { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font: inherit; touch-action: manipulation; }
+    #countdownWidgetToggle, #countdownWidgetMode { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font: inherit; touch-action: manipulation; }
     #countdownWidgetTimers[hidden] { display: none; }
     #countdownWidget.collapsed .countdown-widget-titlebar { margin-bottom: 0; }
     .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
@@ -102,7 +102,7 @@ export function getCountdownWidgetCSS(): string {
 export function getCountdownWidgetHTML(): string {
   return `
   <div id="countdownWidget">
-    <div class="countdown-widget-titlebar"><span>カウントダウン</span><button id="countdownWidgetToggle" type="button" aria-controls="countdownWidgetTimers" aria-expanded="true" aria-label="すべてのカウントダウンを閉じる">▲</button></div>
+    <div class="countdown-widget-titlebar"><span><button id="countdownWidgetMode" type="button" aria-label="曜日・時刻表示に切り替える" aria-pressed="false">⏳</button> カウントダウン</span><button id="countdownWidgetToggle" type="button" aria-controls="countdownWidgetTimers" aria-expanded="true" aria-label="すべてのカウントダウンを閉じる">▲</button></div>
     <div id="countdownWidgetTimers"></div>
   </div>
   <div id="countdownToast"></div>
@@ -126,6 +126,9 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       var widget = document.getElementById('countdownWidget');
       var timersEl = document.getElementById('countdownWidgetTimers');
       var toggleEl = document.getElementById('countdownWidgetToggle');
+      var modeEl = document.getElementById('countdownWidgetMode');
+      var calendarMode = false;
+      var collapsed = false;
       var toastEl = document.getElementById('countdownToast');
       if (!widget || !timersEl) return;
       var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
@@ -213,8 +216,9 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       restorePosition();
 
       if (toggleEl) toggleEl.addEventListener('click', function() {
-        var open = timersEl.hidden;
-        timersEl.hidden = !open;
+        var open = collapsed;
+        collapsed = !open;
+        tickWidget();
         widget.classList.toggle('collapsed', !open);
         toggleEl.textContent = open ? '▲' : '▼';
         toggleEl.setAttribute('aria-expanded', String(open));
@@ -224,6 +228,18 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
         applyPosition(clamped.left, clamped.top);
         savePosition(clamped.left, clamped.top);
       });
+
+      if (modeEl) modeEl.addEventListener('click', function() {
+        calendarMode = !calendarMode;
+        modeEl.textContent = calendarMode ? '📅' : '⏳';
+        modeEl.setAttribute('aria-pressed', String(calendarMode));
+        modeEl.setAttribute('aria-label', calendarMode ? '残り時間表示に切り替える' : '曜日・時刻表示に切り替える');
+        tickWidget();
+      });
+
+      function formatSchedule(date) {
+        return ['日', '月', '火', '水', '木', '金', '土'][date.getDay()] + '曜日の' + pad2(date.getHours()) + ':' + pad2(date.getMinutes()) + '時';
+      }
 
       function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -292,6 +308,9 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
           clock.className = 'widget-clock';
           timer.appendChild(label);
           timer.appendChild(clock);
+          var remaining = document.createElement('div');
+          remaining.className = 'widget-remaining widget-label';
+          timer.appendChild(remaining);
           timersEl.appendChild(timer);
         });
       }
@@ -313,11 +332,24 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
           fetchNextEvent();
         }
         widget.classList.toggle('visible', upcomingEvents.length > 0);
+        var now = Date.now();
+        var hasUrgent = false;
         upcomingEvents.forEach(function(event) {
           var timer = timersEl.querySelector('[data-event-id="' + event.id + '"]');
           var clock = timer && timer.querySelector('.widget-clock');
-          if (clock) clock.textContent = formatRemaining(new Date(event.targetAt).getTime() - Date.now());
+          var target = new Date(event.targetAt);
+          var ms = target.getTime() - now;
+          var urgent = ms > 0 && ms < 3 * 86400000;
+          hasUrgent = hasUrgent || urgent;
+          if (timer) timer.hidden = collapsed && !(calendarMode && urgent);
+          if (clock) clock.textContent = calendarMode ? formatSchedule(target) : formatRemaining(ms);
+          var remaining = timer && timer.querySelector('.widget-remaining');
+          if (remaining) {
+            remaining.hidden = !calendarMode || !urgent;
+            remaining.textContent = calendarMode && urgent ? 'あと ' + formatRemaining(ms) : '';
+          }
         });
+        timersEl.hidden = collapsed && !(calendarMode && hasUrgent);
       }
 
       function fetchNextEvent() {

@@ -156,6 +156,47 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('曜日・時刻モードは3日未満の残り時間を常時表示し、境界を過ぎると自動で表示する', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    let now = new Date(2026, 9, 7, 10, 0, 0).getTime();
+    window.Date.now = () => now;
+    const day = 86400000;
+    (window as any).fetch = vi.fn().mockResolvedValue({ json: async () => ({ events: [
+      { id: 1, label: '直近', targetAt: new Date(now + 2 * day).toISOString() },
+      { id: 2, label: '境界', targetAt: new Date(now + 3 * day).toISOString() },
+      { id: 3, label: '先の予定', targetAt: new Date(now + 4 * day).toISOString() },
+    ] }) });
+    const intervals: Array<() => void> = [];
+    (window as any).setInterval = (callback: () => void) => { intervals.push(callback); return 0; };
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+    const mode = window.document.getElementById('countdownWidgetMode')!;
+    const toggle = window.document.getElementById('countdownWidgetToggle')!;
+    const panels = window.document.getElementById('countdownWidgetTimers')!;
+    const timers = Array.from(panels.children) as HTMLElement[];
+    expect(mode.textContent).toBe('⏳');
+    expect(timers[0].querySelector('.widget-clock')?.textContent).toBe('2日 00:00:00');
+    mode.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    expect(window.document.getElementById('countdownWidget')!.classList.contains('dragging')).toBe(false);
+    mode.click();
+    expect(mode.textContent).toBe('📅');
+    expect(timers[0].querySelector('.widget-clock')?.textContent).toBe('金曜日の10:00時');
+    expect(timers[0].querySelector('.widget-remaining')?.textContent).toBe('あと 2日 00:00:00');
+    expect((timers[1].querySelector('.widget-remaining') as HTMLElement).hidden).toBe(true);
+    toggle.click();
+    expect(panels.hidden).toBe(false);
+    expect(timers.map(timer => timer.hidden)).toEqual([false, true, true]);
+    now += 1000;
+    intervals[0]();
+    expect(timers.map(timer => timer.hidden)).toEqual([false, false, true]);
+    expect(timers[1].querySelector('.widget-remaining')?.textContent).toBe('あと 2日 23:59:59');
+    mode.click();
+    expect(panels.hidden).toBe(true);
+    toggle.click();
+    expect(panels.hidden).toBe(false);
+    expect(timers.every(timer => !timer.hidden)).toBe(true);
+  });
+
   it('残り時間が0以下になった瞬間、単発予定はトーストに「#id ok」を表示する', async () => {
     const window = setupDom() as unknown as Window & typeof globalThis;
     const pastTargetAt = new Date(Date.now() - 1000).toISOString();
