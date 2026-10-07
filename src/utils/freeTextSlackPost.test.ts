@@ -150,3 +150,13 @@ describe('handleTsubuyakiSlashCommand', () => {
     );
   });
 });
+
+it('インタラクティブサンプルには処理と対応する2つのボタンがある', () => {
+  const blocks = buildFreeTextSlackBlocks('octocat', 'テスト本文', 'interactive_sample')!;
+  const actions = blocks.find(block => block.type === 'actions')!;
+  expect(actions.elements).toEqual([
+    { type: 'button', action_id: 'tsubuyaki_sample_reaction_understood', text: { type: 'plain_text', text: '確認しました' }, value: 'understood' },
+    { type: 'button', action_id: 'tsubuyaki_sample_reaction_thanks', text: { type: 'plain_text', text: 'ありがとう' }, value: 'thanks' },
+  ]);
+  expect(JSON.stringify(blocks)).toContain('テスト本文');
+});

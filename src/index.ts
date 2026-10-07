@@ -22775,6 +22775,14 @@ app.post('/slack/interactions', async (c) => {
     return c.text('', 401);
   }
 
+  if (result.sampleResponse) {
+    safeWaitUntil(c, respondToInteraction(result.sampleResponse).then(async (response) => {
+      await logStep('tsubuyaki_sample_response', response.ok ? 'ok' : 'failed: ' + response.error);
+    }).catch(async () => {
+      await logStep('tsubuyaki_sample_response', 'network error');
+    }));
+  }
+
   if (result.aiReplyTask) {
     safeWaitUntil(c, dispatchSlackAiReply(c.env, result.aiReplyTask));
   }

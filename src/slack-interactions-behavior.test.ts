@@ -135,3 +135,33 @@ describe('POST /slack/interactions', () => {
     expect(res.status).toBe(200);
   });
 });
+
+it('サンプルの署名付きクリックを受け付け、本人だけへ応答し元の投稿を残す', async () => {
+  const responseUrl = 'https://hooks.slack.com/actions/T00/B00/sample';
+  const fetchMock = vi.fn(async () => new Response('ok', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const rawBody = 'payload=' + encodeURIComponent(JSON.stringify({
+    type: 'block_actions', response_url: responseUrl,
+    actions: [{ action_id: 'tsubuyaki_sample_reaction_understood', value: 'understood' }],
+  }));
+  const timestamp = nowTimestamp();
+  const signature = await signSlackRequest(rawBody, timestamp, SIGNING_SECRET);
+  const pending: Promise<unknown>[] = [];
+  const res = await app.request('/slack/interactions', {
+    method: 'POST', body: rawBody,
+    headers: { 'X-Slack-Request-Timestamp': timestamp, 'X-Slack-Signature': signature },
+  }, { SLACK_SIGNING_SECRET: SIGNING_SECRET }, {
+    waitUntil(promise: Promise<unknown>) { pending.push(promise); },
+    passThroughOnException() {}, props: {},
+  });
+  expect(res.status).toBe(200);
+  expect(await res.text()).toBe('');
+  await Promise.all(pending);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe(responseUrl);
+  expect(JSON.parse(options.body as string)).toEqual({
+    response_type: 'ephemeral', replace_original: false,
+    text: expect.stringContaining('確認しました'),
+  });
+});

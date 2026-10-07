@@ -409,3 +409,11 @@ GitHub App の **「Install App」** フローでは、コールバックが `/a
 | [HISTORY（履歴）](HISTORY.cloudflare-workers-github-oauth-1.latest.md) | コミット履歴 |
 | [ZANZIBAR（権限モデル）](ZANZIBAR.cloudflare-workers-github-oauth-1.md) | GitHub App 権限の Zanzibar 形式定義 |
 | [EVAL（実装評価）](EVAL.cloudflare-workers-github-oauth-1.20260316.md) | コード品質・セキュリティ評価 |
+
+### つぶやきのインタラクティブ投稿サンプル
+
+`/tsubuyaki` の左サイドバーで「🖱️ インタラクティブ投稿サンプル」を選び、Run▶で適用して本文を投稿します。Slackの投稿には「確認しました」「ありがとう」のボタンが付き、押した本人だけに確認メッセージを返します。元の投稿は残り、回答の集計・保存は行いません。
+
+Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本Workerの `https://<Workerのホスト名>/slack/interactions` に設定してください。既存の `SLACK_SIGNING_SECRET` でクリック通知の署名を検証します。投稿には既存のSlack送信設定（`SOT`・送信先チャンネル）が必要です。新しい環境変数やDBマイグレーションは不要です。
+
+参考: [Slackのインタラクション処理](https://docs.slack.dev/interactivity/handling-user-interaction/)

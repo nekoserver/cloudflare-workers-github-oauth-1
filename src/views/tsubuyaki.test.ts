@@ -69,3 +69,11 @@ describe('getTsubuyakiPage', () => {
     expect(html).toContain('"snippet"');
   });
 });
+
+it('インタラクティブサンプルを選択でき、応答と保存なしの説明がある', () => {
+  const html = getTsubuyakiPage('octocat');
+  expect(html).toContain('data-template="interactive_sample"');
+  expect(html).toContain('自分だけに確認メッセージ');
+  expect(html).toContain('集計・保存なし');
+  expect(html).toContain('tsubuyaki_sample_reaction_understood');
+});
