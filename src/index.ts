@@ -2774,9 +2774,9 @@ export function mergeColumnsFromRows(
 
 /**
  * カラムのキー種別を返す。ER図の定義と一致させること。
- * 'pk' | 'fk' | 'pk+fk' | 'uk' | 'idx' | null
+ * 'pk' | 'fk' | 'pk+fk' | 'uk' | 'uk+fk' | 'idx' | null
  */
-export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | 'pk+idx' | 'fk+idx' | 'uk' | 'idx' | null;
+export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | 'pk+idx' | 'fk+idx' | 'uk' | 'uk+fk' | 'idx' | null;
 
 export interface ColumnKeyInfo {
   [columnName: string]: ColumnKeyType;
@@ -2923,10 +2923,32 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_key_endpoint_stats: { key_id: 'pk+fk', day: 'pk', endpoint: 'pk', status_code: 'pk' },
 };
 
+/**
+ * TABLE_COLUMN_KEYSの静的な型(pk/uk/idx等)に、COLUMN_FK_TARGETSで宣言された
+ * 論理FKを補完してマージする。
+ *
+ * TABLE_COLUMN_KEYSの文字列に'fk'を含めるのを更新し忘れても(例: 新しいFKを
+ * COLUMN_FK_TARGETSに追加したがTABLE_COLUMN_KEYS側の型を'uk+fk'等に直すのを
+ * 忘れても)、/statusの保存データモーダルでFKバッジが欠落しないようにする。
+ * ER図(UML)側は既に同じ補完ロジックを持つ(src/views/status.tsの
+ * normalizeGroupErToUml参照)。この関数はそれをTABLE_COLUMN_KEYS由来の
+ * 静的バッジにも適用する。
+ */
+export function mergeColumnKeyTypeWithFk(baseKeyType: ColumnKeyType, hasLogicalFk: boolean): ColumnKeyType {
+  if (!hasLogicalFk) return baseKeyType;
+  if (!baseKeyType) return 'fk';
+  if (baseKeyType.includes('fk')) return baseKeyType;
+  if (baseKeyType === 'pk') return 'pk+fk';
+  if (baseKeyType === 'uk') return 'uk+fk';
+  if (baseKeyType === 'idx') return 'fk+idx';
+  return baseKeyType;
+}
+
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
   const tableKeys = TABLE_COLUMN_KEYS[tableName];
-  if (!tableKeys) return null;
-  return tableKeys[columnName] ?? null;
+  const baseKeyType = tableKeys?.[columnName] ?? null;
+  const hasLogicalFk = !!COLUMN_FK_TARGETS[tableName]?.[columnName];
+  return mergeColumnKeyTypeWithFk(baseKeyType, hasLogicalFk);
 }
 
 /**

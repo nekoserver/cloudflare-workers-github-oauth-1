@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns, buildGroupErData, TABLE_GROUP_MAP, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, resolveLogicalFkTargetCol } from '../index';
+import { mergeColumnsFromRows, getColumnKeyType, mergeColumnKeyTypeWithFk, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns, buildGroupErData, TABLE_GROUP_MAP, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, resolveLogicalFkTargetCol } from '../index';
 
 describe('mergeColumnsFromRows', () => {
   it('rowsが空なら元のカラムをそのまま返す', () => {
@@ -79,6 +79,78 @@ describe('getColumnKeyType', () => {
 
   it('存在しないテーブルにnullを返す', () => {
     expect(getColumnKeyType('nonexistent_table', 'id')).toBeNull();
+  });
+
+  // 対象: TABLE_COLUMN_KEYSの静的な型文字列がuk/idx単独のままでも、
+  // COLUMN_FK_TARGETSに論理FKが宣言されていればgetColumnKeyTypeが
+  // fkを補完したキー種別を返すこと(/statusの保存データモーダルで
+  // FKバッジが欠落していた不具合の回帰テスト)。
+  it('UK基底のカラムにCOLUMN_FK_TARGETSの論理FKがあればuk+fkを返す', () => {
+    expect(TABLE_COLUMN_KEYS['aichat_answer_vectors']?.['share_id']).toBe('uk');
+    expect(COLUMN_FK_TARGETS['aichat_answer_vectors']?.['share_id']).toBe('ai_chat_shares');
+    expect(getColumnKeyType('aichat_answer_vectors', 'share_id')).toBe('uk+fk');
+  });
+
+  it('IDX基底のカラムにCOLUMN_FK_TARGETSの論理FKがあればfk+idxを返す', () => {
+    expect(TABLE_COLUMN_KEYS['heritage_area_boxes']?.['user_id']).toBe('idx');
+    expect(COLUMN_FK_TARGETS['heritage_area_boxes']?.['user_id']).toBe('user_sessions');
+    expect(getColumnKeyType('heritage_area_boxes', 'user_id')).toBe('fk+idx');
+  });
+
+  it('PK基底のカラムにCOLUMN_FK_TARGETSの論理FKがあればpk+fkを返す', () => {
+    expect(TABLE_COLUMN_KEYS['tree_view_snapshots']?.['repo_name']).toBe('pk');
+    expect(COLUMN_FK_TARGETS['tree_view_snapshots']?.['repo_name']).toBe('installation_permissions');
+    expect(getColumnKeyType('tree_view_snapshots', 'repo_name')).toBe('pk+fk');
+  });
+
+  it('論理FKが無いカラムは元の型をそのまま返す(回帰防止)', () => {
+    expect(getColumnKeyType('ai_summary_log', 'id')).toBe('pk');
+    expect(getColumnKeyType('ai_summary_log', 'summary')).toBeNull();
+  });
+
+  it('既にfkを含む型はCOLUMN_FK_TARGETSの有無に関わらず変化しない', () => {
+    expect(getColumnKeyType('team_members', 'team_id')).toBe('pk+fk');
+    expect(getColumnKeyType('ai_summary_reviews', 'summary_request_id')).toBe('fk');
+  });
+});
+
+describe('mergeColumnKeyTypeWithFk', () => {
+  it('論理FKが無い場合は元の型をそのまま返す', () => {
+    expect(mergeColumnKeyTypeWithFk('uk', false)).toBe('uk');
+    expect(mergeColumnKeyTypeWithFk(null, false)).toBeNull();
+  });
+
+  it('論理FKがあり元の型がnullならfkを返す', () => {
+    expect(mergeColumnKeyTypeWithFk(null, true)).toBe('fk');
+  });
+
+  it('論理FKがありpk/uk/idxならそれぞれpk+fk/uk+fk/fk+idxを返す', () => {
+    expect(mergeColumnKeyTypeWithFk('pk', true)).toBe('pk+fk');
+    expect(mergeColumnKeyTypeWithFk('uk', true)).toBe('uk+fk');
+    expect(mergeColumnKeyTypeWithFk('idx', true)).toBe('fk+idx');
+  });
+
+  it('既にfkを含む型は変化しない', () => {
+    expect(mergeColumnKeyTypeWithFk('fk', true)).toBe('fk');
+    expect(mergeColumnKeyTypeWithFk('pk+fk', true)).toBe('pk+fk');
+    expect(mergeColumnKeyTypeWithFk('fk+idx', true)).toBe('fk+idx');
+  });
+});
+
+describe('renderColumnKeyBadge: uk+fkの表示(src/views/status.ts)', () => {
+  it("renderColumnKeyBadge関数がuk+fkの分岐を持ち、UKとFKの両バッジを出力する", () => {
+    const statusSrc = require('node:fs').readFileSync(
+      require('node:path').join(__dirname, '..', 'views', 'status.ts'),
+      'utf-8',
+    );
+    const idx = statusSrc.indexOf('function renderColumnKeyBadge');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = statusSrc.slice(idx, idx + 1500);
+    const ukFkIdx = fn.indexOf("keyType === 'uk+fk'");
+    expect(ukFkIdx).toBeGreaterThan(-1);
+    const branch = fn.slice(ukFkIdx, ukFkIdx + 200);
+    expect(branch).toContain('>UK<');
+    expect(branch).toContain('>FK<');
   });
 });
 
