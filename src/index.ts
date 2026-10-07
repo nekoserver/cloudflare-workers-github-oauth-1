@@ -20662,6 +20662,11 @@ app.post('/webhook/github', async (c) => {
       const pr = prPayload?.pull_request;
       const repoFullName = prPayload?.repository?.full_name ?? 'unknown';
       const prNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
+      // 本体のコミット追加はpushだけでなくPR synchronizeでも通知される。
+      // 本体PRの要約はD1と外部Workerに限定し、Slack設定がONでも送らない。
+      if (repoFullName.toLowerCase() === 'nekoserver/cloudflare-workers-github-oauth-1') {
+        prNotifyConfig.target = 'worker';
+      }
       const ai = c.env.AI;
       const githubToken = c.env.GITHUB_TOKEN;
 
