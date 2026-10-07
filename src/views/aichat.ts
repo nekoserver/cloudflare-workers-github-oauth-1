@@ -6667,6 +6667,22 @@ export function getAiChatPage(user: {
       return html;
     }
 
+    function buildNewKeywordStatsHtml(days) {
+      var addedDays = (days || []).filter(function(day) { return (day.new_kw_count || 0) > 0; });
+      var total = addedDays.reduce(function(sum, day) { return sum + day.new_kw_count; }, 0);
+      var html = '<section aria-label="新規切り出しキーワード数" style="margin-top:16px;">';
+      html += '<div style="font-size:12px;font-weight:600;">新規切り出しキーワード数: ' + total + '語</div>';
+      html += '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 8px;">このユーザーで初めて登録された語。再抽出・モデル変更は重複計上しません。UTC日付・過去データは除外。</div>';
+      if (!addedDays.length) return html + '<div style="font-size:11px;color:var(--text-muted);">この月の新規切り出しは0語です</div></section>';
+      var maxCount = Math.max.apply(null, addedDays.map(function(day) { return day.new_kw_count; }));
+      html += '<table style="width:100%;font-size:11px;text-align:left;"><thead><tr><th>日付</th><th>新規追加数</th></tr></thead><tbody>';
+      addedDays.forEach(function(day) {
+        html += '<tr><td>' + escHtml(day.date) + '</td><td>' + day.new_kw_count + '語'
+          + '<span aria-hidden="true" style="display:block;height:6px;background:#22c55e;width:' + (day.new_kw_count / maxCount * 100).toFixed(1) + '%;"></span></td></tr>';
+      });
+      return html + '</tbody></table></section>';
+    }
+
     function renderDailyStatsChart() {
       var month = dailyStatsCurrentMonth;
       var parts = month.split('-');
@@ -6952,7 +6968,7 @@ export function getAiChatPage(user: {
 
           dailyStatsBody.innerHTML = '<div style="display:grid;grid-template-columns:160px 1fr;gap:14px;align-items:start;">' +
             '<div>' + leftHtml + '</div>' +
-            '<div>' + svg + '</div>' +
+            '<div>' + svg + buildNewKeywordStatsHtml(days) + '</div>' +
             '</div>' + embSectionHtml;
         })
         .catch(function() { dailyStatsBody.innerHTML = '<div style="color:var(--text-muted);padding:20px 0;">取得に失敗しました</div>'; });

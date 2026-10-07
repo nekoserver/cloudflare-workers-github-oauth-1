@@ -80,3 +80,22 @@ ORDER BY source, q_count DESC;
 ```
 
 本書は取得経路と表示条件を実装から記録したもの。今回報告された本番の非表示原因は、該当APIレスポンス・D1レコードを確認していないため未確定。
+
+
+## 新規切り出しキーワード数（追加実装）
+
+`0167_create_aichat_keyword_registry.sql` 適用後、`aichat_keyword_registry` を初出台帳として使う。
+主キーは `(user_id, keyword)`、`first_share_id` は `ai_chat_shares.id` を参照するNULL許可のFKで、回答を物理削除したときは `ON DELETE SET NULL` により統計を保持する。
+ユーザー識別子は既存のキーワードテーブルと同じ `user_id` を使う。セッション行はログイン状態に依存するため、`user_sessions` へのFKは設けない。
+
+回答キーワードベクトルのINSERT成功時にD1トリガーが `first_source='answer_extraction'` で初出を記録する。
+保存と同じトランザクションで確定するため、失敗時は記録されず、再実行・別回答・別埋め込みモデルで同じ語を登録しても初回日時と件数は変わらない。
+検索・キーワード埋め込み・分類のINSERTにも初出記録を設け、それらで先に存在した語を後で切り出しても新規切り出し数に含めない。
+✂️と同じ保存経路を利用するanswer-graph等の回答キーワード抽出も対象。
+
+既存4テーブルの語を、確認可能な最古の日時で `first_source='legacy'` として取り込む。
+過去の初回抽出日時・出所は保証できないため、日次の新規切り出し数には含めない。既存の語の再抽出は新規として扱わない。
+
+`GET /api/aichat/daily-stats` は `first_source='answer_extraction'` の初回日時をユーザー・月・UTC日付で集計し、`days[].new_kw_count` を返す。
+日次モーダルに月合計と日別件数を表示する。既存の `kw_count`（その日に検索した語の種類数）とは別の指標。
+台帳はユーザーごとの語の初出のみを保持し、回答・モデル・分類の比較には従来の `aichat_answer_keyword_vectors`、`ai_chat_shares`、`aichat_keyword_category_map` を引き続き使う。
