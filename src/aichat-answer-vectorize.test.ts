@@ -254,6 +254,32 @@ describe('parsePrerequisiteTermsResponse: gemma応答からの用語抽出', () 
     const raw = '<think>これは思考過程です</think>東京駅\n新幹線';
     expect(parsePrerequisiteTermsResponse(raw)).toEqual(['東京駅', '新幹線']);
   });
+
+  // 対象: gemma-4-26b-a4b-itがインラインコード記法(`用語`)で用語を返してくる
+  // ことがあり、各語の前後に余分な「`」が残っていた不具合(2026-10-07報告)。
+  it('各語の前後に付くバックティックを除去する', () => {
+    expect(parsePrerequisiteTermsResponse('`東京駅`\n`新幹線`')).toEqual(['東京駅', '新幹線']);
+  });
+
+  it('箇条書き記号とバックティックが両方付いていても正しく除去する', () => {
+    expect(parsePrerequisiteTermsResponse('- `東京駅`\n・`新幹線`')).toEqual(['東京駅', '新幹線']);
+  });
+
+  it('バックティックが複数重なっていても全て除去する', () => {
+    expect(parsePrerequisiteTermsResponse('``東京駅``')).toEqual(['東京駅']);
+  });
+
+  it('バックティック有無が異なる同一語は重複として1件にまとめる', () => {
+    expect(parsePrerequisiteTermsResponse('`東京駅`\n東京駅')).toEqual(['東京駅']);
+  });
+
+  it('バックティックとその内側の空白を両方除去する', () => {
+    expect(parsePrerequisiteTermsResponse('` 東京駅 `')).toEqual(['東京駅']);
+  });
+
+  it('語の一部に含まれるバックティック(前後ではない)は除去しない', () => {
+    expect(parsePrerequisiteTermsResponse('foo`bar')).toEqual(['foo`bar']);
+  });
 });
 
 describe('extractPrerequisiteTerms: gemma-4-26b-a4b-itへの問い合わせ', () => {
