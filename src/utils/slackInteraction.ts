@@ -24,7 +24,7 @@ export type InteractionResult = {
   status: number;
   steps: string[];
   aiReplyTask?: SlackAiReplyTask;
-  sampleResponse?: { responseUrl: string; text: string };
+  sampleResponse?: { responseUrl: string; text: string; responseType: 'in_channel' };
 };
 
 /**
@@ -116,9 +116,15 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
       await log('error', 'invalid sample response_url');
       return { status: 200, steps };
     }
+    const userId = interactionPayload.user?.id;
+    if (typeof userId !== 'string' || !/^[UW][A-Z0-9]+$/.test(userId)) {
+      await log('error', 'missing or invalid sample user');
+      return { status: 200, steps };
+    }
     await log('tsubuyaki_sample_matched', sampleChoice[0]);
     return { status: 200, steps, sampleResponse: {
-      responseUrl, text: '🖱️ サンプル応答:「' + sampleChoice[1] + '」を受け付けました。これは動作確認用で、回答の集計・保存は行いません。',
+      responseUrl, responseType: 'in_channel',
+      text: '🖱️ <@' + userId + '> さんが「' + sampleChoice[1] + '」を押しました。',
     } };
   }
 

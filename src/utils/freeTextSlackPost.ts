@@ -8,7 +8,7 @@ export const TSUBUYAKI_SAMPLE_CHOICES = { understood: '確認しました', than
  * ID は外部 UI からも送られるため、表示名とは分離して安定させる。
  */
 export const SLACK_POST_TEMPLATES = [
-  { id: 'interactive_sample', emoji: '🖱️', title: 'インタラクティブ投稿サンプル', description: 'Slackでボタンを押すと自分だけに確認メッセージが届く（集計・保存なし）' },
+  { id: 'interactive_sample', emoji: '🖱️', title: 'インタラクティブ投稿サンプル', description: 'Slackでボタンを押すと同じチャンネルに操作した人とボタン名を通知（集計・保存なし）' },
   { id: 'plain', emoji: '💬', title: 'フリーメッセージ', description: '自由な内容をそのまま共有' },
   { id: 'announcement', emoji: '📣', title: 'お知らせ', description: '全体への告知や重要な連絡' },
   { id: 'news', emoji: '📰', title: 'ニュース', description: '新着情報や社内ニュース' },

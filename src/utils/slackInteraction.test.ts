@@ -32,6 +32,7 @@ const sampleRow = {
 function buildPayload(overrides: Record<string, any> = {}): string {
   const payload = {
     type: 'block_actions',
+    user: { id: 'U123' },
     trigger_id: 'trigger-123',
     response_url: 'https://hooks.slack.com/actions/T00/B00/xxx',
     actions: [
@@ -368,6 +369,8 @@ describe('handleSlackInteraction', () => {
     const result = await handleSlackInteraction(deps);
     expect(result.status).toBe(200);
     expect(result.sampleResponse?.responseUrl).toBe('https://hooks.slack.com/actions/T00/B00/xxx');
+    expect(result.sampleResponse?.responseType).toBe('in_channel');
+    expect(result.sampleResponse?.text).toContain('<@U123>');
     expect(result.sampleResponse?.text).toContain(value === 'thanks' ? 'ありがとう' : '確認しました');
     expect(deps.dbQuery).not.toHaveBeenCalled();
   });
@@ -391,4 +394,11 @@ describe('handleSlackInteraction', () => {
     }) }));
     expect(result.sampleResponse).toBeUndefined();
   });
+});
+
+it('通知の操作ユーザーが欠落している場合は送信しない', async () => {
+  const result = await handleSlackInteraction(makeDeps({ rawBody: buildPayload({ user: undefined,
+    actions: [{ action_id: 'tsubuyaki_sample_reaction_thanks', value: 'thanks' }],
+  }) }));
+  expect(result.sampleResponse).toBeUndefined();
 });
