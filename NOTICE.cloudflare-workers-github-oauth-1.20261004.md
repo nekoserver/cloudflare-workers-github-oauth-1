@@ -4,6 +4,12 @@
 今回rails-rootのpushコミット要約の動作確認を行う過程で、2つの誤解・1つの表示上の
 分かりにくさが見つかったので記録する。
 
+## 2026-10-08補足: コミット保存と差分取得を区別する
+
+以下のPAT設定は当時のprivateリポジトリの差分取得に使った例。`ghp_*`形式のclassic PATがwebhook受信やコミット保存に必須という意味ではない。
+`repo_commit_index`へのSHA・メッセージ保存はpush本文を使うため`GITHUB_TOKEN`なしでも行う。未設定の場合に省略されるのはGitHub APIによる差分取得など。
+配信設定・署名・DB保存の条件は[通知パイプラインNOTICE](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md)を参照。
+
 ## 1. `GITHUB_TOKEN`はGitHubのリポジトリ設定ではなく、本体Worker側のCloudflareシークレット
 
 `GITHUB_TOKEN`という名前から、GitHub側(リポジトリのSettings → Secrets and

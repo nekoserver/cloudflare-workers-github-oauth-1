@@ -5,6 +5,13 @@
 
 このドキュメントは PR #315 で発覚した `repo_commit_index` の件数ズレ（D1: 206件 vs git: 217件）の事後分析として、「最初からこの手順を守っていれば問題は起きなかった」というベストプラクティスをまとめたものである。
 
+## 2026-10-08補足: 現在はpush受信から自動追記する
+
+以下は2026-05-28時点の手動運用の事後分析。現行の`/webhook/github`はpush本文から`repo_commit_index`へ自動追記するため、以下の「PRマージごとに手動追記」は現在の通常手順ではない。設定・診断は[通知パイプラインNOTICEの2節](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md#2-経路a-github--本体worker-webhookgithub)を参照。
+
+現行コードは`ref`でmainに限定せず、受信した他ブランチのコミットも保存する。したがって`git rev-list --count origin/main`とD1件数の一致、または`COUNT(*) = MAX(seq_num)`を無条件に要求してはいけない。確認は対象ブランチのSHA集合と保存済みSHAを比較する。
+過去の欠落履歴は新しいpushやデプロイだけでは補完されない。履歴補完では件数・連番だけで未登録範囲を決めずSHA単位で差分を確認し、下記のDELETE・再採番手順を現行DBへそのまま適用しない。
+
 ---
 
 ## 発生した問題

@@ -16,68 +16,97 @@
 
 3つとも「webhook」と呼ばれがちだが、**認証方式も通信経路も別物**。「webhookが届かない」と言われたら、まずA/B/Cのどれの話かを最初に特定すること。
 
-### 1.1 Slack通知フロー(Mermaid)
+### 1.1 コミット保存・要約・通知は別の処理（2026-10-08、main `47d08df3`と照合）
 
-以下は、通知イベントの発生からSlackまたはAltワーカーへ到達するまでの現在の分岐を示す。実線は`sendNotification()`に集約された通常の通知経路、破線はセキュリティ検知から`postSlackMessage()`を直接呼ぶSlack専用経路である。
+| 処理 | 起点 | 保存先・送信先 | 条件・注意 |
+|---|---|---|---|
+| コミット本文・SHAの保存 | `/webhook/github`の`push` | 本体D1 `repo_commit_index` | `repository.full_name`、DB、有効な`commits[].id/message`が必要 |
+| pushのAI要約 | 同じ`push` | 本体D1 `ai_summary_log`（`event_type='push_summary'`） | ブランチ削除や要約対象メッセージなしの場合は生成しない |
+| pushの通知本文 | 同じ`push` | 外部Worker `/ingest` | 解決済み通知先がworkerでURL設定済みの場合だけ送信。Slackには送らない |
+| PRのAI要約・エージェント情報 | `pull_request`の`opened/synchronize` | `ai_summary_log`、`commit_agent_log`、`ai_summary_reviews` | `repo_commit_index`へのpush保存とは別 |
+| PR要約の通知 | 同じPRイベント | 解決済みのSlackまたは外部Worker | main `47d08df3`ではSlack ON時のSlack送信経路が残る |
+
+本体PRのSlack送信停止は[PR #2271](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2271)で対応中（確認時点で未マージ）。未マージの修正やローカルのコードを本番の動作として扱わず、マージ・デプロイ状況を確認する。
 
 ```mermaid
 flowchart TD
-  subgraph Sources["通知イベントの発生元"]
-    GH["GitHub webhook<br/>installation / pull_request"]
-    CFAUTH["cf-auth webhook<br/>ログイン・アクセス判定"]
-    RESEND["Resend webhook<br/>delivered / failed / bounced"]
-    USER["ユーザー操作<br/>つぶやき / F1 / セッションrevoke"]
-    LOGIN["ログイン失敗"]
-  end
-
-  GH --> BUILD["通知本文を生成<br/>必要に応じてAI要約・Block Kitを構築"]
-  CFAUTH --> BUILD
-  RESEND --> BUILD
-  USER --> BUILD
-  LOGIN --> BUILD
-
-  BUILD --> CONFIG["resolveNotifyConfigWithSetting<br/>環境変数 + D1 notification_settings"]
-  CONFIG --> TARGET{"NOTIFY_TARGET = worker ?"}
-
-  TARGET -- "No: 未設定・slack・その他" --> ENABLED{"slack_enabled = 1<br/>かつ token / channel 設定済み?"}
-  ENABLED -- No --> SKIP["通知をスキップ<br/>エラー結果またはログを残す"]
-  ENABLED -- Yes --> DISPATCH["sendNotification"]
-  DISPATCH --> POST["postSlackMessage"]
-  POST --> SLACKAPI["Slack Web API<br/>chat.postMessage"]
-  SLACKAPI --> SLACK["Slackチャンネル"]
-
-  TARGET -- Yes --> WORKERCONFIG{"NOTIFY_WORKER_URL<br/>設定済み?"}
-  WORKERCONFIG -- No --> SKIP
-  WORKERCONFIG -- Yes --> DISPATCHWORKER["sendNotification / sendToWorker"]
-  DISPATCHWORKER --> INGEST["Altワーカー /ingest<br/>Bearer認証 + JSON"]
-  INGEST --> ALTDB["D1 alt_notify_ingest_log"]
-  ALTDB --> WSPACE["Altワーカー /wspace"]
-
-  SECURITY["セキュリティ検知<br/>無効JWT / revoke済みセッション / 公開鍵異常"]
-  SECURITY -. "token / channel設定時に直接送信" .-> POST
-
-  SLACKAPI --> RESULT{"Slack API / HTTP結果"}
-  INGEST --> RESULT
-  RESULT -- Success --> DONE["送信成功"]
-  RESULT -- Failure --> FAILURE["呼び出し元でエラー記録<br/>主要処理は原則継続"]
+  GH[GitHub push] --> VERIFY[本体 /webhook/githubで署名検証]
+  VERIFY --> LOG[webhook_logに受信を記録]
+  LOG --> COMMITS[repo_commit_indexへコミット保存]
+  LOG --> SUMMARY[ai_summary_logへpush要約保存]
+  LOG --> TARGET{通知先がworkerでURLあり?}
+  TARGET -- Yes --> INGEST[外部Worker /ingestへ通知]
+  TARGET -- No --> SKIP[通知をスキップ]
 ```
 
-通常経路で`NOTIFY_TARGET=worker`を選んだ場合、`slack_enabled`は参照されない。反対にSlack経路では、D1のユーザーオプションがデフォルトOFFであり、`SLACK_OAUTH_TOKEN`と`SLACK_CHANNEL_ID`も必要となる。なお、無効JWT、revoke済みセッション、公開鍵異常のセキュリティ通知は現状この共通ディスパッチを通らず、Slackへ直接送信されるため、`NOTIFY_TARGET`および`slack_enabled`による切り替えの対象外である。
+この図はpush専用。Slackのcron更新通知、ログイン通知、PR要約通知はそれぞれ別の経路で、Slackに何か届いたことはコミット保存の成功を示さない。
 
 ## 2. 経路A: GitHub → 本体Worker `/webhook/github`
 
-- `X-GitHub-Event`ヘッダーでイベント種別(`installation`/`repository`/`pull_request`等)を判定する。JSON本文の`action`フィールドは補助情報。
-- `pull_request`イベントは`action`が`opened`または`synchronize`のときだけAI要約処理へ進む(`synchronize` = 既存PRへの新規push)。
-- 受信ログは無条件で`webhook_log`テーブルに記録してから処理を分岐する(`logWebhookEvent`)。署名検証に失敗した場合も`rejected`として記録される。
+### 設定場所と受信先
+
+コミットの自動保存には**`push`の購読**が必要。PR要約も使う場合は`pull_request`も購読する。
+
+- リポジトリのSettings → Webhooks: Payload URLを本番Workerの`https://<本番ホスト>/webhook/github`、Content typeを`application/json`、Secretを本体の`GITHUB_WEBHOOK_SECRET`と同じ値にし、Activeを有効にする。
+- GitHub App: Webhookを有効化し、同じ受信URL・Secretを設定する。対象リポジトリへのインストール、対象選択、イベント購読、必要な権限も確認する。`push`購読にはContentsのread以上が必要。
+- OAuthのClient ID・Client Secretだけではwebhookの配信は設定されない。`/webhook/cf-auth`は別のSecretとアクセス判定を使うため、コミット保存用の受信先と混同しない。
+
+受信実装は設定場所で送信元を制限せず、署名とイベントを検証する。旧[20260926 NOTICE](NOTICE.cloudflare-workers-github-oauth-1.20260926.md)の「リポジトリWebhookだけ」という断定は訂正済み。
+[GitHubのwebhook種別](https://docs.github.com/en/webhooks/types-of-webhooks)、[GitHub Appのwebhook設定](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/using-webhooks-with-github-apps)、[pushイベント](https://docs.github.com/en/webhooks/webhook-events-and-payloads#push)も参照。
+
+```bash
+gh api repos/nekoserver/cloudflare-workers-github-oauth-1/hooks \
+  --jq 'map({id,active,events,url:.config.url})'
+```
+
+このコマンドは**リポジトリWebhookの一覧だけ**を見る。結果が`[]`でもGitHub App・Organizationの配信有無は判断できない。各設定元のRecent deliveriesで、本体リポジトリの`push`、送信先URL、HTTP応答、`X-GitHub-Delivery`を確認する。GitHub管理APIを読むための`gh`認証と、Workerが受信・保存するためのSecretは別。
+
+### PAT（`ghp_*`）が必要な処理・不要な処理
+
+| 設定 | 用途 |
+|---|---|
+| `GITHUB_WEBHOOK_SECRET` | 受信本文のHMAC検証。GitHub側のWebhook Secretと一致させる。PATではない |
+| `DB` | 本体D1（`workers-github-oauth`）への保存。必要なマイグレーションも適用する |
+| 本体Workerの`GITHUB_TOKEN` | PR/push差分・PRコミット情報をGitHub APIで取得するためのトークン |
+| `NOTIFY_WORKER_URL` / `NOTIFY_WORKER_SECRET` | 外部Workerへの転送先・Bearer認証。コミット保存用の認証ではない |
+| `SOT` / `SLACK_CHANNEL_ID` | Slack送信設定。コミット保存の条件ではない |
+
+**push本文からSHA・メッセージを`repo_commit_index`へ保存する処理に`GITHUB_TOKEN`や`ghp_*`は不要。** `GITHUB_TOKEN`がない場合は差分取得をスキップするが、コミット保存は続行する。設定場所は本体WorkerのCloudflare Secretであり、GitHub ActionsのSecretとは別。トークンが必要なAPI取得では種類・権限・対象・有効期限を確認し、classic PATの接頭辞だけを必須条件にしない。
+
+### 記録されないときの確認順序
+
+1. 上記の配信元で、新しい`push`が正しい本番URLへ送られたか確認する。ローカルの`git commit`だけでは配信されない。設定追加後に過去履歴が自動送信されるわけでもない。
+2. Secret未設定は500、署名不正は401、JSON不正は400。`ping`の200やPRイベントの200ではpush保存を確認できない。
+3. 本番の`DB`バインディング・マイグレーション・参照しているD1を確認する。DB未設定でもハンドラ末尾は200を返せるため、200だけで保存成功としない。
+4. `webhook_log`の`repository`・`deliveryId`で該当受信を特定する。検証成功後の`status='ok'`は受信記録で、後続の全処理成功を保証しない。保存例外は`status='error'`、`phase='repo_commit_index'`として記録される。DBやログ保存自体が失敗した場合はWorker実行ログも確認する。
+5. 同じpushのSHAを`repo_commit_index`で照合する。`deleted=true`、空の`commits`、空または不正な`id/message`は追加対象にならない。同じSHAの再配信は`INSERT OR IGNORE`で追加されない。連番の競合でもIGNOREされ得るため、エラーがないことだけで全SHA保存済みと判断しない。
+6. 保存済みだが画面に出ない場合は、画面の参照先が`repo_commit_index`、`ai_summary_log`、外部Workerの`alt_notify_ingest_log`、GitHub APIのどれかを確認する。別テーブルへの通知成功は代わりにならない。
+
+本体D1での読み取り例:
+
+```sql
+SELECT event_type, status, payload, error, received_at
+FROM webhook_log
+WHERE source = 'github'
+  AND payload LIKE '%nekoserver/cloudflare-workers-github-oauth-1%'
+ORDER BY received_at DESC LIMIT 20;
+
+SELECT commit_hash, seq_num, github_pr_number, commit_message
+FROM repo_commit_index
+WHERE repo_name = 'nekoserver/cloudflare-workers-github-oauth-1'
+ORDER BY seq_num DESC LIMIT 20;
+```
 
 ## 3. 通知送信の切り替え: `NOTIFY_TARGET`
 
-`src/utils/notifyDispatch.ts`が唯一の送信窓口。呼び出し側(PR要約通知・GitHub Appインストール通知・cf-authアクセス判定通知など)は`sendNotification()`だけ呼べばよく、送信先は`NOTIFY_TARGET`環境変数で一元的に決まる。
+共通通知は`src/utils/notifyDispatch.ts`の`sendNotification()`を使う。
+`resolveNotifyTarget()`は`worker`だけをworkerとして扱い、それ以外はslackへ解決する。本体の`wrangler.toml`は`NOTIFY_TARGET="worker"`を明示しているが、本番の適用値も確認する。
 
-- 未設定 or `slack`以外の値 → 従来通りSlackへ投稿(`postSlackMessage`)
-- `worker` → 外部Workerへ経路Cで送信(`sendToWorker`)
+- worker: `NOTIFY_WORKER_URL`が必要。Slack ON/OFFにかかわらず外部Workerへ送る。
+- slack: `slack_enabled`がOFFで外部Worker URLがある場合は、`resolveNotifyConfigWithSetting()`でworkerへ切り替える。URLもなければSlack送信をスキップ。
+- slackかつON: `SOT`と`SLACK_CHANNEL_ID`が必要。ただしpush通知はSlack宛には送らない。
 
-`isNotifyConfigured()`は`target`ごとに必要な設定(Slackなら`SLACK_OAUTH_TOKEN`+`SLACK_CHANNEL_ID`、workerなら`NOTIFY_WORKER_URL`)が揃っているかだけを見る。**設定が足りない場合は通知をスキップするが、AI要約自体やD1書き込みは止めない**(Slack依存を減らすための設計、`app.post('/webhook/github', ...)`内のコメント参照)。
+通知をスキップしてもAI要約・D1保存は継続する。cron更新通知・つぶやき・セキュリティ通知などSlackへ直接送る経路もあるため、「唯一の送信窓口」「Slackへの投稿をすべて止める」と解釈しない。
 
 ## 4. 経路C: 本体Worker → Altワーカー `/ingest` — 送信ペイロードの形
 
@@ -92,6 +121,8 @@ flowchart TD
   "source": "cloudflare-workers-github-oauth-1"
 }
 ```
+
+`channel`は呼び出し側が指定すればその値、未指定なら`SLACK_CHANNEL_ID`になる。pushハンドラは`repository.full_name`を指定する（11節）。
 
 認証は`NOTIFY_WORKER_SECRET`を`Authorization: Bearer <secret>`ヘッダーに乗せるだけ。**環境変数名は送信側(`NOTIFY_WORKER_SECRET`)と受信側(dynamicneko/cf-authの`INGEST_SECRET`)で異なる**が、これは別リポジトリなので当然であり、揃えるべきは変数名ではなく**設定する値そのもの**。名前が違うことに気づかず「secretを設定したのに401になる」と混乱しないこと。
 
@@ -122,7 +153,7 @@ dynamicneko/cf-auth側の`/ingest`実装は当初、受信データをKVに`inge
 
 上記A〜Cとは別に、Slack Events APIの`/slack/event`で受ける`app_mention`イベントにも似た問題があった。当初は`event.bot_id`が付いているイベントを一律で無視しており、**他Bot経由の正当なメンションまで巻き込んで無視していた**(自分自身の発言だけを除外したいのに、条件が広すぎた)。
 
-`SLACK_BOT_USER_ID`(自App自身のBot User ID、`U`始まり)を追加し、設定済みなら`event.user`と比較して自App自身の発言だけを除外するように変更した(未設定時は従来通りの安全側デフォルト)。確認方法: `curl -X POST https://slack.com/api/auth.test -H "Authorization: Bearer $SLACK_OAUTH_TOKEN"`の`user_id`フィールド。
+`SLACK_BOT_USER_ID`(自App自身のBot User ID、`U`始まり)を追加し、設定済みなら`event.user`と比較して自App自身の発言だけを除外するように変更した(未設定時は従来通りの安全側デフォルト)。確認方法: `curl -X POST https://slack.com/api/auth.test -H "Authorization: Bearer $SOT"`の`user_id`フィールド。
 
 ## 8. 同じ「見た目は成功・実は経路が途切れている」パターン: GitHub Actionsのworkflowファイル配置ミス
 
