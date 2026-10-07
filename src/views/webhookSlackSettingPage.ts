@@ -176,6 +176,7 @@ export function getWebhookSlackSettingPage(
   else (target === 'slack' または未設定):
     if slack_enabled === false (D1のユーザー設定、既定OFF): return false
     return SOT && SLACK_CHANNEL_IDが両方あるか</code></pre>
+      <p class="wh-note">pushイベントのコミットログはSlack通知のON/OFFに関係なく本体D1の<code>repo_commit_index</code>へ、AI要約は<code>ai_summary_log</code>へ保存する。pushイベントはSlackに送信せず、通知先が外部Workerの場合のみ転送する。</p>
       <p class="wh-note"><code>NOTIFY_TARGET</code>は<strong>本体Worker全体で1つだけ</strong>の設定であり、リポジトリ単位・イベント種別単位では切り替えられない。<code>worker</code>に設定するとSlackへの投稿は(slack_enabledの値によらず)一切行われなくなる。</p>
     </div>
 

@@ -20870,15 +20870,11 @@ app.post('/webhook/github', async (c) => {
     }
   }
 
-  // push イベント: 通知先(Slack/外部Worker=cf-auth)へ転送
-  // (従来pull_request・installation(_repositories)・repository(created)以外の
-  // イベントはwebhook_logへ記録されるのみで通知が飛んでいなかった。rails-root
-  // 等、リポジトリwebhookの既定イベントであるpushが通知に反映されないという
-  // 報告を受けて追加)
+  // pushのコミットログは本体D1へ保存する。Slackには送信せず、外部Workerへの転送のみ許可する。
   if (eventType === 'push') {
     const pushPayload = payload as unknown as GitHubWebhookPushPayload;
     const pushNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
-    if (isNotifyConfigured(pushNotifyConfig)) {
+    if (pushNotifyConfig.target === 'worker' && isNotifyConfigured(pushNotifyConfig)) {
       const text = buildPushNotificationText(pushPayload);
       if (text) {
         try {
