@@ -198,6 +198,13 @@ describe('resolveAichatRunOverrides', () => {
 });
 
 describe('claudeの色丸固定(オレンジ)', () => {
+  // 対象: assignModelColors()のclaude専用の固定色ロジック。
+  // 2026-10-08: 旧実装は「既に他モデルが同じ色を使っていたら衝突回避で
+  // 別の色へ再割り当てする」設計だったため、通常のパレット循環で
+  // #f97316を獲得していた別モデルが既存データにいる場合、claudeの
+  // 固定色割り当てがその都度「衝突」とみなされて外れてしまい、
+  // オレンジに統一されない不具合があった(ユーザー報告)。
+  // claudeは他モデルとの衝突を一切考慮せず、常にオレンジを使う。
   it('claudeは常にオレンジ(#f97316)が割り当てられる', () => {
     const { merged, newAssignments } = assignModelColors({}, [{ value: 'claude', label: 'claude' }]);
     expect(merged.claude).toBe('#f97316');
@@ -213,16 +220,28 @@ describe('claudeの色丸固定(オレンジ)', () => {
     expect(merged.claude).toBe('#f97316');
   });
 
-  it('既にclaudeがオレンジ以外の色を持っていて他モデルと衝突していなければ再割り当てしない(既存色保持が優先)', () => {
+  it('既にclaudeがオレンジ以外の色を持っていても常にオレンジへ上書きする(既存色より固定色を優先)', () => {
     const { merged, newAssignments } = assignModelColors({ claude: '#4f46e5' }, [{ value: 'claude', label: 'claude' }]);
-    expect(merged.claude).toBe('#4f46e5');
+    expect(merged.claude).toBe('#f97316');
+    expect(newAssignments).toEqual([{ model_id: 'claude', color: '#f97316', label: 'claude' }]);
+  });
+
+  it('既にclaudeが正しくオレンジの場合はnewAssignmentsに入れない(無駄な再書き込みをしない)', () => {
+    const { merged, newAssignments } = assignModelColors({ claude: '#f97316' }, [{ value: 'claude', label: 'claude' }]);
+    expect(merged.claude).toBe('#f97316');
     expect(newAssignments).toHaveLength(0);
   });
 
-  it('既に他モデルがオレンジを使っている場合はclaudeに別の色を割り当てる(衝突回避)', () => {
+  it('既に他モデルがオレンジを使っていてもclaudeは衝突を無視してオレンジになる(固定色は衝突回避の対象外)', () => {
     const { merged } = assignModelColors({ other: '#f97316' }, [{ value: 'claude', label: 'claude' }]);
-    expect(merged.claude).not.toBe('#f97316');
-    expect(merged.claude).not.toBe(merged.other);
+    expect(merged.claude).toBe('#f97316');
+    expect(merged.other).toBe('#f97316');
+  });
+
+  it('固定色(オレンジ)は固定色を持たない他モデルの新規パレット割り当てには使われない(予約される)', () => {
+    const manyModels = Array.from({ length: AICHAT_COLOR_PALETTE.length }, (_, i) => ({ value: 'model-' + i, label: 'Model ' + i }));
+    const { merged } = assignModelColors({}, manyModels);
+    expect(Object.values(merged)).not.toContain('#f97316');
   });
 
   it('claude以外のモデル(codex等)はオレンジ固定の対象にならず通常のパレット循環を使う', () => {
@@ -232,15 +251,25 @@ describe('claudeの色丸固定(オレンジ)', () => {
 });
 
 describe('Codexモデル色の重複防止', () => {
-  it.each(['codex', 'claude'])('パレットを使い切っていても%sの色を重複させない', (model) => {
+  // claudeは固定色(常にオレンジ)のため、この「パレットを使い切っていても
+  // 重複させない」という衝突回避ロジックの対象はcodexのみ
+  // (claude用の固定色テストはdescribe('claudeの色丸固定(オレンジ)')参照)。
+  it('パレットを使い切っていてもcodexの色を重複させない', () => {
     const existing = Object.fromEntries(AICHAT_COLOR_PALETTE.map((color, index) => ['model-' + index, color]));
-    const result = assignModelColors(existing, [{ value: model, label: model }]);
-    expect(Object.values(existing)).not.toContain(result.merged[model]);
-    expect(result.merged[model]).toMatch(/^#[0-9a-f]{6}$/i);
+    const result = assignModelColors(existing, [{ value: 'codex', label: 'codex' }]);
+    expect(Object.values(existing)).not.toContain(result.merged.codex);
+    expect(result.merged.codex).toMatch(/^#[0-9a-f]{6}$/i);
   });
-  it.each(['codex', 'claude'])('既存の%s色が他モデルと被る場合は再割り当てする', (model) => {
-    const result = assignModelColors({ other: '#4f46e5', [model]: '#4f46e5' }, [{ value: model, label: model }]);
-    expect(result.merged[model]).not.toBe(result.merged.other);
+  it('既存のcodex色が他モデルと被る場合は再割り当てする', () => {
+    const result = assignModelColors({ other: '#4f46e5', codex: '#4f46e5' }, [{ value: 'codex', label: 'codex' }]);
+    expect(result.merged.codex).not.toBe(result.merged.other);
     expect(result.newAssignments).toHaveLength(1);
+  });
+  // claudeは固定色のため「他モデルと被ったら再割り当て」ではなく、常に
+  // オレンジへ収束する(衝突していても他モデルから色を奪わない)。
+  it('既存のclaude色が他モデルと被る場合もオレンジへ収束する(他モデルの色は変えない)', () => {
+    const result = assignModelColors({ other: '#4f46e5', claude: '#4f46e5' }, [{ value: 'claude', label: 'claude' }]);
+    expect(result.merged.claude).toBe('#f97316');
+    expect(result.merged.other).toBe('#4f46e5');
   });
 });

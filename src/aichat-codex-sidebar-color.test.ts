@@ -8,8 +8,9 @@ describe('左サイドパネルのCodex色', () => {
     const colors = JSON.parse(html.match(/var MODEL_COLORS = (.*);/)![1]);
     const source = html.slice(html.indexOf('    function renderSidebarResults()'), html.indexOf('    // ===== カレンダーヒートマップ'));
     const sidebar = document.createElement('div');
-    new Function('document', 'MODEL_COLORS', 'sidebarResults', 'currentResults', 'sidebarSubqueries', 'closeSwipeOpen', 'addSwipeBehavior', source + '\nrenderSidebarResults();')(
-      document, colors, sidebar,
+    var getModelDotColor = function(modelId: string) { return colors[modelId] || ''; };
+    new Function('document', 'MODEL_COLORS', 'getModelDotColor', 'sidebarResults', 'currentResults', 'sidebarSubqueries', 'closeSwipeOpen', 'addSwipeBehavior', source + '\nrenderSidebarResults();')(
+      document, colors, getModelDotColor, sidebar,
       [{ id: 'share', question: '質問本文', model: 'codex', created_at: '2026-10-07T00:00:00' }],
       new Set(), () => {}, () => {},
     );

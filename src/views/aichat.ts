@@ -3031,7 +3031,7 @@ export function getAiChatPage(user: {
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
         item.className = 'sidebar-result-item' + (sidebarSubqueries && sidebarSubqueries.has(r.question) ? ' has-subquery' : '');
-        var modelColor = r.model && MODEL_COLORS[r.model];
+        var modelColor = r.model && getModelDotColor(r.model);
         if (modelColor) item.style.borderLeftColor = modelColor;
 
         var delBtn = document.createElement('button');
@@ -3222,10 +3222,10 @@ export function getAiChatPage(user: {
       if (historyModalSwipeItems.length <= 1) return;
       var current = historyModalSwipeItems[historyModalSwipeIndex];
       if (!current) return;
-      var dotColor = MODEL_COLORS[current.model] || '';
+      var dotColor = getModelDotColor(current.model) || '';
       var dotsHtml = historyModalSwipeItems.map(function(item, idx) {
         var isActive = idx === historyModalSwipeIndex;
-        var c = MODEL_COLORS[item.model] || 'var(--text-muted)';
+        var c = getModelDotColor(item.model) || 'var(--text-muted)';
         var sz = isActive ? '12px' : '7px';
         var shadow = isActive ? ';box-shadow:0 0 0 3px ' + (dotColor ? dotColor + '33' : 'rgba(0,0,0,0.15)') : '';
         return '<span data-swipe-index="' + idx + '" style="display:inline-block;width:' + sz + ';height:' + sz + ';border-radius:50%;background:' + c + ';cursor:pointer;transition:all 0.2s;vertical-align:middle;flex-shrink:0;' + shadow + ';" title="' + escHtml(shortModelName(item.model)) + '"></span>';
@@ -3596,7 +3596,7 @@ export function getAiChatPage(user: {
       var html = '<div style="font-weight:600;margin-bottom:4px;color:var(--text-secondary);">追加質問リンク</div>';
       html += '<div style="display:flex;flex-direction:column;gap:4px;">';
       items.forEach(function(item) {
-        var dotColor = (item.model && MODEL_COLORS && MODEL_COLORS[item.model]) ? MODEL_COLORS[item.model] : '#aaaaaa';
+        var dotColor = (item.model && getModelDotColor(item.model)) || '#aaaaaa';
         html += '<div style="display:flex;gap:8px;align-items:center;">';
         html += '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;" title="' + escHtml(item.model || '') + '"></span>';
         html += '<span style="color:var(--text-muted);">' + escHtml(item.query) + '</span>';
@@ -3673,7 +3673,7 @@ export function getAiChatPage(user: {
       updateHighlightToggleBtn();
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
       historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
-      var dotColor = MODEL_COLORS[r.model] || '';
+      var dotColor = getModelDotColor(r.model) || '';
       var dotStyle = dotColor ? 'display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:4px;vertical-align:middle;' : '';
       historyModalMeta.innerHTML = '<span class="history-modal-model-filter-btn" style="cursor:pointer;' + (dotColor ? 'color:' + dotColor + ';' : '') + 'text-decoration:underline dotted;" title="モデルで絞り込む">' + (dotStyle ? '<span style="' + dotStyle + '"></span>' : '') + escHtml(shortModelName(r.model)) + '</span>' + '　👁 ' + (r.access_count || 0);
       renderHistoryModalTokens(r);
@@ -3837,7 +3837,7 @@ export function getAiChatPage(user: {
       filtered.forEach(function(item) {
         var linkRows = (item.links || []).map(function(lk) {
           var dots = (lk.models || []).map(function(m) {
-            var c = MODEL_COLORS[m] || '';
+            var c = getModelDotColor(m) || '';
             return c ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;" title="' + escHtml(shortModelName(m)) + '"></span>' : '';
           }).join('');
           var hashBadge = lk.question_hash
@@ -3987,7 +3987,7 @@ export function getAiChatPage(user: {
             + '<th style="padding:4px 6px;"></th>'
             + '</tr></thead><tbody>';
           rows.forEach(function(r) {
-            var dot = MODEL_COLORS[r.model] ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + MODEL_COLORS[r.model] + ';margin-right:4px;vertical-align:middle;"></span>' : '';
+            var dot = getModelDotColor(r.model) ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + getModelDotColor(r.model) + ';margin-right:4px;vertical-align:middle;"></span>' : '';
             t += '<tr style="border-bottom:1px solid var(--border-color);">'
               + '<td style="padding:5px 6px;">' + dot + escHtml(shortModelName(r.model)) + '</td>'
               + '<td style="padding:5px 6px;white-space:nowrap;">' + escHtml(r.created_at.slice(0, 16).replace('T', ' ')) + '</td>'
@@ -4021,7 +4021,7 @@ export function getAiChatPage(user: {
         if (entry.commandOnly && !Object.prototype.hasOwnProperty.call(cachedModelMap, entry.value)) return;
         var m = entry.value;
         var btn = document.createElement('button');
-        var dotColor = MODEL_COLORS[m] || '';
+        var dotColor = getModelDotColor(m) || '';
         var isCurrent = m === historyModalCurrentModel;
         var isCached = Object.prototype.hasOwnProperty.call(cachedModelMap, m);
         var dotHtml = dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>' : '';
@@ -4066,7 +4066,7 @@ export function getAiChatPage(user: {
       qDiv.style.cssText = 'background:var(--bg-primary);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text-primary);max-height:72px;overflow:hidden;line-height:1.5;';
       qDiv.textContent = question.length > 120 ? question.slice(0, 120) + '…' : question;
       box.appendChild(qDiv);
-      var dotColor = MODEL_COLORS[selectedModel] || '';
+      var dotColor = getModelDotColor(selectedModel) || '';
       var modelDiv = document.createElement('div');
       modelDiv.innerHTML = (dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;"></span>' : '') + '<strong>' + escHtml(shortModelName(selectedModel)) + '</strong>';
       modelDiv.style.cssText = 'margin-bottom:10px;font-size:14px;';
@@ -4125,7 +4125,7 @@ export function getAiChatPage(user: {
       box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;width:min(600px,92vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);display:flex;flex-direction:column;gap:12px;';
       var header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
-      var dotColor = MODEL_COLORS[selectedModel] || '';
+      var dotColor = getModelDotColor(selectedModel) || '';
       var modelLabel = document.createElement('div');
       modelLabel.innerHTML = (dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;"></span>' : '') + '<strong>' + escHtml(shortModelName(selectedModel)) + '</strong>';
       modelLabel.style.cssText = 'font-size:14px;';
@@ -4193,7 +4193,7 @@ export function getAiChatPage(user: {
         var btn = document.createElement('button');
         var label = m === 'all' ? 'すべて' : shortModelName(m);
         btn.textContent = label;
-        var dotColor = m !== 'all' ? (MODEL_COLORS[m] || '') : '';
+        var dotColor = m !== 'all' ? (getModelDotColor(m) || '') : '';
         var isActive = linkedQuestionsFilter === m;
         btn.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:6px;border-radius:6px;border:1px solid ' + (isActive ? 'var(--accent-color,#667eea)' : 'var(--border-color)') + ';background:' + (isActive ? 'var(--accent-color,#667eea)' : 'var(--bg-primary)') + ';color:' + (isActive ? '#fff' : 'var(--text-primary)') + ';cursor:pointer;font-size:13px;border-left:' + (dotColor ? '4px solid ' + dotColor : '4px solid transparent') + ';';
         btn.addEventListener('click', function() {
@@ -4631,7 +4631,7 @@ export function getAiChatPage(user: {
       items.forEach(function(item) {
         var linkRows = (item.links || []).map(function(lk) {
           var dots = (lk.models || []).map(function(m) {
-            var c = MODEL_COLORS[m] || '';
+            var c = getModelDotColor(m) || '';
             return c ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;" title="' + escHtml(shortModelName(m)) + '"></span>' : '';
           }).join('');
           var hashBadge = lk.question_hash
@@ -7858,6 +7858,17 @@ export function getAiChatPage(user: {
 
     var MODEL_COLORS = ${modelColorsJson};
     var MODEL_LIST = ${modelListJson};
+    // 言語モデル選択モーダル(色丸ドロップダウン)で決めた色を、サイド
+    // パネル・履歴モーダル・質問文パネル等すべての色丸表示で同じ値を
+    // 使うための単一の参照先。claudeはサーバー側(assignModelColors)で
+    // 常にオレンジに固定されるが、万一MODEL_COLORSの値がずれた場合でも
+    // 画面間で表示が食い違わないよう、ここでも同じ固定色を優先する
+    // (2026-10-08、サイドパネルと質問文パネルでclaudeの色が食い違う
+    // 不具合の修正)。
+    var FIXED_MODEL_DOT_COLORS = { claude: '#f97316' };
+    function getModelDotColor(modelId) {
+      return FIXED_MODEL_DOT_COLORS[modelId] || (MODEL_COLORS && MODEL_COLORS[modelId]) || '';
+    }
     // パラメータ調整モーダル(⚙)の対象モデルとmaxTokensの上限(サーバー側の
     // デフォルト値、AICHAT_MODEL_MAX_TOKENSと同じ)。よく使うGemma-4・Qwenの
     // 2モデルだけが対象(ユーザー要望2026-10-03)。
@@ -7873,7 +7884,7 @@ export function getAiChatPage(user: {
     var modelColorDot = document.getElementById('modelColorDot');
 
     function applyModelColor(model) {
-      var color = model === 'claude' ? '#f97316' : (MODEL_COLORS[model] || '');
+      var color = getModelDotColor(model) || '';
       modelColorDot.style.background = color || 'var(--border-color)';
     }
 
@@ -7894,7 +7905,7 @@ export function getAiChatPage(user: {
         item.className = 'model-dot-dropdown-item' + (m.value === lastModel ? ' selected' : '');
         var dot = document.createElement('span');
         dot.className = 'model-dot-dropdown-dot';
-        dot.style.background = m.value === 'claude' ? '#f97316' : (MODEL_COLORS[m.value] || 'var(--border-color)');
+        dot.style.background = getModelDotColor(m.value) || 'var(--border-color)';
         var lbl = document.createElement('span');
         lbl.className = 'model-dot-dropdown-item-label';
         lbl.textContent = m.label;
@@ -8267,7 +8278,7 @@ ${getRubyWasmLoaderScript()}
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
             if (!isLocalCommand) {
-              showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
+              showAichatSendToast(!data.fallbackUsed, getModelDotColor(usedModel));
             }
             if (!assistantBubbleEl) {
               assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : usedModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);

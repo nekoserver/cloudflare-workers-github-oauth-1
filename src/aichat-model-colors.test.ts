@@ -52,9 +52,9 @@ describe('モデルカラー: ナビバードット', () => {
     expect(html).toContain('function applyModelColor');
   });
 
-  it('applyModelColor が MODEL_COLORS を参照している', () => {
+  it('applyModelColor が getModelDotColor(MODEL_COLORS経由)を参照している', () => {
     const html = buildPage(COLORS);
-    expect(html).toContain('MODEL_COLORS[model]');
+    expect(html).toContain('getModelDotColor(model)');
   });
 
   it('modelSelect change 時に applyModelColor を呼び出している', () => {
@@ -69,9 +69,9 @@ describe('モデルカラー: サイドバー縦線', () => {
     expect(html).toContain('border-left: 3px solid transparent');
   });
 
-  it('renderSidebarResults で MODEL_COLORS を参照している', () => {
+  it('renderSidebarResults で getModelDotColor(MODEL_COLORS経由)を参照している', () => {
     const html = buildPage(COLORS);
-    expect(html).toContain('MODEL_COLORS[r.model]');
+    expect(html).toContain('getModelDotColor(r.model)');
   });
 
   it('renderSidebarResults で borderLeftColor を設定している', () => {

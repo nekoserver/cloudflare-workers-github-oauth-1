@@ -39,6 +39,7 @@ describe('Codex質問のチャット表示と送信', () => {
       readAichatResponse: async () => ({ response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }),
       prepareAichatRubyResponse: (data: unknown) => data,
       extractRespUsage() {}, showAichatSendToast() {}, MODEL_COLORS: {} as Record<string, string>,
+      getModelDotColor(modelId: string) { return bindings.MODEL_COLORS[modelId] || ''; },
       currentResults: [{ model }],
       renderSidebarResults: () => { sidebarColors.push(bindings.MODEL_COLORS[model]); },
       appendShareBtn: (text: string) => { shared.push(text); },
