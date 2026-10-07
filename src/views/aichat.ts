@@ -7873,7 +7873,7 @@ export function getAiChatPage(user: {
     var modelColorDot = document.getElementById('modelColorDot');
 
     function applyModelColor(model) {
-      var color = MODEL_COLORS[model] || '';
+      var color = model === 'claude' ? '#f97316' : (MODEL_COLORS[model] || '');
       modelColorDot.style.background = color || 'var(--border-color)';
     }
 
@@ -7894,7 +7894,7 @@ export function getAiChatPage(user: {
         item.className = 'model-dot-dropdown-item' + (m.value === lastModel ? ' selected' : '');
         var dot = document.createElement('span');
         dot.className = 'model-dot-dropdown-dot';
-        dot.style.background = MODEL_COLORS[m.value] || 'var(--border-color)';
+        dot.style.background = m.value === 'claude' ? '#f97316' : (MODEL_COLORS[m.value] || 'var(--border-color)');
         var lbl = document.createElement('span');
         lbl.className = 'model-dot-dropdown-item-label';
         lbl.textContent = m.label;

@@ -21,7 +21,7 @@ describe('Codexのモデル色丸選択', () => {
     find(model).click();
     expect(state.model()).toBe(model);
     expect((bindings.modelSelect as HTMLSelectElement).value).toBe(model);
-    expect(bindings.modelColorDot!.style.background).toBe('rgb(14, 165, 233)');
+    expect(bindings.modelColorDot!.style.background).toBe(model === 'claude' ? 'rgb(249, 115, 22)' : 'rgb(14, 165, 233)');
     state.rebuild();
     expect(find(model).classList.contains('selected')).toBe(true);
     find('other').click();
