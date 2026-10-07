@@ -53,7 +53,15 @@ export function getCountdownWidgetCSS(): string {
     #countdownWidget.visible { display: block; }
     #countdownWidget.dragging { cursor: grabbing; opacity: 0.85; }
     .countdown-widget-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    #countdownWidgetToggle, #countdownWidgetMode { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font: inherit; touch-action: manipulation; }
+    #countdownWidgetToggle, #countdownWidgetMode, #countdownWidgetSettings { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; font: inherit; touch-action: manipulation; }
+    .countdown-widget-actions { display: flex; gap: 6px; }
+    #countdownWidgetSettingsDialog { max-width: min(440px, calc(100vw - 32px)); box-sizing: border-box; padding: 24px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg); color: var(--text-primary); }
+    #countdownWidgetSettingsDialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+    #countdownWidgetSettingsDialog h2 { margin: 0 0 16px; font-size: 18px; }
+    #countdownWidgetSettingsDialog ul { list-style: none; padding: 0; margin: 0 0 20px; }
+    #countdownWidgetSettingsDialog label { display: flex; align-items: flex-start; gap: 8px; line-height: 1.6; cursor: pointer; }
+    #countdownWidgetSettingsDialog input { flex: none; margin-top: 6px; }
+    #countdownWidgetSettingsDialog button { padding: 8px 16px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; }
     #countdownWidgetTimers[hidden] { display: none; }
     #countdownWidget.collapsed .countdown-widget-titlebar { margin-bottom: 0; }
     .countdown-widget-timer + .countdown-widget-timer { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; }
@@ -102,9 +110,14 @@ export function getCountdownWidgetCSS(): string {
 export function getCountdownWidgetHTML(): string {
   return `
   <div id="countdownWidget">
-    <div class="countdown-widget-titlebar"><span><button id="countdownWidgetMode" type="button" aria-label="曜日・時刻表示に切り替える" aria-pressed="false">⏳</button> カウントダウン</span><button id="countdownWidgetToggle" type="button" aria-controls="countdownWidgetTimers" aria-expanded="true" aria-label="すべてのカウントダウンを閉じる">▲</button></div>
+    <div class="countdown-widget-titlebar"><span><button id="countdownWidgetMode" type="button" aria-label="曜日・時刻表示に切り替える" aria-pressed="false">⏳</button> カウントダウン</span><span class="countdown-widget-actions"><button id="countdownWidgetSettings" type="button" aria-label="カウントダウン設定を開く" aria-haspopup="dialog" aria-controls="countdownWidgetSettingsDialog">⚙️</button><button id="countdownWidgetToggle" type="button" aria-controls="countdownWidgetTimers" aria-expanded="true" aria-label="すべてのカウントダウンを閉じる">▲</button></span></div>
     <div id="countdownWidgetTimers"></div>
   </div>
+  <dialog id="countdownWidgetSettingsDialog" aria-labelledby="countdownWidgetSettingsTitle">
+    <h2 id="countdownWidgetSettingsTitle">カウントダウン設定</h2>
+    <ul><li><label><input id="countdownWidgetShowUrgent" type="checkbox" checked>ウィジェットクローズ時も3日以内のタイマーを表示する</label></li></ul>
+    <form method="dialog"><button type="submit">閉じる</button></form>
+  </dialog>
   <div id="countdownToast"></div>
   `;
 }
@@ -127,10 +140,33 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       var timersEl = document.getElementById('countdownWidgetTimers');
       var toggleEl = document.getElementById('countdownWidgetToggle');
       var modeEl = document.getElementById('countdownWidgetMode');
+      var settingsEl = document.getElementById('countdownWidgetSettings');
+      var settingsDialog = document.getElementById('countdownWidgetSettingsDialog');
+      var showUrgentEl = document.getElementById('countdownWidgetShowUrgent');
+      var SHOW_URGENT_COOKIE = 'countdownWidgetShowUrgent';
+      var showUrgentWhenCollapsed = !document.cookie.split(';').some(function(cookie) {
+        return cookie.trim() === SHOW_URGENT_COOKIE + '=0';
+      });
       var calendarMode = false;
       var collapsed = false;
       var toastEl = document.getElementById('countdownToast');
       if (!widget || !timersEl) return;
+      if (showUrgentEl) {
+        showUrgentEl.checked = showUrgentWhenCollapsed;
+        showUrgentEl.addEventListener('change', function() {
+          showUrgentWhenCollapsed = showUrgentEl.checked;
+          document.cookie = SHOW_URGENT_COOKIE + '=' + (showUrgentWhenCollapsed ? '1' : '0') + '; Path=/; Max-Age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+          tickWidget();
+        });
+      }
+      if (settingsEl && settingsDialog) {
+        settingsEl.addEventListener('click', function() { settingsDialog.showModal(); });
+        settingsDialog.addEventListener('click', function(event) {
+          if (event.target !== settingsDialog) return;
+          var rect = settingsDialog.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) settingsDialog.close();
+        });
+      }
       var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
       var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
       var toastHideTimer = null;
@@ -341,7 +377,7 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
           var ms = target.getTime() - now;
           var urgent = ms > 0 && ms < 3 * 86400000;
           hasUrgent = hasUrgent || urgent;
-          if (timer) timer.hidden = collapsed && !(calendarMode && urgent);
+          if (timer) timer.hidden = collapsed && !(showUrgentWhenCollapsed && calendarMode && urgent);
           if (clock) clock.textContent = calendarMode ? formatSchedule(target) : formatRemaining(ms);
           var remaining = timer && timer.querySelector('.widget-remaining');
           if (remaining) {
@@ -349,7 +385,7 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
             remaining.textContent = calendarMode && urgent ? 'あと ' + formatRemaining(ms) : '';
           }
         });
-        timersEl.hidden = collapsed && !(calendarMode && hasUrgent);
+        timersEl.hidden = collapsed && !(showUrgentWhenCollapsed && calendarMode && hasUrgent);
       }
 
       function fetchNextEvent() {
