@@ -84,14 +84,15 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     expect(body.modelColor).toBe(colorInsert!.values[1]);
   });
 
-  it('claude_promptの回答もmodel=neko/askgkとして保存する', async () => {
-    const inserts: { sql: string }[] = [];
+  it.each(['command', 'selected-claude'])('Claudeとして保存し色と回答操作用usageを返す: %s', async (mode) => {
+    const inserts: { sql: string; values: unknown[] }[] = [];
     const db = {
       prepare: (sql: string) => ({
-        bind: () => ({
+        all: async () => ({ results: [{ model_id: 'codex', color: '#4f46e5' }] }),
+        bind: (...values: unknown[]) => ({
           first: () => Promise.resolve(sql.includes('user_sessions') ? { revoked_at: null } : null),
           all: () => Promise.resolve({ results: [] }),
-          run: () => { inserts.push({ sql }); return Promise.resolve({ success: true }); },
+          run: () => { inserts.push({ sql, values }); return Promise.resolve({ success: true }); },
         }),
       }),
     };
@@ -99,11 +100,21 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     const response = await app.request('/api/aichat', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: '/neko askgk claude_prompt="テスト質問"' }),
+      body: JSON.stringify({ message: mode === 'command' ? '/neko askgk claude_prompt="テスト質問"' : 'テスト質問', model: mode === 'selected-claude' ? 'claude' : undefined }),
     }, { JWT_SECRET: 'test-secret', DB: db, RUST_WORKER: rustWorkerFetcher('回答本文') });
 
-    const body = await response.json() as { response: string; usedModel: string };
-    expect(body.usedModel).toBe('neko/askgk');
+    const body = await response.json() as { response: string; usedModel: string; shareId: string; threadId: string; modelColor: string; usage: { total_tokens: number } };
+    expect(body.usedModel).toBe('claude');
+    expect(body.shareId).toBeTruthy();
+    expect(body.threadId).toMatch(/^[0-9a-f]{32}$/);
+    expect(body.usage.total_tokens).toBeGreaterThan(0);
+    const share = inserts.find(i => i.sql.includes('INSERT INTO ai_chat_shares'))!;
+    expect(share.values[3]).toBe('テスト質問');
+    expect(share.values[5]).toBe('claude');
+    expect(share.values[13]).toBeNull();
+    const color = inserts.find(i => i.sql.includes('INSERT INTO aichat_model_colors') && i.values[0] === 'claude')!;
+    expect(body.modelColor).toBe(color.values[1]);
+    expect(body.modelColor).not.toBe('#4f46e5');
     expect(body.response).toBe('回答本文');
     expect(inserts.some((i) => i.sql.includes('INSERT INTO ai_chat_shares'))).toBe(true);
   });
@@ -121,7 +132,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
     const token = await createJWT({ sub: 'codex-user', name: 'Codex User' }, JWT_SECRET);
     const response = await app.request('/aichat', { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, DB }, {
       waitUntil: (promise: Promise<unknown>) => { pending.push(promise); },
-      passThroughOnException() {},
+      passThroughOnException() {}, props: {},
     });
     await Promise.all(pending);
     expect(response.status).toBe(200);

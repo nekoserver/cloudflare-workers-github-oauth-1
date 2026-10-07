@@ -2,7 +2,7 @@ import { getKeywordClassificationModalScript } from '../utils/keywordClassificat
 /**
  * AI チャットページのHTML
  */
-import { formatCodexAskgkQuestion } from '../utils/codexAskgkQuestion';
+import { formatAskgkPromptQuestion } from '../utils/codexAskgkQuestion';
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
@@ -12,7 +12,7 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
-import { CODEX_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
+import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -39,18 +39,19 @@ export function getAiChatPage(user: {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => m.value !== 'codex'), CODEX_ASKGK_MODEL];
+  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => !['codex', 'claude'].includes(m.value)), CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL];
   const modelList = models.some(m => m.value === user.aiChatModel)
     ? models
     : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
   const modelOptionsHtml = modelList
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
-  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL]).merged);
+  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]).merged);
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
   const modelListJson = JSON.stringify([
-    ...modelList.filter(m => m.value !== 'codex').map(m => ({ value: m.value, label: m.label })),
+    ...modelList.filter(m => !['codex', 'claude'].includes(m.value)).map(m => ({ value: m.value, label: m.label })),
     { ...CODEX_ASKGK_MODEL, commandOnly: true },
+    { ...CLAUDE_ASKGK_MODEL, commandOnly: true },
   ]);
   // 色丸ドロップダウンの「⚙」からパラメータ調整モーダルを開けるのは
   // AICHAT_TUNABLE_MODELS(よく使うGemma-4・Qwenのみ、ユーザー要望2026-10-03)に
@@ -8173,14 +8174,14 @@ ${getRubyWasmLoaderScript()}
       return state.bubble;
     }
 
-    var formatCodexAskgkQuestion = ${formatCodexAskgkQuestion.toString()};
+    var formatAskgkPromptQuestion = ${formatAskgkPromptQuestion.toString()};
 
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
       var attachedImage = pendingImageDataUrl;
       if (!msg && !attachedImage) return;
-      var displayQuestion = formatCodexAskgkQuestion(msg);
+      var displayQuestion = formatAskgkPromptQuestion(msg);
       appendBubble(displayQuestion, 'user', null, null, null, attachedImage);
       chatInput.value = '';
       chatInput.style.height = 'auto';

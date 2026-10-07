@@ -1,4 +1,5 @@
 export const CODEX_ASKGK_MODEL = { value: 'codex', label: 'codex' };
+export const CLAUDE_ASKGK_MODEL = { value: 'claude', label: 'claude' };
 
 export const AICHAT_COLOR_PALETTE: readonly string[] = [
   '#4f46e5', // indigo
@@ -28,9 +29,9 @@ export function assignModelColors(
   const newAssignments: Array<{ model_id: string; color: string; label: string }> = [];
 
   for (const model of models) {
-    const codexColorConflict = model.value === 'codex' && merged.codex &&
-      Object.entries(merged).some(([id, color]) => id !== 'codex' && color.toLowerCase() === merged.codex.toLowerCase());
-    if (merged[model.value] && !codexColorConflict) continue;
+    const cliColorConflict = ['codex', 'claude'].includes(model.value) && merged[model.value] &&
+      Object.entries(merged).some(([id, color]) => id !== model.value && color.toLowerCase() === merged[model.value].toLowerCase());
+    if (merged[model.value] && !cliColorConflict) continue;
 
     let color = AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c));
     if (!color) {

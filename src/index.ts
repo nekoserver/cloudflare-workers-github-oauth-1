@@ -3,7 +3,7 @@
  * GitHub OAuthとJWT認証の実装
  */
 
-import { formatCodexAskgkQuestion } from './utils/codexAskgkQuestion';
+import { formatAskgkPromptQuestion } from './utils/codexAskgkQuestion';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
@@ -474,7 +474,7 @@ import {
   resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
 import { isInstallationPermissionsUpdateAction } from './utils/installationPermissionsAction';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -5982,7 +5982,7 @@ app.get('/aichat', authMiddleware, async (c) => {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
   modelColors = merged;
   if (c.env.DB) {
     const db = c.env.DB;
@@ -6115,9 +6115,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 色丸で選択したCodexへの通常の質問は、Workers AIではなくaskgkへ送る。
-  if (body.model === 'codex' && message && !/^\/neko\b/i.test(message)) {
-    message = '/neko askgk codex_prompt="' + message + '"';
+  // 色丸で選択したCodex/Claudeへの通常の質問は、Workers AIではなくaskgkへ送る。
+  if ((body.model === 'codex' || body.model === 'claude') && message && !/^\/neko\b/i.test(message)) {
+    message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
@@ -6457,6 +6457,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
+    const askgkModel = slashCommand.codexAskgk ? 'codex' : slashCommand.claudeAskgk ? 'claude' : null;
     let requestedThreadId = (body.threadId ?? '').trim();
     if (slashCommand.saveAsAiResponse) {
       if (requestedThreadId && !isThreadId(requestedThreadId)) {
@@ -6468,8 +6469,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           'SELECT 1 AS found FROM ai_chat_shares WHERE user_id = ? AND thread_id = ? AND deleted_at IS NULL LIMIT 1'
         ).bind(user.sub, requestedThreadId).first<{ found: number }>();
         if (!ownedThread) {
-          if (!slashCommand.codexAskgk) return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
-          // Codexの回答は既に取得済み。削除済み・古いIDのために回答を失わず、
+          if (!askgkModel) return jsonUtf8({ error: '指定されたスレッドは存在しません' }, 404);
+          // Codex/Claudeの回答は既に取得済み。削除済み・古いIDのために回答を失わず、
           // 所有権を確認できないIDは再利用せず新しいスレッドへ保存する。
           requestedThreadId = '';
         }
@@ -6478,11 +6479,11 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
     // (ai_chat_sharesへmodel='codex'として保存し、✂️/📔ボタン・左サイドパネル
     // 検索(qsearch)を通常のAI回答と同様に使えるようにする、2026-10-04
-    // ユーザー要望)。Codex以外のaskgk応答は共通のautoSaveで保存する。
-    if (slashCommand.codexAskgk && c.env.DB) {
+    // ユーザー要望)。claude_promptも同じ保存経路を使う。その他はautoSaveで保存する。
+    if (askgkModel && c.env.DB) {
       const db = c.env.DB;
       const answer = slashCommand.response;
-      const question = formatCodexAskgkQuestion(message);
+      const question = formatAskgkPromptQuestion(message);
       const threadId = requestedThreadId || createThreadId();
       let modelColor: string | undefined;
       let modelColorError: string | undefined;
@@ -6505,39 +6506,39 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         crypto.getRandomValues(tokenBytes);
         const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
         const now = new Date().toISOString();
-        const conversationHash = await computeConversationHash(user.sub, question, answer, 'codex', now);
+        const conversationHash = await computeConversationHash(user.sub, question, answer, askgkModel, now);
         const questionHash = await computeQuestionHash(user.sub, question);
-        const codexSource = (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api';
+        const askgkSource = (body.source ?? '').trim() === 'textbox' ? 'textbox' : 'api';
 
         await db.prepare(
           'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, codex_session_id, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).bind(
-          shareId, user.sub, userHash, question, answer, 'codex', now, conversationHash, questionHash,
-          usage.input_tokens, usage.output_tokens, usage.total_tokens, codexSource, slashCommand.codexAskgk.sessionId, threadId
+          shareId, user.sub, userHash, question, answer, askgkModel, now, conversationHash, questionHash,
+          usage.input_tokens, usage.output_tokens, usage.total_tokens, askgkSource, slashCommand.codexAskgk?.sessionId ?? null, threadId
         ).run();
 
-        // codexモデルにまだ色が割り当てられていなければ、未使用の色から割り当てる
+        // Codex/Claudeモデルにまだ色が割り当てられていなければ、未使用の色から割り当てる
         // (aichatModelConfig.tsのassignModelColorsを/aichatページと同じパターンで再利用)。
         try {
           const colorRows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
           const existingColors: Record<string, string> = {};
           for (const row of colorRows.results ?? []) existingColors[row.model_id] = row.color;
-          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
-          modelColor = merged.codex;
+          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+          modelColor = merged[askgkModel];
           for (const a of newAssignments) {
             await db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
               .bind(a.model_id, a.color, a.label).run();
           }
         } catch (colorErr) {
           modelColorError = colorErr instanceof Error ? colorErr.message : String(colorErr);
-          logger.warn('Failed to assign color for codex askgk model', {
+          logger.warn('Failed to assign color for askgk model', {
             error: colorErr instanceof Error ? colorErr.message : 'Unknown',
           });
         }
 
         return jsonUtf8({
           response: answer,
-          usedModel: 'codex',
+          usedModel: askgkModel,
           modelColor,
           modelColorError,
           userHash,
@@ -6547,7 +6548,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           threadId,
         });
       } catch (saveErr) {
-        logger.error('Failed to save codex askgk response to ai_chat_shares', {
+        logger.error('Failed to save askgk response to ai_chat_shares', {
           error: saveErr instanceof Error ? saveErr.message : 'Unknown',
           user: user.sub,
         });
@@ -6555,7 +6556,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         // 握りつぶさずログに残す。CLAUDE.mdルール8)。
         const saveError = saveErr instanceof Error ? saveErr.message : String(saveErr);
         if (requestedThreadId) return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saveError }, 500);
-        return jsonUtf8({ response: answer, usedModel: 'codex', systemPromptMode, saveError });
+        return jsonUtf8({ response: answer, usedModel: askgkModel, systemPromptMode, saveError });
       }
     }
 
@@ -6571,7 +6572,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({
       ...saved,
       response: slashCommand.response,
-      usedModel: slashCommand.codexAskgk ? 'codex' : slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko',
+      usedModel: askgkModel ?? (slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko'),
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
       nekoCursorResults: slashCommand.cursorResultsForModal ?? null,
@@ -15386,7 +15387,7 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
     return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
   if (newAssignments.length > 0) {
     const db = c.env.DB;
     for (const a of newAssignments) {

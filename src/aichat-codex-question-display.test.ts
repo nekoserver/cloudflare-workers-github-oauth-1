@@ -9,16 +9,19 @@ describe('Codex質問のチャット表示と送信', () => {
     const colors = JSON.parse(html.match(/var MODEL_COLORS = (.*);/)![1]);
     expect(list).toContainEqual({ value: 'codex', label: 'codex', commandOnly: true });
     expect(colors.codex).not.toBe(colors.other);
+    expect(list).toContainEqual({ value: 'claude', label: 'claude', commandOnly: true });
+    expect(colors.claude).not.toBe(colors.codex);
+    expect(html).toContain('<option value="claude"');
     expect(html).toContain('<option value="codex"');
   });
-  it.each(['"', '“'])('開始引用符%sの質問は本文だけを表示・共有し、送信コマンドは保持する', async (quote) => {
+  it.each(['codex', 'claude'].flatMap(model => ['"', '“'].map(quote => ({ model, quote }))))('$model: 開始引用符$quoteの質問は本文だけを表示・共有し、送信コマンドは保持する', async ({ model, quote }) => {
     const question = '◯  詳しく\n"引用"を説明してください';
-    const message = '/neko askgk codex_prompt=' + quote + question + '"';
+    const message = '/neko askgk ' + model + '_prompt=' + quote + question + '"';
     const html = getAiChatPage({ username: 'test', aiChatModel: 'test-model' });
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
     for (const script of scripts) expect(() => new Function(script[1])).not.toThrow();
     const script = scripts[scripts.length - 1][1];
-    const submit = script.slice(script.indexOf('    var formatCodexAskgkQuestion ='), script.lastIndexOf('    chatInput.focus();'));
+    const submit = script.slice(script.indexOf('    var formatAskgkPromptQuestion ='), script.lastIndexOf('    chatInput.focus();'));
     const bubbles: Array<{ text: string; role: string; model?: string }> = [];
     const sent: string[] = [];
     const shared: string[] = [];
@@ -33,11 +36,11 @@ describe('Codex質問のチャット表示と送信', () => {
       langModeSelect: { value: 'a' }, currentThreadId: '', aichatStreamToggle: { checked: false },
       AICHAT_TUNABLE_MODEL_CONFIG: {},
       fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body).message); return {}; },
-      readAichatResponse: async () => ({ response: '回答', usedModel: 'codex', modelColor: '#0ea5e9', shareId: 'share' }),
+      readAichatResponse: async () => ({ response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }),
       prepareAichatRubyResponse: (data: unknown) => data,
       extractRespUsage() {}, showAichatSendToast() {}, MODEL_COLORS: {} as Record<string, string>,
-      currentResults: [{ model: 'codex' }],
-      renderSidebarResults: () => { sidebarColors.push(bindings.MODEL_COLORS.codex); },
+      currentResults: [{ model }],
+      renderSidebarResults: () => { sidebarColors.push(bindings.MODEL_COLORS[model]); },
       appendShareBtn: (text: string) => { shared.push(text); },
     };
     new Function(...Object.keys(bindings), submit)(...Object.values(bindings));
@@ -46,8 +49,8 @@ describe('Codex質問のチャット表示と送信', () => {
     expect(bubbles.find((bubble) => bubble.role === 'user')?.text).toBe(question);
     expect(sent).toEqual([message]);
     expect(shared).toEqual([question]);
-    expect(bubbles.find((bubble) => bubble.role === 'assistant')?.model).toBe('codex');
-    expect(bindings.MODEL_COLORS).toEqual({ codex: '#0ea5e9' });
+    expect(bubbles.find((bubble) => bubble.role === 'assistant')?.model).toBe(model);
+    expect(bindings.MODEL_COLORS).toEqual({ [model]: '#0ea5e9' });
     expect(sidebarColors).toEqual(['#0ea5e9']);
   });
 });
