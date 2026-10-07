@@ -68,7 +68,7 @@ function recordingDb() {
   return { db, inserts };
 }
 
-async function postPushWebhook(body: string, env: Record<string, unknown>) {
+async function postPushWebhook(body: string, env: Record<string, unknown>, event = 'push') {
   const signature = await signBody(body);
   return app.request(
     '/webhook/github',
@@ -77,7 +77,7 @@ async function postPushWebhook(body: string, env: Record<string, unknown>) {
       headers: {
         'Content-Type': 'application/json',
         'X-Hub-Signature-256': signature,
-        'X-GitHub-Event': 'push',
+        'X-GitHub-Event': event,
         'X-GitHub-Delivery': 'delivery-push-test',
       },
       body,
@@ -337,5 +337,57 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     const response = await postPushWebhook(body, { GITHUB_WEBHOOK_SECRET: secret, DB: db });
     expect(response.status).toBe(200);
     expect(inserts.some((i) => i.sql.includes('repo_commit_index'))).toBe(false);
+  });
+});
+
+
+describe('本体リポジトリのPR要約はSlackに送信しない', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it.each([
+    ['opened', undefined], ['synchronize', undefined],
+    ['opened', 'https://cf-auth.example/ingest'], ['synchronize', 'https://cf-auth.example/ingest'],
+  ])('%s: Slack ONでも外部Worker設定=%sの方針に従いD1へ保存する', async (action, workerUrl) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+    const { db, inserts } = recordingDb();
+    const prepare = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (sql.includes('SELECT slack_enabled')) statement.first = async () => ({ slack_enabled: 1 }) as never;
+      return statement;
+    };
+    const response = await postPushWebhook(JSON.stringify({
+      action, repository: { full_name: 'nekoserver/cloudflare-workers-github-oauth-1' },
+      pull_request: { number: 123, title: 'fix: worker commit', body: 'commit update',
+        html_url: 'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/123', user: { login: 'test' } },
+    }), { GITHUB_WEBHOOK_SECRET: secret, DB: db, SOT: 'test-token', SLACK_CHANNEL_ID: 'C123',
+      NOTIFY_TARGET: 'slack', NOTIFY_WORKER_URL: workerUrl }, 'pull_request');
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(workerUrl ? 1 : 0);
+    if (workerUrl) expect(fetchMock.mock.calls[0][0]).toBe(workerUrl);
+    const summary = inserts.find(row => row.sql.includes('INSERT INTO ai_summary_log'));
+    expect(summary).toBeDefined();
+    expect(summary!.bindings[3]).toBe('pr_summary');
+    expect(inserts.some(row => row.sql.includes('INSERT INTO ai_summary_reviews'))).toBe(true);
+  });
+
+  it('他リポジトリのPR要約はSlack ON時に従来どおりSlackへ送る', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+    const { db } = recordingDb();
+    const prepare = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (sql.includes('SELECT slack_enabled')) statement.first = async () => ({ slack_enabled: 1 }) as never;
+      return statement;
+    };
+    const response = await postPushWebhook(JSON.stringify({ action: 'synchronize',
+      repository: { full_name: 'nekoserver/rails-root' },
+      pull_request: { number: 123, title: 'fix: other repo', html_url: 'https://github.com/nekoserver/rails-root/pull/123' },
+    }), { GITHUB_WEBHOOK_SECRET: secret, DB: db, SOT: 'test-token', SLACK_CHANNEL_ID: 'C123' }, 'pull_request');
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://slack.com/api/chat.postMessage');
   });
 });
