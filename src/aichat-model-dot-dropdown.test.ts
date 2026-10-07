@@ -95,7 +95,7 @@ describe('色ポッチドロップダウン: JS ロジック', () => {
   it('モデル選択時に lastModel と modelSelect.value が更新される', () => {
     const html = buildPage();
     const idx = html.indexOf('function buildModelDotDropdown()');
-    const snippet = html.slice(idx, idx + 900);
+    const snippet = html.slice(idx, html.indexOf('    // モデルごとのパラメータ調整値', idx));
     expect(snippet).toContain('lastModel = m.value');
     expect(snippet).toContain('modelSelect.value = m.value');
     expect(snippet).toContain('applyModelColor(lastModel)');
