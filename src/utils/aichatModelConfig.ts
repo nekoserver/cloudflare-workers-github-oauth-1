@@ -20,6 +20,16 @@ export const AICHAT_COLOR_PALETTE: readonly string[] = [
   '#64748b', // slate
 ];
 
+/**
+ * 特定モデルに固定で割り当てる色。パレットの自動循環より優先する
+ * (ユーザー指定、2026-10-07: claude用の色丸はオレンジにする)。
+ * 他モデルが既にこの色を使っている場合は衝突を避けてパレット循環に
+ * フォールバックする(下のfixedColorTaken判定)。
+ */
+const FIXED_MODEL_COLORS: Readonly<Record<string, string>> = {
+  claude: '#f97316', // オレンジ
+};
+
 export function assignModelColors(
   existingColors: Record<string, string>,
   models: Array<{ value: string; label: string }>
@@ -33,7 +43,12 @@ export function assignModelColors(
       Object.entries(merged).some(([id, color]) => id !== model.value && color.toLowerCase() === merged[model.value].toLowerCase());
     if (merged[model.value] && !cliColorConflict) continue;
 
-    let color = AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c));
+    const fixedColor = FIXED_MODEL_COLORS[model.value];
+    const fixedColorTaken = fixedColor
+      ? Object.entries(merged).some(([id, color]) => id !== model.value && color.toLowerCase() === fixedColor.toLowerCase())
+      : false;
+
+    let color = fixedColor && !fixedColorTaken ? fixedColor : AICHAT_COLOR_PALETTE.find(c => !usedColors.has(c));
     if (!color) {
       // パレットが埋まっていても既存モデルと同じ色を再利用しない。
       let candidate = 0x5b8def;
