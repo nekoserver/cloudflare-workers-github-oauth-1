@@ -69,7 +69,7 @@ export function getAiChatPage(user: {
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>AI チャット</title>
   ${getThemeInitScript()}
   <style>
@@ -7055,6 +7055,27 @@ export function getAiChatPage(user: {
         e.preventDefault();
         if (!chatSendBtn.disabled) chatForm.dispatchEvent(new Event('submit'));
       }
+    });
+
+    // ===== 入力欄フォーカス時のソフトウェアキーボード表示に伴う画面ハング対策 =====
+    // html,body は height:100%; overflow:hidden の固定レイアウト(内部の
+    // #chatLog 等だけが overflow-y:auto でスクロールする)で、document自体は
+    // 本来スクロールしない設計。しかしモバイルブラウザは入力欄フォーカス時に
+    // 「フォーカス要素を可視領域に収めるため」document を独自にスクロール/
+    // パンすることがあり、overflow:hidden下ではそれを戻す通常のスクロール
+    //操作ができず、キーボードを閉じたあとも画面が入力欄基準にうわずった
+    // ままハングアップしたように見える(ユーザー指摘の現象)。
+    // documentは本来常にスクロール位置(0,0)であるべきなので、ずれを検知した
+    // ら即座に(0,0)へ戻す。
+    function pinDocumentScrollForKeyboard() {
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    }
+    window.addEventListener('scroll', pinDocumentScrollForKeyboard, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', pinDocumentScrollForKeyboard);
+    }
+    chatInput.addEventListener('blur', function() {
+      setTimeout(pinDocumentScrollForKeyboard, 50);
     });
 
     // ===== 探索の境界線(未分類キーワード)パネル =====
