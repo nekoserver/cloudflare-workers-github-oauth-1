@@ -188,7 +188,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
-    '| /neko secureminelog | "API"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
+    '| /neko secureminelog | "secureminelog"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
@@ -2056,14 +2056,15 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'secureminelog') {
     // /neko askgk <コマンド>のASKGK_COMMAND_ALIASES(models-list等)のような
-    // エイリアス変換は行わず、"API"という文字列をそのままtunnel-signer経由で
-    // 送る専用コマンド(ユーザー要望)。resolveAskgkCommandはASKGK_COMMAND_ALIASES
-    // に無い文字列をそのまま通すため、"API"がエイリアス表に将来追加されても
-    // ここでは影響を受けないよう、固定文字列を直接askTunnelSignerへ渡す。
+    // エイリアス変換は行わず、"secureminelog"という文字列をそのまま
+    // tunnel-signer経由で送る専用コマンド(ユーザー要望)。resolveAskgkCommand
+    // はASKGK_COMMAND_ALIASESに無い文字列をそのまま通すため、"secureminelog"
+    // がエイリアス表に将来追加されてもここでは影響を受けないよう、固定文字列を
+    // 直接askTunnelSignerへ渡す。
     if (!deps.askTunnelSigner) {
       return { handled: true, response: '❌ /neko secureminelog は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
     }
-    const outcome = await raceWithTimeout(deps.askTunnelSigner('API'), ASKGK_TIMEOUT_MS);
+    const outcome = await raceWithTimeout(deps.askTunnelSigner('secureminelog'), ASKGK_TIMEOUT_MS);
     if (outcome.status === 'timeout') {
       return {
         handled: true,
@@ -2073,7 +2074,7 @@ export async function interpretAichatSlashCommand(
     if (outcome.status === 'error') {
       return { handled: true, response: `❌ /neko secureminelog でエラーが発生しました: ${outcome.message}` };
     }
-    return { handled: true, response: formatAskgkResult('API', outcome.value.reply), saveAsAiResponse: true };
+    return { handled: true, response: formatAskgkResult('secureminelog', outcome.value.reply), saveAsAiResponse: true };
   }
 
   if (subcommand === 'jev') {
