@@ -150,7 +150,8 @@ describe('Taskmine real-data workspace and synchronization', () => {
     expect(d.querySelectorAll('.issue')).toHaveLength(0);
     expect(d.querySelector('#mode')!.textContent).toContain('未接続');
     expect(d.querySelector<HTMLButtonElement>('#newIssue')!.disabled).toBe(true);
-    expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(true);
+    expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(false);
+    expect(d.querySelector<HTMLElement>('#connectionStatus')!.hidden).toBe(true);
     dom.window.close();
   });
   it('shows real projects without connection identity labels even when there are no issues', async () => {
@@ -248,6 +249,9 @@ describe('SecureMine login feedback and restoration', () => {
     await vi.waitFor(()=>expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(false));
     expect(d.querySelector('#loginToast')!.textContent).toBe('ログイン完了');
     expect(d.querySelector('#brand')!.textContent).toBe('🔐SecureMine');
+    expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(false);
+    expect(d.querySelector('#settings')!.classList.contains('is-connected')).toBe(true);
+    expect(d.querySelector<HTMLElement>('#connectionStatus')!.hidden).toBe(false);
     const toastStyle = dom.window.getComputedStyle(d.querySelector('#loginToast')!);
     expect(toastStyle.left).toBe('50%');
     expect(toastStyle.top).toBe('50%');
@@ -268,6 +272,9 @@ describe('SecureMine login feedback and restoration', () => {
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
     expect((d.querySelector('#account') as HTMLSelectElement).value).toBe('saved');
     expect(d.querySelector('#brand')!.textContent).toBe('🔐SecureMine');
+    expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(false);
+    expect(d.querySelector('#settings')!.classList.contains('is-connected')).toBe(true);
+    expect(d.querySelector<HTMLElement>('#connectionStatus')!.hidden).toBe(false);
     expect(calls.every(c=>!c.options.headers['X-Redmine-API-Key'])).toBe(true);
     expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
     dom.window.close();
