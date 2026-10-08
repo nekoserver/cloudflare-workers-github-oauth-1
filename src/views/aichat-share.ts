@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { convertAnswerLinksToFootnotes } from '../utils/aichatLinkFootnotes';
 
 export function getAiChatSharePage(share: {
   question: string;
@@ -13,6 +14,9 @@ export function getAiChatSharePage(share: {
   const safeModel = escapeHtml(share.model);
   const modelShort = escapeHtml(share.model.split('/').pop() ?? share.model);
   const safeDate = escapeHtml(share.created_at.replace('T', ' ').replace(/\.\d+Z$/, ' UTC'));
+  const renderedAnswer = (share.model === 'claude' || share.model === 'codex')
+    ? convertAnswerLinksToFootnotes(share.answer)
+    : share.answer;
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -158,7 +162,7 @@ export function getAiChatSharePage(share: {
 
   <script>
     ${getThemeToggleScript()}
-    var rawAnswer = ${JSON.stringify(share.answer)};
+    var rawAnswer = ${JSON.stringify(renderedAnswer)};
     function mdEsc(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
