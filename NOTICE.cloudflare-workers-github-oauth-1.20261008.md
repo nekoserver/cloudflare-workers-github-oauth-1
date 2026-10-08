@@ -57,3 +57,8 @@ Cloudflare Tunnel（`cloudflared`）・Workers Route（公開URLの振り分け�
 Applicationを新設しない限り確認できない。SSH経由の接続は現状Access経由で問題なく機能しているため、
 これ自体は不具合ではなく「HTTPS側の検証はまだ未着手」というだけの状態。HTTPS用ゲートを新設して
 検証した結果は、判明した時点で本ファイルに追記する。
+
+もう一点、本体Worker（本リポジトリ）からCursor Box内のClaude/Codexへの接続も現状**オリジン直**
+（Tunnel/Access/WARPを経由しない）であり、こちらも同様の理由で `/access-verify` 相当のチェックは
+合格しない。この経路についても、HTTPS用ゲートの新設と合わせて検証対象に加えるかどうかは今後の
+判断次第であり、現時点では「未経由であることが既知」というだけの記録に留める。
