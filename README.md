@@ -27,6 +27,7 @@ GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 | `/` | GET | - | ログインページ |
 | `/welcome` | GET | 必要 | ウェルカムページ |
 | `/settings` | GET | 必要 | 設定ページ |
+| `/taskmine` | GET | 必要 | Redmine課題の閲覧・検索・作成・編集（TaskMine風） |
 | `/repositories` | GET | オプション | リポジトリ一覧（権限モーダル付き） |
 
 ### 認証
@@ -417,3 +418,15 @@ GitHub App の **「Install App」** フローでは、コールバックが `/a
 Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本Workerの `https://<Workerのホスト名>/slack/interactions` に設定してください。既存の `SLACK_SIGNING_SECRET` でクリック通知の署名を検証します。投稿には既存のSlack送信設定（`SOT`・送信先チャンネル）が必要です。新しい環境変数やDBマイグレーションは不要です。
 
 参考: [Slackのインタラクション処理](https://docs.slack.dev/interactivity/handling-user-interaction/)
+
+## TaskMine風 Redmineページ
+
+ログイン後に `/taskmine` を開きます。接続なしのデモで課題の検索・絞り込み、作成・編集、変更履歴、Markdownプレビューを試せます。デモの変更は再読み込み時にリセットされます。
+
+実際のRedmineには「Redmineに接続」からHTTPSのURL（サブディレクトリにも対応）と個人のAPIキーを入力します。複数の接続先を追加し、ヘッダーで切り替えられます。キーと接続情報はページ内のメモリだけで保持し、ブラウザストレージやWorkerには保存しません。
+
+接続先のRedmineでREST APIを有効化し、ページを提供するオリジンへのCORSを設定してください。`X-Redmine-API-Key` / `Content-Type` ヘッダー、GET / POST / PUT / OPTIONSメソッドへの許可が必要です。課題・プロジェクト・メンバー等の閲覧および編集は、APIキーのユーザー権限とRedmineのワークフローに従います。
+
+実データの課題一覧は50件ずつ取得します。ステータス・優先度・プロジェクト・自分の担当はサーバー側で絞り込み、キーワード・期限は現在のページ内で絞り込みます。添付はRedmineのアップロードAPIを使用します。UIは日本語で、iOSネイティブウィジェットとTaskMineの45言語翻訳は含みません。本文の表示・プレビューはMarkdownとして扱います（Textile固有の記法は変換しません）。
+
+機能参考: [TaskMine公式サイト](https://taskmine.megawave.app/)。API仕様: [Redmine REST API](https://www.redmine.org/projects/redmine/wiki/Rest_api)。
