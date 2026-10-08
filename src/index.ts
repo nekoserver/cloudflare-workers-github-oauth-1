@@ -64,6 +64,8 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getAichatCrossModelPage } from './views/aichatCrossModel';
+import { buildCrossModelQuestionGroups, type AichatCrossModelShareRow } from './utils/aichatCrossModelQuestions';
 import { getMentionEditorPage } from './views/mentionEditor';
 import { getTaskminePage } from './views/taskmine';
 import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
@@ -14603,6 +14605,27 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/aichat-cross-model', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getAichatCrossModelPage(user.sub));
+});
+
+/**
+ * claudeとcodexの両方から回答を得ている質問(question_hashの完全一致)だけを抜き出す。
+ * /aichat-cross-model ページで使用。表記揺れは対象外(完全一致のみ、ユーザー判断)。
+ */
+app.get('/api/aichat/cross-model-questions', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT question_hash, model, id, user_hash, question, created_at
+     FROM ai_chat_shares
+     WHERE user_id = ? AND deleted_at IS NULL AND model IN ('claude', 'codex') AND question_hash IS NOT NULL`
+  ).bind(user.sub).all<AichatCrossModelShareRow>();
+  const groups = buildCrossModelQuestionGroups(rows.results ?? []);
+  return jsonUtf8({ groups });
 });
 
 app.get('/api/taskmine/commit-calendar', authMiddleware, async (c) => {

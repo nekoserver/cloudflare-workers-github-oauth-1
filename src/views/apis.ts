@@ -373,6 +373,8 @@ const APIS = [
       res:{keywords:[{keyword:'cloudflare',count:3},{keyword:'workers',count:2}]} },
     { method:'GET',  path:'/api/aichat/shares-by-question', desc:'質問テキストで共有検索', query:[{n:'question',req:true,s:'Cloudflare Workers'}] },
     { method:'GET',  path:'/api/aichat/shares-by-question-hash', desc:'質問ハッシュで共有検索', query:[{n:'hash',req:true,s:'abc123'}] },
+    { method:'GET',  path:'/api/aichat/cross-model-questions', desc:'claudeとcodexの両方から回答を得ている質問一覧(question_hashの完全一致、/aichat-cross-modelページ用)',
+      res:{groups:[{questionHash:'abc123',question:'富士山について教えて',claude:{id:'c1',userHash:'e5f6a7b8',createdAt:'2026-06-01T00:00:00.000Z'},codex:{id:'x1',userHash:'e5f6a7b8',createdAt:'2026-06-02T00:00:00.000Z'},latestCreatedAt:'2026-06-02T00:00:00.000Z'}]} },
     { method:'GET',  path:'/api/aichat/all-keywords', desc:'全キーワード一覧（分類状況付き）',
       res:{keywords:[{keyword:'cloudflare',cnt:10,is_classified:1,category_id:1,category_color:'#0969da',category_pairs:'[["インフラ",1]]'}]} },
     { method:'GET',  path:'/api/aichat/keyword-categories', desc:'キーワードのカテゴリ一覧', query:[{n:'keyword',s:'cloudflare'}],
