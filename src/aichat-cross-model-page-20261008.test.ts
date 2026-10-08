@@ -50,6 +50,27 @@ describe('getAichatCrossModelPage: HTML構造', () => {
     }
     expect(count).toBeGreaterThan(0);
   });
+
+  // 故障シナリオ(実際に発生した不具合): getThemeToggleScript()の出力は
+  // <script>タグを自前で持たない生のJSソースであり、呼び出し側が
+  // 既存の<script>...</script>の中に埋め込む前提になっている。これを
+  // 誤って</script>の外(本文側)に置くと、関数定義のソースコードが
+  // そのままページ本文にテキストとして表示されてしまう(ユーザー指摘の現象)。
+  it('toggleThemeの関数定義は<script>タグの中にあり、本文に生テキストとして露出しない', () => {
+    const lastScriptCloseIdx = html.lastIndexOf('</script>');
+    const bodyCloseIdx = html.indexOf('</body>');
+    expect(lastScriptCloseIdx).toBeGreaterThan(-1);
+    const afterLastScript = html.slice(lastScriptCloseIdx, bodyCloseIdx);
+    expect(afterLastScript).not.toContain('function toggleTheme');
+
+    const scriptRe = /<script>([\s\S]*?)<\/script>/g;
+    let found = false;
+    let m: RegExpExecArray | null;
+    while ((m = scriptRe.exec(html)) !== null) {
+      if (m[1].includes('function toggleTheme')) found = true;
+    }
+    expect(found).toBe(true);
+  });
 });
 
 describe('getAichatCrossModelPage: renderGroups のレンダリングロジック', () => {
