@@ -3,9 +3,9 @@ export function getSecuremineSectionTabsScript(): string {
   return `(function() {
     const tabs = Array.from(document.querySelectorAll('.section-toggle'));
     const spacing = 8;
-    const positions = new Map(tabs.map((tab, index) => [tab, 60 + index * 52]));
+    const positions = new Map(tabs.map((tab, index) => [tab, 60 + index * 136]));
     function arrange() {
-      const height = Math.max(20, Math.min(44, Math.floor((window.innerHeight - 16) / tabs.length) - spacing));
+      const height = Math.max(20, Math.min(128, Math.floor((window.innerHeight - 16) / tabs.length) - spacing));
       const top = window.innerHeight >= tabs.length * (height + spacing) + 52 ? 52 : 8;
       const bottom = Math.max(top, window.innerHeight - height - 8);
       const sorted = tabs.slice().sort((a, b) => positions.get(a) - positions.get(b));
@@ -17,6 +17,7 @@ export function getSecuremineSectionTabsScript(): string {
         const tab = sorted[i];
         positions.set(tab, Math.min(positions.get(tab), i === sorted.length - 1 ? bottom : positions.get(sorted[i + 1]) - height - spacing));
         tab.style.top = positions.get(tab) + 'px'; tab.style.height = height + 'px';
+        tab.style.fontSize = Math.min(12, Math.max(5, (height - 20) / 7)) + 'px';
       }
     }
     function setOpen(tab, open) {
