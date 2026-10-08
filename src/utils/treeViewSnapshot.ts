@@ -148,22 +148,30 @@ export type FetchRepoTreeResult =
  * 叩いて、そのリポジトリのツリー全体を取得しJSONスナップショットへ変換する。
  * fetch実装を注入できるようにし(callJevApiと同じ方針)、テストで実際の
  * ネットワークアクセスを発生させない。
+ *
+ * githubTokenは任意(2026-10-08)。このリポジトリでは呼び出し元が必ず
+ * isTreeViewSnapshotRepo(固定・公開済みの数リポジトリのみを許可する
+ * allowlist)で絞り込んだ後にしかこの関数を呼ばないため、対象は常に
+ * 公開リポジトリであり未認証でもTrees APIを取得できる(匿名60req/hour
+ * のレート制限で十分、6時間ごとに数件を取得するだけのため)。
+ * GITHUB_TOKEN(長期間有効なPAT)をこの用途のためだけにWorkerへ
+ * 常時持たせずに済むよう、省略可能にした。渡された場合はAuthorization
+ * ヘッダーを付け、レート制限緩和等に使える。
  */
 export async function fetchRepoTreeSnapshot(params: {
   repoName: string;
-  githubToken: string;
+  githubToken?: string;
   fetchImpl: typeof fetch;
 }): Promise<FetchRepoTreeResult> {
   const { repoName, githubToken, fetchImpl } = params;
   let response: Response;
   try {
-    response = await fetchImpl(`https://api.github.com/repos/${repoName}/git/trees/main?recursive=1`, {
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'cloudflare-workers-github-oauth-1',
-      },
-    });
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    };
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+    response = await fetchImpl(`https://api.github.com/repos/${repoName}/git/trees/main?recursive=1`, { headers });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, errorCode: 'http_error', detail: `GitHub Trees APIへのリクエストに失敗しました: ${message}` };
