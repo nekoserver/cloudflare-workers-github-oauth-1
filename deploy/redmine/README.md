@@ -12,6 +12,12 @@
 
 専用パス `/redmine-hmac` は署名検証プログラムで保護されます。既存Redmineの通常Web画面に対する認証設定は別です。既存のBasic認証、IP制限、WAFがゲートウェイへの通信を先に拒否する場合は、この専用パスを署名検証プログラムに到達させるよう設定してください。
 
+## mod_cgidを使う場合
+
+mod_wsgiを追加せず、Apacheの既存mod_cgid/mod_cgiで同じ検証処理を実行できます。`gateway.wsgi` と `gateway.cgi` を `/opt/redmine-hmac` に配置し、`gateway.cgi` を実行可能（0755）にします。`apache-cgi.conf.example` をHTTPS VirtualHostへ組み込みます。Passengerが有効な場合はこの専用Locationで `PassengerEnabled off` を設定してください。共有シークレットとnonce DBの設定はmod_wsgiの場合と同じです。
+
+内部Redmine URLに自己署名証明書を使う場合は、設定JSONの `upstream_ca` に信頼する証明書ファイルのパスを追加します。証明書の検証は有効なままです。例えば、内部URL `https://127.0.0.1` に対して証明書SANに `127.0.0.1` が含まれている必要があります。
+
 ## Worker側
 
 `wrangler.toml` の `[vars]` に公開Redmine URLとゲートウェイURLの対応を設定します（末尾スラッシュなし）。登録された接続先だけに署名を発行します。複数台は同じ形式で追加できます。この実装では各ゲートウェイに同じ専用HMACシークレットを設定します。
@@ -25,7 +31,13 @@ npx wrangler secret put REDMINE_HMAC_SECRET
 npm run deploy:worker
 ```
 
-Apacheの `secret` と同じ値を入力します。シークレットをリポジトリやブラウザには保存しません。TaskMine画面ではマップ左側の公開Redmine URLとユーザー本人のAPIキーを入力してください。APIキーはWorkerとApacheを経由しますが永続化しません。
+`REDMINE_HMAC_TARGETS` をWorkerのシークレットとして登録することもできます。wrangler.tomlに同名の変数を定義せず、次を実行してJSONマップを入力してください。
+
+```sh
+npx wrangler secret put REDMINE_HMAC_TARGETS
+```
+
+Apacheの `secret` と同じ値を `REDMINE_HMAC_SECRET` に入力します。シークレットをリポジトリやブラウザには保存しません。TaskMine画面ではマップ左側の公開Redmine URLとユーザー本人のAPIキーを入力してください。APIキーはWorkerとApacheを経由しますが永続化しません。
 
 ## 署名プロトコル
 

@@ -52,6 +52,15 @@ class GatewayTests(unittest.TestCase):
     def test_expired_request(self):
         self.assertTrue(self.request(HTTP_X_REDMINE_TIMESTAMP=str(int(time.time()) - 120))[0].startswith('403'))
 
+    def test_private_ca_is_used_for_upstream_tls(self):
+        self.config['upstream_ca'] = '/trusted/local-ca.pem'
+        with patch.object(gateway.ssl, 'create_default_context') as context, patch.object(gateway.urllib.request, 'HTTPSHandler') as handler, patch.object(gateway.urllib.request, 'build_opener') as opener:
+            opener.return_value.open.side_effect = OSError('upstream unavailable')
+            self.assertTrue(self.request()[0].startswith('502'))
+            context.assert_called_once_with(cafile='/trusted/local-ca.pem')
+            handler.assert_called_once_with(context=context.return_value)
+            self.assertIn(handler.return_value, opener.call_args.args)
+
     def test_valid_request_and_replay(self):
         class Response:
             code = 200
