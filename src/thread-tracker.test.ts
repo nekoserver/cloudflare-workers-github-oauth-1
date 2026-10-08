@@ -107,6 +107,12 @@ describe('thread tracker page', () => {
     expect(html).toContain('Max-Age=31536000; SameSite=Lax; Secure');
   });
 
+  it('回答(.markdown)内のリンクは下線なし、hover時のみ下線を表示する(モデルに関わらず全体に適用)', () => {
+    const html = getThreadTrackerPage('alice');
+    expect(html).toContain('.markdown a{text-decoration:none}');
+    expect(html).toContain('.markdown a:hover{text-decoration:underline}');
+  });
+
   it('トップバナーを撤去し、右ペインへ画面幅と高さを最大限割り当てる', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).not.toContain('<header>');

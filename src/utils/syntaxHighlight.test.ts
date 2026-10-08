@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { highlightCode } from './syntaxHighlight';
 
 describe('highlightCode', () => {
+  // 故障シナリオ(実際に発生した不具合): highlightCode()はaichat.ts/
+  // aichat-share.tsでhighlightCode.toString()経由でブラウザの<script>内に
+  // 単体で埋め込まれる。この関数の内部にfunction esc(s){...}のような
+  // 「変数名に束縛されたfunction」を書くと、esbuildのname保持機能により
+  // 関数本体の先頭にバンドル専用のname保持ヘルパー呼び出しが挿入される
+  // (wrangler deploy --dry-runで実際のバンドル出力を確認して判明)。
+  // このヘルパーはバンドル環境の外(toString()で単体に切り出した文字列を
+  // <script>へ埋め込んだ場合)では未定義のため、highlightCode()を呼んだ
+  // 瞬間にReferenceErrorが発生し、呼び出し元のparseMd全体が失敗して
+  // 共有ページ(/s/:userHash/:id)の本文が空白になった。
+  // トップレベルのtoString()出力にそのヘルパー呼び出しが含まれていないことを
+  // 確認する(vitestのトランスフォームでは再現しないため、本番相当の再現
+  // 確認は`wrangler deploy --dry-run`のバンドル出力で別途行っている)。
+  it('toString()で文字列化した関数本体にバンドル専用のname保持ヘルパー呼び出しが含まれない', () => {
+    const src = highlightCode.toString();
+    const bundlerHelperCall = '__' + 'name(';
+    expect(src).not.toContain(bundlerHelperCall);
+  });
+
   it('未対応の言語指定(lang)はHTMLエスケープのみ行い、ハイライトしない', () => {
     const code = 'const x = 1; // <script>';
     expect(highlightCode(code, 'unknownlang')).toBe('const x = 1; // &lt;script&gt;');
