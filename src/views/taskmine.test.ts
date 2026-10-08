@@ -160,9 +160,9 @@ describe('Taskmine real-data workspace and synchronization', () => {
     expect(calls.some(c=>c.url.pathname.endsWith('/users/current.json'))).toBe(true);
     expect(d.querySelector<HTMLElement>('#mode')!.hidden).toBe(true);
     expect(d.querySelector('#mode')!.textContent).toBe('');
-    expect(d.querySelector('#detail')!.textContent).toContain('プロジェクト一覧');
-    expect(d.querySelector('#detail')!.textContent).toContain('Real project <img');
-    expect(d.querySelector('#detail img')).toBeNull();
+    expect(d.querySelector('#projectOverview')!.textContent).toContain('プロジェクト一覧');
+    expect(d.querySelector('#projectOverview')!.textContent).toContain('Real project <img');
+    expect(d.querySelector('#projectOverview img')).toBeNull();
     expect(d.querySelector('#issues')!.textContent).toContain('課題はまだ登録されていません');
     expect(d.querySelector('#pageInfo')!.textContent).toBe('0件');
     dom.window.close();
@@ -170,7 +170,7 @@ describe('Taskmine real-data workspace and synchronization', () => {
   it('accepts an authenticated account with no visible projects and explains permissions', async () => {
     const {dom,d}=remotePage(false,true);
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
-    expect(d.querySelector('#detail')!.textContent).toContain('閲覧できるプロジェクトがありません');
+    expect(d.querySelector('#projectOverview')!.textContent).toContain('閲覧できるプロジェクトがありません');
     expect(d.querySelector<HTMLButtonElement>('#newIssue')!.disabled).toBe(true);
     dom.window.close();
   });
