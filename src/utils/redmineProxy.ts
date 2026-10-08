@@ -61,10 +61,14 @@ export async function proxyRedmine(c: Context<{ Bindings: Bindings; Variables: V
   const signature = await redmineSignature(c.env.REDMINE_HMAC_SECRET, c.req.method, path, timestamp, nonce, apiKey, contentType, body.buffer);
   gateway.searchParams.set('path', path);
   try {
-    const response = await fetch(gateway, { method: c.req.method, redirect: 'error', signal: AbortSignal.timeout(30000), headers: {
+    const response = await fetch(gateway, { method: c.req.method, redirect: 'manual', signal: AbortSignal.timeout(30000), headers: {
       'X-Redmine-API-Key': apiKey, 'X-Redmine-Timestamp': timestamp, 'X-Redmine-Nonce': nonce,
       'X-Redmine-Signature': signature, ...(contentType ? { 'Content-Type': contentType } : {}),
     }, body: c.req.method === 'GET' ? undefined : body });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      return error('ApacheのHMACゲートウェイがリダイレクトを返しました。ゲートウェイURL・Access設定を確認してください。', 502);
+    }
     return new Response(response.body, { status: response.status, headers: {
       'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
       'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
