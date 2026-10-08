@@ -3,6 +3,7 @@ import { getKeywordClassificationModalScript } from '../utils/keywordClassificat
  * AI チャットページのHTML
  */
 import { formatAskgkPromptQuestion } from '../utils/codexAskgkQuestion';
+import { convertAnswerLinksToFootnotes } from '../utils/aichatLinkFootnotes';
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
@@ -7553,7 +7554,8 @@ export function getAiChatPage(user: {
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
-      el.innerHTML = parseMd(text);
+      var renderText = (model === 'claude' || model === 'codex') ? convertAnswerLinksToFootnotes(text) : text;
+      el.innerHTML = parseMd(renderText);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
       if (isLocalCommand) styleGhPrListBubble(el, text);
@@ -8207,6 +8209,7 @@ ${getRubyWasmLoaderScript()}
     }
 
     var formatAskgkPromptQuestion = ${formatAskgkPromptQuestion.toString()};
+    var convertAnswerLinksToFootnotes = ${convertAnswerLinksToFootnotes.toString()};
 
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
