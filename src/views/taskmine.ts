@@ -1,3 +1,4 @@
+import { getSecuremineSectionTabsScript } from '../utils/securemineSectionTabs';
 import { getSecuremineCalendarScript } from '../utils/securemineCalendar';
 import { getThemeCSS, getThemeInitScript } from '../utils/theme';
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
@@ -13,12 +14,14 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 .issue-tabs{display:flex;gap:8px;border-bottom:1px solid var(--border-color);margin-bottom:16px;overflow-x:auto}.issue-tabs button{flex-shrink:0;border:0;border-radius:0;background:transparent;padding:10px 8px;border-bottom:3px solid transparent}.issue-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-color);color:var(--accent-color);font-weight:600}.issue-create{display:flex;justify-content:flex-end;margin-bottom:16px}.issue-create button{white-space:nowrap}
 .auto-sync-drawer{display:flex;align-items:center;flex-shrink:0}.auto-sync-clip{width:170px;overflow:hidden;transition:width .28s ease,visibility 0s}.auto-sync{width:170px;white-space:nowrap;transition:transform .28s ease,opacity .28s ease}.auto-sync-drawer.is-closed .auto-sync-clip{width:0;visibility:hidden;transition:width .28s ease,visibility 0s .28s}.auto-sync-drawer.is-closed .auto-sync{transform:translateX(110%);opacity:0}#autoSyncToggle{padding:0 9px;font-size:22px;line-height:28px}@media(prefers-reduced-motion:reduce){.auto-sync-clip,.auto-sync{transition:none!important}}
 #settings.is-connected>summary{color:#86efac}.connection-status{margin-left:8px;font-weight:700;color:#86efac;-webkit-text-fill-color:transparent;-webkit-text-stroke:.7px currentColor}
+.section-toggle{position:fixed;right:6px;z-index:20;width:76px;height:44px;padding:0 4px;touch-action:none;user-select:none;cursor:ns-resize;background:var(--card-bg);box-shadow:0 2px 8px #0002;font-size:12px}.section-toggle[aria-expanded="true"]{border-color:var(--accent-color);color:var(--accent-color)}.section-toggle::before{content:"⋮ ";opacity:.6}.section-toggle.is-dragging{box-shadow:0 4px 12px #0004}.layout.issues-closed{grid-template-columns:230px}.project-section{overflow-wrap:anywhere}.project-section h2{font-size:16px}main{width:calc(100% - 88px);margin-right:88px;padding:0 16px}@media(max-width:1050px){.layout{grid-template-columns:1fr}#detail{grid-column:auto}.layout.issues-closed{grid-template-columns:1fr}}@media(max-width:680px){main{width:calc(100% - 80px);margin-right:80px;padding:0 8px}.section-toggle{right:4px;width:72px;font-size:11px}.issue-tabs{gap:2px}.issue-tabs button{font-size:12px;padding:10px 4px}.sync-bar{gap:4px;flex-wrap:wrap}.auto-sync-drawer{margin-left:auto}}
 </style></head><body>
 <header><strong id="brand">▣ SecureMine</strong><select id="account" aria-label="アカウント"><option value="">未接続</option><option value="demo">操作デモ</option></select><button id="theme" aria-label="テーマ切替">◐</button></header>
+<nav aria-label="セクションの開閉"><button type="button" class="section-toggle" id="issuesToggle" aria-controls="issueWorkspace detail" aria-expanded="true" title="クリックで課題を開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">課題</button><button type="button" class="section-toggle" id="projectsToggle" aria-controls="projectSection" aria-expanded="true" title="クリックでプロジェクトを開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">プロジェクト</button><button type="button" class="section-toggle" id="commitsToggle" aria-controls="commitSection" aria-expanded="true" title="クリックでコミットログを開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">コミット</button></nav>
 <main><div class="muted" id="mode">未接続 · Redmineに接続してください</div>
 <div class="sync-bar"><span id="syncState" role="status" aria-live="polite">未接続</span><div class="auto-sync-drawer" id="autoSyncDrawer"><div class="auto-sync-clip" id="autoSyncControls"><label class="auto-sync"><input id="autoSync" type="checkbox">自動同期（60秒）</label></div><button type="button" id="autoSyncToggle" aria-controls="autoSyncControls" aria-expanded="true" aria-label="自動同期設定を閉じる">›</button></div></div>
 <div id="message" role="status" aria-live="polite"></div>
-<div class="layout"><aside class="panel side"><section class="commit-calendar-panel"><div class="heading"><h2 id="calendarMonth">当月カレンダー</h2><button id="calendarRefresh" class="calendar-refresh" aria-label="コミットログを再取得">↻</button></div><table class="commit-calendar" id="commitCalendar"><thead><tr><th scope="col">日</th><th scope="col">月</th><th scope="col">火</th><th scope="col">水</th><th scope="col">木</th><th scope="col">金</th><th scope="col">土</th></tr></thead><tbody></tbody></table><small id="calendarStatus" role="status" aria-live="polite"></small></section><h2>ワークスペース</h2><button id="overview">プロジェクト一覧</button><h3>プロジェクト</h3><div id="projects"></div>
+<div class="layout"><aside class="panel side"><section class="commit-calendar-panel" id="commitSection" aria-label="コミットログ"><h2>コミットログ</h2><div class="heading"><h2 id="calendarMonth">当月カレンダー</h2><button id="calendarRefresh" class="calendar-refresh" aria-label="コミットログを再取得">↻</button></div><table class="commit-calendar" id="commitCalendar"><thead><tr><th scope="col">日</th><th scope="col">月</th><th scope="col">火</th><th scope="col">水</th><th scope="col">木</th><th scope="col">金</th><th scope="col">土</th></tr></thead><tbody></tbody></table><small id="calendarStatus" role="status" aria-live="polite"></small></section><section class="project-section" id="projectSection" aria-label="プロジェクト"><h2>プロジェクト</h2><button id="overview">プロジェクト一覧</button><div id="projects"></div><div id="projectOverview"></div></section>
 <details id="settings"><summary>Redmineに接続<span id="connectionStatus" class="connection-status" hidden>接続中</span></summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" placeholder="https://redmine.example.com" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIとWorker・ApacheのHMAC接続設定が必要です。APIキーはWorkerで暗号化して保存します。ログイン状態は標準で7日間保持します。</small></form></details></aside>
 <section class="panel" id="issueWorkspace"><div class="issue-tabs" role="tablist" aria-label="課題一覧"><button id="all" role="tab" aria-selected="true" aria-controls="issueTabPanel" class="active">すべての課題</button><button id="mine" role="tab" aria-selected="false" aria-controls="issueTabPanel" tabindex="-1">自分の担当課題</button></div><div id="issueTabPanel" role="tabpanel" aria-labelledby="all"><div class="issue-create"><button class="primary" id="newIssue">＋ 課題を作成</button></div><div class="heading"><h2 id="listTitle">課題一覧</h2><button id="refresh" aria-label="Redmineのデータを同期">↻ 同期</button></div><div class="filters"><input id="search" type="search" aria-label="課題を検索" placeholder="課題名・番号で検索"><select id="status" aria-label="ステータス"></select><select id="priority" aria-label="優先度"></select><select id="due" aria-label="期限"><option value="">すべての期限</option><option value="late">期限超過</option><option value="week">7日以内</option><option value="none">期限なし</option></select></div><small id="count"></small><div id="issues"></div><div class="pager"><button id="prev">前へ</button><small id="pageInfo"></small><button id="next">次へ</button></div></div></section>
 <section class="panel" id="detail"><div class="empty">課題を選択すると、詳細と変更履歴を表示します。</div></section></div>
@@ -26,6 +29,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 <div id="loginToast" role="status" aria-live="polite" hidden>ログイン完了</div>
 <script>
 ${getSecuremineCalendarScript()}
+${getSecuremineSectionTabsScript()}
 (function() {
   ${getMarkdownParserScript()}
   const $ = (id) => document.getElementById(id);
@@ -94,7 +98,8 @@ ${getSecuremineCalendarScript()}
   }
   function overview() {
     state.selected = null;
-    const d = $("detail"); d.replaceChildren(element("h2", "プロジェクト一覧"));
+    $("detail").replaceChildren(element("div", "課題を選択すると、詳細と変更履歴を表示します。", "empty"));
+    const d = $("projectOverview"); d.replaceChildren(element("h2", "プロジェクト一覧"));
     if (!state.account && !state.demo) {
       d.append(element("p", "Redmineに接続すると、既存のプロジェクトと課題を取得します。"));
       return;
@@ -108,7 +113,11 @@ ${getSecuremineCalendarScript()}
       d.append(card);
     });
   }
+  function openIssues() {
+    if ($("issuesToggle").getAttribute("aria-expanded") === "false") $("issuesToggle").click();
+  }
   function selectProject(p) {
+    openIssues();
     selectIssueTab(false);
     state.project = p.id; state.mine = false; state.offset = 0; state.selected = null;
     projectDetail(p);
