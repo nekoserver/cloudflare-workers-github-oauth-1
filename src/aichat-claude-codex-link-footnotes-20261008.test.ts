@@ -23,8 +23,19 @@ describe('AIチャット本体(buildAssistantBubble): claude/codexの回答だ�
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    expect(fn).toContain("(model === 'claude' || model === 'codex') ? convertAnswerLinksToFootnotes(text) : text");
+    expect(fn).toContain("var isClaudeOrCodex = model === 'claude' || model === 'codex';");
+    expect(fn).toContain('convertAnswerLinksToFootnotes(text) : text');
     expect(fn).toContain('parseMd(renderText)');
+  });
+
+  it('claude/codexのときだけhighlightCodeBlocksInでコードブロックをハイライトする', () => {
+    const idx = html.indexOf('function buildAssistantBubble(');
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('if (isClaudeOrCodex) highlightCodeBlocksIn(el);');
+  });
+
+  it('highlightCodeがインポート元からtoString()で埋め込まれている', () => {
+    expect(html).toContain('var highlightCode = function highlightCode(code, lang)');
   });
 });
 
@@ -63,5 +74,27 @@ describe('共有ページ(getAiChatSharePage): claude/codexの回答だけリン
     });
     expect(html).toContain('[公式ドキュメント](https://example.com/docs)を見てください。');
     expect(html).not.toContain('1. [https://example.com/docs]');
+  });
+
+  it('highlightCodeがインポート元からtoString()で埋め込まれ、claude/codexのときだけ有効フラグがtrueになる', () => {
+    const html = getAiChatSharePage({ ...baseShare, model: 'claude', answer: 'ok' });
+    expect(html).toContain('var highlightCode = function highlightCode(code, lang)');
+    expect(html).toContain('var AICHAT_SHARE_HIGHLIGHT_ENABLED = true;');
+  });
+
+  it('claude/codex以外のモデルでは有効フラグがfalseになる(ハイライトしない)', () => {
+    const html = getAiChatSharePage({ ...baseShare, model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', answer: 'ok' });
+    expect(html).toContain('var AICHAT_SHARE_HIGHLIGHT_ENABLED = false;');
+  });
+});
+
+describe('AIチャット: リンクの下線を消す(claude/codexに限らずpreview-area全体)', () => {
+  it('.preview-area a に text-decoration: none が付き、hoverで下線が出る', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('.preview-area a {');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 250);
+    expect(snippet).toContain('.preview-area a { color: var(--accent-color, #667eea); text-decoration: none; }');
+    expect(snippet).toContain('.preview-area a:hover { text-decoration: underline; }');
   });
 });
