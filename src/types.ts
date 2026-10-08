@@ -74,6 +74,14 @@ export type Bindings = {
   CF_WH1_WEBHOOK_SECRET?: string;
   /** harness_hook_logへのPostToolUseフック書き込み用の共有シークレット */
   HARNESS_HOOK_SECRET?: string;
+  /** /access-verifyページ: Cloudflare Access JWT署名検証に使うチーム名(<チーム名>.cloudflareaccess.com) */
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  /** /access-verifyページ: JWTのaud(Application Audience Tag)期待値 */
+  CF_ACCESS_AUD?: string;
+  /** /access-verifyページ: メールアドレスの許可ドメイン(カンマ区切り、未設定なら制限なし) */
+  CF_ACCESS_ALLOWED_EMAIL_DOMAINS?: string;
+  /** /access-verifyページ: Tunnel経由で期待されるHostヘッダー値(未設定ならチェックなし) */
+  CF_ACCESS_EXPECTED_HOST?: string;
   GITHUB_TOKEN?: string;
   /**
    * /gh-attach（gh issue create --attachのWASM移植）のアップロード専用GitHub PAT
