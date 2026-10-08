@@ -64,7 +64,10 @@ function remotePage(fail = false) {
     const w = window as any;
     w.AbortSignal.timeout = () => undefined;
     w.fetch = async (input: string, options: any) => {
-      const url = new URL(input); calls.push({url, options});
+      const transport = new URL(input, "https://example.com");
+      const url = new URL(transport.searchParams.get("path")!, transport.searchParams.get("base")! + "/"); calls.push({url, options});
+      expect(transport.pathname).toBe("/api/taskmine/redmine");
+      expect(options.credentials).toBe("same-origin");
       if(fail) throw new Error('CORS failure');
       let data: any;
       if(url.pathname.endsWith('/projects.json')) data = {projects:[{id:7,name:'Remote'}],total_count:1};
@@ -122,7 +125,7 @@ describe('Taskmine Redmine REST integration', () => {
   });
   it('shows connection failures and keeps the demo usable', async () => {
     const {dom,d}=remotePage(true);
-    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('CORS'));
+    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('Worker'));
     expect(d.querySelectorAll('.issue')).toHaveLength(4);
     expect(d.querySelector('#account')!.children).toHaveLength(1);
     expect(d.querySelector<HTMLButtonElement>('#connection button')!.disabled).toBe(false);

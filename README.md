@@ -423,10 +423,10 @@ Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本
 
 ログイン後に `/taskmine` を開きます。接続なしのデモで課題の検索・絞り込み、作成・編集、変更履歴、Markdownプレビューを試せます。デモの変更は再読み込み時にリセットされます。
 
-実際のRedmineには「Redmineに接続」からHTTPSのURL（サブディレクトリにも対応）と個人のAPIキーを入力します。複数の接続先を追加し、ヘッダーで切り替えられます。キーと接続情報はページ内のメモリだけで保持し、ブラウザストレージやWorkerには保存しません。
+実際のRedmineには「Redmineに接続」からHTTPSのURL（サブディレクトリにも対応）と個人のAPIキーを入力します。複数の接続先を追加し、ヘッダーで切り替えられます。キーと接続情報はページ内のメモリだけで保持します。APIキーは認証済みWorkerとApache経由で転送しますが、ブラウザストレージやWorkerには永続化しません。
 
-接続先のRedmineでREST APIを有効化し、ページを提供するオリジンへのCORSを設定してください。`X-Redmine-API-Key` / `Content-Type` ヘッダー、GET / POST / PUT / OPTIONSメソッドへの許可が必要です。課題・プロジェクト・メンバー等の閲覧および編集は、APIキーのユーザー権限とRedmineのワークフローに従います。
+接続先のRedmineでREST APIを有効化し、本体WorkerとApacheのHMACゲートウェイを設定してください。ブラウザは同一オリジンのWorkerを経由するため、RedmineのCORS許可は不要です。設定手順は [HMAC接続ガイド](deploy/redmine/README.md) を参照してください。課題・プロジェクト・メンバー等の閲覧および編集は、APIキーのユーザー権限とRedmineのワークフローに従います。
 
-実データの課題一覧は50件ずつ取得します。ステータス・優先度・プロジェクト・自分の担当はサーバー側で絞り込み、キーワード・期限は現在のページ内で絞り込みます。添付はRedmineのアップロードAPIを使用します。UIは日本語で、iOSネイティブウィジェットとTaskMineの45言語翻訳は含みません。本文の表示・プレビューはMarkdownとして扱います（Textile固有の記法は変換しません）。
+実データの課題一覧は50件ずつ取得します。ステータス・優先度・プロジェクト・自分の担当はサーバー側で絞り込み、キーワード・期限は現在のページ内で絞り込みます。添付はRedmineのアップロードAPIを使用します（アップロード・ダウンロードは10MiBまで）。UIは日本語で、iOSネイティブウィジェットとTaskMineの45言語翻訳は含みません。本文の表示・プレビューはMarkdownとして扱います（Textile固有の記法は変換しません）。
 
 機能参考: [TaskMine公式サイト](https://taskmine.megawave.app/)。API仕様: [Redmine REST API](https://www.redmine.org/projects/redmine/wiki/Rest_api)。

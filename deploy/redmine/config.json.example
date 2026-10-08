@@ -1,0 +1,5 @@
+{
+  "secret": "REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_CHARACTERS",
+  "upstream": "http://127.0.0.1:3000/redmine",
+  "nonce_db": "/var/lib/redmine-hmac/nonces.sqlite3"
+}

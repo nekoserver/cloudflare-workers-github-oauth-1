@@ -13,7 +13,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 <main><div class="hero"><div><div class="eyebrow">REDMINE WORKSPACE</div><h1>今日の仕事を、ひと目で。</h1><div class="muted" id="mode">デモモード · 接続せずに操作を試せます</div></div><button class="primary" id="newIssue">＋ 課題を作成</button></div>
 <div id="message" role="status" aria-live="polite"></div>
 <div class="layout"><aside class="panel side"><h2>ワークスペース</h2><button id="all" class="active">すべての課題</button><button id="mine">自分の担当課題</button><h3>プロジェクト</h3><div id="projects"></div>
-<details id="settings"><summary>Redmineに接続</summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" placeholder="https://redmine.example.com" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIの有効化と、このページのオリジンへのCORS許可が必要です。APIキーはページを閉じると破棄されます。</small></form></details></aside>
+<details id="settings"><summary>Redmineに接続</summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" placeholder="https://redmine.example.com" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIとWorker・ApacheのHMAC接続設定が必要です。APIキーは接続時にWorker経由で転送し、保存しません。</small></form></details></aside>
 <section class="panel"><div class="heading"><h2 id="listTitle">すべての課題</h2><button id="refresh" aria-label="再読み込み">↻</button></div><div class="filters"><input id="search" type="search" aria-label="課題を検索" placeholder="課題名・番号で検索"><select id="status" aria-label="ステータス"></select><select id="priority" aria-label="優先度"></select><select id="due" aria-label="期限"><option value="">すべての期限</option><option value="late">期限超過</option><option value="week">7日以内</option><option value="none">期限なし</option></select></div><small id="count"></small><div id="issues"></div><div class="pager"><button id="prev">前へ</button><small id="pageInfo"></small><button id="next">次へ</button></div></section>
 <section class="panel" id="detail"><div class="empty">課題を選択すると、詳細と変更履歴を表示します。</div></section></div>
 <footer>TaskMineの主要操作を再現した独立したWebページです。<a href="https://taskmine.megawave.app/" target="_blank" rel="noopener noreferrer">機能の参考：TaskMine公式サイト</a> · <a href="/">ホーム</a><br>iOSホーム画面ウィジェット・45言語へのUI翻訳は対象外です。Markdown表示に対応しています（Textile形式は原文表示）。</footer></main>
@@ -86,6 +86,9 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
       $("projects").append(b);
     });
   }
+  function proxyUrl(account, path) {
+    return "/api/taskmine/redmine?" + new URLSearchParams({base: account.url, path});
+  }
   let queue = Promise.resolve(), lastRequest = 0;
   function api(account, path, method = "GET", body, raw = false) {
     const run = async () => {
@@ -95,13 +98,16 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
       lastRequest = Date.now();
       let response;
       try {
-        response = await fetch(account.url + "/" + path, { method, credentials: "omit", redirect: "error", headers: { "X-Redmine-API-Key": account.key, "Content-Type": raw ? "application/octet-stream" : "application/json" }, body: body === void 0 ? void 0 : raw ? body : JSON.stringify(body), signal: AbortSignal.timeout(3e4) });
+        response = await fetch(proxyUrl(account, path), { method, credentials: "same-origin", redirect: "error", headers: { "X-Redmine-API-Key": account.key, "Content-Type": raw ? "application/octet-stream" : "application/json" }, body: body === void 0 ? void 0 : raw ? body : JSON.stringify(body), signal: AbortSignal.timeout(3e4) });
       } catch (e) {
-        throw new Error("Redmineに接続できません。URL・ネットワーク・CORS設定を確認してください。");
+        throw new Error("Redmineに接続できません。Workerへの接続・ネットワーク設定を確認してください。");
       }
       if (response.status === 204)
         return {};
-      const data = await response.json();
+      let data;
+      try { data = await response.json(); } catch {
+        throw new Error("Redmine接続先がJSONを返しません: HTTP " + response.status + "。Apacheの設定を確認してください。");
+      }
       if (!response.ok)
         throw new Error("Redmine HTTP " + response.status + ": " + (data.errors || ["権限またはAPI設定を確認してください"]).join(" / "));
       return data;
@@ -256,9 +262,9 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
     const a = state.account;
     try {
       const url = new URL(file.content_url);
-      if (!a || url.origin !== new URL(a.url).origin)
+      if (!a || !url.href.startsWith(a.url + "/"))
         throw new Error("別のサーバーの添付URLは開けません。");
-      const response = await fetch(url, { headers: { "X-Redmine-API-Key": a.key }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(3e4) });
+      const response = await fetch(proxyUrl(a, url.href.slice(a.url.length + 1)), { headers: { "X-Redmine-API-Key": a.key }, credentials: "same-origin", redirect: "error", signal: AbortSignal.timeout(3e4) });
       if (!response.ok)
         throw new Error("添付ファイルを取得できません: HTTP " + response.status);
       const href = URL.createObjectURL(await response.blob());
