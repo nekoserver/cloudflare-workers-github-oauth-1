@@ -16535,8 +16535,8 @@ async function syncTreeViewSnapshots(
   const failed: { repoName: string; error: string }[] = [];
   const differences: { repoName: string; status: 'changed' | 'unchanged'; addedPaths: string[] }[] = [];
 
-  if (!env.DB || !targetDb) {
-    return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBが未設定です' }] };
+  if (!env.DB || !targetDb || !env.GITHUB_TOKEN) {
+    return { synced, skipped, failed: [{ repoName: '(all)', error: 'DBまたはGITHUB_TOKENが未設定です' }] };
   }
 
   // 指定更新でも固定許可リスト外は対象にしない。一括更新は
@@ -16571,10 +16571,7 @@ async function syncTreeViewSnapshots(
       const index = nextIndex++;
       const repoName = repoNames[index];
       try {
-        // 対象はisTreeViewSnapshotRepoで絞り込んだ固定・公開リポジトリのみ
-        // (treeViewSnapshot.tsのfetchRepoTreeSnapshotコメント参照)のため、
-        // GITHUB_TOKEN無しでも取得できる。
-        const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN, fetchImpl: fetch });
+        const result = await fetchRepoTreeSnapshot({ repoName, githubToken: env.GITHUB_TOKEN!, fetchImpl: fetch });
         if (!result.ok) {
           logger.error('[tree-view-snapshot-sync] GitHub Trees API取得失敗', { repoName, errorCode: result.errorCode, detail: result.detail });
           if (!dryRun) {
@@ -16769,6 +16766,7 @@ const TREE_VIEW_SNAPSHOT_REFRESH_RATE_LIMIT_MAX = 5;
 app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.GITHUB_TOKEN) return jsonUtf8({ error: 'GITHUB_TOKENが未設定です' }, 503);
   const body = await c.req.json<{ userToken?: string; repoName?: string }>().catch(() => null);
   const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
   if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
