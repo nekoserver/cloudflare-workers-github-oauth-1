@@ -1,6 +1,8 @@
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../types';
 
+import { readSecuremineSession, decryptCredential } from './securemineSessionStore';
+
 const encoder = new TextEncoder();
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 export async function redmineSignature(secret: string, method: string, path: string, timestamp: string, nonce: string, apiKey: string, contentType: string, body: ArrayBuffer) {
@@ -39,7 +41,13 @@ export async function proxyRedmine(c: Context<{ Bindings: Bindings; Variables: V
     if (gateway.protocol !== 'https:' || gateway.username || gateway.password || gateway.search || gateway.hash) throw new Error();
   } catch { return error('Redmine接続先のWorker設定が不正です。', 503); }
   if (!allowedRedminePath(c.req.method, path)) return error('許可されていないRedmine APIです。', 400);
-  const apiKey = c.req.header('X-Redmine-API-Key') || '';
+  let apiKey = c.req.header('X-Redmine-API-Key') || '';
+  if (!apiKey) {
+    try {
+      const session = await readSecuremineSession(c);
+      if (session?.base_url === base) apiKey = await decryptCredential(c.env.JWT_SECRET, session.api_key_encrypted, session.user_id, base);
+    } catch { return error('Redmineセッションを復元できません。再ログインしてください。', 503); }
+  }
   if (!apiKey || apiKey.length > 512) return error('Redmine APIキーが必要です。', 400);
   const limit = 10 * 1024 * 1024;
   const chunks: Uint8Array[] = []; let size = 0;

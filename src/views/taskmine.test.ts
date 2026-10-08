@@ -60,8 +60,8 @@ describe('Taskmine', () => {
   });
 });
 
-function remotePage(fail = false, empty = false) {
-  const control = { fail, empty, failIssues: false, updated: false, issues: [] as any[], tick: () => {} };
+function remotePage(fail = false, empty = false, restored = false) {
+  const control = { fail, empty, failLogin: false, failIssues: false, updated: false, issues: [] as any[], tick: () => {} };
   const calls: {url: URL; options: any}[] = [];
   let time = Date.now();
   const dom = new JSDOM(getTaskminePage(), {runScripts:'dangerously', url:'https://example.com/taskmine', beforeParse(window) {
@@ -70,6 +70,8 @@ function remotePage(fail = false, empty = false) {
     w.AbortSignal.timeout = () => undefined;
     w.setInterval = (handler: () => void) => { control.tick = handler; return 1; };
     w.fetch = async (input: string, options: any) => {
+      if (input === '/api/taskmine/session') return {ok:true,status:200,json:async()=>({account:restored ? {id:'saved',name:'Work',url:'https://redmine.example/redmine'} : null})};
+      if (input === '/api/taskmine/login') return {ok:!control.failLogin,status:control.failLogin ? 503 : 200,json:async()=>control.failLogin ? {error:'DB保存失敗'} : {loggedInAt:'2026-10-08T00:00:00Z'}};
       if (input === '/api/taskmine/commit-calendar') return {ok:true,status:200,json:async()=>({year:2026,month:10,days:[]})};
       const transport = new URL(input, "https://example.com");
       const url = new URL(transport.searchParams.get("path")!, transport.searchParams.get("base")! + "/"); calls.push({url, options});
@@ -93,7 +95,7 @@ function remotePage(fail = false, empty = false) {
   const d=dom.window.document;
   (d.querySelector('#serverUrl') as HTMLInputElement).value='https://redmine.example/redmine/';
   (d.querySelector('#apiKey') as HTMLInputElement).value='private-api-key';
-  d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+  if (!restored) d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
   return {dom,d,calls,control};
 }
 describe('Taskmine Redmine REST integration', () => {
@@ -232,6 +234,35 @@ describe('Taskmine refreshed details and issue failures', () => {
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期失敗'));
     expect(d.querySelector('#issues')!.textContent).toContain('Previously loaded');
     expect(d.querySelector('#issues')!.textContent).not.toContain('まだ登録されていません');
+    dom.window.close();
+  });
+});
+
+describe('SecureMine login feedback and restoration', () => {
+  it('shows a spinner until login is saved, then shows the green completion toast', async () => {
+    const {dom,d}=remotePage();
+    expect(d.querySelector('.login-spinner')).not.toBeNull();
+    expect(d.querySelector('#connection button')!.getAttribute('aria-busy')).toBe('true');
+    expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
+    await vi.waitFor(()=>expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(false));
+    expect(d.querySelector('#loginToast')!.textContent).toBe('ログイン完了');
+    expect(d.querySelector('.login-spinner')).toBeNull();
+    dom.window.close();
+  });
+  it('stops the spinner without showing completion when saving fails',async()=>{
+    const {dom,d,control}=remotePage();control.failLogin=true;
+    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('DB保存失敗'));
+    expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
+    expect(d.querySelector('.login-spinner')).toBeNull();
+    expect((d.querySelector('#account') as HTMLSelectElement).value).toBe('');
+    dom.window.close();
+  });
+  it('restores the saved connection after page load using the HttpOnly cookie without a browser API key',async()=>{
+    const {dom,d,calls}=remotePage(false,false,true);
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    expect((d.querySelector('#account') as HTMLSelectElement).value).toBe('saved');
+    expect(calls.every(c=>!c.options.headers['X-Redmine-API-Key'])).toBe(true);
+    expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
     dom.window.close();
   });
 });
