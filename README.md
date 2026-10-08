@@ -27,7 +27,7 @@ GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 | `/` | GET | - | ログインページ |
 | `/welcome` | GET | 必要 | ウェルカムページ |
 | `/settings` | GET | 必要 | 設定ページ |
-| `/taskmine` | GET | 必要 | Redmine課題の閲覧・検索・作成・編集（TaskMine風） |
+| `/taskmine` | GET | 必要 | Redmine課題の閲覧・検索・作成・編集（SecureMine） |
 | `/repositories` | GET | オプション | リポジトリ一覧（権限モーダル付き） |
 
 ### 認証
@@ -419,7 +419,7 @@ Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本
 
 参考: [Slackのインタラクション処理](https://docs.slack.dev/interactivity/handling-user-interaction/)
 
-## TaskMine風 Redmineページ
+## SecureMine Redmineページ
 
 ログイン後に `/taskmine` を開き、Redmineに接続します。既存Redmineのプロジェクト・課題の閲覧、課題の作成・編集、変更履歴、Markdownプレビューを操作できます。初期表示は未接続で、操作デモはアカウント選択から明示的に切り替えます。デモの変更は再読み込み時にリセットされます。
 
@@ -427,7 +427,7 @@ Slack App の **Interactivity & Shortcuts** を有効にし、Request URL を本
 
 接続先のRedmineでREST APIを有効化し、本体WorkerとApacheのHMACゲートウェイを設定してください。ブラウザは同一オリジンのWorkerを経由するため、RedmineのCORS許可は不要です。設定手順は [HMAC接続ガイド](deploy/redmine/README.md) を参照してください。課題・プロジェクト・メンバー等の閲覧および編集は、APIキーのユーザー権限とRedmineのワークフローに従います。
 
-接続中のRedmineユーザーとプロジェクトの説明・識別子・公開区分・更新日時を表示します。「同期」でユーザー・プロジェクト・ステータス・優先度・トラッカー・課題一覧と選択中の課題詳細を再取得します。「自動同期（60秒）」は任意で有効にでき、非表示のタブや編集中は同期を停止します。取得失敗時は前回のデータを保持して同期失敗を表示します。更新はRedmineに直接反映し、保存後に一覧・詳細を再取得します。別DBへのデータ複製は行いません。
+接続時にはRedmineユーザーを確認し、プロジェクトの説明・識別子・公開区分・更新日時を表示します。「同期」でユーザー・プロジェクト・ステータス・優先度・トラッカー・課題一覧と選択中の課題詳細を再取得します。「自動同期（60秒）」は任意で有効にでき、非表示のタブや編集中は同期を停止します。取得失敗時は前回のデータを保持して同期失敗を表示します。更新はRedmineに直接反映し、保存後に一覧・詳細を再取得します。別DBへのデータ複製は行いません。
 
 実データの課題一覧は50件ずつ取得します。ステータス・優先度・プロジェクト・自分の担当はサーバー側で絞り込み、キーワード・期限は現在のページ内で絞り込みます。添付はRedmineのアップロードAPIを使用します（アップロード・ダウンロードは10MiBまで）。UIは日本語で、iOSネイティブウィジェットとTaskMineの45言語翻訳は含みません。本文の表示・プレビューはMarkdownとして扱います（Textile固有の記法は変換しません）。
 

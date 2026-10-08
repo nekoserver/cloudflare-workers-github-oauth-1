@@ -98,7 +98,7 @@ function remotePage(fail = false, empty = false) {
 describe('Taskmine Redmine REST integration', () => {
   it('connects a subdirectory server, filters assigned issues, creates and reloads a real issue', async () => {
     const {dom,d,calls}=remotePage();
-    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('https://redmine.example/redmine'));
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
     (d.querySelector('#mine') as HTMLElement).click();
     await vi.waitFor(()=>expect(calls.some(c=>c.url.searchParams.get('assigned_to_id')==='me')).toBe(true));
     (d.querySelector('#newIssue') as HTMLElement).click();
@@ -150,11 +150,12 @@ describe('Taskmine real-data workspace and synchronization', () => {
     expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(true);
     dom.window.close();
   });
-  it('shows real projects and identity even when there are no issues', async () => {
+  it('shows real projects without connection identity labels even when there are no issues', async () => {
     const {dom,d,calls}=remotePage();
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
     expect(calls.some(c=>c.url.pathname.endsWith('/users/current.json'))).toBe(true);
-    expect(d.querySelector('#mode')!.textContent).toContain('Alice Test');
+    expect(d.querySelector<HTMLElement>('#mode')!.hidden).toBe(true);
+    expect(d.querySelector('#mode')!.textContent).toBe('');
     expect(d.querySelector('#detail')!.textContent).toContain('プロジェクト一覧');
     expect(d.querySelector('#detail')!.textContent).toContain('Real project <img');
     expect(d.querySelector('#detail img')).toBeNull();
@@ -164,7 +165,7 @@ describe('Taskmine real-data workspace and synchronization', () => {
   });
   it('accepts an authenticated account with no visible projects and explains permissions', async () => {
     const {dom,d}=remotePage(false,true);
-    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('Alice Test'));
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
     expect(d.querySelector('#detail')!.textContent).toContain('閲覧できるプロジェクトがありません');
     expect(d.querySelector<HTMLButtonElement>('#newIssue')!.disabled).toBe(true);
     dom.window.close();
