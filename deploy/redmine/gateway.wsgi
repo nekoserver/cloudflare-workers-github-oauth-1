@@ -27,7 +27,7 @@ def allowed(method, path):
     if any(c in decoded for c in '\r\n\\%#?') or any(part in ('.', '..') for part in decoded.split('/')):
         return False
     if method == 'GET':
-        return bool(re.fullmatch(r'(projects|issue_statuses|enumerations/issue_priorities|trackers|issues)\.json|projects/[1-9]\d*/memberships\.json|issues/[1-9]\d*\.json', name) or
+        return bool(re.fullmatch(r'(users/current|projects|issue_statuses|enumerations/issue_priorities|trackers|issues)\.json|projects/[1-9]\d*/memberships\.json|issues/[1-9]\d*\.json', name) or
                     (re.fullmatch(r'attachments/download/[1-9]\d*(/[^/]+)?', name) and re.fullmatch(r'attachments/download/[1-9]\d*(/[^/]+)?', decoded)))
     if method == 'POST':
         return name in ('issues.json', 'uploads.json')

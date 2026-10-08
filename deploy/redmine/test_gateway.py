@@ -39,6 +39,12 @@ class GatewayTests(unittest.TestCase):
         payload = gateway.application(environ, lambda status, headers: result.append((status, headers)))
         return result[0][0], b''.join(payload)
 
+    def test_current_user_only(self):
+        self.assertTrue(gateway.allowed('GET', 'users/current.json'))
+        self.assertFalse(gateway.allowed('GET', 'users.json'))
+        self.assertFalse(gateway.allowed('GET', 'users/1.json'))
+        self.assertFalse(gateway.allowed('PUT', 'users/current.json'))
+
     def test_cross_language_vector(self):
         raw = gateway.canonical('POST', 'issues.json', '1791475200', '12345678-1234-1234-1234-123456789abc', 'api-key', 'application/json', '{"issue":{"subject":"日本語"}}'.encode())
         self.assertEqual(hmac.new(self.config['secret'].encode(), raw, hashlib.sha256).hexdigest(), '8ec0ed783c95d470e079a1d2d6a40afbc9579023f6426881aca5d9c046386cae')

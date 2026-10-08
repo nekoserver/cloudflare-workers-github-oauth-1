@@ -63,6 +63,8 @@ npx vitest run src/utils/redmineProxy.test.ts src/views/taskmine.test.ts
 python3 -m unittest discover -s deploy/redmine -p 'test_*.py'
 ```
 
+`users/current.json` のGETも許可し、APIキーのユーザーを接続時・同期時に確認します。ユーザー一覧や他ユーザーの取得・更新は許可しません。
+
 実機では、ログイン後の一覧取得・課題作成・編集・添付を確認してください。ゲートウェイへの署名なしのリクエストは403になり、同じ署名付きリクエストの再送も403になる必要があります。503はWorkerの未設定、403は接続先未登録またはHMAC拒否、502はApache/Redmineへの接続やゲートウェイ設定の失敗を確認してください。
 
 Apache設定参考：https://www.modwsgi.org/en/master/configuration-directives/WSGIScriptAlias.html
