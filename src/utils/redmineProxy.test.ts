@@ -17,7 +17,10 @@ describe('Redmine HMAC proxy', () => {
     expect(await redmineSignature(...args.slice(0,5) as [string,string,string,string,string], 'other-key', args[6], body)).not.toBe(signature);
   });
   it('forwards only a configured target, signs it, and drops upstream cookies', async () => {
-    const fetcher = vi.fn(async () => new Response('{"projects":[]}', {headers:{'Content-Type':'application/json','Set-Cookie':'secret=upstream'}}));
+    const fetcher = vi.fn(async (_url: URL, init: RequestInit) => {
+      if (init.redirect === 'error') throw new TypeError('Invalid redirect value, must be follow or manual');
+      return new Response('{"projects":[]}', {headers:{'Content-Type':'application/json','Set-Cookie':'secret=upstream'}});
+    });
     vi.stubGlobal('fetch', fetcher);
     const response = await app.request(url(), {headers:{'X-Redmine-API-Key':'api-key'}}, env);
     expect(response.status).toBe(200);
@@ -25,9 +28,18 @@ describe('Redmine HMAC proxy', () => {
     expect(target.origin + target.pathname).toBe('https://redmine.example/redmine-hmac');
     const headers = init.headers as Record<string,string>;
     expect(headers['X-Redmine-Signature']).toBe(await redmineSignature(env.REDMINE_HMAC_SECRET, 'GET', 'projects.json', headers['X-Redmine-Timestamp'], headers['X-Redmine-Nonce'], 'api-key', '', new ArrayBuffer(0)));
-    expect(init.redirect).toBe('error');
+    expect(init.redirect).toBe('manual');
     expect(response.headers.get('Set-Cookie')).toBeNull();
     expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+  it.each([301, 302, 303, 307, 308])('refuses HTTP %s redirects without following or exposing their Location', async status => {
+    const fetcher = vi.fn(async () => new Response('login', {status,headers:{Location:'https://other.example/login'}}));
+    vi.stubGlobal('fetch', fetcher);
+    const response = await app.request(url(), {headers:{'X-Redmine-API-Key':'key'}}, env);
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Location')).toBeNull();
+    expect(await response.text()).toContain('リダイレクト');
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('rejects unconfigured destinations and cross-origin writes before fetching', async () => {
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
