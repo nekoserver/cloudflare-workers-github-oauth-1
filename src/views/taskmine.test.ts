@@ -70,6 +70,7 @@ function remotePage(fail = false, empty = false) {
     w.AbortSignal.timeout = () => undefined;
     w.setInterval = (handler: () => void) => { control.tick = handler; return 1; };
     w.fetch = async (input: string, options: any) => {
+      if (input === '/api/taskmine/commit-calendar') return {ok:true,status:200,json:async()=>({year:2026,month:10,days:[]})};
       const transport = new URL(input, "https://example.com");
       const url = new URL(transport.searchParams.get("path")!, transport.searchParams.get("base")! + "/"); calls.push({url, options});
       expect(transport.pathname).toBe("/api/taskmine/redmine");
