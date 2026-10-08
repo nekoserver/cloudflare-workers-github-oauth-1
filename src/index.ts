@@ -65,6 +65,7 @@ import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getMentionEditorPage } from './views/mentionEditor';
+import { getTaskminePage } from './views/taskmine';
 import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
 import { getBinHexPage } from './views/binHex';
@@ -14599,6 +14600,12 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/taskmine', authMiddleware, (c) => {
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; img-src 'self' data: blob:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  c.header('Cache-Control', 'no-store');
+  return c.html(getTaskminePage());
 });
 
 app.get('/mention-editor', authMiddleware, async (c) => {
