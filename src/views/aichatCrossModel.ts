@@ -89,6 +89,8 @@ export function getAichatCrossModelPage(username: string): string {
   </div>
 
   <script>
+    ${getThemeToggleScript()}
+
     var listEl = document.getElementById('list');
     var loadingEl = document.getElementById('loadingMsg');
     var emptyEl = document.getElementById('emptyMsg');
@@ -145,7 +147,6 @@ export function getAichatCrossModelPage(username: string): string {
         errorEl.classList.add('show');
       });
   </script>
-  ${getThemeToggleScript()}
 </body>
 </html>`;
 }
