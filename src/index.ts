@@ -66,6 +66,7 @@ import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getMentionEditorPage } from './views/mentionEditor';
 import { getTaskminePage } from './views/taskmine';
+import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
 import { proxyRedmine } from './utils/redmineProxy';
 import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
@@ -14601,6 +14602,18 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+app.get('/api/taskmine/commit-calendar', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.DB) return c.json({ error: 'コミットログのデータベースが未設定です。' }, 503);
+  const workspace = await getCurrentWorkspace(c.env.DB, c.get('user').sub);
+  if (!workspace) return c.json({ error: 'ワークスペースを取得できませんでした。' }, 503);
+  try {
+    return c.json(await readWorkspaceCommitDays(c.env.DB, workspace.workspaceId, new Date()));
+  } catch {
+    return c.json({ error: 'コミットログを取得できませんでした。' }, 502);
+  }
 });
 
 app.all('/api/taskmine/redmine', authMiddleware, proxyRedmine);
