@@ -188,6 +188,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
+    '| /neko secureminelog | "API"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
     '| /neko rubyver | /ruby-wasmページが読み込むRuby/WASMのビルドライン・パッケージバージョンを表示します |',
     '| /neko jev | TypeSafe AI(Jev)の残クレジット確認方法(console.typesafe.ai)を案内します |',
@@ -2053,6 +2054,28 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatAskgkResult(question, outcome.value.reply), saveAsAiResponse: true };
   }
 
+  if (subcommand === 'secureminelog') {
+    // /neko askgk <コマンド>のASKGK_COMMAND_ALIASES(models-list等)のような
+    // エイリアス変換は行わず、"API"という文字列をそのままtunnel-signer経由で
+    // 送る専用コマンド(ユーザー要望)。resolveAskgkCommandはASKGK_COMMAND_ALIASES
+    // に無い文字列をそのまま通すため、"API"がエイリアス表に将来追加されても
+    // ここでは影響を受けないよう、固定文字列を直接askTunnelSignerへ渡す。
+    if (!deps.askTunnelSigner) {
+      return { handled: true, response: '❌ /neko secureminelog は現在利用できません(rust-worker-sqlx-d1連携未設定)' };
+    }
+    const outcome = await raceWithTimeout(deps.askTunnelSigner('API'), ASKGK_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko secureminelog がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko secureminelog でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatAskgkResult('API', outcome.value.reply), saveAsAiResponse: true };
+  }
+
   if (subcommand === 'jev') {
     return { handled: true, response: formatJevCreditsInfo() };
   }
@@ -2122,6 +2145,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko askgk, /neko ruby, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand}\n利用可能なコマンド: /neko hms, /neko epoch, /neko ip, /neko cal, /neko fymd, /neko clog, /neko sessions, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko qsearch, /neko csearch, /neko s, /neko vcount, /neko j, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko ls, /neko gh, /neko tree, /neko msb, /neko tlist, /neko mlb, /neko hellodw, /neko askgk, /neko secureminelog, /neko ruby, /neko rubyver, /neko jev, /neko vlink, /neko help\n詳細は /neko help を実行してください`,
   };
 }
