@@ -873,12 +873,22 @@ const APIS = [
       res:{ok:true,rubyVersion:'4.0',verified:true} },
     { method:'GET',  path:'/api/ruby-wasm/snippets/:id/verifications', desc:'スニペットの動作確認履歴を新しい順に取得(自分の所有分のみ)', path_params:['id'], pp:{id:'a1b2c3d4'},
       res:{verifications:[{ruby_version:'4.0',verified:1,verified_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'DELETE', path:'/api/ruby-wasm/snippets/:id', desc:'保存済みスニペットを削除(動作確認履歴も合わせて削除、自分の所有分のみ)', path_params:['id'], pp:{id:'a1b2c3d4'},
+      res:{ok:true} },
   ]},
   { group: 'Mention Editor', endpoints: [
     { method:'GET',  path:'/api/mention-editor/documents', desc:'保存済みmention-editorドキュメント一覧(自分の分のみ)',
       res:{documents:[{id:'a1b2c3d4',title:'メモ1',config:{content:'puts "hi"'},createdAt:'2026-06-15T00:00:00.000Z',updatedAt:'2026-06-15T00:00:00.000Z'}]} },
     { method:'POST', path:'/api/mention-editor/documents', desc:'ドキュメントを保存(idを指定すれば更新、未指定なら新規作成)', body:[{n:'id',s:'a1b2c3d4'},{n:'title',req:true,s:'メモ1'},{n:'config',req:true,s:{content:'puts "hi"'}}],
       res:{id:'a1b2c3d4',saved:true} },
+  ]},
+  { group: 'Taskmine（Securemine連携）', endpoints: [
+    { method:'GET',  path:'/api/taskmine/commit-calendar', desc:'/taskmineページ用の現在ワークスペースのコミットカレンダー取得',
+      res:{days:[{date:'2026-06-15',count:3}]} },
+    { method:'POST', path:'/api/taskmine/login', desc:'Redmine接続情報(base URL・APIキー)を検証しsecuremineセッションを発行(Cookieにトークンを保存)', body:[{n:'base',req:true,s:'https://redmine.example.com'},{n:'name',s:'my-redmine'},{n:'apiKey',req:true,s:'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}],
+      res:{loggedInAt:'2026-06-15T00:00:00.000Z',expiresAt:'2026-06-22T00:00:00.000Z',user:{id:1,login:'alice',firstname:'Alice',lastname:'Smith'}} },
+    { method:'GET',  path:'/api/taskmine/session', desc:'現在のsecuremineセッション(Redmine接続状態)を取得',
+      res:{account:{id:'e5f6a7b8',name:'my-redmine',url:'https://redmine.example.com'},user:{id:1,login:'alice'},loggedInAt:'2026-06-15T00:00:00.000Z',expiresAt:'2026-06-22T00:00:00.000Z'} },
   ]},
   { group: 'ワークフロー', endpoints: [
     { method:'GET', path:'/api/workflow', desc:'登録済みワークフロー一覧(/workflowページで参照)',
