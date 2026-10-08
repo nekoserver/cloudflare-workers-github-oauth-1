@@ -1,0 +1,16 @@
+# Include inside the HTTPS VirtualHost. Requires mod_wsgi (Python 3).
+# Place before a catch-all ProxyPass and exclude the gateway from that proxy.
+ProxyPass /redmine-hmac !
+WSGIDaemonProcess redmine-hmac user=www-data group=www-data processes=2 threads=5
+WSGIScriptAlias /redmine-hmac /opt/redmine-hmac/gateway.wsgi
+<Location /redmine-hmac>
+    WSGIProcessGroup redmine-hmac
+    WSGIApplicationGroup %{GLOBAL}
+    Require all granted
+    LimitRequestBody 10485760
+</Location>
+<Directory /opt/redmine-hmac>
+    <Files gateway.wsgi>
+        Require all granted
+    </Files>
+</Directory>

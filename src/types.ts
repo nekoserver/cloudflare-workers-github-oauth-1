@@ -5,6 +5,9 @@ import type { JWTPayload } from './utils/jwt';
 
 /** Cloudflare Workers 環境変数バインディング */
 export type Bindings = {
+  /** Redmine公開URL→Apache HMACゲートウェイURLのJSONマップ */
+  REDMINE_HMAC_TARGETS?: string;
+  REDMINE_HMAC_SECRET?: string;
   JWT_SECRET: string;
   ENVIRONMENT: string;
   GITHUB_CLIENT_ID?: string;

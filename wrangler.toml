@@ -12,6 +12,8 @@ assets = { directory = "./public" }
 # 環境変数（本番環境ではwrangler secretを使用）
 [vars]
 ENVIRONMENT = "development"
+# Redmine公開URL→Apache HMACゲートウェイURL。実環境に合わせて設定する。
+# REDMINE_HMAC_TARGETS = '{"https://redmine.example.com/redmine":"https://redmine.example.com/redmine-hmac"}'
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
 AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # GitHubのnumeric IDは公開情報であり、デプロイ直後から管理者認可が機能するよう
@@ -25,6 +27,7 @@ NOTIFY_TARGET = "worker"
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
 #   wrangler secret put GITHUB_CLIENT_SECRET
+#   wrangler secret put REDMINE_HMAC_SECRET # Apacheゲートウェイと同じ専用シークレット
 #   wrangler secret put JWT_SECRET
 #   wrangler secret put RESEND_WEBHOOK_SECRET
 #   wrangler secret put SLACK_SIGNING_SECRET
