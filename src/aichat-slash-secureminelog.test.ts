@@ -3,14 +3,14 @@ import { interpretAichatSlashCommand, ASKGK_TIMEOUT_MS } from './utils/aichatSla
 
 // 対象: /neko secureminelog サブコマンド。/neko askgk <コマンド>の
 // ASKGK_COMMAND_ALIASES(models-list→"cf ai models list"等)のような
-// エイリアス変換を一切経由せず、"API"という文字列をそのままtunnel-signer
+// エイリアス変換を一切経由せず、"secureminelog"という文字列をそのままtunnel-signer
 // 経由で送ることを保証する(ユーザー要望)。
 describe('/neko secureminelog', () => {
-  it('"API"という文字列をそのままaskTunnelSignerへ渡す(エイリアス変換しない)', async () => {
+  it('"secureminelog"という文字列をそのままaskTunnelSignerへ渡す(エイリアス変換しない)', async () => {
     const result = await interpretAichatSlashCommand('/neko secureminelog', new Date('2026-10-08T00:00:00.000Z'), {
       fetchLatestCommitAgentLog: async () => null,
       askTunnelSigner: async (message) => {
-        expect(message).toBe('API');
+        expect(message).toBe('secureminelog');
         return { reply: 'API応答本文' };
       },
     });
@@ -20,11 +20,11 @@ describe('/neko secureminelog', () => {
     expect(result.saveAsAiResponse).toBe(true);
   });
 
-  it('末尾に引数が付いていても無視し、常に"API"を送る', async () => {
+  it('末尾に引数が付いていても無視し、常に"secureminelog"を送る', async () => {
     const result = await interpretAichatSlashCommand('/neko secureminelog foo bar', new Date('2026-10-08T00:00:00.000Z'), {
       fetchLatestCommitAgentLog: async () => null,
       askTunnelSigner: async (message) => {
-        expect(message).toBe('API');
+        expect(message).toBe('secureminelog');
         return { reply: 'ok' };
       },
     });
