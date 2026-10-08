@@ -1,9 +1,11 @@
 """Apache mod_wsgi HMAC gate. Configuration is read only on the server."""
+from contextlib import closing
 import hashlib
 import hmac
 import json
 import re
 import sqlite3
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -73,7 +75,7 @@ def application(environ, start_response):
         expected = hmac.new(config['secret'].encode(), canonical(method, path, timestamp, nonce, key, content_type, body), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
             return error('403 Forbidden', 'HMAC authentication failed')
-        with sqlite3.connect(config['nonce_db'], timeout=5) as db:
+        with closing(sqlite3.connect(config['nonce_db'], timeout=5)) as db, db:
             db.execute('CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
             db.execute('DELETE FROM nonces WHERE expires < ?', (int(time.time()),))
             try:
@@ -85,7 +87,10 @@ def application(environ, start_response):
         if content_type:
             headers['Content-Type'] = content_type
         req = urllib.request.Request(upstream, data=None if method == 'GET' else body, headers=headers, method=method)
-        opener = urllib.request.build_opener(NoRedirect())
+        handlers = [NoRedirect()]
+        if config.get('upstream_ca'):
+            handlers.append(urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=config['upstream_ca'])))
+        opener = urllib.request.build_opener(*handlers)
         try:
             response = opener.open(req, timeout=25)
         except urllib.error.HTTPError as e:

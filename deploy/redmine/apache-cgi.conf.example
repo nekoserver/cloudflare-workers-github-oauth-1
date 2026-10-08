@@ -1,0 +1,16 @@
+# Include inside the HTTPS VirtualHost. Requires Apache mod_cgid or mod_cgi.
+# Use this alternative when mod_wsgi is unavailable.
+# Exclude /redmine-hmac from any catch-all ProxyPass before that ProxyPass.
+# ProxyPass /redmine-hmac !
+ScriptAlias /redmine-hmac /opt/redmine-hmac/gateway.cgi
+<Directory /opt/redmine-hmac>
+    Options +ExecCGI -Indexes
+    AllowOverride None
+    Require all granted
+</Directory>
+<Location /redmine-hmac>
+    # For Apache installations hosting Redmine through Passenger:
+    # PassengerEnabled off
+    Require all granted
+    LimitRequestBody 10485760
+</Location>
