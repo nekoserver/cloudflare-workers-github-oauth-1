@@ -64,6 +64,13 @@ import { getUuidGenPage } from './views/uuidGen';
 import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
+import { getCfAccessVerifyPage } from './views/cfAccessVerify';
+import {
+  parseAccessJwt,
+  fetchAccessCerts,
+  verifyAccessJwtSignature,
+  buildAccessVerificationReport,
+} from './utils/cfAccessVerify';
 import { getAichatCrossModelPage } from './views/aichatCrossModel';
 import { buildCrossModelQuestionGroups, type AichatCrossModelShareRow } from './utils/aichatCrossModelQuestions';
 import { getMentionEditorPage } from './views/mentionEditor';
@@ -14605,6 +14612,56 @@ app.get('/answer-graph', authMiddleware, async (c) => {
 app.get('/base64', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getBase64Page(user.sub));
+});
+
+/**
+ * CloudflareのWARP/Zero Trust Access ならびに Tunnel を経由した正規ユーザーの
+ * ログインであることを証明するための診断ページ。認証はAccessのJWT署名検証
+ * そのものが目的のため、本Worker自身のCookieセッション(authMiddleware)は
+ * 要求しない(Accessが正しく機能していない状態でもこのページ自体は見える
+ * ようにする必要があるため)。
+ */
+app.get('/access-verify', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const rawToken = c.req.header('Cf-Access-Jwt-Assertion')
+    ?? getCookieValues(c.req.header('Cookie'), ['CF_Authorization']).CF_Authorization
+    ?? undefined;
+  const parsed = rawToken ? parseAccessJwt(rawToken) : null;
+
+  let signatureValid: boolean | null = null;
+  if (parsed && c.env.CF_ACCESS_TEAM_DOMAIN) {
+    try {
+      const certs = await fetchAccessCerts(c.env.CF_ACCESS_TEAM_DOMAIN);
+      signatureValid = await verifyAccessJwtSignature(parsed, certs);
+    } catch (err) {
+      logger.error('Cloudflare Access証明書の取得/検証に失敗', { error: err instanceof Error ? err.message : String(err) });
+      signatureValid = false;
+    }
+  }
+
+  const report = buildAccessVerificationReport({
+    rawToken,
+    parsed,
+    signatureValid,
+    hostHeader: c.req.header('Host'),
+    config: {
+      teamDomain: c.env.CF_ACCESS_TEAM_DOMAIN,
+      expectedAud: c.env.CF_ACCESS_AUD,
+      allowedEmailDomainsCsv: c.env.CF_ACCESS_ALLOWED_EMAIL_DOMAINS,
+      expectedHost: c.env.CF_ACCESS_EXPECTED_HOST,
+    },
+  });
+
+  const diagnosticHeaders = {
+    'Cf-Connecting-Ip': c.req.header('Cf-Connecting-Ip'),
+    'Cf-Ipcountry': c.req.header('Cf-Ipcountry'),
+    'Cf-Ray': c.req.header('Cf-Ray'),
+    'Cf-Visitor': c.req.header('Cf-Visitor'),
+    'Host': c.req.header('Host'),
+    'User-Agent': c.req.header('User-Agent'),
+  };
+
+  return c.html(getCfAccessVerifyPage(report, diagnosticHeaders));
 });
 
 app.get('/aichat-cross-model', authMiddleware, async (c) => {
