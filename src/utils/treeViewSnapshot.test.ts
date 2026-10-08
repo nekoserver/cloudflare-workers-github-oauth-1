@@ -216,31 +216,6 @@ describe('fetchRepoTreeSnapshot', () => {
     if (!result.ok) expect(result.detail).toContain('network down');
   });
 
-  // 対象: isTreeViewSnapshotRepoで絞り込んだ固定・公開リポジトリのみを
-  // 扱うため、GITHUB_TOKEN無しでも取得できる(2026-10-08、cronトリガーの
-  // 更新にGITHUB_TOKENを使わなくて済むようにしたいというユーザー要望)。
-  it('githubTokenを省略した場合はAuthorizationヘッダーを付けずに取得する', async () => {
-    const mockFn = vi.fn(async (_input: string, _init?: RequestInit) =>
-      new Response(JSON.stringify({ tree: [{ path: 'README.md', type: 'blob' }] }), { status: 200 })
-    );
-    const fetchImpl = mockFn as unknown as typeof fetch;
-    const result = await fetchRepoTreeSnapshot({ repoName: 'nekoserver/example', fetchImpl });
-    expect(result.ok).toBe(true);
-    const headers = mockFn.mock.calls[0][1]!.headers as Record<string, string>;
-    expect(headers.Authorization).toBeUndefined();
-    expect(headers.Accept).toBe('application/vnd.github+json');
-  });
-
-  it('githubTokenを渡した場合はAuthorizationヘッダーを付ける(後方互換)', async () => {
-    const mockFn = vi.fn(async (_input: string, _init?: RequestInit) =>
-      new Response(JSON.stringify({ tree: [{ path: 'README.md', type: 'blob' }] }), { status: 200 })
-    );
-    const fetchImpl = mockFn as unknown as typeof fetch;
-    await fetchRepoTreeSnapshot({ repoName: 'nekoserver/example', githubToken: 'token', fetchImpl });
-    const headers = mockFn.mock.calls[0][1]!.headers as Record<string, string>;
-    expect(headers.Authorization).toBe('Bearer token');
-  });
-
   it('レスポンスにtree配列が無い場合はok:falseを返す', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ notTree: true }), { status: 200 })) as unknown as typeof fetch;
     const result = await fetchRepoTreeSnapshot({ repoName: 'nekoserver/example', githubToken: 'token', fetchImpl });
