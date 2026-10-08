@@ -1,6 +1,7 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { convertAnswerLinksToFootnotes } from '../utils/aichatLinkFootnotes';
+import { highlightCode } from '../utils/syntaxHighlight';
 
 export function getAiChatSharePage(share: {
   question: string;
@@ -14,9 +15,8 @@ export function getAiChatSharePage(share: {
   const safeModel = escapeHtml(share.model);
   const modelShort = escapeHtml(share.model.split('/').pop() ?? share.model);
   const safeDate = escapeHtml(share.created_at.replace('T', ' ').replace(/\.\d+Z$/, ' UTC'));
-  const renderedAnswer = (share.model === 'claude' || share.model === 'codex')
-    ? convertAnswerLinksToFootnotes(share.answer)
-    : share.answer;
+  const isClaudeOrCodex = share.model === 'claude' || share.model === 'codex';
+  const renderedAnswer = isClaudeOrCodex ? convertAnswerLinksToFootnotes(share.answer) : share.answer;
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -107,6 +107,12 @@ export function getAiChatSharePage(share: {
     .chat-bubble.assistant code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-size: 0.88em; font-family: ui-monospace, monospace; }
     .chat-bubble.assistant pre { background: var(--bg-secondary); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 10px; }
     .chat-bubble.assistant pre code { background: none; padding: 0; font-size: 0.85em; }
+    /* claude/codex回答のコードブロックに適用する軽量シンタックスハイライト
+       (highlightCode、src/utils/syntaxHighlight.ts)のトークン配色 */
+    .tok-kw { color: var(--tok-keyword); font-weight: 600; }
+    .tok-str { color: var(--tok-string); }
+    .tok-num { color: var(--tok-number); }
+    .tok-com { color: var(--tok-comment); font-style: italic; }
     .chat-bubble.assistant blockquote { border-left: 3px solid var(--border-color); margin: 0 0 10px; padding: 4px 0 4px 12px; color: var(--text-muted); }
     .chat-bubble.assistant table { border-collapse: collapse; width: 100%; margin: 0 0 10px; font-size: 12px; }
     .chat-bubble.assistant th, .chat-bubble.assistant td { border: 1px solid var(--border-color); padding: 4px 8px; }
@@ -163,6 +169,8 @@ export function getAiChatSharePage(share: {
   <script>
     ${getThemeToggleScript()}
     var rawAnswer = ${JSON.stringify(renderedAnswer)};
+    var AICHAT_SHARE_HIGHLIGHT_ENABLED = ${JSON.stringify(isClaudeOrCodex)};
+    var highlightCode = ${highlightCode.toString()};
     function mdEsc(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -197,7 +205,9 @@ export function getAiChatSharePage(share: {
       var codeBlocks = [];
       src = src.replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
         var idx = codeBlocks.length;
-        codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + mdEsc(code.replace(/\\n$/, '')) + '</code></pre>');
+        var codeBody = code.replace(/\\n$/, '');
+        var highlighted = (AICHAT_SHARE_HIGHLIGHT_ENABLED && lang) ? highlightCode(codeBody, lang) : mdEsc(codeBody);
+        codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + highlighted + '</code></pre>');
         return '\\x00CB' + idx + '\\x00';
       });
       var inlineCodes = [];

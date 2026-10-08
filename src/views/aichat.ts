@@ -4,6 +4,7 @@ import { getKeywordClassificationModalScript } from '../utils/keywordClassificat
  */
 import { formatAskgkPromptQuestion } from '../utils/codexAskgkQuestion';
 import { convertAnswerLinksToFootnotes } from '../utils/aichatLinkFootnotes';
+import { highlightCode } from '../utils/syntaxHighlight';
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
@@ -757,12 +758,19 @@ export function getAiChatPage(user: {
     .preview-area code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-size: 0.88em; font-family: ui-monospace, monospace; }
     .preview-area pre { background: var(--bg-secondary); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 10px; }
     .preview-area pre code { background: none; padding: 0; font-size: 0.85em; }
+    /* claude/codex回答のコードブロックに適用する軽量シンタックスハイライト
+       (highlightCode、src/utils/syntaxHighlight.ts)のトークン配色 */
+    .tok-kw { color: var(--tok-keyword); font-weight: 600; }
+    .tok-str { color: var(--tok-string); }
+    .tok-num { color: var(--tok-number); }
+    .tok-com { color: var(--tok-comment); font-style: italic; }
     .preview-area blockquote { border-left: 3px solid var(--border-color); margin: 0 0 10px; padding: 4px 0 4px 12px; color: var(--text-muted); }
     .preview-area table { border-collapse: collapse; width: 100%; margin: 0 0 10px; font-size: 12px; }
     .preview-area th, .preview-area td { border: 1px solid var(--border-color); padding: 4px 8px; }
     .preview-area th { background: var(--bg-secondary); font-weight: 600; }
     .preview-area hr { border: none; border-top: 1px solid var(--border-color); margin: 12px 0; }
-    .preview-area a { color: var(--accent-color, #667eea); }
+    .preview-area a { color: var(--accent-color, #667eea); text-decoration: none; }
+    .preview-area a:hover { text-decoration: underline; }
     .preview-area img { max-width: 100%; }
     .preview-area input[type="checkbox"] { margin-right: 4px; }
 
@@ -7554,8 +7562,10 @@ export function getAiChatPage(user: {
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
-      var renderText = (model === 'claude' || model === 'codex') ? convertAnswerLinksToFootnotes(text) : text;
+      var isClaudeOrCodex = model === 'claude' || model === 'codex';
+      var renderText = isClaudeOrCodex ? convertAnswerLinksToFootnotes(text) : text;
       el.innerHTML = parseMd(renderText);
+      if (isClaudeOrCodex) highlightCodeBlocksIn(el);
       if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand) addTlistRegisterButton(el, text);
       if (isLocalCommand) styleGhPrListBubble(el, text);
@@ -8210,6 +8220,16 @@ ${getRubyWasmLoaderScript()}
 
     var formatAskgkPromptQuestion = ${formatAskgkPromptQuestion.toString()};
     var convertAnswerLinksToFootnotes = ${convertAnswerLinksToFootnotes.toString()};
+    var highlightCode = ${highlightCode.toString()};
+
+    function highlightCodeBlocksIn(el) {
+      var codeBlocks = el.querySelectorAll('pre > code[class^="language-"]');
+      for (var ci = 0; ci < codeBlocks.length; ci++) {
+        var codeEl = codeBlocks[ci];
+        var lang = codeEl.className.replace('language-', '');
+        codeEl.innerHTML = highlightCode(codeEl.textContent, lang);
+      }
+    }
 
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();

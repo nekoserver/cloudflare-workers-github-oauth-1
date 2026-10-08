@@ -41,6 +41,10 @@ export function getThemeCSS(): string {
       --code-bg: #edf2f7;
       --modal-overlay: rgba(0, 0, 0, 0.5);
       --chart-bar-bg: #edf2f7;
+      --tok-keyword: #9a3fb5;
+      --tok-string: #1a7f37;
+      --tok-number: #0969da;
+      --tok-comment: #6e7781;
     }
 
     [data-theme="dark"] {
@@ -71,6 +75,10 @@ export function getThemeCSS(): string {
       --code-bg: #1a202c;
       --modal-overlay: rgba(0, 0, 0, 0.7);
       --chart-bar-bg: #4a5568;
+      --tok-keyword: #d9a8ff;
+      --tok-string: #7ee787;
+      --tok-number: #79c0ff;
+      --tok-comment: #8b949e;
     }
   `;
 }
