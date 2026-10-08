@@ -232,7 +232,8 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
 
   await next();
 
-  if (idleTimeoutToSet && lastActivityToSet) {
+  const renewedActivity = c.res.headers.get('Set-Cookie')?.includes('last_activity=');
+  if (idleTimeoutToSet && lastActivityToSet && !renewedActivity) {
     c.res.headers.append(
       'Set-Cookie',
       `last_activity=${lastActivityToSet}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutToSet}`

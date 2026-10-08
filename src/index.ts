@@ -68,6 +68,7 @@ import { getMentionEditorPage } from './views/mentionEditor';
 import { getTaskminePage } from './views/taskmine';
 import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
 import { proxyRedmine } from './utils/redmineProxy';
+import { securemineLogin, securemineSession } from './utils/securemineLogin';
 import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
 import { getBinHexPage } from './views/binHex';
@@ -14616,6 +14617,8 @@ app.get('/api/taskmine/commit-calendar', authMiddleware, async (c) => {
   }
 });
 
+app.post('/api/taskmine/login', authMiddleware, securemineLogin);
+app.get('/api/taskmine/session', authMiddleware, securemineSession);
 app.all('/api/taskmine/redmine', authMiddleware, proxyRedmine);
 
 app.get('/taskmine', authMiddleware, (c) => {
