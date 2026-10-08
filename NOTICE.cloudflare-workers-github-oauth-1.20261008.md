@@ -49,3 +49,11 @@ Cloudflare Tunnel（`cloudflared`）・Workers Route（公開URLの振り分け�
 この一連の確認・設定作業はCloudflareダッシュボード側の操作であり、本セッション
 （`CLOUDFLARE_API_TOKEN`未設定・デプロイ不可）からは実行できない。コード側は正しく動いていても、
 上記の確認手順がすべて整うまで `/access-verify` は不合格のままになるのが仕様通りの挙動である。
+
+### 2026-10-08時点の運用状況: HTTPS用ゲートが無く効果未確認
+
+現時点でTunnel/Access/WARP経由の接続は**SSHのみ**であり、HTTPS経由でAccessを通した接続が
+存在しない。そのため `/access-verify` が実際に合格判定を返すところまでは、HTTPS用のAccess
+Applicationを新設しない限り確認できない。SSH経由の接続は現状Access経由で問題なく機能しているため、
+これ自体は不具合ではなく「HTTPS側の検証はまだ未着手」というだけの状態。HTTPS用ゲートを新設して
+検証した結果は、判明した時点で本ファイルに追記する。
