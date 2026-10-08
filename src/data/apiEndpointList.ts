@@ -28,6 +28,7 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/share-keywords', desc: '共有のキーワード一覧' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares-by-question', desc: '質問テキストで共有検索' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/shares-by-question-hash', desc: '質問ハッシュで共有検索' },
+  { group: 'AI チャット', method: 'GET', path: '/api/aichat/cross-model-questions', desc: 'claudeとcodexの両方から回答を得ている質問一覧(question_hashの完全一致、/aichat-cross-modelページ用)' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/all-keywords', desc: '全キーワード一覧（分類状況付き）' },
   { group: 'AI チャット', method: 'GET', path: '/api/aichat/keyword-categories', desc: 'キーワードのカテゴリ一覧' },
   { group: 'AI チャット', method: 'POST', path: '/api/aichat/keyword-categories', desc: 'カテゴリ新規作成' },
