@@ -241,11 +241,17 @@ describe('Taskmine refreshed details and issue failures', () => {
 describe('SecureMine login feedback and restoration', () => {
   it('shows a spinner until login is saved, then shows the green completion toast', async () => {
     const {dom,d}=remotePage();
+    expect(d.querySelector('#brand')!.textContent).toBe('▣ SecureMine');
     expect(d.querySelector('.login-spinner')).not.toBeNull();
     expect(d.querySelector('#connection button')!.getAttribute('aria-busy')).toBe('true');
     expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
     await vi.waitFor(()=>expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(false));
     expect(d.querySelector('#loginToast')!.textContent).toBe('ログイン完了');
+    expect(d.querySelector('#brand')!.textContent).toBe('🔐SecureMine');
+    const toastStyle = dom.window.getComputedStyle(d.querySelector('#loginToast')!);
+    expect(toastStyle.left).toBe('50%');
+    expect(toastStyle.top).toBe('50%');
+    expect(toastStyle.transform).toBe('translate(-50%,-50%)');
     expect(d.querySelector('.login-spinner')).toBeNull();
     dom.window.close();
   });
@@ -261,6 +267,7 @@ describe('SecureMine login feedback and restoration', () => {
     const {dom,d,calls}=remotePage(false,false,true);
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
     expect((d.querySelector('#account') as HTMLSelectElement).value).toBe('saved');
+    expect(d.querySelector('#brand')!.textContent).toBe('🔐SecureMine');
     expect(calls.every(c=>!c.options.headers['X-Redmine-API-Key'])).toBe(true);
     expect((d.querySelector('#loginToast') as HTMLElement).hidden).toBe(true);
     dom.window.close();
