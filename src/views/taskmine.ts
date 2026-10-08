@@ -4,20 +4,20 @@ import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdow
 /** TaskMineの主要操作をブラウザで再現。APIキーはメモリ内のみで保持する。 */
 export function getTaskminePage(): string {
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TaskMine · Redmine Workspace</title>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SecureMine</title>
 ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 *{box-sizing:border-box}body{margin:0;background:var(--bg-secondary);color:var(--text-primary);font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}button,input,select,textarea{font:inherit;color:var(--text-primary);background:var(--input-bg);border:1px solid var(--input-border);border-radius:9px;padding:9px 12px}button{cursor:pointer}button:hover{border-color:var(--accent-color)}button:disabled{opacity:.5;cursor:wait}a{color:var(--accent-color)}header{position:sticky;top:0;height:44px;z-index:10;background:var(--card-bg);border-bottom:1px solid var(--border-color);display:flex;align-items:center;padding:0 20px;gap:12px}header strong{margin-right:auto}.primary{background:var(--accent-color);color:var(--card-bg);font-weight:600}main{max-width:1320px;margin:28px auto;padding:0 24px}.hero{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}h1{font-size:30px;line-height:1.25;margin:6px 0}h2{font-size:19px;margin:0 0 16px}h3{font-size:15px}.eyebrow,.muted,small{color:var(--text-secondary)}.eyebrow{letter-spacing:.13em;font-size:11px}.layout{display:grid;grid-template-columns:230px minmax(280px,1fr) minmax(300px,1.05fr);gap:18px;align-items:start}.panel{background:var(--card-bg);border:1px solid var(--border-color);border-radius:16px;padding:20px}.side button{width:100%;text-align:left;margin:3px 0}.side .active,.issue.active{border-color:var(--accent-color);background:var(--bg-secondary)}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.filters input{width:100%}.filters select{flex:1;min-width:100px}.issue{display:block;width:100%;text-align:left;background:var(--card-bg);padding:16px;margin:8px 0;border:1px solid var(--border-color);border-radius:12px}.issue strong{display:block;margin:5px 0}.meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary)}progress{width:100%;height:5px;accent-color:var(--accent-color)}.heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.badge{border-radius:20px;background:var(--bg-secondary);padding:3px 9px;font-size:12px}.description{white-space:pre-wrap;overflow-wrap:anywhere}.facts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}.fact{background:var(--bg-secondary);border-radius:10px;padding:10px}.fact small{display:block}.history{border-left:2px solid var(--border-color);padding:0 0 12px 14px;margin-top:15px;overflow-wrap:anywhere}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{display:flex;flex-direction:column;gap:4px;font-size:12px}label.full{grid-column:1/-1}textarea{min-height:120px;resize:vertical}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}.empty{padding:38px 10px;text-align:center;color:var(--text-secondary)}#message{white-space:pre-wrap;background:var(--card-bg);border:1px solid var(--accent-color);padding:12px;border-radius:10px;margin-bottom:14px}#message:empty{display:none}details{margin-top:22px}summary{cursor:pointer}#connection{display:grid;gap:10px;margin-top:16px}footer{color:var(--text-secondary);font-size:12px;padding:24px 0}#preview{padding:12px;background:var(--bg-secondary);border-radius:10px}#preview:empty{display:none}[hidden]{display:none!important}#account{max-width:180px;padding:3px 8px}#theme{padding:3px 9px}#detail{min-height:330px;scroll-margin-top:60px}.sync-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;color:var(--text-secondary);font-size:12px}.auto-sync{flex-direction:row;align-items:center}.project-card{display:block;width:100%;text-align:left;margin:12px 0;padding:16px}.project-card strong{display:block}.project-card .preview-area{margin-top:8px}.pager{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
 @media(max-width:1050px){.layout{grid-template-columns:200px 1fr}#detail{grid-column:2}}@media(max-width:680px){main{padding:0 12px;margin-top:18px}.hero{align-items:flex-start;flex-wrap:wrap}.hero>.primary{white-space:nowrap}h1{font-size:25px}.layout{display:flex;flex-direction:column}.panel{width:100%;padding:16px}.side{order:0}.side #projects{display:flex;overflow:auto;gap:6px}.side button{width:auto;white-space:nowrap}.side h3{margin:10px 0}.form-grid{grid-template-columns:1fr}label.full{grid-column:auto}header{padding:0 12px}.facts{gap:8px}}
 </style></head><body>
-<header><strong>▣ TaskMine</strong><select id="account" aria-label="アカウント"><option value="">未接続</option><option value="demo">操作デモ</option></select><button id="theme" aria-label="テーマ切替">◐</button></header>
-<main><div class="hero"><div><div class="eyebrow">REDMINE WORKSPACE</div><h1>今日の仕事を、ひと目で。</h1><div class="muted" id="mode">未接続 · Redmineに接続してください</div></div><button class="primary" id="newIssue">＋ 課題を作成</button></div>
+<header><strong>▣ SecureMine</strong><select id="account" aria-label="アカウント"><option value="">未接続</option><option value="demo">操作デモ</option></select><button id="theme" aria-label="テーマ切替">◐</button></header>
+<main><div class="hero"><div><div class="muted" id="mode">未接続 · Redmineに接続してください</div></div><button class="primary" id="newIssue">＋ 課題を作成</button></div>
 <div class="sync-bar"><span id="syncState" role="status" aria-live="polite">未接続</span><label class="auto-sync"><input id="autoSync" type="checkbox">自動同期（60秒）</label></div>
 <div id="message" role="status" aria-live="polite"></div>
 <div class="layout"><aside class="panel side"><h2>ワークスペース</h2><button id="all" class="active">すべての課題</button><button id="mine">自分の担当課題</button><button id="overview">プロジェクト一覧</button><h3>プロジェクト</h3><div id="projects"></div>
 <details id="settings"><summary>Redmineに接続</summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" placeholder="https://redmine.example.com" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIとWorker・ApacheのHMAC接続設定が必要です。APIキーは接続時にWorker経由で転送し、保存しません。</small></form></details></aside>
 <section class="panel"><div class="heading"><h2 id="listTitle">すべての課題</h2><button id="refresh" aria-label="Redmineのデータを同期">↻ 同期</button></div><div class="filters"><input id="search" type="search" aria-label="課題を検索" placeholder="課題名・番号で検索"><select id="status" aria-label="ステータス"></select><select id="priority" aria-label="優先度"></select><select id="due" aria-label="期限"><option value="">すべての期限</option><option value="late">期限超過</option><option value="week">7日以内</option><option value="none">期限なし</option></select></div><small id="count"></small><div id="issues"></div><div class="pager"><button id="prev">前へ</button><small id="pageInfo"></small><button id="next">次へ</button></div></section>
 <section class="panel" id="detail"><div class="empty">課題を選択すると、詳細と変更履歴を表示します。</div></section></div>
-<footer>TaskMineの主要操作を再現した独立したWebページです。<a href="https://taskmine.megawave.app/" target="_blank" rel="noopener noreferrer">機能の参考：TaskMine公式サイト</a> · <a href="/">ホーム</a><br>iOSホーム画面ウィジェット・45言語へのUI翻訳は対象外です。Markdown表示に対応しています（Textile形式は原文表示）。</footer></main>
+<footer><a href="/">ホーム</a></footer></main>
 <script>
 (function() {
   ${getMarkdownParserScript()}
@@ -66,6 +66,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
     state.projects = []; state.statuses = []; state.priorities = []; state.trackers = [];
     state.issues = []; state.members = []; state.selected = null; state.total = 0;
     state.project = ""; state.mine = false; state.user = null; state.loaded = false;
+    $("mode").hidden = false;
     $("mode").textContent = "未接続 · Redmineに接続してください";
     $("settings").open = true;
     setup(); render(); overview(); updateSync("未接続");
@@ -116,10 +117,9 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
     // Keep only display identity; /users/current can return sensitive extra fields.
     return {user: {id: current.id, login: current.login, firstname: current.firstname, lastname: current.lastname}, projects, statuses, priorities, trackers};
   }
-  function identity(a) {
-    const u = state.user;
-    const name = [u?.firstname, u?.lastname].filter(Boolean).join(" ") || u?.login || "";
-    $("mode").textContent = a.name + " · " + a.url + " · " + name;
+  function hideConnectionSummary() {
+    $("mode").textContent = "";
+    $("mode").hidden = true;
   }
   async function synchronize() {
     if (!state.account) { if (state.demo) load(); return; }
@@ -139,7 +139,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
       setup();
       if (state.statuses.some(s => String(s.id) === status)) $("status").value = status;
       if (state.priorities.some(p => String(p.id) === priority)) $("priority").value = priority;
-      identity(a);
+      hideConnectionSummary();
       const selectedId = state.selected?.id;
       const ok = await load();
       if (state.account !== a) return;
@@ -173,6 +173,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
     state.selected = null;
     state.project = "";
     state.mine = false;
+    $("mode").hidden = false;
     $("mode").textContent = "デモモード · 接続せずに操作を試せます";
     setup();
     render(); overview(); updateSync("操作デモ · 実際のRedmineには反映されません");
@@ -544,7 +545,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
     state.statuses = a.statuses;
     state.priorities = a.priorities;
     state.trackers = a.trackers;
-    identity(a);
+    hideConnectionSummary();
     setup(); overview(); updateSync("同期中…");
     await load();
   }
