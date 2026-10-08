@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { getTaskminePage } from './taskmine';
 
-function page() { return new JSDOM(getTaskminePage(), { runScripts: 'dangerously', url: 'https://example.com/taskmine' }); }
+function page(demo = true) {
+  const dom = new JSDOM(getTaskminePage(), { runScripts: 'dangerously', url: 'https://example.com/taskmine' });
+  if (demo) { const select = dom.window.document.querySelector('#account')! as unknown as HTMLSelectElement; select.value = 'demo'; select.dispatchEvent(new dom.window.Event('change')); }
+  return dom;
+}
 describe('Taskmine', () => {
   it('renders executable scripts and demo issues; filters and shows detail safely', () => {
     const dom = page();
@@ -56,29 +60,32 @@ describe('Taskmine', () => {
   });
 });
 
-function remotePage(fail = false) {
+function remotePage(fail = false, empty = false) {
+  const control = { fail, empty, failIssues: false, updated: false, issues: [] as any[], tick: () => {} };
   const calls: {url: URL; options: any}[] = [];
   let time = Date.now();
   const dom = new JSDOM(getTaskminePage(), {runScripts:'dangerously', url:'https://example.com/taskmine', beforeParse(window) {
     window.Date.now = () => time += 2000;
     const w = window as any;
     w.AbortSignal.timeout = () => undefined;
+    w.setInterval = (handler: () => void) => { control.tick = handler; return 1; };
     w.fetch = async (input: string, options: any) => {
       const transport = new URL(input, "https://example.com");
       const url = new URL(transport.searchParams.get("path")!, transport.searchParams.get("base")! + "/"); calls.push({url, options});
       expect(transport.pathname).toBe("/api/taskmine/redmine");
       expect(options.credentials).toBe("same-origin");
-      if(fail) throw new Error('CORS failure');
+      if(control.fail || control.failIssues && url.pathname.endsWith('/issues.json')) throw new Error('network failure');
       let data: any;
-      if(url.pathname.endsWith('/projects.json')) data = {projects:[{id:7,name:'Remote'}],total_count:1};
+      if(url.pathname.endsWith('/current.json')) data = {user:{id:4,login:'alice',firstname:'Alice',lastname:'Test'}};
+      else if(url.pathname.endsWith('/projects.json')) data = {projects:control.empty ? [] : [{id:7,name:control.updated ? 'Updated project' : 'Remote',identifier:'remote',description:'Real project <img src=x onerror=alert(1)>',updated_on:'2026-10-08T00:00:00Z'}],total_count:control.empty ? 0 : 1};
       else if(url.pathname.endsWith('/issue_statuses.json')) data = {issue_statuses:[{id:1,name:'Open'}]};
       else if(url.pathname.endsWith('/issue_priorities.json')) data = {issue_priorities:[{id:2,name:'Normal'}]};
       else if(url.pathname.endsWith('/trackers.json')) data = {trackers:[{id:1,name:'Task'}]};
       else if(url.pathname.endsWith('/memberships.json')) data = {memberships:[{user:{id:4,name:'Member'}}],total_count:1};
       else if(url.pathname.endsWith('/uploads.json')) data = {upload:{token:'upload-token'}};
       else if(options.method==='POST') data = {issue:{id:9}};
-      else if(url.pathname.endsWith('/9.json')) data = {issue:{id:9,subject:'Remote issue',project:{id:7,name:'Remote'},status:{id:1,name:'Open'},priority:{id:2,name:'Normal'},tracker:{id:1,name:'Task'},journals:[]}};
-      else data = {issues:[],total_count:0};
+      else if(url.pathname.endsWith('/9.json')) data = {issue:{id:9,subject:control.updated ? 'Updated remote issue' : 'Remote issue',project:{id:7,name:'Remote'},status:{id:1,name:'Open'},priority:{id:2,name:'Normal'},tracker:{id:1,name:'Task'},journals:[]}};
+      else data = {issues:control.issues,total_count:control.issues.length};
       return {status:200,ok:true,json:async()=>data};
     };
   }});
@@ -86,7 +93,7 @@ function remotePage(fail = false) {
   (d.querySelector('#serverUrl') as HTMLInputElement).value='https://redmine.example/redmine/';
   (d.querySelector('#apiKey') as HTMLInputElement).value='private-api-key';
   d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
-  return {dom,d,calls};
+  return {dom,d,calls,control};
 }
 describe('Taskmine Redmine REST integration', () => {
   it('connects a subdirectory server, filters assigned issues, creates and reloads a real issue', async () => {
@@ -123,12 +130,106 @@ describe('Taskmine Redmine REST integration', () => {
     expect(d.cookie).not.toContain('private-api-key');
     dom.window.close();
   });
-  it('shows connection failures and keeps the demo usable', async () => {
+  it('shows connection failures without displaying demo issues as real data', async () => {
     const {dom,d}=remotePage(true);
     await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('Worker'));
-    expect(d.querySelectorAll('.issue')).toHaveLength(4);
-    expect(d.querySelector('#account')!.children).toHaveLength(1);
+    expect(d.querySelectorAll('.issue')).toHaveLength(0);
+    expect(d.querySelector('#account')!.children).toHaveLength(2);
     expect(d.querySelector<HTMLButtonElement>('#connection button')!.disabled).toBe(false);
+    dom.window.close();
+  });
+});
+
+
+describe('Taskmine real-data workspace and synchronization', () => {
+  it('starts disconnected with no sample data and asks for a Redmine connection', () => {
+    const dom = page(false); const d = dom.window.document;
+    expect(d.querySelectorAll('.issue')).toHaveLength(0);
+    expect(d.querySelector('#mode')!.textContent).toContain('未接続');
+    expect(d.querySelector<HTMLButtonElement>('#newIssue')!.disabled).toBe(true);
+    expect(d.querySelector<HTMLDetailsElement>('#settings')!.open).toBe(true);
+    dom.window.close();
+  });
+  it('shows real projects and identity even when there are no issues', async () => {
+    const {dom,d,calls}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    expect(calls.some(c=>c.url.pathname.endsWith('/users/current.json'))).toBe(true);
+    expect(d.querySelector('#mode')!.textContent).toContain('Alice Test');
+    expect(d.querySelector('#detail')!.textContent).toContain('プロジェクト一覧');
+    expect(d.querySelector('#detail')!.textContent).toContain('Real project <img');
+    expect(d.querySelector('#detail img')).toBeNull();
+    expect(d.querySelector('#issues')!.textContent).toContain('課題はまだ登録されていません');
+    expect(d.querySelector('#pageInfo')!.textContent).toBe('0件');
+    dom.window.close();
+  });
+  it('accepts an authenticated account with no visible projects and explains permissions', async () => {
+    const {dom,d}=remotePage(false,true);
+    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('Alice Test'));
+    expect(d.querySelector('#detail')!.textContent).toContain('閲覧できるプロジェクトがありません');
+    expect(d.querySelector<HTMLButtonElement>('#newIssue')!.disabled).toBe(true);
+    dom.window.close();
+  });
+  it('refreshes project metadata and issues and preserves data if synchronization fails', async () => {
+    const {dom,d,calls,control}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    control.updated=true;
+    control.issues=[{id:21,subject:'Backend change',project:{id:7,name:'Updated project'},status:{id:1,name:'Open'},priority:{id:2,name:'Normal'},tracker:{id:1,name:'Task'}}];
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#issues')!.textContent).toContain('Backend change'));
+    expect(d.querySelector('#projects')!.textContent).toContain('Updated project');
+    expect(calls.filter(c=>c.url.pathname.endsWith('/projects.json'))).toHaveLength(2);
+    control.fail=true;
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期失敗'));
+    expect(d.querySelector('#issues')!.textContent).toContain('Backend change');
+    expect(d.querySelector<HTMLButtonElement>('#refresh')!.disabled).toBe(false);
+    dom.window.close();
+  });
+  it('supports automatic synchronization and pauses it while editing', async () => {
+    const {dom,d,calls,control}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    const auto=d.querySelector<HTMLInputElement>('#autoSync')!; auto.checked=true;
+    control.updated=true; control.tick();
+    await vi.waitFor(()=>expect(d.querySelector('#projects')!.textContent).toContain('Updated project'));
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    (d.querySelector('#newIssue') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#assignee')!.textContent).toContain('Member'));
+    const count=calls.length;
+    control.tick();
+    expect(calls.length).toBe(count);
+    expect(d.querySelector('#syncState')!.textContent).toContain('編集中');
+    dom.window.close();
+  });
+});
+
+
+describe('Taskmine refreshed details and issue failures', () => {
+  it('reloads the selected issue detail when changes were made in Redmine', async () => {
+    const {dom,d,control}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    control.issues=[{id:9,subject:'Remote issue',project:{id:7,name:'Remote'},status:{id:1,name:'Open'},priority:{id:2,name:'Normal'},tracker:{id:1,name:'Task'}}];
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelectorAll('.issue')).toHaveLength(1));
+    await vi.waitFor(()=>expect(d.querySelector<HTMLButtonElement>('#refresh')!.disabled).toBe(false));
+    (d.querySelector('.issue') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#detail')!.textContent).toContain('変更履歴'));
+    control.updated=true;
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#detail')!.textContent).toContain('Updated remote issue'));
+    dom.window.close();
+  });
+  it('keeps the previous issue list when metadata refresh succeeds but issue retrieval fails', async () => {
+    const {dom,d,control}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    control.issues=[{id:9,subject:'Previously loaded',project:{id:7,name:'Remote'},status:{id:1,name:'Open'},priority:{id:2,name:'Normal'},tracker:{id:1,name:'Task'}}];
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#issues')!.textContent).toContain('Previously loaded'));
+    await vi.waitFor(()=>expect(d.querySelector<HTMLButtonElement>('#refresh')!.disabled).toBe(false));
+    control.failIssues=true;
+    (d.querySelector('#refresh') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期失敗'));
+    expect(d.querySelector('#issues')!.textContent).toContain('Previously loaded');
+    expect(d.querySelector('#issues')!.textContent).not.toContain('まだ登録されていません');
     dom.window.close();
   });
 });

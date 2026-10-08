@@ -73,3 +73,11 @@ describe('Redmine HMAC proxy', () => {
     expect(res.status).toBe(502); expect(await res.text()).not.toContain('api-key leaked');
   });
 });
+
+
+it('allows reading only the authenticated Redmine user, not arbitrary users', () => {
+  expect(allowedRedminePath('GET', 'users/current.json')).toBe(true);
+  expect(allowedRedminePath('GET', 'users.json')).toBe(false);
+  expect(allowedRedminePath('GET', 'users/1.json')).toBe(false);
+  expect(allowedRedminePath('PUT', 'users/current.json')).toBe(false);
+});

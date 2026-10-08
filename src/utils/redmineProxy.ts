@@ -16,7 +16,7 @@ export function allowedRedminePath(method: string, path: string): boolean {
   let decoded: string;
   try { decoded = decodeURIComponent(pathname); } catch { return false; }
   if (/[\r\n\\%#?]/.test(decoded) || decoded.split('/').some(part => part === '.' || part === '..')) return false;
-  if (method === 'GET') return /^(projects|issue_statuses|enumerations\/issue_priorities|trackers|issues)\.json$/.test(pathname)
+  if (method === 'GET') return /^(users\/current|projects|issue_statuses|enumerations\/issue_priorities|trackers|issues)\.json$/.test(pathname)
     || /^projects\/[1-9]\d*\/memberships\.json$/.test(pathname)
     || /^issues\/[1-9]\d*\.json$/.test(pathname)
     || /^attachments\/download\/[1-9]\d*(\/[^/]+)?$/.test(pathname) && /^attachments\/download\/[1-9]\d*(\/[^/]+)?$/.test(decoded);
