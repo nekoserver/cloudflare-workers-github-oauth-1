@@ -56,7 +56,7 @@ describe('Taskmine', () => {
   });
 });
 
-function remotePage(fail = false) {
+function remotePage(fail: boolean | 'auth' = false) {
   const calls: {url: URL; options: any}[] = [];
   let time = Date.now();
   const dom = new JSDOM(getTaskminePage(), {runScripts:'dangerously', url:'https://example.com/taskmine', beforeParse(window) {
@@ -64,10 +64,17 @@ function remotePage(fail = false) {
     const w = window as any;
     w.AbortSignal.timeout = () => undefined;
     w.fetch = async (input: string, options: any) => {
-      const url = new URL(input); calls.push({url, options});
-      if(fail) throw new Error('CORS failure');
+      const transport = new URL(input, window.location.href);
+      if(transport.origin !== window.location.origin || transport.pathname !== '/api/taskmine/redmine') throw new Error('browser CORS blocked');
+      expect(options.credentials).toBe('same-origin');
+      const url = new URL(options.headers['X-Redmine-URL'] + '/' + options.headers['X-Redmine-Path']);
+      options={...options,method:options.headers['X-Redmine-Method']};
+      calls.push({url, options});
+      if(fail === true) throw new Error('connection failure');
+      if(fail === 'auth') return {status:401,ok:false,json:async()=>({error:'Redmineの認証に失敗しました。APIキーを確認してください。',errorCode:'REDMINE_AUTH'})};
       let data: any;
-      if(url.pathname.endsWith('/projects.json')) data = {projects:[{id:7,name:'Remote'}],total_count:1};
+      if(url.pathname.endsWith('/users/current.json')) data={user:{id:4,login:'alice'}};
+      else if(url.pathname.endsWith('/projects.json')) data = {projects:[{id:7,name:'Remote'}],total_count:1};
       else if(url.pathname.endsWith('/issue_statuses.json')) data = {issue_statuses:[{id:1,name:'Open'}]};
       else if(url.pathname.endsWith('/issue_priorities.json')) data = {issue_priorities:[{id:2,name:'Normal'}]};
       else if(url.pathname.endsWith('/trackers.json')) data = {trackers:[{id:1,name:'Task'}]};
@@ -80,15 +87,15 @@ function remotePage(fail = false) {
     };
   }});
   const d=dom.window.document;
-  (d.querySelector('#serverUrl') as HTMLInputElement).value='https://redmine.example/redmine/';
+  (d.querySelector('#serverUrl') as HTMLInputElement).value='https://mynw.nekomaneki.work/redmine/';
   (d.querySelector('#apiKey') as HTMLInputElement).value='private-api-key';
   d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
-  return {dom,d,calls};
+  return {dom,d,calls,setFailure:(value: boolean)=>{fail=value;}};
 }
 describe('Taskmine Redmine REST integration', () => {
   it('connects a subdirectory server, filters assigned issues, creates and reloads a real issue', async () => {
     const {dom,d,calls}=remotePage();
-    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('https://redmine.example/redmine'));
+    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('https://mynw.nekomaneki.work/redmine'));
     (d.querySelector('#mine') as HTMLElement).click();
     await vi.waitFor(()=>expect(calls.some(c=>c.url.searchParams.get('assigned_to_id')==='me')).toBe(true));
     (d.querySelector('#newIssue') as HTMLElement).click();
@@ -114,15 +121,26 @@ describe('Taskmine Redmine REST integration', () => {
     expect(update.url.pathname).toBe('/redmine/issues/9.json');
     expect(JSON.parse(update.options.body).issue).toMatchObject({notes:'updated',done_ratio:80});
     await vi.waitFor(()=>expect(d.querySelector('#detail')!.textContent).toContain('変更履歴'));
+    expect(calls[0].url.pathname).toBe('/redmine/users/current.json');
     expect(calls.every(c=>c.options.headers['X-Redmine-API-Key']==='private-api-key')).toBe(true);
     expect(d.querySelector<HTMLInputElement>('#apiKey')!.value).toBe('');
     expect(dom.window.localStorage.length).toBe(0);
     expect(d.cookie).not.toContain('private-api-key');
     dom.window.close();
   });
+  it('shows authentication errors and allows retry after correcting the API key', async () => {
+    const {dom,d,setFailure}=remotePage('auth');
+    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('APIキー'));
+    expect(d.querySelector('#account')!.children).toHaveLength(1);
+    setFailure(false);
+    d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    await vi.waitFor(()=>expect(d.querySelector('#mode')!.textContent).toContain('mynw.nekomaneki.work'));
+    expect(d.querySelector('#account')!.children).toHaveLength(2);
+    dom.window.close();
+  });
   it('shows connection failures and keeps the demo usable', async () => {
     const {dom,d}=remotePage(true);
-    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('CORS'));
+    await vi.waitFor(()=>expect(d.querySelector('#message')!.textContent).toContain('通信'));
     expect(d.querySelectorAll('.issue')).toHaveLength(4);
     expect(d.querySelector('#account')!.children).toHaveLength(1);
     expect(d.querySelector<HTMLButtonElement>('#connection button')!.disabled).toBe(false);
