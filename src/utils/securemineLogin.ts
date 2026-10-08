@@ -35,7 +35,7 @@ export async function securemineLogin(c: Context<AppEnv>) {
     for (const cookie of renewed.cookies) c.header('Set-Cookie',cookie,{append:true});
     c.header('Set-Cookie',`${SECUREMINE_COOKIE}=${token}; Path=/api/taskmine; HttpOnly; Secure; SameSite=Lax; Max-Age=${SECUREMINE_TTL}`,{append:true});
     return c.json({loggedInAt:now,expiresAt,user:identity},200,headers);
-  } catch { return c.json({error:'ログイン情報を保存できません。接続設定とDBの状態を確認してください。'},503,headers); }
+  } catch { return c.json({error:'Redmine HTTP 502: ログイン情報を保存できません。接続設定とDBの状態を確認してください。'},502,headers); }
 }
 export async function securemineSession(c: Context<AppEnv>) {
   try {
