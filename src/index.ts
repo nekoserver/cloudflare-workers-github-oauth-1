@@ -97,7 +97,7 @@ import {
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
 import { getD1BindingCount, validateD1BindingValues } from './utils/d1QueryBindings';
 import { buildThreadGrowthWindow, createThreadId, isThreadId, parseGrowingThreadLimit } from './utils/aichatThreads';
-import { encodeSseEvent, parseAichatStreamData } from './utils/aichatSse';
+import { encodeSseEvent, parseAichatStreamData, withSseHeartbeat } from './utils/aichatSse';
 import {
   buildGithubRepositoryApiUrl,
   buildGithubTreeApiUrl,
@@ -6759,6 +6759,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         const isFallback = i > 0;
+        let streamCancelled = false;
+        const reader = upstream.getReader();
         const responseStream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controller.enqueue(encoder.encode(encodeSseEvent('start', {
@@ -6766,7 +6768,6 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
               systemPromptMode,
               ...(isFallback ? { fallbackUsed: true } : {}),
             })));
-            const reader = upstream.getReader();
             let buffer = '';
             let rawResponse = '';
             let emittedResponse = '';
@@ -6774,6 +6775,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
             try {
               while (true) {
                 const { value, done } = await reader.read();
+                if (streamCancelled) return;
                 buffer += decoder.decode(value, { stream: !done });
                 const blocks = buffer.split(/\r?\n\r?\n/);
                 buffer = done ? '' : (blocks.pop() ?? '');
@@ -6794,9 +6796,11 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
                 }
                 if (done) break;
               }
+              if (streamCancelled) return;
               const response = stripThinkTags(rawResponse);
               if (!response) throw new Error(`AI returned empty streaming response [model=${model}]`);
               const saved = await autoSave(response, model, usage, threadId);
+              if (streamCancelled) return;
               if ('saveError' in saved && requestedThreadId) {
                 throw new Error('追加質問をスレッドへ保存できませんでした: ' + saved.saveError);
               }
@@ -6809,20 +6813,22 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
                 ...('saveError' in saved ? {} : saved),
               })));
             } catch (err) {
+              if (streamCancelled) return;
               logger.warn('AI chat stream failed', { model, user: user.sub, error: err instanceof Error ? err.message : 'Unknown error' });
               controller.enqueue(encoder.encode(encodeSseEvent('error', {
                 error: err instanceof Error ? err.message : 'AIストリームの受信に失敗しました',
               })));
             } finally {
               reader.releaseLock();
-              controller.close();
+              if (!streamCancelled) controller.close();
             }
           },
           cancel() {
-            void upstream.cancel('client disconnected');
+            streamCancelled = true;
+            return reader.cancel('client disconnected');
           },
         });
-        return new Response(responseStream, {
+        return new Response(withSseHeartbeat(responseStream), {
           headers: {
             'Content-Type': 'text/event-stream; charset=utf-8',
             'Cache-Control': 'no-cache, no-transform',
