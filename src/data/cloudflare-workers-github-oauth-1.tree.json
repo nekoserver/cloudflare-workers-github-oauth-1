@@ -7,7 +7,11 @@
       "type": "file"
     },
     {
-      "name": "API.cloudflare-workers-github-oauth-1.latest.md",
+      "name": "API.cloudflare-workers-github-oauth-1.20260924.md",
+      "type": "file"
+    },
+    {
+      "name": "BUGREPORT.cloudflare-workers-github-oauth-1.20261008.md",
       "type": "file"
     },
     {
@@ -71,6 +75,22 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.aichat-page.20260924.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.apis-external-policy.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.askgk-slack-support.20261003.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260928.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.code-review.md",
       "type": "file"
     },
@@ -83,7 +103,15 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.shared-functions.20260928.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "HISTORY.-20260928.md",
       "type": "file"
     },
     {
@@ -223,6 +251,18 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20260926.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261004.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261008.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.COMMITDB.md",
       "type": "file"
     },
@@ -248,6 +288,14 @@
     },
     {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.aichat.20260808.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.cloudflare-wasm-inventory.20260929.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.cursor-redmine-workers.md",
       "type": "file"
     },
     {
@@ -291,6 +339,14 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.sqlx-d1.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.stats-chart.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.tree-wasm.md",
       "type": "file"
     },
@@ -308,6 +364,10 @@
     },
     {
       "name": "PLAN.cloudflare-workers-github-oauth-1.20260917.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.askgk-slack-support.20261003.md",
       "type": "file"
     },
     {
@@ -339,7 +399,15 @@
       "type": "file"
     },
     {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.FK-VERIFY.20260928.md",
+      "type": "file"
+    },
+    {
       "name": "REPORT.cloudflare-workers-github-oauth-1.REPOSITORIES.20260609.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.RUBYWASM-SQLXD1-FETCH.20260927.md",
       "type": "file"
     },
     {
@@ -387,6 +455,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260805-20260929.AICHAT_OVERVIEW.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.20260827.heritage-journey.md",
       "type": "file"
     },
@@ -428,6 +500,18 @@
     },
     {
       "name": "SPEC.cloudflare-workers-github-oauth-1.20260919.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20260924.auto-explore.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261004.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261008.access-centralization.md",
       "type": "file"
     },
     {
@@ -487,6 +571,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.askgk-settings-alias.20261003.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.md",
       "type": "file"
     },
@@ -496,6 +584,10 @@
     },
     {
       "name": "SPEC.cloudflare-workers-github-oauth-1.commit-summary-merge-sha.20260919.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.conversation-thread-growth.md",
       "type": "file"
     },
     {
@@ -515,7 +607,19 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.jev-table-pattern-scores.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.ruby-wasm-sqlx-d1-adapter.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.sqlx-d1.md",
       "type": "file"
     },
     {
@@ -527,7 +631,15 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.tvcron-countdown.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.webhook-log-status-indexes.md",
       "type": "file"
     },
     {
@@ -544,6 +656,10 @@
     },
     {
       "name": "STATS.COMMIT.203.-20250528.md",
+      "type": "file"
+    },
+    {
+      "name": "SUGGEST.cloudflare-workers-github-oauth-1.20261007.md",
       "type": "file"
     },
     {
@@ -573,6 +689,46 @@
     {
       "name": "chess-tsume-17te.md",
       "type": "file"
+    },
+    {
+      "name": "deploy",
+      "type": "dir",
+      "children": [
+        {
+          "name": "redmine",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README.md",
+              "type": "file"
+            },
+            {
+              "name": "apache-cgi.conf.example",
+              "type": "file"
+            },
+            {
+              "name": "apache.conf.example",
+              "type": "file"
+            },
+            {
+              "name": "config.json.example",
+              "type": "file"
+            },
+            {
+              "name": "gateway.cgi",
+              "type": "file"
+            },
+            {
+              "name": "gateway.wsgi",
+              "type": "file"
+            },
+            {
+              "name": "test_gateway.py",
+              "type": "file"
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "dynamicneko-aichat-flow.html",
@@ -1215,6 +1371,30 @@
         {
           "name": "0160_add_error_message_to_tree_view_update_log.sql",
           "type": "file"
+        },
+        {
+          "name": "0161_reconcile_api_endpoint_stats.sql",
+          "type": "file"
+        },
+        {
+          "name": "0163_create_mention_editor_documents.sql",
+          "type": "file"
+        },
+        {
+          "name": "0165_add_thread_id_to_ai_chat_shares.sql",
+          "type": "file"
+        },
+        {
+          "name": "0166_seed_ai_chat_threads.sql",
+          "type": "file"
+        },
+        {
+          "name": "0167_create_aichat_keyword_registry.sql",
+          "type": "file"
+        },
+        {
+          "name": "0168_create_securemine_sessions.sql",
+          "type": "file"
         }
       ]
     },
@@ -1449,6 +1629,22 @@
             {
               "name": "sqlc.wasm",
               "type": "file"
+            },
+            {
+              "name": "sqlx.d.ts",
+              "type": "file"
+            },
+            {
+              "name": "sqlx.js",
+              "type": "file"
+            },
+            {
+              "name": "sqlx_bg.wasm",
+              "type": "file"
+            },
+            {
+              "name": "sqlx_bg.wasm.d.ts",
+              "type": "file"
             }
           ]
         },
@@ -1487,6 +1683,10 @@
           "type": "file"
         },
         {
+          "name": "build-sqlx-wasm.sh",
+          "type": "file"
+        },
+        {
           "name": "build-tree-wasm.sh",
           "type": "file"
         },
@@ -1507,6 +1707,14 @@
               "type": "file"
             }
           ]
+        },
+        {
+          "name": "evaluate-table-pattern-scores.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "evaluate-table-pattern-scores.ts",
+          "type": "file"
         },
         {
           "name": "generate-d1-query-catalog-inserts.js",
@@ -1613,6 +1821,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-askgk-save-integration.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-auto-vectorize-settings.test.ts",
           "type": "file"
         },
@@ -1622,6 +1834,10 @@
         },
         {
           "name": "aichat-calendar-visible.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-canvas-theme.test.ts",
           "type": "file"
         },
         {
@@ -1638,6 +1854,26 @@
         },
         {
           "name": "aichat-classify-input-keyboard.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-claude-codex-link-footnotes-20261008.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-codex-model-select.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-codex-question-display.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-codex-sidebar-color.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-cross-model-page-20261008.test.ts",
           "type": "file"
         },
         {
@@ -1678,6 +1914,10 @@
         },
         {
           "name": "aichat-history-modal-e2e.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-history-modal-frame-toggle.test.ts",
           "type": "file"
         },
         {
@@ -1722,6 +1962,10 @@
         },
         {
           "name": "aichat-image-register-dedupe.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-keyboard-scroll-hang-20261008.test.ts",
           "type": "file"
         },
         {
@@ -1781,6 +2025,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-keyword-registry.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-kw-cat-badge-dimmed.test.ts",
           "type": "file"
         },
@@ -1814,6 +2062,10 @@
         },
         {
           "name": "aichat-kw-group-badge-click.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-group-dim-hide-keywords.test.ts",
           "type": "file"
         },
         {
@@ -1870,6 +2122,10 @@
         },
         {
           "name": "aichat-model-dot-dropdown.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-model-params-tuning.test.ts",
           "type": "file"
         },
         {
@@ -1985,6 +2241,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-share-syntax-highlight-20261008.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-shares-token-display.test.ts",
           "type": "file"
         },
@@ -1998,6 +2258,14 @@
         },
         {
           "name": "aichat-slack-log-preview-freeze.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-askgk-codex-persist.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-askgk.test.ts",
           "type": "file"
         },
         {
@@ -2025,6 +2293,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-slash-jev.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-slash-limit.test.ts",
           "type": "file"
         },
@@ -2037,6 +2309,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-slash-ruby.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-slash-rubyver.test.ts",
           "type": "file"
         },
@@ -2046,6 +2322,10 @@
         },
         {
           "name": "aichat-slash-search.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-slash-secureminelog.test.ts",
           "type": "file"
         },
         {
@@ -2089,6 +2369,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-sse-integration.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-subqueries-cat-badge-color-20260817.test.ts",
           "type": "file"
         },
@@ -2109,11 +2393,27 @@
           "type": "file"
         },
         {
+          "name": "aichat-subquery-new-entry.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-subquery-selection.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-swipe-highlight-bugfix.test.ts",
           "type": "file"
         },
         {
           "name": "aichat-swipe-text-selection.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-thread-tracker-handoff.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-threads.test.ts",
           "type": "file"
         },
         {
@@ -2389,7 +2689,15 @@
           "type": "file"
         },
         {
+          "name": "call-graph-file-shade-color-20260924.test.ts",
+          "type": "file"
+        },
+        {
           "name": "call-graph-route-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-access-verify-page-20261008.test.ts",
           "type": "file"
         },
         {
@@ -2438,6 +2746,10 @@
         },
         {
           "name": "commit-checker-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-summary-allowed-repos-20261001.test.ts",
           "type": "file"
         },
         {
@@ -2565,6 +2877,10 @@
               "type": "file"
             },
             {
+              "name": "rails-root.tree.json",
+              "type": "file"
+            },
+            {
               "name": "routeCities.ts",
               "type": "file"
             },
@@ -2592,6 +2908,10 @@
         },
         {
           "name": "db-table-registry-completeness-20260728.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "deploy-script.test.ts",
           "type": "file"
         },
         {
@@ -2655,6 +2975,10 @@
           "type": "file"
         },
         {
+          "name": "fk-verification.test.ts",
+          "type": "file"
+        },
+        {
           "name": "flyBrainLogic.test.ts",
           "type": "file"
         },
@@ -2692,6 +3016,10 @@
         },
         {
           "name": "gh-pr-list-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "github-push-notify-20261001.test.ts",
           "type": "file"
         },
         {
@@ -3403,6 +3731,18 @@
           "type": "file"
         },
         {
+          "name": "mention-editor-json-save.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "mention-editor-page-20260927.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "mention-editor-storage.test.ts",
+          "type": "file"
+        },
+        {
           "name": "merge-fk-targets.test.ts",
           "type": "file"
         },
@@ -3437,6 +3777,10 @@
           "type": "file"
         },
         {
+          "name": "picoruby-wasm-removal.test.ts",
+          "type": "file"
+        },
+        {
           "name": "publicKey-countdown-deadline.test.ts",
           "type": "file"
         },
@@ -3454,6 +3798,18 @@
         },
         {
           "name": "publicKeySecurityEvents-20260904.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "query-builder-page-20260927.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "query-builder-route-20260927.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "query-pattern-analysis-route.test.ts",
           "type": "file"
         },
         {
@@ -3485,6 +3841,10 @@
           "type": "file"
         },
         {
+          "name": "resend-webhook-migration.test.ts",
+          "type": "file"
+        },
+        {
           "name": "resend-webhook-route.test.ts",
           "type": "file"
         },
@@ -3506,6 +3866,14 @@
           "children": [
             {
               "name": "ai-summary.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.ts",
               "type": "file"
             },
             {
@@ -3599,7 +3967,7 @@
           "type": "file"
         },
         {
-          "name": "slack-interactions-route.test.ts",
+          "name": "slack-interactions-behavior.test.ts",
           "type": "file"
         },
         {
@@ -3619,6 +3987,14 @@
           "type": "file"
         },
         {
+          "name": "sqlx-wasm-20260924.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "status-aichat-images-preview.test.ts",
+          "type": "file"
+        },
+        {
           "name": "status-migration-consistency.test.ts",
           "type": "file"
         },
@@ -3627,11 +4003,23 @@
           "type": "file"
         },
         {
+          "name": "test-file-catalog.test.ts",
+          "type": "file"
+        },
+        {
           "name": "test-setup-heritage-journey-city-cookies.ts",
           "type": "file"
         },
         {
+          "name": "thread-tracker.test.ts",
+          "type": "file"
+        },
+        {
           "name": "tree-view-cron-countdown.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-cron-notification.test.ts",
           "type": "file"
         },
         {
@@ -3651,7 +4039,15 @@
           "type": "file"
         },
         {
+          "name": "tsubuyaki-all-entry-points-consistency.test.ts",
+          "type": "file"
+        },
+        {
           "name": "tsubuyaki-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tsubuyaki-notify-behavior.test.ts",
           "type": "file"
         },
         {
@@ -3687,7 +4083,23 @@
               "type": "file"
             },
             {
+              "name": "aichatCrossModelQuestions.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatCrossModelQuestions.ts",
+              "type": "file"
+            },
+            {
               "name": "aichatImage.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatLinkFootnotes.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatLinkFootnotes.ts",
               "type": "file"
             },
             {
@@ -3719,6 +4131,18 @@
               "type": "file"
             },
             {
+              "name": "aichatSse.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatSse.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatThreads.ts",
+              "type": "file"
+            },
+            {
               "name": "apiKeyStats.test.ts",
               "type": "file"
             },
@@ -3735,11 +4159,27 @@
               "type": "file"
             },
             {
+              "name": "browserEscapeCompatibility.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "buildAiMessages.test.ts",
+              "type": "file"
+            },
+            {
               "name": "buildAiMessages.ts",
               "type": "file"
             },
             {
               "name": "callGraphBuilder.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfAccessVerify.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfAccessVerify.ts",
               "type": "file"
             },
             {
@@ -3759,6 +4199,22 @@
               "type": "file"
             },
             {
+              "name": "codexAskgkQuestion.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexAskgkQuestion.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexAskgkReply.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexAskgkReply.ts",
+              "type": "file"
+            },
+            {
               "name": "columnRelationStats.test.ts",
               "type": "file"
             },
@@ -3772,6 +4228,10 @@
             },
             {
               "name": "commitAgentLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitSummaryAllowedRepos.ts",
               "type": "file"
             },
             {
@@ -3939,6 +4399,14 @@
               "type": "file"
             },
             {
+              "name": "githubPushNotify.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "githubPushNotify.ts",
+              "type": "file"
+            },
+            {
               "name": "githubWebhook.ts",
               "type": "file"
             },
@@ -3972,6 +4440,14 @@
             },
             {
               "name": "html.ts",
+              "type": "file"
+            },
+            {
+              "name": "installationPermissionsAction.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "installationPermissionsAction.ts",
               "type": "file"
             },
             {
@@ -4039,7 +4515,15 @@
               "type": "file"
             },
             {
+              "name": "jwt-security.test.ts",
+              "type": "file"
+            },
+            {
               "name": "jwt.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordClassificationModal.ts",
               "type": "file"
             },
             {
@@ -4052,6 +4536,10 @@
             },
             {
               "name": "keywordHighlight.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordPickerWidget.test.ts",
               "type": "file"
             },
             {
@@ -4099,11 +4587,23 @@
               "type": "file"
             },
             {
+              "name": "mentionEditorConfig.ts",
+              "type": "file"
+            },
+            {
               "name": "mergeColumnsFromRows.test.ts",
               "type": "file"
             },
             {
               "name": "mlbDivisions.ts",
+              "type": "file"
+            },
+            {
+              "name": "modalRuntime.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "modalRuntime.ts",
               "type": "file"
             },
             {
@@ -4143,11 +4643,35 @@
               "type": "file"
             },
             {
+              "name": "queryBuilder.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryBuilder.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryPatternAnalysis.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryPatternAnalysis.ts",
+              "type": "file"
+            },
+            {
               "name": "railLineStations.test.ts",
               "type": "file"
             },
             {
               "name": "railLineStations.ts",
+              "type": "file"
+            },
+            {
+              "name": "redmineProxy.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "redmineProxy.ts",
               "type": "file"
             },
             {
@@ -4188,6 +4712,42 @@
             },
             {
               "name": "rubyWasmLoader.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineCalendar.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineCalendar.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineCommitDays.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineCommitDays.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineLogin.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineLogin.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineSectionTabs.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineSectionTabs.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineSessionStore.ts",
               "type": "file"
             },
             {
@@ -4271,6 +4831,14 @@
               "type": "file"
             },
             {
+              "name": "syntaxHighlight.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "syntaxHighlight.ts",
+              "type": "file"
+            },
+            {
               "name": "textToMarkdown.test.ts",
               "type": "file"
             },
@@ -4295,6 +4863,10 @@
               "type": "file"
             },
             {
+              "name": "treeViewCronNotify.ts",
+              "type": "file"
+            },
+            {
               "name": "treeViewSnapshot.test.ts",
               "type": "file"
             },
@@ -4308,6 +4880,14 @@
             },
             {
               "name": "treeWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "tunnelSignerAsk.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tunnelSignerAsk.ts",
               "type": "file"
             },
             {
@@ -4336,6 +4916,10 @@
             },
             {
               "name": "wasmModuleSource.ts",
+              "type": "file"
+            },
+            {
+              "name": "webhookSlackSettingDiagnostics.ts",
               "type": "file"
             },
             {
@@ -4382,6 +4966,10 @@
             },
             {
               "name": "aichat.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatCrossModel.ts",
               "type": "file"
             },
             {
@@ -4437,11 +5025,31 @@
               "type": "file"
             },
             {
+              "name": "cfAccessVerify.ts",
+              "type": "file"
+            },
+            {
               "name": "cheeseSearch.ts",
               "type": "file"
             },
             {
               "name": "chessBoard.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.build.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.keywords.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.longpress.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexQuestionTree.ts",
               "type": "file"
             },
             {
@@ -4637,6 +5245,10 @@
               "type": "file"
             },
             {
+              "name": "mentionEditor.ts",
+              "type": "file"
+            },
+            {
               "name": "mlbSphere-jp-today-start-flash.test.ts",
               "type": "file"
             },
@@ -4698,6 +5310,18 @@
             },
             {
               "name": "publicKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryBuilderPage.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryPatternAnalysis.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "queryPatternAnalysis.ts",
               "type": "file"
             },
             {
@@ -4769,6 +5393,10 @@
               "type": "file"
             },
             {
+              "name": "sqlxWasm.ts",
+              "type": "file"
+            },
+            {
               "name": "status-table-status.test.ts",
               "type": "file"
             },
@@ -4785,7 +5413,27 @@
               "type": "file"
             },
             {
+              "name": "taskmine.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "taskmine.ts",
+              "type": "file"
+            },
+            {
               "name": "tdf.ts",
+              "type": "file"
+            },
+            {
+              "name": "testFileCatalog.ts",
+              "type": "file"
+            },
+            {
+              "name": "threadTracker.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "threadTracker.ts",
               "type": "file"
             },
             {
@@ -4897,6 +5545,10 @@
               "type": "file"
             },
             {
+              "name": "webhookSlackSettingPage.ts",
+              "type": "file"
+            },
+            {
               "name": "welcome.ts",
               "type": "file"
             },
@@ -4924,6 +5576,10 @@
         },
         {
           "name": "wasm-gron-go-diff-registry-20260923.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "wasm-instantiate-streaming-mime-20260924.test.ts",
           "type": "file"
         },
         {
@@ -5131,7 +5787,23 @@
           "type": "file"
         },
         {
+          "name": "webhook-github-log-repository-20260925.test.ts",
+          "type": "file"
+        },
+        {
           "name": "webhook-github-pr-slack-independence.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-github-push-notify-20261001.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-slack-setting-diagnostics-20261001.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "webhook-slack-setting-page-20261001.test.ts",
           "type": "file"
         },
         {
@@ -5457,6 +6129,30 @@
             {
               "name": "main_test.go",
               "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "sqlx-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "Cargo.lock",
+              "type": "file"
+            },
+            {
+              "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
             }
           ]
         },
