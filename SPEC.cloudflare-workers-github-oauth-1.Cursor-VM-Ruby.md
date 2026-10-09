@@ -81,6 +81,43 @@ Redmine の Gemfile は `gem 'rails', '8.1.3.1'` と Ruby `>= 3.2.0, < 4.1.0` �
 
 以上は gem のインストール、CLI 起動、依存関係の確認であり、Rails サーバーの起動、DB 接続、マイグレーション、アプリの動作確認は実施していない。
 
+## Rails 関連 gem のインストール状況
+
+以下は同じ Ruby `4.0.7` の gem 環境で、`Gem::Specification.find_all_by_name` により確認したインストール済みバージョン。Rails 本体の各コンポーネントはすべて `8.1.4` と `8.1.3.1` が共存している。
+
+| Rails コンポーネント | インストール済みバージョン |
+| --- | --- |
+| railties | `8.1.4`、`8.1.3.1` |
+| actioncable / actionmailbox / actionmailer | 各 `8.1.4`、`8.1.3.1` |
+| actionpack / actiontext / actionview | 各 `8.1.4`、`8.1.3.1` |
+| activejob / activemodel / activerecord | 各 `8.1.4`、`8.1.3.1` |
+| activestorage / activesupport | 各 `8.1.4`、`8.1.3.1` |
+
+主要な周辺 gem は以下のとおり。網羅的な全 gem 一覧ではなく、Rails の実行・画面・開発に関係する gem を抜粋している。
+
+| 関連 gem | インストール済みバージョン |
+| --- | --- |
+| rack / rackup | `3.2.7` / `2.3.1` |
+| puma / thruster | `8.0.2` / `0.1.26` |
+| sqlite3 | `2.9.6` |
+| propshaft | `1.3.2` |
+| importmap-rails | `2.2.3` |
+| turbo-rails / stimulus-rails | `2.0.23` / `1.3.4` |
+| jbuilder / bootsnap | `2.15.1` / `1.26.0` |
+| nokogiri / bcrypt | `1.19.4` / `3.1.22` |
+| image_processing / ruby-vips | `1.14.0` / `2.3.0` |
+| rubocop-rails / rubocop-rails-omakase | `2.38.0` / `1.1.0` |
+| brakeman / bundler-audit | `8.0.6` / `0.9.3` |
+| debug / web-console | `1.11.1` / `4.3.0` |
+| capybara / selenium-webdriver | `3.40.0` / `4.50.0` |
+| rails-dom-testing / rails-html-sanitizer | `2.3.0` / `1.7.1` |
+| actionpack-xml_parser / roadie-rails | `2.0.1` / `3.4.0` |
+| requestjs-rails / doorkeeper | `0.0.14` / `5.8.2` |
+
+`rails-root` と `rails-root-b` の Gemfile には、propshaft、sqlite3、puma、thruster、importmap-rails、turbo-rails、stimulus-rails、jbuilder、bootsnap、image_processing、および開発用の bundler-audit、brakeman、rubocop-rails-omakase が指定されている。Redmine の Gemfile には propshaft、importmap-rails、stimulus-rails、nokogiri、bcrypt などが指定されている。
+
+インストール済みであることと各アプリでの使用は別に確認する。たとえば `rails-root` の bcrypt 指定はコメントアウトされており、上表だけから同アプリでの利用を判断しない。アプリで選択される gem とバージョンは、そのアプリの Gemfile・Gemfile.lock に従う。
+
 ## Rails アプリ側の Kamal 設定
 
 `/home/box/apps/rails-root` と `/home/box/apps/rails-root-b` の両方で、以下を確認した。
