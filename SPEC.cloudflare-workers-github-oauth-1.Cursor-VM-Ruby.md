@@ -1,4 +1,4 @@
-# Cursor VM の Ruby・rbenv・Kamal
+# Cursor VM の Ruby・rbenv・Rails・Kamal
 
 確認日: 2026-10-09（JST）。`/home/box` 以下の実ファイルとコマンド出力に基づく環境記録。
 
@@ -57,7 +57,31 @@ Kamal は Ruby gem として `2.12.0` がインストール済み。`kamal versi
 
 インストール済み gem の README では、Kamal は Docker コンテナとしてアプリを配備し、SSHKit でサーバー上のコマンドを実行し、kamal-proxy でリクエストを切り替えるツールと説明されている。
 
-## Rails アプリ側の状態
+## Rails のインストール状況
+
+Ruby `4.0.7` の gem 環境に Rails `8.1.4` と `8.1.3.1` が共存している。リポジトリのルートで上記 PATH 設定を使用した `rails --version` は `Rails 8.1.4` を返した。
+
+| 項目 | 確認結果 |
+| --- | --- |
+| インストール済み rails gem | `8.1.4`、`8.1.3.1` |
+| railties / actionpack / activerecord / activesupport | それぞれ `8.1.4`、`8.1.3.1` |
+| shim | `/home/box/.rbenv/shims/rails` |
+| `rbenv which rails` | `/home/box/.rbenv/versions/4.0.7/bin/rails` |
+| gem 本体 | `/home/box/.rbenv/versions/4.0.7/lib/ruby/gems/4.0.0/gems/rails-8.1.4` および `rails-8.1.3.1` |
+
+各アプリのディレクトリで `bundle exec rails --version` と `bundle check` を実行した結果は以下のとおり。アプリごとの Rails バージョンは Gemfile と Gemfile.lock により選択される。
+
+| アプリ | `bundle exec rails --version` | `bundle check` |
+| --- | --- | --- |
+| `/home/box/apps/rails-root` | `Rails 8.1.4` | 依存 gem を満たしている |
+| `/home/box/apps/rails-root-b` | `Rails 8.1.4` | 依存 gem を満たしている |
+| `/home/box/apps/redmine` | `Rails 8.1.3.1` | 依存 gem を満たしている |
+
+Redmine の Gemfile は `gem 'rails', '8.1.3.1'` と Ruby `>= 3.2.0, < 4.1.0` を指定し、Gemfile.lock の Rails も `8.1.3.1`。`bundle check` は成功したが、Windows 向けの旧 platform 指定（`:mingw`、`:x64_mingw`、`:mswin`）に対する非推奨警告が出た。
+
+以上は gem のインストール、CLI 起動、依存関係の確認であり、Rails サーバーの起動、DB 接続、マイグレーション、アプリの動作確認は実施していない。
+
+## Rails アプリ側の Kamal 設定
 
 `/home/box/apps/rails-root` と `/home/box/apps/rails-root-b` の両方で、以下を確認した。
 
