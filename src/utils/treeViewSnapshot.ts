@@ -87,7 +87,7 @@ export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnaps
   'nekoserver/rails-root': railsRootTreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-01T00:00:00.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-09T00:00:00.000Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
 
