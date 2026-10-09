@@ -1,7 +1,7 @@
 # SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md
 
 **対象**: `/cursor-agent` ページ、Cursor Background Agent API（Cloud Agent / VM）、
-D1 `cursor_agent_*` テーブル、および今日以降の AIチャット入力窓・ダイナミックワーカー
+D1 `cursor_agent_*` テーブル、および今後追加する AIチャット入力窓・ダイナミックワーカー
 （`nekoserver/dynamicneko`）からの問い合わせ — いま実装済みの起動・チャンク結合・
 キャッシュ・応答検索・過去ログ検索を1箇所にまとめ、次に足す2経路の到達点を決める。
 
@@ -12,7 +12,7 @@ D1 `cursor_agent_*` テーブル、および今日以降の AIチャット入力
 
 ## 0. 到達点
 
-**対象**: cursor-agent 機能の「いまできること」と「今日以降にやること」の境界。
+**対象**: cursor-agent 機能の「いまできること」と「今後追加すること」の境界。
 
 | 状態 | 内容 |
 |---|---|
@@ -55,7 +55,11 @@ D1 `cursor_agent_*` テーブル、および今日以降の AIチャット入力
 
 許可リポジトリは当面 `nekoserver/cloudflare-workers-github-oauth-1` のみ
 （`CURSOR_AGENT_ALLOWED_REPOS`）。model は `grok-4.6`、effort `high`、fast `true`、
-`startingRef: main`。`agent_id` は **`agent.id` ネストのみ**（トップレベル `id` は見ない）。
+`startingRef: main`。`agent_id` は `extractCursorAgentId` で `agent.id` を優先し、
+そこに文字列の ID が無ければトップレベル `id` を読む。
+起動応答は `{ agent: {...}, run: {...} }`、状態取得応答は
+`{ id, status, ... }` のフラットな形にも対応する（`extractCursorAgentFields`）。
+これらは現行コードのリクエスト・応答処理を記述したものである。
 
 D1 保存失敗でも Cursor 起動自体は成功扱いで HTTP 200、`historySaved: false`
 （ルール8: 記録は logger、通知はレスポンス）。Cursor API 失敗は 502。
@@ -124,11 +128,23 @@ Cursor 会話 API が返す assistant 断片を、人間が読める1本の回�
 
 ### 書き込み条件
 
-成功終端（`agent_status` が `FINISHED` / `COMPLETED`、または `run_status` が `COMPLETED`）
+成功終端（`agent_status` が `FINISHED` / `COMPLETED` / `IDLE`、または `run_status` が `COMPLETED`）
 かつ結合後の回答が非空のときだけ INSERT。RUNNING 中の途中文は UNIQUE で永久保存しない
 （以後キャッシュ優先になり、完成文に更新できなくなる）。
 
-未完了の行は毎回会話 API を呼ぶ。キャッシュ読み出しも成功終端のときだけ行う。
+判定前に状態文字列を trim し、大文字へ正規化する。現行実装では、状態取得 API が
+実行中の作業が無い Agent に返す `IDLE` も成功終端として扱う。
+
+会話取得時、D1 の最新状態が成功終端でなく `CURSOR_API_KEY` が設定されていれば、
+先に `GET /v1/agents/{id}` で状態を再取得して status_log に追記し、再判定する。
+これにより `/neko csearch` の「表示」だけを使う場合も、起動時の RUNNING が
+残り続けてキャッシュを保存できない事態を防ぐ。状態再取得の失敗は logger に
+記録して会話取得を続ける（この失敗自体はレスポンスの error には載らない）。
+
+再判定後も未完了なら会話 API を呼び、回答は返すがキャッシュを読み書きしない。
+成功終端で既存の非空キャッシュがあれば `source: 'cache'`、それ以外は会話 API の
+回答を `source: 'api'` で返す。キャッシュ保存失敗も `cacheError` に載せる。
+キャッシュヒット時は `CURSOR_API_KEY` 未設定でも回答を返せる。
 
 表は assistant の回答本文だけ持つ。生の会話 JSON と `user_message` は持たない。
 
@@ -200,12 +216,14 @@ D1 の過去ログへは書かない。世代番号 `historyFetchSeq` と AbortC
 回答キャッシュの検索に失敗しました: D1_ERROR: no such table: cursor_agent_answer_cache: SQLITE_ERROR
 ```
 
-JOIN 失敗時は画面の列だけで再検索する。プロンプト等に一致すれば `rows` に載る。
+JOIN 失敗が回答キャッシュ表の欠落と判定された場合だけ、画面の列で再検索する。プロンプト等に一致すれば `rows` に載る。
 インクリメンタルが空一覧のまま死なないようにする。
+表欠落以外の SQL エラーやデータ破損では再検索せず、`rows: []` と `searchError` を返す。
 
 | 状態 | 見え方 |
 |---|---|
-| 0139 が無い／壊れている | `searchError` に表名。画面の列に一致すれば `rows` あり |
+| 0139 の表が無い | `searchError` に表名。画面の列に一致すれば `rows` あり |
+| 表欠落以外の SQL エラー・破損 | `searchError` あり、`rows: []` |
 | 表はあるがキャッシュ0件 | `searchError` なし。`cacheTotal === 0` |
 | 表もあり語が不一致 | `searchError` なし。`cacheTotal > 0` でヒット0件 |
 
@@ -252,7 +270,7 @@ JOIN 失敗時は画面の列だけで再検索する。プロンプト等に一
 
 ---
 
-## 7. 今日以降: AIチャット入力窓からの Cursor VM 問い合わせと過去検索
+## 7. 今後追加: AIチャット入力窓からの Cursor VM 問い合わせと過去検索
 
 **対象**: `/aichat` の入力窓（`src/views/aichat.ts`）、
 `src/utils/aichatSlashCommand.ts` の `/neko` スラッシュコマンド —
@@ -336,7 +354,7 @@ AIチャット過去ログ検索は残す。
 
 ---
 
-## 8. 今日以降: ダイナミックワーカーからの問い合わせ
+## 8. 今後追加: ダイナミックワーカーからの問い合わせ
 
 **対象**: `nekoserver/dynamicneko` の AI 問い合わせウィジェット、
 本体 Worker の `POST /api/aichat/query-external` /
@@ -345,8 +363,9 @@ dynamicneko は本体の Cookie セッションを持たない。**未実装。*
 
 ### 背景
 
-dynamicneko は Service Binding（`DYNAMICNEKO` / 呼び出し元からは本体 Worker）で
-本体 API を呼ぶ。`*.workers.dev` 同士の通常 fetch は Cloudflare 1042 で落ちるため
+dynamicneko から本体 API を呼ぶ経路には、dynamicneko 側で本体 Worker を指す
+Service Binding が必要。本体の `DYNAMICNEKO` は本体 → dynamicneko 用であり、
+逆方向の Binding ではない。`*.workers.dev` 同士の通常 fetch は Cloudflare 1042 で落ちるため
 公開 URL にしない（`src/types.ts` の `DYNAMICNEKO` コメント、`/neko hellodw`）。
 
 既存の外部 API:
@@ -383,7 +402,7 @@ kimi-code / aichat に倣い、変数名は呼び出し元と同じにする
 | 通信 | Service Binding。公開 URL の fetch にしない |
 | 認証 | Bearer secret（例: `CURSOR_AGENT_EXTERNAL_SECRET`。実装時に dynamicneko 側と同名） |
 | 許可 | `dynamicneko_aichat_allowed_users` を当面再利用。専用表が必要になったら分ける |
-| 起動の user_id | body の `login`（GitHub login）。`user_sessions` に無ければ保存せず 403/400。`'dynamicneko-service'` で launch しない |
+| 起動の user_id | body の `login`（GitHub login）。`user_sessions.user_id` に解決する。解決できなければ Cursor API を呼ぶ前に 403。`'dynamicneko-service'` で launch しない |
 | 権限 UI | permission-external 相当でグレーアウトしてよいが、本体 API でも再検証する |
 
 ### API 案（実装時にパス名を確定してよい）
@@ -397,7 +416,10 @@ kimi-code / aichat に倣い、変数名は呼び出し元と同じにする
 | 過去ログ | `POST /api/cursor-agent/history/past-log-search` | `POST /api/cursor-agent/past-log-search-external` |
 
 body 例: `{ email, login, prompt, keyword, repoFullName? }`。
-`email` で許可、`login` で `user_id`。prompt / keyword は経路ごとに必須。
+`email` で許可、`login` で `user_id` を解決する。prompt / keyword は経路ごとに必須。
+Bearer secret は呼び出し元サービスを認証する。ユーザーの email / login は、
+呼び出し元が認証済みユーザーから取得した値だけを転送し、ブラウザの任意入力を
+そのまま信頼しない。他人の login の指定で履歴を読み書きできないよう検証する。
 
 `query-external` の question に `/neko cursor ...` を載せる案もある。
 その場合も Cursor 用コア関数を呼び、Workers AI には落とさない。
@@ -412,7 +434,7 @@ body 例: `{ email, login, prompt, keyword, repoFullName? }`。
 | 3 | secret 名が本体と dynamicneko で違う | 同名にする |
 | 4 | 許可メールを UI だけ見て本体で再検証しない | launch/search でも allowlist を見る |
 | 5 | `dynamicneko-service` で launch_log を書く | `login` → `user_sessions` |
-| 6 | login が本体未ログインで行が孤児になる | 保存スキップまたは 403。黙って他人名義にしない |
+| 6 | login が本体未ログインで行が孤児になる | Cursor API を呼ぶ前に 403。起動だけ成功して履歴が残らない状態にしない |
 | 7 | クライアント指定の launchIds を信じて過去ログへ結ぶ | サーバ再検索のみ（現行と同じ） |
 | 8 | 0139 欠落を空成功にする | 既存 `searchError` を JSON で返す |
 | 9 | RUNNING 回答をキャッシュする | 既存 `isCursorAgentSuccessfulTerminal` |
@@ -432,7 +454,7 @@ body 例: `{ email, login, prompt, keyword, repoFullName? }`。
 
 **対象**: `/cursor-agent`、AIチャット入力窓、ダイナミックワーカーの3入口。
 
-1. 起動前チェックは `validateCursorAgentLaunchRequest` のみ
+1. 起動入力のチェックは `validateCursorAgentLaunchRequest` を共有する。認証・許可・所有者解決も起動前に行う
 2. チャンク抽出・結合・成功終端キャッシュは既存関数のみ
 3. 検索 SQL は `queryCursorAgentHistoryWithSearch` のみ（0139 フォールバック含む）
 4. 過去ログ保存は `persistCursorAgentPastLogHits` のみ。GET/キー入力では呼ばない
