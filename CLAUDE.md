@@ -198,6 +198,12 @@
     - 既に導入済みで後から「頼んでいない」と指摘された設定スイッチがあっても、使われている箇所が複数(このリポジトリでは9箇所以上+専用の診断ページ)に及ぶ場合は、ユーザーの許可なく全面撤去もしない(ドミノ式に他の機能を壊す)。まずユーザーに影響範囲を提示し、全面撤去か部分的な縮小かの判断を仰ぐこと(本ルールの元になった実例でも、調査の末に本体機能は撤去せず温存する判断になった)
     - 不具合調査の際、「複雑な設定スイッチが絡んでいるのでは」という仮説を立てる前に、まずその設定スイッチが実際にその経路のコードで参照されているかをコード上で確認してから仮説を話すこと。参照されているかどうかを確認せずに仮説を口に出すと、ユーザーに無駄な確認作業(ダッシュボードでの値確認等)を強いることになる
     - **根本原因はルール9(テストファースト)を守れていないこと**。`NOTIFY_TARGET`のような「将来必要になるかもしれない」設定スイッチは、それを要求する具体的な失敗するテストが先に無いまま実装に紛れ込む。ルール9の通り、まず「この切り替えが無いと落ちるテスト」を書き、それをユーザーに見せて合意を得てから実装する運用を徹底すれば、本当に要求されていない設定スイッチはそもそもテストが存在せず書けないため、この種の無断追加自体が構造的に起こらなくなる。「テストを書いてから直す」ではなく「このテストが通らないと困る、という合意を先に取ってからテストを書く」まで一歩手前から始めること
+38. **ワーカー間リクエストの認証は「`CF-Worker`ヘッダー + HMAC照合」を基準方針とする** — 本Worker(`nekoserver/cloudflare-workers-github-oauth-1`)と他Worker(`nekoserver/dynamicneko`・`nekoserver/cf-auth`・`rust-worker-sqlx-d1`)の間のリクエストは、以下を**新規に追加するエンドポイントのデフォルト方式**とする(現状分析は[`SPEC.cloudflare-workers-github-oauth-1.20261008.worker-auth-policy.md`](SPEC.cloudflare-workers-github-oauth-1.20261008.worker-auth-policy.md)参照)。
+    - 呼び出し元は`CF-Worker: <worker名>`(例: `dynamicneko`)・`CF-Worker-Timestamp: <UNIX秒>`・`CF-Worker-Signature: sha256=<hex>`の3ヘッダーを付ける。署名対象は`"{CF-Worker}\n{CF-Worker-Timestamp}\n{METHOD}\n{PATH}\n{rawBody}"`、アルゴリズムはHMAC-SHA256(`crypto.subtle`)
+    - 受信側は`verifyGitHubWebhookSignature`(`src/utils/githubWebhook.ts`)と同じ**タイミングセーフ比較**(`mismatch |= a ^ b`形式、単純な`===`/`!==`比較は禁止)を使い、`CF-Worker-Timestamp`が現在時刻から一定範囲(目安±5分、`redmineSignature`と同程度)を超えていれば拒否してリプレイを防ぐ
+    - シークレットは**機能ごとではなく呼び出し元Workerごとに1つ**(例: `CF_WORKER_SECRET_DYNAMICNEKO`)発行する。新しい`-external`エンドポイントを追加するたびに新しいシークレット環境変数を発行する現状の運用(`AICHAT_EXTERNAL_SECRET`・`KIMI_CODE_EXTERNAL_SECRET`等)は増やさない
+    - 既存の静的Bearer方式(`AICHAT_EXTERNAL_SECRET`・`CF_AUTH_WEBHOOK_SECRET`・`NOTIFY_WORKER_SECRET`等、本文を署名対象にせず単純比較のみ)は**後方互換のため残してよいが、新規追加はしない**。既存分の移行は呼び出し元リポジトリ側の送信コードも同時に変更する必要があるため、個別タスクとして計画すること
+    - rust-worker-sqlx-d1が自ら署名してtunnels.rbへ送る`ORIGIN_HMAC_SECRET`(本Workerはシークレットを扱わない中継のみ、`src/utils/tunnelSignerAsk.ts`)はこの方針の対象外(他リポジトリの実装に委ねる)
 
 ---
 
