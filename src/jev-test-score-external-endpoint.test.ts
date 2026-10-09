@@ -110,6 +110,13 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       permissions TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE repo_commit_index (
+      commit_hash TEXT PRIMARY KEY,
+      seq_num INTEGER NOT NULL,
+      github_pr_number INTEGER,
+      commit_message TEXT NOT NULL,
+      repo_name TEXT NOT NULL
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
