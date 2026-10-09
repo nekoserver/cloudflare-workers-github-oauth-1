@@ -3,8 +3,8 @@ import { getSecuremineCalendarScript } from '../utils/securemineCalendar';
 import { getThemeCSS, getThemeInitScript } from '../utils/theme';
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
 
-/** TaskMineの主要操作をブラウザで再現。APIキーはメモリ内のみで保持する。 */
-export function getTaskminePage(): string {
+/** SecureMineの主要操作をブラウザで再現。APIキーはメモリ内のみで保持する。 */
+export function getSecureminePage(): string {
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SecureMine</title>
 ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
@@ -215,7 +215,7 @@ ${getSecuremineSectionTabsScript()}
     });
   }
   function proxyUrl(account, path) {
-    return "/api/taskmine/redmine?" + new URLSearchParams({base: account.url, path});
+    return "/api/securemine/redmine?" + new URLSearchParams({base: account.url, path});
   }
   let queue = Promise.resolve(), lastRequest = 0;
   function api(account, path, method = "GET", body, raw = false) {
@@ -553,7 +553,7 @@ ${getSecuremineSectionTabsScript()}
         throw new Error("APIキーを入力してください。");
       message("接続情報を確認中…");
       Object.assign(a, await metadata(a));
-      await sessionRequest("/api/taskmine/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({base:a.url,name:a.name,apiKey:a.key})});
+      await sessionRequest("/api/securemine/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({base:a.url,name:a.name,apiKey:a.key})});
       state.accounts.push(a);
       const o = element("option", a.name);
       o.value = a.id;
@@ -671,7 +671,7 @@ ${getSecuremineSectionTabsScript()}
   async function restoreSession() {
     if (typeof fetch !== "function") return;
     try {
-      const saved = await sessionRequest("/api/taskmine/session");
+      const saved = await sessionRequest("/api/securemine/session");
       if (!saved.account || state.account || state.demo || $("connection").querySelector("button").disabled) return;
       const a = {...saved.account, key:""};
       Object.assign(a, await metadata(a));

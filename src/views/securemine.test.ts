@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { getTaskminePage } from './taskmine';
+import { getSecureminePage } from './securemine';
 
 function page(demo = true) {
-  const dom = new JSDOM(getTaskminePage(), { runScripts: 'dangerously', url: 'https://example.com/taskmine' });
+  const dom = new JSDOM(getSecureminePage(), { runScripts: 'dangerously', url: 'https://example.com/securemine' });
   if (demo) { const select = dom.window.document.querySelector('#account')! as unknown as HTMLSelectElement; select.value = 'demo'; select.dispatchEvent(new dom.window.Event('change')); }
   return dom;
 }
-describe('Taskmine', () => {
+describe('SecureMine', () => {
   it('renders executable scripts and demo issues; filters and shows detail safely', () => {
     const dom = page();
     const d = dom.window.document;
@@ -64,18 +64,18 @@ function remotePage(fail = false, empty = false, restored = false) {
   const control = { fail, empty, failLogin: false, failIssues: false, updated: false, issues: [] as any[], tick: () => {} };
   const calls: {url: URL; options: any}[] = [];
   let time = Date.now();
-  const dom = new JSDOM(getTaskminePage(), {runScripts:'dangerously', url:'https://example.com/taskmine', beforeParse(window) {
+  const dom = new JSDOM(getSecureminePage(), {runScripts:'dangerously', url:'https://example.com/securemine', beforeParse(window) {
     window.Date.now = () => time += 2000;
     const w = window as any;
     w.AbortSignal.timeout = () => undefined;
     w.setInterval = (handler: () => void) => { control.tick = handler; return 1; };
     w.fetch = async (input: string, options: any) => {
-      if (input === '/api/taskmine/session') return {ok:true,status:200,json:async()=>({account:restored ? {id:'saved',name:'Work',url:'https://redmine.example/redmine'} : null})};
-      if (input === '/api/taskmine/login') return {ok:!control.failLogin,status:control.failLogin ? 503 : 200,json:async()=>control.failLogin ? {error:'DB保存失敗'} : {loggedInAt:'2026-10-08T00:00:00Z'}};
-      if (input === '/api/taskmine/commit-calendar') return {ok:true,status:200,json:async()=>({year:2026,month:10,days:[]})};
+      if (input === '/api/securemine/session') return {ok:true,status:200,json:async()=>({account:restored ? {id:'saved',name:'Work',url:'https://redmine.example/redmine'} : null})};
+      if (input === '/api/securemine/login') return {ok:!control.failLogin,status:control.failLogin ? 503 : 200,json:async()=>control.failLogin ? {error:'DB保存失敗'} : {loggedInAt:'2026-10-08T00:00:00Z'}};
+      if (input === '/api/securemine/commit-calendar') return {ok:true,status:200,json:async()=>({year:2026,month:10,days:[]})};
       const transport = new URL(input, "https://example.com");
       const url = new URL(transport.searchParams.get("path")!, transport.searchParams.get("base")! + "/"); calls.push({url, options});
-      expect(transport.pathname).toBe("/api/taskmine/redmine");
+      expect(transport.pathname).toBe("/api/securemine/redmine");
       expect(options.credentials).toBe("same-origin");
       if(control.fail || control.failIssues && url.pathname.endsWith('/issues.json')) throw new Error('network failure');
       let data: any;
@@ -98,7 +98,7 @@ function remotePage(fail = false, empty = false, restored = false) {
   if (!restored) d.querySelector('#connection')!.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
   return {dom,d,calls,control};
 }
-describe('Taskmine Redmine REST integration', () => {
+describe('SecureMine Redmine REST integration', () => {
   it('connects a subdirectory server, filters assigned issues, creates and reloads a real issue', async () => {
     const {dom,d,calls}=remotePage();
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
@@ -144,7 +144,7 @@ describe('Taskmine Redmine REST integration', () => {
 });
 
 
-describe('Taskmine real-data workspace and synchronization', () => {
+describe('SecureMine real-data workspace and synchronization', () => {
   it('starts disconnected with no sample data and asks for a Redmine connection', () => {
     const dom = page(false); const d = dom.window.document;
     expect(d.querySelectorAll('.issue')).toHaveLength(0);
@@ -208,7 +208,7 @@ describe('Taskmine real-data workspace and synchronization', () => {
 });
 
 
-describe('Taskmine refreshed details and issue failures', () => {
+describe('SecureMine refreshed details and issue failures', () => {
   it('reloads the selected issue detail when changes were made in Redmine', async () => {
     const {dom,d,control}=remotePage();
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));

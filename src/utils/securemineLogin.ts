@@ -33,7 +33,7 @@ export async function securemineLogin(c: Context<AppEnv>) {
       c.env.DB.prepare(`INSERT INTO user_sessions (user_id,session_duration,current_login_at,last_activity_at,idle_timeout_seconds,updated_at) VALUES (?,'1w',?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_login_at=user_sessions.current_login_at,current_login_at=excluded.current_login_at,last_activity_at=excluded.last_activity_at,session_duration=excluded.session_duration,idle_timeout_seconds=excluded.idle_timeout_seconds,updated_at=excluded.updated_at`).bind(user.sub,now,now,renewed.idleTimeoutSeconds,now),
     ]);
     for (const cookie of renewed.cookies) c.header('Set-Cookie',cookie,{append:true});
-    c.header('Set-Cookie',`${SECUREMINE_COOKIE}=${token}; Path=/api/taskmine; HttpOnly; Secure; SameSite=Lax; Max-Age=${SECUREMINE_TTL}`,{append:true});
+    c.header('Set-Cookie',`${SECUREMINE_COOKIE}=${token}; Path=/api/securemine; HttpOnly; Secure; SameSite=Lax; Max-Age=${SECUREMINE_TTL}`,{append:true});
     return c.json({loggedInAt:now,expiresAt,user:identity},200,headers);
   } catch { return c.json({error:'ログイン情報を保存できません。接続設定とDBの状態を確認してください。'},503,headers); }
 }

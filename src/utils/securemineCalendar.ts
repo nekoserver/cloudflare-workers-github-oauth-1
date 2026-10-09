@@ -44,7 +44,7 @@ export function getSecuremineCalendarScript(): string {
     if (pending) return;
     pending = true; status.textContent = 'コミットログを確認中…';
     try {
-      const response = await fetch('/api/taskmine/commit-calendar', {credentials:'same-origin',headers:{Accept:'application/json'}});
+      const response = await fetch('/api/securemine/commit-calendar', {credentials:'same-origin',headers:{Accept:'application/json'}});
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const data = await response.json();
       if (!Number.isInteger(data.year) || !Number.isInteger(data.month) || data.month < 1 || data.month > 12 || !Array.isArray(data.days)) throw new Error('Invalid calendar');

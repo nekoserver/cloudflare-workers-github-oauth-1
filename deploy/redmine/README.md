@@ -1,6 +1,6 @@
 # Worker → Apache HMAC → Redmine
 
-ブラウザはログイン済みの本体Worker `/api/taskmine/redmine` に通信します。WorkerがHMACを付与し、Apache上のPython 3 mod_wsgiゲートウェイが検証してから固定のRedmineバックエンドへ転送します。ブラウザ向けCORS設定は不要です。Redmine REST APIを有効にし、ユーザーのAPIキーで操作権限を判定します。
+ブラウザはログイン済みの本体Worker `/api/securemine/redmine` に通信します。WorkerがHMACを付与し、Apache上のPython 3 mod_wsgiゲートウェイが検証してから固定のRedmineバックエンドへ転送します。ブラウザ向けCORS設定は不要です。Redmine REST APIを有効にし、ユーザーのAPIキーで操作権限を判定します。
 
 ## Apache側
 
@@ -37,7 +37,7 @@ npm run deploy:worker
 npx wrangler secret put REDMINE_HMAC_TARGETS
 ```
 
-Apacheの `secret` と同じ値を `REDMINE_HMAC_SECRET` に入力します。シークレットをリポジトリやブラウザには保存しません。TaskMine画面ではマップ左側の公開Redmine URLとユーザー本人のAPIキーを入力してください。APIキーはWorkerとApacheを経由しますが永続化しません。
+Apacheの `secret` と同じ値を `REDMINE_HMAC_SECRET` に入力します。シークレットをリポジトリやブラウザには保存しません。SecureMine画面ではマップ左側の公開Redmine URLとユーザー本人のAPIキーを入力してください。APIキーはWorkerとApacheを経由しますが永続化しません。
 
 ## 署名プロトコル
 
@@ -59,7 +59,7 @@ Content-TypeのSHA256 hex（GETは空文字のハッシュ）
 ## 検証
 
 ```sh
-npx vitest run src/utils/redmineProxy.test.ts src/views/taskmine.test.ts
+npx vitest run src/utils/redmineProxy.test.ts src/views/securemine.test.ts
 python3 -m unittest discover -s deploy/redmine -p 'test_*.py'
 ```
 
