@@ -1,14 +1,14 @@
-# NOTICE: TaskMine / Redmine と本体WorkersのHMAC接続
+# NOTICE: SecureMine / Redmine と本体WorkersのHMAC接続
 
 更新日: 2026-10-08（JST）
-対象: `cloudflare-workers-github-oauth-1` の `/taskmine` と、Apache上のRedmine。
+対象: `cloudflare-workers-github-oauth-1` の `/securemine` と、Apache上のRedmine。
 本書はこの作業で実施した設定・修正・確認結果を記録する。ファイル名のcursorは整理用の名称であり、この接続にCursor APIは使用しない。
 
 ## 現在の接続構成
 
 ```text
-ログイン済みブラウザの /taskmine
-  → 本体Worker /api/taskmine/redmine（認証・接続先制限・HMAC署名）
+ログイン済みブラウザの /securemine
+  → 本体Worker /api/securemine/redmine（認証・接続先制限・HMAC署名）
   → https://mynw.nekomaneki.work/redmine-hmac
   → Apache mod_cgid の gateway.cgi（HMAC・時刻・nonce検証）
   → gateway.wsgi の共通処理
@@ -17,7 +17,7 @@
 
 - 本体Worker: `cloudflare-workers-github-oauth-1`。
 - 公開Worker URL: `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev`。
-- TaskMine画面で入力するRedmine URL: `https://mynw.nekomaneki.work`。
+- SecureMine画面で入力するRedmine URL: `https://mynw.nekomaneki.work`。
 - ゲートウェイURL: `https://mynw.nekomaneki.work/redmine-hmac`。
 - Redmineの配置先: `/home/box/apps/redmine`。
 - 接続時にはRedmine本人のAPIキーを入力する。HMACシークレットをブラウザへ渡さない。
@@ -69,7 +69,7 @@ npx wrangler secret put REDMINE_HMAC_SECRET
 
 今回の本番設定はCloudflare API経由で反映した。再設定時も、値をシェルの引数やログへ出さず、対話入力などで登録する。現環境はシークレット方式なので、`wrangler.toml` の `[vars]` に同名の変数を重複定義しない。
 
-設定名は `src/types.ts` に追加した。認証付きルートは `src/index.ts`、署名と転送処理は `src/utils/redmineProxy.ts` に実装した。TaskMineの一覧・詳細・作成・編集・添付の通信をWorker経由へ変更し、ページのCSPの `connect-src` は `'self'` に限定した。
+設定名は `src/types.ts` に追加した。認証付きルートは `src/index.ts`、署名と転送処理は `src/utils/redmineProxy.ts` に実装した。SecureMineの一覧・詳細・作成・編集・添付の通信をWorker経由へ変更し、ページのCSPの `connect-src` は `'self'` に限定した。
 
 ## Apacheに反映した設定
 
@@ -185,14 +185,14 @@ GETのContent-Typeと本文は空文字／空バイト列のハッシュを使�
 
 | PR | 内容 |
 | --- | --- |
-| [#2284](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2284) | TaskMine風Redmineページ追加 |
+| [#2284](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2284) | SecureMine風Redmineページ追加 |
 | [#2286](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2286) | 本体Worker経由のHMAC接続、ゲートウェイと設定例 |
 | [#2287](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2287) | Apache CGI入口、内部CA検証、SQLite接続のクローズ |
 | [#2288](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2288) | Worker非対応redirectモードによる502の修正 |
 
 全PRは2026-10-08時点でマージ済み。各後続PRは先行PRのマージ後に最新mainから独立して作成した。
 
-関連実装: `src/utils/redmineProxy.ts`、`src/utils/redmineProxy.test.ts`、`src/views/taskmine.ts`、`src/views/taskmine.test.ts`、`src/index.ts`、`src/types.ts`。
+関連実装: `src/utils/redmineProxy.ts`、`src/utils/redmineProxy.test.ts`、`src/views/securemine.ts`、`src/views/securemine.test.ts`、`src/index.ts`、`src/types.ts`。
 設定・配置手順: `deploy/redmine/README.md`、`gateway.cgi`、`gateway.wsgi`、`apache-cgi.conf.example`、`apache.conf.example`、`config.json.example`、`test_gateway.py`。
 
 ## 再発時の確認箇所
@@ -212,7 +212,7 @@ GETのContent-Typeと本文は空文字／空バイト列のハッシュを使�
 
 ## 実データの取得・同期を中心にしたフロントへの更新
 
-TaskMineは既存Redmineの普段使い用フロントとして、データの取得・同期・更新を中心にする。Redmineをデータの保存先とし、別DBへ複製しない。
+SecureMineは既存Redmineの普段使い用フロントとして、データの取得・同期・更新を中心にする。Redmineをデータの保存先とし、別DBへ複製しない。
 
 - 初期表示は未接続とし、操作デモは明示的に選択する。
 - 接続時に `users/current.json` でAPIキーのユーザーを確認し、名前を表示する。WorkerとApacheの許可リストに、この本人取得のGETだけを追加する。
@@ -228,13 +228,13 @@ TaskMineは既存Redmineの普段使い用フロントとして、データの�
 
 ## 画面名称とヘッダー表示の整理
 
-画面名称をSecureMineへ変更し、ブラウザタイトル・画面ヘッダー・ウェルカムページのリンク表示を統一した。「今日の仕事を、ひと目で。」と「REDMINE WORKSPACE」を削除し、接続後のアカウント名・Redmine URL・ユーザー名を区切り記号で並べる表示も削除した。未接続・操作デモの案内と同期状態は引き続き表示する。接続時の本人確認とアカウント切り替えの処理は維持し、ページURLは `/taskmine` を使用する。
+画面名称をSecureMineへ変更し、ブラウザタイトル・画面ヘッダー・ウェルカムページのリンク表示を統一した。「今日の仕事を、ひと目で。」と「REDMINE WORKSPACE」を削除し、接続後のアカウント名・Redmine URL・ユーザー名を区切り記号で並べる表示も削除した。未接続・操作デモの案内と同期状態は引き続き表示する。接続時の本人確認とアカウント切り替えの処理は維持し、ページURLは `/securemine` を使用する。
 
 ## SecureMine左上の当月コミットカレンダー
 
-ログイン後の `/taskmine` で、左サイドバーの先頭に当月カレンダーを表示する。現在のワークスペースのGitHubコミットログを使用し、当月の日別コミット記録または月別集計に1件以上の記録がある日を薄水色（`#e0f2fe`）にする。Redmineへの接続やAPIキー入力を待たずに読み込む。
+ログイン後の `/securemine` で、左サイドバーの先頭に当月カレンダーを表示する。現在のワークスペースのGitHubコミットログを使用し、当月の日別コミット記録または月別集計に1件以上の記録がある日を薄水色（`#e0f2fe`）にする。Redmineへの接続やAPIキー入力を待たずに読み込む。
 
-- API: 認証付き `GET /api/taskmine/commit-calendar`。ユーザーの現在のワークスペースだけを対象にする。
+- API: 認証付き `GET /api/securemine/commit-calendar`。ユーザーの現在のワークスペースだけを対象にする。
 - 取得元: D1の `commit_list_cache`（`commit_count > 0`）と `commit_calendar_cache`（日付別の件数が正のもの）。複数リポジトリ・両取得元で同じ日付があっても1日として表示する。
 - 月と日付は既存コミットログと同じ日本時間（Asia/Tokyo）で判定する。対象月以外・存在しない日付は塗らない。
 - 日曜始まりで、うるう年・月初の曜日位置に対応。当日は輪郭で示し、コミットの有無は背景色で示す。
@@ -247,11 +247,11 @@ TaskMineは既存Redmineの普段使い用フロントとして、データの�
 ## SecureMineログイン保持（7日間）
 
 - 接続ボタンに回転インジケーターを表示し、本人確認・DB保存・Cookie更新の成功後に緑色の「ログイン完了」トーストを5秒間表示する。失敗時は完了表示を出さない。
-- `POST /api/taskmine/login` はHMACゲートウェイ経由で `users/current.json` を確認する。同一オリジンのリクエストのみ許可する。
+- `POST /api/securemine/login` はHMACゲートウェイ経由で `users/current.json` を確認する。同一オリジンのリクエストのみ許可する。
 - マイグレーション `0168_create_securemine_sessions.sql` が必要。通常のdeployはD1マイグレーションを先に適用する。
 - D1の `securemine_sessions` に接続先・表示名・本人情報・ログイン日時・有効期限と暗号化APIキーを保存する。`securemine_login_history` にログイン日時を追記し、`user_sessions` のログイン日時・最終操作日時・有効期間も同じDBバッチで更新する。
 - APIキーはJWT_SECRETから用途を分離して導出した鍵によるAES-GCMで暗号化し、所有者IDと接続先URLに結び付ける。JWT_SECRET変更後は再ログインが必要。
-- ブラウザにはランダムなセッションCookieだけを発行する（HttpOnly / Secure / SameSite=Lax、Path=/api/taskmine）。DBにはCookie値のSHA-256ハッシュを保存する。APIキーはCookie・localStorage・復元APIのレスポンスには含めない。
+- ブラウザにはランダムなセッションCookieだけを発行する（HttpOnly / Secure / SameSite=Lax、Path=/api/securemine）。DBにはCookie値のSHA-256ハッシュを保存する。APIキーはCookie・localStorage・復元APIのレスポンスには含めない。
 - 本体の認証JWTとCookieも接続成功時から604800秒（7日）へ更新する。SESSION_IDLE_TIMEOUT_SECONDSが明示設定されている場合、そのアイドル期限は引き続き優先する。強制revokeの確認も継続する。
-- 再読み込み時は `GET /api/taskmine/session` から最後にログインした接続先を復元し、Workerが所有者・期限・接続先を確認して保存済みAPIキーを復号する。復元ではログイン履歴の追記や完了トースト表示をしない。
+- 再読み込み時は `GET /api/securemine/session` から最後にログインした接続先を復元し、Workerが所有者・期限・接続先を確認して保存済みAPIキーを復号する。復元ではログイン履歴の追記や完了トースト表示をしない。
 - ページ内で追加した複数アカウントは引き続き切り替え可能。再読み込みで復元する接続先は最後にログインした1件。課題・プロジェクトのデータ本体はRedmineに置いたまま。

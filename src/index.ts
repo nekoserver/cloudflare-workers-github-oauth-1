@@ -74,7 +74,7 @@ import {
 import { getAichatCrossModelPage } from './views/aichatCrossModel';
 import { buildCrossModelQuestionGroups, type AichatCrossModelShareRow } from './utils/aichatCrossModelQuestions';
 import { getMentionEditorPage } from './views/mentionEditor';
-import { getTaskminePage } from './views/taskmine';
+import { getSecureminePage } from './views/securemine';
 import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
 import { proxyRedmine } from './utils/redmineProxy';
 import { securemineLogin, securemineSession } from './utils/securemineLogin';
@@ -14685,7 +14685,7 @@ app.get('/api/aichat/cross-model-questions', authMiddleware, async (c) => {
   return jsonUtf8({ groups });
 });
 
-app.get('/api/taskmine/commit-calendar', authMiddleware, async (c) => {
+app.get('/api/securemine/commit-calendar', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   if (!c.env.DB) return c.json({ error: 'コミットログのデータベースが未設定です。' }, 503);
   const workspace = await getCurrentWorkspace(c.env.DB, c.get('user').sub);
@@ -14697,14 +14697,14 @@ app.get('/api/taskmine/commit-calendar', authMiddleware, async (c) => {
   }
 });
 
-app.post('/api/taskmine/login', authMiddleware, securemineLogin);
-app.get('/api/taskmine/session', authMiddleware, securemineSession);
-app.all('/api/taskmine/redmine', authMiddleware, proxyRedmine);
+app.post('/api/securemine/login', authMiddleware, securemineLogin);
+app.get('/api/securemine/session', authMiddleware, securemineSession);
+app.all('/api/securemine/redmine', authMiddleware, proxyRedmine);
 
-app.get('/taskmine', authMiddleware, (c) => {
+app.get('/securemine', authMiddleware, (c) => {
   c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   c.header('Cache-Control', 'no-store');
-  return c.html(getTaskminePage());
+  return c.html(getSecureminePage());
 });
 
 app.get('/mention-editor', authMiddleware, async (c) => {

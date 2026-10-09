@@ -4,7 +4,7 @@ import { getCalendarMonth, getSecuremineCalendarScript } from './securemineCalen
 import { vi } from 'vitest';
 function mount(result: {year:number;month:number;days:number[]}, fail = false) {
   const calls: {url:string;options:any}[] = [];
-  const dom = new JSDOM('<section><h2 id="calendarMonth"></h2><button id="calendarRefresh">同期</button><table id="commitCalendar"><tbody></tbody></table><small id="calendarStatus"></small></section><script>'+getSecuremineCalendarScript()+'</script>', {runScripts:'dangerously',url:'https://example.com/taskmine',beforeParse(window) {
+  const dom = new JSDOM('<section><h2 id="calendarMonth"></h2><button id="calendarRefresh">同期</button><table id="commitCalendar"><tbody></tbody></table><small id="calendarStatus"></small></section><script>'+getSecuremineCalendarScript()+'</script>', {runScripts:'dangerously',url:'https://example.com/securemine',beforeParse(window) {
     (window as any).fetch=async(url:string, options:any)=>{calls.push({url,options});return {ok:!fail,status:fail?500:200,json:async()=>result};};
   }});
   return {dom,d:dom.window.document,calls};
@@ -20,7 +20,7 @@ describe('SecureMine commit calendar', () => {
     expect([...d.querySelectorAll('.has-commits')].map(x=>x.textContent)).toEqual(['1','8','31']);
     expect(d.querySelectorAll('.calendar-day')).toHaveLength(31);
     expect(d.querySelector('tbody tr')!.children[4].textContent).toBe('1');
-    expect(calls[0]).toMatchObject({url:'/api/taskmine/commit-calendar',options:{credentials:'same-origin'}});
+    expect(calls[0]).toMatchObject({url:'/api/securemine/commit-calendar',options:{credentials:'same-origin'}});
     dom.window.close();
   });
   it('renders leap day and an empty month without highlights',async()=>{

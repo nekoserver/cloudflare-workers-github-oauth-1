@@ -4,8 +4,8 @@ import type { Bindings, Variables } from '../types';
 import { allowedRedminePath, proxyRedmine, redmineSignature } from './redmineProxy';
 const env = { REDMINE_HMAC_SECRET: 'test-secret-with-at-least-32-chars', REDMINE_HMAC_TARGETS: JSON.stringify({'https://redmine.example/redmine':'https://redmine.example/redmine-hmac'}) };
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-app.all('/api/taskmine/redmine', proxyRedmine);
-const url = (path = 'projects.json') => 'https://worker.example/api/taskmine/redmine?' + new URLSearchParams({base:'https://redmine.example/redmine', path});
+app.all('/api/securemine/redmine', proxyRedmine);
+const url = (path = 'projects.json') => 'https://worker.example/api/securemine/redmine?' + new URLSearchParams({base:'https://redmine.example/redmine', path});
 afterEach(() => vi.unstubAllGlobals());
 describe('Redmine HMAC proxy', () => {
   it('signs a fixed cross-language vector and binds body, API key and method', async () => {
