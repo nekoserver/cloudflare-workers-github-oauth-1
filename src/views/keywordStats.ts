@@ -10,7 +10,9 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 
 export type RepoKeywordCountRow = { repoFullName: string | null; keywordCount: number };
 export type RepoFileCountRow = { repoFullName: string | null; fileCount: number };
+export type FileExtCountRow = { fileExt: string; fileCount: number };
 export type FileExtKeywordRow = { fileExt: string; keywordFileCount: number };
+export type FileExtDistributionRow = { fileExt: string; fileCount: number; keywordFileCount: number };
 export type KeywordFrequencyRow = { keyword: string; occurrenceCount: number };
 
 export type KeywordStatsData = {
@@ -19,7 +21,7 @@ export type KeywordStatsData = {
   totalProcessedFiles: number;
   byRepo: RepoKeywordCountRow[];
   byRepoFiles: RepoFileCountRow[];
-  byFileExt: FileExtKeywordRow[];
+  byFileExt: FileExtDistributionRow[];
   topKeywords: KeywordFrequencyRow[];
 };
 
@@ -46,12 +48,35 @@ export function sortRepoFileCounts(rows: RepoFileCountRow[]): RepoFileCountRow[]
 }
 
 /**
- * ファイルタイプ(拡張子)別のキーワード分布を、件数の多い順(同数なら
+ * ファイルタイプ(拡張子)別の処理済みファイル件数(fileCount)と、
+ * キーワードが抽出された要約に含まれていた件数(keywordFileCount)を
+ * 1行にまとめる(DBアクセスを含まない純粋関数)。
+ *
+ * 2026-10-11、ユーザー指摘: 以前はai_summary_keywordsとのJOINだけで
+ * 集計していたため、.md/.erb/.cssのようにドキュメント・スタイル変更が
+ * 中心でAIの要約からキーワードがほとんど抽出されない拡張子が、実際には
+ * ファイルとして処理されているのに表に一切出てこなかった(「スタイル変更が
+ * 多ければその傾向が」を確認したいという本来の目的を果たせていなかった)。
+ * fileCountRows(ai_summary_filesのみの集計、キーワード有無を問わない)を
+ * 主の件数とし、keywordCountRows(従来のJOIN集計)はその拡張子の中で
+ * 実際にキーワードまで抽出された件数として並べて表示する。
+ */
+export function mergeFileExtCounts(fileCountRows: FileExtCountRow[], keywordCountRows: FileExtKeywordRow[]): FileExtDistributionRow[] {
+  const keywordCountByExt = new Map(keywordCountRows.map((r) => [r.fileExt, r.keywordFileCount]));
+  return fileCountRows.map((r) => ({
+    fileExt: r.fileExt,
+    fileCount: r.fileCount,
+    keywordFileCount: keywordCountByExt.get(r.fileExt) ?? 0,
+  }));
+}
+
+/**
+ * ファイルタイプ(拡張子)別の分布を、処理済みファイル件数の多い順(同数なら
  * 拡張子の昇順)に並べ替える。頻出キーワードランキング(SQL側でORDER BY)と
  * 揃えて、こちらはDBアクセスを含まない純粋関数側でテスト可能にする。
  */
-export function sortFileExtKeywordCounts(rows: FileExtKeywordRow[]): FileExtKeywordRow[] {
-  return [...rows].sort((a, b) => b.keywordFileCount - a.keywordFileCount || a.fileExt.localeCompare(b.fileExt));
+export function sortFileExtDistribution(rows: FileExtDistributionRow[]): FileExtDistributionRow[] {
+  return [...rows].sort((a, b) => b.fileCount - a.fileCount || a.fileExt.localeCompare(b.fileExt));
 }
 
 export function getKeywordStatsPage(user: { name?: string; username: string }, data: KeywordStatsData): string {
@@ -88,16 +113,17 @@ export function getKeywordStatsPage(user: { name?: string; username: string }, d
         `</tr>`;
     }).join('');
 
-  const byFileExtSorted = sortFileExtKeywordCounts(data.byFileExt);
-  const maxFileExtCount = byFileExtSorted.length > 0 ? Math.max(...byFileExtSorted.map((r) => r.keywordFileCount)) : 0;
+  const byFileExtSorted = sortFileExtDistribution(data.byFileExt);
+  const maxFileExtCount = byFileExtSorted.length > 0 ? Math.max(...byFileExtSorted.map((r) => r.fileCount)) : 0;
 
   const fileExtRows = byFileExtSorted.length === 0
-    ? '<tr class="empty-row"><td colspan="3">ファイルタイプ別の分布はまだありません</td></tr>'
+    ? '<tr class="empty-row"><td colspan="4">ファイルタイプ別の分布はまだありません</td></tr>'
     : byFileExtSorted.map((r) => {
-      const barWidth = maxFileExtCount > 0 ? Math.round((r.keywordFileCount / maxFileExtCount) * 100) : 0;
+      const barWidth = maxFileExtCount > 0 ? Math.round((r.fileCount / maxFileExtCount) * 100) : 0;
       const extLabel = r.fileExt.startsWith('(') ? r.fileExt : `.${r.fileExt}`;
       return `<tr>` +
         `<td>${escapeHtml(extLabel)}</td>` +
+        `<td class="num">${r.fileCount}</td>` +
         `<td class="num">${r.keywordFileCount}</td>` +
         `<td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${barWidth}%"></div></div></td>` +
         `</tr>`;
@@ -251,15 +277,17 @@ export function getKeywordStatsPage(user: { name?: string; username: string }, d
         <tbody>${repoFileRows}</tbody>
       </table>
 
-      <div class="section-title">ファイルタイプ別のキーワード分布</div>
+      <div class="section-title">ファイルタイプ別の分布</div>
       <div class="section-note">
-        同じ要約に含まれるキーワードと変更ファイルの拡張子を掛け合わせた、ざっくりした傾向
-        (例: スタイル変更が多ければcss/scssの件数が多くなる)。1つの要約に複数のキーワード・
-        複数のファイルがある場合は全ての組み合わせを数えるため、厳密な「このキーワードはこの
-        ファイルに対応する」という対応関係ではない点に注意。
+        拡張子ごとの処理済みファイル件数(多い順。例: スタイル変更が多ければcss/scssの件数が
+        多くなる)。「キーワード付き」はそのうち、同じ要約にキーワードが1件以上抽出されていた
+        件数(1つの要約に複数のキーワード・複数のファイルがある場合は組み合わせを数えるため、
+        厳密な「このキーワードはこのファイルに対応する」という対応関係ではない)。
+        ドキュメント・スタイル変更主体の要約はキーワードがほとんど抽出されないことが多く、
+        キーワード付き件数が0でもファイル自体は処理済みとして表に出る。
       </div>
       <table>
-        <thead><tr><th>拡張子</th><th class="num">件数</th><th></th></tr></thead>
+        <thead><tr><th>拡張子</th><th class="num">件数</th><th class="num">キーワード付き</th><th></th></tr></thead>
         <tbody>${fileExtRows}</tbody>
       </table>
 
