@@ -1,0 +1,128 @@
+import { describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import app from './index';
+import { createJWT } from './utils/jwt';
+
+/**
+ * 対象: GET /keyword-stats(🔑 コミット要約キーワード統計ページ)。
+ * ai_summary_keywordsの総数・リポジトリ別分布・頻出キーワードランキングを
+ * ざっくり把握するためのページ。
+ *
+ * 故障シナリオ:
+ *   (1) 未認証は401
+ *   (2) ai_summary_keywordsが0件でも例外にならず「まだありません」表示になる
+ *   (3) リポジトリ別件数が正しく集計され、多い順に並ぶ
+ *   (4) 頻出キーワードが出現回数順に並ぶ
+ */
+const JWT_SECRET = 'test-secret';
+
+async function authHeader(sub = 'test-user') {
+  return `Bearer ${await createJWT({ sub, name: 'Test' }, JWT_SECRET)}`;
+}
+
+function wrapD1(db: DatabaseSync) {
+  return {
+    prepare(sql: string) {
+      const stmt = db.prepare(sql);
+      const makeChain = (args: unknown[]) => ({
+        async first<T>(): Promise<T | null> {
+          const row = stmt.get(...(args as never[]));
+          return (row ?? null) as T | null;
+        },
+        async all<T>(): Promise<{ results?: T[] }> {
+          const rows = stmt.all(...(args as never[])) as unknown[];
+          return { results: rows as T[] };
+        },
+        bind(...innerArgs: unknown[]) {
+          return makeChain(innerArgs);
+        },
+      });
+      return makeChain([]);
+    },
+  };
+}
+
+function setupDb(): DatabaseSync {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE user_sessions (
+      user_id TEXT PRIMARY KEY,
+      last_activity_at TEXT,
+      revoked_at TEXT,
+      idle_timeout_seconds INTEGER
+    );
+    CREATE TABLE ai_summary_log (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT, repo_full_name TEXT);
+    CREATE TABLE ai_summary_keywords (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      summary_log_id INTEGER NOT NULL,
+      keyword TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  return db;
+}
+
+async function getPage(db: DatabaseSync) {
+  return app.request('/keyword-stats', { headers: { Authorization: await authHeader() } }, { JWT_SECRET, DB: wrapD1(db) });
+}
+
+describe('GET /keyword-stats', () => {
+  it('未認証は401', async () => {
+    const db = setupDb();
+    const res = await app.request('/keyword-stats', {}, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(401);
+  });
+
+  it('キーワードが0件でも例外にならず「まだありません」と表示する', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('キーワードはまだありません');
+    expect(html).toContain('>0<');
+  });
+
+  it('リポジトリ別の集計が件数の多い順に並ぶ', async () => {
+    const db = setupDb();
+    db.exec(`
+      INSERT INTO ai_summary_log (id, request_id, repo_full_name) VALUES
+        (1, 'r1', 'nekoserver/rails-root'),
+        (2, 'r2', 'nekoserver/dynamicneko'),
+        (3, 'r3', 'nekoserver/dynamicneko');
+      INSERT INTO ai_summary_keywords (summary_log_id, keyword) VALUES
+        (1, 'ログイン機能'),
+        (2, 'キャッシュ'),
+        (2, '認証トークン'),
+        (3, 'キャッシュ');
+    `);
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const dynamicnekoIdx = html.indexOf('nekoserver/dynamicneko');
+    const railsRootIdx = html.indexOf('nekoserver/rails-root');
+    expect(dynamicnekoIdx).toBeGreaterThan(-1);
+    expect(railsRootIdx).toBeGreaterThan(-1);
+    expect(dynamicnekoIdx).toBeLessThan(railsRootIdx);
+  });
+
+  it('頻出キーワードが出現回数順に並ぶ', async () => {
+    const db = setupDb();
+    db.exec(`
+      INSERT INTO ai_summary_log (id, request_id, repo_full_name) VALUES (1, 'r1', 'nekoserver/rails-root');
+      INSERT INTO ai_summary_keywords (summary_log_id, keyword) VALUES
+        (1, 'キャッシュ'),
+        (1, 'キャッシュ'),
+        (1, 'キャッシュ'),
+        (1, '認証トークン'),
+        (1, '認証トークン');
+    `);
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const cacheIdx = html.indexOf('キャッシュ');
+    const authIdx = html.indexOf('認証トークン');
+    expect(cacheIdx).toBeGreaterThan(-1);
+    expect(authIdx).toBeGreaterThan(-1);
+    expect(cacheIdx).toBeLessThan(authIdx);
+  });
+});
