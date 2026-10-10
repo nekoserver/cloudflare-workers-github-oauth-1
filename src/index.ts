@@ -16241,6 +16241,34 @@ async function loadSummaryKeywords(db: D1Database, summaryLogId: number): Promis
   return (rows.results ?? []).map((r) => r.keyword);
 }
 
+/**
+ * キャッシュ済み要約(commit-summary-external)を返す際、その要約がまだ
+ * キーワード未抽出(デプロイ前の要約・キーワード抽出機能自体が無かった頃の
+ * 要約・前回AI呼び出し失敗など)であれば、この場で抽出して保存してから返す
+ * (ユーザー要望2026-10-11: tree-viewの「要約」ボタンをタップしたとき、
+ * キャッシュ済みでもキー未抽出ならその場で抽出されるようにする)。
+ * 既にキーワードがあれば何もせずそのまま返す(AIを再度呼ばない)。
+ */
+async function ensureSummaryKeywords(
+  env: Bindings,
+  db: D1Database,
+  summaryLogId: number,
+  requestId: string,
+  summaryText: string,
+  existingKeywords: string[],
+  context: Record<string, unknown>,
+): Promise<string[]> {
+  if (existingKeywords.length > 0) return existingKeywords;
+  if (!env.AI || !summaryText) return existingKeywords;
+  const keywords = await extractSummaryKeywords(
+    env.AI, summaryText, extractPrerequisiteTerms, filterMeaningfulPrerequisiteTerms,
+    (error) => logger.warn('[commit-summary-external] キャッシュ済み要約への事後キーワード抽出に失敗', { ...context, summaryLogId, error: error instanceof Error ? error.message : String(error) }),
+  );
+  if (keywords.length === 0) return existingKeywords;
+  await saveSummaryKeywords(db, requestId, keywords, new Date().toISOString());
+  return keywords;
+}
+
 app.post('/api/commit-summary-status-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -16257,8 +16285,12 @@ app.post('/api/commit-summary-status-external', async (c) => {
   if (hashes.length > 200) return jsonUtf8({ error: 'commitHashes は200件以内で指定してください' }, 400);
 
   try {
-    const cached = await findCachedCommitHashes(c.env.DB, repoName, hashes);
-    return jsonUtf8({ repoName, cached: hashes.filter((h) => cached.has(h)) });
+    const status = await findCachedCommitHashes(c.env.DB, repoName, hashes);
+    return jsonUtf8({
+      repoName,
+      cached: hashes.filter((h) => status.cached.has(h)),
+      withKeywords: hashes.filter((h) => status.withKeywords.has(h)),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-status-external] キャッシュ有無の取得に失敗', { repoName, error: message });
@@ -16318,26 +16350,34 @@ app.post('/api/commit-summary-external', async (c) => {
 
   try {
     const existing = await c.env.DB.prepare(
-      `SELECT l.id, l.summary, l.model FROM commit_agent_log c
+      `SELECT l.id, l.request_id, l.summary, l.model FROM commit_agent_log c
        JOIN ai_summary_log l ON l.request_id = c.request_id
        WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
-    ).bind(commitHash, repoName).first<{ id: number; summary: string; model: string | null }>();
+    ).bind(commitHash, repoName).first<{ id: number; request_id: string; summary: string; model: string | null }>();
     if (existing) {
-      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log', keywords: await loadSummaryKeywords(c.env.DB, existing.id) });
+      const keywords = await ensureSummaryKeywords(
+        c.env, c.env.DB, existing.id, existing.request_id, existing.summary,
+        await loadSummaryKeywords(c.env.DB, existing.id), { commitHash, repoName, source: 'ai_summary_log' },
+      );
+      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log', keywords });
     }
 
     // commit_shaの直接一致で見つからない場合、マージコミットの可能性を
     // 考えてrepo_commit_index.github_pr_number経由でai_summary_logを引く。
     const viaMergeCommit = await c.env.DB.prepare(
-      `SELECT l.id, l.summary, l.model FROM repo_commit_index i
+      `SELECT l.id, l.request_id, l.summary, l.model FROM repo_commit_index i
        JOIN ai_summary_log l ON l.repo_full_name = i.repo_name AND l.pr_number = i.github_pr_number
        WHERE i.commit_hash = ? AND i.repo_name = ? AND i.github_pr_number IS NOT NULL
          AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
-    ).bind(commitHash, repoName).first<{ id: number; summary: string; model: string | null }>();
+    ).bind(commitHash, repoName).first<{ id: number; request_id: string; summary: string; model: string | null }>();
     if (viaMergeCommit) {
-      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index', keywords: await loadSummaryKeywords(c.env.DB, viaMergeCommit.id) });
+      const keywords = await ensureSummaryKeywords(
+        c.env, c.env.DB, viaMergeCommit.id, viaMergeCommit.request_id, viaMergeCommit.summary,
+        await loadSummaryKeywords(c.env.DB, viaMergeCommit.id), { commitHash, repoName, source: 'repo_commit_index' },
+      );
+      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index', keywords });
     }
 
     return await generateAndRecordCommitSummary(c.env, c.env.DB, commitHash, repoName);

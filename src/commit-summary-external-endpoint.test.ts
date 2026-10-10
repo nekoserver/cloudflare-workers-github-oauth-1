@@ -314,6 +314,65 @@ describe('POST /api/commit-summary-external', () => {
     expect(res.status).toBe(404);
   });
 
+  it('キャッシュ済みだがキーワード未抽出の場合、タップ時にその場で抽出・保存して返す(ユーザー要望2026-10-11)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'h1', '- 概要\nバグを修正した', 'existing-model');
+    const aiEnv = makeAiEnv('- 概要\nバグを修正した');
+
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiEnv);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cached: boolean; keywords?: string[] };
+    expect(body.cached).toBe(true);
+    expect(body.keywords?.length).toBeGreaterThan(0);
+    // 要約本体は生成しない(キャッシュ済みのため)、キーワード抽出のみ1回。
+    expect(aiEnv.AI.run).toHaveBeenCalledTimes(1);
+    const stored = db.prepare(
+      'SELECT k.keyword FROM ai_summary_keywords k JOIN ai_summary_log l ON l.id = k.summary_log_id ORDER BY k.id'
+    ).all() as Array<{ keyword: string }>;
+    expect(stored.length).toBeGreaterThan(0);
+    expect(body.keywords).toEqual(stored.map((r) => r.keyword));
+  });
+
+  it('キャッシュ済みで既にキーワード抽出済みの場合は、AIを再度呼ばずそのまま返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'h1', '- 概要\nバグを修正した', 'existing-model');
+    db.prepare(
+      `INSERT INTO ai_summary_keywords (summary_log_id, keyword) SELECT id, 'バグ修正' FROM ai_summary_log WHERE request_id = 'req-1'`
+    ).run();
+    const aiEnv = makeAiEnv('- 概要\nバグを修正した');
+
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME, aiEnv);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cached: boolean; keywords?: string[] };
+    expect(body.keywords).toEqual(['バグ修正']);
+    expect(aiEnv.AI.run).not.toHaveBeenCalled();
+  });
+
+  it('キャッシュ済みでキーワード未抽出だがAIバインディング未設定の場合は、例外にせず空のキーワードのまま返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'h1', '- 概要\nバグを修正した', 'existing-model');
+
+    const res = await postSummary(db, 'ok@example.com', 'h1', REPO_NAME);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cached: boolean; keywords?: string[] };
+    expect(body.cached).toBe(true);
+    expect(body.keywords).toEqual([]);
+  });
+
+  it('マージコミット経由のキャッシュでもキーワード未抽出ならその場で抽出・保存する', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'req-1', REPO_NAME, 42, 'branch-tip-sha', '- 概要\nWebhookで生成済みの要約', 'existing-model');
+    insertMergeCommitIndexRow(db, 'merge-commit-sha', REPO_NAME, 1, 42);
+    const aiEnv = makeAiEnv('- 概要\nWebhookで生成済みの要約');
+
+    const res = await postSummary(db, 'ok@example.com', 'merge-commit-sha', REPO_NAME, aiEnv);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { source?: string; keywords?: string[] };
+    expect(body.source).toBe('repo_commit_index');
+    expect(body.keywords?.length).toBeGreaterThan(0);
+    expect(aiEnv.AI.run).toHaveBeenCalledTimes(1);
+  });
+
   it('マージコミット(commit_agent_logにはブランチ先端shaしか無く直接一致しない)でも、repo_commit_index.github_pr_number経由でai_summary_logの要約を返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     // PRブランチ先端sha(branch-tip-sha)がcommit_agent_logに記録されている。
@@ -436,6 +495,33 @@ describe('POST /api/commit-summary-status-external', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { cached: string[] };
     expect(body.cached).toEqual(['aaa1111', 'ccc3333']);
+  });
+
+  it('withKeywordsはキーワード抽出済みのcachedだけを含む部分集合になる', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'r1', REPO_NAME, 10, 'aaa1111', '- 要約A(キーワード抽出済み)', 'm');
+    insertExistingAiSummary(db, 'r2', REPO_NAME, 11, 'bbb2222', '- 要約B(キーワード未抽出)', 'm');
+    db.prepare(
+      `INSERT INTO ai_summary_keywords (summary_log_id, keyword) SELECT id, '要約A' FROM ai_summary_log WHERE request_id = 'r1'`
+    ).run();
+    const res = await postStatus(db, { repoName: REPO_NAME, commitHashes: ['aaa1111', 'bbb2222'] });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { cached: string[]; withKeywords: string[] };
+    expect(body.cached).toEqual(['aaa1111', 'bbb2222']);
+    expect(body.withKeywords).toEqual(['aaa1111']);
+  });
+
+  it('マージコミット経由でcachedな要約もwithKeywordsに正しく反映される', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'r1', REPO_NAME, 42, 'aaa1111', '- 要約', 'm');
+    insertMergeCommitIndexRow(db, 'ccc3333', REPO_NAME, 1, 42);
+    db.prepare(
+      `INSERT INTO ai_summary_keywords (summary_log_id, keyword) SELECT id, '要約' FROM ai_summary_log WHERE request_id = 'r1'`
+    ).run();
+    const res = await postStatus(db, { repoName: REPO_NAME, commitHashes: ['ccc3333'] });
+    const body = await res.json() as { cached: string[]; withKeywords: string[] };
+    expect(body.cached).toEqual(['ccc3333']);
+    expect(body.withKeywords).toEqual(['ccc3333']);
   });
 
   it('別リポジトリの要約はcachedにならない', async () => {
