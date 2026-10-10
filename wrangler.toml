@@ -70,6 +70,10 @@ NOTIFY_TARGET = "worker"
 #   CF_DASHBOARD_ADMIN_GITHUB_IDS  # /cf-dashboardを許可するGitHub numeric ID（カンマ区切り）
 #     GitHubプロフィールAPIのid値を[vars]に設定する（公開情報なのでsecretでなくてよい）。
 #     未設定・不正な値の場合は全員を拒否する。
+#   R9_HMAC_SECRET  # /r9-status が https://r9.nekomaneki.work への署名付きGETに使う
+#     HMACシークレット（deploy/redmine/のHMACゲートウェイと同じ方式）。
+#     r9.nekomaneki.work側の検証プログラムにも同じ値を設定する。
+#     設定手順: wrangler secret put R9_HMAC_SECRET
 #   GOOGLE_CSE_API_KEY  # /neko vlink が使うGoogle Custom Search JSON APIのAPIキー
 #   GOOGLE_CSE_CX       # /neko vlink が使うGoogle Programmable Search Engineの検索エンジンID(cx)
 #     両方セットで設定する（片方のみの場合は/neko vlinkを無効化する）。secretで管理し、

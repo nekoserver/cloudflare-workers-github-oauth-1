@@ -82,6 +82,12 @@ export type Bindings = {
   CF_ACCESS_ALLOWED_EMAIL_DOMAINS?: string;
   /** /access-verifyページ: Tunnel経由で期待されるHostヘッダー値(未設定ならチェックなし) */
   CF_ACCESS_EXPECTED_HOST?: string;
+  /**
+   * /r9-statusページが使う、https://r9.nekomaneki.workへのHMAC署名用シークレット。
+   * deploy/redmine/のHMACゲートウェイと同じ方式(HMAC-SHA256)で署名する。
+   * 未設定の場合は/r9-statusが「未設定」の案内を表示する(r9へのリクエストは送らない)。
+   */
+  R9_HMAC_SECRET?: string;
   GITHUB_TOKEN?: string;
   /**
    * /gh-attach（gh issue create --attachのWASM移植）のアップロード専用GitHub PAT
