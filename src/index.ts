@@ -597,6 +597,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'email_audit_anomalies', migration: '0022', description: 'メール監査異常検知', syncPolicy: 'auto' },
   { name: 'slack_interaction_log', migration: '0024', description: 'Slack操作ログ', syncPolicy: 'auto' },
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
+  { name: 'ai_summary_keywords', migration: '0169', description: 'AI要約から抽出したキーワード', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2663,6 +2664,14 @@ BEGIN
   ON CONFLICT(user_id, keyword) DO NOTHING;
 END;
 `,
+  '0169': `CREATE TABLE IF NOT EXISTS ai_summary_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  summary_log_id INTEGER NOT NULL REFERENCES ai_summary_log(id),
+  keyword TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(summary_log_id, keyword)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_summary_keywords_summary_log_id ON ai_summary_keywords(summary_log_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2828,6 +2837,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
   commit_agent_log: { id: 'pk', request_id: 'fk', repo_full_name: 'idx', pr_number: 'idx' },
+  ai_summary_keywords: { id: 'pk', summary_log_id: 'fk+idx', keyword: 'uk' },
   repo_color_settings: { id: 'pk', workspace_id: 'fk', repo_name: 'fk' },
   repo_groups: { id: 'pk', workspace_id: 'fk' },
   repo_group_members: { group_id: 'pk+fk', repo_name: 'pk+fk', workspace_id: 'fk' },
@@ -3009,7 +3019,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
-  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   email_confirm_tokens: 'auth',
@@ -3261,6 +3271,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // ========================================================================
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
+  ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
 
   // ========================================================================
@@ -3458,6 +3469,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'ts_function_impact.repo_id': 'id',
   'ts_commit_quality.repo_id': 'id',
   'api_search_keyword_sections.keyword_id': 'id',
+  'ai_summary_keywords.summary_log_id': 'id',
 
   // workflow_hierarchy の親子番号 → workflow_registry.workflow_no
   'workflow_hierarchy.child_workflow_no': 'workflow_no',
@@ -16201,6 +16213,14 @@ app.post('/api/jev-vuln-score-external', async (c) => {
  * 生成し、ai_summary_log/commit_agent_logへ書き込んでから返す。次回以降は
  * commit_agent_logの直接一致で見つかるようになる。
  */
+/** ai_summary_keywordsからsummary_log_idに紐づくキーワードを取得する。 */
+async function loadSummaryKeywords(db: D1Database, summaryLogId: number): Promise<string[]> {
+  const rows = await db.prepare(
+    'SELECT keyword FROM ai_summary_keywords WHERE summary_log_id = ? ORDER BY id'
+  ).bind(summaryLogId).all<{ keyword: string }>();
+  return (rows.results ?? []).map((r) => r.keyword);
+}
+
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -16218,26 +16238,26 @@ app.post('/api/commit-summary-external', async (c) => {
 
   try {
     const existing = await c.env.DB.prepare(
-      `SELECT l.summary, l.model FROM commit_agent_log c
+      `SELECT l.id, l.summary, l.model FROM commit_agent_log c
        JOIN ai_summary_log l ON l.request_id = c.request_id
        WHERE c.commit_sha = ? AND c.repo_full_name = ? AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
-    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    ).bind(commitHash, repoName).first<{ id: number; summary: string; model: string | null }>();
     if (existing) {
-      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log' });
+      return jsonUtf8({ commitHash, summary: existing.summary, model: existing.model ?? '(記録なし)', cached: true, source: 'ai_summary_log', keywords: await loadSummaryKeywords(c.env.DB, existing.id) });
     }
 
     // commit_shaの直接一致で見つからない場合、マージコミットの可能性を
     // 考えてrepo_commit_index.github_pr_number経由でai_summary_logを引く。
     const viaMergeCommit = await c.env.DB.prepare(
-      `SELECT l.summary, l.model FROM repo_commit_index i
+      `SELECT l.id, l.summary, l.model FROM repo_commit_index i
        JOIN ai_summary_log l ON l.repo_full_name = i.repo_name AND l.pr_number = i.github_pr_number
        WHERE i.commit_hash = ? AND i.repo_name = ? AND i.github_pr_number IS NOT NULL
          AND l.summary IS NOT NULL AND l.summary != ''
        ORDER BY l.id DESC LIMIT 1`
-    ).bind(commitHash, repoName).first<{ summary: string; model: string | null }>();
+    ).bind(commitHash, repoName).first<{ id: number; summary: string; model: string | null }>();
     if (viaMergeCommit) {
-      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index' });
+      return jsonUtf8({ commitHash, summary: viaMergeCommit.summary, model: viaMergeCommit.model ?? '(記録なし)', cached: true, source: 'repo_commit_index', keywords: await loadSummaryKeywords(c.env.DB, viaMergeCommit.id) });
     }
 
     return await generateAndRecordCommitSummary(c.env, c.env.DB, commitHash, repoName);
@@ -16302,6 +16322,18 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
     return jsonUtf8({ error: '要約の新規生成に失敗しました: ' + pipelineResult.summary }, 502);
   }
 
+  // キーワード抽出(✂️と同じextractPrerequisiteTerms、Gemma-4)は要約本体とは
+  // 独立した補助情報のため、失敗しても要約自体の保存・返却は妨げない
+  // (握りつぶさずログには残す)。
+  let keywords: string[] = [];
+  if (env.AI) {
+    try {
+      keywords = filterMeaningfulPrerequisiteTerms(await extractPrerequisiteTerms(env.AI, pipelineResult.summary));
+    } catch (error) {
+      logger.warn('[commit-summary-external] キーワード抽出に失敗', { commitHash, repoName, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   const now = new Date();
   const eventDate = now.toISOString().slice(0, 10);
   const requestId = crypto.randomUUID();
@@ -16328,6 +16360,13 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
       pipelineResult.usedModel, pipelineResult.summary, diffResult.diffLength, 0, now.toISOString()
     ).run();
 
+    if (keywords.length > 0) {
+      await db.batch(keywords.map((keyword) => db.prepare(
+        `INSERT OR IGNORE INTO ai_summary_keywords (summary_log_id, keyword, created_at)
+         SELECT id, ?, ? FROM ai_summary_log WHERE request_id = ?`
+      ).bind(keyword, now.toISOString(), requestId)));
+    }
+
     // commit_agent_log.pr_numberはNOT NULLのため、PRに紐付かないコミットは
     // 0を「PR不明」のセンチネル値として使う(直接一致の検索はcommit_sha+
     // repo_full_nameのみで行っており、pr_numberは見ないため実害はない)。
@@ -16348,7 +16387,7 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
     // (次回同じコミットが再度リクエストされた場合は再生成される)。
   }
 
-  return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false, source: 'generated' });
+  return jsonUtf8({ commitHash, summary: pipelineResult.summary, model: pipelineResult.usedModel, cached: false, source: 'generated', keywords });
 }
 
 // tree-viewの「テスト評価」ボタンがJev診断結果の保存に使う固定のmodel値
