@@ -471,7 +471,9 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
-import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
+import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
+import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
+import { loadCommitSummaryAllowedRepos, buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
@@ -16221,6 +16223,31 @@ async function loadSummaryKeywords(db: D1Database, summaryLogId: number): Promis
   return (rows.results ?? []).map((r) => r.keyword);
 }
 
+app.post('/api/commit-summary-status-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; commitHashes?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const hashes = Array.isArray(body?.commitHashes)
+    ? Array.from(new Set((body!.commitHashes as unknown[]).filter((h): h is string => typeof h === 'string' && /^[0-9a-f]{7,64}$/i.test(h))))
+    : [];
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (hashes.length === 0) return jsonUtf8({ error: 'commitHashes は1件以上の16進コミットハッシュ配列で指定してください' }, 400);
+  if (hashes.length > 200) return jsonUtf8({ error: 'commitHashes は200件以内で指定してください' }, 400);
+
+  try {
+    const cached = await findCachedCommitHashes(c.env.DB, repoName, hashes);
+    return jsonUtf8({ repoName, cached: hashes.filter((h) => cached.has(h)) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-summary-status-external] キャッシュ有無の取得に失敗', { repoName, error: message });
+    return jsonUtf8({ error: 'キャッシュ有無の取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -16231,9 +16258,9 @@ app.post('/api/commit-summary-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   try {
@@ -16421,9 +16448,9 @@ app.post('/api/jev-test-score-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
@@ -16555,9 +16582,9 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   const login = auth.login as string;
 
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   try {
@@ -16892,7 +16919,7 @@ app.post('/api/tree-view-snapshot-external', async (c) => {
 
   const repoName = (body?.repoName ?? '').trim();
   if (!isTreeViewSnapshotRepo(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildSnapshotRepoNotSupportedMessage(repoName, TREE_VIEW_SNAPSHOT_REPOS) }, 400);
   }
 
   try {
@@ -16941,7 +16968,7 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
 
   const repoName = (body?.repoName ?? '').trim();
   if (!isTreeViewSnapshotRepo(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildSnapshotRepoNotSupportedMessage(repoName, TREE_VIEW_SNAPSHOT_REPOS) }, 400);
   }
 
   // 正規表現による形式チェックだけでは、GITHUB_TOKENが読めるnekoserver

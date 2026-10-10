@@ -41,6 +41,18 @@ describe('loadCommitSummaryAllowedRepos', () => {
     expect(allowed).toEqual(['nekoserver/cloudflare-workers-github-oauth-1', 'nekoserver/dynamicneko', 'nekoserver/rust-worker-sqlx-d1']);
   });
 
+  it('installation_permissionsに行が無くても、追跡対象(trackedRepos)は許可され、重複は1件にまとまる', async () => {
+    const db = createMockDb([{ repo_name: 'nekoserver/dynamicneko' }]);
+    const allowed = await loadCommitSummaryAllowedRepos(db, ['nekoserver/rails-root', 'nekoserver/dynamicneko']);
+    expect(allowed).toEqual(['nekoserver/dynamicneko', 'nekoserver/rails-root']);
+  });
+
+  it('追跡対象でもinstallation_permissionsにも無いリポジトリは許可されない', async () => {
+    const db = createMockDb([]);
+    const allowed = await loadCommitSummaryAllowedRepos(db, ['nekoserver/rails-root']);
+    expect(allowed).not.toContain('nekoserver/other');
+  });
+
   it('installation_permissionsが空でも例外を投げず空配列を返す', async () => {
     const db = createMockDb([]);
     const allowed = await loadCommitSummaryAllowedRepos(db);
@@ -67,5 +79,20 @@ describe('loadCommitSummaryAllowedRepos', () => {
     } as unknown as D1Database;
     const allowed = await loadCommitSummaryAllowedRepos(db);
     expect(allowed).toEqual([]);
+  });
+});
+
+import { buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
+
+describe('buildRepoNotAllowedMessage', () => {
+  it('拒否されたリポジトリ名・原因・対処・現在の対象を含む', () => {
+    const msg = buildRepoNotAllowedMessage('nekoserver/rails-root', ['nekoserver/a', 'nekoserver/b']);
+    expect(msg).toContain('nekoserver/rails-root');
+    expect(msg).toContain('GitHub App がインストールされていない');
+    expect(msg).toContain('Repository access');
+    expect(msg).toContain('nekoserver/a, nekoserver/b');
+  });
+  it('repoName未指定では指定方法を案内する', () => {
+    expect(buildRepoNotAllowedMessage('', [])).toContain('owner/repo');
   });
 });
