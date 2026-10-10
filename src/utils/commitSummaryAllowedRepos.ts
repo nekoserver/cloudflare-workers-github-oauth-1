@@ -20,3 +20,13 @@ export async function loadCommitSummaryAllowedRepos(db: D1Database): Promise<str
     .all<{ repo_name: string }>();
   return (results ?? []).map((row) => row.repo_name);
 }
+
+export function buildRepoNotAllowedMessage(repoName: string, allowed: string[]): string {
+  if (!repoName) {
+    return 'repoName が指定されていません。owner/repo 形式(例: nekoserver/rails-root)で指定してください';
+  }
+  const list = allowed.length > 0 ? allowed.join(', ') : '(なし)';
+  return `「${repoName}」は要約の対象外です。このリポジトリに GitHub App がインストールされていないためです。` +
+    `対処: GitHub の Settings > Applications > 該当 App > Configure > Repository access で ${repoName} を追加してください` +
+    `(追加すると自動で対象になります)。現在の対象: ${list}`;
+}
