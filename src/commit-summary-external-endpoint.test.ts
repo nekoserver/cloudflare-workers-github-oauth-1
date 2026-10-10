@@ -253,6 +253,12 @@ describe('POST /api/commit-summary-external', () => {
     expect(res.status).toBe(400);
   });
 
+  it('installation_permissionsに行が無くても、組み込み済みの追跡対象(rails-root)は400にならない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await postSummary(db, 'ok@example.com', 'h1', 'nekoserver/rails-root');
+    expect(res.status).not.toBe(400);
+  });
+
   it('未許可メールアドレスは403で拒否される', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     insertExistingAiSummary(db, 'req-1', REPO_NAME, 1, 'h1', '- 概要\n要約済み', 'test-model');

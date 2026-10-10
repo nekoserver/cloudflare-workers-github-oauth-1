@@ -14,11 +14,12 @@
 // 新しく追加したばかりでコミット未登録のリポジトリや、該当コミットが0件の
 // 検索結果では空になってしまい、「有効なリポジトリかどうか」の判定には
 // 不適切(GitHub Appのアクセス権限という、本来の認可境界とも一致しない)。
-export async function loadCommitSummaryAllowedRepos(db: D1Database): Promise<string[]> {
+export async function loadCommitSummaryAllowedRepos(db: D1Database, trackedRepos: readonly string[] = []): Promise<string[]> {
   const { results } = await db
     .prepare('SELECT DISTINCT repo_name FROM installation_permissions WHERE repo_name IS NOT NULL ORDER BY repo_name ASC')
     .all<{ repo_name: string }>();
-  return (results ?? []).map((row) => row.repo_name);
+  const names = new Set([...(results ?? []).map((row) => row.repo_name), ...trackedRepos]);
+  return [...names].sort();
 }
 
 export function buildRepoNotAllowedMessage(repoName: string, allowed: string[]): string {

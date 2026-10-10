@@ -16232,7 +16232,7 @@ app.post('/api/commit-summary-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
     return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
@@ -16422,7 +16422,7 @@ app.post('/api/jev-test-score-external', async (c) => {
   const commitHash = (body?.commitHash ?? '').trim();
   if (!commitHash) return jsonUtf8({ error: 'commitHash は必須です' }, 400);
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
     return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
@@ -16556,7 +16556,7 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   const login = auth.login as string;
 
   const repoName = (body?.repoName ?? '').trim();
-  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
+  const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB, Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
   if (!commitSummaryAllowedRepos.includes(repoName)) {
     return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
