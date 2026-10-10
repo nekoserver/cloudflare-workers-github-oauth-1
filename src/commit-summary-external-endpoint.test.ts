@@ -73,6 +73,11 @@ function wrapD1(db: DatabaseSync) {
       });
       return makeChain([]);
     },
+    async batch(stmts: Array<{ run(): Promise<unknown> }>) {
+      const results = [];
+      for (const s of stmts) results.push(await s.run());
+      return results;
+    },
   };
 }
 
@@ -95,6 +100,13 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       diff_length INTEGER DEFAULT 0,
       slack_notified INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE ai_summary_keywords (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      summary_log_id INTEGER NOT NULL REFERENCES ai_summary_log(id),
+      keyword TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(summary_log_id, keyword)
     );
     CREATE TABLE commit_agent_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,17 +350,23 @@ describe('POST /api/commit-summary-external', () => {
     const aiEnv = makeAiEnv('- 概要\n新規生成した要約');
     const first = await postSummary(db, 'ok@example.com', 'orphan-sha', REPO_NAME, { GITHUB_TOKEN: 'gh-token', ...aiEnv });
     expect(first.status).toBe(200);
-    expect(aiEnv.AI.run).toHaveBeenCalledTimes(1);
+    // 要約本体(1回)+キーワード抽出(1回)でAI.runは2回呼ばれる。
+    expect(aiEnv.AI.run).toHaveBeenCalledTimes(2);
 
     vi.unstubAllGlobals();
     const second = await postSummary(db, 'ok@example.com', 'orphan-sha', REPO_NAME, { GITHUB_TOKEN: 'gh-token', ...aiEnv });
     expect(second.status).toBe(200);
-    const body = (await second.json()) as { summary: string; source?: string; cached?: boolean };
+    const body = (await second.json()) as { summary: string; source?: string; cached?: boolean; keywords?: string[] };
     expect(body.summary).toBe('- 概要\n新規生成した要約');
     expect(body.source).toBe('ai_summary_log');
     expect(body.cached).toBe(true);
+    const stored = db.prepare(
+      'SELECT k.keyword FROM ai_summary_keywords k JOIN ai_summary_log l ON l.id = k.summary_log_id ORDER BY k.id'
+    ).all() as Array<{ keyword: string }>;
+    expect(stored.length).toBeGreaterThan(0);
+    expect(body.keywords).toEqual(stored.map((r) => r.keyword));
     // 2回目はAIを再度呼ばない(fetchもスタブしていないため、呼ばれたら例外で落ちる)。
-    expect(aiEnv.AI.run).toHaveBeenCalledTimes(1);
+    expect(aiEnv.AI.run).toHaveBeenCalledTimes(2);
   });
 
   it('GitHub Commit API上にcommitHashが実在しない場合は404(あいまいな500にしない)', async () => {
