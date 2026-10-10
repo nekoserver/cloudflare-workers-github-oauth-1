@@ -473,6 +473,8 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
+import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
+import { findSummaryKeywordBackfillTargets, runSummaryKeywordBackfill } from './utils/aiSummaryKeywordsBackfill';
 import { loadCommitSummaryAllowedRepos, buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
@@ -16248,6 +16250,41 @@ app.post('/api/commit-summary-status-external', async (c) => {
   }
 });
 
+// 既存のai_summary_log(デプロイ前にWebhook経由で自動生成された要約等)には
+// キーワードが付いていない。ログイン済みユーザーが手動で少しずつ遡って
+// キーワードを付けられるようにするバックフィル用エンドポイント。
+// 1回のAI呼び出しがコミットされる前提で、1回の呼び出しで処理する件数を
+// limitで絞り、リクエストタイムアウトを避ける(全件は複数回の呼び出しに分ける)。
+app.post('/api/commit-summary-keywords-backfill', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json<{ limit?: number; repoName?: string; eventDateFrom?: string; eventDateTo?: string }>().catch(() => null);
+  const limit = Math.min(Math.max(Number(body?.limit ?? 20) || 20, 1), 50);
+  const filter = {
+    repoName: body?.repoName?.trim() || undefined,
+    eventDateFrom: body?.eventDateFrom?.trim() || undefined,
+    eventDateTo: body?.eventDateTo?.trim() || undefined,
+  };
+
+  try {
+    const targets = await findSummaryKeywordBackfillTargets(c.env.DB, limit, filter);
+    const nowIso = new Date().toISOString();
+    const result = await runSummaryKeywordBackfill(
+      targets,
+      // バックフィルは1件ずつの失敗をfailedに記録して利用者に見せる必要があるため、
+      // 失敗を握りつぶして空配列を返すextractSummaryKeywords(ボタン押下時・Webhook
+      // 自動要約向けの非ブロッキング設計)は使わず、直接呼んでエラーを伝播させる。
+      (summary) => extractPrerequisiteTerms(c.env.AI as Ai, summary).then(filterMeaningfulPrerequisiteTerms),
+      (requestId, keywords) => saveSummaryKeywords(c.env.DB as D1Database, requestId, keywords, nowIso),
+    );
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-summary-keywords-backfill] バックフィル処理に失敗', { error: message });
+    return jsonUtf8({ error: 'バックフィル処理でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 app.post('/api/commit-summary-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
@@ -16352,14 +16389,10 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
   // キーワード抽出(✂️と同じextractPrerequisiteTerms、Gemma-4)は要約本体とは
   // 独立した補助情報のため、失敗しても要約自体の保存・返却は妨げない
   // (握りつぶさずログには残す)。
-  let keywords: string[] = [];
-  if (env.AI) {
-    try {
-      keywords = filterMeaningfulPrerequisiteTerms(await extractPrerequisiteTerms(env.AI, pipelineResult.summary));
-    } catch (error) {
-      logger.warn('[commit-summary-external] キーワード抽出に失敗', { commitHash, repoName, error: error instanceof Error ? error.message : String(error) });
-    }
-  }
+  const keywords = await extractSummaryKeywords(
+    env.AI, pipelineResult.summary, extractPrerequisiteTerms, filterMeaningfulPrerequisiteTerms,
+    (error) => logger.warn('[commit-summary-external] キーワード抽出に失敗', { commitHash, repoName, error: error instanceof Error ? error.message : String(error) }),
+  );
 
   const now = new Date();
   const eventDate = now.toISOString().slice(0, 10);
@@ -16387,12 +16420,7 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
       pipelineResult.usedModel, pipelineResult.summary, diffResult.diffLength, 0, now.toISOString()
     ).run();
 
-    if (keywords.length > 0) {
-      await db.batch(keywords.map((keyword) => db.prepare(
-        `INSERT OR IGNORE INTO ai_summary_keywords (summary_log_id, keyword, created_at)
-         SELECT id, ?, ? FROM ai_summary_log WHERE request_id = ?`
-      ).bind(keyword, now.toISOString(), requestId)));
-    }
+    await saveSummaryKeywords(db, requestId, keywords, now.toISOString());
 
     // commit_agent_log.pr_numberはNOT NULLのため、PRに紐付かないコミットは
     // 0を「PR不明」のセンチネル値として使う(直接一致の検索はcommit_sha+
@@ -21079,6 +21107,12 @@ app.post('/webhook/github', async (c) => {
                 aiModel,
               ).run();
 
+              const prSummaryKeywords = await extractSummaryKeywords(
+                ai, summary, extractPrerequisiteTerms, filterMeaningfulPrerequisiteTerms,
+                (error) => logger.warn('PR summaryのキーワード抽出に失敗', { error: error instanceof Error ? error.message : String(error), prUrl }),
+              );
+              await saveSummaryKeywords(db, requestId, prSummaryKeywords, now.toISOString());
+
               const commitAgentLogEntry = buildCommitAgentLogEntry({
                 requestId,
                 repoFullName,
@@ -21300,6 +21334,12 @@ app.post('/webhook/github', async (c) => {
           pipelineResult.fallbackUsed ? 1 : 0,
           aiModel
         ).run();
+
+        const pushSummaryKeywords = await extractSummaryKeywords(
+          c.env.AI, pipelineResult.summary, extractPrerequisiteTerms, filterMeaningfulPrerequisiteTerms,
+          (error) => logger.warn('push summaryのキーワード抽出に失敗', { error: error instanceof Error ? error.message : String(error), repositoryFullName }),
+        );
+        await saveSummaryKeywords(db, requestId, pushSummaryKeywords, now.toISOString());
       } catch (error) {
         logger.error('Failed to insert ai_summary_log for push webhook', {
           error: error instanceof Error ? error.message : 'Unknown error',

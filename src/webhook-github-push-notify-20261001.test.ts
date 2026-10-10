@@ -64,8 +64,23 @@ function recordingDb() {
         all: () => Promise.resolve({ results: [] }),
       };
     },
+    batch: (stmts: Array<{ run(): Promise<unknown> }>) => Promise.all(stmts.map((s) => s.run())),
   };
   return { db, inserts };
+}
+
+// runSummaryPipeline(要約本体)とextractPrerequisiteTerms(キーワード抽出)は
+// 同じモデル(DEFAULT_AI_MODEL=ANSWER_PREREQUISITE_TERMS_MODEL=gemma-4)を
+// 使うため、モデル名では区別できない。プロンプト文言で呼び分ける。
+function makeAiStub(summaryText: string, keywords: string[]) {
+  const run = vi.fn(async (_model: string, input: { messages: { role: string; content: string }[] }) => {
+    const userContent = input.messages.find((m) => m.role === 'user')?.content ?? '';
+    if (userContent.includes('次の文章を理解するのに必要な用語や概念')) {
+      return { response: keywords.join('\n') };
+    }
+    return { response: summaryText };
+  });
+  return { run };
 }
 
 async function postPushWebhook(body: string, env: Record<string, unknown>, event = 'push') {
@@ -241,6 +256,30 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(bindings[5]).toBeNull();
     expect(bindings[6]).toBe('push');
     expect(bindings[7]).toBe('https://github.com/nekoserver/rails-root/compare/a...b');
+  });
+
+  it('AI binding設定時、push要約と同時にキーワードを抽出してai_summary_keywordsへ保存する', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const { db, inserts } = recordingDb();
+    const ai = makeAiStub('- 概要\nログイン機能を修正した', ['ログイン機能', '認証トークン']);
+
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
+      pusher: { name: 'okiraku' },
+      commits: [{ id: 'a', message: 'fix: login bug' }],
+      head_commit: { id: 'a', message: 'fix: login bug' },
+    });
+
+    const response = await postPushWebhook(body, { GITHUB_WEBHOOK_SECRET: secret, DB: db, AI: ai });
+
+    expect(response.status).toBe(200);
+    const summaryInsert = inserts.find((i) => i.sql.includes('INSERT INTO ai_summary_log'));
+    expect(summaryInsert).toBeDefined();
+    const requestId = summaryInsert!.bindings[0];
+    const keywordInserts = inserts.filter((i) => i.sql.includes('INSERT OR IGNORE INTO ai_summary_keywords'));
+    expect(keywordInserts.map((i) => i.bindings[0])).toEqual(['ログイン機能', '認証トークン']);
+    expect(keywordInserts.every((i) => i.bindings[2] === requestId)).toBe(true);
   });
 
   it('GITHUB_TOKEN設定時、pushのcompare URLから実際にdiffを取得してdiff_lengthに反映する', async () => {
