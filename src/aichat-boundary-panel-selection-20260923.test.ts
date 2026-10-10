@@ -213,7 +213,36 @@ describe('探索の境界線パネル: 各段階の開始・完了時刻と所�
     const html = buildPage();
     const idx = html.indexOf('function runAutoExplore()');
     const snippet = html.slice(idx, idx + 1600);
-    expect(snippet).toContain("autoExploreProgressLog.innerHTML = '';");
+    expect(snippet).toContain("autoExploreProgressLogLines.innerHTML = '';");
     expect(snippet).toContain("autoExploreProgressLog.classList.add('kb-progress-log-visible');");
+  });
+});
+
+describe('探索の境界線パネル: 進捗ログを閉じるボタン', () => {
+  it('ログパネル内に閉じるボタン(autoExploreProgressLogClose)を描画する', () => {
+    const html = buildPage();
+    const logIdx = html.indexOf('id="autoExploreProgressLog"');
+    expect(logIdx).toBeGreaterThan(-1);
+    const closeIdx = html.indexOf('id="autoExploreProgressLogClose"', logIdx);
+    const linesIdx = html.indexOf('id="autoExploreProgressLogLines"', logIdx);
+    expect(closeIdx).toBeGreaterThan(logIdx);
+    expect(linesIdx).toBeGreaterThan(closeIdx);
+  });
+
+  it('閉じるボタンを押すと、実行状態を変えずにログパネルのvisibleクラスだけを外す(探索自体は止めない)', () => {
+    const html = buildPage();
+    const idx = html.indexOf("autoExploreProgressLogClose.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain("autoExploreProgressLog.classList.remove('kb-progress-log-visible');");
+    expect(snippet).not.toContain('autoExploreCancelRequested = true;');
+  });
+
+  it('ログ行の追加先はautoExploreProgressLogLines(ボタンを巻き込んで消さない)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function autoExploreLogLine(');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain('autoExploreProgressLogLines.appendChild(line);');
   });
 });

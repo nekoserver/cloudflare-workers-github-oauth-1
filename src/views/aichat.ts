@@ -208,8 +208,11 @@ export function getAiChatPage(user: {
     .kb-auto-explore-btn:hover:not(:disabled) { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
     .kb-auto-explore-btn:disabled { opacity:0.6; cursor:default; }
     .kb-auto-explore-btn.kb-running { border-color:#dc2626; color:#dc2626; }
-    .kb-progress-log { display:none; max-height:120px; overflow-y:auto; padding:6px 14px; font-family:monospace; font-size:10.5px; line-height:1.5; color:var(--text-muted); background:var(--bg-secondary); border-top:1px solid var(--border-color); white-space:pre; }
+    .kb-progress-log { display:none; position:relative; max-height:120px; overflow-y:auto; padding:6px 14px; font-family:monospace; font-size:10.5px; line-height:1.5; color:var(--text-muted); background:var(--bg-secondary); border-top:1px solid var(--border-color); white-space:pre; }
     .kb-progress-log.kb-progress-log-visible { display:block; }
+    .kb-progress-log-close { position:sticky; top:0; float:right; margin-left:8px; padding:1px 7px; border-radius:10px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:10.5px; white-space:nowrap; cursor:pointer; border:1.5px solid var(--text-muted); color:var(--text-muted); background:var(--bg-secondary); }
+    .kb-progress-log-close:hover { border-color:var(--accent-color,#667eea); color:var(--accent-color,#667eea); }
+    .kb-progress-log-lines { overflow-wrap:anywhere; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -1152,8 +1155,13 @@ export function getAiChatPage(user: {
         <button type="button" class="kb-auto-explore-btn" id="autoExploreBtn" title="チェックした(または入力した)キーワードを起点に、入力待ちを挟まず最大3階層まで自動で問い合わせる">🧭 自動探索</button>
       </div>
       <!-- 自動探索の途中経過ログ。AI問い合わせ→Jev処理→キー切り出しの
-           各段階の開始・完了時刻と所要時間を、実行中だけ表示する。 -->
-      <div class="kb-progress-log" id="autoExploreProgressLog"></div>
+           各段階の開始・完了時刻と所要時間を表示する。完了後もログが
+           残り続け場所を占有するだけになっていたため、表示中だけ
+           「閉じる」ボタンを出し、押すとログパネルを閉じる。 -->
+      <div class="kb-progress-log" id="autoExploreProgressLog">
+        <button type="button" class="kb-progress-log-close" id="autoExploreProgressLogClose" title="探索ログを閉じる">✕ 閉じる</button>
+        <div class="kb-progress-log-lines" id="autoExploreProgressLogLines"></div>
+      </div>
       <div class="chat-form-area">
         <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
           <div class="chat-image-preview-thumb">
@@ -7183,6 +7191,8 @@ export function getAiChatPage(user: {
     var autoExploreBtn = document.getElementById('autoExploreBtn');
     var autoExploreManualInput = document.getElementById('autoExploreManualInput');
     var autoExploreProgressLog = document.getElementById('autoExploreProgressLog');
+    var autoExploreProgressLogLines = document.getElementById('autoExploreProgressLogLines');
+    var autoExploreProgressLogClose = document.getElementById('autoExploreProgressLogClose');
     var AUTO_EXPLORE_MAX_LEVELS = 3;
     var AUTO_EXPLORE_LEVEL_LIMIT = 20;
     var autoExploreRunning = false;
@@ -7195,7 +7205,7 @@ export function getAiChatPage(user: {
     function autoExploreLogLine(text) {
       var line = document.createElement('div');
       line.textContent = text;
-      autoExploreProgressLog.appendChild(line);
+      autoExploreProgressLogLines.appendChild(line);
       autoExploreProgressLog.scrollTop = autoExploreProgressLog.scrollHeight;
     }
 
@@ -7333,7 +7343,7 @@ export function getAiChatPage(user: {
       autoExploreCancelRequested = false;
       setAutoExploreButtonRunning();
       autoExploreManualInput.value = '';
-      autoExploreProgressLog.innerHTML = '';
+      autoExploreProgressLogLines.innerHTML = '';
       autoExploreProgressLog.classList.add('kb-progress-log-visible');
       showAichatToast('自動探索を開始します(選択' + seedKeywords.length + '件・最大' + AUTO_EXPLORE_MAX_LEVELS + '階層)', 'aichat-scissors-toast-neutral');
 
@@ -7390,6 +7400,13 @@ export function getAiChatPage(user: {
         return;
       }
       runAutoExplore();
+    });
+
+    // ログパネルを閉じるだけで、実行中の探索自体は止めない(停止は
+    // autoExploreBtnの「⏹ 停止」が担う)。完了後もログが残り続け
+    // 場所を占有するだけになっていた問題への対応。
+    autoExploreProgressLogClose.addEventListener('click', function() {
+      autoExploreProgressLog.classList.remove('kb-progress-log-visible');
     });
 
     // ===== 写真添付(＋ボタン) =====
