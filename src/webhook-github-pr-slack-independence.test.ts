@@ -106,4 +106,16 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
     expect(block).toContain("logWebhookEvent(c.env.DB, 'github', eventType, 'error'");
     expect(block).toContain('unexpectedPrErrorMessage');
   });
+
+  it('ai_summary_logへのINSERT後にextractSummaryKeywords→saveSummaryKeywordsでキーワードを抽出・保存する（summary=初期設計との差異を分離した後の本文を使う）', () => {
+    const insertIdx = webhookBlock.indexOf('INSERT INTO ai_summary_log');
+    expect(insertIdx).toBeGreaterThan(-1);
+    const afterInsertIdx = webhookBlock.indexOf('.run();', insertIdx) + 7;
+    const extractIdx = webhookBlock.indexOf('extractSummaryKeywords(', afterInsertIdx);
+    expect(extractIdx).toBeGreaterThan(afterInsertIdx);
+    const block = webhookBlock.slice(extractIdx, extractIdx + 300);
+    expect(block).toContain('ai, summary, extractPrerequisiteTerms, filterMeaningfulPrerequisiteTerms');
+    const saveIdx = webhookBlock.indexOf('saveSummaryKeywords(db, requestId, prSummaryKeywords, now.toISOString())', extractIdx);
+    expect(saveIdx).toBeGreaterThan(extractIdx);
+  });
 });
