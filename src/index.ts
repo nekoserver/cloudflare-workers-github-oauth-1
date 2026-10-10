@@ -471,6 +471,7 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
+import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { loadCommitSummaryAllowedRepos, buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
@@ -16892,7 +16893,7 @@ app.post('/api/tree-view-snapshot-external', async (c) => {
 
   const repoName = (body?.repoName ?? '').trim();
   if (!isTreeViewSnapshotRepo(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildSnapshotRepoNotSupportedMessage(repoName, TREE_VIEW_SNAPSHOT_REPOS) }, 400);
   }
 
   try {
@@ -16941,7 +16942,7 @@ app.post('/api/tree-view-snapshot-refresh-external', async (c) => {
 
   const repoName = (body?.repoName ?? '').trim();
   if (!isTreeViewSnapshotRepo(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${TREE_VIEW_SNAPSHOT_REPOS.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildSnapshotRepoNotSupportedMessage(repoName, TREE_VIEW_SNAPSHOT_REPOS) }, 400);
   }
 
   // 正規表現による形式チェックだけでは、GITHUB_TOKENが読めるnekoserver
