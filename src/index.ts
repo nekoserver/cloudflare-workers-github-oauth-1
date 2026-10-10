@@ -471,7 +471,7 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
-import { loadCommitSummaryAllowedRepos } from './utils/commitSummaryAllowedRepos';
+import { loadCommitSummaryAllowedRepos, buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
@@ -16233,7 +16233,7 @@ app.post('/api/commit-summary-external', async (c) => {
   const repoName = (body?.repoName ?? '').trim();
   const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   try {
@@ -16423,7 +16423,7 @@ app.post('/api/jev-test-score-external', async (c) => {
   const repoName = (body?.repoName ?? '').trim();
   const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   const commitApiUrl = `https://api.github.com/repos/${repoName}/commits/${commitHash}`;
@@ -16557,7 +16557,7 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   const repoName = (body?.repoName ?? '').trim();
   const commitSummaryAllowedRepos = await loadCommitSummaryAllowedRepos(c.env.DB);
   if (!commitSummaryAllowedRepos.includes(repoName)) {
-    return jsonUtf8({ error: `repoNameは次のいずれかである必要があります: ${commitSummaryAllowedRepos.join(', ')}` }, 400);
+    return jsonUtf8({ error: buildRepoNotAllowedMessage(repoName, commitSummaryAllowedRepos) }, 400);
   }
 
   try {

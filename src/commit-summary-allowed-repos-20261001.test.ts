@@ -69,3 +69,18 @@ describe('loadCommitSummaryAllowedRepos', () => {
     expect(allowed).toEqual([]);
   });
 });
+
+import { buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
+
+describe('buildRepoNotAllowedMessage', () => {
+  it('拒否されたリポジトリ名・原因・対処・現在の対象を含む', () => {
+    const msg = buildRepoNotAllowedMessage('nekoserver/rails-root', ['nekoserver/a', 'nekoserver/b']);
+    expect(msg).toContain('nekoserver/rails-root');
+    expect(msg).toContain('GitHub App がインストールされていない');
+    expect(msg).toContain('Repository access');
+    expect(msg).toContain('nekoserver/a, nekoserver/b');
+  });
+  it('repoName未指定では指定方法を案内する', () => {
+    expect(buildRepoNotAllowedMessage('', [])).toContain('owner/repo');
+  });
+});
