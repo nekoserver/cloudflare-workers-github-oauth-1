@@ -153,10 +153,9 @@ describe('GET /keyword-stats', () => {
 
   it('キーワードが一切抽出されなかった拡張子(.md/.erb/.css等)も、ファイルとして処理済みなら表に出る(2026-10-11、ユーザー指摘の再発防止)', async () => {
     const db = setupDb();
-    // ドキュメント・スタイル変更のみのコミットは、要約からキーワードが
-    // 一つも抽出されないことが多い(filterMeaningfulPrerequisiteTermsで
-    // 低価値語として除外される等)。以前はai_summary_keywordsとのJOINのみで
-    // 集計していたため、このケースの拡張子が表に一切現れなかった。
+    // まだキーワードが一件も抽出されていない要約(どんな理由であれ、
+    // ai_summary_keywordsに行が無い状態)を模す。以前はai_summary_keywordsとの
+    // JOINのみで集計していたため、このケースの拡張子が表に一切現れなかった。
     db.exec(`
       INSERT INTO ai_summary_log (id, request_id, repo_full_name) VALUES (1, 'r1', 'nekoserver/rails-root');
       INSERT INTO ai_summary_files (summary_log_id, file_path, file_ext) VALUES
