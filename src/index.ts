@@ -32,7 +32,7 @@ import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionR
 import { getTestFileCatalogPage, type TestFileCatalogRow } from './views/testFileCatalog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
-import { getKeywordStatsPage, sortRepoKeywordCounts, sortRepoFileCounts, sortFileExtKeywordCounts } from './views/keywordStats';
+import { getKeywordStatsPage, sortRepoKeywordCounts, sortRepoFileCounts, mergeFileExtCounts } from './views/keywordStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -19916,7 +19916,7 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   try {
-    const [totalRow, logsWithKeywordsRow, byRepoRows, topKeywordRows, totalFilesRow, byRepoFilesRows, byFileExtRows] = await Promise.all([
+    const [totalRow, logsWithKeywordsRow, byRepoRows, topKeywordRows, totalFilesRow, byRepoFilesRows, byFileExtCountRows, byFileExtKeywordRows] = await Promise.all([
       c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
       c.env.DB.prepare('SELECT COUNT(DISTINCT summary_log_id) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
       c.env.DB.prepare(
@@ -19940,6 +19940,11 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
          GROUP BY l.repo_full_name`
       ).all<{ repoFullName: string | null; fileCount: number }>(),
       c.env.DB.prepare(
+        `SELECT file_ext AS fileExt, COUNT(*) AS fileCount
+         FROM ai_summary_files
+         GROUP BY file_ext`
+      ).all<{ fileExt: string; fileCount: number }>(),
+      c.env.DB.prepare(
         `SELECT f.file_ext AS fileExt, COUNT(*) AS keywordFileCount
          FROM ai_summary_keywords k
          JOIN ai_summary_files f ON f.summary_log_id = k.summary_log_id
@@ -19955,7 +19960,7 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
         totalProcessedFiles: totalFilesRow?.cnt ?? 0,
         byRepo: sortRepoKeywordCounts(byRepoRows.results ?? []),
         byRepoFiles: sortRepoFileCounts(byRepoFilesRows.results ?? []),
-        byFileExt: sortFileExtKeywordCounts(byFileExtRows.results ?? []),
+        byFileExt: mergeFileExtCounts(byFileExtCountRows.results ?? [], byFileExtKeywordRows.results ?? []),
         topKeywords: topKeywordRows.results ?? [],
       }
     );

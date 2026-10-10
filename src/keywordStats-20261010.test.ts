@@ -151,6 +151,28 @@ describe('GET /keyword-stats', () => {
     expect(html).toContain('>2<');
   });
 
+  it('キーワードが一切抽出されなかった拡張子(.md/.erb/.css等)も、ファイルとして処理済みなら表に出る(2026-10-11、ユーザー指摘の再発防止)', async () => {
+    const db = setupDb();
+    // ドキュメント・スタイル変更のみのコミットは、要約からキーワードが
+    // 一つも抽出されないことが多い(filterMeaningfulPrerequisiteTermsで
+    // 低価値語として除外される等)。以前はai_summary_keywordsとのJOINのみで
+    // 集計していたため、このケースの拡張子が表に一切現れなかった。
+    db.exec(`
+      INSERT INTO ai_summary_log (id, request_id, repo_full_name) VALUES (1, 'r1', 'nekoserver/rails-root');
+      INSERT INTO ai_summary_files (summary_log_id, file_path, file_ext) VALUES
+        (1, 'README.md', 'md'),
+        (1, 'app/views/users/show.html.erb', 'erb'),
+        (1, 'app/assets/style.css', 'css');
+    `);
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('.md');
+    expect(html).toContain('.erb');
+    expect(html).toContain('.css');
+    expect(html).not.toContain('ファイルタイプ別の分布はまだありません');
+  });
+
   it('リポジトリ別の集計が件数の多い順に並ぶ', async () => {
     const db = setupDb();
     db.exec(`
