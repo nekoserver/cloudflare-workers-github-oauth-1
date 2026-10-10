@@ -407,3 +407,53 @@ describe('POST /api/commit-summary-external', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('POST /api/commit-summary-status-external', () => {
+  async function postStatus(db: DatabaseSync, body: Record<string, unknown>): Promise<Response> {
+    const userToken = await makeUserToken('ok@example.com');
+    return app.request(
+      '/api/commit-summary-status-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, ...body }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+  }
+
+  it('直接一致・マージコミット経由はcached、要約の無いものは含まれない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'r1', REPO_NAME, 10, 'aaa1111', '- 要約A', 'm');
+    insertExistingAiSummary(db, 'r2', REPO_NAME, 11, 'bbb2222', '', 'm');
+    insertExistingAiSummary(db, 'r3', REPO_NAME, 12, 'ddd4444', '- 要約D', 'm');
+    insertMergeCommitIndexRow(db, 'ccc3333', REPO_NAME, 1, 12);
+    const res = await postStatus(db, { repoName: REPO_NAME, commitHashes: ['aaa1111', 'bbb2222', 'ccc3333', 'eee5555'] });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { cached: string[] };
+    expect(body.cached).toEqual(['aaa1111', 'ccc3333']);
+  });
+
+  it('別リポジトリの要約はcachedにならない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertExistingAiSummary(db, 'r1', 'nekoserver/other', 10, 'aaa1111', '- 要約A', 'm');
+    const res = await postStatus(db, { repoName: REPO_NAME, commitHashes: ['aaa1111'] });
+    expect((await res.json() as { cached: string[] }).cached).toEqual([]);
+  });
+
+  it('bind上限を超える件数(100件)でも全件判定できる', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const hashes = Array.from({ length: 100 }, (_, i) => (i + 1).toString(16).padStart(8, '0'));
+    insertExistingAiSummary(db, 'rx', REPO_NAME, 1, hashes[99], '- 要約', 'm');
+    const res = await postStatus(db, { repoName: REPO_NAME, commitHashes: hashes });
+    expect((await res.json() as { cached: string[] }).cached).toEqual([hashes[99]]);
+  });
+
+  it('commitHashesが空・不正なら400、未許可メールは403', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    expect((await postStatus(db, { repoName: REPO_NAME, commitHashes: [] })).status).toBe(400);
+    expect((await postStatus(db, { repoName: REPO_NAME, commitHashes: ['zz;drop'] })).status).toBe(400);
+    expect((await postStatus(db, { commitHashes: ['aaa1111'] })).status).toBe(400);
+    const ngToken = await makeUserToken('ng@example.com');
+    const res = await app.request('/api/commit-summary-status-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: ngToken, repoName: REPO_NAME, commitHashes: ['aaa1111'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res.status).toBe(403);
+  });
+});
