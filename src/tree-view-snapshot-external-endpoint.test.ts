@@ -135,10 +135,11 @@ describe('POST /api/tree-view-repos-external', () => {
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
       'nekoserver/rails-root',
+      'nekoserver/rust-worker-sqlx-d1',
     ]);
   });
 
-  it('D1が空でも組み込みの3リポジトリを一覧に返す', async () => {
+  it('D1が空でも組み込みの4リポジトリを一覧に返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
@@ -148,6 +149,7 @@ describe('POST /api/tree-view-repos-external', () => {
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
       'nekoserver/rails-root',
+      'nekoserver/rust-worker-sqlx-d1',
     ]);
   });
 });
