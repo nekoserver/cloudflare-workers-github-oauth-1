@@ -32,6 +32,7 @@ import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionR
 import { getTestFileCatalogPage, type TestFileCatalogRow } from './views/testFileCatalog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
+import { getKeywordStatsPage, sortRepoKeywordCounts } from './views/keywordStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -19843,6 +19844,51 @@ app.get('/jev-label-stats', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[jev-label-stats] ページ描画に失敗', { error: message });
     return new Response('Failed to render jev-label-stats', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * 🔑 コミット要約キーワード統計ページ。ai_summary_keywordsから抽出された
+ * キーワードの総数・リポジトリ別分布・頻出キーワードランキングをざっくり
+ * 把握するための一覧。デプロイ前の既存要約はキーワード未抽出のことがあるため、
+ * ここでの総数は「抽出済みのものだけ」の集計。
+ */
+app.get('/keyword-stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const [totalRow, logsWithKeywordsRow, byRepoRows, topKeywordRows] = await Promise.all([
+      c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
+      c.env.DB.prepare('SELECT COUNT(DISTINCT summary_log_id) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
+      c.env.DB.prepare(
+        `SELECT l.repo_full_name AS repoFullName, COUNT(*) AS keywordCount
+         FROM ai_summary_keywords k
+         JOIN ai_summary_log l ON l.id = k.summary_log_id
+         GROUP BY l.repo_full_name`
+      ).all<{ repoFullName: string | null; keywordCount: number }>(),
+      c.env.DB.prepare(
+        `SELECT keyword, COUNT(*) AS occurrenceCount
+         FROM ai_summary_keywords
+         GROUP BY keyword
+         ORDER BY occurrenceCount DESC, keyword ASC
+         LIMIT 20`
+      ).all<{ keyword: string; occurrenceCount: number }>(),
+    ]);
+
+    const html = getKeywordStatsPage(
+      { name: user.name, username: user.sub },
+      {
+        totalKeywordRows: totalRow?.cnt ?? 0,
+        totalSummaryLogsWithKeywords: logsWithKeywordsRow?.cnt ?? 0,
+        byRepo: sortRepoKeywordCounts(byRepoRows.results ?? []),
+        topKeywords: topKeywordRows.results ?? [],
+      }
+    );
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-stats] ページ描画に失敗', { error: message });
+    return new Response('Failed to render keyword-stats', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 
