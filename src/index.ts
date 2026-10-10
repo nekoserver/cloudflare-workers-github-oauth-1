@@ -32,7 +32,7 @@ import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionR
 import { getTestFileCatalogPage, type TestFileCatalogRow } from './views/testFileCatalog';
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
-import { getKeywordStatsPage, sortRepoKeywordCounts } from './views/keywordStats';
+import { getKeywordStatsPage, sortRepoKeywordCounts, sortRepoFileCounts, sortFileExtKeywordCounts } from './views/keywordStats';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -475,6 +475,7 @@ import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffU
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
+import { saveSummaryFiles } from './utils/aiSummaryFiles';
 import { findSummaryKeywordBackfillTargets, runSummaryKeywordBackfill } from './utils/aiSummaryKeywordsBackfill';
 import { loadCommitSummaryAllowedRepos, buildRepoNotAllowedMessage } from './utils/commitSummaryAllowedRepos';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
@@ -603,6 +604,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'slack_interaction_log', migration: '0024', description: 'Slack操作ログ', syncPolicy: 'auto' },
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'ai_summary_keywords', migration: '0169', description: 'AI要約から抽出したキーワード', syncPolicy: 'auto' },
+  { name: 'ai_summary_files', migration: '0170', description: 'AI要約の元diffから抽出した変更ファイル一覧', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2677,6 +2679,16 @@ END;
   UNIQUE(summary_log_id, keyword)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_summary_keywords_summary_log_id ON ai_summary_keywords(summary_log_id);`,
+  '0170': `CREATE TABLE IF NOT EXISTS ai_summary_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  summary_log_id INTEGER NOT NULL REFERENCES ai_summary_log(id),
+  file_path TEXT NOT NULL,
+  file_ext TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(summary_log_id, file_path)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_summary_files_summary_log_id ON ai_summary_files(summary_log_id);
+CREATE INDEX IF NOT EXISTS idx_ai_summary_files_file_ext ON ai_summary_files(file_ext);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2843,6 +2855,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
   commit_agent_log: { id: 'pk', request_id: 'fk', repo_full_name: 'idx', pr_number: 'idx' },
   ai_summary_keywords: { id: 'pk', summary_log_id: 'fk+idx', keyword: 'uk' },
+  ai_summary_files: { id: 'pk', summary_log_id: 'fk+idx', file_path: 'uk', file_ext: 'idx' },
   repo_color_settings: { id: 'pk', workspace_id: 'fk', repo_name: 'fk' },
   repo_groups: { id: 'pk', workspace_id: 'fk' },
   repo_group_members: { group_id: 'pk+fk', repo_name: 'pk+fk', workspace_id: 'fk' },
@@ -3024,7 +3037,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
-  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   email_confirm_tokens: 'auth',
@@ -3277,6 +3290,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
+  ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
 
   // ========================================================================
@@ -3475,6 +3489,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'ts_commit_quality.repo_id': 'id',
   'api_search_keyword_sections.keyword_id': 'id',
   'ai_summary_keywords.summary_log_id': 'id',
+  'ai_summary_files.summary_log_id': 'id',
 
   // workflow_hierarchy の親子番号 → workflow_registry.workflow_no
   'workflow_hierarchy.child_workflow_no': 'workflow_no',
@@ -16422,6 +16437,7 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
     ).run();
 
     await saveSummaryKeywords(db, requestId, keywords, now.toISOString());
+    await saveSummaryFiles(db, requestId, diffResult.changedFilePaths, now.toISOString());
 
     // commit_agent_log.pr_numberはNOT NULLのため、PRに紐付かないコミットは
     // 0を「PR不明」のセンチネル値として使う(直接一致の検索はcommit_sha+
@@ -19849,15 +19865,18 @@ app.get('/jev-label-stats', authMiddleware, async (c) => {
 
 /**
  * 🔑 コミット要約キーワード統計ページ。ai_summary_keywordsから抽出された
- * キーワードの総数・リポジトリ別分布・頻出キーワードランキングをざっくり
+ * キーワードの総数・リポジトリ別分布・頻出キーワードランキング、
+ * ならびにai_summary_filesから処理済みファイル総数・リポジトリ別の
+ * ファイル件数内訳・ファイルタイプ(拡張子)別のキーワード分布をざっくり
  * 把握するための一覧。デプロイ前の既存要約はキーワード未抽出のことがあるため、
- * ここでの総数は「抽出済みのものだけ」の集計。
+ * ここでの総数は「抽出済みのものだけ」の集計。ai_summary_filesも同様に、
+ * 本機能デプロイ後に処理された要約からのみファイル一覧が記録される。
  */
 app.get('/keyword-stats', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   try {
-    const [totalRow, logsWithKeywordsRow, byRepoRows, topKeywordRows] = await Promise.all([
+    const [totalRow, logsWithKeywordsRow, byRepoRows, topKeywordRows, totalFilesRow, byRepoFilesRows, byFileExtRows] = await Promise.all([
       c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
       c.env.DB.prepare('SELECT COUNT(DISTINCT summary_log_id) AS cnt FROM ai_summary_keywords').first<{ cnt: number }>(),
       c.env.DB.prepare(
@@ -19873,6 +19892,19 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
          ORDER BY occurrenceCount DESC, keyword ASC
          LIMIT 20`
       ).all<{ keyword: string; occurrenceCount: number }>(),
+      c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM ai_summary_files').first<{ cnt: number }>(),
+      c.env.DB.prepare(
+        `SELECT l.repo_full_name AS repoFullName, COUNT(*) AS fileCount
+         FROM ai_summary_files f
+         JOIN ai_summary_log l ON l.id = f.summary_log_id
+         GROUP BY l.repo_full_name`
+      ).all<{ repoFullName: string | null; fileCount: number }>(),
+      c.env.DB.prepare(
+        `SELECT f.file_ext AS fileExt, COUNT(*) AS keywordFileCount
+         FROM ai_summary_keywords k
+         JOIN ai_summary_files f ON f.summary_log_id = k.summary_log_id
+         GROUP BY f.file_ext`
+      ).all<{ fileExt: string; keywordFileCount: number }>(),
     ]);
 
     const html = getKeywordStatsPage(
@@ -19880,7 +19912,10 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
       {
         totalKeywordRows: totalRow?.cnt ?? 0,
         totalSummaryLogsWithKeywords: logsWithKeywordsRow?.cnt ?? 0,
+        totalProcessedFiles: totalFilesRow?.cnt ?? 0,
         byRepo: sortRepoKeywordCounts(byRepoRows.results ?? []),
+        byRepoFiles: sortRepoFileCounts(byRepoFilesRows.results ?? []),
+        byFileExt: sortFileExtKeywordCounts(byFileExtRows.results ?? []),
         topKeywords: topKeywordRows.results ?? [],
       }
     );
@@ -21007,6 +21042,7 @@ app.post('/webhook/github', async (c) => {
           // diff 取得（GITHUB_TOKEN がある場合のみ）
           let trimmedDiff = '';
           let diffLength = 0;
+          let changedFilePaths: string[] = [];
           if (!githubToken) {
             logger.warn('GITHUB_TOKEN is not configured, skipping PR diff fetch', { prUrl });
           } else if (!pr.diff_url) {
@@ -21016,6 +21052,7 @@ app.post('/webhook/github', async (c) => {
               const diffResult = await fetchPrDiff({ diffUrl: pr.diff_url, githubToken });
               trimmedDiff = diffResult.trimmedDiff;
               diffLength = diffResult.diffLength;
+              changedFilePaths = diffResult.changedFilePaths;
               logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
             } catch (error) {
               logger.warn('Failed to fetch PR diff', {
@@ -21158,6 +21195,7 @@ app.post('/webhook/github', async (c) => {
                 (error) => logger.warn('PR summaryのキーワード抽出に失敗', { error: error instanceof Error ? error.message : String(error), prUrl }),
               );
               await saveSummaryKeywords(db, requestId, prSummaryKeywords, now.toISOString());
+              await saveSummaryFiles(db, requestId, changedFilePaths, now.toISOString());
 
               const commitAgentLogEntry = buildCommitAgentLogEntry({
                 requestId,
@@ -21324,6 +21362,7 @@ app.post('/webhook/github', async (c) => {
         // だけでなく実際の差分もAI要約の根拠にするよう変更)。
         let trimmedDiff = '';
         let diffLength = 0;
+        let changedFilePaths: string[] = [];
         const githubToken = c.env.GITHUB_TOKEN;
         const pushDiffUrl = buildPushCompareDiffUrl(pushPayload);
         if (!githubToken) {
@@ -21335,6 +21374,7 @@ app.post('/webhook/github', async (c) => {
             const diffResult = await fetchPrDiff({ diffUrl: pushDiffUrl, githubToken });
             trimmedDiff = diffResult.trimmedDiff;
             diffLength = diffResult.diffLength;
+            changedFilePaths = diffResult.changedFilePaths;
           } catch (error) {
             logger.warn('Failed to fetch push diff', {
               error: error instanceof Error ? error.message : 'Unknown error',
@@ -21386,6 +21426,7 @@ app.post('/webhook/github', async (c) => {
           (error) => logger.warn('push summaryのキーワード抽出に失敗', { error: error instanceof Error ? error.message : String(error), repositoryFullName }),
         );
         await saveSummaryKeywords(db, requestId, pushSummaryKeywords, now.toISOString());
+        await saveSummaryFiles(db, requestId, changedFilePaths, now.toISOString());
       } catch (error) {
         logger.error('Failed to insert ai_summary_log for push webhook', {
           error: error instanceof Error ? error.message : 'Unknown error',

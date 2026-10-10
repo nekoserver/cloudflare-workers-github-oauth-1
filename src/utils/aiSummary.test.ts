@@ -78,7 +78,7 @@ describe('fetchPrDiff', () => {
   });
 
   it('8000文字以下のdiffはそのまま返す', async () => {
-    const shortDiff = 'diff --git a/file.ts\n+added line';
+    const shortDiff = 'diff --git a/file.ts b/file.ts\n+added line';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(shortDiff, { status: 200 })
     ));
@@ -90,6 +90,24 @@ describe('fetchPrDiff', () => {
 
     expect(result.diffLength).toBe(shortDiff.length);
     expect(result.trimmedDiff).toBe(shortDiff);
+    expect(result.changedFilePaths).toEqual(['file.ts']);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('切り詰め前のdiff全文からファイル一覧を抜き出す(8000文字超でも末尾のファイルを取り逃さない)', async () => {
+    const longDiff = `diff --git a/early.ts b/early.ts\n${'a'.repeat(9000)}\ndiff --git a/late.ts b/late.ts\n+added`;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(longDiff, { status: 200 })
+    ));
+
+    const result = await fetchPrDiff({
+      diffUrl: 'https://api.github.com/repos/owner/repo/pulls/1.diff',
+      githubToken: 'ghp_test123',
+    });
+
+    expect(result.trimmedDiff.includes('late.ts')).toBe(false);
+    expect(result.changedFilePaths).toEqual(['early.ts', 'late.ts']);
 
     vi.unstubAllGlobals();
   });

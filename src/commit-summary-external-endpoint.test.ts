@@ -108,6 +108,14 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(summary_log_id, keyword)
     );
+    CREATE TABLE ai_summary_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      summary_log_id INTEGER NOT NULL REFERENCES ai_summary_log(id),
+      file_path TEXT NOT NULL,
+      file_ext TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(summary_log_id, file_path)
+    );
     CREATE TABLE commit_agent_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       request_id TEXT NOT NULL,

@@ -1,3 +1,5 @@
+import { parseChangedFilePaths } from './diffFileList';
+
 export const DEFAULT_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 export const FALLBACK_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 
@@ -45,6 +47,7 @@ export type FetchDiffParams = {
 export type FetchDiffResult = {
   trimmedDiff: string;
   diffLength: number;
+  changedFilePaths: string[];
 };
 
 export async function fetchPrDiff(
@@ -68,9 +71,13 @@ export async function fetchPrDiff(
   }
 
   const diff = await diffRes.text();
+  // ファイル一覧はtrimmedDiff(先頭8000文字)ではなく切る前のdiff全文から
+  // 抜き出す。大きいPRだと末尾のファイルのdiff --git行がtrimmedDiffの
+  // 範囲外になり、処理済みファイル数が本来より少なく数えられてしまうため。
   return {
     diffLength: diff.length,
     trimmedDiff: diff.slice(0, 8000),
+    changedFilePaths: parseChangedFilePaths(diff),
   };
 }
 

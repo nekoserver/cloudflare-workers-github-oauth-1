@@ -9,24 +9,49 @@ import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export type RepoKeywordCountRow = { repoFullName: string | null; keywordCount: number };
+export type RepoFileCountRow = { repoFullName: string | null; fileCount: number };
+export type FileExtKeywordRow = { fileExt: string; keywordFileCount: number };
 export type KeywordFrequencyRow = { keyword: string; occurrenceCount: number };
 
 export type KeywordStatsData = {
   totalKeywordRows: number;
   totalSummaryLogsWithKeywords: number;
+  totalProcessedFiles: number;
   byRepo: RepoKeywordCountRow[];
+  byRepoFiles: RepoFileCountRow[];
+  byFileExt: FileExtKeywordRow[];
   topKeywords: KeywordFrequencyRow[];
 };
 
 /**
- * リポジトリ別キーワード件数を、件数の多い順に並べ替える
- * (DBアクセスを含まない純粋関数)。repo_full_nameがNULLの行は
- * 「(リポジトリ不明)」として最後にまとめる。
+ * リポジトリ別の件数行を、件数の多い順に並べ替える(DBアクセスを含まない
+ * 純粋関数)。repo_full_nameがNULLの行は「(リポジトリ不明)」として最後に
+ * まとめる。sortRepoKeywordCounts・sortRepoFileCountsはどちらもこの
+ * 共通ロジックを使う。
  */
-export function sortRepoKeywordCounts(rows: RepoKeywordCountRow[]): RepoKeywordCountRow[] {
-  const known = rows.filter((r) => r.repoFullName !== null).sort((a, b) => b.keywordCount - a.keywordCount);
+function sortReposByCountDesc<T extends { repoFullName: string | null }>(rows: T[], countOf: (row: T) => number): T[] {
+  const known = rows.filter((r) => r.repoFullName !== null).sort((a, b) => countOf(b) - countOf(a));
   const unknown = rows.filter((r) => r.repoFullName === null);
   return [...known, ...unknown];
+}
+
+/** リポジトリ別キーワード件数を、件数の多い順に並べ替える。 */
+export function sortRepoKeywordCounts(rows: RepoKeywordCountRow[]): RepoKeywordCountRow[] {
+  return sortReposByCountDesc(rows, (r) => r.keywordCount);
+}
+
+/** リポジトリ別の処理済みファイル件数を、件数の多い順に並べ替える。 */
+export function sortRepoFileCounts(rows: RepoFileCountRow[]): RepoFileCountRow[] {
+  return sortReposByCountDesc(rows, (r) => r.fileCount);
+}
+
+/**
+ * ファイルタイプ(拡張子)別のキーワード分布を、件数の多い順(同数なら
+ * 拡張子の昇順)に並べ替える。頻出キーワードランキング(SQL側でORDER BY)と
+ * 揃えて、こちらはDBアクセスを含まない純粋関数側でテスト可能にする。
+ */
+export function sortFileExtKeywordCounts(rows: FileExtKeywordRow[]): FileExtKeywordRow[] {
+  return [...rows].sort((a, b) => b.keywordFileCount - a.keywordFileCount || a.fileExt.localeCompare(b.fileExt));
 }
 
 export function getKeywordStatsPage(user: { name?: string; username: string }, data: KeywordStatsData): string {
@@ -44,6 +69,36 @@ export function getKeywordStatsPage(user: { name?: string; username: string }, d
       return `<tr>` +
         `<td>${label}</td>` +
         `<td class="num">${r.keywordCount}</td>` +
+        `<td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${barWidth}%"></div></div></td>` +
+        `</tr>`;
+    }).join('');
+
+  const byRepoFilesSorted = sortRepoFileCounts(data.byRepoFiles);
+  const maxRepoFileCount = byRepoFilesSorted.length > 0 ? Math.max(...byRepoFilesSorted.map((r) => r.fileCount)) : 0;
+
+  const repoFileRows = byRepoFilesSorted.length === 0
+    ? '<tr class="empty-row"><td colspan="3">処理済みファイルはまだありません</td></tr>'
+    : byRepoFilesSorted.map((r) => {
+      const label = r.repoFullName ? escapeHtml(r.repoFullName) : '(リポジトリ不明)';
+      const barWidth = maxRepoFileCount > 0 ? Math.round((r.fileCount / maxRepoFileCount) * 100) : 0;
+      return `<tr>` +
+        `<td>${label}</td>` +
+        `<td class="num">${r.fileCount}</td>` +
+        `<td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${barWidth}%"></div></div></td>` +
+        `</tr>`;
+    }).join('');
+
+  const byFileExtSorted = sortFileExtKeywordCounts(data.byFileExt);
+  const maxFileExtCount = byFileExtSorted.length > 0 ? Math.max(...byFileExtSorted.map((r) => r.keywordFileCount)) : 0;
+
+  const fileExtRows = byFileExtSorted.length === 0
+    ? '<tr class="empty-row"><td colspan="3">ファイルタイプ別の分布はまだありません</td></tr>'
+    : byFileExtSorted.map((r) => {
+      const barWidth = maxFileExtCount > 0 ? Math.round((r.keywordFileCount / maxFileExtCount) * 100) : 0;
+      const extLabel = r.fileExt.startsWith('(') ? r.fileExt : `.${r.fileExt}`;
+      return `<tr>` +
+        `<td>${escapeHtml(extLabel)}</td>` +
+        `<td class="num">${r.keywordFileCount}</td>` +
         `<td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${barWidth}%"></div></div></td>` +
         `</tr>`;
     }).join('');
@@ -162,9 +217,9 @@ export function getKeywordStatsPage(user: { name?: string; username: string }, d
     <div class="card">
       <h1 class="title">🔑 コミット要約キーワード統計</h1>
       <p class="subtitle">
-        PRマージ・push・要約ボタン押下時にGemma-4で抽出されたキーワード(ai_summary_keywords)の
-        ざっくりした傾向。デプロイ前に生成された既存の要約はキーワード未抽出の場合があるため、
-        ここでの総数は「抽出済みのものだけ」の集計。
+        PRマージ・push・要約ボタン押下時にGemma-4で抽出されたキーワード(ai_summary_keywords)・
+        変更ファイル一覧(ai_summary_files)のざっくりした傾向。デプロイ前に生成された既存の要約は
+        キーワード・ファイル一覧とも未抽出の場合があるため、ここでの総数は「抽出済みのものだけ」の集計。
       </p>
 
       <div class="stat-tiles">
@@ -173,16 +228,39 @@ export function getKeywordStatsPage(user: { name?: string; username: string }, d
           <span class="stat-value">${data.totalKeywordRows}</span>
         </div>
         <div class="stat-tile">
+          <span class="stat-label">処理済みファイル総数</span>
+          <span class="stat-value">${data.totalProcessedFiles}</span>
+        </div>
+        <div class="stat-tile">
           <span class="stat-label">キーワード付き要約の件数</span>
           <span class="stat-value">${data.totalSummaryLogsWithKeywords}</span>
         </div>
       </div>
 
-      <div class="section-title">リポジトリ別の分布</div>
+      <div class="section-title">リポジトリ別の分布(キーワード)</div>
       <div class="section-note">リポジトリごとのキーワード抽出件数(多い順)。</div>
       <table>
         <thead><tr><th>リポジトリ</th><th class="num">件数</th><th></th></tr></thead>
         <tbody>${repoRows}</tbody>
+      </table>
+
+      <div class="section-title">リポジトリ別の分布(処理済みファイル)</div>
+      <div class="section-note">リポジトリごとの処理済みファイル件数(多い順)。</div>
+      <table>
+        <thead><tr><th>リポジトリ</th><th class="num">件数</th><th></th></tr></thead>
+        <tbody>${repoFileRows}</tbody>
+      </table>
+
+      <div class="section-title">ファイルタイプ別のキーワード分布</div>
+      <div class="section-note">
+        同じ要約に含まれるキーワードと変更ファイルの拡張子を掛け合わせた、ざっくりした傾向
+        (例: スタイル変更が多ければcss/scssの件数が多くなる)。1つの要約に複数のキーワード・
+        複数のファイルがある場合は全ての組み合わせを数えるため、厳密な「このキーワードはこの
+        ファイルに対応する」という対応関係ではない点に注意。
+      </div>
+      <table>
+        <thead><tr><th>拡張子</th><th class="num">件数</th><th></th></tr></thead>
+        <tbody>${fileExtRows}</tbody>
       </table>
 
       <div class="section-title">頻出キーワード(上位20件)</div>
