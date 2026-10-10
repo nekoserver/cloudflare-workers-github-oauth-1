@@ -73,6 +73,8 @@ import {
 } from './utils/cfAccessVerify';
 import { getR9StatusPage } from './views/r9Status';
 import { fetchR9Status } from './utils/r9Gateway';
+import { getBotAuthVerifyPage } from './views/botAuthVerify';
+import { verifyIncomingBotRequest } from './utils/webBotAuthVerify';
 import { getAichatCrossModelPage } from './views/aichatCrossModel';
 import { buildCrossModelQuestionGroups, type AichatCrossModelShareRow } from './utils/aichatCrossModelQuestions';
 import { getMentionEditorPage } from './views/mentionEditor';
@@ -14671,6 +14673,17 @@ app.get('/r9-status', authMiddleware, async (c) => {
   if (!c.env.R9_HMAC_SECRET) return c.html(getR9StatusPage(null));
   const result = await fetchR9Status(c.env.R9_HMAC_SECRET);
   return c.html(getR9StatusPage(result));
+});
+
+/**
+ * CursorのBot等からのWeb Bot Auth(HTTP Message Signatures)署名付き
+ * リクエストを検証する。認証は署名そのものが担うため、authMiddleware
+ * (通常のCookieログイン)は要求しない(/access-verifyと同じ設計方針)。
+ */
+app.all('/bot-auth-verify', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await verifyIncomingBotRequest(c.req.raw);
+  return c.html(getBotAuthVerifyPage(result));
 });
 
 app.get('/aichat-cross-model', authMiddleware, async (c) => {
