@@ -1,0 +1,156 @@
+{
+  "name": "nekoserver/rust-worker-sqlx-d1",
+  "type": "dir",
+  "children": [
+    {
+      "name": "CAUTION.rust-worker-sqlx-d1.git-branch-hard-reset.md",
+      "type": "file"
+    },
+    {
+      "name": "CLAUDE.md",
+      "type": "file"
+    },
+    {
+      "name": "Cargo.lock",
+      "type": "file"
+    },
+    {
+      "name": "Cargo.toml",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.rust-worker-sqlx-d1.20260925.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.rust-worker-sqlx-d1.20260929.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.rust-worker-sqlx-d1.webhook-slack-lessons.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.rust-worker-sqlx-d1.webhook-verification-20260925.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.20260925.md",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.mcp-candidate-apis.20260925.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.rust-worker-sqlx-d1.router-migration.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.20260925.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.ai-summary-log-heritage-cities-samples.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.airline-route-area-tables-samples.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.axum-migration.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.header-inspector-retry-and-pacing.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.header-inspector.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.heritage-cities-distance-km-cast-fix.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.heritage-cities-distance-km-text-cast-fix.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.slack-tables-samples.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-and-filters-more-tables.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-delivery-id-duration-ms.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-more-patterns.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-syntax-highlight.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-toc-overview.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.rust-worker-sqlx-d1.sqlx-d1-examples-webhook-log-more-samples.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.security.md",
+      "type": "file"
+    },
+    {
+      "name": "src",
+      "type": "dir",
+      "children": [
+        {
+          "name": "accessstats.rs",
+          "type": "file"
+        },
+        {
+          "name": "auth.rs",
+          "type": "file"
+        },
+        {
+          "name": "depgraph.rs",
+          "type": "file"
+        },
+        {
+          "name": "headerinspector.rs",
+          "type": "file"
+        },
+        {
+          "name": "lib.rs",
+          "type": "file"
+        },
+        {
+          "name": "sqlxexamples.rs",
+          "type": "file"
+        },
+        {
+          "name": "tunnelsigner.rs",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "wrangler.toml",
+      "type": "file"
+    }
+  ]
+}
