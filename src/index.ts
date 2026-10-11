@@ -416,6 +416,8 @@ import { buildJevValuesForLoop, computeJevButtonState, isMissingTableError } fro
 import { groupJevScoreRowsByShare, isValidJevScoreBoardLabelId, JEV_SCORE_BOARD_LIMIT, JEV_SCORE_BOARD_LABEL_MIN, JEV_SCORE_BOARD_LABEL_MAX, type JevScoreBoardScoreRow } from './utils/jevScoreBoard';
 import { buildJevLivePulse, type JevLivePulseRow } from './utils/jevLivePulse';
 import { runJevScoreForShare, runJevScoreForKeyword } from './utils/jevScoreFlow';
+import { runClefScoreForShare } from './utils/clefScoreFlow';
+import type { ClefScoreAiBinding } from './utils/clefScoreApi';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -9190,6 +9192,45 @@ app.post('/api/aichat/jev-score', authMiddleware, async (c) => {
   });
   if (!result.ok) {
     logger.error('[jev-score] runJevScoreForShare失敗', { shareId, model, status: result.status, error: result.error });
+    return jsonUtf8({ error: result.error, verified: false }, result.status);
+  }
+
+  return jsonUtf8({ shareId, model, values: result.values, verified: result.verified, state: result.state });
+});
+
+/**
+ * 「Clefでの評価を追加」(thread-tracker等)用。表示中の回答バブルの回答文を
+ * Clef(Workers AI決定モデル)の全ラベルで評価させ、clef_evaluations
+ * (jev_evaluationsとは別の新テーブル、migrations/0171)へ書き込んだ後、
+ * 書き込み内容を再読み込みして検証(ベリファイ)する。既存の/api/aichat/
+ * jev-score・jev_evaluationsには一切影響しない(PLAN.cloudflare-workers-
+ * github-oauth-1.20261011.judgment-models.mdのステップ③、追加専用の拡張)。
+ */
+app.post('/api/aichat/clef-score', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+
+  const body = await c.req.json<{ shareId?: string; model?: string }>().catch(() => null);
+  const shareId = (body?.shareId ?? '').trim();
+  const model = (body?.model ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  if (!model) return jsonUtf8({ error: 'model は必須です' }, 400);
+
+  const shareRow = await getAichatShareDetail(c.env.DB, user.sub, shareId, '');
+  if (!shareRow) return jsonUtf8({ error: 'Not found' }, 404);
+
+  const result = await runClefScoreForShare({
+    db: c.env.DB,
+    ai: c.env.AI as ClefScoreAiBinding,
+    targetType: 'answer',
+    userId: user.sub,
+    shareId,
+    model,
+    stateText: shareRow.answer,
+  });
+  if (!result.ok) {
+    logger.error('[clef-score] runClefScoreForShare失敗', { shareId, model, status: result.status, error: result.error });
     return jsonUtf8({ error: result.error, verified: false }, result.status);
   }
 
