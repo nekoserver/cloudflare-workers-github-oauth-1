@@ -158,7 +158,7 @@ describe('POST /api/clef-playground-external', () => {
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal(db, { userToken, model: 'not-a-real-model', ...VALID_BODY }, `Bearer ${SECRET}`, makeAiEnv(run));
     expect(res.status).toBe(200);
-    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef-flash', expect.objectContaining({ state: VALID_BODY.state }));
+    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef-flash', expect.objectContaining({ model: '@cf/cloudflare/clef-flash', state: VALID_BODY.state }));
   });
 
   it('正常系: 検証済みpayloadでAI.runを呼び、resultを展開したレスポンスを返す', async () => {
@@ -170,11 +170,14 @@ describe('POST /api/clef-playground-external', () => {
     const body = await res.json() as { model: string; answers: { condition: { noul: number } } };
     expect(body.model).toBe('@cf/cloudflare/clef');
     expect(body.answers.condition.noul).toBe(0.92);
-    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef', { state: VALID_BODY.state, questions: VALID_BODY.questions });
-    // userToken・modelは入力(input)としてAI.runへ渡さない。
+    // Workers AI側のClefはinputオブジェクト自体にもmodelを必須として
+    // 要求するため、ai.run()の第一引数と同じmodelをinputにも含める
+    // (2026-10-11、実機で確認。詳細はutils/clefPlayground.test.ts参照)。
+    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef', { model: '@cf/cloudflare/clef', state: VALID_BODY.state, questions: VALID_BODY.questions });
+    // userTokenはAI.runの入力(input)へ渡さない(クライアントの個人情報を
+    // Workers AIへ送る必要が無い)。
     const [, input] = run.mock.calls[0];
     expect(input).not.toHaveProperty('userToken');
-    expect(input).not.toHaveProperty('model');
   });
 
   it('AI.run失敗時は502を返し、握りつぶさない', async () => {
