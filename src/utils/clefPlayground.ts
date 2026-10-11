@@ -50,15 +50,25 @@ export function buildClefPlaygroundResponseBody(outcome: { model: ClefPlayground
 
 /**
  * 検証済みpayload({state, questions, model?})からmodelを解決し、
- * env.AI.run(model, {state, questions})を呼ぶ。失敗はerrorDetailに
- * メッセージを入れて返す(呼び出し元でログ記録・HTTPステータス決定を行う)。
+ * env.AI.run(model, {model, state, questions})を呼ぶ。
+ *
+ * 2026-10-11、実機で確認: ai.run(model, input)の第一引数(model)だけでは
+ * 足りず、Workers AI側のスキーマ検証がinputオブジェクト自体にも
+ * model/state/questionsの3つを必須として要求する
+ * (実際に返ってきたエラー: "required properties at '/' are
+ * 'model,state,questions'")。そのため第一引数と同じmodelをinputにも
+ * 含めて渡す(以前はpayload.modelをinputから除外していたのが誤り)。
+ *
+ * 失敗はerrorDetailにメッセージを入れて返す(呼び出し元でログ記録・
+ * HTTPステータス決定を行う)。
  */
 export async function callClefPlaygroundModel(
   ai: ClefAiBinding,
   payload: Record<string, unknown>
 ): Promise<ClefPlaygroundOutcome> {
   const model = resolveClefPlaygroundModel(payload.model);
-  const { model: _model, ...input } = payload;
+  const { model: _model, ...rest } = payload;
+  const input = { model, ...rest };
   try {
     const result = await ai.run(model, input);
     return { ok: true, model, result };
