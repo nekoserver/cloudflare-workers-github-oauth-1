@@ -607,6 +607,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'ai_summary_keywords', migration: '0169', description: 'AI要約から抽出したキーワード', syncPolicy: 'auto' },
   { name: 'ai_summary_files', migration: '0170', description: 'AI要約の元diffから抽出した変更ファイル一覧', syncPolicy: 'auto' },
+  { name: 'clef_evaluations', migration: '0171', description: 'Clef(Workers AI決定モデル)によるAIチャット回答評価。jev_evaluationsとは別テーブルで、既存のJev評価データには一切影響しない', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2691,6 +2692,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_keywords_summary_log_id ON ai_summary_
 );
 CREATE INDEX IF NOT EXISTS idx_ai_summary_files_summary_log_id ON ai_summary_files(summary_log_id);
 CREATE INDEX IF NOT EXISTS idx_ai_summary_files_file_ext ON ai_summary_files(file_ext);`,
+  '0171': `CREATE TABLE IF NOT EXISTS clef_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_type TEXT NOT NULL,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT,
+  jev_label_id INTEGER NOT NULL REFERENCES jev_labels(id),
+  clef_model TEXT NOT NULL,
+  value REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_clef_evaluations_unique ON clef_evaluations(target_type, user_id, share_id, model, jev_label_id, clef_model);
+CREATE INDEX IF NOT EXISTS idx_clef_evaluations_share ON clef_evaluations(share_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2953,6 +2967,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   jev_label_groups: { id: 'pk' },
   jev_labels: { id: 'pk', jev_group_id: 'fk' },
   jev_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
+  clef_evaluations: { id: 'pk', share_id: 'fk+idx', user_id: 'fk', jev_label_id: 'fk' },
   jev_country_keyword_labels: { id: 'pk' },
   jev_country_keyword_evaluations: { id: 'pk', keyword: 'idx', user_id: 'fk', jev_country_keyword_label_id: 'fk' },
   jev_keyword_boundary_labels: { id: 'pk' },
@@ -3127,6 +3142,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   jev_label_groups: 'ai',
   jev_labels: 'ai',
   jev_evaluations: 'ai',
+  clef_evaluations: 'ai',
   jev_country_keyword_labels: 'ai',
   jev_country_keyword_evaluations: 'ai',
   jev_keyword_boundary_labels: 'ai',
@@ -3357,6 +3373,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
   jev_labels: { jev_group_id: 'jev_label_groups' },
   jev_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
+  clef_evaluations: { user_id: 'user_sessions', share_id: 'ai_chat_shares', jev_label_id: 'jev_labels' },
   jev_country_keyword_evaluations: { user_id: 'user_sessions', jev_country_keyword_label_id: 'jev_country_keyword_labels' },
   jev_keyword_boundary_evaluations: { user_id: 'user_sessions', jev_keyword_boundary_label_id: 'jev_keyword_boundary_labels', source_share_id: 'ai_chat_shares' },
   jev_vuln_labels: { jev_group_id: 'jev_vuln_label_groups' },
@@ -3473,6 +3490,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'jev_labels.jev_group_id': 'id',
   'jev_evaluations.share_id': 'id',
   'jev_evaluations.jev_label_id': 'id',
+  'clef_evaluations.share_id': 'id',
+  'clef_evaluations.jev_label_id': 'id',
   'jev_country_keyword_evaluations.jev_country_keyword_label_id': 'id',
   'jev_keyword_boundary_evaluations.jev_keyword_boundary_label_id': 'id',
   'jev_keyword_boundary_evaluations.source_share_id': 'id',
