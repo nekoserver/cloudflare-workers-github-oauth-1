@@ -2,7 +2,7 @@
  * POST /api/clef-playground・/api/clef-playground-external のテスト
  *
  * 対象: Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・
- * clef-flash・clef-omni)を試し呼びするプレイグラウンド。Clefは「Jev互換」
+ * clef-flash)を試し呼びするプレイグラウンド。Clefは「Jev互換」
  * (state+questions、質問type=noul/choice/scoreが同じ形)を公式に名乗って
  * いるため、/api/jev-playground・/api/jev-playground-externalと同じ
  * validateJevPlaygroundPayloadを使い、呼び出し先だけがAPIキー経由の外部
@@ -11,8 +11,13 @@
  * 故障シナリオ:
  *   (1) AIバインディング未設定でもAI.run相当を試みて例外で落ちてしまう
  *   (2) state/questionsの検証が漏れ、不正なpayloadでもAI.runを呼んでしまう
- *   (3) 未知のmodel文字列をそのままAI.run()へ渡し、存在しないモデルIDで
- *       呼び出してしまう(resolveClefPlaygroundModelでフォールバックすべき)
+ *   (3) 未知のmodel文字列(clef-omni含む。音声・動画対応で別スキーマと
+ *       見られ、本エンドポイントのスキーマ非対応)をそのままAI.run()へ渡し、
+ *       非対応のモデルIDで呼び出してしまう
+ *       (resolveClefPlaygroundModelでフォールバックすべき)
+ *   (3.5) input.modelにカタログの完全なID(@cf/cloudflare/clef-flash等)を
+ *       渡してしまう(2026-10-11実機で確認: 短い名前clef/clef-flashのみ
+ *       正規表現を通る)
  *   (4) AI.run失敗時に握りつぶして200を返してしまう
  *   (5) (externalのみ) Bearer secretが一致しないリクエストが素通りしてしまう
  *   (6) (externalのみ) userTokenが無い/偽造されている場合に本文の生emailを
@@ -158,7 +163,18 @@ describe('POST /api/clef-playground-external', () => {
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal(db, { userToken, model: 'not-a-real-model', ...VALID_BODY }, `Bearer ${SECRET}`, makeAiEnv(run));
     expect(res.status).toBe(200);
-    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef-flash', expect.objectContaining({ model: '@cf/cloudflare/clef-flash', state: VALID_BODY.state }));
+    // input.modelは短い名前(clef-flash)。ai.run()の第一引数はカタログの
+    // 完全なID(@cf/cloudflare/clef-flash)のまま(2026-10-11実機で確認)。
+    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef-flash', expect.objectContaining({ model: 'clef-flash', state: VALID_BODY.state }));
+  });
+
+  it('clef-omniは本エンドポイントのスキーマ非対応のため既定モデル(clef-flash)へフォールバックする', async () => {
+    const db = setupDb(['ok@example.com']);
+    const run = vi.fn().mockResolvedValue({ answers: { condition: 0.5 } });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postExternal(db, { userToken, model: '@cf/cloudflare/clef-omni', ...VALID_BODY }, `Bearer ${SECRET}`, makeAiEnv(run));
+    expect(res.status).toBe(200);
+    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef-flash', expect.objectContaining({ model: 'clef-flash' }));
   });
 
   it('正常系: 検証済みpayloadでAI.runを呼び、resultを展開したレスポンスを返す', async () => {
@@ -171,9 +187,9 @@ describe('POST /api/clef-playground-external', () => {
     expect(body.model).toBe('@cf/cloudflare/clef');
     expect(body.answers.condition.noul).toBe(0.92);
     // Workers AI側のClefはinputオブジェクト自体にもmodelを必須として
-    // 要求するため、ai.run()の第一引数と同じmodelをinputにも含める
+    // 要求するが、その値は短い名前(clef)でなければならない
     // (2026-10-11、実機で確認。詳細はutils/clefPlayground.test.ts参照)。
-    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef', { model: '@cf/cloudflare/clef', state: VALID_BODY.state, questions: VALID_BODY.questions });
+    expect(run).toHaveBeenCalledWith('@cf/cloudflare/clef', { state: VALID_BODY.state, questions: VALID_BODY.questions, model: 'clef' });
     // userTokenはAI.runの入力(input)へ渡さない(クライアントの個人情報を
     // Workers AIへ送る必要が無い)。
     const [, input] = run.mock.calls[0];

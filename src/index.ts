@@ -5280,8 +5280,10 @@ app.post('/api/jev-playground-external', async (c) => {
 });
 
 /**
- * Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・clef-flash・
- * clef-omni)を試し呼びするプレイグラウンド。Clefは「Jev互換」を公式に
+ * Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・clef-flash。
+ * clef-omniは音声・動画対応で別スキーマと見られるため、テキストのみの
+ * 本プレイグラウンドでは対象外)を試し呼びする
+ * プレイグラウンド。Clefは「Jev互換」を公式に
  * 名乗っており、state+questions(type=noul/choice/score)のリクエスト形式が
  * 同じため、既存のvalidateJevPlaygroundPayloadをそのまま使う。Jev
  * Playgroundと異なりAPIキーではなくWorkers AIバインディング(env.AI)を
