@@ -9,14 +9,17 @@
 // 本ページはテキストのみのstate+questions形式専用であり、clef-omniは
 // 別の(未検証の)リクエストスキーマを使うと見られるため選択肢に含めていない。
 //
-// 2026-10-11、実機で確認(ユーザー報告のエラーで裏取り): Jevはnoulタイプの
-// 質問オブジェクトにinstructionsフィールドを含めても許容するが、Clef側の
-// スキーマはquestionsオブジェクトにadditionalPropertiesを許可しておらず、
-// type/question以外の未知フィールドがあるとquestions全体を拒否する
-// (実際に返ってきたエラー: {"error":{"type":"invalid_request","message":
-// "Request body failed validation","details":{"fieldErrors":{"questions":
-// ["Extra inputs are not permitted"]}}}})。そのためnoulタイプの質問には
-// instructionsを含めない(choice/scoreのcriteriaはClef側も要求するため残す)。
+// 2026-10-11、実機で確認(ユーザー報告のエラーで裏取り、Cloudflareの公式モデル
+// スキーマ(cloudflare/cloudflare-docsリポジトリのsrc/content/workers-ai-models/
+// clef-flash.jsonで確認)でも裏付け): Jev Playgroundは質問テキストを`question`
+// フィールドで渡すが、Clef自身のリクエストスキーマには`question`という名前の
+// フィールドは存在せず、質問テキストは`instructions`フィールド(noul/choice/score
+// 共通で必須)で渡す必要がある。`question`のまま送るとquestionsのoneOf判定が
+// どの質問タイプにも一致せず、"required properties at '/' are
+// 'model,state,questions'"という(ルート直下の必須プロパティ不足に見える)
+// 紛らわしいエラーになる(noul/choice/scoreのどのタイプでも同じ症状になっていた)。
+// なお`criteria`はnoulでは任意(true/falseの意味を補足する説明)、choice
+// (オプションIDをキーにしたオブジェクト)・score(順序付き配列)では必須。
 
 function escapeJsonForHtml(value: unknown): string {
   return JSON.stringify(value, null, 2).replace(/&/g, '\\u0026').replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -93,7 +96,7 @@ export function getClefPlaygroundPage(): string {
       model: DEFAULT_CLEF_MODEL,
       state,
       questions: { [questionId]: {
-        type: template.type, question,
+        type: template.type, instructions: question,
         ...(template.type === 'noul' ? {} : { criteria: template.criteria }),
       } },
     };
@@ -139,7 +142,7 @@ document.querySelectorAll('.card').forEach(function(card){
     try{body=JSON.parse(textarea.value)}catch(_){body={model:'${DEFAULT_CLEF_MODEL}',questions:{}}}
     body.state=sample.state;
     var questionKey=Object.keys(body.questions)[0];
-    if(questionKey){body.questions[questionKey].question=sample.question}
+    if(questionKey){body.questions[questionKey].instructions=sample.question}
     textarea.value=JSON.stringify(body,null,2);
     flash.textContent=JSON.stringify(sample.state);
     flash.classList.remove('is-flashing');
