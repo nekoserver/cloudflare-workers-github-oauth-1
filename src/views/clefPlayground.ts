@@ -8,6 +8,15 @@
 // clef-omni(音声・動画対応、@cf/cloudflare/clef-omni)も実在するが、
 // 本ページはテキストのみのstate+questions形式専用であり、clef-omniは
 // 別の(未検証の)リクエストスキーマを使うと見られるため選択肢に含めていない。
+//
+// 2026-10-11、実機で確認(ユーザー報告のエラーで裏取り): Jevはnoulタイプの
+// 質問オブジェクトにinstructionsフィールドを含めても許容するが、Clef側の
+// スキーマはquestionsオブジェクトにadditionalPropertiesを許可しておらず、
+// type/question以外の未知フィールドがあるとquestions全体を拒否する
+// (実際に返ってきたエラー: {"error":{"type":"invalid_request","message":
+// "Request body failed validation","details":{"fieldErrors":{"questions":
+// ["Extra inputs are not permitted"]}}}})。そのためnoulタイプの質問には
+// instructionsを含めない(choice/scoreのcriteriaはClef側も要求するため残す)。
 
 function escapeJsonForHtml(value: unknown): string {
   return JSON.stringify(value, null, 2).replace(/&/g, '\\u0026').replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -85,7 +94,7 @@ export function getClefPlaygroundPage(): string {
       state,
       questions: { [questionId]: {
         type: template.type, question,
-        ...(template.type === 'noul' ? { instructions: template.instructions } : { criteria: template.criteria }),
+        ...(template.type === 'noul' ? {} : { criteria: template.criteria }),
       } },
     };
     const options = template.samples.map((sample, index) => `<button type="button" class="state-option" data-index="${index}"><strong>${escapeHtml(sample[0])}</strong><span>${escapeHtml(sample[1])}</span></button>`).join('');
