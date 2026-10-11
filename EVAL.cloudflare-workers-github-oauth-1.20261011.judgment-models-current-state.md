@@ -69,6 +69,41 @@
 (Clef Playground(`src/utils/clefPlayground.ts`)は既にこの生
 パススルー経路の対になるものとして実装済み)。
 
+### 1.5 補足: AIチャットの「既存の応答フロー」にJevが組み込まれている箇所は、クライアント側では2箇所だけ、サーバー側は1関数に集約されている
+
+この事実はこれまで複数のSPEC/EVALに断片的にしか書かれていなかった
+(auto-explore側の呼び出しは
+[`SPEC.cloudflare-workers-github-oauth-1.20260924.auto-explore.md`](SPEC.cloudflare-workers-github-oauth-1.20260924.auto-explore.md)
+4-3節に記載があるが、📔ボタン側の呼び出しとの関係や「これで全数か」は
+どこにも明記されていなかった)ため、ここで`grep`による実測で確定させる。
+
+`POST /api/aichat/jev-score`をクライアント側から呼んでいる箇所は、
+`src/views/aichat.ts`の以下の2箇所のみ(`src/`全体を検索して確認済み。
+`src/views/apis.ts`・`src/data/apiEndpointList.ts`はAPIカタログ表示用の
+記述であり呼び出しではない)。
+
+| 呼び出し元(関数) | 行(目安) | トリガー |
+|---|---|---|
+| `runJevScoreAndShow()` | `aichat.ts:4967` | 詳細プレビューモーダルの📔ボタン(ユーザーが手動で押す) |
+| `autoExploreProcessKeyword()` | `aichat.ts:7257` | 自動探索パイプラインの2段階目(自動実行、4-3節参照) |
+
+この2箇所は**どちらも同じエンドポイント(`POST /api/aichat/jev-score`)を
+叩き、サーバー側は必ず同じ1つの関数`runJevScoreForShare()`
+(`jevScoreFlow.ts`)を通る**(ルートハンドラ自体は認可・バリデーションの
+薄いラッパーで、実処理は全てこの関数に委譲している)。
+
+**含意**: 「既存のAI応答フローに組み込まれたJev問い合わせ」を変更・
+抽象化する必要が生じた場合、触る場所は実質1箇所(`runJevScoreForShare()`、
+または呼び出し元の`/api/aichat/jev-score`ハンドラ)に限定される。
+クライアント側の2つの呼び出し元(📔ボタン・自動探索)は、サーバー側の
+実装を意識せずどちらも恩恵を受ける(またはどちらも影響を受ける)。
+
+一方、PLANで採用した「新テーブル(`clef_evaluations`)+新規エンドポイント
+(`/api/aichat/clef-score`)を追加するだけ」という方針では、**この1関数には
+一切触らない**。そのため、この節で確定させた「唯一の経路」は今回の
+拡張作業では変更対象にならない(将来、本当にJevからClefへ本番を
+切り替える判断をした時にのみ、この節の情報が変更対象の特定に使える)。
+
 ---
 
 ## 1.5 合計呼び出し箇所数
