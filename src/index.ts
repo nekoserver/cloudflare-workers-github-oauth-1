@@ -44,6 +44,8 @@ import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
 import { getJevPlaygroundPage } from './views/jevPlayground';
+import { getClefPlaygroundPage } from './views/clefPlayground';
+import { callClefPlaygroundModel, buildClefPlaygroundResponseBody, type ClefAiBinding } from './utils/clefPlayground';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getEarthComposer25Page } from './views/earthComposer25';
@@ -5275,6 +5277,67 @@ app.post('/api/jev-playground-external', async (c) => {
   if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
 
   return callJevPlaygroundApi(c.env.JEV_API_KEY, validation.payload);
+});
+
+/**
+ * Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・clef-flash・
+ * clef-omni)を試し呼びするプレイグラウンド。Clefは「Jev互換」を公式に
+ * 名乗っており、state+questions(type=noul/choice/score)のリクエスト形式が
+ * 同じため、既存のvalidateJevPlaygroundPayloadをそのまま使う。Jev
+ * Playgroundと異なりAPIキーではなくWorkers AIバインディング(env.AI)を
+ * 使うため課金対象ではあるが追加のAPIキー管理は不要。
+ */
+app.get('/clef-playground', authMiddleware, (c) => {
+  return c.html(getClefPlaygroundPage());
+});
+
+app.post('/api/clef-playground', authMiddleware, async (c) => {
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+
+  const body = await c.req.json().catch(() => null);
+  const validation = validateJevPlaygroundPayload(body);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  const outcome = await callClefPlaygroundModel(c.env.AI as ClefAiBinding, validation.payload);
+  if (!outcome.ok) {
+    logger.warn('[clef-playground] AI.run呼び出しに失敗', { error: outcome.errorDetail });
+    return jsonUtf8({ error: 'Clefモデルの呼び出しに失敗しました: ' + outcome.errorDetail }, 502);
+  }
+  return jsonUtf8(buildClefPlaygroundResponseBody(outcome));
+});
+
+/**
+ * dynamicnekoの/clef-pg-reactページ用。jev-playground-externalと同じ
+ * 専用Bearer secret + userToken認可パターンで提供する(専用secretが
+ * 未配備の環境だけAICHAT_EXTERNAL_SECRETへフォールバック)。
+ */
+app.post('/api/clef-playground-external', async (c) => {
+  const authorization = c.req.header('Authorization') ?? '';
+  const externalSecret = c.env.CLEF_PLAYGROUND_EXTERNAL_SECRET || c.env.AICHAT_EXTERNAL_SECRET;
+  const expectedAuthorization = externalSecret
+    ? `Bearer ${externalSecret}`
+    : null;
+  if (!expectedAuthorization || authorization !== expectedAuthorization) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+
+  const body = await c.req.json<{ userToken?: string } & Record<string, unknown>>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, false);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  if (!body) return jsonUtf8({ error: 'リクエストは有効なJSONで指定してください' }, 400);
+  const { userToken: _userToken, ...rest } = body;
+  const validation = validateJevPlaygroundPayload(rest);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  const outcome = await callClefPlaygroundModel(c.env.AI as ClefAiBinding, validation.payload);
+  if (!outcome.ok) {
+    logger.warn('[clef-playground-external] AI.run呼び出しに失敗', { error: outcome.errorDetail });
+    return jsonUtf8({ error: 'Clefモデルの呼び出しに失敗しました: ' + outcome.errorDetail }, 502);
+  }
+  return jsonUtf8(buildClefPlaygroundResponseBody(outcome));
 });
 
 // =====================================================
