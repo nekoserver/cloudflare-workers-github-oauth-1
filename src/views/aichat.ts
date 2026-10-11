@@ -198,6 +198,10 @@ export function getAiChatPage(user: {
        入力欄へ差し込む(次の探索を境界線上のキーワードへ誘導する)。 */
     .kb-panel { display:none; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 14px; border-top:1px solid var(--border-color); background:var(--bg-secondary); }
     .kb-panel.kb-panel-visible { display:flex; }
+    /* 「未分類パネル」チェックボックス(kbPanelToggle)でユーザーが非表示にした場合。
+       kb-panel-visibleより後に書かれているだけでは詳細度が同じで上書きできない
+       (CSS内の出現順で決まるため、挿入順を変えると壊れる)ため!importantで確実に勝たせる。 */
+    .kb-panel.kb-panel-hidden { display:none !important; }
     .kb-panel-label { font-size:11px; color:var(--text-muted); white-space:nowrap; }
     .kb-chip-wrap { display:inline-flex; align-items:center; gap:3px; padding:3px 10px 3px 6px; border-radius:12px; font-size:11px; white-space:nowrap; box-sizing:border-box; border:1.5px solid var(--accent-color,#667eea); background:transparent; }
     .kb-chip-check { width:12px; height:12px; margin:0; cursor:pointer; accent-color:var(--accent-color,#667eea); flex-shrink:0; }
@@ -1175,9 +1179,14 @@ export function getAiChatPage(user: {
           <textarea class="chat-input" id="chatInput" placeholder="メッセージを入力... (Ctrl+Enter または Shift+Enter で送信)" rows="1"></textarea>
           <button type="submit" class="chat-send-btn" id="chatSendBtn">送信</button>
         </form>
-        <label style="display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:5px;font-size:11px;color:var(--text-muted);cursor:pointer;">
-          <input type="checkbox" id="aichatStreamToggle" checked> 応答をリアルタイム表示
-        </label>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:5px;font-size:11px;color:var(--text-muted);">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="kbPanelToggle" checked> 未分類パネル
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="aichatStreamToggle" checked> 応答をリアルタイム表示
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -7392,15 +7401,44 @@ export function getAiChatPage(user: {
         });
     }
 
+    // 実行中の自動探索に停止要求を立てる共通処理。autoExploreBtnのクリック
+    // (実行中に押した場合)と、kbPanelToggleで未分類パネルを非表示にした
+    // 場合の両方から呼ぶ(「パネルを隠したら自動探索も止める」ため)。
+    // 実行中でなければ何もしない。
+    function requestAutoExploreCancel() {
+      if (!autoExploreRunning) return;
+      autoExploreCancelRequested = true;
+      autoExploreBtn.disabled = true;
+      autoExploreBtn.textContent = '⏹ 停止中...';
+    }
+
     autoExploreBtn.addEventListener('click', function() {
       if (autoExploreRunning) {
-        autoExploreCancelRequested = true;
-        autoExploreBtn.disabled = true;
-        autoExploreBtn.textContent = '⏹ 停止中...';
+        requestAutoExploreCancel();
         return;
       }
       runAutoExplore();
     });
+
+    // 「未分類パネル」チェックボックス: 入力欄上の探索の境界線パネル
+    // (keywordBoundaryPanel)自体の表示/非表示を切り替える。非表示にする
+    // 時は、見えなくなったパネルの裏で自動探索だけが動き続ける状態を
+    // 避けるため、実行中の自動探索も同時に停止させる(ユーザー指示)。
+    var kbPanelToggle = document.getElementById('kbPanelToggle');
+    kbPanelToggle.checked = localStorage.getItem('aichat_kb_panel_enabled') !== 'off';
+    function applyKbPanelToggle() {
+      if (kbPanelToggle.checked) {
+        keywordBoundaryPanel.classList.remove('kb-panel-hidden');
+      } else {
+        keywordBoundaryPanel.classList.add('kb-panel-hidden');
+        requestAutoExploreCancel();
+      }
+    }
+    kbPanelToggle.addEventListener('change', function() {
+      localStorage.setItem('aichat_kb_panel_enabled', kbPanelToggle.checked ? 'on' : 'off');
+      applyKbPanelToggle();
+    });
+    applyKbPanelToggle();
 
     // ログパネルを閉じるだけで、実行中の探索自体は止めない(停止は
     // autoExploreBtnの「⏹ 停止」が担う)。完了後もログが残り続け
