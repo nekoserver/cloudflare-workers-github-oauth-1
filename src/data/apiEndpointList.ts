@@ -270,7 +270,7 @@ export const API_ENDPOINT_LIST: ApiEndpointEntry[] = [
   { group: 'ヘリテージジャーニー', method: 'POST', path: '/api/heritage-journey/save-waypoint-set', desc: '経由地点の組み合わせ(waypoint-set)を保存' },
   { group: 'ヘリテージジャーニー', method: 'GET', path: '/api/heritage-journey/latest-waypoint-set', desc: '発着都市の組み合わせで最後に保存された経由地点セットを取得' },
   { group: 'Jevプレイグラウンド', method: 'POST', path: '/api/jev-playground', desc: 'Jev API(TypeSafe AI systemone)を任意の質問セット(state+questions)で試し呼びし、応答をそのまま中継する(課金対象、JEV_API_KEY必須)' },
-  { group: 'Clefプレイグラウンド', method: 'POST', path: '/api/clef-playground', desc: 'Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・clef-flash・clef-omni)を任意の質問セット(state+questions、Jev互換形式)で試し呼びする(Workers AIバインディング利用、課金対象)' },
+  { group: 'Clefプレイグラウンド', method: 'POST', path: '/api/clef-playground', desc: 'Cloudflare Workers AIのClef決定モデル(@cf/cloudflare/clef・clef-flash)を任意の質問セット(state+questions、Jev互換形式)で試し呼びする(Workers AIバインディング利用、課金対象)' },
   { group: 'クエリビルダー・パターン分析', method: 'POST', path: '/api/d1-query-catalog/run', desc: 'D1クエリカタログ(d1_query_catalog)に登録済みのSQLを名前指定で実行' },
   { group: 'クエリビルダー・パターン分析', method: 'GET', path: '/api/query-builder/columns', desc: '許可リスト(STATUS_TABLE_DEFINITIONS)内のテーブルのカラム一覧(PRAGMA table_info)を取得' },
   { group: 'クエリビルダー・パターン分析', method: 'POST', path: '/api/query-builder/run', desc: '選択式で組み立てたQuerySpecを検証しSELECT文をD1へ実行(テーブル・カラムは許可リストのみ)' },
