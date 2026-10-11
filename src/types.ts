@@ -58,6 +58,8 @@ export type Bindings = {
   JEV_API_KEY?: string;
   /** dynamicnekoのJev Playgroundだけに使用するBearer認証シークレット。他のexternal APIと共有しない */
   JEV_PLAYGROUND_EXTERNAL_SECRET?: string;
+  /** dynamicnekoのClef Playgroundだけに使用するBearer認証シークレット。他のexternal APIと共有しない */
+  CLEF_PLAYGROUND_EXTERNAL_SECRET?: string;
   /**
    * jev-score-external・jev-stats-externalが受け取るuserToken(短寿命JWT、sub=email)の
    * 検証用シークレット。dynamicneko側の同名シークレットと同じ値をwrangler secret putで設定する。
