@@ -4,14 +4,23 @@
  * 対象: /clef-playground ページ(src/views/clefPlayground.ts)が各質問タイプの
  * カードに埋め込む、デフォルトのリクエストJSON(textarea初期値)。
  *
- * 故障シナリオ: 2026-10-11、実機でnoulタイプのデフォルトリクエストを実行すると
- * Workers AI側のClefから次のエラーが返ってきた(ユーザー報告・裏取り済み):
- *   {"error":{"type":"invalid_request","message":"Request body failed validation",
- *     "details":{"formErrors":[],"fieldErrors":{"questions":["Extra inputs are not permitted"]}}}}
- * jevPlayground.tsと同じテンプレートをそのまま流用し、noulタイプの質問オブジェクトに
- * `instructions`フィールドを含めていたことが原因(Jev APIは許容するが、Clef側の
- * スキーマはadditionalPropertiesを許可しておらず、type/question以外の未知フィールドを
- * 含むquestionsオブジェクト全体を拒否する)。
+ * 故障シナリオ: 2026-10-11、実機で全タイプ(noul/choice/score)のデフォルトリクエストを
+ * 実行すると、Workers AI側のClefから次のエラーが返ってきた(ユーザー報告・裏取り済み):
+ *   {"error": "5006: Error: required properties at '/' are 'model,state,questions'"}
+ *
+ * 原因: jevPlayground.tsのテンプレートをそのまま流用し、質問テキストを`question`
+ * フィールドに入れていたが、Cloudflareの公式モデルスキーマ(cloudflare/cloudflare-docsの
+ * src/content/workers-ai-models/clef-flash.jsonで確認。`questions`配下のoneOf、
+ * noul/choice/score共通で`instructions`が必須、`question`という名前のフィールドは
+ * スキーマに存在しない)によると、質問テキストは`instructions`フィールドで渡す必要がある。
+ * `question`は未知のフィールドとして扱われ、かつ必須の`instructions`が無いため、
+ * questionsのoneOfがどの質問タイプにも一致せず、バリデータがフォールバックで
+ * ルート直下の必須プロパティ(model/state/questions)の不足として報告していた
+ * (noul/choice/scoreのどのタイプでも同じ症状になっていたのはこのため)。
+ *
+ * なお、noulの`criteria`(true/falseの意味を説明するオブジェクト)は公式スキーマ上
+ * 任意のため省略可能。choice(オプションIDをキーにしたオブジェクト)・
+ * score(順序付き配列)の`criteria`は必須で、この2タイプの形式自体は従来通りで正しい。
  */
 import { describe, it, expect } from 'vitest';
 import { getClefPlaygroundPage } from './clefPlayground';
@@ -31,23 +40,27 @@ function extractRequestJson(html: string, cardType: string): Record<string, unkn
 }
 
 describe('getClefPlaygroundPage', () => {
-  it('noulタイプのデフォルトリクエストJSONに、Clefのスキーマが拒否するinstructionsフィールドを含めない', () => {
+  it('全タイプのデフォルトリクエストJSONは、質問テキストをinstructionsフィールドで渡す(questionフィールドは使わない)', () => {
+    const html = getClefPlaygroundPage();
+    for (const cardType of ['noul', 'choice', 'score']) {
+      const body = extractRequestJson(html, cardType);
+      const questions = body.questions as Record<string, Record<string, unknown>>;
+      const question = Object.values(questions)[0];
+      expect(question).toHaveProperty('instructions');
+      expect(typeof question.instructions).toBe('string');
+      expect(question).not.toHaveProperty('question');
+    }
+  });
+
+  it('noulタイプの質問オブジェクトはtype/instructionsのみを持つ(criteriaは任意のため省略)', () => {
     const html = getClefPlaygroundPage();
     const body = extractRequestJson(html, 'noul');
     const questions = body.questions as Record<string, Record<string, unknown>>;
     const question = Object.values(questions)[0];
-    expect(question).not.toHaveProperty('instructions');
+    expect(Object.keys(question).sort()).toEqual(['instructions', 'type']);
   });
 
-  it('noulタイプの質問オブジェクトはtype/questionのみを持つ(additionalPropertiesなし)', () => {
-    const html = getClefPlaygroundPage();
-    const body = extractRequestJson(html, 'noul');
-    const questions = body.questions as Record<string, Record<string, unknown>>;
-    const question = Object.values(questions)[0];
-    expect(Object.keys(question).sort()).toEqual(['question', 'type']);
-  });
-
-  it('choice/scoreタイプは従来通りcriteriaフィールドを持つ', () => {
+  it('choice/scoreタイプは必須のcriteriaフィールドを持つ', () => {
     const html = getClefPlaygroundPage();
     for (const cardType of ['choice', 'score']) {
       const body = extractRequestJson(html, cardType);
@@ -55,5 +68,19 @@ describe('getClefPlaygroundPage', () => {
       const question = Object.values(questions)[0];
       expect(question).toHaveProperty('criteria');
     }
+  });
+
+  it('choiceタイプのcriteriaはオプションIDをキーにしたオブジェクト、scoreタイプのcriteriaは順序付き配列', () => {
+    const html = getClefPlaygroundPage();
+    const choiceBody = extractRequestJson(html, 'choice');
+    const choiceQuestions = choiceBody.questions as Record<string, Record<string, unknown>>;
+    const choiceQuestion = Object.values(choiceQuestions)[0];
+    expect(choiceQuestion.criteria).not.toBeInstanceOf(Array);
+    expect(typeof choiceQuestion.criteria).toBe('object');
+
+    const scoreBody = extractRequestJson(html, 'score');
+    const scoreQuestions = scoreBody.questions as Record<string, Record<string, unknown>>;
+    const scoreQuestion = Object.values(scoreQuestions)[0];
+    expect(Array.isArray(scoreQuestion.criteria)).toBe(true);
   });
 });
