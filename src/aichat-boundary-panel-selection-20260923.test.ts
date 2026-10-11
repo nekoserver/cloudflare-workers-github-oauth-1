@@ -116,14 +116,23 @@ describe('探索の境界線パネル: 自動探索は選択(またはチェッ�
 });
 
 describe('探索の境界線パネル: 実行中にもう一度押すと停止できる', () => {
-  it('実行中でなければrunAutoExplore()を呼び、実行中ならキャンセル要求を立てる(ボタンは無効化しない=押し直せる)', () => {
+  it('実行中でなければrunAutoExplore()を呼び、実行中ならrequestAutoExploreCancel()でキャンセル要求を立てる', () => {
     const html = buildPage();
     const idx = html.indexOf("autoExploreBtn.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 400);
+    const snippet = html.slice(idx, idx + 200);
     expect(snippet).toContain('if (autoExploreRunning) {');
-    expect(snippet).toContain('autoExploreCancelRequested = true;');
+    expect(snippet).toContain('requestAutoExploreCancel();');
     expect(snippet).toContain('runAutoExplore();');
+  });
+
+  it('requestAutoExploreCancel()はボタンを無効化せず(押し直せる)、キャンセル要求と「停止中...」ラベルを立てる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function requestAutoExploreCancel()');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain('autoExploreCancelRequested = true;');
+    expect(snippet).toContain("autoExploreBtn.textContent = '⏹ 停止中...';");
   });
 
   it('実行中はボタンをdisabledにせず(押し直せる)、⏹ 停止のラベル・kb-runningクラスにする', () => {
