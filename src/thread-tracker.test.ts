@@ -326,7 +326,7 @@ describe('thread tracker page', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).toContain('function jevScoreHtml(turn)');
     expect(html).not.toContain('Jevスコア: ');
-    expect(html).toContain("jevScoreHtml(turn)+context+'<div class=\"markdown question\"");
+    expect(html).toContain("jevScoreHtml(turn)+clefScoreHtml(turn)+context+'<div class=\"markdown question\"");
     expect(html).not.toContain("+' · 質問 '+");
     expect(html).not.toContain('heading=index===0');
     expect(html).toMatch(/\.jev-score\{margin:0 0 2px/);

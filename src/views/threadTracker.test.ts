@@ -228,4 +228,56 @@ describe('getThreadTrackerPage', () => {
   it('ビューモードが切り替わるたびに検索窓は表示状態にリセットされる(閉じたまま固定navbarに取り残されない)', () => {
     expect(html).toMatch(/function applyViewMode\(\)\{[^}]*setSearchPanelOpen\(true\)/);
   });
+
+  // 対象: 「Clefでの評価を追加」ボタン(clefScoreHtml・bindClefScoreButtons)。
+  // PLAN.cloudflare-workers-github-oauth-1.20261011.judgment-models.mdの
+  // ステップ④。既存のjevScoreHtml(自動探索・📔ボタン由来のJevスコア表示)
+  // とは完全に独立した経路(/api/aichat/clef-score)。
+  describe('「Clefでの評価を追加」ボタン', () => {
+    it('turn.idがある場合のみ、結果表示用のdiv(data-clef-score-result)とボタン(data-clef-score-btn)を出す', () => {
+      expect(html).toContain("function clefScoreHtml(turn){return turn.id?");
+      expect(html).toContain('data-clef-score-result="');
+      expect(html).toContain('data-clef-score-btn');
+      expect(html).toContain('data-share-id="');
+      expect(html).toContain('data-model="');
+    });
+
+    it('turnHtmlはjevScoreHtml(turn)の直後にclefScoreHtml(turn)を差し込む(既存のJevスコア表示の並びを壊さない)', () => {
+      expect(html).toContain('jevScoreHtml(turn)+clefScoreHtml(turn)+context');
+    });
+
+    it('bindActionsはbindTurnDeckの直後にbindClefScoreButtonsを呼ぶ', () => {
+      expect(html).toContain('bindTurnDeck(root);bindClefScoreButtons(root);');
+    });
+
+    it('ボタン押下はPOST /api/aichat/clef-scoreへshareId・modelを送る(/api/aichat/jev-scoreとは別経路)', () => {
+      const idx = html.indexOf('function bindClefScoreButtons(root)');
+      expect(idx).toBeGreaterThan(-1);
+      const snippet = html.slice(idx, idx + 1200);
+      expect(snippet).toContain("fetch('/api/aichat/clef-score'");
+      expect(snippet).toContain('JSON.stringify({shareId:shareId,model:model})');
+      expect(snippet).not.toContain('/api/aichat/jev-score');
+    });
+
+    it('verified!==trueの場合はボタンを再有効化し、resultコンテナにエラーを表示する(黙って成功扱いにしない)', () => {
+      const idx = html.indexOf('function bindClefScoreButtons(root)');
+      const snippet = html.slice(idx, idx + 1200);
+      expect(snippet).toContain('result.data.verified!==true');
+      expect(snippet).toContain('btn.disabled=false;btn.textContent=originalText;');
+      expect(snippet).toContain("container.textContent='Clef評価に失敗しました: '");
+    });
+
+    it('成功時は結果の数値をresultコンテナへ表示し、ボタン自体は取り除く(二重押下を防ぐ)', () => {
+      const idx = html.indexOf('function bindClefScoreButtons(root)');
+      const snippet = html.slice(idx, idx + 1200);
+      expect(snippet).toContain('values.map(function(v){return \'<span>\'+esc(v.value)+\'</span>\';})');
+      expect(snippet).toContain('btn.remove();');
+    });
+
+    it('.clef-scoreは色分けクラス(jev-score-high/medium相当)を持たない数値のみの表示にする(意味論が未検証のため)', () => {
+      expect(html).toContain('.clef-score{');
+      expect(html).not.toContain('clef-score-high');
+      expect(html).not.toContain('clef-score-medium');
+    });
+  });
 });
