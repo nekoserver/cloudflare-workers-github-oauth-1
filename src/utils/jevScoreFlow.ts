@@ -35,7 +35,11 @@ export type JevScoreFlowResult =
   | { ok: false; status: 500; error: string }
   | { ok: false; status: 502; error: string };
 
-async function fetchAllLabels(db: JevScoreDb): Promise<{ ok: true; labels: JevLabel[] } | { ok: false; error: string }> {
+/**
+ * jev_labels(質問定義)の取得。clefScoreFlow.ts(Clefによる評価、
+ * jev_labelsを共有してclef_evaluationsへ書き込む)からも再利用する。
+ */
+export async function fetchAllLabels(db: JevScoreDb): Promise<{ ok: true; labels: JevLabel[] } | { ok: false; error: string }> {
   try {
     const rows = await db
       .prepare('SELECT id, question_text, options_json FROM jev_labels')
