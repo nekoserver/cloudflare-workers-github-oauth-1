@@ -401,6 +401,14 @@ import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadat
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWebhookSlackSettingPage } from './views/webhookSlackSettingPage';
 import { buildWebhookSettingChecks, fetchCfAuthSettingChecks, toWebhookLogDisplayRows, type WebhookLogRawRow } from './utils/webhookSlackSettingDiagnostics';
+import { getRepoOnboardingCheckPage, type RepoOnboardingStageView } from './views/repoOnboardingCheckPage';
+import {
+  evaluateInstallationCheck,
+  evaluateWebhookDeliveryCheck,
+  evaluateCommitBackfillCheck,
+  type InstallationPermissionRow,
+  type WebhookLogRow,
+} from './utils/repoOnboardingCheck';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -14163,6 +14171,131 @@ app.get('/wh-setting_github-to-slack', authMiddleware, async (c) => {
   const cfAuthChecks = await fetchCfAuthSettingChecks(c.env.CF_AUTH, c.env.NOTIFY_WORKER_SECRET);
 
   return c.html(getWebhookSlackSettingPage(user.sub, checks, recentPushLogs, cfAuthChecks));
+});
+
+// repoNameは "owner/repo" 形式のみ許可する。GitHub APIへそのまま埋め込むため、
+// パストラバーサルやURLインジェクションにつながる文字種を拒否する。
+function isSafeOwnerRepoName(repoName: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoName);
+}
+
+app.get('/repo-onboarding-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const rawRepo = (c.req.query('repo') ?? '').trim();
+
+  if (!rawRepo) {
+    return c.html(getRepoOnboardingCheckPage(user.sub, null, null));
+  }
+  if (!isSafeOwnerRepoName(rawRepo)) {
+    return c.html(getRepoOnboardingCheckPage(user.sub, rawRepo, null));
+  }
+
+  const db = c.env.DB;
+  const stages: RepoOnboardingStageView[] = [];
+
+  // ①GitHub Appインストール確認
+  if (db) {
+    try {
+      const { results } = await db
+        .prepare('SELECT repo_name, repository_selection, updated_at FROM installation_permissions')
+        .all<InstallationPermissionRow>();
+      stages.push({
+        stepNumber: 1,
+        title: 'GitHub Appインストール',
+        result: evaluateInstallationCheck(rawRepo, results ?? []),
+      });
+    } catch (error) {
+      logger.error('Failed to query installation_permissions for onboarding check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 1,
+        title: 'GitHub Appインストール',
+        result: { status: 'warning', summary: 'installation_permissionsの取得に失敗しました', detail: 'D1クエリでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 1, title: 'GitHub Appインストール', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ②webhook疎通確認
+  if (db) {
+    try {
+      const { results } = await db
+        .prepare(
+          `SELECT event_type, status, received_at FROM webhook_log WHERE source = 'github' AND payload LIKE ? ORDER BY received_at DESC LIMIT 20`
+        )
+        .bind(`%${rawRepo}%`)
+        .all<WebhookLogRow>();
+      stages.push({
+        stepNumber: 2,
+        title: 'webhook疎通(経路A)',
+        result: evaluateWebhookDeliveryCheck(results ?? []),
+      });
+    } catch (error) {
+      logger.error('Failed to query webhook_log for onboarding check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 2,
+        title: 'webhook疎通(経路A)',
+        result: { status: 'warning', summary: 'webhook_logの取得に失敗しました', detail: 'D1クエリでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 2, title: 'webhook疎通(経路A)', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ③repo_commit_indexバックフィル確認(D1件数 vs GitHub実コミット数)
+  if (db) {
+    try {
+      const d1Row = await db
+        .prepare('SELECT COUNT(*) as cnt, MAX(seq_num) as maxSeq FROM repo_commit_index WHERE repo_name = ?')
+        .bind(rawRepo)
+        .first<{ cnt: number; maxSeq: number | null }>();
+      const d1Summary = { count: d1Row?.cnt ?? 0, maxSeq: d1Row?.maxSeq ?? null };
+
+      let githubTotal: number | null = null;
+      const [owner, repo] = rawRepo.split('/');
+      if (c.env.GITHUB_TOKEN && owner && repo) {
+        const { total } = await getGitHubCommitCount({ owner, repo, accessToken: c.env.GITHUB_TOKEN });
+        githubTotal = total;
+      }
+      stages.push({
+        stepNumber: 3,
+        title: 'コミット保存・バックフィル',
+        result: evaluateCommitBackfillCheck(d1Summary, githubTotal),
+      });
+    } catch (error) {
+      logger.error('Failed to evaluate repo_commit_index backfill check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 3,
+        title: 'コミット保存・バックフィル',
+        result: { status: 'warning', summary: '確認中にエラーが発生しました', detail: 'D1クエリまたはGitHub API呼び出しでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 3, title: 'コミット保存・バックフィル', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ④cf-authの/wspace記録確認・⑤dynamicnekoのtree-view組み込み確認は未実装
+  stages.push({
+    stepNumber: 4,
+    title: 'cf-authの/wspace記録',
+    result: { status: 'not_implemented', summary: 'このチェックは未実装です', detail: 'cf-auth側に状態確認用エンドポイントが無いため、現時点では手動確認が必要です' },
+  });
+  stages.push({
+    stepNumber: 5,
+    title: 'dynamicnekoのtree-view組み込み',
+    result: { status: 'not_implemented', summary: 'このチェックは未実装です', detail: 'dynamicneko側に許可リスト確認用エンドポイントが無いため、現時点では手動確認が必要です' },
+  });
+
+  return c.html(getRepoOnboardingCheckPage(user.sub, rawRepo, stages));
 });
 
 app.get('/api/workflow', authMiddleware, async (c) => {
