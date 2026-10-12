@@ -382,6 +382,34 @@ describe('GET /api/aichat/threads/seed', () => {
     });
   });
 
+  // 対象: Clefスコアのキャッシュ読み出し。過去に評価したはずの数値が
+  // 読み出せず「追加」ボタンが復活してしまう不具合の修正(2026-10-12、
+  // ユーザー報告)。clef_evaluationsの内容をquestionClefScoresとして
+  // 事前に埋め込み、クライアント側(clefScoreHtml)が描画前に参照できる
+  // ようにする。
+  it('表示中の質問文IDと同じshare_idに保存された回答ClefスコアをquestionClefScoresとして返す(jev_evaluationsとは別に集計)', async () => {
+    const row = {
+      id: 'question-share-id', thread_id: THREAD_ID, conversation_hash: 'hash-1', question_hash: 'question-hash',
+      question: '質問', answer: '回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z',
+      question_clef_scores: '1:0.87,7:0.13',
+    };
+    const res = await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb([row]) });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { threads: Array<{ turns: Array<{ id: string; questionClefScores: Array<{ labelId: number; value: number }> }> }> };
+    expect(body.threads[0].turns[0]).toMatchObject({
+      id: 'question-share-id',
+      questionClefScores: [{ labelId: 1, value: 0.87 }, { labelId: 7, value: 0.13 }],
+    });
+  });
+
+  it('クエリにclef_evaluationsからのAS question_clef_scores集計を含む(jev_evaluations集計と並んで存在する)', async () => {
+    let capturedSql = '';
+    const db = { prepare(sql: string) { capturedSql = sql; return { bind() { return { async first() { return { last_activity_at: new Date().toISOString(), revoked_at: null, idle_timeout_seconds: null }; }, async all() { return { results: [] }; }, async run() { return { success: true }; } }; } }; } };
+    await app.request('/api/aichat/threads/seed', { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: db });
+    expect(capturedSql).toContain('FROM clef_evaluations e');
+    expect(capturedSql).toContain('AS question_clef_scores');
+  });
+
   it('新しい100件をスレッドごとのシードデータへ整形する', async () => {
     const rows = [
       { id: 'share-1', thread_id: THREAD_ID, conversation_hash: 'hash-1', question: '昔の質問', answer: '昔の回答', model: 'gemma', source: 'textbox', created_at: '2025-01-01T00:00:00.000Z' },
@@ -517,6 +545,17 @@ describe('GET /api/aichat/threads/:threadId', () => {
     const res = await app.request('/api/aichat/threads/' + THREAD_ID, { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeFailingDb('no such column: thread_id') });
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'スレッドの取得に失敗しました: no such column: thread_id' });
+  });
+
+  it('clef_evaluationsに保存済みのClefスコアをquestionClefScoresとして返す(過去に評価済みでもボタンが復活しない)', async () => {
+    const rows = [{
+      id: 'share-1', conversation_hash: 'conversation-1', question: '最初の質問', answer: '回答', model: 'gemma',
+      source: 'textbox', created_at: '2026-09-28T00:00:00.000Z', question_clef_scores: '1:0.92',
+    }];
+    const res = await app.request('/api/aichat/threads/' + THREAD_ID, { headers: { Cookie: await authCookie() } }, { JWT_SECRET: SECRET, DB: makeDb(rows) });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { turns: Array<{ id: string; questionClefScores?: Array<{ labelId: number; value: number }> }> };
+    expect(body.turns[0]).toMatchObject({ id: 'share-1', questionClefScores: [{ labelId: 1, value: 0.92 }] });
   });
 });
 

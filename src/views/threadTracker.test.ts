@@ -235,11 +235,30 @@ describe('getThreadTrackerPage', () => {
   // とは完全に独立した経路(/api/aichat/clef-score)。
   describe('「Clefでの評価を追加」ボタン', () => {
     it('turn.idがある場合のみ、結果表示用のdiv(data-clef-score-result)とボタン(data-clef-score-btn)を出す', () => {
-      expect(html).toContain("function clefScoreHtml(turn){return turn.id?");
+      expect(html).toContain('function clefScoreHtml(turn){if(!turn.id)return');
       expect(html).toContain('data-clef-score-result="');
       expect(html).toContain('data-clef-score-btn');
       expect(html).toContain('data-share-id="');
       expect(html).toContain('data-model="');
+    });
+
+    it('turn.questionClefScores(キャッシュ)が既にある場合は、ボタンを出さずスコアを直接表示する(再評価ボタンが復活しない)', () => {
+      const idx = html.indexOf('function clefScoreHtml(turn)');
+      expect(idx).toBeGreaterThan(-1);
+      const fnEnd = html.indexOf('\n', idx) >= 0 ? html.indexOf('function turnHtml(turn', idx) : -1;
+      const fnBody = html.slice(idx, fnEnd > idx ? fnEnd : idx + 700);
+      expect(fnBody).toContain('turn.questionClefScores||[]');
+      expect(fnBody).toMatch(/if\s*\(\s*scores\.length\s*\)/);
+      // data-clef-score-btnはキャッシュ無し(else)の分岐1箇所にしか出てこない
+      // (キャッシュ済みの場合にボタンを再描画してしまう不具合の再発防止)。
+      const btnOccurrences = fnBody.split('data-clef-score-btn').length - 1;
+      expect(btnOccurrences).toBe(1);
+    });
+
+    it('キャッシュ済みのClefスコアもscoreColorClassで色分けする(Jevと同じルール)', () => {
+      const idx = html.indexOf('function clefScoreHtml(turn)');
+      const snippet = html.slice(idx, idx + 400);
+      expect(snippet).toContain('scoreColorClass(score.value)');
     });
 
     it('turnHtmlはjevScoreHtml(turn)の直後にclefScoreHtml(turn)を差し込む(既存のJevスコア表示の並びを壊さない)', () => {
@@ -272,6 +291,29 @@ describe('getThreadTrackerPage', () => {
       const snippet = html.slice(idx, idx + 1200);
       expect(snippet).toContain('var className=scoreColorClass(v.value);');
       expect(snippet).toContain('btn.remove();');
+    });
+
+    it('成功時(DBへの書き込み完了=verified:true)にshowClefSaveToast()を呼ぶ(失敗時は呼ばない)', () => {
+      const idx = html.indexOf('function bindClefScoreButtons(root)');
+      const snippet = html.slice(idx, idx + 1200);
+      const verifiedCheckIdx = snippet.indexOf('result.data.verified!==true');
+      const toastCallIdx = snippet.indexOf('showClefSaveToast();');
+      expect(toastCallIdx).toBeGreaterThan(-1);
+      expect(toastCallIdx).toBeGreaterThan(verifiedCheckIdx);
+      expect(toastCallIdx).toBeLessThan(snippet.indexOf('btn.remove();'));
+    });
+
+    it('showClefSaveToast()は「Clefスコア登録完了」のトーストを画面中央に表示し、一定時間後に消える', () => {
+      const idx = html.indexOf('function showClefSaveToast()');
+      expect(idx).toBeGreaterThan(-1);
+      const snippet = html.slice(idx, idx + 400);
+      expect(snippet).toContain("toast.textContent='Clefスコア登録完了';");
+      expect(snippet).toContain("toast.className='clef-save-toast';");
+      expect(snippet).toContain('setTimeout(');
+      expect(html).toMatch(/\.clef-save-toast\{[^}]*position:fixed/);
+      expect(html).toMatch(/\.clef-save-toast\{[^}]*top:50%/);
+      expect(html).toMatch(/\.clef-save-toast\{[^}]*left:50%/);
+      expect(html).toMatch(/\.clef-save-toast\{[^}]*background:#c6f6d5/);
     });
 
     it('ClefのスコアもscoreColorClass(Jevと同じ0.8/0.5の閾値)で色分けする(ユーザー指示、2026-10-12)', () => {

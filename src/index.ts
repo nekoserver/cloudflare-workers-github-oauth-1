@@ -7847,7 +7847,12 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
                  FROM jev_evaluations e
                 WHERE e.target_type = 'answer'
                   AND e.user_id = ?
-                  AND e.share_id = recent_shares.id) AS question_jev_scores
+                  AND e.share_id = recent_shares.id) AS question_jev_scores,
+              (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
+                 FROM clef_evaluations e
+                WHERE e.target_type = 'answer'
+                  AND e.user_id = ?
+                  AND e.share_id = recent_shares.id) AS question_clef_scores
        FROM (
          SELECT id, thread_id, conversation_hash, question_hash, question, answer, model, source, created_at
          FROM ai_chat_shares
@@ -7858,16 +7863,16 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
          LIMIT 100
        ) AS recent_shares
        ORDER BY COALESCE(thread_id, id) ASC, created_at ASC, id ASC`
-    ).bind(user.sub, user.sub).all<{
+    ).bind(user.sub, user.sub, user.sub).all<{
       id: string; thread_id: string | null; conversation_hash: string; question_hash: string | null; question: string; answer: string;
-      model: string | null; source: string | null; created_at: string; question_jev_scores: string | null;
+      model: string | null; source: string | null; created_at: string; question_jev_scores: string | null; question_clef_scores: string | null;
     }>();
 
     const threads = new Map<string, {
       threadId: string | null;
       createdAt: string;
       latestActivityAt: string;
-      turns: Array<{ id: string; conversationHash: string | null; questionHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string; questionJevScores?: Array<{ labelId: number; value: number }> }>;
+      turns: Array<{ id: string; conversationHash: string | null; questionHash: string | null; question: string; answer: string; model: string | null; source: string | null; createdAt: string; questionJevScores?: Array<{ labelId: number; value: number }>; questionClefScores?: Array<{ labelId: number; value: number }> }>;
     }>();
     for (const row of rows.results ?? []) {
       // thread_id導入前の回答も検索結果から消さない。旧回答は回答ごとに独立表示する。
@@ -7879,6 +7884,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
       }
       thread.latestActivityAt = row.created_at;
       const questionJevScores = parseThreadQuestionJevScores(row.question_jev_scores);
+      const questionClefScores = parseThreadQuestionJevScores(row.question_clef_scores);
       thread.turns.push({
         id: row.id,
         conversationHash: row.conversation_hash,
@@ -7889,6 +7895,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
         source: row.source,
         createdAt: row.created_at,
         ...(questionJevScores.length ? { questionJevScores } : {}),
+        ...(questionClefScores.length ? { questionClefScores } : {}),
       });
     }
 
@@ -7918,13 +7925,18 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
                  FROM jev_evaluations e
                 WHERE e.target_type = 'answer'
                   AND e.user_id = ?
-                  AND e.share_id = s.id) AS question_jev_scores
+                  AND e.share_id = s.id) AS question_jev_scores,
+              (SELECT GROUP_CONCAT(e.jev_label_id || ':' || e.value)
+                 FROM clef_evaluations e
+                WHERE e.target_type = 'answer'
+                  AND e.user_id = ?
+                  AND e.share_id = s.id) AS question_clef_scores
        FROM ai_chat_shares s
       WHERE s.user_id = ? AND s.thread_id = ? AND s.deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`
-    ).bind(user.sub, user.sub, threadId).all<{
+    ).bind(user.sub, user.sub, user.sub, threadId).all<{
       id: string; conversation_hash: string | null; question_hash: string | null; question: string; answer: string; model: string | null;
-      source: string | null; created_at: string; question_jev_scores: string | null;
+      source: string | null; created_at: string; question_jev_scores: string | null; question_clef_scores: string | null;
     }>();
     if (!(rows.results ?? []).length) return jsonUtf8({ error: 'スレッドが見つかりません' }, 404);
     return jsonUtf8({
@@ -7940,6 +7952,9 @@ app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
         createdAt: row.created_at,
         ...(parseThreadQuestionJevScores(row.question_jev_scores).length
           ? { questionJevScores: parseThreadQuestionJevScores(row.question_jev_scores) }
+          : {}),
+        ...(parseThreadQuestionJevScores(row.question_clef_scores).length
+          ? { questionClefScores: parseThreadQuestionJevScores(row.question_clef_scores) }
           : {}),
       })),
     });
