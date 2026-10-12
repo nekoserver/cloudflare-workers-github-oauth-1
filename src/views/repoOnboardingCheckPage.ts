@@ -7,6 +7,7 @@ function statusBadge(status: OnboardingCheckResult['status']): string {
     ok: { cls: 'roc-badge-ok', label: '✅ OK' },
     warning: { cls: 'roc-badge-warn', label: '⚠️ 要確認' },
     missing: { cls: 'roc-badge-ng', label: '❌ 未達' },
+    optional: { cls: 'roc-badge-optional', label: '🔶 任意(未設定)' },
     not_implemented: { cls: 'roc-badge-info', label: '🚧 未実装' },
   };
   const { cls, label } = map[status];
@@ -103,6 +104,7 @@ export function getRepoOnboardingCheckPage(
     .roc-badge-ng { background: #ffebe9; color: #cf222e; }
     .roc-badge-warn { background: #fff8c5; color: #9a6700; }
     .roc-badge-info { background: #ddf4ff; color: #0969da; }
+    .roc-badge-optional { background: #fbefff; color: #8250df; }
     .roc-empty { font-size: 13px; color: var(--text-secondary); }
     .roc-note { font-size: 12px; color: var(--text-secondary); margin-top: 10px; line-height: 1.6; }
   </style>
@@ -122,7 +124,7 @@ export function getRepoOnboardingCheckPage(
         <input type="text" name="repo" placeholder="nekoserver/railway" value="${repoName ? escapeHtml(repoName) : ''}" autocomplete="off" spellcheck="false">
         <button type="submit">確認</button>
       </form>
-      <p class="roc-note">SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.mdの8ステップのうち、本体Workerのデータだけで判定できる①〜③を表示します。④(cf-authの/wspace記録)・⑤(dynamicnekoのtree-view組み込み)は現時点では未実装です(🚧表示)。</p>
+      <p class="roc-note">SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.mdの8ステップのうち、本体Workerのデータだけで判定できる①〜③を表示します。④(cf-authの/wspace記録)・⑤(dynamicnekoのtree-view組み込み)は現時点では未実装です(🚧表示)。<br>①(GitHub Appインストール)は webhook受信・repo_commit_indexへの保存そのものには不要なため、未インストールでも🔶「任意」表示に留め、❌扱いはしません。AI要約の-external系エンドポイントを使う場合のみ必要です。</p>
     </div>
 
     <div class="roc-card">
