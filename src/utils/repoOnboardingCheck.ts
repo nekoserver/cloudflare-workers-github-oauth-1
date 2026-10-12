@@ -107,11 +107,18 @@ export type RepoCommitIndexSummary = {
 /**
  * ③repo_commit_indexのバックフィル状況確認。D1件数とGitHub実際のコミット数を
  * 比較する。githubTotalがnull(API取得失敗)の場合はwarningとし、断定しない。
+ *
+ * lastSyncedAt: repo_commit_index自体にはタイムスタンプ列が無いため、同じ
+ * webhookハンドラが書き込む直近のpushイベント受信時刻(②で取得したもの)を
+ * 「最終反映日時」の目安として表示する(ユーザー要望: OK表示でも完了日時を
+ * 時系列で追えるようにしたい、への対応)。渡さない場合は省略される。
  */
 export function evaluateCommitBackfillCheck(
   d1Summary: RepoCommitIndexSummary,
-  githubTotal: number | null
+  githubTotal: number | null,
+  lastSyncedAt?: string | null
 ): OnboardingCheckResult {
+  const syncedDetail = lastSyncedAt ? `最終反映(直近push受信): ${lastSyncedAt}` : undefined;
   if (githubTotal === null) {
     return {
       status: 'warning',
@@ -123,6 +130,7 @@ export function evaluateCommitBackfillCheck(
     return {
       status: 'ok',
       summary: `repo_commit_indexはGitHub側と一致しています(${d1Summary.count}件)`,
+      detail: syncedDetail,
     };
   }
   if (d1Summary.count < githubTotal) {

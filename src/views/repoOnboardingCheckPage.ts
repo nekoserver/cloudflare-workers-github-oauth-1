@@ -124,7 +124,7 @@ export function getRepoOnboardingCheckPage(
         <input type="text" name="repo" placeholder="nekoserver/railway" value="${repoName ? escapeHtml(repoName) : ''}" autocomplete="off" spellcheck="false">
         <button type="submit">確認</button>
       </form>
-      <p class="roc-note">SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.mdの8ステップのうち、本体Workerのデータだけで判定できる①〜③を表示します。④(cf-authの/wspace記録)・⑤(dynamicnekoのtree-view組み込み)は現時点では未実装です(🚧表示)。<br>①(GitHub Appインストール)は webhook受信・repo_commit_indexへの保存そのものには不要なため、未インストールでも🔶「任意」表示に留め、❌扱いはしません。AI要約の-external系エンドポイントを使う場合のみ必要です。</p>
+      <p class="roc-note">①〜③は本体Workerのデータ(D1・GitHub API)だけで判定します。④(cf-authの/wspace記録)・⑤(dynamicnekoのtree-view組み込み)は、Service Binding経由でCF-Worker+HMAC署名(CLAUDE.mdルール38)付きリクエストを送って確認します。<br>①(GitHub Appインストール)は webhook受信・repo_commit_indexへの保存そのものには不要なため、未インストールでも🔶「任意」表示に留め、❌扱いはしません。AI要約の-external系エンドポイントを使う場合のみ必要です。</p>
     </div>
 
     <div class="roc-card">

@@ -105,4 +105,16 @@ describe('evaluateCommitBackfillCheck', () => {
     const result = evaluateCommitBackfillCheck({ count: 0, maxSeq: null }, 0);
     expect(result.status).toBe('ok');
   });
+
+  it('lastSyncedAtを渡すとOK時のdetailに最終反映日時が入る(完了日時を時系列で追えるようにする要望対応)', () => {
+    const result = evaluateCommitBackfillCheck({ count: 2, maxSeq: 2 }, 2, '2026-10-12T07:10:00Z');
+    expect(result.status).toBe('ok');
+    expect(result.detail).toContain('2026-10-12T07:10:00Z');
+  });
+
+  it('lastSyncedAtを渡さなければdetailはundefinedのまま(後方互換)', () => {
+    const result = evaluateCommitBackfillCheck({ count: 2, maxSeq: 2 }, 2);
+    expect(result.status).toBe('ok');
+    expect(result.detail).toBeUndefined();
+  });
 });

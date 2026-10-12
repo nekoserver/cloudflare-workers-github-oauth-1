@@ -50,6 +50,19 @@ export type Bindings = {
   RUST_WORKER?: Fetcher;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
+  /**
+   * /repo-onboarding-checkの④が、cf-auth側 GET /api/wspace/repo-check を
+   * CF-Worker + HMAC-SHA256方式(CLAUDE.mdルール38・workerRequestSignature.ts)で
+   * 署名する際に使う共有シークレット。cf-auth側のCF_WORKER_SECRET_MAINと
+   * 同じ値を設定する(呼び出し元=本Worker用のペア鍵)。
+   */
+  CF_AUTH_WORKER_HMAC_SECRET?: string;
+  /**
+   * /repo-onboarding-checkの⑤が、dynamicneko側 GET /api/tree-view/repo-check を
+   * CF-Worker + HMAC-SHA256方式で署名する際に使う共有シークレット。dynamicneko側の
+   * CF_WORKER_SECRET_MAINと同じ値を設定する(呼び出し元=本Worker用のペア鍵)。
+   */
+  DYNAMICNEKO_WORKER_HMAC_SECRET?: string;
   /** dynamicnekoのNew SnippetウィジェットがPOST /api/kimi-code/generate-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
   KIMI_CODE_EXTERNAL_SECRET?: string;
   /** dynamicnekoのAI問い合わせウィジェットがPOST /api/aichat/query-external・/api/aichat/permission-externalを呼ぶ際のBearer認証シークレット。dynamicneko側と同じ変数名・同じ値を設定する */
