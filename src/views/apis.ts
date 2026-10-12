@@ -541,6 +541,7 @@ const APIS = [
       res:{assignments:[{keyword:'cloudflare',categories:['インフラ']}]} },
     { method:'GET',    path:'/api/repo-permissions', desc:'インストール権限一覧',
       res:{permissions:[{repo:'cloudflare-workers-github-oauth-1',owner:'nekoserver',permission:'write'}]} },
+    { method:'GET',    path:'/repo-onboarding-check', desc:'新リポジトリのwebhookオンボーディング状態を①〜⑤の段階でチェックするページ(JSON APIではなくHTMLページを返す。送信すると結果パネルにHTMLがそのまま表示される)。④⑤はService Binding経由でcf-auth・dynamicnekoへCF-Worker+HMAC署名付きで問い合わせる(SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.md参照)', query:[{n:'repo',s:'nekoserver/railway'}] },
   ]},
   { group: 'リポジトリ色・グループ', endpoints: [
     { method:'GET',    path:'/api/repo-colors', desc:'リポジトリカラー設定一覧',
