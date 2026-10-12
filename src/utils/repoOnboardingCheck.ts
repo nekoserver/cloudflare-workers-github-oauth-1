@@ -5,7 +5,7 @@
 //
 // エラー種別は文字列prefixではなく判別可能な型で表現する(CLAUDE.mdルール32)。
 
-export type OnboardingCheckStatus = 'ok' | 'warning' | 'missing' | 'not_implemented';
+export type OnboardingCheckStatus = 'ok' | 'warning' | 'missing' | 'optional' | 'not_implemented';
 
 export type OnboardingCheckResult = {
   status: OnboardingCheckStatus;
@@ -22,6 +22,14 @@ export type InstallationPermissionRow = {
 /**
  * ①GitHub Appインストール確認。repo_name一致の行、またはrepository_selection='all'の
  * 行(repo_name IS NULL)のどちらかがあればインストール済みと判定する。
+ *
+ * 注意: GitHub Appのインストールは、webhook受信→repo_commit_index保存という
+ * コアのオンボーディングパイプライン自体には不要(webhookのPayload URL・Secretの
+ * 設定だけで成立する。実例: nekoserver/railwayはApp未インストールのままwebhook
+ * 経由のコミット保存が機能した)。Appが必要なのは、installation_permissionsを
+ * 参照する別機能(loadCommitSummaryAllowedRepos経由の/api/commit-summary-external等
+ * のAI要約系「-external」エンドポイントの許可リスト)のみ。そのため未インストールは
+ * 'missing'(❌必須未達)ではなく'optional'(🔶任意、未設定でも本流は動く)とする。
  */
 export function evaluateInstallationCheck(
   repoName: string,
@@ -32,7 +40,7 @@ export function evaluateInstallationCheck(
     return {
       status: 'ok',
       summary: `GitHub Appが${repoName}にインストール済みです`,
-      detail: `最終更新: ${exactMatch.updated_at}`,
+      detail: `最終更新: ${exactMatch.updated_at}(AI要約の-external系エンドポイントの対象になります)`,
     };
   }
   const allRepos = rows.find((row) => row.repo_name === null && row.repository_selection === 'all');
@@ -44,9 +52,9 @@ export function evaluateInstallationCheck(
     };
   }
   return {
-    status: 'missing',
-    summary: `GitHub Appが${repoName}にインストールされていません`,
-    detail: 'Settings > Applications > 該当App > Configure > Repository accessで対象リポジトリを追加してください',
+    status: 'optional',
+    summary: `GitHub Appは${repoName}にインストールされていません(任意)`,
+    detail: 'webhook受信・repo_commit_indexへの保存には影響しません。AI要約の-external系エンドポイント(/api/commit-summary-external等)の対象にしたい場合のみ、Settings > Applications > 該当App > Configure > Repository accessで追加してください',
   };
 }
 
