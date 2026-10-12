@@ -409,6 +409,12 @@ import {
   type InstallationPermissionRow,
   type WebhookLogRow,
 } from './utils/repoOnboardingCheck';
+import {
+  fetchCfAuthWspaceRepoCheck,
+  evaluateWspaceCheck,
+  fetchDynamicnekoTreeViewRepoCheck,
+  evaluateTreeViewCheck,
+} from './utils/repoOnboardingRemoteCheck';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -14220,6 +14226,9 @@ app.get('/repo-onboarding-check', authMiddleware, async (c) => {
   }
 
   // ②webhook疎通確認
+  // 直近のpush受信日時は③のdetail(完了日時を時系列で追えるようにする表示)にも使うため
+  // このブロックの外側(関数スコープ)で保持する。
+  let latestOkPushAt: string | null = null;
   if (db) {
     try {
       const { results } = await db
@@ -14228,10 +14237,12 @@ app.get('/repo-onboarding-check', authMiddleware, async (c) => {
         )
         .bind(`%${rawRepo}%`)
         .all<WebhookLogRow>();
+      const rows = results ?? [];
+      latestOkPushAt = rows.find((row) => row.status === 'ok' && row.event_type === 'push')?.received_at ?? null;
       stages.push({
         stepNumber: 2,
         title: 'webhook疎通(経路A)',
-        result: evaluateWebhookDeliveryCheck(results ?? []),
+        result: evaluateWebhookDeliveryCheck(rows),
       });
     } catch (error) {
       logger.error('Failed to query webhook_log for onboarding check', {
@@ -14266,7 +14277,7 @@ app.get('/repo-onboarding-check', authMiddleware, async (c) => {
       stages.push({
         stepNumber: 3,
         title: 'コミット保存・バックフィル',
-        result: evaluateCommitBackfillCheck(d1Summary, githubTotal),
+        result: evaluateCommitBackfillCheck(d1Summary, githubTotal, latestOkPushAt),
       });
     } catch (error) {
       logger.error('Failed to evaluate repo_commit_index backfill check', {
@@ -14283,17 +14294,17 @@ app.get('/repo-onboarding-check', authMiddleware, async (c) => {
     stages.push({ stepNumber: 3, title: 'コミット保存・バックフィル', result: { status: 'warning', summary: 'DBバインディングがありません' } });
   }
 
-  // ④cf-authの/wspace記録確認・⑤dynamicnekoのtree-view組み込み確認は未実装
-  stages.push({
-    stepNumber: 4,
-    title: 'cf-authの/wspace記録',
-    result: { status: 'not_implemented', summary: 'このチェックは未実装です', detail: 'cf-auth側に状態確認用エンドポイントが無いため、現時点では手動確認が必要です' },
-  });
-  stages.push({
-    stepNumber: 5,
-    title: 'dynamicnekoのtree-view組み込み',
-    result: { status: 'not_implemented', summary: 'このチェックは未実装です', detail: 'dynamicneko側に許可リスト確認用エンドポイントが無いため、現時点では手動確認が必要です' },
-  });
+  // ④cf-authの/wspace記録確認(Service Binding + CF-Worker/HMAC署名)
+  {
+    const result = await fetchCfAuthWspaceRepoCheck(c.env.CF_AUTH, c.env.CF_AUTH_WORKER_HMAC_SECRET, rawRepo);
+    stages.push({ stepNumber: 4, title: 'cf-authの/wspace記録', result: evaluateWspaceCheck(result) });
+  }
+
+  // ⑤dynamicnekoのtree-view組み込み確認(Service Binding + CF-Worker/HMAC署名)
+  {
+    const result = await fetchDynamicnekoTreeViewRepoCheck(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, rawRepo);
+    stages.push({ stepNumber: 5, title: 'dynamicnekoのtree-view組み込み', result: evaluateTreeViewCheck(result) });
+  }
 
   return c.html(getRepoOnboardingCheckPage(user.sub, rawRepo, stages));
 });

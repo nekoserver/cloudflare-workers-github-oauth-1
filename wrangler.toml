@@ -89,6 +89,11 @@ NOTIFY_TARGET = "worker"
 # 通知先を外部Workerに切り替える場合（NOTIFY_TARGET="worker"）に必要:
 #   wrangler secret put NOTIFY_WORKER_URL     # 送信先WorkerのエンドポイントURL
 #   wrangler secret put NOTIFY_WORKER_SECRET  # Authorization: Bearer <secret> として送信（任意だが推奨）
+#
+# /repo-onboarding-checkの④⑤（cf-auth /wspace・dynamicneko tree-viewの確認）に必要
+# （CF-Worker + HMAC方式、CLAUDE.mdルール38）:
+#   wrangler secret put CF_AUTH_WORKER_HMAC_SECRET       # cf-auth側のCF_WORKER_SECRET_MAINと同じ値
+#   wrangler secret put DYNAMICNEKO_WORKER_HMAC_SECRET   # dynamicneko側のCF_WORKER_SECRET_MAINと同じ値
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:
