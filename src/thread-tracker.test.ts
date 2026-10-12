@@ -337,7 +337,7 @@ describe('thread tracker page', () => {
     const html = getThreadTrackerPage('alice');
     expect(html).not.toContain("esc(score.labelId)+'='+esc(score.value)");
     expect(html).not.toContain(".join(' · ')");
-    expect(html).toContain("value>=0.8?'jev-score-high':(value>=0.5?'jev-score-medium':'')");
+    expect(html).toContain("v>=0.8?'jev-score-high':(v>=0.5?'jev-score-medium':'')");
     expect(html).toContain('.jev-score-high{color:#3fb950}');
     expect(html).toContain('.jev-score-medium{color:#d29922}');
   });

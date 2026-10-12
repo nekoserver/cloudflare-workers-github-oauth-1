@@ -270,14 +270,97 @@ describe('getThreadTrackerPage', () => {
     it('成功時は結果の数値をresultコンテナへ表示し、ボタン自体は取り除く(二重押下を防ぐ)', () => {
       const idx = html.indexOf('function bindClefScoreButtons(root)');
       const snippet = html.slice(idx, idx + 1200);
-      expect(snippet).toContain('values.map(function(v){return \'<span>\'+esc(v.value)+\'</span>\';})');
+      expect(snippet).toContain('var className=scoreColorClass(v.value);');
       expect(snippet).toContain('btn.remove();');
     });
 
-    it('.clef-scoreは色分けクラス(jev-score-high/medium相当)を持たない数値のみの表示にする(意味論が未検証のため)', () => {
-      expect(html).toContain('.clef-score{');
-      expect(html).not.toContain('clef-score-high');
-      expect(html).not.toContain('clef-score-medium');
+    it('ClefのスコアもscoreColorClass(Jevと同じ0.8/0.5の閾値)で色分けする(ユーザー指示、2026-10-12)', () => {
+      const idx = html.indexOf('function scoreColorClass(value)');
+      expect(idx).toBeGreaterThan(-1);
+      const snippet = html.slice(idx, idx + 200);
+      expect(snippet).toContain("v>=0.8?'jev-score-high':(v>=0.5?'jev-score-medium':'')");
+      // jevScoreHtml・bindClefScoreButtonsの両方がこの共通関数を使う(重複実装しない)。
+      const jevIdx = html.indexOf('function jevScoreHtml(turn)');
+      expect(html.slice(jevIdx, jevIdx + 300)).toContain('scoreColorClass(score.value)');
+      const clefBtnIdx = html.indexOf('function bindClefScoreButtons(root)');
+      expect(html.slice(clefBtnIdx, clefBtnIdx + 1200)).toContain('scoreColorClass(v.value)');
+    });
+  });
+
+  // 対象: 3列スタイルタブ内の「Jev」「Clef」チェックボックス
+  // (showJevScoreToggle/showClefScoreToggle)。ユーザー指示(2026-10-12)で、
+  // それぞれON/OFFをCookieへ保存し、変更するたびに即時反映する。
+  describe('3列スタイルタブの「Jev」「Clef」チェックボックスでスコア表示を切り替える', () => {
+    it('showJevScoreToggle・showClefScoreToggleをstyle-sheet-actions内に描画する', () => {
+      expect(html).toContain('id="showJevScoreToggle"');
+      expect(html).toContain('id="showClefScoreToggle"');
+    });
+
+    function openTrackerPage() {
+      return new JSDOM(html, {
+        url: 'https://example.com/thread-tracker',
+        runScripts: 'dangerously',
+        beforeParse(window) {
+          Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false }) });
+          Object.defineProperty(window, 'fetch', { value: async () => ({ ok: true, json: async () => ({ threads: [], items: [] }) }) });
+        },
+      });
+    }
+
+    it('デフォルトは両方チェック済みで、hide-jev-score/hide-clef-scoreクラスは付かない(既存の表示を変えない)', () => {
+      const dom = openTrackerPage();
+      const { document } = dom.window;
+      expect((document.getElementById('showJevScoreToggle') as HTMLInputElement).checked).toBe(true);
+      expect((document.getElementById('showClefScoreToggle') as HTMLInputElement).checked).toBe(true);
+      expect(document.documentElement.classList.contains('hide-jev-score')).toBe(false);
+      expect(document.documentElement.classList.contains('hide-clef-score')).toBe(false);
+      dom.window.close();
+    });
+
+    it('Jevのチェックを外すとhide-jev-scoreクラスが付き、Cookie(thread_tracker_show_jev_score=off)に保存される', () => {
+      const dom = openTrackerPage();
+      const { document } = dom.window;
+      const toggle = document.getElementById('showJevScoreToggle') as HTMLInputElement;
+      toggle.checked = false;
+      toggle.dispatchEvent(new dom.window.Event('change'));
+      expect(document.documentElement.classList.contains('hide-jev-score')).toBe(true);
+      expect(document.cookie).toContain('thread_tracker_show_jev_score=off');
+      dom.window.close();
+    });
+
+    it('Clefのチェックを外すとhide-clef-scoreクラスが付き、Cookie(thread_tracker_show_clef_score=off)に保存される', () => {
+      const dom = openTrackerPage();
+      const { document } = dom.window;
+      const toggle = document.getElementById('showClefScoreToggle') as HTMLInputElement;
+      toggle.checked = false;
+      toggle.dispatchEvent(new dom.window.Event('change'));
+      expect(document.documentElement.classList.contains('hide-clef-score')).toBe(true);
+      expect(document.cookie).toContain('thread_tracker_show_clef_score=off');
+      dom.window.close();
+    });
+
+    it('次回表示時はCookieの値(off)を読み込み、チェックを外した状態・非表示クラス付きで復元する', () => {
+      const dom = new JSDOM(html, {
+        url: 'https://example.com/thread-tracker',
+        runScripts: 'dangerously',
+        beforeParse(window) {
+          window.document.cookie = 'thread_tracker_show_jev_score=off; Path=/';
+          window.document.cookie = 'thread_tracker_show_clef_score=off; Path=/';
+          Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false }) });
+          Object.defineProperty(window, 'fetch', { value: async () => ({ ok: true, json: async () => ({ threads: [], items: [] }) }) });
+        },
+      });
+      const { document } = dom.window;
+      expect((document.getElementById('showJevScoreToggle') as HTMLInputElement).checked).toBe(false);
+      expect((document.getElementById('showClefScoreToggle') as HTMLInputElement).checked).toBe(false);
+      expect(document.documentElement.classList.contains('hide-jev-score')).toBe(true);
+      expect(document.documentElement.classList.contains('hide-clef-score')).toBe(true);
+      dom.window.close();
+    });
+
+    it('.hide-jev-score .jev-score・.hide-clef-score .clef-score/.clef-score-add-btnをdisplay:noneにするCSSを持つ', () => {
+      expect(html).toContain('.hide-jev-score .jev-score{display:none}');
+      expect(html).toContain('.hide-clef-score .clef-score,.hide-clef-score .clef-score-add-btn{display:none}');
     });
   });
 });
