@@ -13,11 +13,13 @@ import {
 //   (3) webhook_logが空(未配信)なのと、配信はあるが全て失敗なのを混同する
 //   (4) GitHub API取得失敗(githubTotal=null)を「0件一致」と誤判定する
 //   (5) D1件数がGitHub側より多い(重複等の異常)ケースをOKと誤判定する
+//   (6) GitHub App未インストールを、webhook本流を妨げる必須条件(missing)と
+//       誤って表示する(実際は-external系エンドポイントの許可リストにのみ影響)
 
 describe('evaluateInstallationCheck', () => {
-  it('対象repoの行が無い場合はmissing', () => {
+  it('対象repoの行が無い場合はoptional(webhook本流には不要なためmissingにしない)', () => {
     const result = evaluateInstallationCheck('nekoserver/railway', []);
-    expect(result.status).toBe('missing');
+    expect(result.status).toBe('optional');
   });
 
   it('対象repoの行がある場合はok', () => {
@@ -38,14 +40,14 @@ describe('evaluateInstallationCheck', () => {
     const result = evaluateInstallationCheck('nekoserver/railway', [
       { repo_name: null, repository_selection: 'selected', updated_at: '2026-10-12T00:00:00Z' },
     ]);
-    expect(result.status).toBe('missing');
+    expect(result.status).toBe('optional');
   });
 
   it('他リポジトリの行があるだけではokにしない', () => {
     const result = evaluateInstallationCheck('nekoserver/railway', [
       { repo_name: 'nekoserver/dynamicneko', repository_selection: 'selected', updated_at: '2026-10-12T00:00:00Z' },
     ]);
-    expect(result.status).toBe('missing');
+    expect(result.status).toBe('optional');
   });
 });
 
