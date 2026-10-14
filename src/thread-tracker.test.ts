@@ -141,9 +141,9 @@ describe('thread tracker page', () => {
     expect(html).toContain("url.protocol==='https:'||url.protocol==='http:'");
   });
 
-  it('左上の3列スタイルボタンと左端の垂直タブでスタイルモーダルを開閉でき、2ペインの説明文は表示しない', () => {
+  it('左端の垂直タブでスタイルモーダルを開閉でき、撤去済みの左上ボタンと2ペインの説明文は表示しない', () => {
     const html = getThreadTrackerPage('alice');
-    expect(html).toContain('id="threeColumnStyleButton"');
+    expect(html).not.toContain('id="threeColumnStyleButton"');
     expect(html).toContain('id="threeColumnStyleModal"');
     expect(html).toContain('id="threeColumnStyleTab"');
     expect(html).toContain('class="style-sheet-tab"');
