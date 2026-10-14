@@ -1,0 +1,5002 @@
+{
+  "name": "nekoserver/railway",
+  "type": "dir",
+  "children": [
+    {
+      "name": "AGENTS.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.railway.20261013.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.railway.tailscale-chatgpt-cloud.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.md",
+      "type": "file"
+    },
+    {
+      "name": "RAILS-ENVIRONMENT.md",
+      "type": "file"
+    },
+    {
+      "name": "RAILWAY.md",
+      "type": "file"
+    },
+    {
+      "name": "REDMINE-ENVIRONMENT.md",
+      "type": "file"
+    },
+    {
+      "name": "SETUP.railway.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.railway.websocket-sse.md",
+      "type": "file"
+    },
+    {
+      "name": "rails-app",
+      "type": "dir",
+      "children": [
+        {
+          "name": "Gemfile",
+          "type": "file"
+        },
+        {
+          "name": "Gemfile.lock",
+          "type": "file"
+        },
+        {
+          "name": "README.md",
+          "type": "file"
+        },
+        {
+          "name": "Rakefile",
+          "type": "file"
+        },
+        {
+          "name": "app",
+          "type": "dir",
+          "children": [
+            {
+              "name": "assets",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "images",
+                  "type": "dir"
+                },
+                {
+                  "name": "stylesheets",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "controllers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "concerns",
+                  "type": "dir"
+                },
+                {
+                  "name": "home_controller.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "helpers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application_helper.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "jobs",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application_job.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "models",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application_record.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "concerns",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "views",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "layouts",
+                  "type": "dir"
+                },
+                {
+                  "name": "pwa",
+                  "type": "dir"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "bin",
+          "type": "dir",
+          "children": [
+            {
+              "name": "brakeman",
+              "type": "file"
+            },
+            {
+              "name": "bundler-audit",
+              "type": "file"
+            },
+            {
+              "name": "ci",
+              "type": "file"
+            },
+            {
+              "name": "dev",
+              "type": "file"
+            },
+            {
+              "name": "rails",
+              "type": "file"
+            },
+            {
+              "name": "rake",
+              "type": "file"
+            },
+            {
+              "name": "rubocop",
+              "type": "file"
+            },
+            {
+              "name": "setup",
+              "type": "file"
+            },
+            {
+              "name": "thrust",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "config",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application.rb",
+              "type": "file"
+            },
+            {
+              "name": "boot.rb",
+              "type": "file"
+            },
+            {
+              "name": "bundler-audit.yml",
+              "type": "file"
+            },
+            {
+              "name": "ci.rb",
+              "type": "file"
+            },
+            {
+              "name": "credentials.yml.enc",
+              "type": "file"
+            },
+            {
+              "name": "environment.rb",
+              "type": "file"
+            },
+            {
+              "name": "environments",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "development.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "production.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "initializers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "allowed_hosts.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "assets.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "content_security_policy.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "filter_parameter_logging.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "inflections.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "locales",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "en.yml",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "puma.rb",
+              "type": "file"
+            },
+            {
+              "name": "routes.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "config.ru",
+          "type": "file"
+        },
+        {
+          "name": "db",
+          "type": "dir",
+          "children": [
+            {
+              "name": "seeds.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "lib",
+          "type": "dir",
+          "children": [
+            {
+              "name": "tasks",
+              "type": "dir"
+            }
+          ]
+        },
+        {
+          "name": "public",
+          "type": "dir",
+          "children": [
+            {
+              "name": "400.html",
+              "type": "file"
+            },
+            {
+              "name": "404.html",
+              "type": "file"
+            },
+            {
+              "name": "406-unsupported-browser.html",
+              "type": "file"
+            },
+            {
+              "name": "422.html",
+              "type": "file"
+            },
+            {
+              "name": "500.html",
+              "type": "file"
+            },
+            {
+              "name": "icon.png",
+              "type": "file"
+            },
+            {
+              "name": "icon.svg",
+              "type": "file"
+            },
+            {
+              "name": "robots.txt",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "script",
+          "type": "dir"
+        },
+        {
+          "name": "vendor",
+          "type": "dir"
+        }
+      ]
+    },
+    {
+      "name": "redmine",
+      "type": "dir",
+      "children": [
+        {
+          "name": "CONTRIBUTING.md",
+          "type": "file"
+        },
+        {
+          "name": "Gemfile",
+          "type": "file"
+        },
+        {
+          "name": "LICENSE.txt",
+          "type": "file"
+        },
+        {
+          "name": "README.rdoc",
+          "type": "file"
+        },
+        {
+          "name": "Rakefile",
+          "type": "file"
+        },
+        {
+          "name": "app",
+          "type": "dir",
+          "children": [
+            {
+              "name": "assets",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "fonts",
+                  "type": "dir"
+                },
+                {
+                  "name": "images",
+                  "type": "dir"
+                },
+                {
+                  "name": "javascripts",
+                  "type": "dir"
+                },
+                {
+                  "name": "stylesheets",
+                  "type": "dir"
+                },
+                {
+                  "name": "themes",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "controllers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "account_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "activities_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "admin_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "application_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachments_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_sources_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auto_completes_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "boards_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "calendars_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "comments_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "context_menus",
+                  "type": "dir"
+                },
+                {
+                  "name": "custom_field_enumerations_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "documents_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "email_addresses_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enumerations_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "files_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "gantts_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "groups_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "help_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "imports_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_categories_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relations_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_statuses_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journals_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mail_handler_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "members_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "messages_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "my_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "news_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "oauth2_applications_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "previews_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "principal_memberships_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_enumerations_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "queries_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reports_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "roles_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "settings_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "svg_icons_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sys_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "trackers_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "twofa_backup_codes_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "twofa_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "users_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "versions_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watchers_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhooks_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "welcome_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wikis_controller.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflows_controller.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "helpers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "account_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "activities_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "admin_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "application_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachments_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_sources_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "avatars_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "boards_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "context_menus_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "documents_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "email_addresses_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enumerations_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "gantt_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "groups_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "icons_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "imports_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_categories_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relations_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_statuses_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journals_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mail_handler_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "members_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "messages_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "my_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "news_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "principal_memberships_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_queries_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "queries_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reports_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "roles_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "routes_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "settings_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sort_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "svg_icon_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "trackers_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "twofa_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_queries_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "users_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "versions_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watchers_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "welcome_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_helper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflows_helper.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "javascript",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application.js",
+                  "type": "file"
+                },
+                {
+                  "name": "controllers",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "jobs",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "application_job.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "destroy_project_job.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "destroy_projects_job.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhook_job.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "models",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "anonymous_user.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "application_record.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachment.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_source.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_source_ldap.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "board.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "change.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "changeset.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "comment.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "concerns",
+                  "type": "dir"
+                },
+                {
+                  "name": "custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_enumeration.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_value.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_value.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document_category.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document_category_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "email_address.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enabled_module.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enumeration.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group_anonymous.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group_builtin.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group_non_member.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "import.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "import_item.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_category.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_import.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_priority.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_priority_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relation.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_status.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journal.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journal_detail.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mail_handler.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mailer.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "member.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "member_role.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "message.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "news.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "principal.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_admin_query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reaction.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository",
+                  "type": "dir"
+                },
+                {
+                  "name": "repository.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "role.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "setting.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_activity.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_activity_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_import.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "token.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "tracker.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_import.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_preference.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_query.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "version.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "version_custom_field.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watcher.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhook.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhook_payload.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_annotate.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_content.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_content_version.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_diff.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_page.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_redirect.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflow_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflow_rule.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflow_transition.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "validators",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "date_validator.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "views",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "account",
+                  "type": "dir"
+                },
+                {
+                  "name": "activities",
+                  "type": "dir"
+                },
+                {
+                  "name": "admin",
+                  "type": "dir"
+                },
+                {
+                  "name": "attachments",
+                  "type": "dir"
+                },
+                {
+                  "name": "auth_sources",
+                  "type": "dir"
+                },
+                {
+                  "name": "boards",
+                  "type": "dir"
+                },
+                {
+                  "name": "calendars",
+                  "type": "dir"
+                },
+                {
+                  "name": "common",
+                  "type": "dir"
+                },
+                {
+                  "name": "context_menus",
+                  "type": "dir"
+                },
+                {
+                  "name": "custom_field_enumerations",
+                  "type": "dir"
+                },
+                {
+                  "name": "custom_fields",
+                  "type": "dir"
+                },
+                {
+                  "name": "documents",
+                  "type": "dir"
+                },
+                {
+                  "name": "doorkeeper",
+                  "type": "dir"
+                },
+                {
+                  "name": "email_addresses",
+                  "type": "dir"
+                },
+                {
+                  "name": "enumerations",
+                  "type": "dir"
+                },
+                {
+                  "name": "files",
+                  "type": "dir"
+                },
+                {
+                  "name": "gantts",
+                  "type": "dir"
+                },
+                {
+                  "name": "groups",
+                  "type": "dir"
+                },
+                {
+                  "name": "help",
+                  "type": "dir"
+                },
+                {
+                  "name": "imports",
+                  "type": "dir"
+                },
+                {
+                  "name": "issue_categories",
+                  "type": "dir"
+                },
+                {
+                  "name": "issue_relations",
+                  "type": "dir"
+                },
+                {
+                  "name": "issue_statuses",
+                  "type": "dir"
+                },
+                {
+                  "name": "issues",
+                  "type": "dir"
+                },
+                {
+                  "name": "journals",
+                  "type": "dir"
+                },
+                {
+                  "name": "layouts",
+                  "type": "dir"
+                },
+                {
+                  "name": "mail_handler",
+                  "type": "dir"
+                },
+                {
+                  "name": "mailer",
+                  "type": "dir"
+                },
+                {
+                  "name": "members",
+                  "type": "dir"
+                },
+                {
+                  "name": "messages",
+                  "type": "dir"
+                },
+                {
+                  "name": "my",
+                  "type": "dir"
+                },
+                {
+                  "name": "news",
+                  "type": "dir"
+                },
+                {
+                  "name": "principal_memberships",
+                  "type": "dir"
+                },
+                {
+                  "name": "projects",
+                  "type": "dir"
+                },
+                {
+                  "name": "queries",
+                  "type": "dir"
+                },
+                {
+                  "name": "reactions",
+                  "type": "dir"
+                },
+                {
+                  "name": "reports",
+                  "type": "dir"
+                },
+                {
+                  "name": "repositories",
+                  "type": "dir"
+                },
+                {
+                  "name": "roles",
+                  "type": "dir"
+                },
+                {
+                  "name": "search",
+                  "type": "dir"
+                },
+                {
+                  "name": "settings",
+                  "type": "dir"
+                },
+                {
+                  "name": "sudo_mode",
+                  "type": "dir"
+                },
+                {
+                  "name": "svg_icons",
+                  "type": "dir"
+                },
+                {
+                  "name": "timelog",
+                  "type": "dir"
+                },
+                {
+                  "name": "trackers",
+                  "type": "dir"
+                },
+                {
+                  "name": "twofa",
+                  "type": "dir"
+                },
+                {
+                  "name": "twofa_backup_codes",
+                  "type": "dir"
+                },
+                {
+                  "name": "users",
+                  "type": "dir"
+                },
+                {
+                  "name": "versions",
+                  "type": "dir"
+                },
+                {
+                  "name": "watchers",
+                  "type": "dir"
+                },
+                {
+                  "name": "webhooks",
+                  "type": "dir"
+                },
+                {
+                  "name": "welcome",
+                  "type": "dir"
+                },
+                {
+                  "name": "wiki",
+                  "type": "dir"
+                },
+                {
+                  "name": "wikis",
+                  "type": "dir"
+                },
+                {
+                  "name": "workflows",
+                  "type": "dir"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "bin",
+          "type": "dir",
+          "children": [
+            {
+              "name": "about",
+              "type": "file"
+            },
+            {
+              "name": "bundle",
+              "type": "file"
+            },
+            {
+              "name": "changelog.rb",
+              "type": "file"
+            },
+            {
+              "name": "importmap",
+              "type": "file"
+            },
+            {
+              "name": "rails",
+              "type": "file"
+            },
+            {
+              "name": "rake",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "config",
+          "type": "dir",
+          "children": [
+            {
+              "name": "additional_environment.rb.example",
+              "type": "file"
+            },
+            {
+              "name": "application.rb",
+              "type": "file"
+            },
+            {
+              "name": "boot.rb",
+              "type": "file"
+            },
+            {
+              "name": "configuration.yml.example",
+              "type": "file"
+            },
+            {
+              "name": "database.yml.example",
+              "type": "file"
+            },
+            {
+              "name": "environment.rb",
+              "type": "file"
+            },
+            {
+              "name": "environments",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "development.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "production.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "test_pgsql.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "test_sqlite3.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "icon_source.yml",
+              "type": "file"
+            },
+            {
+              "name": "importmap.rb",
+              "type": "file"
+            },
+            {
+              "name": "initializers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "00-core_plugins.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "10-patches.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20-mime_types.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "30-redmine.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "backtrace_silencers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "doorkeeper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "inflections.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "zeitwerk.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "locales",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "ar.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "az.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "bg.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "bs.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ca.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "cs.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "da.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "de.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "el.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "en-GB.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "en.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "es-PA.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "es.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "et.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "eu.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "fa.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "fi.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "fr.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "gl.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "he.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "hr.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "hu.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "id.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "it.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ja.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ko.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "lt.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "lv.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "mk.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "mn.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "nl.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "no.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "pl.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "pt-BR.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "pt.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ro.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ru.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sk.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sl.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sq.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sr-YU.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sr.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "sv.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ta-IN.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "th.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "tr.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "uk.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "vi.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "zh-TW.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "zh.yml",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "routes.rb",
+              "type": "file"
+            },
+            {
+              "name": "settings.yml",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "config.ru",
+          "type": "file"
+        },
+        {
+          "name": "db",
+          "type": "dir",
+          "children": [
+            {
+              "name": "migrate",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "001_setup.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "002_issue_move.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "003_issue_add_note.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "004_export_pdf.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "005_issue_start_date.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "006_calendar_and_activity.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "007_create_journals.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "008_create_user_preferences.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "009_add_hide_mail_pref.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "010_create_comments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "011_add_news_comments_count.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "012_add_comments_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "013_create_queries.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "014_add_queries_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "015_create_repositories.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "016_add_repositories_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "017_create_settings.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "018_set_doc_and_files_notifications.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "019_add_issue_status_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "020_add_role_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "021_add_tracker_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "022_serialize_possibles_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "023_add_tracker_is_in_roadmap.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "024_add_roadmap_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "025_add_search_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "026_add_repository_login_and_password.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "027_create_wikis.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "028_create_wiki_pages.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "029_create_wiki_contents.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "030_add_projects_feeds_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "031_add_repository_root_url.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "032_create_time_entries.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "033_add_timelog_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "034_create_changesets.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "035_create_changes.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "036_add_changeset_commit_date.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "037_add_project_identifier.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "038_add_custom_field_is_filter.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "039_create_watchers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "040_create_changesets_issues.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "041_rename_comment_to_comments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "042_create_issue_relations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "043_add_relations_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "044_set_language_length_to_five.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "045_create_boards.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "046_create_messages.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "047_add_boards_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "048_allow_null_version_effective_date.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "049_add_wiki_destroy_page_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "050_add_wiki_attachments_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "051_add_project_status.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "052_add_changes_revision.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "053_add_changes_branch.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "054_add_changesets_scmid.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "055_add_repositories_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "056_add_repositories_changes_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "057_add_versions_wiki_page_title.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "058_add_issue_categories_assigned_to_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "059_add_roles_assignable.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "060_change_changesets_committer_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "061_add_roles_builtin.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "062_insert_builtin_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "063_add_roles_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "064_drop_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "065_add_settings_updated_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "066_add_custom_value_customized_index.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "067_create_wiki_redirects.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "068_create_enabled_modules.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "069_add_issues_estimated_hours.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "070_change_attachments_content_type_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "071_add_queries_column_names.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "072_add_enumerations_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "073_add_enumerations_is_default.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "074_add_auth_sources_tls.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "075_add_members_mail_notification.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "076_allow_null_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "077_remove_issue_statuses_html_color.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "078_add_custom_fields_position.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "079_add_user_preferences_time_zone.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "080_add_users_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "081_create_projects_trackers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "082_add_messages_locked.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "083_add_messages_sticky.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "084_change_auth_sources_account_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "085_add_role_tracker_old_status_index_to_workflows.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "086_add_custom_fields_searchable.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "087_change_projects_description_to_text.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "088_add_custom_fields_default_value.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "089_add_attachments_description.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "090_change_versions_name_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "091_change_changesets_revision_to_string.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "092_change_changes_from_revision_to_string.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "093_add_wiki_pages_protected.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "094_change_projects_homepage_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "095_add_wiki_pages_parent_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "096_add_commit_access_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "097_add_view_wiki_edits_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "098_set_topic_authors_as_watchers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "099_add_delete_wiki_pages_attachments_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "100_add_changesets_user_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "101_populate_changesets_user_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "102_add_custom_fields_editable.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "103_set_custom_fields_editable.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "104_add_projects_lft_and_rgt.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "105_build_projects_tree.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "106_remove_projects_projects_count.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "107_add_open_id_authentication_tables.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "108_add_identity_url_to_users.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090214190337_add_watchers_user_id_type_index.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090312172426_add_queries_sort_criteria.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090312194159_add_projects_trackers_unique_index.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090318181151_extend_settings_name.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090323224724_add_type_to_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090401221305_update_enumerations_to_sti.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090401231134_add_active_field_to_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090403001910_add_project_to_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090406161854_add_parent_id_to_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090425161243_add_queries_group_by.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090503121501_create_member_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090503121505_populate_member_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090503121510_drop_members_role_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090614091200_fix_messages_sticky_null.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090704172350_populate_users_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090704172355_create_groups_users.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20090704172358_add_member_roles_inherited_from.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091010093521_fix_users_custom_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017212227_add_missing_indexes_to_workflows.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017212457_add_missing_indexes_to_custom_fields_projects.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017212644_add_missing_indexes_to_messages.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017212938_add_missing_indexes_to_repositories.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213027_add_missing_indexes_to_comments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213113_add_missing_indexes_to_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213151_add_missing_indexes_to_wiki_pages.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213228_add_missing_indexes_to_watchers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213257_add_missing_indexes_to_auth_sources.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213332_add_missing_indexes_to_documents.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213444_add_missing_indexes_to_tokens.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213536_add_missing_indexes_to_changesets.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213642_add_missing_indexes_to_issue_categories.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213716_add_missing_indexes_to_member_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213757_add_missing_indexes_to_boards.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213835_add_missing_indexes_to_user_preferences.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017213910_add_missing_indexes_to_issues.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214015_add_missing_indexes_to_members.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214107_add_missing_indexes_to_custom_fields.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214136_add_missing_indexes_to_queries.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214236_add_missing_indexes_to_time_entries.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214308_add_missing_indexes_to_news.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214336_add_missing_indexes_to_users.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214406_add_missing_indexes_to_attachments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214440_add_missing_indexes_to_wiki_contents.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214519_add_missing_indexes_to_custom_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214611_add_missing_indexes_to_journals.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214644_add_missing_indexes_to_issue_relations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214720_add_missing_indexes_to_wiki_redirects.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091017214750_add_missing_indexes_to_custom_fields_trackers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091025163651_add_activity_indexes.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091108092559_add_versions_status.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091114105931_add_view_issues_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091123212029_add_default_done_ratio_to_issue_status.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091205124427_add_versions_sharing.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091220183509_add_lft_and_rgt_indexes_to_projects.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091220183727_add_index_to_settings_name.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091220184736_add_indexes_to_issue_status.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091225164732_remove_enumerations_opt.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20091227112908_change_wiki_contents_text_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100129193402_change_users_mail_notification_to_string.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100129193813_update_mail_notification_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100221100219_add_index_on_changesets_scmid.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100313132032_add_issues_nested_sets_columns.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100313171051_add_index_on_issues_nested_set.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100705164950_change_changes_path_length_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20100819172912_enable_calendar_and_gantt_modules_where_appropriate.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20101104182107_add_unique_index_on_members.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20101107130441_add_custom_fields_visible.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20101114115114_change_projects_name_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20101114115359_change_projects_identifier_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110220160626_add_workflows_assignee_and_author.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110223180944_add_users_salt.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110223180953_salt_user_passwords.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110224000000_add_repositories_path_encoding.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110226120112_change_repositories_password_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110226120132_change_auth_sources_account_password_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110227125750_change_journal_details_values_to_text.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110228000000_add_repositories_log_encoding.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110228000100_copy_repositories_log_encoding.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110401192910_add_index_to_users_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110408103312_add_roles_issues_visibility.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110412065600_add_issues_is_private.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110511000000_add_repositories_extra_info.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20110902000000_create_changeset_parents.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20111201201315_add_unique_index_to_issue_relations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120115143024_add_repositories_identifier.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120115143100_add_repositories_is_default.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120115143126_set_default_repositories.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120127174243_add_custom_fields_multiple.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120205111326_change_users_login_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120223110929_change_attachments_container_defaults.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120301153455_add_auth_sources_filter.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120422150750_change_repositories_to_full_sti.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120705074331_add_trackers_fields_bits.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120707064544_add_auth_sources_timeout.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120714122000_add_workflows_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120714122100_update_workflows_to_sti.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120714122200_add_workflows_rule_fields.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120731164049_add_boards_parent_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20120930112914_add_journals_private_notes.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20121026002032_add_enumerations_position_name.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20121026003537_populate_enumerations_position_name.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20121209123234_add_queries_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20121209123358_update_queries_to_sti.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20121213084931_add_attachments_disk_directory.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130110122628_split_documents_permissions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130201184705_add_unique_index_on_tokens_value.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130202090625_add_projects_inherit_members.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130207175206_add_unique_index_on_custom_fields_trackers.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130207181455_add_unique_index_on_custom_fields_projects.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130215073721_change_users_lastname_length_to_255.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130215111127_add_issues_closed_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130215111141_populate_issues_closed_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130217094251_remove_issues_default_fk_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130602092539_create_queries_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130710182539_add_queries_visibility.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130713104233_create_custom_fields_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130713111657_add_queries_options.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130729070143_add_users_must_change_passwd.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20130911193200_remove_eols_from_attachments_filename.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131004113137_support_for_multiple_commit_keywords.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131005100610_add_repositories_created_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131124175346_add_custom_fields_format_store.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131210180802_add_custom_fields_description.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131214094309_remove_custom_fields_min_max_length_default_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131215104612_store_relation_type_in_journal_details.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20131218183023_delete_orphan_time_entries_custom_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20140228130325_change_changesets_comments_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20140903143914_add_password_changed_at_to_user.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20140920094058_insert_builtin_groups.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20141029181752_add_trackers_default_status_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20141029181824_remove_issue_statuses_is_default.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20141109112308_add_roles_users_visibility.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20141122124142_add_wiki_redirects_redirects_to_wiki_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150113194759_create_email_addresses.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150113211532_populate_email_addresses.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150113213922_remove_users_mail.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150113213955_add_email_addresses_user_id_index.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150208105930_replace_move_issues_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150510083747_change_documents_title_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150525103953_clear_estimated_hours_on_parent_issues.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150526183158_add_roles_time_entries_visibility.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150528084820_add_roles_all_roles_managed.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150528092912_create_roles_managed_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150528093249_add_unique_index_on_roles_managed_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150725112753_insert_allowed_statuses_for_new_issues.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150730122707_create_imports.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150730122735_create_import_items.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150921204850_change_time_entries_comments_limit_to_1024.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20150921210243_change_wiki_contents_comments_limit_to_1024.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151020182334_change_attachments_filesize_limit_to_8.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151020182731_fix_comma_in_user_format_setting_value.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151021184614_change_issue_categories_name_limit_to_60.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151021185456_change_auth_sources_filter_to_text.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151021190616_change_user_preferences_hide_mail_default_to_true.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151024082034_add_tokens_updated_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151025072118_create_custom_field_enumerations.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20151031095005_add_projects_default_version_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20160404080304_force_password_reset_during_setup.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20160416072926_remove_position_defaults.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20160529063352_add_roles_settings.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161001122012_add_tracker_id_index_to_workflows.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161002133421_add_index_on_member_roles_inherited_from.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161010081301_change_issues_description_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161010081528_change_journal_details_value_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161010081600_change_journals_notes_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161126094932_add_index_on_changesets_issues_issue_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20161220091118_add_index_on_issues_parent_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170207050700_add_index_on_disk_filename_to_attachments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170302015225_change_attachments_digest_limit_to_64.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170309214320_add_project_default_assigned_to_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170320051650_change_repositories_extra_info_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170418090031_add_view_news_to_all_existing_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170419144536_add_view_messages_to_all_existing_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20170723112801_rename_comments_to_content.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20180501132547_add_author_id_to_time_entries.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20180913072918_add_verify_peer_to_auth_sources.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20180923082945_change_sqlite_booleans_to_0_and_1.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20180923091603_change_sqlite_booleans_default.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20190315094151_change_custom_values_value_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20190315102101_add_trackers_description.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20190510070108_add_unique_id_to_import_items.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20190620135549_change_roles_name_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20200826153401_add_twofa_scheme_to_user.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20200826153402_add_totp_to_user.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20210704125704_add_twofa_required_to_groups.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20210705111300_add_projects_default_issue_query_id.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20210728131544_drop_is_in_chlog_column.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20210801145548_remove_bcc_recipients_setting.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20210801211024_remove_orphaned_user_custom_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20211213122100_remove_identity_url_from_users.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20211213122101_drop_open_id_authentication_tables.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20211213122102_remove_open_id_setting.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20220224194639_delete_orphaned_time_entry_activities.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20220714093000_add_journal_updated_on.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20220714093010_add_journal_updated_by.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20220806215628_add_default_time_entry_activity_to_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20221002193055_delete_orphaned_query_and_role_from_queries_roles.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20221004172825_ensure_text_formatting_setting_is_stored_in_db.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20221012135202_add_index_to_custom_values.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20221214173537_add_select_project_publicity_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20230818020734_add_status_description.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20231012112407_remove_mention_users_permission.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20231113131245_ensure_default_notification_option_is_stored_in_db.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20240213101801_add_queries_description.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241007144951_change_text_formatting_from_markdown_to_common_mark.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241022095140_remove_orphaned_custom_value_attachments.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241026031710_update_orphaned_journal_updated_by_id_to_anonymous.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241103150135_change_settings_value_limit.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241103184550_change_builtin_roles_user_visibility.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20241213003659_add_unique_index_to_projects_identifier.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20250423065135_create_reactions.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20250530185658_ensure_wiki_tablesort_setting_is_stored_in_db.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20250611092155_create_doorkeeper_tables.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20250611092227_enable_pkce.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20251007073256_create_webhooks.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20260319062845_add_index_to_users_lower_login_on_postgres_and_sqlite.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20260319170822_add_index_to_users_login.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20260320090000_ensure_default_issue_start_date_to_creation_date_is_stored_in_db.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "20260520164915_add_private_by_default_to_trackers.rb",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "doc",
+          "type": "dir",
+          "children": [
+            {
+              "name": "CHANGELOG",
+              "type": "file"
+            },
+            {
+              "name": "COPYING",
+              "type": "file"
+            },
+            {
+              "name": "INSTALL",
+              "type": "file"
+            },
+            {
+              "name": "README_FOR_APP",
+              "type": "file"
+            },
+            {
+              "name": "RUNNING_TESTS",
+              "type": "file"
+            },
+            {
+              "name": "UPGRADING",
+              "type": "file"
+            },
+            {
+              "name": "licenses",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "chartjs.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "fugue-icons.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "jquery-ui.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "jquery.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "notosans.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "open-color.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "silk-icons.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "tabler-icons.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "tablesort.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "tribute.txt",
+                  "type": "file"
+                },
+                {
+                  "name": "turndown.txt",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "extra",
+          "type": "dir",
+          "children": [
+            {
+              "name": "mail_handler",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "rdm-mailhandler.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "sample_plugin",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "README",
+                  "type": "file"
+                },
+                {
+                  "name": "app",
+                  "type": "dir"
+                },
+                {
+                  "name": "assets",
+                  "type": "dir"
+                },
+                {
+                  "name": "config",
+                  "type": "dir"
+                },
+                {
+                  "name": "db",
+                  "type": "dir"
+                },
+                {
+                  "name": "init.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "test",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "svn",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "Redmine.pm",
+                  "type": "file"
+                },
+                {
+                  "name": "reposman.rb",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lib",
+          "type": "dir",
+          "children": [
+            {
+              "name": "generators",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "redmine_plugin",
+                  "type": "dir"
+                },
+                {
+                  "name": "redmine_plugin_controller",
+                  "type": "dir"
+                },
+                {
+                  "name": "redmine_plugin_migration",
+                  "type": "dir"
+                },
+                {
+                  "name": "redmine_plugin_model",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "plugins",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "acts_as_activity_provider",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_attachable",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_customizable",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_event",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_searchable",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_tree",
+                  "type": "dir"
+                },
+                {
+                  "name": "acts_as_watchable",
+                  "type": "dir"
+                },
+                {
+                  "name": "gravatar",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "redmine",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "access_control.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "access_keys.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "activity",
+                  "type": "dir"
+                },
+                {
+                  "name": "activity.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "acts",
+                  "type": "dir"
+                },
+                {
+                  "name": "asset_path.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "ciphering.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "codeset_util.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "configuration.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "core_ext",
+                  "type": "dir"
+                },
+                {
+                  "name": "core_ext.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "database.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "default_data",
+                  "type": "dir"
+                },
+                {
+                  "name": "diff.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "diff_table.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "export",
+                  "type": "dir"
+                },
+                {
+                  "name": "field_format.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "helpers",
+                  "type": "dir"
+                },
+                {
+                  "name": "hook",
+                  "type": "dir"
+                },
+                {
+                  "name": "hook.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "i18n.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "imap.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "info.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "job_wrapper.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "markdownizer.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "menu_manager.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mime_type.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "my_page.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "nested_set",
+                  "type": "dir"
+                },
+                {
+                  "name": "notifiable.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "pagination.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "platform.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "plugin.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "plugin_loader.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "pop3.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "preparation.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_jump_box.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "quote_reply.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reaction.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "safe_attributes.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "scm",
+                  "type": "dir"
+                },
+                {
+                  "name": "search.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sort_criteria.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "string_array_diff",
+                  "type": "dir"
+                },
+                {
+                  "name": "subclass_factory.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sudo_mode.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "syntax_highlighting.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "themes.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "thumbnail.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "twofa",
+                  "type": "dir"
+                },
+                {
+                  "name": "twofa.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "unified_diff.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "utils",
+                  "type": "dir"
+                },
+                {
+                  "name": "utils.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "version.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "views",
+                  "type": "dir"
+                },
+                {
+                  "name": "wiki_formatting",
+                  "type": "dir"
+                },
+                {
+                  "name": "wiki_formatting.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "redmine.rb",
+              "type": "file"
+            },
+            {
+              "name": "tasks",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "ci.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "ciphering.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "deprecated.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "email.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "extract_fixtures.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "icons.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "initializers.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "load_default_data.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "locales.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "metrics.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "migrate_from_mantis.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "migrate_from_trac.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "permissions.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "redmine.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "reminder.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "testing.rake",
+                  "type": "file"
+                },
+                {
+                  "name": "yardoc.rake",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "webhook_endpoint_validator.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "package.json",
+          "type": "file"
+        },
+        {
+          "name": "plugins",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "public",
+          "type": "dir",
+          "children": [
+            {
+              "name": "404.html",
+              "type": "file"
+            },
+            {
+              "name": "500.html",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application_system_test_case.rb",
+              "type": "file"
+            },
+            {
+              "name": "autoload",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "plugin_autoload_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "controllers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "empty",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "coverage",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "html_formatter.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "views",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "extra",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "redmine_pm",
+                  "type": "dir"
+                }
+              ]
+            },
+            {
+              "name": "fixtures",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "asset_path",
+                  "type": "dir"
+                },
+                {
+                  "name": "attachments.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_sources.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "boards.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "changes.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "changesets.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "comments.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_projects.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_trackers.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_values.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "diffs",
+                  "type": "dir"
+                },
+                {
+                  "name": "documents.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "email_addresses.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "enabled_modules.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "encoding",
+                  "type": "dir"
+                },
+                {
+                  "name": "enumerations.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "files",
+                  "type": "dir"
+                },
+                {
+                  "name": "groups_users.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_categories.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relations.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_statuses.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "issues.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "journal_details.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "journals.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "ldap",
+                  "type": "dir"
+                },
+                {
+                  "name": "mail_handler",
+                  "type": "dir"
+                },
+                {
+                  "name": "member_roles.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "members.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "messages.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "news.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "plugins",
+                  "type": "dir"
+                },
+                {
+                  "name": "projects.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_trackers.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "queries.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories",
+                  "type": "dir"
+                },
+                {
+                  "name": "repositories.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "roles.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "themes",
+                  "type": "dir"
+                },
+                {
+                  "name": "time_entries.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "tokens.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "trackers.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "user_preferences.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "users.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "versions.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "views",
+                  "type": "dir"
+                },
+                {
+                  "name": "watchers.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_content_versions.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_contents.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_pages.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "wikis.yml",
+                  "type": "file"
+                },
+                {
+                  "name": "workflows.yml",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "functional",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "account_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "activities_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "admin_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachments_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachments_visibility_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_sources_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auto_completes_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "boards_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "calendars_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "comments_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "context_menus",
+                  "type": "dir"
+                },
+                {
+                  "name": "custom_field_enumerations_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "documents_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "email_addresses_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enumerations_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "files_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "gantts_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "groups_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "help_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "imports_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_categories_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relations_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_statuses_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_controller_transaction_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_custom_fields_visibility_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journals_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mail_handler_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "members_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "messages_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "my_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "news_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "previews_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "principal_memberships_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_enumerations_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "queries_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reports_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_bazaar_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_cvs_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_filesystem_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_git_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_mercurial_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_subversion_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "roles_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_custom_fields_visibility_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sessions_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "settings_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sys_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_custom_fields_visibility_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_report_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "trackers_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "users_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "versions_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "versions_custom_fields_visibility_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watchers_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhooks_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "welcome_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wikis_controller_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflows_controller_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "generators",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "controller_generator_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "migration_generator_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "model_generator_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "helpers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "activities_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "application_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "avatars_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "context_menus_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_fields_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "groups_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "icons_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journals_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "members_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "projects_queries_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "queries_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reports_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "routes_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "settings_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sort_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "version_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watchers_helper_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_helper_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "integration",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "account_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "admin_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "api_test",
+                  "type": "dir"
+                },
+                {
+                  "name": "application_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachments_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "feeds_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "layout_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "lib",
+                  "type": "dir"
+                },
+                {
+                  "name": "projects_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_git_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "routing",
+                  "type": "dir"
+                },
+                {
+                  "name": "sessions_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sudo_mode_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "twofa_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "users_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "welcome_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "mailers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "empty",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "models",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "empty",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "object_helpers.rb",
+              "type": "file"
+            },
+            {
+              "name": "system",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "api_key_copy_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "copy_pre_content_to_clipboard_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "copy_to_clipboard_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_enumerations_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "gantts_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "groups_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "inline_autocomplete_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_import_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_reply_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issues_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "keyboard_shortcuts_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "list_autofill_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "members_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "messages_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "my_page_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "oauth_provider_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "quick_jump_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reactions_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repositories_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "responsive_menu_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "selection_indent_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sticky_issue_header_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "sudo_mode_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "table_paste_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "timelog_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "versions_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watchers_test.rb",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "test_helper.rb",
+              "type": "file"
+            },
+            {
+              "name": "unit",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "activity_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachment_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "attachment_transaction_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "auth_source_ldap_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "board_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "changeset_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "comment_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_user_format_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_field_version_format_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "custom_value_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "default_data_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document_category_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "document_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "email_address_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enabled_module_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "enumeration_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "group_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "initializers",
+                  "type": "dir"
+                },
+                {
+                  "name": "issue_category_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_custom_field_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_import_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_nested_set_concurrency_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_nested_set_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_priority_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_relation_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_scopes_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_status_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_subtasking_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "issue_transaction_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "jobs",
+                  "type": "dir"
+                },
+                {
+                  "name": "journal_observer_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "journal_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "lib",
+                  "type": "dir"
+                },
+                {
+                  "name": "mail_handler_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mailer_localisation_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "mailer_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "member_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "message_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "news_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "principal_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_admin_query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_copy_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_members_inheritance_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_nested_set_concurrency_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_nested_set_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "project_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "reaction_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_bazaar_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_cvs_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_filesystem_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_git_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_mercurial_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_subversion_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "repository_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "role_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "search_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "setting_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_activity_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_custom_field_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_import_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "time_entry_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "token_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "tracker_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_import_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_preference_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_query_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "user_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "version_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "watcher_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhook_payload_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "webhook_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_content_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_content_version_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_page_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_redirect_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "wiki_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflow_test.rb",
+                  "type": "file"
+                },
+                {
+                  "name": "workflow_transition_test.rb",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "themes",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "vendor",
+          "type": "dir",
+          "children": [
+            {
+              "name": "javascript",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "chart.min.js",
+                  "type": "file"
+                },
+                {
+                  "name": "tablesort.min.js",
+                  "type": "file"
+                },
+                {
+                  "name": "tablesort.number.min.js",
+                  "type": "file"
+                },
+                {
+                  "name": "turndown.js",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "yarn.lock",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "start-rails.sh",
+      "type": "file"
+    },
+    {
+      "name": "start-redmine.sh",
+      "type": "file"
+    },
+    {
+      "name": "start-web.sh",
+      "type": "file"
+    },
+    {
+      "name": "web-proxy",
+      "type": "dir",
+      "children": [
+        {
+          "name": "Caddyfile",
+          "type": "file"
+        },
+        {
+          "name": "Caddyfile.security-headers-draft",
+          "type": "file"
+        },
+        {
+          "name": "README.md",
+          "type": "file"
+        },
+        {
+          "name": "apache-lib.conf",
+          "type": "file"
+        },
+        {
+          "name": "apache-ruby-cgi",
+          "type": "file"
+        },
+        {
+          "name": "origin_csp.py",
+          "type": "file"
+        },
+        {
+          "name": "start-lib-web.sh",
+          "type": "file"
+        }
+      ]
+    }
+  ]
+}

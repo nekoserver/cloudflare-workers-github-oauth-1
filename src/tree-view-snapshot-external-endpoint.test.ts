@@ -135,11 +135,12 @@ describe('POST /api/tree-view-repos-external', () => {
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
       'nekoserver/rails-root',
+      'nekoserver/railway',
       'nekoserver/rust-worker-sqlx-d1',
     ]);
   });
 
-  it('D1が空でも組み込みの4リポジトリを一覧に返す', async () => {
+  it('D1が空でも組み込みの5リポジトリを一覧に返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-repos-external', db, { userToken });
@@ -149,6 +150,7 @@ describe('POST /api/tree-view-repos-external', () => {
       'nekoserver/cloudflare-workers-github-oauth-1',
       'nekoserver/dynamicneko',
       'nekoserver/rails-root',
+      'nekoserver/railway',
       'nekoserver/rust-worker-sqlx-d1',
     ]);
   });
@@ -160,6 +162,19 @@ describe('POST /api/tree-view-snapshot-external', () => {
     const userToken = await makeUserToken('ok@example.com');
     const res = await postExternal('/api/tree-view-snapshot-external', db, { userToken, repoName: 'someone/unrelated-repo' });
     expect(res.status).toBe(400);
+  });
+
+  it('D1未同期のRailwayも最新の組み込みツリーを返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await postExternal('/api/tree-view-snapshot-external', db, { userToken, repoName: 'nekoserver/railway' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { tree: { name: string; children: Array<{ name: string }> } };
+    expect(body.tree.name).toBe('nekoserver/railway');
+    expect(body.tree.children.map(node => node.name)).toEqual(expect.arrayContaining([
+      'rails-app', 'redmine', 'web-proxy', 'SPEC.railway.websocket-sse.md',
+    ]));
+    expect(body.tree.children.some(node => node.name.startsWith('.'))).toBe(false);
   });
 
   it('D1未同期のdynamicnekoは組み込みスナップショットを返す', async () => {
