@@ -15,10 +15,12 @@ describe('/neko tree', () => {
     const repositoryTree = vi.fn().mockResolvedValue('tree');
     await interpretAichatSlashCommand('/neko tree owner/repo --depth 3', new Date(), { ...baseDeps, repositoryTree });
     await interpretAichatSlashCommand('/neko tree owner/repo --depth=4', new Date(), { ...baseDeps, repositoryTree });
+    await interpretAichatSlashCommand('/neko tree owner/repo --depth 7', new Date(), { ...baseDeps, repositoryTree });
     await interpretAichatSlashCommand('/neko tree owner/repo -d=1', new Date(), { ...baseDeps, repositoryTree });
     expect(repositoryTree).toHaveBeenNthCalledWith(1, 'owner/repo', 3);
     expect(repositoryTree).toHaveBeenNthCalledWith(2, 'owner/repo', 4);
-    expect(repositoryTree).toHaveBeenNthCalledWith(3, 'owner/repo', 1);
+    expect(repositoryTree).toHaveBeenNthCalledWith(3, 'owner/repo', 7);
+    expect(repositoryTree).toHaveBeenNthCalledWith(4, 'owner/repo', 1);
   });
 
   it('em dashで入力された—depthも解釈する', async () => {
@@ -62,9 +64,9 @@ describe('/neko tree', () => {
   it('不正な深さや不足した引数をAPI呼び出し前に拒否する', async () => {
     const repositoryTree = vi.fn();
     const missing = await interpretAichatSlashCommand('/neko tree', new Date(), { ...baseDeps, repositoryTree });
-    const invalidDepth = await interpretAichatSlashCommand('/neko tree owner/repo --depth 5', new Date(), { ...baseDeps, repositoryTree });
+    const invalidDepth = await interpretAichatSlashCommand('/neko tree owner/repo --depth 8', new Date(), { ...baseDeps, repositoryTree });
     expect(missing.handled && missing.response).toContain('リポジトリを指定');
-    expect(invalidDepth.handled && invalidDepth.response).toContain('1から4');
+    expect(invalidDepth.handled && invalidDepth.response).toContain('1から7');
     expect(repositoryTree).not.toHaveBeenCalled();
   });
 

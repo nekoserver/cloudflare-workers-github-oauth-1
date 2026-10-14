@@ -1849,7 +1849,7 @@ export async function interpretAichatSlashCommand(
     const args = parts.slice(2);
     const repoArg = args[0];
     if (!repoArg) {
-      return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-4]' };
+      return { handled: true, response: '❌ リポジトリを指定してください: /neko tree <owner/repo> [--depth 1-7]' };
     }
     let depth = 2;
     const treeOptions: TreeFormatOptions = {};
@@ -1859,8 +1859,8 @@ export async function interpretAichatSlashCommand(
       const depthWithEquals = option.match(/^(?:--depth|-d)=(.*)$/);
       if (option === '--depth' || option === '-d' || depthWithEquals) {
         const value = depthWithEquals ? depthWithEquals[1] : args[++i];
-        if (!value || !/^[1-4]$/.test(value)) {
-          return { handled: true, response: '❌ --depth は1から4の整数で指定してください' };
+        if (!value || !/^[1-7]$/.test(value)) {
+          return { handled: true, response: '❌ --depth は1から7の整数で指定してください' };
         }
         depth = Number(value);
       } else if (option === '--files-only' || option === '-f') {
@@ -1882,7 +1882,7 @@ export async function interpretAichatSlashCommand(
         if (value !== 'name' && value !== 'time') return { handled: true, response: '❌ --sort は name または time を指定してください' };
         treeOptions.sort = value;
       } else {
-        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-4] [--pattern glob] [--files-only|--dirs-only] [--hidden] [--sort name|time] [--reverse]` };
+        return { handled: true, response: `❌ 不明なオプションです: ${args[i]}\n書式: /neko tree <owner/repo> [--depth 1-7] [--pattern glob] [--files-only|--dirs-only] [--hidden] [--sort name|time] [--reverse]` };
       }
     }
     if (treeOptions.filesOnly && treeOptions.directoriesOnly) {

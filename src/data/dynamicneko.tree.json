@@ -47,6 +47,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.dynamicneko.20261003.md",
+      "type": "file"
+    },
+    {
       "name": "SUGGEST.react-router.md",
       "type": "file"
     },
@@ -121,6 +125,10 @@
               "type": "file"
             },
             {
+              "name": "settingsCheck.ts",
+              "type": "file"
+            },
+            {
               "name": "state.ts",
               "type": "file"
             },
@@ -139,11 +147,19 @@
           "type": "dir",
           "children": [
             {
+              "name": "feed.test.ts",
+              "type": "file"
+            },
+            {
               "name": "ingest.test.ts",
               "type": "file"
             },
             {
               "name": "oauth-callback.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "settings-check.test.ts",
               "type": "file"
             }
           ]
@@ -188,6 +204,22 @@
         },
         {
           "name": "0004_create_tree_view_file_types.sql",
+          "type": "file"
+        },
+        {
+          "name": "0005_add_tree_view_file_types_jsonc_css_mjs.sql",
+          "type": "file"
+        },
+        {
+          "name": "0006_add_tree_view_file_types_erb.sql",
+          "type": "file"
+        },
+        {
+          "name": "0007_add_tree_view_file_types_rs.sql",
+          "type": "file"
+        },
+        {
+          "name": "0008_create_commit_log_translations_keywords.sql",
           "type": "file"
         }
       ]
@@ -345,6 +377,14 @@
           "type": "file"
         },
         {
+          "name": "commit-log-persist.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-log-translate-extract.ts",
+          "type": "file"
+        },
+        {
           "name": "components",
           "type": "dir",
           "children": [
@@ -374,6 +414,10 @@
             },
             {
               "name": "ask-ai-widget.tsx",
+              "type": "file"
+            },
+            {
+              "name": "clef-playground-page.tsx",
               "type": "file"
             },
             {
@@ -493,6 +537,10 @@
               "type": "file"
             },
             {
+              "name": "tree-view-date-results-window.tsx",
+              "type": "file"
+            },
+            {
               "name": "tree-view-page.tsx",
               "type": "file"
             },
@@ -531,6 +579,18 @@
               "type": "file"
             },
             {
+              "name": "tree-view-sample-data-rails-root.ts",
+              "type": "file"
+            },
+            {
+              "name": "tree-view-sample-data-railway.ts",
+              "type": "file"
+            },
+            {
+              "name": "tree-view-sample-data-rust-worker-sqlx-d1.ts",
+              "type": "file"
+            },
+            {
               "name": "tree-view-sample-data.ts",
               "type": "file"
             }
@@ -549,6 +609,14 @@
           "type": "file"
         },
         {
+          "name": "movable-dialog.css",
+          "type": "file"
+        },
+        {
+          "name": "movable-panel.ts",
+          "type": "file"
+        },
+        {
           "name": "run-code.ts",
           "type": "file"
         },
@@ -561,11 +629,31 @@
           "type": "file"
         },
         {
+          "name": "sortable-list.ts",
+          "type": "file"
+        },
+        {
           "name": "styles.css",
           "type": "file"
         },
         {
+          "name": "tree-view-commit-date-tree.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-commit-search.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-day-files.ts",
+          "type": "file"
+        },
+        {
           "name": "tree-view-diff-render.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-file-heatmap.ts",
           "type": "file"
         },
         {
@@ -588,6 +676,10 @@
         },
         {
           "name": "welcome-browser-test-sample.ts",
+          "type": "file"
+        },
+        {
+          "name": "workerRequestAuth.ts",
           "type": "file"
         }
       ]
@@ -665,6 +757,18 @@
           "type": "file"
         },
         {
+          "name": "clef-playground-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "clef-playground-page-no-inner-html.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "clef-playground-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
           "name": "commit-checker-external.test.ts",
           "type": "file"
         },
@@ -678,6 +782,22 @@
         },
         {
           "name": "commit-checker-score.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-log-extract-run-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-log-extract-test-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-log-persist.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-log-translate-extract.test.ts",
           "type": "file"
         },
         {
@@ -721,6 +841,10 @@
           "type": "file"
         },
         {
+          "name": "highlighted-code-lines.test.ts",
+          "type": "file"
+        },
+        {
           "name": "html-run-preview.test.ts",
           "type": "file"
         },
@@ -761,11 +885,19 @@
           "type": "file"
         },
         {
+          "name": "movable-panel.test.ts",
+          "type": "file"
+        },
+        {
           "name": "ping.test.ts",
           "type": "file"
         },
         {
           "name": "rive-app-state.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "samples-sortable-dialogs.browser.test.tsx",
           "type": "file"
         },
         {
@@ -797,7 +929,19 @@
           "type": "file"
         },
         {
+          "name": "slash-command-input-20260927.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "sortable-list.test.ts",
+          "type": "file"
+        },
+        {
           "name": "svg-icons-page.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "tokenize-css.test.ts",
           "type": "file"
         },
         {
@@ -817,11 +961,27 @@
           "type": "file"
         },
         {
+          "name": "tree-view-commit-date-tree.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-commit-files-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-commit-search.test.ts",
+          "type": "file"
+        },
+        {
           "name": "tree-view-commit-summary-external.test.ts",
           "type": "file"
         },
         {
           "name": "tree-view-commits-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-day-files.test.ts",
           "type": "file"
         },
         {
@@ -833,11 +993,19 @@
           "type": "file"
         },
         {
+          "name": "tree-view-file-heatmap.test.ts",
+          "type": "file"
+        },
+        {
           "name": "tree-view-file-types.test.ts",
           "type": "file"
         },
         {
           "name": "tree-view-html-preview-csp.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-idle-fall.browser.test.tsx",
           "type": "file"
         },
         {
@@ -850,6 +1018,10 @@
         },
         {
           "name": "tree-view-raw-ref-external.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-repo-check.test.ts",
           "type": "file"
         },
         {
@@ -869,6 +1041,10 @@
           "type": "file"
         },
         {
+          "name": "typewriter-composer-widget-resize-and-style-picker.browser.test.tsx",
+          "type": "file"
+        },
+        {
           "name": "typewriter-ja-20260922.browser.test.tsx",
           "type": "file"
         },
@@ -885,7 +1061,15 @@
           "type": "file"
         },
         {
+          "name": "ui-samples-additional-components.browser.test.tsx",
+          "type": "file"
+        },
+        {
           "name": "ui-samples-anim-icons-20260923.browser.test.tsx",
+          "type": "file"
+        },
+        {
+          "name": "ui-samples-interactive-20260927.browser.test.tsx",
           "type": "file"
         },
         {
