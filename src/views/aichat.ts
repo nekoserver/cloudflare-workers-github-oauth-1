@@ -125,14 +125,14 @@ export function getAiChatPage(user: {
     .sidebar-toggle.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
 
     .navbar-brand {
-      font-size: 13px; font-weight: 700;
+      font-size: 7px; font-weight: 700;
       color: var(--text-primary); text-decoration: none;
       display: flex; align-items: baseline; gap: 7px;
       white-space: nowrap;
     }
-    .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+    .navbar-model { font-size: 7px; font-weight: 400; color: var(--text-muted); }
     .navbar-model-select {
-      font-size: 9px; font-weight: 400; color: var(--text-muted);
+      font-size: 7px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: none; outline: none; cursor: pointer;
       padding: 0 2px; max-width: min(180px, 45vw); min-width: 0; flex-shrink: 1;
     }
@@ -145,7 +145,7 @@ export function getAiChatPage(user: {
     }
     .zt-bge-model-select option { background: var(--card-bg); color: var(--text-primary); }
     .navbar-lang-select {
-      font-size: 9px; font-weight: 400; color: var(--text-muted);
+      font-size: 7px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border-color); border-radius: 5px;
       outline: none; cursor: pointer; padding: 1px 4px; flex-shrink: 0;
     }
@@ -325,19 +325,31 @@ export function getAiChatPage(user: {
       flex-wrap: wrap; gap: 5px; flex: 1 1 620px; min-width: 0; max-width: 100%;
     }
     .navbar .search-hist-btn, .navbar .search-log-btn, .navbar .theme-toggle {
-      height: 24px; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 7px; padding: 2px 3px; border-radius: 4px;
+      height: 20px; display: inline-flex; align-items: center; justify-content: center;
     }
-    .navbar .theme-toggle { width: 24px; border-radius: 7px; }
-    .navbar .theme-toggle svg { width: 14px; height: 14px; }
+    .navbar .theme-toggle { width: 20px; padding: 0; }
+    .navbar .theme-toggle svg { width: 10px; height: 10px; }
+    .navbar > .sidebar-toggle, .navbar .user-icon {
+      width: 20px; height: 20px; font-size: 7px;
+    }
+    .navbar > .sidebar-toggle { border-radius: 4px; }
+    .navbar .navbar-model-select, .navbar .navbar-lang-select { height: 20px; }
     .navbar .user-name {
-      font-size: 9px;
+      font-size: 7px;
       max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     @media (max-width: 640px) {
       .navbar { padding: 6px 8px; gap: 6px; }
       .navbar-spacer { display: none; }
       .user-menu { flex-basis: 100%; justify-content: flex-start; }
-      .navbar-brand { font-size: 12px; }
+      .navbar-brand { font-size: 7px; }
+    }
+    @media (max-width: 360px) {
+      .navbar .search-hist-btn, .navbar .search-log-btn, .navbar .theme-toggle, .navbar .user-name,
+      .navbar .navbar-model-select, .navbar .navbar-lang-select, .navbar .navbar-brand,
+      .navbar > .sidebar-toggle, .navbar .user-icon { font-size: 6px; }
+      .navbar .search-hist-btn, .navbar .search-log-btn { padding: 2px; }
     }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
