@@ -99,8 +99,11 @@ export function getAiChatPage(user: {
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 8px var(--navbar-shadow);
-      padding: 0 20px;
-      height: 44px;
+      padding: 6px 12px;
+      min-height: 44px;
+      height: auto;
+      flex-wrap: wrap;
+      min-width: 0;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -122,7 +125,7 @@ export function getAiChatPage(user: {
     .sidebar-toggle.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
 
     .navbar-brand {
-      font-size: 17px; font-weight: 700;
+      font-size: 15px; font-weight: 700;
       color: var(--text-primary); text-decoration: none;
       display: flex; align-items: baseline; gap: 7px;
       white-space: nowrap;
@@ -131,7 +134,7 @@ export function getAiChatPage(user: {
     .navbar-model-select {
       font-size: 11px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: none; outline: none; cursor: pointer;
-      padding: 0 2px; max-width: 180px; flex-shrink: 0;
+      padding: 0 2px; max-width: min(180px, 45vw); min-width: 0; flex-shrink: 1;
     }
     .navbar-model-select:hover { color: var(--text-primary); }
     .navbar-model-select option { background: var(--card-bg); color: var(--text-primary); }
@@ -152,13 +155,15 @@ export function getAiChatPage(user: {
     .navbar-spacer { flex: 1; }
     .search-log-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 9px;
+      color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 4px 6px;
+      white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-log-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
     .search-hist-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 9px;
+      color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 4px 6px;
+      white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-hist-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
@@ -315,7 +320,19 @@ export function getAiChatPage(user: {
       white-space: normal;
     }
 
-    .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .user-menu {
+      display: flex; align-items: center; justify-content: flex-end;
+      flex-wrap: wrap; gap: 5px; flex: 1 1 620px; min-width: 0; max-width: 100%;
+    }
+    .navbar .user-name {
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    @media (max-width: 640px) {
+      .navbar { padding: 6px 8px; gap: 6px; }
+      .navbar-spacer { display: none; }
+      .user-menu { flex-basis: 100%; justify-content: flex-start; }
+      .navbar-brand { font-size: 13px; }
+    }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
       width: 32px; height: 32px; border-radius: 50%;
@@ -371,7 +388,7 @@ export function getAiChatPage(user: {
     }
     .token-usage-gran-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .sidebar-kw-modal {
-      display: none; position: fixed; left: 260px; top: 44px; bottom: 0; z-index: 200;
+      display: none; position: fixed; left: 260px; top: var(--aichat-navbar-height, 44px); bottom: 0; z-index: 200;
       width: 240px; background: var(--card-bg); overflow-y: hidden;
       flex-direction: column;
       border-left: 1px solid var(--border-color);
@@ -1041,6 +1058,16 @@ export function getAiChatPage(user: {
       </div>
     </div>
   </nav>
+  <script>
+    (function () {
+      var navbar = document.querySelector('.navbar');
+      function updateNavbarHeight() {
+        document.documentElement.style.setProperty('--aichat-navbar-height', navbar.getBoundingClientRect().height + 'px');
+      }
+      new ResizeObserver(updateNavbarHeight).observe(navbar);
+      updateNavbarHeight();
+    })();
+  </script>
 
   <!-- ボディエリア（サイドバー + チャット） -->
   <div class="body-area">
