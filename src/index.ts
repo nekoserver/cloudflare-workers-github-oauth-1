@@ -401,6 +401,20 @@ import { WINE_METADATA_SEED, type WineMetadataSeedRow } from './data/wineMetadat
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWebhookSlackSettingPage } from './views/webhookSlackSettingPage';
 import { buildWebhookSettingChecks, fetchCfAuthSettingChecks, toWebhookLogDisplayRows, type WebhookLogRawRow } from './utils/webhookSlackSettingDiagnostics';
+import { getRepoOnboardingCheckPage, type RepoOnboardingStageView } from './views/repoOnboardingCheckPage';
+import {
+  evaluateInstallationCheck,
+  evaluateWebhookDeliveryCheck,
+  evaluateCommitBackfillCheck,
+  type InstallationPermissionRow,
+  type WebhookLogRow,
+} from './utils/repoOnboardingCheck';
+import {
+  fetchCfAuthWspaceRepoCheck,
+  evaluateWspaceCheck,
+  fetchDynamicnekoTreeViewRepoCheck,
+  evaluateTreeViewCheck,
+} from './utils/repoOnboardingRemoteCheck';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -6154,7 +6168,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getAiChatPage({
     name: user.name,
@@ -14178,6 +14192,136 @@ app.get('/wh-setting_github-to-slack', authMiddleware, async (c) => {
   const cfAuthChecks = await fetchCfAuthSettingChecks(c.env.CF_AUTH, c.env.NOTIFY_WORKER_SECRET);
 
   return c.html(getWebhookSlackSettingPage(user.sub, checks, recentPushLogs, cfAuthChecks));
+});
+
+// repoNameは "owner/repo" 形式のみ許可する。GitHub APIへそのまま埋め込むため、
+// パストラバーサルやURLインジェクションにつながる文字種を拒否する。
+function isSafeOwnerRepoName(repoName: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoName);
+}
+
+app.get('/repo-onboarding-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const rawRepo = (c.req.query('repo') ?? '').trim();
+
+  if (!rawRepo) {
+    return c.html(getRepoOnboardingCheckPage(user.sub, null, null));
+  }
+  if (!isSafeOwnerRepoName(rawRepo)) {
+    return c.html(getRepoOnboardingCheckPage(user.sub, rawRepo, null));
+  }
+
+  const db = c.env.DB;
+  const stages: RepoOnboardingStageView[] = [];
+
+  // ①GitHub Appインストール確認
+  if (db) {
+    try {
+      const { results } = await db
+        .prepare('SELECT repo_name, repository_selection, updated_at FROM installation_permissions')
+        .all<InstallationPermissionRow>();
+      stages.push({
+        stepNumber: 1,
+        title: 'GitHub Appインストール',
+        result: evaluateInstallationCheck(rawRepo, results ?? []),
+      });
+    } catch (error) {
+      logger.error('Failed to query installation_permissions for onboarding check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 1,
+        title: 'GitHub Appインストール',
+        result: { status: 'warning', summary: 'installation_permissionsの取得に失敗しました', detail: 'D1クエリでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 1, title: 'GitHub Appインストール', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ②webhook疎通確認
+  // 直近のpush受信日時は③のdetail(完了日時を時系列で追えるようにする表示)にも使うため
+  // このブロックの外側(関数スコープ)で保持する。
+  let latestOkPushAt: string | null = null;
+  if (db) {
+    try {
+      const { results } = await db
+        .prepare(
+          `SELECT event_type, status, received_at FROM webhook_log WHERE source = 'github' AND payload LIKE ? ORDER BY received_at DESC LIMIT 20`
+        )
+        .bind(`%${rawRepo}%`)
+        .all<WebhookLogRow>();
+      const rows = results ?? [];
+      latestOkPushAt = rows.find((row) => row.status === 'ok' && row.event_type === 'push')?.received_at ?? null;
+      stages.push({
+        stepNumber: 2,
+        title: 'webhook疎通(経路A)',
+        result: evaluateWebhookDeliveryCheck(rows),
+      });
+    } catch (error) {
+      logger.error('Failed to query webhook_log for onboarding check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 2,
+        title: 'webhook疎通(経路A)',
+        result: { status: 'warning', summary: 'webhook_logの取得に失敗しました', detail: 'D1クエリでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 2, title: 'webhook疎通(経路A)', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ③repo_commit_indexバックフィル確認(D1件数 vs GitHub実コミット数)
+  if (db) {
+    try {
+      const d1Row = await db
+        .prepare('SELECT COUNT(*) as cnt, MAX(seq_num) as maxSeq FROM repo_commit_index WHERE repo_name = ?')
+        .bind(rawRepo)
+        .first<{ cnt: number; maxSeq: number | null }>();
+      const d1Summary = { count: d1Row?.cnt ?? 0, maxSeq: d1Row?.maxSeq ?? null };
+
+      let githubTotal: number | null = null;
+      const [owner, repo] = rawRepo.split('/');
+      if (c.env.GITHUB_TOKEN && owner && repo) {
+        const { total } = await getGitHubCommitCount({ owner, repo, accessToken: c.env.GITHUB_TOKEN });
+        githubTotal = total;
+      }
+      stages.push({
+        stepNumber: 3,
+        title: 'コミット保存・バックフィル',
+        result: evaluateCommitBackfillCheck(d1Summary, githubTotal, latestOkPushAt),
+      });
+    } catch (error) {
+      logger.error('Failed to evaluate repo_commit_index backfill check', {
+        repoName: rawRepo,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      stages.push({
+        stepNumber: 3,
+        title: 'コミット保存・バックフィル',
+        result: { status: 'warning', summary: '確認中にエラーが発生しました', detail: 'D1クエリまたはGitHub API呼び出しでエラーが発生しました。Workerログを確認してください' },
+      });
+    }
+  } else {
+    stages.push({ stepNumber: 3, title: 'コミット保存・バックフィル', result: { status: 'warning', summary: 'DBバインディングがありません' } });
+  }
+
+  // ④cf-authの/wspace記録確認(Service Binding + CF-Worker/HMAC署名)
+  {
+    const result = await fetchCfAuthWspaceRepoCheck(c.env.CF_AUTH, c.env.CF_AUTH_WORKER_HMAC_SECRET, rawRepo);
+    stages.push({ stepNumber: 4, title: 'cf-authの/wspace記録', result: evaluateWspaceCheck(result) });
+  }
+
+  // ⑤dynamicnekoのtree-view組み込み確認(Service Binding + CF-Worker/HMAC署名)
+  {
+    const result = await fetchDynamicnekoTreeViewRepoCheck(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, rawRepo);
+    stages.push({ stepNumber: 5, title: 'dynamicnekoのtree-view組み込み', result: evaluateTreeViewCheck(result) });
+  }
+
+  return c.html(getRepoOnboardingCheckPage(user.sub, rawRepo, stages));
 });
 
 app.get('/api/workflow', authMiddleware, async (c) => {
