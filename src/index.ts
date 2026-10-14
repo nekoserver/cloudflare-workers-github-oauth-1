@@ -16,6 +16,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
+import { conversationStreamHealthy } from './utils/conversationStreamHealth';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
@@ -6134,9 +6135,13 @@ app.get('/md-preview', (c) => {
   return c.html(getMarkdownPreviewPage());
 });
 
-/**
- * AI チャットページ（認証が必要）
- */
+/** 埋め込み先の死活確認（認証が必要）。 */
+app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ healthy: await conversationStreamHealthy() });
+});
+
+/** AI チャットページ（認証が必要）。 */
 app.get('/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
