@@ -8,7 +8,9 @@ export function getConversationStreamPanel(): string {
     .conversation-stream-panel { position: fixed; top: var(--aichat-navbar-height, 44px); right: 0; bottom: 0; z-index: 190; width: min(420px, 100%); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-left: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); overflow: hidden; }
     .conversation-stream-panel[hidden] { display: none; }
     .conversation-stream-close { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; width: 18px; height: 20px; padding: 0; margin-left: auto; cursor: pointer; flex-shrink: 0; }
-    .conversation-stream-toggle[aria-pressed="true"] { color: var(--accent-color); border-color: var(--accent-color); background: var(--bg-secondary); }
+    .conversation-stream-toggle,
+    .conversation-stream-toggle[aria-pressed="true"] { background: transparent; border: 1px solid #16a34a; }
+    .conversation-stream-toggle[data-server-state="error"] { border-color: #dc2626; }
     @media (min-width: 1000px) { body.conversation-stream-open .body-area { padding-right: 420px; } }
     .conversation-stream-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; margin: 2px 0; flex-shrink: 0; }
     .conversation-stream-controls button { background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--input-border); height: 20px; padding: 2px 3px; white-space: nowrap; border-radius: 4px; cursor: pointer; font: inherit; font-size: 7px; }
@@ -37,9 +39,32 @@ export function getConversationStreamPanel(): string {
     var start = document.getElementById('conversationStreamStart');
     var stop = document.getElementById('conversationStreamStop');
     var protocol = 'websocket';
+    var healthTimer = null;
+    var checkingHealth = false;
+    async function checkHealth() {
+      if (checkingHealth || document.hidden) return;
+      checkingHealth = true;
+      try {
+        var response = await fetch('/api/aichat/conversation-stream/health', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+        if (response.status === 401 || response.status === 403) return;
+        var data = response.ok ? await response.json() : null;
+        var healthy = !!(data && data.healthy === true);
+        toggle.setAttribute('data-server-state', healthy ? 'healthy' : 'error');
+        toggle.title = healthy ? 'ストリーム（サーバー正常）' : 'ストリーム（サーバーエラー）';
+      } catch (error) {
+        toggle.setAttribute('data-server-state', 'error');
+        toggle.title = 'ストリーム（サーバーエラー）';
+      } finally { checkingHealth = false; }
+    }
+    function startHealthChecks() {
+      if (healthTimer !== null) return;
+      checkHealth();
+      healthTimer = setInterval(checkHealth, 30000);
+    }
     var buttons = panel.querySelectorAll('[data-conversation-protocol]');
     function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
     function load() {
+      checkHealth();
       start.disabled = true; stop.disabled = true;
       var url = new URL('https://mynw.nekomaneki.work/lib/conversation-embed.html');
       url.searchParams.set('protocol', protocol);
@@ -84,7 +109,15 @@ export function getConversationStreamPanel(): string {
     new MutationObserver(function () {
       if (!panel.hidden && frame.contentWindow) frame.contentWindow.postMessage({ type: 'conversation-theme', theme: theme() }, 'https://mynw.nekomaneki.work');
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    window.addEventListener('pagehide', function () { frame.removeAttribute('src'); });
+    window.addEventListener('pagehide', function () {
+      frame.removeAttribute('src'); clearInterval(healthTimer); healthTimer = null;
+    });
+    window.addEventListener('pageshow', function () {
+      startHealthChecks();
+      if (!panel.hidden && !frame.getAttribute('src')) load();
+    });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkHealth(); });
+    startHealthChecks();
   })();
   </script>`;
 }
