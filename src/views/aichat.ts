@@ -712,14 +712,14 @@ export function getAiChatPage(user: {
       display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
     }
     .history-modal-search-input {
-      flex: 1; min-width: 0; font-size: 12px; padding: 4px 8px;
+      flex: 1; min-width: 0; font-size: 9px; padding: 4px 8px;
       border: 1px solid var(--border-color); border-radius: 6px;
       background: var(--bg-primary); color: var(--text-primary);
       outline: none;
     }
     .history-modal-search-input:focus { border-color: var(--accent-color, #667eea); }
     .history-modal-search-btn {
-      font-size: 12px; padding: 4px 8px; white-space: nowrap;
+      font-size: 9px; padding: 4px 8px; white-space: nowrap;
       border: 1px solid var(--border-color); border-radius: 6px;
       background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer;
       transition: background 0.15s, color 0.15s;
@@ -738,29 +738,31 @@ export function getAiChatPage(user: {
       background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; white-space: nowrap;
     }
     .subquery-link-delete:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.08); }
-    .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-    .history-modal-date { font-size: 11px; color: var(--text-muted); }
+    .history-modal-title { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+    .history-modal-date { font-size: 9px; color: var(--text-muted); }
     .history-modal-date-link {
-      font-size: 11px; color: var(--accent-color, #667eea); cursor: pointer;
+      font-size: 9px; color: var(--accent-color, #667eea); cursor: pointer;
       background: none; border: none; padding: 0; font-family: inherit;
       text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 2px;
     }
     .history-modal-date-link:hover { opacity: 0.75; }
     .history-modal-close {
       width: 30px; height: 30px; border: none; border-radius: 8px;
-      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; line-height: 1;
     }
     .history-modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .history-modal-fullscreen-btn {
       width: 30px; height: 30px; border: none; border-radius: 8px;
-      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 10px; line-height: 1;
     }
     .history-modal-fullscreen-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .history-modal-chat {
       flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 20px;
       display: flex; flex-direction: column; gap: 14px;
     }
-    .history-modal .chat-bubble { max-width: 88%; }
+    .history-modal .chat-bubble { max-width: 88%; font-size: 11px; line-height: 1.5; }
+    .history-modal .preview-area table { font-size: 10px; }
+    .history-modal .search-hist-btn { font-size: 9px; }
     .history-modal .chat-bubble.user {
       align-self: flex-start; margin-left: 0;
       border-bottom-right-radius: 12px; border-bottom-left-radius: 3px;
@@ -783,9 +785,9 @@ export function getAiChatPage(user: {
     .history-modal-foot {
       flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
       background: var(--card-bg); display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; font-size: 11px; color: var(--text-muted);
+      gap: 12px; font-size: 9px; color: var(--text-muted);
     }
-    .history-modal-link { font-size: 11px; color: var(--accent-color, #667eea); text-decoration: none; white-space: nowrap; }
+    .history-modal-link { font-size: 9px; color: var(--accent-color, #667eea); text-decoration: none; white-space: nowrap; }
     .history-modal-link:hover { text-decoration: underline; }
 
     /* ======= Markdownプレビュー ======= */
@@ -1631,7 +1633,7 @@ export function getAiChatPage(user: {
       <div class="history-modal-head">
         <div class="history-modal-head-left">
           <span>
-            <button class="search-hist-btn" id="historyModalKwEditToggleBtn" style="padding:3px 6px;font-size:13px;vertical-align:middle;margin-right:4px;" title="キーワード分類モード: 未分類のキーワードをタップするとキーワード分類モーダルが開きます">📝</button>
+            <button class="search-hist-btn" id="historyModalKwEditToggleBtn" style="padding:3px 6px;font-size:9px;vertical-align:middle;margin-right:4px;" title="キーワード分類モード: 未分類のキーワードをタップするとキーワード分類モーダルが開きます">📝</button>
             <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
           </span>
           <span class="history-modal-date"><button class="history-modal-date-link" id="historyModalDateLink"></button><span id="historyModalTime"></span></span>
@@ -1646,15 +1648,15 @@ export function getAiChatPage(user: {
       <div class="history-modal-chat" id="historyModalChat"></div>
       <div id="historyModalKeywordChips" style="display:none;padding:6px 14px 4px;flex-wrap:wrap;gap:1px;border-top:1px solid var(--border-color);"></div>
       <div class="history-modal-foot">
-        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:14px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
+        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:9px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
-        <span id="historyModalTokens" style="font-size:11px;color:var(--text-muted);"></span>
+        <span id="historyModalTokens" style="font-size:9px;color:var(--text-muted);"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
-        <button type="button" class="search-hist-btn" id="historyModalJevValuesBtn" style="padding:3px 6px;font-size:13px;" title="Jev評価値(jev_label_id 1〜20)を表示">📔</button>
-        <button type="button" class="search-hist-btn" id="historyModalScissorsBtn" style="padding:3px 6px;font-size:13px;" title="この回答をベクタ化してキーワードを一括登録する">✂️</button>
+        <button type="button" class="search-hist-btn" id="historyModalJevValuesBtn" style="padding:3px 6px;font-size:9px;" title="Jev評価値(jev_label_id 1〜20)を表示">📔</button>
+        <button type="button" class="search-hist-btn" id="historyModalScissorsBtn" style="padding:3px 6px;font-size:9px;" title="この回答をベクタ化してキーワードを一括登録する">✂️</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
-      <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
+      <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:9px;display:none;"></div>
     </div>
   </div>
 
