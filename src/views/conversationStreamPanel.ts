@@ -29,7 +29,6 @@ export function getConversationStreamPanel(): string {
       <button type="button" data-conversation-protocol="ndjson" aria-pressed="false">NDJSON</button>
       <button type="button" data-conversation-protocol="jsonseq" aria-pressed="false">JSON Text Sequence</button>
     </div>
-    <p class="conversation-stream-note">欄内で既存のHMACキーを入力して「表示を開始」。方式の切替後はキーを再入力してください。この会話への送信や通常のAI履歴への保存は行いません。</p>
     <iframe id="conversationStreamFrame" class="conversation-stream-frame" title="この会話の閲覧専用ストリーム" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin"></iframe>
   </aside>
   <script>
