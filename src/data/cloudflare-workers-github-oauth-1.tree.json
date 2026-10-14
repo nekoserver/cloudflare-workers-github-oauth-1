@@ -63,6 +63,10 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261011.judgment-models-current-state.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.PR1812.20260914.md",
       "type": "file"
     },
@@ -136,6 +140,10 @@
     },
     {
       "name": "NOTICE.API.20260525.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.aichat-stream-embed.md",
       "type": "file"
     },
     {
@@ -263,6 +271,10 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261011.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.COMMITDB.md",
       "type": "file"
     },
@@ -364,6 +376,10 @@
     },
     {
       "name": "PLAN.cloudflare-workers-github-oauth-1.20260917.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20261011.judgment-models.md",
       "type": "file"
     },
     {
@@ -515,6 +531,14 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261008.worker-auth-policy.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261011.judgment-models-overview.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.ADDTABLE.md",
       "type": "file"
     },
@@ -543,6 +567,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.Cursor-VM-Ruby.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.EVP.md",
       "type": "file"
     },
@@ -559,11 +587,19 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.SecureMine.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.VECTORIZE.md",
       "type": "file"
     },
     {
       "name": "SPEC.cloudflare-workers-github-oauth-1.ai-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.aichat-codex-claude.md",
       "type": "file"
     },
     {
@@ -599,6 +635,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.grokbot-vm-restart.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.jev-cli-wasm.md",
       "type": "file"
     },
@@ -612,6 +652,10 @@
     },
     {
       "name": "SPEC.cloudflare-workers-github-oauth-1.latest.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.md",
       "type": "file"
     },
     {
@@ -660,6 +704,10 @@
     },
     {
       "name": "SUGGEST.cloudflare-workers-github-oauth-1.20261007.md",
+      "type": "file"
+    },
+    {
+      "name": "SUGGEST.cloudflare-workers-github-oauth-1.20261012.md",
       "type": "file"
     },
     {
@@ -1395,6 +1443,18 @@
         {
           "name": "0168_create_securemine_sessions.sql",
           "type": "file"
+        },
+        {
+          "name": "0169_create_ai_summary_keywords.sql",
+          "type": "file"
+        },
+        {
+          "name": "0170_create_ai_summary_files.sql",
+          "type": "file"
+        },
+        {
+          "name": "0171_create_clef_evaluations.sql",
+          "type": "file"
         }
       ]
     },
@@ -1805,6 +1865,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-agent-slash-no-history.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-answer-graph-category-colors.test.ts",
           "type": "file"
         },
@@ -1962,6 +2026,10 @@
         },
         {
           "name": "aichat-image-register-dedupe.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kb-panel-toggle.test.ts",
           "type": "file"
         },
         {
@@ -2178,6 +2246,10 @@
         },
         {
           "name": "aichat-neko-results-modal.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-normal-font.test.ts",
           "type": "file"
         },
         {
@@ -2669,6 +2741,10 @@
           "type": "file"
         },
         {
+          "name": "botAuthVerify-page.test.ts",
+          "type": "file"
+        },
+        {
           "name": "brushJjaemuLogic.test.ts",
           "type": "file"
         },
@@ -2741,6 +2817,14 @@
           "type": "file"
         },
         {
+          "name": "clef-playground-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "clef-score-endpoint.test.ts",
+          "type": "file"
+        },
+        {
           "name": "column-fk-targets-completeness-20260820.test.ts",
           "type": "file"
         },
@@ -2754,6 +2838,10 @@
         },
         {
           "name": "commit-summary-external-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-summary-keywords-backfill-endpoint.test.ts",
           "type": "file"
         },
         {
@@ -2881,7 +2969,15 @@
               "type": "file"
             },
             {
+              "name": "railway.tree.json",
+              "type": "file"
+            },
+            {
               "name": "routeCities.ts",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-sqlx-d1.tree.json",
               "type": "file"
             },
             {
@@ -3655,6 +3751,10 @@
           "type": "file"
         },
         {
+          "name": "keywordStats-20261010.test.ts",
+          "type": "file"
+        },
+        {
           "name": "kimi-code-external.test.ts",
           "type": "file"
         },
@@ -3810,6 +3910,10 @@
         },
         {
           "name": "query-pattern-analysis-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "r9-status-page-20261010.test.ts",
           "type": "file"
         },
         {
@@ -4075,6 +4179,30 @@
               "type": "file"
             },
             {
+              "name": "aiSummaryFiles.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummaryFiles.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummaryKeywords.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummaryKeywords.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummaryKeywordsBackfill.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aiSummaryKeywordsBackfill.ts",
+              "type": "file"
+            },
+            {
               "name": "aiTimeout.ts",
               "type": "file"
             },
@@ -4195,6 +4323,30 @@
               "type": "file"
             },
             {
+              "name": "clefPlayground.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefPlayground.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefScoreApi.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefScoreApi.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefScoreFlow.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefScoreFlow.ts",
+              "type": "file"
+            },
+            {
               "name": "cloudflareD1Api.ts",
               "type": "file"
             },
@@ -4232,6 +4384,10 @@
             },
             {
               "name": "commitSummaryAllowedRepos.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitSummaryCacheStatus.ts",
               "type": "file"
             },
             {
@@ -4296,6 +4452,14 @@
             },
             {
               "name": "d1QueryBindings.ts",
+              "type": "file"
+            },
+            {
+              "name": "diffFileList.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "diffFileList.ts",
               "type": "file"
             },
             {
@@ -4659,6 +4823,14 @@
               "type": "file"
             },
             {
+              "name": "r9Gateway.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "r9Gateway.ts",
+              "type": "file"
+            },
+            {
               "name": "railLineStations.test.ts",
               "type": "file"
             },
@@ -4672,6 +4844,22 @@
             },
             {
               "name": "redmineProxy.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoOnboardingCheck.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoOnboardingCheck.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoOnboardingRemoteCheck.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoOnboardingRemoteCheck.ts",
               "type": "file"
             },
             {
@@ -4875,6 +5063,14 @@
               "type": "file"
             },
             {
+              "name": "treeViewSnapshotMessage.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewSnapshotMessage.ts",
+              "type": "file"
+            },
+            {
               "name": "treeWasmServer.test.ts",
               "type": "file"
             },
@@ -4919,7 +5115,23 @@
               "type": "file"
             },
             {
+              "name": "webBotAuthVerify.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "webBotAuthVerify.ts",
+              "type": "file"
+            },
+            {
               "name": "webhookSlackSettingDiagnostics.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerRequestSignature.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerRequestSignature.ts",
               "type": "file"
             },
             {
@@ -4958,6 +5170,10 @@
             },
             {
               "name": "aichat-share.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichat-stream-embed.test.ts",
               "type": "file"
             },
             {
@@ -5013,6 +5229,10 @@
               "type": "file"
             },
             {
+              "name": "botAuthVerify.ts",
+              "type": "file"
+            },
+            {
               "name": "brushJjaemu.ts",
               "type": "file"
             },
@@ -5037,6 +5257,14 @@
               "type": "file"
             },
             {
+              "name": "clefPlayground.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "clefPlayground.ts",
+              "type": "file"
+            },
+            {
               "name": "codexQuestionTree.build.test.ts",
               "type": "file"
             },
@@ -5054,6 +5282,10 @@
             },
             {
               "name": "columnStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamPanel.ts",
               "type": "file"
             },
             {
@@ -5205,6 +5437,14 @@
               "type": "file"
             },
             {
+              "name": "keywordStats.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordStats.ts",
+              "type": "file"
+            },
+            {
               "name": "kimiCode.ts",
               "type": "file"
             },
@@ -5325,6 +5565,14 @@
               "type": "file"
             },
             {
+              "name": "r9Status.ts",
+              "type": "file"
+            },
+            {
+              "name": "repoOnboardingCheckPage.ts",
+              "type": "file"
+            },
+            {
               "name": "repositories.test.ts",
               "type": "file"
             },
@@ -5334,6 +5582,14 @@
             },
             {
               "name": "rubyWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemine.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemine.ts",
               "type": "file"
             },
             {
@@ -5410,14 +5666,6 @@
             },
             {
               "name": "status.ts",
-              "type": "file"
-            },
-            {
-              "name": "taskmine.test.ts",
-              "type": "file"
-            },
-            {
-              "name": "taskmine.ts",
               "type": "file"
             },
             {
@@ -6151,6 +6399,16 @@
                 {
                   "name": "lib.rs",
                   "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "vendor",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "home-stub",
+                  "type": "dir"
                 }
               ]
             }
