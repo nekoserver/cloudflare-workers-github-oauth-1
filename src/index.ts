@@ -623,6 +623,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'slack_interaction_log', migration: '0024', description: 'Slack操作ログ', syncPolicy: 'auto' },
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'ai_summary_keywords', migration: '0169', description: 'AI要約から抽出したキーワード', syncPolicy: 'auto' },
+  { name: 'commit_summary_topics', migration: '0173', description: '翻訳済みコミット要約のTopic一覧', syncPolicy: 'auto' },
+  { name: 'commit_summary_topic_links', migration: '0173', description: 'Topicと要約の対応・キーワード記録日時', syncPolicy: 'auto' },
   { name: 'ai_summary_files', migration: '0170', description: 'AI要約の元diffから抽出した変更ファイル一覧', syncPolicy: 'auto' },
   { name: 'clef_evaluations', migration: '0171', description: 'Clef(Workers AI決定モデル)によるAIチャット回答評価。jev_evaluationsとは別テーブルで、既存のJev評価データには一切影響しない', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
@@ -2722,6 +2724,33 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_files_file_ext ON ai_summary_files(fil
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clef_evaluations_unique ON clef_evaluations(target_type, user_id, share_id, model, jev_label_id, clef_model);
 CREATE INDEX IF NOT EXISTS idx_clef_evaluations_share ON clef_evaluations(share_id);`,
+  '0173': `CREATE TABLE IF NOT EXISTS commit_summary_topics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS commit_summary_topic_links (
+  topic_id INTEGER NOT NULL REFERENCES commit_summary_topics(id) ON DELETE CASCADE,
+  summary_log_id INTEGER NOT NULL REFERENCES ai_summary_log(id) ON DELETE CASCADE,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY(topic_id, summary_log_id)
+);
+CREATE INDEX IF NOT EXISTS idx_commit_summary_topic_links_summary ON commit_summary_topic_links(summary_log_id);
+CREATE TRIGGER IF NOT EXISTS commit_summary_topics_from_keyword
+AFTER INSERT ON ai_summary_keywords
+WHEN trim(NEW.keyword) != ''
+BEGIN
+  INSERT OR IGNORE INTO commit_summary_topics(name, created_at)
+  VALUES(trim(NEW.keyword), NEW.created_at);
+  INSERT OR IGNORE INTO commit_summary_topic_links(topic_id, summary_log_id, recorded_at)
+  SELECT id, NEW.summary_log_id, NEW.created_at FROM commit_summary_topics WHERE name = trim(NEW.keyword);
+END;
+INSERT OR IGNORE INTO commit_summary_topics(name, created_at)
+SELECT trim(keyword), MIN(created_at) FROM ai_summary_keywords WHERE trim(keyword) != '' GROUP BY trim(keyword);
+INSERT OR IGNORE INTO commit_summary_topic_links(topic_id, summary_log_id, recorded_at)
+SELECT t.id, k.summary_log_id, MIN(k.created_at)
+FROM ai_summary_keywords k JOIN commit_summary_topics t ON t.name = trim(k.keyword)
+GROUP BY t.id, k.summary_log_id;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2888,6 +2917,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
   commit_agent_log: { id: 'pk', request_id: 'fk', repo_full_name: 'idx', pr_number: 'idx' },
   ai_summary_keywords: { id: 'pk', summary_log_id: 'fk+idx', keyword: 'uk' },
+  commit_summary_topics: { id: 'pk', name: 'uk' },
+  commit_summary_topic_links: { topic_id: 'pk+fk', summary_log_id: 'pk+fk+idx' },
   ai_summary_files: { id: 'pk', summary_log_id: 'fk+idx', file_path: 'uk', file_ext: 'idx' },
   repo_color_settings: { id: 'pk', workspace_id: 'fk', repo_name: 'fk' },
   repo_groups: { id: 'pk', workspace_id: 'fk' },
@@ -3071,7 +3102,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
-  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', ai_summary_files: 'ai',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   email_confirm_tokens: 'auth',
@@ -3325,6 +3356,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
+  commit_summary_topic_links: { topic_id: 'commit_summary_topics', summary_log_id: 'ai_summary_log' },
   ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
 
@@ -3527,6 +3559,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'ts_commit_quality.repo_id': 'id',
   'api_search_keyword_sections.keyword_id': 'id',
   'ai_summary_keywords.summary_log_id': 'id',
+  'commit_summary_topic_links.topic_id': 'id',
+  'commit_summary_topic_links.summary_log_id': 'id',
   'ai_summary_files.summary_log_id': 'id',
 
   // workflow_hierarchy の親子番号 → workflow_registry.workflow_no
