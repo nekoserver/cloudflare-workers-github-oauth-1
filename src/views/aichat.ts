@@ -1,4 +1,5 @@
 import { getKeywordClassificationModalScript } from '../utils/keywordClassificationModal';
+import { getConversationStreamPanel } from './conversationStreamPanel';
 /**
  * AI チャットページのHTML
  */
@@ -1145,6 +1146,7 @@ export function getAiChatPage(user: {
 
     <!-- チャット本体 -->
     <div class="chat-wrapper">
+      ${getConversationStreamPanel()}
       <div class="chat-log" id="chatLog"></div>
       <!-- 「探索の境界線」パネル: ベクタ化済みキーワードのうちまだどの
            カテゴリにも分類されていないもの(aichat_keyword_category_map
