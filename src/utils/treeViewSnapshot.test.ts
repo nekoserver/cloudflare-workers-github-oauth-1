@@ -9,7 +9,7 @@
  *
  * 故障シナリオ:
  *   (1) 隠しファイル・隠しディレクトリ配下がツリーに混入してしまう
- *   (2) 深さ4階層を超えるパスが混入してしまう
+ *   (2) 深さ7階層を超えるパスが混入してしまう
  *   (3) 同名の中間ディレクトリが複数回登場したとき、誤って複製・上書きされる
  *   (4) 各階層の子要素が名前順にソートされない
  *   (5) blob(ファイル)なのにdir(ディレクトリ)として扱われてしまう、逆も
@@ -127,16 +127,22 @@ describe('buildTreeViewSnapshotFromGithubItems', () => {
     expect(result.children?.map((c) => c.name)).toEqual(['README.md']);
   });
 
-  it('深さ4階層を超えるパスは除外する', () => {
+  it('深さ7階層までは含め、8階層目以降は除外する', () => {
     const items: GithubTreeItem[] = [
-      { path: 'a/b/c/d.ts', type: 'blob' },
-      { path: 'a/b/c/d/e.ts', type: 'blob' },
+      { path: 'a/b/c/d/e/f/g', type: 'tree' },
+      { path: 'a/b/c/d/e/f/g.ts', type: 'blob' },
+      { path: 'a/b/c/d/e/f/g/h.ts', type: 'blob' },
     ];
     const result = buildTreeViewSnapshotFromGithubItems(items, 'nekoserver/example');
-    const a = result.children?.find((c) => c.name === 'a');
-    const b = a?.children?.find((c) => c.name === 'b');
-    const c = b?.children?.find((c) => c.name === 'c');
-    expect(c?.children?.map((n) => n.name)).toEqual(['d.ts']);
+    let current = result;
+    for (const name of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      const next = current.children?.find((child) => child.name === name);
+      expect(next?.type).toBe('dir');
+      if (!next) return;
+      current = next;
+    }
+    expect(current.children?.map((node) => node.name)).toEqual(['g', 'g.ts']);
+    expect(current.children?.find((node) => node.name === 'g')?.children).toBeUndefined();
   });
 
   it('各階層の子要素は名前順にソートされる', () => {

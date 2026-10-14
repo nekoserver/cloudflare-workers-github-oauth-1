@@ -6408,7 +6408,23 @@
               "children": [
                 {
                   "name": "home-stub",
-                  "type": "dir"
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "Cargo.toml",
+                      "type": "file"
+                    },
+                    {
+                      "name": "src",
+                      "type": "dir",
+                      "children": [
+                        {
+                          "name": "lib.rs",
+                          "type": "file"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }

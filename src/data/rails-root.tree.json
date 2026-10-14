@@ -3,6 +3,10 @@
   "type": "dir",
   "children": [
     {
+      "name": "Dockerfile",
+      "type": "file"
+    },
+    {
       "name": "Gemfile",
       "type": "file"
     },
@@ -27,6 +31,10 @@
           "type": "dir",
           "children": [
             {
+              "name": "images",
+              "type": "dir"
+            },
+            {
               "name": "stylesheets",
               "type": "dir",
               "children": [
@@ -47,6 +55,10 @@
               "type": "file"
             },
             {
+              "name": "concerns",
+              "type": "dir"
+            },
+            {
               "name": "home_controller.rb",
               "type": "file"
             }
@@ -63,6 +75,98 @@
             {
               "name": "home_helper.rb",
               "type": "file"
+            },
+            {
+              "name": "icons_helper.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "javascript",
+          "type": "dir",
+          "children": [
+            {
+              "name": "application.js",
+              "type": "file"
+            },
+            {
+              "name": "controllers",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "accordion_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "application.js",
+                  "type": "file"
+                },
+                {
+                  "name": "drawer_panel_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "fx_extra_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "hello_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "index.js",
+                  "type": "file"
+                },
+                {
+                  "name": "morph_panel_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "motion_ui_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "skin_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "stagger_list_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "terminal_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "theme_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "toc_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "ui_gallery_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "view_transitions_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "waapi_panel_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "webgl_controller.js",
+                  "type": "file"
+                },
+                {
+                  "name": "widgets_controller.js",
+                  "type": "file"
+                }
+              ]
             }
           ]
         },
@@ -93,6 +197,20 @@
             {
               "name": "application_record.rb",
               "type": "file"
+            },
+            {
+              "name": "concerns",
+              "type": "dir"
+            }
+          ]
+        },
+        {
+          "name": "services",
+          "type": "dir",
+          "children": [
+            {
+              "name": "welcome_terminal.rb",
+              "type": "file"
             }
           ]
         },
@@ -104,6 +222,62 @@
               "name": "home",
               "type": "dir",
               "children": [
+                {
+                  "name": "_animations.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_components.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_hotwire.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_motion-icons.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_overlay.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_stylesheet.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_terminal.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_toc.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_view-transitions.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_webgl.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_welcome.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "_widgets.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "hotwire_quote.html.erb",
+                  "type": "file"
+                },
+                {
+                  "name": "hotwire_time.html.erb",
+                  "type": "file"
+                },
                 {
                   "name": "index.html.erb",
                   "type": "file"
@@ -167,6 +341,14 @@
           "type": "file"
         },
         {
+          "name": "docker-entrypoint",
+          "type": "file"
+        },
+        {
+          "name": "importmap",
+          "type": "file"
+        },
+        {
           "name": "rails",
           "type": "file"
         },
@@ -180,6 +362,10 @@
         },
         {
           "name": "setup",
+          "type": "file"
+        },
+        {
+          "name": "thrust",
           "type": "file"
         }
       ]
@@ -217,6 +403,10 @@
           "type": "file"
         },
         {
+          "name": "deploy.yml",
+          "type": "file"
+        },
+        {
           "name": "environment.rb",
           "type": "file"
         },
@@ -237,6 +427,10 @@
               "type": "file"
             }
           ]
+        },
+        {
+          "name": "importmap.rb",
+          "type": "file"
         },
         {
           "name": "initializers",
@@ -299,6 +493,20 @@
       ]
     },
     {
+      "name": "lib",
+      "type": "dir",
+      "children": [
+        {
+          "name": "tasks",
+          "type": "dir"
+        }
+      ]
+    },
+    {
+      "name": "log",
+      "type": "dir"
+    },
+    {
       "name": "public",
       "type": "dir",
       "children": [
@@ -337,9 +545,27 @@
       ]
     },
     {
+      "name": "script",
+      "type": "dir"
+    },
+    {
+      "name": "storage",
+      "type": "dir"
+    },
+    {
       "name": "test",
       "type": "dir",
       "children": [
+        {
+          "name": "config",
+          "type": "dir",
+          "children": [
+            {
+              "name": "host_authorization_test.rb",
+              "type": "file"
+            }
+          ]
+        },
         {
           "name": "controllers",
           "type": "dir",
@@ -351,8 +577,68 @@
           ]
         },
         {
+          "name": "fixtures",
+          "type": "dir",
+          "children": [
+            {
+              "name": "files",
+              "type": "dir"
+            }
+          ]
+        },
+        {
+          "name": "helpers",
+          "type": "dir"
+        },
+        {
+          "name": "integration",
+          "type": "dir"
+        },
+        {
+          "name": "mailers",
+          "type": "dir"
+        },
+        {
+          "name": "models",
+          "type": "dir"
+        },
+        {
+          "name": "services",
+          "type": "dir",
+          "children": [
+            {
+              "name": "welcome_terminal_test.rb",
+              "type": "file"
+            }
+          ]
+        },
+        {
           "name": "test_helper.rb",
           "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "tmp",
+      "type": "dir",
+      "children": [
+        {
+          "name": "pids",
+          "type": "dir"
+        },
+        {
+          "name": "storage",
+          "type": "dir"
+        }
+      ]
+    },
+    {
+      "name": "vendor",
+      "type": "dir",
+      "children": [
+        {
+          "name": "javascript",
+          "type": "dir"
         }
       ]
     }

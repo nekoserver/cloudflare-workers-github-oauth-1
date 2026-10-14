@@ -91,9 +91,9 @@ export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnaps
   'nekoserver/rust-worker-sqlx-d1': rustWorkerSqlxD1TreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-14T00:00:00.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-14T13:57:00Z';
 
-const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
+const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 7;
 
 function isHiddenSegment(segment: string): boolean {
   return segment.startsWith('.');
@@ -101,7 +101,7 @@ function isHiddenSegment(segment: string): boolean {
 
 /**
  * GitHub Trees API(recursive=1)のtree配列から、隠しファイル除外・
- * 深さ4階層まで・各階層名前順ソートのJSONツリーを組み立てる
+ * 深さ7階層まで・各階層名前順ソートのJSONツリーを組み立てる
  * (以前手作業で行っていたgit ls-tree→JSON変換と同じ規則)。
  * ネットワークアクセスを含まない純粋関数としてテスト可能にする。
  */
