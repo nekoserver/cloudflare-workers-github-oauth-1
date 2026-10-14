@@ -132,7 +132,7 @@ export function getAiChatPage(user: {
     }
     .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
     .navbar-model-select {
-      font-size: 10px; font-weight: 400; color: var(--text-muted);
+      font-size: 9px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: none; outline: none; cursor: pointer;
       padding: 0 2px; max-width: min(180px, 45vw); min-width: 0; flex-shrink: 1;
     }
@@ -145,7 +145,7 @@ export function getAiChatPage(user: {
     }
     .zt-bge-model-select option { background: var(--card-bg); color: var(--text-primary); }
     .navbar-lang-select {
-      font-size: 10px; font-weight: 400; color: var(--text-muted);
+      font-size: 9px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border-color); border-radius: 5px;
       outline: none; cursor: pointer; padding: 1px 4px; flex-shrink: 0;
     }
@@ -155,14 +155,14 @@ export function getAiChatPage(user: {
     .navbar-spacer { flex: 1; }
     .search-log-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 3px 5px;
+      color: var(--text-muted); cursor: pointer; font-size: 9px; padding: 2px 5px;
       white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-log-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
     .search-hist-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 3px 5px;
+      color: var(--text-muted); cursor: pointer; font-size: 9px; padding: 2px 5px;
       white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
@@ -324,8 +324,13 @@ export function getAiChatPage(user: {
       display: flex; align-items: center; justify-content: flex-end;
       flex-wrap: wrap; gap: 5px; flex: 1 1 620px; min-width: 0; max-width: 100%;
     }
+    .navbar .search-hist-btn, .navbar .search-log-btn, .navbar .theme-toggle {
+      height: 24px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .navbar .theme-toggle { width: 24px; border-radius: 7px; }
+    .navbar .theme-toggle svg { width: 14px; height: 14px; }
     .navbar .user-name {
-      font-size: 10px;
+      font-size: 9px;
       max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     @media (max-width: 640px) {

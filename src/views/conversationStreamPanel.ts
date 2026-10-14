@@ -1,6 +1,6 @@
 /** 通常のチャット入力から独立した、認証付き会話ストリームの埋め込み。 */
 export function getConversationStreamToggle(): string {
-  return '<button type="button" class="search-hist-btn conversation-stream-toggle" id="conversationStreamToggle" aria-controls="conversationStreamPanel" aria-expanded="false" aria-pressed="false" title="この会話のストリーム（閲覧のみ）">会話ストリーム</button>';
+  return '<button type="button" class="search-hist-btn conversation-stream-toggle" id="conversationStreamToggle" aria-controls="conversationStreamPanel" aria-expanded="false" aria-pressed="false" title="この会話のストリーム（閲覧のみ）">ストリーム</button>';
 }
 
 export function getConversationStreamPanel(): string {
