@@ -1,3 +1,4 @@
+import railwayTreeJson from '../data/railway.tree.json';
 import cloudflareWorkersGithubOauth1TreeJson from '../data/cloudflare-workers-github-oauth-1.tree.json';
 import dynamicnekoTreeJson from '../data/dynamicneko.tree.json';
 import railsRootTreeJson from '../data/rails-root.tree.json';
@@ -78,18 +79,19 @@ export function resolveNextTreeViewSnapshot(
 }
 
 /**
- * `/neko tree` で採取した初期対象2リポジトリの組み込みスナップショット。
+ * `/neko tree` で採取した対象リポジトリの組み込みスナップショット。
  * cronがまだ一度も動いていない環境でも、dynamicnekoの/tree-viewから
  * これらのリポジトリを開けるようにする。
  */
 export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnapshotNode>> = {
   'nekoserver/cloudflare-workers-github-oauth-1': cloudflareWorkersGithubOauth1TreeJson as TreeViewSnapshotNode,
   'nekoserver/dynamicneko': dynamicnekoTreeJson as TreeViewSnapshotNode,
+  'nekoserver/railway': railwayTreeJson as TreeViewSnapshotNode,
   'nekoserver/rails-root': railsRootTreeJson as TreeViewSnapshotNode,
   'nekoserver/rust-worker-sqlx-d1': rustWorkerSqlxD1TreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-10T00:00:00.000Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-14T00:00:00.000Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 4;
 
