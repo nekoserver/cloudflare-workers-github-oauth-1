@@ -1,5 +1,6 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
+import { isAskgkSlashPrompt } from './codexAskgkQuestion';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
 import type { TreeFormatOptions } from './treeWasmServer';
@@ -2037,6 +2038,12 @@ export async function interpretAichatSlashCommand(
     // (index.ts)へ返す。呼び出し元はこれを使ってai_chat_sharesへ
     // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
     // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
+    if (isAskgkSlashPrompt(question)) {
+      const response = /^codex_(?:prompt|prmpt)\b/i.test(question)
+        ? parseCodexAskgkReply(outcome.value.reply).answer
+        : outcome.value.reply.trim();
+      return { handled: true, response, saveAsAiResponse: false };
+    }
     if (/^codex_\w+\b/i.test(question)) {
       const { answer, sessionId } = parseCodexAskgkReply(outcome.value.reply);
       const response = appendAskgkLlmInfoLine(answer, 'codex', outcome.value.llmModel, outcome.value.llmEffort);
