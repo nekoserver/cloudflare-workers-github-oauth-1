@@ -1,5 +1,5 @@
 import { getKeywordClassificationModalScript } from '../utils/keywordClassificationModal';
-import { getConversationStreamPanel } from './conversationStreamPanel';
+import { getConversationStreamPanel, getConversationStreamToggle } from './conversationStreamPanel';
 /**
  * AI チャットページのHTML
  */
@@ -125,14 +125,14 @@ export function getAiChatPage(user: {
     .sidebar-toggle.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
 
     .navbar-brand {
-      font-size: 15px; font-weight: 700;
+      font-size: 13px; font-weight: 700;
       color: var(--text-primary); text-decoration: none;
       display: flex; align-items: baseline; gap: 7px;
       white-space: nowrap;
     }
     .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
     .navbar-model-select {
-      font-size: 11px; font-weight: 400; color: var(--text-muted);
+      font-size: 10px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: none; outline: none; cursor: pointer;
       padding: 0 2px; max-width: min(180px, 45vw); min-width: 0; flex-shrink: 1;
     }
@@ -145,7 +145,7 @@ export function getAiChatPage(user: {
     }
     .zt-bge-model-select option { background: var(--card-bg); color: var(--text-primary); }
     .navbar-lang-select {
-      font-size: 11px; font-weight: 400; color: var(--text-muted);
+      font-size: 10px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border-color); border-radius: 5px;
       outline: none; cursor: pointer; padding: 1px 4px; flex-shrink: 0;
     }
@@ -155,14 +155,14 @@ export function getAiChatPage(user: {
     .navbar-spacer { flex: 1; }
     .search-log-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 4px 6px;
+      color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 3px 5px;
       white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-log-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
     .search-hist-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 7px;
-      color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 4px 6px;
+      color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 3px 5px;
       white-space: nowrap; flex-shrink: 0;
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
@@ -325,13 +325,14 @@ export function getAiChatPage(user: {
       flex-wrap: wrap; gap: 5px; flex: 1 1 620px; min-width: 0; max-width: 100%;
     }
     .navbar .user-name {
+      font-size: 10px;
       max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     @media (max-width: 640px) {
       .navbar { padding: 6px 8px; gap: 6px; }
       .navbar-spacer { display: none; }
       .user-menu { flex-basis: 100%; justify-content: flex-start; }
-      .navbar-brand { font-size: 13px; }
+      .navbar-brand { font-size: 12px; }
     }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
@@ -1035,6 +1036,7 @@ export function getAiChatPage(user: {
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
       <button class="search-hist-btn" id="kwClassifyBtn" title="キーワード分類">🔑分類</button>
       <button class="search-hist-btn" id="ztTreeBtn" title="Zanzibar形式分類ツリー">ZT</button>
+      ${getConversationStreamToggle()}
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       ${getCountdownWidgetHTML()}
@@ -1172,8 +1174,8 @@ export function getAiChatPage(user: {
     </div>
 
     <!-- チャット本体 -->
+    ${getConversationStreamPanel()}
     <div class="chat-wrapper">
-      ${getConversationStreamPanel()}
       <div class="chat-log" id="chatLog"></div>
       <!-- 「探索の境界線」パネル: ベクタ化済みキーワードのうちまだどの
            カテゴリにも分類されていないもの(aichat_keyword_category_map

@@ -1,6 +1,6 @@
 # AIチャットへの会話ストリーム埋め込み
 
-`/aichat` のチャット欄に、折り畳み式の「この会話のストリーム（閲覧のみ）」を追加する。開いたときに `https://mynw.nekomaneki.work/lib/conversation-embed.html` を読み込み、閉じると iframe を解除して受信を止める。初期方式は WebSocket。SSE・NDJSON・JSON Text Sequence にも切り替えられる。
+`/aichat` の上部ナビバーに「会話ストリーム」トグルボタンを置き、「この会話のストリーム（閲覧のみ）」を右サイドパネルとして開く。再クリック、閉じるボタン、Escapeで閉じる。幅1000px以上ではチャット横に420pxの表示領域を確保し、狭い画面では重ねて表示する。上部操作ボタン・選択欄・ユーザー名は10pxの文字で表示する。開いたときに `https://mynw.nekomaneki.work/lib/conversation-embed.html` を読み込み、閉じると iframe を解除して受信を止める。初期方式は WebSocket。SSE・NDJSON・JSON Text Sequence にも切り替えられる。
 
 この表示は VM の会話オブザーバーが提供する会話であり、本体AIチャットの履歴を配信するものではない。通常の質問入力と履歴保存には触れない。既存 HMAC キーは埋め込み先で入力し、親ページや URL へ渡さない。方式切替後は再入力が必要。
 
