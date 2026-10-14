@@ -866,7 +866,7 @@ export function getAiChatPage(user: {
     }
     .chat-bubble {
       max-width: 85%; padding: 10px 14px; border-radius: 12px;
-      font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+      font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
     }
     .chat-bubble.user {
       align-self: flex-end; background: var(--accent-color, #667eea); color: #fff; border-bottom-right-radius: 3px;
@@ -984,13 +984,13 @@ export function getAiChatPage(user: {
     .chat-form { display: flex; gap: 8px; align-items: flex-end; }
     .chat-input {
       flex: 1; padding: 9px 13px; border-radius: 8px; border: 1px solid var(--border-color);
-      background: var(--card-bg); color: var(--text-primary); font-size: 14px; resize: none;
+      background: var(--card-bg); color: var(--text-primary); font-size: 12px; resize: none;
       min-height: 40px; max-height: 160px; overflow-y: auto; font-family: inherit; line-height: 1.5;
     }
     .chat-input:focus { outline: none; border-color: var(--accent-color, #667eea); }
     .chat-send-btn {
       padding: 9px 16px; border-radius: 8px; border: none;
-      background: var(--accent-color, #667eea); color: #fff; font-size: 14px; font-weight: 600;
+      background: var(--accent-color, #667eea); color: #fff; font-size: 12px; font-weight: 600;
       cursor: pointer; white-space: nowrap; transition: opacity 0.15s; height: 40px;
     }
     .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
