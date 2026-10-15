@@ -356,6 +356,105 @@ describe('getThreadTrackerPage', () => {
     });
   });
 
+  // 対象: 「Jevでの評価を追加」ボタン(jevScoreHtml・bindJevScoreButtons)。
+  // ユーザー要望2026-10-15: 「Jevのスコアが無いがチェックボックスがONに
+  // なっている場合は「Clefでの評価を追加」ボタン同様の処理を「Jevでの
+  // 評価を追加」でも出来るように」。既存の自動Jev評価経路(📔ボタン・
+  // 自動探索)・既存のjev_evaluationsには一切触れない(既存の
+  // /api/aichat/jev-scoreをそのまま使う、新規エンドポイントは作らない)。
+  describe('「Jevでの評価を追加」ボタン', () => {
+    it.each([true, false])('再描画しても検証済みの評価だけをキャッシュしてボタンを出さない: verified=%s', async (verified) => {
+      const turn = { id: 'share-1', model: 'codex', question: '確認用の質問', answer: '回答', createdAt: '2026-10-14T00:00:00Z' };
+      const dom = new JSDOM(html, {
+        url: 'https://example.com/thread-tracker', runScripts: 'dangerously',
+        beforeParse(window) {
+          Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false }) });
+          Object.defineProperty(window, 'fetch', { value: async (path: string) => ({ ok: true, json: async () => path.includes('jev-score')
+            ? { verified, values: [{ jevLabelId: 1, value: 0.91 }] }
+            : path.includes('threads/seed') ? { threads: [{ threadId: 'thread-1', turns: [turn] }] } : { items: [] } }) });
+        },
+      });
+      const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+      try {
+        await settle(); await settle();
+        (dom.window.document.querySelector('.thread-card') as HTMLElement).click();
+        (dom.window.document.querySelector('[data-jev-score-btn]') as HTMLElement).click();
+        await settle(); await settle();
+        expect(!!dom.window.document.querySelector('.clef-save-toast')).toBe(verified);
+        dom.window.document.getElementById('responseSearch')!.dispatchEvent(new dom.window.Event('input'));
+        (dom.window.document.querySelector('.thread-card') as HTMLElement).click();
+        expect(!!dom.window.document.querySelector('[data-jev-score-btn]')).toBe(!verified);
+        if (verified) {
+          expect(dom.window.document.querySelector('[data-jev-score-result="share-1"]')!.textContent).toContain('0.91');
+          expect(dom.window.document.querySelector('[data-jev-score-result="share-1"] .jev-score-high')).not.toBeNull();
+        }
+      } finally { dom.window.close(); }
+    });
+
+    it('turn.idがある場合のみ、結果表示用のdiv(data-jev-score-result)とボタン(data-jev-score-btn)を出す', () => {
+      expect(html).toContain('function jevScoreHtml(turn){if(!turn.id)return');
+      expect(html).toContain('data-jev-score-result="');
+      expect(html).toContain('data-jev-score-btn');
+    });
+
+    it('turn.questionJevScores(キャッシュ)が既にある場合は、ボタンを出さずスコアを直接表示する(再評価ボタンが復活しない)', () => {
+      const idx = html.indexOf('function jevScoreHtml(turn)');
+      expect(idx).toBeGreaterThan(-1);
+      const fnEnd = html.indexOf('function bindJevScoreButtons(root)', idx);
+      const fnBody = html.slice(idx, fnEnd > idx ? fnEnd : idx + 700);
+      expect(fnBody).toContain('turn.questionJevScores||[]');
+      expect(fnBody).toMatch(/if\s*\(\s*scores\.length\s*\)/);
+      const btnOccurrences = fnBody.split('data-jev-score-btn').length - 1;
+      expect(btnOccurrences).toBe(1);
+    });
+
+    it('bindActionsはbindClefScoreButtonsの直後にbindJevScoreButtonsを呼ぶ', () => {
+      expect(html).toContain('bindTurnDeck(root);bindClefScoreButtons(root);bindJevScoreButtons(root);');
+    });
+
+    it('ボタン押下はPOST /api/aichat/jev-scoreへshareId・modelを送る(既存の自動Jev評価経路を増やさず、既存エンドポイントをそのまま使う)', () => {
+      const idx = html.indexOf('function bindJevScoreButtons(root)');
+      expect(idx).toBeGreaterThan(-1);
+      const snippet = html.slice(idx, html.indexOf('function clefScoreHtml(turn)', idx));
+      expect(snippet).toContain("fetch('/api/aichat/jev-score'");
+      expect(snippet).toContain('JSON.stringify({shareId:shareId,model:model})');
+    });
+
+    it('verified!==trueの場合はボタンを再有効化し、resultコンテナにエラーを表示する(黙って成功扱いにしない)', () => {
+      const idx = html.indexOf('function bindJevScoreButtons(root)');
+      const snippet = html.slice(idx, html.indexOf('function clefScoreHtml(turn)', idx));
+      expect(snippet).toContain('result.data.verified!==true');
+      expect(snippet).toContain('btn.disabled=false;btn.textContent=originalText;');
+      expect(snippet).toContain("container.textContent='Jev評価に失敗しました: '");
+    });
+
+    it('成功時は結果の数値をresultコンテナへ表示し、ボタン自体は取り除く(二重押下を防ぐ)', () => {
+      const idx = html.indexOf('function bindJevScoreButtons(root)');
+      const snippet = html.slice(idx, html.indexOf('function clefScoreHtml(turn)', idx));
+      expect(snippet).toContain('var className=scoreColorClass(v.value);');
+      expect(snippet).toContain('btn.remove();');
+    });
+
+    it('成功時(DBへの書き込み完了=verified:true)にshowJevSaveToast()を呼ぶ(失敗時は呼ばない)', () => {
+      const idx = html.indexOf('function bindJevScoreButtons(root)');
+      const snippet = html.slice(idx, html.indexOf('function clefScoreHtml(turn)', idx));
+      const verifiedCheckIdx = snippet.indexOf('result.data.verified!==true');
+      const toastCallIdx = snippet.indexOf('showJevSaveToast();');
+      expect(toastCallIdx).toBeGreaterThan(-1);
+      expect(toastCallIdx).toBeGreaterThan(verifiedCheckIdx);
+      expect(toastCallIdx).toBeLessThan(snippet.indexOf('btn.remove();'));
+    });
+
+    it('showJevSaveToast()は「Jevスコア登録完了」のトーストを画面中央に表示する(既存のclef-save-toastと同じ見た目)', () => {
+      const idx = html.indexOf('function showJevSaveToast()');
+      expect(idx).toBeGreaterThan(-1);
+      const snippet = html.slice(idx, idx + 400);
+      expect(snippet).toContain("toast.textContent='Jevスコア登録完了';");
+      expect(snippet).toContain("toast.className='clef-save-toast';");
+      expect(snippet).toContain('setTimeout(');
+    });
+  });
+
   // 対象: 3列スタイルタブ内の「Jev」「Clef」チェックボックス
   // (showJevScoreToggle/showClefScoreToggle)。ユーザー指示(2026-10-12)で、
   // それぞれON/OFFをCookieへ保存し、変更するたびに即時反映する。
@@ -427,8 +526,10 @@ describe('getThreadTrackerPage', () => {
       dom.window.close();
     });
 
-    it('.hide-jev-score .jev-score・.hide-clef-score .clef-score/.clef-score-add-btnをdisplay:noneにするCSSを持つ', () => {
-      expect(html).toContain('.hide-jev-score .jev-score{display:none}');
+    it('.hide-jev-score .jev-score/.jev-score-add-btn・.hide-clef-score .clef-score/.clef-score-add-btnをdisplay:noneにするCSSを持つ', () => {
+      // 「Jevでの評価を追加」ボタン追加(ユーザー要望2026-10-15)に伴い、
+      // Clefと同様に.jev-score-add-btnもhide-jev-score時に隠す対象へ加えた。
+      expect(html).toContain('.hide-jev-score .jev-score,.hide-jev-score .jev-score-add-btn{display:none}');
       expect(html).toContain('.hide-clef-score .clef-score,.hide-clef-score .clef-score-add-btn{display:none}');
     });
   });
