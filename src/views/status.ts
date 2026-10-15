@@ -1836,6 +1836,7 @@ export function getCacheStatusPage(user: {
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
+      <a href="/commit-activity-backfill-status" class="back-btn">📈 committed_atバックフィル達成度</a>
     </div>
   </div>
 
