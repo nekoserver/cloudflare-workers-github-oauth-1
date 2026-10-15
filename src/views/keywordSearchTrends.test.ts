@@ -87,4 +87,52 @@ describe('getKeywordSearchTrendsPage', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).not.toContain('<img src=x onerror=alert(1)>');
   });
+
+  it('各クエリカードに最新スナップショットの数値をdata属性で持たせる(クライアント側の並び替え用)', () => {
+    const html = getKeywordSearchTrendsPage(
+      { name: 'Octocat', username: 'octocat' },
+      {
+        queries: [
+          {
+            repoName: 'nekoserver/dynamicneko',
+            query: 'oauth',
+            snapshots: [
+              { searchLogId: 1, searchedAt: '2026-10-15T00:00:00Z', fileCount: 3, keywordCount: 2, totalOccurrenceCount: 5 },
+              { searchLogId: 2, searchedAt: '2026-10-16T00:00:00Z', fileCount: 7, keywordCount: 4, totalOccurrenceCount: 12 },
+            ],
+          },
+        ],
+      },
+    );
+    expect(html).toContain('data-file-count="7"');
+    expect(html).toContain('data-keyword-count="4"');
+    expect(html).toContain('data-occurrence-count="12"');
+  });
+
+  it('並び替え用のソートボタンを3つ持ち、既定で出現回数合計がアクティブ(降順)になっている', () => {
+    const html = getKeywordSearchTrendsPage(
+      { name: 'Octocat', username: 'octocat' },
+      {
+        queries: [
+          {
+            repoName: 'nekoserver/dynamicneko',
+            query: 'oauth',
+            snapshots: [{ searchLogId: 1, searchedAt: '2026-10-15T00:00:00Z', fileCount: 1, keywordCount: 1, totalOccurrenceCount: 1 }],
+          },
+        ],
+      },
+    );
+    expect(html).toContain('data-sort-field="fileCount"');
+    expect(html).toContain('data-sort-field="keywordCount"');
+    expect(html).toContain('data-sort-field="occurrenceCount"');
+    const occurrenceBtnIdx = html.indexOf('data-sort-field="occurrenceCount"');
+    const surrounding = html.slice(occurrenceBtnIdx - 100, occurrenceBtnIdx + 60);
+    expect(surrounding).toContain('is-active');
+    expect(surrounding).toContain('data-sort-dir="desc"');
+  });
+
+  it('検索ログが0件のときはソートボタンを出さない', () => {
+    const html = getKeywordSearchTrendsPage({ name: 'Octocat', username: 'octocat' }, { queries: [] });
+    expect(html).not.toContain('class="sort-btn');
+  });
 });

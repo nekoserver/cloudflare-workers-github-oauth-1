@@ -496,7 +496,7 @@ import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffU
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
 import { dedupeKeywords, buildKeywordOccurrenceResults, type KeywordOccurrenceRow } from './utils/treeViewKeywordOccurrence';
-import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery, type KeywordSearchLogRow, type KeywordSearchResultCountRow } from './utils/treeViewKeywordSearchLog';
+import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery, sortKeywordSearchTrendQueriesByLatestOccurrenceDesc, type KeywordSearchLogRow, type KeywordSearchResultCountRow } from './utils/treeViewKeywordSearchLog';
 import { mergeCommitActivityDaily, computeBackfillCoverage } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
@@ -20757,13 +20757,9 @@ app.get('/keyword-search-trends', authMiddleware, async (c) => {
     ]);
 
     const grouped = buildKeywordSearchSnapshotsByQuery(logRows.results ?? [], resultCountRows.results ?? []);
-    const queries: KeywordSearchTrendQueryRow[] = Array.from(grouped.values())
-      .map(({ key, snapshots }) => ({ repoName: key.repoName, query: key.query, snapshots }))
-      .sort((a, b) => {
-        const aLatest = a.snapshots[a.snapshots.length - 1]?.searchedAt ?? '';
-        const bLatest = b.snapshots[b.snapshots.length - 1]?.searchedAt ?? '';
-        return bLatest.localeCompare(aLatest);
-      });
+    const queries: KeywordSearchTrendQueryRow[] = sortKeywordSearchTrendQueriesByLatestOccurrenceDesc(
+      Array.from(grouped.values()).map(({ key, snapshots }) => ({ repoName: key.repoName, query: key.query, snapshots })),
+    );
 
     const html = getKeywordSearchTrendsPage({ name: user.name, username: user.sub }, { queries });
     return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
