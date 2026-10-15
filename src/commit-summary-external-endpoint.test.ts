@@ -63,9 +63,9 @@ function wrapD1(db: DatabaseSync) {
           const rows = stmt.all(...(args as never[])) as unknown[];
           return { results: rows as T[] };
         },
-        async run(): Promise<{ success: boolean }> {
-          stmt.run(...(args as never[]));
-          return { success: true };
+        async run(): Promise<{ success: boolean; meta: { changes: number } }> {
+          const result = stmt.run(...(args as never[]));
+          return { success: true, meta: { changes: Number(result.changes) } };
         },
         bind(...innerArgs: unknown[]) {
           return makeChain(innerArgs);
@@ -135,7 +135,8 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       seq_num INTEGER NOT NULL,
       github_pr_number INTEGER,
       commit_message TEXT NOT NULL,
-      repo_name TEXT NOT NULL
+      repo_name TEXT NOT NULL,
+      committed_at TEXT
     );
     CREATE TABLE installation_permissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -692,6 +693,77 @@ describe('POST /api/commit-file-changes-external', () => {
     const okToken = await makeUserToken('ok@example.com');
     const res401 = await app.request('/api/commit-file-changes-external',
       { method: 'POST', headers: { Authorization: 'Bearer wrong-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: okToken, repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res401.status).toBe(401);
+  });
+});
+
+describe('POST /api/repo-commit-committed-at-external', () => {
+  async function postCommittedAt(db: DatabaseSync, body: Record<string, unknown>): Promise<Response> {
+    const userToken = await makeUserToken('ok@example.com');
+    return app.request(
+      '/api/repo-commit-committed-at-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, ...body }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+  }
+
+  function readCommittedAt(db: DatabaseSync, commitHash: string): string | null {
+    const row = db.prepare(`SELECT committed_at FROM repo_commit_index WHERE commit_hash = ?`).get(commitHash) as { committed_at: string | null };
+    return row.committed_at;
+  }
+
+  it('committed_atがNULLの行だけ更新する', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertMergeCommitIndexRow(db, 'aaa1111', REPO_NAME, 1, null);
+    const res = await postCommittedAt(db, { repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { updatedCount: number };
+    expect(body.updatedCount).toBe(1);
+    expect(readCommittedAt(db, 'aaa1111')).toBe('2026-10-14T01:00:00Z');
+  });
+
+  it('既にcommitted_atが入っている行は上書きしない(push webhook由来の値を保護する)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertMergeCommitIndexRow(db, 'aaa1111', REPO_NAME, 1, null);
+    db.prepare(`UPDATE repo_commit_index SET committed_at = '2026-10-01T00:00:00Z' WHERE commit_hash = 'aaa1111'`).run();
+    const res = await postCommittedAt(db, { repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] });
+    const body = (await res.json()) as { updatedCount: number };
+    expect(body.updatedCount).toBe(0);
+    expect(readCommittedAt(db, 'aaa1111')).toBe('2026-10-01T00:00:00Z');
+  });
+
+  it('別リポジトリの同じcommit_hashは更新しない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertMergeCommitIndexRow(db, 'aaa1111', 'nekoserver/other', 1, null);
+    const res = await postCommittedAt(db, { repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] });
+    const body = (await res.json()) as { updatedCount: number };
+    expect(body.updatedCount).toBe(0);
+    expect(readCommittedAt(db, 'aaa1111')).toBeNull();
+  });
+
+  it('commitsが空・201件以上・不正なcommitHash/committedAt・repoName未指定は400', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    expect((await postCommittedAt(db, { repoName: REPO_NAME, commits: [] })).status).toBe(400);
+    expect((await postCommittedAt(db, {
+      repoName: REPO_NAME, commits: Array.from({ length: 201 }, (_, i) => ({ commitHash: i.toString(16).padStart(8, '0'), committedAt: '2026-10-14T01:00:00Z' })),
+    })).status).toBe(400);
+    expect((await postCommittedAt(db, { repoName: REPO_NAME, commits: [{ commitHash: 'zz;drop', committedAt: '2026-10-14T01:00:00Z' }] })).status).toBe(400);
+    expect((await postCommittedAt(db, { repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '' }] })).status).toBe(400);
+    expect((await postCommittedAt(db, { commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] })).status).toBe(400);
+  });
+
+  it('未許可メールは403、Bearer secret不一致は401', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const ngToken = await makeUserToken('ng@example.com');
+    const res403 = await app.request('/api/repo-commit-committed-at-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: ngToken, repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res403.status).toBe(403);
+
+    const okToken = await makeUserToken('ok@example.com');
+    const res401 = await app.request('/api/repo-commit-committed-at-external',
+      { method: 'POST', headers: { Authorization: 'Bearer wrong-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: okToken, repoName: REPO_NAME, commits: [{ commitHash: 'aaa1111', committedAt: '2026-10-14T01:00:00Z' }] }) },
       { ...BASE_ENV, DB: wrapD1(db) });
     expect(res401.status).toBe(401);
   });

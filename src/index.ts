@@ -493,7 +493,7 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries, buildCommitFileChangeEntries } from './utils/githubPushNotify';
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
-import { mergeCommitActivityDaily } from './utils/commitActivitySummary';
+import { mergeCommitActivityDaily, computeBackfillCoverage } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
 import { findSummaryKeywordBackfillTargets, runSummaryKeywordBackfill } from './utils/aiSummaryKeywordsBackfill';
@@ -16724,6 +16724,49 @@ app.post('/api/commit-file-changes-external', async (c) => {
   }
 });
 
+/**
+ * repo_commit_index.committed_atの段階的バックフィル用エンドポイント
+ * (SPEC.cloudflare-workers-github-oauth-1.20261015.commit-activity-dashboard.md
+ * 8章)。dynamicnekoのGET /api/tree-view/commitsが既に取得済みのコミット日時
+ * (GitHub Commits APIのdate)を"ついで書き込み"するために使う。
+ * committed_atが既に入っている行は上書きしない(push webhook由来の値を
+ * 壊さない。IS NULLの行だけ対象)。
+ */
+app.post('/api/repo-commit-committed-at-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; commits?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const commits = Array.isArray(body?.commits)
+    ? (body!.commits as unknown[])
+        .filter((e): e is { commitHash?: unknown; committedAt?: unknown } => typeof e === 'object' && e !== null)
+        .map((e) => ({ commitHash: typeof e.commitHash === 'string' ? e.commitHash : '', committedAt: typeof e.committedAt === 'string' ? e.committedAt : '' }))
+        .filter((e) => /^[0-9a-f]{7,64}$/i.test(e.commitHash) && e.committedAt.length > 0)
+    : [];
+
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (commits.length === 0) return jsonUtf8({ error: 'commits は1件以上の{commitHash, committedAt}配列で指定してください' }, 400);
+  if (commits.length > 200) return jsonUtf8({ error: 'commits は200件以内で指定してください' }, 400);
+
+  try {
+    let updatedCount = 0;
+    for (const commit of commits) {
+      const result = await c.env.DB.prepare(
+        'UPDATE repo_commit_index SET committed_at = ? WHERE repo_name = ? AND commit_hash = ? AND committed_at IS NULL'
+      ).bind(commit.committedAt, repoName, commit.commitHash).run();
+      if ((result.meta?.changes ?? 0) > 0) updatedCount += 1;
+    }
+    return jsonUtf8({ repoName, updatedCount });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[repo-commit-committed-at-external] 更新に失敗', { repoName, error: message });
+    return jsonUtf8({ error: '更新でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 // 既存のai_summary_log(デプロイ前にWebhook経由で自動生成された要約等)には
 // キーワードが付いていない。ログイン済みユーザーが手動で少しずつ遡って
 // キーワードを付けられるようにするバックフィル用エンドポイント。
@@ -19126,8 +19169,15 @@ app.get('/api/commit-activity-summary', authMiddleware, async (c) => {
        LIMIT 10`
     ).bind(repoName).all<{ filePath: string; changeCount: number }>();
 
+    const coverageRow = await db.prepare(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN committed_at IS NOT NULL THEN 1 ELSE 0 END) as filled
+       FROM repo_commit_index
+       WHERE repo_name = ?`
+    ).bind(repoName).first<{ total: number; filled: number | null }>();
+    const backfillCoverage = computeBackfillCoverage(coverageRow?.total ?? 0, coverageRow?.filled ?? 0);
+
     const daily = mergeCommitActivityDaily(commitRows.results ?? [], fileChangeRows.results ?? [], topicRows.results ?? []);
-    return jsonUtf8({ repoName, daily, topFiles: topFileRows.results ?? [] });
+    return jsonUtf8({ repoName, daily, topFiles: topFileRows.results ?? [], backfillCoverage });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-activity-summary] 集計に失敗', { repoName, error: message });
