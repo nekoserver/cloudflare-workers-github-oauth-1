@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeCommitActivityDaily } from './commitActivitySummary';
+import { mergeCommitActivityDaily, computeBackfillCoverage } from './commitActivitySummary';
 
 // 対象: mergeCommitActivityDaily(コミット数・変更ファイル数・Topicの
 // 3クエリ結果を日付で統合する純粋関数)。
@@ -53,5 +53,19 @@ describe('mergeCommitActivityDaily', () => {
 
   it('入力が全て空なら空配列を返す', () => {
     expect(mergeCommitActivityDaily([], [], [])).toEqual([]);
+  });
+});
+
+describe('computeBackfillCoverage', () => {
+  it('committedAtFilled/totalCommitsの比率を計算する', () => {
+    expect(computeBackfillCoverage(200, 50)).toEqual({ totalCommits: 200, committedAtFilled: 50, ratio: 0.25 });
+  });
+
+  it('totalCommitsが0なら0除算せずratio=0を返す', () => {
+    expect(computeBackfillCoverage(0, 0)).toEqual({ totalCommits: 0, committedAtFilled: 0, ratio: 0 });
+  });
+
+  it('全件埋まっていればratio=1', () => {
+    expect(computeBackfillCoverage(10, 10)).toEqual({ totalCommits: 10, committedAtFilled: 10, ratio: 1 });
   });
 });

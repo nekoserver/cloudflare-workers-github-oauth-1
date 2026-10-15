@@ -59,3 +59,18 @@ export function mergeCommitActivityDaily(
       topics: topicsByDate.get(date) ?? [],
     }));
 }
+
+export interface BackfillCoverage {
+  totalCommits: number;
+  committedAtFilled: number;
+  ratio: number;
+}
+
+/**
+ * repo_commit_index.committed_atの段階的バックフィル(SPEC8章)の達成度を
+ * 計算する純粋関数。totalCommitsが0の場合はratio=0を返す(0除算を避ける)。
+ */
+export function computeBackfillCoverage(totalCommits: number, committedAtFilled: number): BackfillCoverage {
+  const ratio = totalCommits > 0 ? committedAtFilled / totalCommits : 0;
+  return { totalCommits, committedAtFilled, ratio };
+}

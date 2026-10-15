@@ -183,6 +183,18 @@ describe('GET /api/commit-activity-summary', () => {
     expect(body.daily).toEqual([]);
   });
 
+  it('backfillCoverageはcommitted_atが埋まっている行数の比率を返す', async () => {
+    const db = setupDb();
+    insertCommit(db, 'aaa1111', 1, REPO_NAME, '2026-10-14T01:00:00Z');
+    insertCommit(db, 'bbb2222', 2, REPO_NAME, null);
+    insertCommit(db, 'ccc3333', 3, REPO_NAME, null);
+    insertCommit(db, 'other', 1, 'nekoserver/other', null);
+
+    const res = await getSummary(db, REPO_NAME);
+    const body = (await res.json()) as { backfillCoverage: { totalCommits: number; committedAtFilled: number; ratio: number } };
+    expect(body.backfillCoverage).toEqual({ totalCommits: 3, committedAtFilled: 1, ratio: 1 / 3 });
+  });
+
   it('topFilesは変更回数の多い順に最大10件返す', async () => {
     const db = setupDb();
     insertFileChange(db, REPO_NAME, 'aaa1111', 'src/a.ts', '2026-10-14T01:00:00Z');
