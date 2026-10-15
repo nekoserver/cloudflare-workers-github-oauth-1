@@ -494,6 +494,7 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries, buildCommitFileChangeEntries } from './utils/githubPushNotify';
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
+import { dedupeKeywords, buildKeywordOccurrenceResults, type KeywordOccurrenceRow } from './utils/treeViewKeywordOccurrence';
 import { mergeCommitActivityDaily, computeBackfillCoverage } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
@@ -16635,6 +16636,78 @@ app.post('/api/commit-summary-status-external', async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-summary-status-external] キャッシュ有無の取得に失敗', { repoName, error: message });
     return jsonUtf8({ error: 'キャッシュ有無の取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+const TREE_VIEW_KEYWORD_OCCURRENCE_CHUNK_SIZE = 40;
+
+/**
+ * dynamicnekoのtree-view検索窓(ユーザー要望2026-10-15: 検索窓にキーワードを
+ * 入れたときのヒットファイル群から「切り出しキー」を集め、それぞれのAI
+ * チャットでの出現回数を右ペインに出す)用の集計エンドポイント。
+ *
+ * 1. filePaths(検索結果のファイル一覧)に対応するai_summary_filesから
+ *    summary_log_idを特定し、ai_summary_keywordsで「切り出しキー」
+ *    (コミット要約から抽出されたキーワード)を集める
+ * 2. そのキーワードごとに、AIチャット側のaichat_search_log.select_count
+ *    (ユーザー要望元のanswerGraph.tsの「AIチャットページでの出現回数」と
+ *    同じ値)を合計して出現回数とする
+ *
+ * 集計・整形自体(dedupeKeywords・buildKeywordOccurrenceResults)はDB
+ * アクセスを含まない純粋関数としてsrc/utils/treeViewKeywordOccurrence.tsに
+ * 切り出し済み(CLAUDE.mdルール15)。
+ */
+app.post('/api/tree-view-keyword-occurrence-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; filePaths?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const filePaths = Array.isArray(body?.filePaths)
+    ? Array.from(new Set((body!.filePaths as unknown[]).filter((p): p is string => typeof p === 'string' && p.length > 0)))
+    : [];
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (filePaths.length === 0) return jsonUtf8({ error: 'filePaths は1件以上指定してください' }, 400);
+  if (filePaths.length > 200) return jsonUtf8({ error: 'filePaths は200件以内で指定してください' }, 400);
+
+  try {
+    const keywordRows: { keyword: string }[] = [];
+    for (let i = 0; i < filePaths.length; i += TREE_VIEW_KEYWORD_OCCURRENCE_CHUNK_SIZE) {
+      const chunk = filePaths.slice(i, i + TREE_VIEW_KEYWORD_OCCURRENCE_CHUNK_SIZE);
+      const marks = chunk.map(() => '?').join(',');
+      const rows = await c.env.DB.prepare(
+        `SELECT DISTINCT k.keyword AS keyword
+         FROM ai_summary_files f
+         JOIN ai_summary_log l ON l.id = f.summary_log_id
+         JOIN ai_summary_keywords k ON k.summary_log_id = l.id
+         WHERE l.repo_full_name = ? AND f.file_path IN (${marks})`
+      ).bind(repoName, ...chunk).all<{ keyword: string }>();
+      keywordRows.push(...(rows.results ?? []));
+    }
+    const extractedKeywords = dedupeKeywords(keywordRows);
+    if (extractedKeywords.length === 0) return jsonUtf8({ repoName, results: [] });
+
+    const countRows: KeywordOccurrenceRow[] = [];
+    for (let i = 0; i < extractedKeywords.length; i += TREE_VIEW_KEYWORD_OCCURRENCE_CHUNK_SIZE) {
+      const chunk = extractedKeywords.slice(i, i + TREE_VIEW_KEYWORD_OCCURRENCE_CHUNK_SIZE);
+      const marks = chunk.map(() => '?').join(',');
+      const rows = await c.env.DB.prepare(
+        `SELECT keyword, SUM(select_count) AS cnt
+         FROM aichat_search_log
+         WHERE user_id = ? AND keyword IN (${marks})
+         GROUP BY keyword`
+      ).bind(auth.login as string, ...chunk).all<{ keyword: string; cnt: number | null }>();
+      countRows.push(...(rows.results ?? []));
+    }
+
+    const results = buildKeywordOccurrenceResults(extractedKeywords, countRows);
+    return jsonUtf8({ repoName, results });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-keyword-occurrence-external] 集計に失敗', { repoName, error: message });
+    return jsonUtf8({ error: '集計でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
