@@ -361,6 +361,7 @@ import { looksLikeRubyCode } from './utils/rubyCodeDetector';
 import { wrapCodeAsMarkdown } from './utils/markdownCodeBlocks';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getCronStatusPage, type CronExecutionRow, type CronSnapshotRow } from './views/cronStatus';
+import { getCommitActivityBackfillStatusPage } from './views/commitActivityBackfillStatus';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
@@ -19182,6 +19183,29 @@ app.get('/api/commit-activity-summary', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[commit-activity-summary] 集計に失敗', { repoName, error: message });
     return jsonUtf8({ error: '集計でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * repo_commit_index.committed_atの段階的バックフィル達成度を、リポジトリ
+ * 横断で一覧表示する簡易ページ(SPEC.cloudflare-workers-github-oauth-1.20261015.commit-activity-dashboard.md
+ * 8章、ユーザー要望2026-10-15: 「設定で通知する/表示するを選択可能に」の
+ * "/statusで確認"選択肢に対応)。/statusページからリンクする。
+ */
+app.get('/commit-activity-backfill-status', authMiddleware, async (c) => {
+  if (!c.env.DB) return c.html(getCommitActivityBackfillStatusPage({ repos: [], generatedAt: new Date().toISOString() }));
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT repo_name as repoName, COUNT(*) as total, SUM(CASE WHEN committed_at IS NOT NULL THEN 1 ELSE 0 END) as filled
+       FROM repo_commit_index
+       GROUP BY repo_name`
+    ).all<{ repoName: string; total: number; filled: number | null }>();
+    const repos = (rows.results ?? []).map((row) => ({ repoName: row.repoName, ...computeBackfillCoverage(row.total, row.filled ?? 0) }));
+    return c.html(getCommitActivityBackfillStatusPage({ repos, generatedAt: new Date().toISOString() }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-activity-backfill-status] 取得に失敗', { error: message });
+    return c.html(getCommitActivityBackfillStatusPage({ repos: [], generatedAt: new Date().toISOString() }), 500);
   }
 });
 

@@ -209,3 +209,39 @@ describe('GET /api/commit-activity-summary', () => {
     ]);
   });
 });
+
+describe('GET /commit-activity-backfill-status', () => {
+  async function getPage(db: DatabaseSync): Promise<Response> {
+    const auth = await makeAuthHeader();
+    return app.request('/commit-activity-backfill-status', { headers: { Authorization: auth } }, { JWT_SECRET, DB: wrapD1(db) });
+  }
+
+  it('未ログインは401', async () => {
+    const db = setupDb();
+    const res = await app.request('/commit-activity-backfill-status', {}, { JWT_SECRET, DB: wrapD1(db) });
+    expect(res.status).toBe(401);
+  });
+
+  it('リポジトリ横断でcommitted_atの達成度を表示する', async () => {
+    const db = setupDb();
+    insertCommit(db, 'aaa1111', 1, REPO_NAME, '2026-10-14T01:00:00Z');
+    insertCommit(db, 'bbb2222', 2, REPO_NAME, null);
+    insertCommit(db, 'ccc3333', 1, 'nekoserver/other', null);
+
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(REPO_NAME);
+    expect(html).toContain('nekoserver/other');
+    expect(html).toContain('50.0%');
+    expect(html).toContain('0.0%');
+  });
+
+  it('repo_commit_indexが空でも500にならず空状態を表示する', async () => {
+    const db = setupDb();
+    const res = await getPage(db);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('repo_commit_indexにデータがありません');
+  });
+});
