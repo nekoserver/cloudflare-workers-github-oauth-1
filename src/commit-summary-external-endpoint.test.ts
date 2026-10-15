@@ -145,6 +145,14 @@ function setupDb(allowedUsers: Record<string, string>): DatabaseSync {
       permissions TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE commit_file_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_name TEXT NOT NULL,
+      commit_hash TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      committed_at TEXT NOT NULL,
+      UNIQUE(repo_name, commit_hash, file_path)
+    );
   `);
   for (const [email, login] of Object.entries(allowedUsers)) {
     db.prepare(`INSERT INTO dynamicneko_aichat_allowed_users (email, github_login) VALUES (?, ?)`).run(email, login);
@@ -549,5 +557,142 @@ describe('POST /api/commit-summary-status-external', () => {
       { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: ngToken, repoName: REPO_NAME, commitHashes: ['aaa1111'] }) },
       { ...BASE_ENV, DB: wrapD1(db) });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/commit-file-latest-external', () => {
+  async function postLatest(db: DatabaseSync, body: Record<string, unknown>): Promise<Response> {
+    const userToken = await makeUserToken('ok@example.com');
+    return app.request(
+      '/api/commit-file-latest-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, ...body }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+  }
+
+  function insertCommitFileChange(db: DatabaseSync, repoName: string, commitHash: string, filePath: string, committedAt: string): void {
+    db.prepare(
+      `INSERT INTO commit_file_changes (repo_name, commit_hash, file_path, committed_at) VALUES (?, ?, ?, ?)`
+    ).run(repoName, commitHash, filePath, committedAt);
+  }
+
+  it('同じファイルに複数コミットがある場合、committed_atが最新のものを返す', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommitFileChange(db, REPO_NAME, 'aaa1111', 'src/a.ts', '2026-10-01T00:00:00.000Z');
+    insertCommitFileChange(db, REPO_NAME, 'bbb2222', 'src/a.ts', '2026-10-10T00:00:00.000Z');
+    const res = await postLatest(db, { repoName: REPO_NAME, filePaths: ['src/a.ts'] });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { latest: Record<string, { commitHash: string; committedAt: string }> };
+    expect(body.latest['src/a.ts']).toEqual({ commitHash: 'bbb2222', committedAt: '2026-10-10T00:00:00.000Z' });
+  });
+
+  it('記録の無いファイルはレスポンスのキーに含まれない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommitFileChange(db, REPO_NAME, 'aaa1111', 'src/a.ts', '2026-10-01T00:00:00.000Z');
+    const res = await postLatest(db, { repoName: REPO_NAME, filePaths: ['src/a.ts', 'src/missing.ts'] });
+    const body = await res.json() as { latest: Record<string, unknown> };
+    expect(Object.keys(body.latest)).toEqual(['src/a.ts']);
+  });
+
+  it('別リポジトリの記録は返さない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    insertCommitFileChange(db, 'nekoserver/other', 'aaa1111', 'src/a.ts', '2026-10-01T00:00:00.000Z');
+    const res = await postLatest(db, { repoName: REPO_NAME, filePaths: ['src/a.ts'] });
+    const body = await res.json() as { latest: Record<string, unknown> };
+    expect(Object.keys(body.latest)).toEqual([]);
+  });
+
+  it('filePathsが空・repoName未指定は400、未許可メールは403', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    expect((await postLatest(db, { repoName: REPO_NAME, filePaths: [] })).status).toBe(400);
+    expect((await postLatest(db, { filePaths: ['src/a.ts'] })).status).toBe(400);
+    const ngToken = await makeUserToken('ng@example.com');
+    const res = await app.request('/api/commit-file-latest-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: ngToken, repoName: REPO_NAME, filePaths: ['src/a.ts'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res.status).toBe(403);
+  });
+
+  it('Bearer secretが一致しなければ401', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const userToken = await makeUserToken('ok@example.com');
+    const res = await app.request('/api/commit-file-latest-external',
+      { method: 'POST', headers: { Authorization: 'Bearer wrong-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, repoName: REPO_NAME, filePaths: ['src/a.ts'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/commit-file-changes-external', () => {
+  async function postChanges(db: DatabaseSync, body: Record<string, unknown>): Promise<Response> {
+    const userToken = await makeUserToken('ok@example.com');
+    return app.request(
+      '/api/commit-file-changes-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken, ...body }) },
+      { ...BASE_ENV, DB: wrapD1(db) }
+    );
+  }
+
+  function readCommitFileChanges(db: DatabaseSync, repoName: string, commitHash: string): Array<{ file_path: string; committed_at: string }> {
+    return db.prepare(
+      `SELECT file_path, committed_at FROM commit_file_changes WHERE repo_name = ? AND commit_hash = ? ORDER BY file_path`
+    ).all(repoName, commitHash) as Array<{ file_path: string; committed_at: string }>;
+  }
+
+  it('filePathsをcommit_file_changesへ保存する', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await postChanges(db, {
+      repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts', 'src/b.ts'], committedAt: '2026-10-15T01:00:00.000Z',
+    });
+    expect(res.status).toBe(200);
+    const rows = readCommitFileChanges(db, REPO_NAME, 'aaa1111');
+    expect(rows).toEqual([
+      { file_path: 'src/a.ts', committed_at: '2026-10-15T01:00:00.000Z' },
+      { file_path: 'src/b.ts', committed_at: '2026-10-15T01:00:00.000Z' },
+    ]);
+  });
+
+  it('committedAt省略時は現在時刻を使う', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const res = await postChanges(db, { repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'] });
+    expect(res.status).toBe(200);
+    const rows = readCommitFileChanges(db, REPO_NAME, 'aaa1111');
+    expect(rows[0].committed_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('同じ内容を2回送っても重複せず冪等(push webhook経由で既に記録済みの場合も無害)', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    await postChanges(db, { repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'], committedAt: '2026-10-15T01:00:00.000Z' });
+    const res2 = await postChanges(db, { repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'], committedAt: '2026-10-15T02:00:00.000Z' });
+    expect(res2.status).toBe(200);
+    const rows = readCommitFileChanges(db, REPO_NAME, 'aaa1111');
+    // UNIQUE(repo_name, commit_hash, file_path)によりINSERT OR IGNOREされ、
+    // 最初に記録された値(push webhook等が先行していた場合も含む)が保持される。
+    expect(rows).toEqual([{ file_path: 'src/a.ts', committed_at: '2026-10-15T01:00:00.000Z' }]);
+  });
+
+  it('filePathsが空・201件以上・commitHash不正・repoName未指定は400', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    expect((await postChanges(db, { repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: [] })).status).toBe(400);
+    expect((await postChanges(db, {
+      repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: Array.from({ length: 201 }, (_, i) => `f${i}.ts`),
+    })).status).toBe(400);
+    expect((await postChanges(db, { repoName: REPO_NAME, commitHash: 'zz;drop', filePaths: ['src/a.ts'] })).status).toBe(400);
+    expect((await postChanges(db, { commitHash: 'aaa1111', filePaths: ['src/a.ts'] })).status).toBe(400);
+  });
+
+  it('未許可メールは403、Bearer secret不一致は401', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const ngToken = await makeUserToken('ng@example.com');
+    const res403 = await app.request('/api/commit-file-changes-external',
+      { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: ngToken, repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res403.status).toBe(403);
+
+    const okToken = await makeUserToken('ok@example.com');
+    const res401 = await app.request('/api/commit-file-changes-external',
+      { method: 'POST', headers: { Authorization: 'Bearer wrong-secret', 'Content-Type': 'application/json' }, body: JSON.stringify({ userToken: okToken, repoName: REPO_NAME, commitHash: 'aaa1111', filePaths: ['src/a.ts'] }) },
+      { ...BASE_ENV, DB: wrapD1(db) });
+    expect(res401.status).toBe(401);
   });
 });

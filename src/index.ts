@@ -16679,6 +16679,49 @@ app.post('/api/commit-file-latest-external', async (c) => {
   }
 });
 
+/**
+ * commit_file_changesへの書き込み用エンドポイント。push webhookが元々持つ
+ * commits[].added/removed/modifiedからの自動蓄積(主経路)とは別に、
+ * dynamicneko側の既存エンドポイント(/api/tree-view/commit-files、GitHub
+ * 単体コミット取得APIのfiles[]を使うフォルダ差分表示・ファイル名検索機能)が
+ * 同じAPI呼び出しの"ついで"にコミット単位のファイル変更を中継保存するために
+ * 使う(SPEC.dynamicneko.20261015.md参照)。UNIQUE(repo_name, commit_hash,
+ * file_path)への INSERT OR IGNORE のため、push webhook側で既に記録済みの
+ * 組み合わせを送っても無害に無視される(冪等)。
+ */
+app.post('/api/commit-file-changes-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; commitHash?: string; filePaths?: unknown; committedAt?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const commitHash = (body?.commitHash ?? '').trim();
+  const filePaths = Array.isArray(body?.filePaths)
+    ? Array.from(new Set((body!.filePaths as unknown[]).filter((p): p is string => typeof p === 'string' && p.length > 0)))
+    : [];
+  const committedAt = typeof body?.committedAt === 'string' && body.committedAt ? body.committedAt : new Date().toISOString();
+
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (!/^[0-9a-f]{7,64}$/i.test(commitHash)) return jsonUtf8({ error: 'commitHash は16進のコミットハッシュで指定してください' }, 400);
+  if (filePaths.length === 0) return jsonUtf8({ error: 'filePaths は1件以上指定してください' }, 400);
+  if (filePaths.length > 200) return jsonUtf8({ error: 'filePaths は200件以内で指定してください' }, 400);
+
+  try {
+    for (const filePath of filePaths) {
+      await c.env.DB.prepare(
+        'INSERT OR IGNORE INTO commit_file_changes (repo_name, commit_hash, file_path, committed_at) VALUES (?, ?, ?, ?)'
+      ).bind(repoName, commitHash, filePath, committedAt).run();
+    }
+    return jsonUtf8({ repoName, commitHash, savedCount: filePaths.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-file-changes-external] 保存に失敗', { repoName, commitHash, error: message });
+    return jsonUtf8({ error: '保存でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 // 既存のai_summary_log(デプロイ前にWebhook経由で自動生成された要約等)には
 // キーワードが付いていない。ログイン済みユーザーが手動で少しずつ遡って
 // キーワードを付けられるようにするバックフィル用エンドポイント。
