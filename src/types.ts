@@ -195,7 +195,14 @@ export interface GitHubWebhookPushPayload {
   ref?: string;
   deleted?: boolean;
   compare?: string;
-  commits?: Array<{ id?: string; message?: string }>;
+  commits?: Array<{
+    id?: string;
+    message?: string;
+    timestamp?: string;
+    added?: string[];
+    removed?: string[];
+    modified?: string[];
+  }>;
   head_commit?: { id?: string; message?: string } | null;
   pusher?: { name?: string };
   repository?: { full_name?: string };
