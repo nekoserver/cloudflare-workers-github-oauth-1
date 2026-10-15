@@ -440,6 +440,7 @@ import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getG
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
+import { verifyTailscaleWebhookSignature } from './utils/tailscaleWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
@@ -24327,6 +24328,47 @@ app.post('/webhook/cf-wh1', async (c) => {
 
   logger.info('cf-wh1 webhook received', { event });
   safeWaitUntil(c, logWebhookEvent(c.env.DB, 'cf-wh1', event, 'ok', payload));
+
+  return c.json({ result: 'OK' });
+});
+
+/**
+ * Tailscaleからのwebhook専用エンドポイント(ユーザー要望2026-10-15:
+ * 署名無し・無関係なリクエストが/webhook/github宛に届いて401で弾かれて
+ * いたのを確認し、専用エンドポイントを新設して受ける)。
+ * Tailscale-Webhook-Signatureヘッダー(t=<unix秒>,v1=<hex>形式)を
+ * CF_WEBHOOK_SECRETで検証する(verifyTailscaleWebhookSignature)。
+ * 成功/拒否いずれもwebhook_log(source='tailscale')へ記録する。
+ */
+app.post('/webhook/ts', async (c) => {
+  const webhookSecret = c.env.CF_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('CF_WEBHOOK_SECRET is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+  const signatureHeader = c.req.header('Tailscale-Webhook-Signature');
+
+  const verification = await verifyTailscaleWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected Tailscale webhook', { reason: verification.reason });
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'tailscale', null, 'rejected', null, verification.reason));
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    safeWaitUntil(c, logWebhookEvent(c.env.DB, 'tailscale', null, 'error', null, 'Invalid JSON payload'));
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const eventType = typeof payload.type === 'string' ? payload.type : 'unknown';
+
+  logger.info('Tailscale webhook received', { eventType });
+  safeWaitUntil(c, logWebhookEvent(c.env.DB, 'tailscale', eventType, 'ok', payload));
 
   return c.json({ result: 'OK' });
 });
