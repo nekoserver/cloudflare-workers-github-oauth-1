@@ -40,6 +40,24 @@ export function resolveHeritageTourCountryFilterEnabled(
   return true;
 }
 
+/**
+ * /tree-viewの検索窓にヒットしたファイル群から集めた切り出しキー×AIチャット
+ * 出現回数を、検索するたびに自動でtree_view_keyword_search_logへ記録するか、
+ * その都度確認してから記録するか(ユーザー要望2026-10-15)。D1優先→Cookie→
+ * ハードコードデフォルト(false=その都度確認)の順で解決する(ルール27と
+ * 同じ解決順)。
+ */
+export function resolveTreeViewKeywordSearchAutoSave(
+  dbValue: string | null | undefined,
+  cookieValue: string | null | undefined
+): boolean {
+  if (dbValue === 'on') return true;
+  if (dbValue === 'off') return false;
+  if (cookieValue === 'on') return true;
+  if (cookieValue === 'off') return false;
+  return false;
+}
+
 export type RenewSessionParams = {
   currentUser: JWTPayload;
   newDuration: string;

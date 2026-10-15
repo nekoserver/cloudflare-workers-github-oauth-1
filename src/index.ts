@@ -34,6 +34,7 @@ import { getTestFileCatalogPage, type TestFileCatalogRow } from './views/testFil
 import { renderJevScoreBoardPage } from './views/jevScoreBoard';
 import { getJevLabelStatsPage, buildJevLabelGroupCounts, type JevLabelGroupCount } from './views/jevLabelStats';
 import { getKeywordStatsPage, sortRepoKeywordCounts, sortRepoFileCounts, mergeFileExtCounts } from './views/keywordStats';
+import { getKeywordSearchTrendsPage, type KeywordSearchTrendQueryRow } from './views/keywordSearchTrends';
 import { getCallGraphPage } from './views/callGraph';
 import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, type CallGraphNode, type CallGraphEdge } from './utils/callGraphBuilder';
 import { getKwArchitecturePage } from './views/kw-architecture';
@@ -478,7 +479,7 @@ import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, formatSummaryPrLink, formatSummaryDiffLength, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
-import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
+import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled, resolveTreeViewKeywordSearchAutoSave } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
@@ -495,6 +496,7 @@ import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffU
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
 import { dedupeKeywords, buildKeywordOccurrenceResults, type KeywordOccurrenceRow } from './utils/treeViewKeywordOccurrence';
+import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery, type KeywordSearchLogRow, type KeywordSearchResultCountRow } from './utils/treeViewKeywordSearchLog';
 import { mergeCommitActivityDaily, computeBackfillCoverage } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
@@ -631,6 +633,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ai_summary_files', migration: '0170', description: 'AI要約の元diffから抽出した変更ファイル一覧', syncPolicy: 'auto' },
   { name: 'clef_evaluations', migration: '0171', description: 'Clef(Workers AI決定モデル)によるAIチャット回答評価。jev_evaluationsとは別テーブルで、既存のJev評価データには一切影響しない', syncPolicy: 'auto' },
   { name: 'commit_file_changes', migration: '0174', description: 'push webhookから自動蓄積するコミット単位のファイル変更記録(added/removed/modified)', syncPolicy: 'auto' },
+  { name: 'tree_view_keyword_search_log', migration: '0176', description: 'dynamicnekoのtree-view検索窓で検索するたびに記録する検索ログ(repo_name・query・searched_at)', syncPolicy: 'auto' },
+  { name: 'tree_view_keyword_search_results', migration: '0176', description: 'tree_view_keyword_search_log 1件ごとの切り出しキーとAIチャットでの出現回数', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2766,6 +2770,25 @@ GROUP BY t.id, k.summary_log_id;`,
 CREATE INDEX IF NOT EXISTS idx_commit_file_changes_repo_file ON commit_file_changes(repo_name, file_path);
 CREATE INDEX IF NOT EXISTS idx_commit_file_changes_commit ON commit_file_changes(repo_name, commit_hash);`,
   '0175': `ALTER TABLE repo_commit_index ADD COLUMN committed_at TEXT;`,
+  '0176': `CREATE TABLE IF NOT EXISTS tree_view_keyword_search_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  query TEXT NOT NULL,
+  file_count INTEGER NOT NULL DEFAULT 0,
+  searched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tvksl_user_repo_query ON tree_view_keyword_search_log(user_id, repo_name, query, searched_at);
+
+CREATE TABLE IF NOT EXISTS tree_view_keyword_search_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  search_log_id INTEGER NOT NULL REFERENCES tree_view_keyword_search_log(id),
+  keyword TEXT NOT NULL,
+  occurrence_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_tvksr_search_log_id ON tree_view_keyword_search_results(search_log_id);
+CREATE INDEX IF NOT EXISTS idx_tvksr_keyword ON tree_view_keyword_search_results(keyword);`,
+  '0177': `ALTER TABLE user_sessions ADD COLUMN tree_view_keyword_search_auto_save TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2952,6 +2975,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   commit_file_changes: { id: 'pk', repo_name: 'idx', commit_hash: 'idx', file_path: 'idx' },
+  tree_view_keyword_search_log: { id: 'pk', user_id: 'idx', repo_name: 'idx', query: 'idx', searched_at: 'idx' },
+  tree_view_keyword_search_results: { id: 'pk', search_log_id: 'fk', keyword: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3119,6 +3144,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
   commit_file_changes: 'commit',
+  tree_view_keyword_search_log: 'commit',
+  tree_view_keyword_search_results: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -3373,6 +3400,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
+  tree_view_keyword_search_results: { search_log_id: 'tree_view_keyword_search_log' },
   commit_summary_topic_links: { topic_id: 'commit_summary_topics', summary_log_id: 'ai_summary_log' },
   ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
@@ -5119,7 +5147,7 @@ async function finalizePasskeyLogin(c: Context<{ Bindings: Bindings; Variables: 
 async function updateUserSettings(
   db: D1Database | undefined,
   userId: string,
-  field: 'timezone' | 'session_duration' | 'display_name' | 'recent_commits_count' | 'toast_duration' | 'heritage_tour_country_filter',
+  field: 'timezone' | 'session_duration' | 'display_name' | 'recent_commits_count' | 'toast_duration' | 'heritage_tour_country_filter' | 'tree_view_keyword_search_auto_save',
   value: string
 ): Promise<boolean> {
   if (!db) {
@@ -16712,6 +16740,110 @@ app.post('/api/tree-view-keyword-occurrence-external', async (c) => {
 });
 
 /**
+ * dynamicnekoのtree-viewが、検索するたびに自動保存するか・その都度確認
+ * するかを決めるために、ログイン中ユーザーの現在の設定を取得する
+ * (ユーザー要望2026-10-15)。/settingsページで変更したD1の値
+ * (user_sessions.tree_view_keyword_search_auto_save)をそのまま返す
+ * (resolveTreeViewKeywordSearchAutoSave。cross-origin呼び出しのため
+ * Cookieフォールバックは使わず、D1の値のみで解決する)。
+ */
+app.post('/api/tree-view-keyword-search-save-mode-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT tree_view_keyword_search_auto_save FROM user_sessions WHERE user_id = ?'
+    ).bind(auth.login as string).first<{ tree_view_keyword_search_auto_save: string | null }>();
+    const autoSave = resolveTreeViewKeywordSearchAutoSave(row?.tree_view_keyword_search_auto_save ?? null, null);
+    return jsonUtf8({ autoSave });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-keyword-search-save-mode-external] 取得に失敗', { error: message });
+    return jsonUtf8({ error: '設定の取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * tree-view-keyword-search-save-mode-externalの設定変更用(ユーザー要望
+ * 2026-10-15: 「自動上書きかその都度確認かを設定で決めて選択可能にする」)。
+ * dynamicneko側はoauth-1のセッションCookieを持たないため、/settings
+ * ページのようなCookie併用フォームではなくuserToken経由の更新専用
+ * エンドポイントとして分ける。
+ */
+app.post('/api/tree-view-keyword-search-save-mode-set-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; autoSave?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  if (typeof body?.autoSave !== 'boolean') return jsonUtf8({ error: 'autoSave はtrue/falseで指定してください' }, 400);
+
+  try {
+    await updateUserSettings(c.env.DB, auth.login as string, 'tree_view_keyword_search_auto_save', body.autoSave ? 'on' : 'off');
+    return jsonUtf8({ autoSave: body.autoSave });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-keyword-search-save-mode-set-external] 更新に失敗', { error: message });
+    return jsonUtf8({ error: '設定の更新でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoのtree-view検索窓の結果(切り出しキー×AIチャット出現回数)を
+ * tree_view_keyword_search_log/tree_view_keyword_search_resultsへ記録する
+ * (ユーザー要望2026-10-15: 「次回の再検索時に比較する」ための時系列データ)。
+ * 保存自体は自動保存・都度確認のどちらでもこのエンドポイントを叩く
+ * (自動保存かどうかの判定はdynamicneko側がsave-mode-externalの結果を見て
+ * 呼ぶかどうかを決める。このエンドポイントは常に保存する)。
+ */
+app.post('/api/tree-view-keyword-search-log-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; query?: string; fileCount?: number; results?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const query = (body?.query ?? '').trim();
+  const fileCount = Number.isFinite(body?.fileCount) && (body!.fileCount as number) >= 0 ? Math.floor(body!.fileCount as number) : 0;
+  const rawResults = Array.isArray(body?.results)
+    ? (body!.results as unknown[]).filter(
+        (r): r is { keyword: unknown; occurrenceCount: unknown } => typeof r === 'object' && r !== null,
+      ).map((r) => ({
+        keyword: typeof r.keyword === 'string' ? r.keyword : '',
+        occurrenceCount: typeof r.occurrenceCount === 'number' ? r.occurrenceCount : 0,
+      }))
+    : [];
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (!query) return jsonUtf8({ error: 'query は必須です' }, 400);
+
+  try {
+    const nowIso = new Date().toISOString();
+    const logResult = await c.env.DB.prepare(
+      'INSERT INTO tree_view_keyword_search_log (repo_name, user_id, query, file_count, searched_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(repoName, auth.login as string, query, fileCount, nowIso).run();
+    const searchLogId = logResult.meta?.last_row_id;
+    if (!searchLogId) throw new Error('search_log_idの取得に失敗しました');
+
+    const sanitized = sanitizeKeywordOccurrenceRowsForSave(rawResults);
+    for (const row of sanitized) {
+      await c.env.DB.prepare(
+        'INSERT INTO tree_view_keyword_search_results (search_log_id, keyword, occurrence_count) VALUES (?, ?, ?)'
+      ).bind(searchLogId, row.keyword, row.occurrenceCount).run();
+    }
+    return jsonUtf8({ searchLogId, searchedAt: nowIso, savedKeywordCount: sanitized.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-keyword-search-log-external] 保存に失敗', { repoName, query, error: message });
+    return jsonUtf8({ error: '保存でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
  * ファイルパスの一覧を受け取り、各ファイルを最後に変更したコミットのSHAを
  * commit_file_changes(push webhook経由で自動蓄積、2026-10-15)から返す。
  * tree-viewの📗判定(ユーザー指摘「コミットと変更したファイルの関連付けを
@@ -20596,6 +20728,49 @@ app.get('/keyword-stats', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[keyword-stats] ページ描画に失敗', { error: message });
     return new Response('Failed to render keyword-stats', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+});
+
+/**
+ * dynamicnekoの/tree-view検索窓で記録した(tree_view_keyword_search_log/
+ * tree_view_keyword_search_results)、クエリごとの時系列を一覧表示する
+ * ページ(ユーザー要望2026-10-15)。ログイン中ユーザー自身の記録のみ対象。
+ */
+app.get('/keyword-search-trends', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  try {
+    const [logRows, resultCountRows] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT id, repo_name AS repoName, query, file_count AS fileCount, searched_at AS searchedAt
+         FROM tree_view_keyword_search_log
+         WHERE user_id = ?
+         ORDER BY searched_at ASC`
+      ).bind(user.sub).all<KeywordSearchLogRow>(),
+      c.env.DB.prepare(
+        `SELECT r.search_log_id AS searchLogId, COUNT(*) AS resultCount, SUM(r.occurrence_count) AS totalOccurrenceCount
+         FROM tree_view_keyword_search_results r
+         JOIN tree_view_keyword_search_log l ON l.id = r.search_log_id
+         WHERE l.user_id = ?
+         GROUP BY r.search_log_id`
+      ).bind(user.sub).all<KeywordSearchResultCountRow>(),
+    ]);
+
+    const grouped = buildKeywordSearchSnapshotsByQuery(logRows.results ?? [], resultCountRows.results ?? []);
+    const queries: KeywordSearchTrendQueryRow[] = Array.from(grouped.values())
+      .map(({ key, snapshots }) => ({ repoName: key.repoName, query: key.query, snapshots }))
+      .sort((a, b) => {
+        const aLatest = a.snapshots[a.snapshots.length - 1]?.searchedAt ?? '';
+        const bLatest = b.snapshots[b.snapshots.length - 1]?.searchedAt ?? '';
+        return bLatest.localeCompare(aLatest);
+      });
+
+    const html = getKeywordSearchTrendsPage({ name: user.name, username: user.sub }, { queries });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[keyword-search-trends] ページ描画に失敗', { error: message });
+    return new Response('Failed to render keyword-search-trends', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 
