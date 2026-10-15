@@ -111,6 +111,7 @@ export type PushRepoCommitIndexEntry = {
   commitHash: string;
   commitMessage: string;
   githubPrNumber: number | null;
+  committedAt: string | null;
 };
 
 /**
@@ -136,6 +137,7 @@ export function buildPushRepoCommitIndexEntries(payload: GitHubWebhookPushPayloa
       commitHash: c.id,
       commitMessage: c.message,
       githubPrNumber: extractPrNumberFromMergeCommitMessage(c.message),
+      committedAt: typeof c.timestamp === 'string' && c.timestamp ? c.timestamp : null,
     });
   }
   return entries;

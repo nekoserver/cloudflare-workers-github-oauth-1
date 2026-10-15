@@ -92,16 +92,17 @@ describe('buildPushRepoCommitIndexEntries', () => {
   it('commitsのid/messageからエントリを組み立て、マージコミットはPR番号も抜き出す', () => {
     const payload: GitHubWebhookPushPayload = {
       commits: [
-        { id: 'aaaa', message: 'fix: typo' },
+        { id: 'aaaa', message: 'fix: typo', timestamp: '2026-10-15T01:00:00Z' },
         { id: 'bbbb', message: 'Merge pull request #2246 from nekoserver/claude/push-real-diff-fetch-20261004' },
       ],
     };
     expect(buildPushRepoCommitIndexEntries(payload)).toEqual([
-      { commitHash: 'aaaa', commitMessage: 'fix: typo', githubPrNumber: null },
+      { commitHash: 'aaaa', commitMessage: 'fix: typo', githubPrNumber: null, committedAt: '2026-10-15T01:00:00Z' },
       {
         commitHash: 'bbbb',
         commitMessage: 'Merge pull request #2246 from nekoserver/claude/push-real-diff-fetch-20261004',
         githubPrNumber: 2246,
+        committedAt: null,
       },
     ]);
   });
@@ -110,7 +111,7 @@ describe('buildPushRepoCommitIndexEntries', () => {
     const payload: GitHubWebhookPushPayload = {
       commits: [{ id: 'aaaa' }, { message: 'no id' }, { id: 'cccc', message: 'ok' }],
     };
-    expect(buildPushRepoCommitIndexEntries(payload)).toEqual([{ commitHash: 'cccc', commitMessage: 'ok', githubPrNumber: null }]);
+    expect(buildPushRepoCommitIndexEntries(payload)).toEqual([{ commitHash: 'cccc', commitMessage: 'ok', githubPrNumber: null, committedAt: null }]);
   });
 
   it('ブランチ削除pushでは空配列を返す', () => {

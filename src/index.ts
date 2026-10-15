@@ -493,6 +493,7 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries, buildCommitFileChangeEntries } from './utils/githubPushNotify';
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
+import { mergeCommitActivityDaily } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
 import { findSummaryKeywordBackfillTargets, runSummaryKeywordBackfill } from './utils/aiSummaryKeywordsBackfill';
@@ -2762,6 +2763,7 @@ GROUP BY t.id, k.summary_log_id;`,
 );
 CREATE INDEX IF NOT EXISTS idx_commit_file_changes_repo_file ON commit_file_changes(repo_name, file_path);
 CREATE INDEX IF NOT EXISTS idx_commit_file_changes_commit ON commit_file_changes(repo_name, commit_hash);`,
+  '0175': `ALTER TABLE repo_commit_index ADD COLUMN committed_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -19080,6 +19082,60 @@ app.get('/apis', authMiddleware, async (c) => {
 });
 
 /**
+ * コミット活動ダッシュボード用の集計API。
+ * SPEC.cloudflare-workers-github-oauth-1.20261015.commit-activity-dashboard.md
+ * 参照。repoNameは必須(6章のリポジトリ境界の原則に合わせ、全リポジトリ横断
+ * で返す経路は作らない)。/statusページの新規モーダルから呼ばれる想定。
+ * テストスコア推移(SPEC3章の4軸目)は本バージョンでは未実装(次段階)。
+ */
+app.get('/api/commit-activity-summary', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const repoName = c.req.query('repoName') ?? '';
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+
+  try {
+    const db = c.env.DB;
+    const commitRows = await db.prepare(
+      `SELECT date(committed_at) as date, COUNT(*) as commitCount
+       FROM repo_commit_index
+       WHERE repo_name = ? AND committed_at IS NOT NULL
+       GROUP BY date(committed_at)`
+    ).bind(repoName).all<{ date: string; commitCount: number }>();
+
+    const fileChangeRows = await db.prepare(
+      `SELECT date(committed_at) as date, COUNT(*) as fileChangeCount
+       FROM commit_file_changes
+       WHERE repo_name = ?
+       GROUP BY date(committed_at)`
+    ).bind(repoName).all<{ date: string; fileChangeCount: number }>();
+
+    const topicRows = await db.prepare(
+      `SELECT date(s.created_at) as date, t.name as topic
+       FROM commit_summary_topic_links l
+       JOIN commit_summary_topics t ON t.id = l.topic_id
+       JOIN ai_summary_log s ON s.id = l.summary_log_id
+       WHERE s.repo_full_name = ?`
+    ).bind(repoName).all<{ date: string; topic: string }>();
+
+    const topFileRows = await db.prepare(
+      `SELECT file_path as filePath, COUNT(DISTINCT commit_hash) as changeCount
+       FROM commit_file_changes
+       WHERE repo_name = ?
+       GROUP BY file_path
+       ORDER BY changeCount DESC
+       LIMIT 10`
+    ).bind(repoName).all<{ filePath: string; changeCount: number }>();
+
+    const daily = mergeCommitActivityDaily(commitRows.results ?? [], fileChangeRows.results ?? [], topicRows.results ?? []);
+    return jsonUtf8({ repoName, daily, topFiles: topFileRows.results ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-activity-summary] 集計に失敗', { repoName, error: message });
+    return jsonUtf8({ error: '集計でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
  * キャッシュ状況ページ（認証が必要）
  */
 app.get('/status', authMiddleware, async (c) => {
@@ -21922,8 +21978,8 @@ app.post('/webhook/github', async (c) => {
           let nextSeq = (maxSeqResult?.maxSeq ?? 0) + 1;
           for (const entry of entries) {
             await db.prepare(
-              'INSERT OR IGNORE INTO repo_commit_index (commit_hash, seq_num, github_pr_number, commit_message, repo_name) VALUES (?, ?, ?, ?, ?)'
-            ).bind(entry.commitHash, nextSeq, entry.githubPrNumber, entry.commitMessage, repositoryFullName).run();
+              'INSERT OR IGNORE INTO repo_commit_index (commit_hash, seq_num, github_pr_number, commit_message, repo_name, committed_at) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(entry.commitHash, nextSeq, entry.githubPrNumber, entry.commitMessage, repositoryFullName, entry.committedAt).run();
             nextSeq += 1;
           }
         } catch (error) {

@@ -202,7 +202,7 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
       expect(response.status).toBe(200);
       expect(fetchMock).not.toHaveBeenCalled();
       const commit = inserts.find(i => i.sql.includes('INSERT OR IGNORE INTO repo_commit_index'));
-      expect(commit?.bindings).toEqual(['abc', 1, null, 'fix: commit log', repo]);
+      expect(commit?.bindings).toEqual(['abc', 1, null, 'fix: commit log', repo, null]);
       const summary = inserts.find(i => i.sql.includes('INSERT INTO ai_summary_log'));
       expect(summary?.bindings[3]).toBe('push_summary');
       expect(summary?.bindings[4]).toBe(repo);
@@ -343,7 +343,7 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
       ref: 'refs/heads/main',
       repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
       commits: [
-        { id: 'aaaa', message: 'fix: typo' },
+        { id: 'aaaa', message: 'fix: typo', timestamp: '2026-10-15T01:00:00Z' },
         { id: 'bbbb', message: 'Merge pull request #42 from nekoserver/some-branch' },
       ],
     });
@@ -353,13 +353,14 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(response.status).toBe(200);
     const indexInserts = inserts.filter((i) => i.sql.includes('INSERT OR IGNORE INTO repo_commit_index'));
     expect(indexInserts).toHaveLength(2);
-    expect(indexInserts[0]!.bindings).toEqual(['aaaa', 1, null, 'fix: typo', 'nekoserver/rails-root']);
+    expect(indexInserts[0]!.bindings).toEqual(['aaaa', 1, null, 'fix: typo', 'nekoserver/rails-root', '2026-10-15T01:00:00Z']);
     expect(indexInserts[1]!.bindings).toEqual([
       'bbbb',
       2,
       42,
       'Merge pull request #42 from nekoserver/some-branch',
       'nekoserver/rails-root',
+      null,
     ]);
   });
 
