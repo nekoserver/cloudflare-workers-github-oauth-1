@@ -83,3 +83,28 @@ export function buildKeywordSearchSnapshotsByQuery(
   }
   return byGroup;
 }
+
+/**
+ * /keyword-search-trendsページの既定の並び順(ユーザー要望2026-10-15:
+ * 「なんの指定もなければ上から出現回数合計の多い順」)。各クエリの最新
+ * スナップショットのtotalOccurrenceCountで降順に並べる。クリックによる
+ * 並び替え(ファイル数・切り出しキー異なり数での並び替え)はページ側の
+ * クライアントJSが担うため、ここではサーバー側の初期表示順だけを決める。
+ * 同数の場合はkeywordCount降順→query昇順で安定的に並べる(表示が実行
+ * ごとにばらつかないようにする)。
+ */
+export function sortKeywordSearchTrendQueriesByLatestOccurrenceDesc<
+  T extends { query: string; snapshots: KeywordSearchSnapshot[] },
+>(queries: T[]): T[] {
+  return [...queries].sort((a, b) => {
+    const aLatest = a.snapshots[a.snapshots.length - 1];
+    const bLatest = b.snapshots[b.snapshots.length - 1];
+    const aOccurrence = aLatest?.totalOccurrenceCount ?? 0;
+    const bOccurrence = bLatest?.totalOccurrenceCount ?? 0;
+    if (aOccurrence !== bOccurrence) return bOccurrence - aOccurrence;
+    const aKeywordCount = aLatest?.keywordCount ?? 0;
+    const bKeywordCount = bLatest?.keywordCount ?? 0;
+    if (aKeywordCount !== bKeywordCount) return bKeywordCount - aKeywordCount;
+    return a.query.localeCompare(b.query);
+  });
+}

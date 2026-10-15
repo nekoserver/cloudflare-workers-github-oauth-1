@@ -50,7 +50,7 @@ export function getKeywordSearchTrendsPage(user: { name?: string; username: stri
         `<td class="num">${s.totalOccurrenceCount}</td>` +
         `</tr>`).join('');
 
-      return `<div class="query-card">
+      return `<div class="query-card" data-file-count="${latest.fileCount}" data-keyword-count="${latest.keywordCount}" data-occurrence-count="${latest.totalOccurrenceCount}">
         <div class="query-card-head">
           <span class="query-repo">${escapeHtml(q.repoName)}</span>
           <span class="query-text">${escapeHtml(q.query)}</span>
@@ -65,6 +65,13 @@ export function getKeywordSearchTrendsPage(user: { name?: string; username: stri
         </table>
       </div>`;
     }).join('');
+
+  const sortControls = data.queries.length === 0 ? '' : `<div class="sort-controls" role="group" aria-label="並び替え">
+    <span class="sort-controls-label">並び替え:</span>
+    <button type="button" class="sort-btn" data-sort-field="fileCount">ファイル数</button>
+    <button type="button" class="sort-btn" data-sort-field="keywordCount">切り出しキー異なり数</button>
+    <button type="button" class="sort-btn is-active" data-sort-field="occurrenceCount" data-sort-dir="desc">出現回数合計</button>
+  </div>`;
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -119,6 +126,13 @@ export function getKeywordSearchTrendsPage(user: { name?: string; username: stri
     .title { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
     .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; line-height: 1.6; }
     .empty-note { font-size: 13px; color: var(--text-muted); padding: 20px 0; }
+    .sort-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .sort-controls-label { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+    .sort-btn {
+      border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary);
+      border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+    }
+    .sort-btn.is-active { border-color: var(--accent-color); color: var(--accent-color); font-weight: 700; }
     .query-card { border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
     .query-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
     .query-repo { font-size: 11px; color: var(--text-muted); }
@@ -172,7 +186,8 @@ export function getKeywordSearchTrendsPage(user: { name?: string; username: stri
         拡張方向の目安になる(件数が少ない=実装がまだ薄い領域)。
       </p>
 
-      ${queryCards}
+      ${sortControls}
+      <div id="queryCardsList">${queryCards}</div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
     </div>
@@ -188,6 +203,46 @@ export function getKeywordSearchTrendsPage(user: { name?: string; username: stri
       var dd = document.getElementById('dropdownMenu');
       if (!icon.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
     });
+
+    (function() {
+      var list = document.getElementById('queryCardsList');
+      if (!list) return;
+      var sortBtns = Array.prototype.slice.call(document.querySelectorAll('.sort-btn'));
+
+      function attrNameForField(field) {
+        if (field === 'fileCount') return 'data-file-count';
+        if (field === 'keywordCount') return 'data-keyword-count';
+        return 'data-occurrence-count';
+      }
+
+      function applySort(field, dir) {
+        var attrName = attrNameForField(field);
+        var cards = Array.prototype.slice.call(list.querySelectorAll('.query-card'));
+        cards.sort(function(a, b) {
+          var av = Number(a.getAttribute(attrName)) || 0;
+          var bv = Number(b.getAttribute(attrName)) || 0;
+          return dir === 'asc' ? av - bv : bv - av;
+        });
+        cards.forEach(function(card) {
+          list.appendChild(card);
+        });
+      }
+
+      sortBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var field = btn.getAttribute('data-sort-field');
+          var wasActive = btn.classList.contains('is-active');
+          var dir = wasActive && btn.getAttribute('data-sort-dir') === 'desc' ? 'asc' : 'desc';
+          sortBtns.forEach(function(b) {
+            b.classList.remove('is-active');
+            b.removeAttribute('data-sort-dir');
+          });
+          btn.classList.add('is-active');
+          btn.setAttribute('data-sort-dir', dir);
+          applySort(field, dir);
+        });
+      });
+    })();
   </script>
 </body>
 </html>`;

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery } from './treeViewKeywordSearchLog';
+import {
+  sanitizeKeywordOccurrenceRowsForSave,
+  buildKeywordSearchSnapshotsByQuery,
+  sortKeywordSearchTrendQueriesByLatestOccurrenceDesc,
+} from './treeViewKeywordSearchLog';
 
 // 対象: tree_view_keyword_search_log/tree_view_keyword_search_resultsの
 // 保存前検証(sanitizeKeywordOccurrenceRowsForSave)と、傾向分析ページ用の
@@ -98,5 +102,43 @@ describe('buildKeywordSearchSnapshotsByQuery', () => {
       ],
     );
     expect(result.get('owner/repo\u0000oauth')?.snapshots.map((s) => s.searchLogId)).toEqual([1, 2]);
+  });
+});
+
+describe('sortKeywordSearchTrendQueriesByLatestOccurrenceDesc', () => {
+  function query(name: string, totalOccurrenceCount: number, keywordCount = 1) {
+    return {
+      query: name,
+      snapshots: [
+        { searchLogId: 1, searchedAt: '2026-10-15T00:00:00Z', fileCount: 1, keywordCount, totalOccurrenceCount },
+      ],
+    };
+  }
+
+  it('最新スナップショットのtotalOccurrenceCountが多い順に並べる', () => {
+    const result = sortKeywordSearchTrendQueriesByLatestOccurrenceDesc([query('少', 1), query('多', 10), query('中', 5)]);
+    expect(result.map((q) => q.query)).toEqual(['多', '中', '少']);
+  });
+
+  it('出現回数が同数ならkeywordCountが多い順に並べる', () => {
+    const result = sortKeywordSearchTrendQueriesByLatestOccurrenceDesc([query('少key', 5, 1), query('多key', 5, 3)]);
+    expect(result.map((q) => q.query)).toEqual(['多key', '少key']);
+  });
+
+  it('出現回数・keywordCountが両方同数ならqueryの文字コード順で安定的に並ぶ', () => {
+    const result = sortKeywordSearchTrendQueriesByLatestOccurrenceDesc([query('b', 5, 2), query('a', 5, 2)]);
+    expect(result.map((q) => q.query)).toEqual(['a', 'b']);
+  });
+
+  it('スナップショットが複数ある場合は最新(末尾)の値で比較する(古いスナップショットは見ない)', () => {
+    const rising = {
+      query: 'rising',
+      snapshots: [
+        { searchLogId: 1, searchedAt: '2026-10-14T00:00:00Z', fileCount: 1, keywordCount: 1, totalOccurrenceCount: 100 },
+        { searchLogId: 2, searchedAt: '2026-10-15T00:00:00Z', fileCount: 1, keywordCount: 1, totalOccurrenceCount: 1 },
+      ],
+    };
+    const result = sortKeywordSearchTrendQueriesByLatestOccurrenceDesc([rising, query('higher-now', 2)]);
+    expect(result.map((q) => q.query)).toEqual(['higher-now', 'rising']);
   });
 });
