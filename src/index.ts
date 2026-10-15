@@ -490,7 +490,7 @@ import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type GitHubWebhookPushPayload, type ResendWebhookPayload } from './types';
-import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries } from './utils/githubPushNotify';
+import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffUrl, buildPushRepoCommitIndexEntries, buildCommitFileChangeEntries } from './utils/githubPushNotify';
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
@@ -627,6 +627,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_summary_topic_links', migration: '0173', description: 'Topicと要約の対応・キーワード記録日時', syncPolicy: 'auto' },
   { name: 'ai_summary_files', migration: '0170', description: 'AI要約の元diffから抽出した変更ファイル一覧', syncPolicy: 'auto' },
   { name: 'clef_evaluations', migration: '0171', description: 'Clef(Workers AI決定モデル)によるAIチャット回答評価。jev_evaluationsとは別テーブルで、既存のJev評価データには一切影響しない', syncPolicy: 'auto' },
+  { name: 'commit_file_changes', migration: '0174', description: 'push webhookから自動蓄積するコミット単位のファイル変更記録(added/removed/modified)', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2751,6 +2752,16 @@ INSERT OR IGNORE INTO commit_summary_topic_links(topic_id, summary_log_id, recor
 SELECT t.id, k.summary_log_id, MIN(k.created_at)
 FROM ai_summary_keywords k JOIN commit_summary_topics t ON t.name = trim(k.keyword)
 GROUP BY t.id, k.summary_log_id;`,
+  '0174': `CREATE TABLE IF NOT EXISTS commit_file_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_name TEXT NOT NULL,
+  commit_hash TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  committed_at TEXT NOT NULL,
+  UNIQUE(repo_name, commit_hash, file_path)
+);
+CREATE INDEX IF NOT EXISTS idx_commit_file_changes_repo_file ON commit_file_changes(repo_name, file_path);
+CREATE INDEX IF NOT EXISTS idx_commit_file_changes_commit ON commit_file_changes(repo_name, commit_hash);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2936,6 +2947,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
+  commit_file_changes: { id: 'pk', repo_name: 'idx', commit_hash: 'idx', file_path: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3102,6 +3114,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
+  commit_file_changes: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -3374,6 +3387,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
+  commit_file_changes: { repo_name: 'installation_permissions' },
   tree_view_snapshots: { repo_name: 'installation_permissions' },
   tree_view_snapshot_refresh_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
   tree_view_update_log: { repo_name: 'installation_permissions' },
@@ -16621,6 +16635,50 @@ app.post('/api/commit-summary-status-external', async (c) => {
   }
 });
 
+/**
+ * ファイルパスの一覧を受け取り、各ファイルを最後に変更したコミットのSHAを
+ * commit_file_changes(push webhook経由で自動蓄積、2026-10-15)から返す。
+ * tree-viewの📗判定(ユーザー指摘「コミットと変更したファイルの関連付けを
+ * ちゃんと記録に残せ」)が、GitHub Commits APIへの問い合わせを省略して
+ * 最新コミットshaを得るための経路。該当する記録が無いファイルは
+ * レスポンスのキーに含まれない(未判定/push webhookがまだ届いていない等)。
+ */
+app.post('/api/commit-file-latest-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; filePaths?: unknown }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const filePaths = Array.isArray(body?.filePaths)
+    ? Array.from(new Set((body!.filePaths as unknown[]).filter((p): p is string => typeof p === 'string' && p.length > 0)))
+    : [];
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (filePaths.length === 0) return jsonUtf8({ error: 'filePaths は1件以上指定してください' }, 400);
+  if (filePaths.length > 200) return jsonUtf8({ error: 'filePaths は200件以内で指定してください' }, 400);
+
+  try {
+    const placeholders = filePaths.map(() => '?').join(',');
+    const rows = await c.env.DB.prepare(
+      `SELECT file_path, commit_hash, committed_at FROM commit_file_changes
+       WHERE repo_name = ? AND file_path IN (${placeholders})
+       ORDER BY committed_at ASC`
+    ).bind(repoName, ...filePaths).all<{ file_path: string; commit_hash: string; committed_at: string }>();
+    const latest: Record<string, { commitHash: string; committedAt: string }> = {};
+    for (const row of rows.results ?? []) {
+      // committed_at昇順で走査しているため、同じfile_pathは後の行ほど新しい
+      // (最後に上書きした値が最新コミットになる)。
+      latest[row.file_path] = { commitHash: row.commit_hash, committedAt: row.committed_at };
+    }
+    return jsonUtf8({ repoName, latest });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[commit-file-latest-external] 最新コミット取得に失敗', { repoName, error: message });
+    return jsonUtf8({ error: '最新コミット取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
 // 既存のai_summary_log(デプロイ前にWebhook経由で自動生成された要約等)には
 // キーワードが付いていない。ログイン済みユーザーが手動で少しずつ遡って
 // キーワードを付けられるようにするバックフィル用エンドポイント。
@@ -21831,6 +21889,31 @@ app.post('/webhook/github', async (c) => {
             repositoryFullName,
           });
           await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'repo_commit_index', repository: repositoryFullName }, error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
+
+      // commit_file_changes: 「各コミットがどのファイルを変更したか」をコミット単位で
+      // 記録する(2026-10-15、ユーザー指摘「コミットと変更したファイルの関連付けを
+      // ちゃんと記録に残せ」)。repo_commit_index(PRマージの連番管理)やai_summary_files
+      // (PR/push単位でしかファイルを持たない)とは別に、GitHub push webhookが
+      // 元々持っているcommits[].added/removed/modifiedから直接組み立てる
+      // (追加のGitHub API呼び出し不要)。AI要約・repo_commit_indexの成否とは無関係に、
+      // 取得できたコミットのファイル一覧は記録する。
+      const fileChangeEntries = buildCommitFileChangeEntries(pushPayload);
+      if (fileChangeEntries.length > 0) {
+        try {
+          const db = c.env.DB;
+          for (const entry of fileChangeEntries) {
+            await db.prepare(
+              'INSERT OR IGNORE INTO commit_file_changes (repo_name, commit_hash, file_path, committed_at) VALUES (?, ?, ?, ?)'
+            ).bind(repositoryFullName, entry.commitHash, entry.filePath, entry.committedAt).run();
+          }
+        } catch (error) {
+          logger.error('Failed to update commit_file_changes for push webhook', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            repositoryFullName,
+          });
+          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'commit_file_changes', repository: repositoryFullName }, error instanceof Error ? error.message : 'Unknown error');
         }
       }
     }

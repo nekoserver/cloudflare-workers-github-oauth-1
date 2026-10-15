@@ -140,3 +140,47 @@ export function buildPushRepoCommitIndexEntries(payload: GitHubWebhookPushPayloa
   }
   return entries;
 }
+
+export type CommitFileChangeEntry = {
+  commitHash: string;
+  filePath: string;
+  committedAt: string;
+};
+
+/**
+ * pushイベントのcommits配列(added/removed/modified)から、コミット単位の
+ * ファイル変更記録(commit_file_changesテーブル)へ追記する行データを
+ * 組み立てる純粋関数。
+ *
+ * 背景(2026-10-15): tree-viewの📗判定(ファイルの要約/キーワード抽出完了状態の
+ * 色分け)が、ファイルごとに「最新コミットは何か」をGitHub Commits APIへ
+ * 毎回問い合わせており、これを減らすには「コミットがどのファイルを
+ * 変更したか」をそもそもD1に持っておく必要があるという指摘を受けた。
+ * GitHubのpush webhookペイロードは追加のAPI呼び出し無しで各コミットの
+ * added/removed/modifiedファイル一覧を既に含んでいるため、ここから
+ * 直接組み立てる(ai_summary_filesのようなPR/push単位ではなく、
+ * commit_sha単位でfile_pathを持つ)。
+ *
+ * idが欠けているコミットは除外する。1コミットが複数ファイルを変更する
+ * 場合は(commitHash, filePath)の組ごとに1エントリを作る。
+ */
+export function buildCommitFileChangeEntries(payload: GitHubWebhookPushPayload): CommitFileChangeEntry[] {
+  if (payload.deleted) return [];
+  const commits = Array.isArray(payload.commits) ? payload.commits : [];
+  const entries: CommitFileChangeEntry[] = [];
+  for (const c of commits) {
+    if (typeof c.id !== 'string' || !c.id) continue;
+    const committedAt = typeof c.timestamp === 'string' && c.timestamp ? c.timestamp : new Date().toISOString();
+    const filePaths = new Set<string>();
+    for (const list of [c.added, c.removed, c.modified]) {
+      if (!Array.isArray(list)) continue;
+      for (const filePath of list) {
+        if (typeof filePath === 'string' && filePath) filePaths.add(filePath);
+      }
+    }
+    for (const filePath of filePaths) {
+      entries.push({ commitHash: c.id, filePath, committedAt });
+    }
+  }
+  return entries;
+}

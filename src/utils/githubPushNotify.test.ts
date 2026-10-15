@@ -4,6 +4,7 @@ import {
   buildPushCompareDiffUrl,
   extractPrNumberFromMergeCommitMessage,
   buildPushRepoCommitIndexEntries,
+  buildCommitFileChangeEntries,
 } from './githubPushNotify';
 import type { GitHubWebhookPushPayload } from '../types';
 
@@ -119,5 +120,61 @@ describe('buildPushRepoCommitIndexEntries', () => {
 
   it('commitsが無ければ空配列を返す', () => {
     expect(buildPushRepoCommitIndexEntries({})).toEqual([]);
+  });
+});
+
+describe('buildCommitFileChangeEntries', () => {
+  it('added/removed/modifiedを1コミットごとに重複排除してまとめる', () => {
+    const payload: GitHubWebhookPushPayload = {
+      commits: [
+        {
+          id: 'aaaa',
+          message: 'fix',
+          timestamp: '2026-10-15T01:00:00Z',
+          added: ['a.ts'],
+          removed: ['b.ts'],
+          modified: ['c.ts', 'a.ts'],
+        },
+      ],
+    };
+    expect(buildCommitFileChangeEntries(payload)).toEqual([
+      { commitHash: 'aaaa', filePath: 'a.ts', committedAt: '2026-10-15T01:00:00Z' },
+      { commitHash: 'aaaa', filePath: 'b.ts', committedAt: '2026-10-15T01:00:00Z' },
+      { commitHash: 'aaaa', filePath: 'c.ts', committedAt: '2026-10-15T01:00:00Z' },
+    ]);
+  });
+
+  it('複数コミットそれぞれのファイルをまとめる', () => {
+    const payload: GitHubWebhookPushPayload = {
+      commits: [
+        { id: 'a1', timestamp: '2026-10-15T01:00:00Z', added: ['x.ts'] },
+        { id: 'a2', timestamp: '2026-10-15T02:00:00Z', modified: ['y.ts'] },
+      ],
+    };
+    expect(buildCommitFileChangeEntries(payload)).toEqual([
+      { commitHash: 'a1', filePath: 'x.ts', committedAt: '2026-10-15T01:00:00Z' },
+      { commitHash: 'a2', filePath: 'y.ts', committedAt: '2026-10-15T02:00:00Z' },
+    ]);
+  });
+
+  it('idが欠けているコミットは除外する', () => {
+    const payload: GitHubWebhookPushPayload = {
+      commits: [{ added: ['x.ts'] }, { id: 'ok', modified: ['y.ts'] }],
+    };
+    expect(buildCommitFileChangeEntries(payload)).toEqual([{ commitHash: 'ok', filePath: 'y.ts', committedAt: expect.any(String) }]);
+  });
+
+  it('added/removed/modifiedが全て無いコミットはファイル無しになる', () => {
+    const payload: GitHubWebhookPushPayload = { commits: [{ id: 'a1', timestamp: '2026-10-15T01:00:00Z' }] };
+    expect(buildCommitFileChangeEntries(payload)).toEqual([]);
+  });
+
+  it('ブランチ削除pushでは空配列を返す', () => {
+    const payload: GitHubWebhookPushPayload = { deleted: true, commits: [{ id: 'a', added: ['x.ts'] }] };
+    expect(buildCommitFileChangeEntries(payload)).toEqual([]);
+  });
+
+  it('commitsが無ければ空配列を返す', () => {
+    expect(buildCommitFileChangeEntries({})).toEqual([]);
   });
 });
