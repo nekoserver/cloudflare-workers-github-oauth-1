@@ -87,6 +87,8 @@ export type Bindings = {
   CF_AUTH_WEBHOOK_SECRET?: string;
   /** /webhook/cf-wh1（Cloudflareからのwebhook）のHMAC-SHA256署名検証用シークレット */
   CF_WH1_WEBHOOK_SECRET?: string;
+  /** /webhook/ts（Tailscaleからのwebhook）のHMAC-SHA256署名検証用シークレット */
+  CF_WEBHOOK_SECRET?: string;
   /** harness_hook_logへのPostToolUseフック書き込み用の共有シークレット */
   HARNESS_HOOK_SECRET?: string;
   /** /access-verifyページ: Cloudflare Access JWT署名検証に使うチーム名(<チーム名>.cloudflareaccess.com) */
