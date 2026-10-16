@@ -497,7 +497,7 @@ import { buildPushNotificationText, buildPushSummaryInput, buildPushCompareDiffU
 import { buildSnapshotRepoNotSupportedMessage } from './utils/treeViewSnapshotMessage';
 import { findCachedCommitHashes } from './utils/commitSummaryCacheStatus';
 import { dedupeKeywords, buildKeywordOccurrenceResults, type KeywordOccurrenceRow } from './utils/treeViewKeywordOccurrence';
-import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery, sortKeywordSearchTrendQueriesByLatestOccurrenceDesc, type KeywordSearchLogRow, type KeywordSearchResultCountRow } from './utils/treeViewKeywordSearchLog';
+import { sanitizeKeywordOccurrenceRowsForSave, buildKeywordSearchSnapshotsByQuery, sortKeywordSearchTrendQueriesByLatestOccurrenceDesc, fetchLatestKeywordSearchLog, type KeywordSearchLogRow, type KeywordSearchResultCountRow } from './utils/treeViewKeywordSearchLog';
 import { mergeCommitActivityDaily, computeBackfillCoverage } from './utils/commitActivitySummary';
 import { extractSummaryKeywords, saveSummaryKeywords } from './utils/aiSummaryKeywords';
 import { saveSummaryFiles } from './utils/aiSummaryFiles';
@@ -16841,6 +16841,40 @@ app.post('/api/tree-view-keyword-search-log-external', async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[tree-view-keyword-search-log-external] 保存に失敗', { repoName, query, error: message });
     return jsonUtf8({ error: '保存でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * dynamicnekoのtree-view検索結果パネルの「更新可」/「最新状態」バッジ
+ * (ユーザー要望2026-10-16: 「新たな要約/切り出し後あるいは画面右側の
+ * ヒット件数とキーワードの値が前回データベース記録時より変化している場合は
+ * それが更新可能であるという意味で薄緑色の中抜き枠で『更新可』ボタンを
+ * 設置し...」)用。(repoName, query)の組で前回保存済みの直近1件の
+ * スナップショット(fileCount・results)を返す。dynamicneko側はこれと
+ * 現在の表示内容を比較して「更新可」か「最新状態」かを判定する(比較自体は
+ * dynamicneko側のisKeywordSearchResultUpToDateが行う。比較対象の現在値は
+ * このWorkerが持たないため、ここでは前回値を返すだけに留める)。
+ */
+app.post('/api/tree-view-keyword-search-log-latest-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string; repoName?: string; query?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+
+  const repoName = (body?.repoName ?? '').trim();
+  const query = (body?.query ?? '').trim();
+  if (!repoName) return jsonUtf8({ error: 'repoName は必須です' }, 400);
+  if (!query) return jsonUtf8({ error: 'query は必須です' }, 400);
+
+  try {
+    const snapshot = await fetchLatestKeywordSearchLog(c.env.DB, auth.login as string, repoName, query);
+    if (!snapshot) return jsonUtf8({ found: false });
+    return jsonUtf8({ found: true, fileCount: snapshot.fileCount, searchedAt: snapshot.searchedAt, results: snapshot.results });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-keyword-search-log-latest-external] 取得に失敗', { repoName, query, error: message });
+    return jsonUtf8({ error: '取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
