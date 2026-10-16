@@ -123,6 +123,13 @@ class_name = "DemoContainer"
 image = "./containers/demo/Dockerfile"
 max_instances = 1
 
+# SSH(`wrangler containers ssh <INSTANCE_ID>` またはsshクライアント経由)で
+# コンテナにログインするための公開鍵。wranglerのSSHサポートはデフォルトで
+# 有効。ed25519のみ対応。秘密鍵はここに書かない(公開鍵のみ)。
+[[containers.authorized_keys]]
+name = "admin"
+public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM8/iV+DiD+cTQQgadOhHKkTUR+2ldz9ocGxC45sRbD"
+
 [[durable_objects.bindings]]
 name = "DEMO_CONTAINER"
 class_name = "DemoContainer"
