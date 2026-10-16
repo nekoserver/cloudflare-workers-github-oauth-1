@@ -12,6 +12,8 @@ assets = { directory = "./public" }
 # 環境変数（本番環境ではwrangler secretを使用）
 [vars]
 ENVIRONMENT = "development"
+# アカウントIDは秘密情報ではないため[vars]に置く(/cf-containersのトークン設定・トンネル一覧で使用)
+CLOUDFLARE_ACCOUNT_ID = "4eb48547c6f6a8194e6c3eb5e700463f"
 # Redmine公開URL→Apache HMACゲートウェイURL。実環境に合わせて設定する。
 # REDMINE_HMAC_TARGETS = '{"https://redmine.example.com/redmine":"https://redmine.example.com/redmine-hmac"}'
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
