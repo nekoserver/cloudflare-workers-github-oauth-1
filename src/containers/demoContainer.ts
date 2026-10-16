@@ -31,6 +31,10 @@ export class DemoContainer extends Container<Bindings> {
       NEKOROOT_HOSTNAME: env.NEKOROOT_HOSTNAME ?? '',
       NEKOROOT_TUNNEL_TOKEN: env.NEKOROOT_TUNNEL_TOKEN ?? '',
       TAILSCALE_AUTHKEY: env.TAILSCALE_AUTHKEY ?? '',
+      // コンテナ内のcfコマンド(containers/demo/cf)用。Worker本体の
+      // CLOUDFLARE_API_KEYは流用せず、コンテナ専用のトークンを渡す。
+      CF_CONTAINER_API_TOKEN: env.CF_CONTAINER_API_TOKEN ?? '',
+      CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID ?? '',
     };
   }
 

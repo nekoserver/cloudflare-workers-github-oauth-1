@@ -36,5 +36,6 @@ describe('setWorkerSecret', () => {
   it('ALLOWED_SECRET_NAMESにNEKOROOT_TUNNEL_TOKENとTAILSCALE_AUTHKEYを含む', () => {
     expect(ALLOWED_SECRET_NAMES).toContain('NEKOROOT_TUNNEL_TOKEN');
     expect(ALLOWED_SECRET_NAMES).toContain('TAILSCALE_AUTHKEY');
+    expect(ALLOWED_SECRET_NAMES).toContain('CF_CONTAINER_API_TOKEN');
   });
 });
