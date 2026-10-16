@@ -45,7 +45,7 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
-import { setWorkerSecret, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
+import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -19519,8 +19519,10 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('[cf-containers-secrets] secret設定に失敗', { name, error: message });
-    return jsonUtf8({ error: 'secretの設定に失敗しました: ' + message }, 502);
+    const verify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! });
+    const diag = `使用トークン=${cfApiKeySource(c.env)} / アカウントID=${c.env.CLOUDFLARE_ACCOUNT_ID} / トークン検証: ${verify}`;
+    logger.error('[cf-containers-secrets] secret設定に失敗', { name, error: message, diag });
+    return jsonUtf8({ error: 'secretの設定に失敗しました: ' + message + ' (' + diag + ')' }, 502);
   }
 
   // secretを設定しただけではコンテナ内の環境変数は更新されない
@@ -27621,6 +27623,13 @@ export { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots };
 
 export default app;
 
+
+function cfApiKeySource(env: Bindings): string {
+  if (env.CLOUDFLARE_API_KEY) return 'CLOUDFLARE_API_KEY';
+  if ((env as any).CLOUDFLARE_API_TOKEN) return 'CLOUDFLARE_API_TOKEN';
+  if (env.CF_CONTAINER_API_TOKEN) return 'CF_CONTAINER_API_TOKEN';
+  return 'なし';
+}
 
 function cfApiKey(env: Bindings): string | undefined {
   return env.CLOUDFLARE_API_KEY || (env as any).CLOUDFLARE_API_TOKEN || env.CF_CONTAINER_API_TOKEN;

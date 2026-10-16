@@ -61,7 +61,37 @@ export async function setWorkerSecret(
   );
   const payload = (await response.json()) as CloudflareEnvelope<unknown>;
   if (!response.ok || !payload.success) {
-    const message = payload.errors?.map((e) => e.message).filter(Boolean).join(', ');
-    throw new Error(message || `Cloudflare API error (${response.status})`);
+    const message = payload.errors?.map((e) => `${e.message}(code ${e.code})`).join(', ');
+    throw new Error(`${message || 'Cloudflare API error'} [HTTP ${response.status}]`);
   }
+}
+
+/**
+ * 認証失敗時の診断用。トークンをユーザートークン/アカウントトークン両方の
+ * verify APIにかけ、Cloudflareが返した状態をそのまま文字列で返す(値は含めない)。
+ */
+export async function verifyApiToken(
+  credentials: CfWorkerSecretCredentials,
+  fetcher: typeof fetch = fetch
+): Promise<string> {
+  const urls: Array<[string, string]> = [
+    ['user', 'https://api.cloudflare.com/client/v4/user/tokens/verify'],
+    ['account', `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(credentials.accountId)}/tokens/verify`],
+  ];
+  const results: string[] = [];
+  for (const [label, url] of urls) {
+    try {
+      const response = await fetcher(url, { headers: { Authorization: `Bearer ${credentials.apiKey}` } });
+      const payload = (await response.json()) as CloudflareEnvelope<{ status?: string } | null>;
+      if (payload.success) {
+        results.push(`${label}: ${payload.result?.status ?? 'ok'}`);
+      } else {
+        const errs = payload.errors?.map((e) => `${e.message}(code ${e.code})`).join(', ');
+        results.push(`${label}: NG ${errs ?? ''} [HTTP ${response.status}]`);
+      }
+    } catch (err) {
+      results.push(`${label}: 検証呼び出し失敗 ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return results.join(' / ');
 }
