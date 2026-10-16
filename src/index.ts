@@ -42,7 +42,8 @@ import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getCfContainersPage } from './views/cfContainers';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
-import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart } from './utils/cfContainerOperationLog';
+import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents } from './utils/cfContainerOperationLog';
+import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
@@ -19418,6 +19419,9 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
   const stub = await getDemoContainerStub(c.env);
   const statusResponse = await buildContainerStatusResponse(stub);
   let usage: { totalStartCount: number; lastStartedAt: string | null; elapsedSinceLastStart: string | null } | undefined;
+  let cost:
+    | { cumulativeConnectedSeconds: number; estimatedCostUsd: number; hourlyRate: ReturnType<typeof computeHourlyRate>; instanceType: string }
+    | undefined;
   if (c.env.DB) {
     try {
       const summary = await getContainerUsageSummary(c.env.DB);
@@ -19426,12 +19430,29 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
       const message = err instanceof Error ? err.message : String(err);
       logger.error('[cf-containers-status] 稼働ログ集計の取得に失敗', { error: message });
     }
+    try {
+      const events = await getContainerOperationEvents(c.env.DB);
+      const cumulativeConnectedSeconds = computeCumulativeConnectedSeconds(events);
+      cost = {
+        cumulativeConnectedSeconds,
+        estimatedCostUsd: estimateCostUsd(cumulativeConnectedSeconds, CONFIGURED_INSTANCE_SPEC),
+        hourlyRate: computeHourlyRate(CONFIGURED_INSTANCE_SPEC),
+        instanceType: CONFIGURED_INSTANCE_TYPE,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-status] 累計接続時間・コスト計算の取得に失敗', { error: message });
+    }
   }
   // wrangler containers ssh <INSTANCE_ID>で使うインスタンスID。
   // Durable ObjectのIDは固定名'demo'から導出される値のため、コンテナが
   // 起動しているかに関わらずバインディングさえあれば常に計算できる。
   const instanceId = c.env.DEMO_CONTAINER ? c.env.DEMO_CONTAINER.idFromName('demo').toString() : null;
-  return jsonUtf8({ ...statusResponse, usage, instanceId });
+  // sleepAfterはsrc/containers/demoContainer.tsの定数(無操作でこの時間が
+  // 経過すると自動停止する)。cloudflare:workers越しのimportを避けるため
+  // ここでは同じ値を文字列として明示している。値を変えたら両方更新すること。
+  const sleepAfter = '5m';
+  return jsonUtf8({ ...statusResponse, usage, instanceId, cost, sleepAfter });
 });
 
 /**

@@ -53,6 +53,26 @@ export function formatElapsedSinceLastStart(lastStartedAt: string | null, now: D
   return hours > 0 ? `${hours}時間${minutes}分` : `${minutes}分`;
 }
 
+export interface ContainerOperationEventRow {
+  action: string;
+  result: string;
+  createdAt: string;
+}
+
+/**
+ * 累計接続時間の計算(cfContainerCost.tsのcomputeCumulativeConnectedSeconds)
+ * に使う、start/restart/stopイベントの全件。1行あたりのサイズが小さく、
+ * 管理者限定ページの操作履歴なので全件取得で十分(ページングは未実装)。
+ */
+export async function getContainerOperationEvents(db: D1Database): Promise<ContainerOperationEventRow[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT action, result, created_at AS createdAt FROM cf_container_operation_log WHERE action IN ('start', 'restart', 'stop') ORDER BY created_at ASC"
+    )
+    .all<{ action: string; result: string; createdAt: string }>();
+  return results ?? [];
+}
+
 export async function recordContainerOperation(
   db: D1Database | undefined,
   entry: ContainerOperationLogEntry,

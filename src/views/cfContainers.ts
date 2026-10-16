@@ -70,14 +70,24 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <h1>Cloudflare Containers（デモ）</h1>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
 <div class="notice">
-  Durable Objects・Containersはどちらも使用量課金が発生します（DO: リクエスト数・実行時間・ストレージ、Containers: vCPU秒・メモリGiB秒・ディスクGB-月）。
-  使い終わったら必ず「停止」を押してください。一定時間操作が無ければコンテナ側で自動停止するよう設定していますが、放置しないよう注意してください。
+  無操作のまま<strong id="sleep-after-value">?</strong>経過すると自動停止します。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
 <div class="card">
   <div class="status-row">
     <span id="status-chip" class="chip" data-running="false">状態取得中…</span>
     <button id="btn-refresh" type="button">状態を再取得</button>
   </div>
+  <div id="live-clock" style="font-size:20px;font-weight:600;margin-bottom:10px;" hidden>00:00:00</div>
+  <table class="health-table" style="margin-bottom:10px;">
+    <thead><tr><th></th><th>vCPU(0.5)</th><th>メモリ(4GiB)</th><th>ディスク(8GB)</th><th>合計</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>$/時間</td>
+        <td id="rate-vcpu"></td><td id="rate-memory"></td><td id="rate-disk"></td><td id="rate-total"></td>
+      </tr>
+    </tbody>
+  </table>
+  <div id="cost-summary" style="font-size:13px;"></div>
   <button id="btn-start" type="button">起動</button>
   <button id="btn-stop" type="button">停止</button>
   <button id="btn-restart" type="button">再起動</button>
@@ -144,6 +154,37 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     });
   });
 
+  var sleepAfterValue = document.getElementById('sleep-after-value');
+  var liveClock = document.getElementById('live-clock');
+  var costSummary = document.getElementById('cost-summary');
+  var rateCells = {
+    vcpu: document.getElementById('rate-vcpu'),
+    memory: document.getElementById('rate-memory'),
+    disk: document.getElementById('rate-disk'),
+    total: document.getElementById('rate-total')
+  };
+  var liveClockTimer = null;
+  var sleepAfterShown = false;
+
+  function formatSleepAfter(value) {
+    var m = /^(\d+)([a-z]+)$/.exec(String(value || ''));
+    if (!m) return String(value || '不明');
+    var n = m[1];
+    if (m[2] === 'm') return n + '分';
+    if (m[2] === 's') return n + '秒';
+    if (m[2] === 'h') return n + '時間';
+    return value;
+  }
+
+  function formatHms(totalSeconds) {
+    var s = Math.max(0, Math.floor(totalSeconds));
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    return pad(h) + ':' + pad(m) + ':' + pad(sec);
+  }
+
   function renderStatus(data) {
     chip.textContent = data.label;
     chip.setAttribute('data-running', data.running ? 'true' : 'false');
@@ -164,6 +205,36 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       sshCommand.textContent = 'ssh -o ProxyCommand="wrangler containers ssh %h" cloudchamber@' + data.instanceId;
     } else {
       sshBox.hidden = true;
+    }
+    if (!sleepAfterShown && data.sleepAfter) {
+      sleepAfterValue.textContent = formatSleepAfter(data.sleepAfter);
+      sleepAfterShown = true;
+    }
+    if (data.cost) {
+      rateCells.vcpu.textContent = '$' + data.cost.hourlyRate.vcpuUsdPerHour.toFixed(5);
+      rateCells.memory.textContent = '$' + data.cost.hourlyRate.memoryUsdPerHour.toFixed(5);
+      rateCells.disk.textContent = '$' + data.cost.hourlyRate.diskUsdPerHour.toFixed(5);
+      rateCells.total.textContent = '$' + data.cost.hourlyRate.totalUsdPerHour.toFixed(5);
+      costSummary.textContent =
+        '累計接続時間: ' + formatHms(data.cost.cumulativeConnectedSeconds) +
+        ' / 予定支出(概算、無料枠未考慮): $' + data.cost.estimatedCostUsd.toFixed(4) +
+        '（' + data.cost.instanceType + '）';
+    }
+    if (liveClockTimer) {
+      clearInterval(liveClockTimer);
+      liveClockTimer = null;
+    }
+    if (data.running && data.usage && data.usage.lastStartedAt) {
+      var startedAtMs = Date.parse(data.usage.lastStartedAt);
+      liveClock.hidden = false;
+      var tick = function () {
+        var elapsedThisSession = (Date.now() - startedAtMs) / 1000;
+        liveClock.textContent = formatHms(elapsedThisSession) + '（今回のセッション）';
+      };
+      tick();
+      liveClockTimer = setInterval(tick, 1000);
+    } else {
+      liveClock.hidden = true;
     }
   }
 
