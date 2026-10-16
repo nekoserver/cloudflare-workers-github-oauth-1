@@ -7,6 +7,7 @@
 export type CloudflareTunnelCredentials = {
   accountId: string;
   apiKey: string;
+  apiEmail?: string;
 };
 
 type CloudflareTunnelRaw = {
@@ -39,7 +40,11 @@ export async function listCloudflareTunnels(
 ): Promise<CloudflareTunnelSummary[]> {
   const response = await fetcher(
     `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(credentials.accountId)}/cfd_tunnel?is_deleted=false`,
-    { headers: { Authorization: `Bearer ${credentials.apiKey}` } }
+    {
+      headers: credentials.apiEmail
+        ? { "X-Auth-Email": credentials.apiEmail, "X-Auth-Key": credentials.apiKey }
+        : { Authorization: `Bearer ${credentials.apiKey}` },
+    }
   );
   const payload = (await response.json()) as CloudflareEnvelope<CloudflareTunnelRaw[]>;
   if (!response.ok || !payload.success) {

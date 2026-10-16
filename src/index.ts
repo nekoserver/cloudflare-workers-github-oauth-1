@@ -19476,6 +19476,7 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
     const tunnels = await listCloudflareTunnels({
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
+      apiEmail: cfApiEmail(c.env),
     });
     return jsonUtf8({ tunnels });
   } catch (err) {
@@ -19512,7 +19513,7 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   try {
     // wrangler.tomlの name と一致させること(このWorker自身のスクリプト名)。
     await setWorkerSecret(
-      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! },
+      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)!, apiEmail: cfApiEmail(c.env) },
       'cloudflare-workers-github-oauth-1',
       name as AllowedSecretName,
       value
@@ -27624,4 +27625,10 @@ export default app;
 
 function cfApiKey(env: Bindings): string | undefined {
   return env.CLOUDFLARE_API_KEY || (env as any).CLOUDFLARE_API_TOKEN || env.CF_CONTAINER_API_TOKEN;
+}
+
+// CLOUDFLARE_API_KEYがGlobal API Keyの場合は/cf-dashboardと同じくX-Auth-Email方式で送る
+// (Bearerで送るとCloudflareがAuthentication errorを返す)。
+function cfApiEmail(env: Bindings): string | undefined {
+  return env.CLOUDFLARE_API_KEY ? env.CLOUDFLARE_API_EMAIL : undefined;
 }

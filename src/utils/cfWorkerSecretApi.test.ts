@@ -39,3 +39,14 @@ describe('setWorkerSecret', () => {
     expect(ALLOWED_SECRET_NAMES).toContain('CF_CONTAINER_API_TOKEN');
   });
 });
+
+describe('setWorkerSecret (Global API Key)', () => {
+  it('apiEmailがあればX-Auth-Email/X-Auth-Keyで送り、Bearerにしない(Authentication error回避)', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, result: {} }), { status: 200 }));
+    await setWorkerSecret({ accountId: 'a', apiKey: 'gk', apiEmail: 'me@example.com' }, 's', 'NEKOROOT_TUNNEL_TOKEN', 'v', fetcher as unknown as typeof fetch);
+    const headers = (fetcher.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-Auth-Email']).toBe('me@example.com');
+    expect(headers['X-Auth-Key']).toBe('gk');
+    expect(headers.Authorization).toBeUndefined();
+  });
+});
