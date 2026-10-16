@@ -40,6 +40,8 @@ import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, 
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { getCfContainersPage } from './views/cfContainers';
+import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -19351,6 +19353,97 @@ app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) =
     return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getCfDashboardPage());
+});
+
+/**
+ * @cloudflare/containersはcloudflare:workers(workerdのみに存在する組み込み
+ * モジュール)を読み込むため、プレーンNode環境のテストが./indexを直接
+ * importしたときに巻き込まれて失敗しないよう、静的importせず実際に
+ * リクエストを処理するときにだけdynamic importする
+ * (src/containers/demoContainer.tsのコメント参照)。
+ */
+async function getDemoContainerStub(env: Bindings) {
+  if (!env.DEMO_CONTAINER) return null;
+  const { getContainer } = await import('@cloudflare/containers');
+  return getContainer(env.DEMO_CONTAINER, 'demo');
+}
+
+async function buildContainerStatusResponse(
+  stub: Awaited<ReturnType<typeof getDemoContainerStub>>
+): Promise<{ label: string; running: boolean; status?: string; error?: string }> {
+  if (!stub) return { label: formatContainerStatusLabel(null), running: false, error: 'DEMO_CONTAINERバインディングが未設定です' };
+  try {
+    const state = (await stub.getState()) as ContainerStateLike;
+    return { label: formatContainerStatusLabel(state), running: isContainerRunning(state), status: state.status };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { label: formatContainerStatusLabel(null), running: false, error: message };
+  }
+}
+
+/**
+ * Cloudflare Containersのデモ用管理ページ（管理者認証が必要）。
+ * 起動・停止・再起動・状態参照・プロキシのデモ。注意: Durable Objects・
+ * Containersはどちらも使用量課金が発生する。使い終わったら必ず停止すること。
+ */
+app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(c.req.path), 403);
+  }
+  return c.html(getCfContainersPage());
+});
+
+/** デモコンテナの現在状態を返す（管理者認証が必要）。 */
+app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const stub = await getDemoContainerStub(c.env);
+  return jsonUtf8(await buildContainerStatusResponse(stub));
+});
+
+/** デモコンテナの起動/停止/再起動（管理者認証が必要）。 */
+app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json<{ action?: string }>().catch(() => null);
+  const action = resolveContainerAction(body?.action ?? '');
+  if (!action) return jsonUtf8({ error: 'actionはstart/stop/restartのいずれかを指定してください' }, 400);
+
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+
+  try {
+    if (action === 'start') {
+      await stub.start();
+    } else if (action === 'stop') {
+      await stub.stop();
+    } else {
+      await stub.stop();
+      await stub.start();
+    }
+    return jsonUtf8(await buildContainerStatusResponse(stub));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-action] 操作に失敗', { action, error: message });
+    return jsonUtf8({ error: '操作でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * デモコンテナへのプロキシ（管理者認証が必要）。コンテナが停止していれば
+ * Container.fetch経由で起動を待ってからリクエストを転送する。
+ */
+app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+  const prefix = '/cf-containers/proxy';
+  const url = new URL(c.req.url);
+  const forwardPath = url.pathname.slice(prefix.length) || '/';
+  const forwardUrl = `${url.origin}${forwardPath}${url.search}`;
+  try {
+    return await stub.fetch(new Request(forwardUrl, c.req.raw));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonUtf8({ error: 'プロキシでサーバーエラーが発生しました: ' + message }, 502);
+  }
 });
 
 /**

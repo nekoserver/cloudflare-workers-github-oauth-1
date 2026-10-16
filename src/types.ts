@@ -2,6 +2,10 @@
  * 共通型定義
  */
 import type { JWTPayload } from './utils/jwt';
+// import typeのため実行時にはこの行自体が消える(@cloudflare/containersの
+// cloudflare:workers importも実行されない)。プレーンNode環境のテストが
+// このファイルをimportしても問題ない。
+import type { DemoContainer } from './containers/demoContainer';
 
 /** Cloudflare Workers 環境変数バインディング */
 export type Bindings = {
@@ -35,6 +39,14 @@ export type Bindings = {
    * [[services]]でdynamicnekoをbindingすること(URLではなくFetcher)。
    */
   DYNAMICNEKO?: Fetcher;
+  /**
+   * /cf-containers（Cloudflare Containersのデモ用管理ページ、管理者限定）が
+   * 起動・停止・再起動・プロキシの対象にするデモコンテナのDurable Object
+   * バインディング。wrangler.tomlの[[containers]]・
+   * [[durable_objects.bindings]]参照。DO・Containersはどちらも使用量課金が
+   * 発生するため、使い終わったら必ず停止すること。
+   */
+  DEMO_CONTAINER?: DurableObjectNamespace<DemoContainer>;
   /**
    * /wh-setting_github-to-slackページが、cf-auth(dynamicneko/cf-auth)側の
    * 設定状況(secretの有無)を横並びで比較表示するためのService Binding。

@@ -2,6 +2,14 @@ import app, { syncAllTreeViewSnapshots } from './index';
 import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
 import type { Bindings } from './types';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
+// Durable Objectのclass_nameバインディング(wrangler.tomlの
+// [[durable_objects.bindings]])には、workerdから見えるエントリモジュール
+// (このファイル)自身がそのクラスをexportしている必要がある。クラスの
+// named exportはworkerdの起動時検証上「function or ExportedHandler」の
+// 条件を満たす(クラスはJS上typeof === 'function'の値のため)ため、下の
+// worker-entry-config.test.tsが本来防ぎたかった「値のnamed export」
+// (例: export const X = 90)とは別物。詳細はそのテストのコメント参照。
+export { DemoContainer } from './containers/demoContainer';
 
 export default {
   fetch: app.fetch,
