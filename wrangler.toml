@@ -110,6 +110,38 @@ database_id = "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf"
 [ai]
 binding = "AI"
 
+# /cf-containers（Cloudflare Containersのデモ用管理ページ、管理者限定）が
+# 起動・停止・再起動・プロキシの対象にするデモコンテナ。
+# 注意（必ず理解してから使うこと）: Durable Objects・Containersはどちらも
+# 使用量課金が発生する（DO: リクエスト数・実行時間・ストレージ、
+# Containers: vCPU秒・メモリGiB秒・ディスクGB-月。起動中は継続的に課金
+# されるため、使い終わったら/cf-containersから必ず停止すること）。
+# sleepAfter(src/containers/demoContainer.ts)で一定時間後に自動停止する
+# ようにしているが、起動したまま放置しないよう運用で注意する。
+[[containers]]
+class_name = "DemoContainer"
+image = "./containers/demo/Dockerfile"
+max_instances = 1
+# standard-1(1/2 vCPU・4GiBメモリ・8GBディスク)。既定のlite(1/16 vCPU・
+# 256MiB)ではtmux上でCLIを動かすには心細いため、実用と節約のバランスを
+# とってstandardの中で最小のこの構成にしている。
+instance_type = "standard-1"
+
+# SSH(`wrangler containers ssh <INSTANCE_ID>` またはsshクライアント経由)で
+# コンテナにログインするための公開鍵。wranglerのSSHサポートはデフォルトで
+# 有効。ed25519のみ対応。秘密鍵はここに書かない(公開鍵のみ)。
+[[containers.authorized_keys]]
+name = "admin"
+public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM8/iV+DiD+cTQQgadOhHKkTUR+2ldz9ocGxC45sRbD"
+
+[[durable_objects.bindings]]
+name = "DEMO_CONTAINER"
+class_name = "DemoContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DemoContainer"]
+
 # dynamicneko（Cloudflare Dynamic Worker Loader使用）への直接呼び出し。/neko hellodwが
 # 起動確認pingを送る。公開URLへの通常fetch()は*.workers.dev同士だとCloudflareに
 # HTTP 404 error code: 1042で拒否される（実際に本番で発生し確認済み）ため、

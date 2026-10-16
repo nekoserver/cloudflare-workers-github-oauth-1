@@ -4,6 +4,12 @@ vi.mock('./index', () => ({
   default: { fetch: vi.fn() }, syncAllTreeViewSnapshots: vi.fn(),
 }));
 vi.mock('./utils/treeViewCronCountdown', () => ({ registerNextTreeViewCronCountdown: vi.fn() }));
+// worker-entry.tsはDurable Object(DemoContainer)をre-exportしており、
+// その実体(@cloudflare/containers)はworkerdのみに存在するcloudflare:workers
+// を読み込むため、プレーンNode環境のこのテストではモックに置き換える
+// (このテストが検証したいのはscheduled()ハンドラの挙動であり、
+// DemoContainerのexport自体の検証はsrc/worker-entry-config.test.tsが担う)。
+vi.mock('./containers/demoContainer', () => ({ DemoContainer: class {} }));
 import worker from './worker-entry';
 import { syncAllTreeViewSnapshots } from './index';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';

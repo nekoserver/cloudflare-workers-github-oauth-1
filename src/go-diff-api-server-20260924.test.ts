@@ -99,7 +99,7 @@ describe('POST /api/diff: go-diff-wasmのサーバー配線', () => {
 
   it('APIキー(nkapi_...)でも外部から呼び出せる', async () => {
     const apiKeyRow = { id: 'key-1', user_id: 'ext-user', label: 'test', expires_at: null, revoked_at: null };
-    const executionCtx = { waitUntil: () => {}, passThroughOnException: () => {}, props: {} } as ExecutionContext;
+    const executionCtx = { waitUntil: () => {}, passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
     const res = await app.request(
       '/api/diff',
       {

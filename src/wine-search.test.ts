@@ -734,7 +734,7 @@ describe('POST /api/wine/search, /api/wine/bulk-register, GET /wine-search', () 
       let queryVector: number[];
       try {
         const result = await env.AI.run('dummy' as never, { text: [q] } as never);
-        const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+        const resultObj = (typeof result === 'object' && result !== null) ? result as unknown as Record<string, unknown> : {};
         const data = Array.isArray(resultObj.data) ? resultObj.data as number[][] : [];
         queryVector = Array.isArray(data[0]) ? data[0] : [];
       } catch (e) {
