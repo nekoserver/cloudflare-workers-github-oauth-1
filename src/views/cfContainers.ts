@@ -137,10 +137,25 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     refresh: document.getElementById('btn-refresh')
   };
 
+  var isRunning = false;
+
+  // 起動中は「起動」、停止中は「停止」を押せないようにする(状態と矛盾する
+  // 操作をボタンの見た目からも分かるようにする)。
+  function applyRunningDisabled() {
+    buttons.start.disabled = isRunning;
+    buttons.stop.disabled = !isRunning;
+  }
+
   function setBusy(busy) {
-    Object.keys(buttons).forEach(function (key) {
-      buttons[key].disabled = busy;
-    });
+    if (busy) {
+      Object.keys(buttons).forEach(function (key) {
+        buttons[key].disabled = true;
+      });
+      return;
+    }
+    buttons.restart.disabled = false;
+    buttons.refresh.disabled = false;
+    applyRunningDisabled();
   }
 
   var usageSummary = document.getElementById('usage-summary');
@@ -188,6 +203,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   function renderStatus(data) {
     chip.textContent = data.label;
     chip.setAttribute('data-running', data.running ? 'true' : 'false');
+    isRunning = !!data.running;
+    applyRunningDisabled();
     if (data.usage) {
       var parts = ['累計起動回数: ' + data.usage.totalStartCount + '回'];
       if (data.usage.lastStartedAt) {
