@@ -20,15 +20,16 @@
 # tmux: SSH(wrangler containers ssh)で入った後、接続が切れても作業(Codex/
 # Claude CLI等のセッション)を継続できるようにするターミナルマルチプレクサ。
 #
-# Node.js: Ubuntu 24.04のapt既定パッケージ(18.x系、ディストリが追従する
-# LTSより古い)ではなく、NodeSourceの配布リポジトリから最新のNode.jsを導入。
+# Node.js: NodeSource経由での最新版導入を試みたが、deb.nodesource.comへの
+# 到達性をこのセッションのサンドボックスでは確認できなかった(Cloudflare
+# Workers Build側での到達性は未確認)。実際のCI失敗の原因はこのDockerfile
+# ではなくDurable Objectのmigration(wrangler versions upload非対応)だと
+# 判明した後も、外部依存を減らす目的でUbuntu標準リポジトリのnodejsパッケージ
+# に戻したままにしている。18.x系とやや古いが、server.js自体はNode標準
+# モジュールのみに依存し要求するAPIも軽量なため、動作に支障はない。
 FROM ubuntu:24.04
 RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg tmux \
-    && curl -fsSL https://deb.nodesource.com/setup_current.x -o /tmp/nodesource_setup.sh \
-    && bash /tmp/nodesource_setup.sh \
-    && rm -f /tmp/nodesource_setup.sh \
-    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get install -y --no-install-recommends ca-certificates nodejs tmux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
