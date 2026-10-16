@@ -19521,8 +19521,7 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   const stub = await getDemoContainerStub(c.env);
   if (stub) {
     try {
-      await stub.stop();
-      await stub.start();
+      await stub.restart();
       await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
         logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
       );
@@ -19553,8 +19552,7 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
     } else if (action === 'stop') {
       await stub.stop();
     } else {
-      await stub.stop();
-      await stub.start();
+      await stub.restart();
     }
     await recordContainerOperation(c.env.DB, { action, performedBy, result: 'success' }, (message) =>
       logger.error('[cf-containers-action] 操作ログの記録に失敗', { action, error: message })

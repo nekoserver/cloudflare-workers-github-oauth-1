@@ -21,6 +21,13 @@ const stubMethods = {
   getState: vi.fn(),
   start: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn().mockResolvedValue(undefined),
+  // DemoContainer.restart()は同一DOインスタンス内でstop→startをロック付きで
+  // 実行する(排他制御)。route側はstub.restart()だけを呼ぶため、ここでも
+  // 実際にstop/startを順に呼ぶ実装で模倣する。
+  restart: vi.fn().mockImplementation(async function (this: typeof stubMethods) {
+    await this.stop();
+    await this.start();
+  }),
   fetch: vi.fn(),
 };
 

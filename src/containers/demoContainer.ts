@@ -34,6 +34,48 @@ export class DemoContainer extends Container<Bindings> {
     };
   }
 
+  // start()/stop()はContainer基底クラスの実装がfetch()等のストレージ外I/Oを
+  // 使っており、Durable Objectのinput gate(ストレージ操作のみ保護する)の
+  // 対象外になる。そのため2つの管理者タブ、または/api/cf-containers/action
+  // と/api/cf-containers/secretsからの同時リクエストがstart()/stop()を
+  // 並行して呼ぶと、呼び出しが入れ替わって意図しない状態になりうる
+  // (出典: https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
+  // 「Input gates only protect storage operations」)。
+  // このインスタンス変数によるロックは、同一DOインスタンスが生きている間は
+  // 同期的にチェック→セットされるため確実に排他できる(await前に判定する)。
+  private busy = false;
+
+  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.busy) {
+      throw new Error('別の操作が進行中です。しばらく待ってから再試行してください');
+    }
+    this.busy = true;
+    try {
+      return await fn();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async start(...args: Parameters<Container['start']>): Promise<void> {
+    return this.withLock(() => super.start(...args));
+  }
+
+  async stop(...args: Parameters<Container['stop']>): Promise<void> {
+    return this.withLock(() => super.stop(...args));
+  }
+
+  /**
+   * stop→startを1回のロック取得で実行する(index.ts側でstop()とstart()を
+   * 別々に呼ぶと、その間に別リクエストが割り込める隙間が生まれるため)。
+   */
+  async restart(): Promise<void> {
+    return this.withLock(async () => {
+      await super.stop();
+      await super.start();
+    });
+  }
+
   /**
    * コンテナが停止するたびに呼ばれる(sleepAfterによる自動停止・管理者操作
    * による明示的な停止のどちらも含む)。/api/cf-containers/actionルート側の
