@@ -19470,7 +19470,7 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
  */
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_KEY') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
+    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
   }
   try {
     const tunnels = await listCloudflareTunnels({
@@ -19494,7 +19494,7 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
  */
 app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_KEY') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)' }, 503);
+    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)' }, 503);
   }
   const body = await c.req.json<{ name?: string; value?: string }>().catch(() => null);
   const name = body?.name ?? '';
@@ -27625,12 +27625,14 @@ export default app;
 
 
 function cfApiKeySource(env: Bindings): string {
-  if (env.CLOUDFLARE_API_KEY) return 'CLOUDFLARE_API_KEY';
-  if ((env as any).CLOUDFLARE_API_TOKEN) return 'CLOUDFLARE_API_TOKEN';
   if (env.CF_CONTAINER_API_TOKEN) return 'CF_CONTAINER_API_TOKEN';
+  if ((env as any).CLOUDFLARE_API_TOKEN) return 'CLOUDFLARE_API_TOKEN';
+  if (env.CLOUDFLARE_API_KEY) return 'CLOUDFLARE_API_KEY';
   return 'なし';
 }
 
 function cfApiKey(env: Bindings): string | undefined {
-  return env.CLOUDFLARE_API_KEY || (env as any).CLOUDFLARE_API_TOKEN || env.CF_CONTAINER_API_TOKEN;
+  // /cf-containers用のAPIトークン(CF_CONTAINER_API_TOKEN)を最優先する。
+  // CLOUDFLARE_API_KEYは/cf-dashboard用(X-Auth-Email併用のGlobal API Key)でBearerでは通らない。
+  return env.CF_CONTAINER_API_TOKEN || (env as any).CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_API_KEY;
 }
