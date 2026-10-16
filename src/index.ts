@@ -45,6 +45,7 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
+import { setWorkerSecret, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -19474,6 +19475,64 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });
     return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [] });
   }
+});
+
+/**
+ * nekorootトンネルのトークン等のsecretを、CLIを使わずページから直接設定
+ * する（管理者認証が必要）。Cloudflare Workers Scripts APIでWorker自身の
+ * secretを書き換え、その後コンテナを再起動して新しいenvVarsを反映する。
+ * 書き換え可能なsecret名はALLOWED_SECRET_NAMES(cfWorkerSecretApi.ts)に
+ * 限定し、JWT_SECRET等の重要なsecretを誤って上書きできないようにしている。
+ */
+app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_KEY/CLOUDFLARE_ACCOUNT_IDが未設定です' }, 503);
+  }
+  const body = await c.req.json<{ name?: string; value?: string }>().catch(() => null);
+  const name = body?.name ?? '';
+  const value = body?.value ?? '';
+  if (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(name)) {
+    return jsonUtf8({ error: `nameは${ALLOWED_SECRET_NAMES.join('/')}のいずれかを指定してください` }, 400);
+  }
+  if (!value.trim()) {
+    return jsonUtf8({ error: 'valueが空です' }, 400);
+  }
+
+  const user = c.get('user');
+  const performedBy = user?.sub ?? 'unknown';
+
+  try {
+    // wrangler.tomlの name と一致させること(このWorker自身のスクリプト名)。
+    await setWorkerSecret(
+      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: c.env.CLOUDFLARE_API_KEY },
+      'cloudflare-workers-github-oauth-1',
+      name as AllowedSecretName,
+      value
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-secrets] secret設定に失敗', { name, error: message });
+    return jsonUtf8({ error: 'secretの設定に失敗しました: ' + message }, 502);
+  }
+
+  // secretを設定しただけではコンテナ内の環境変数は更新されない
+  // (DemoContainerのenvVarsはコンテナ起動時にしか反映されない)ため、
+  // 続けて再起動して新しい値を反映する。
+  const stub = await getDemoContainerStub(c.env);
+  if (stub) {
+    try {
+      await stub.stop();
+      await stub.start();
+      await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
+        logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-secrets] secret設定後の再起動に失敗', { error: message });
+      return jsonUtf8({ ok: true, warning: 'secretは設定しましたが、再起動に失敗しました: ' + message });
+    }
+  }
+  return jsonUtf8({ ok: true });
 });
 
 /** デモコンテナの起動/停止/再起動（管理者認証が必要）。 */
