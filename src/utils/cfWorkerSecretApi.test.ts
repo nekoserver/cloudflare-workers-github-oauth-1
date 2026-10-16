@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { setWorkerSecret, ALLOWED_SECRET_NAMES } from './cfWorkerSecretApi';
+import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES } from './cfWorkerSecretApi';
 
 describe('setWorkerSecret', () => {
   const credentials = { accountId: 'acc1', apiKey: 'token1' };
@@ -30,12 +30,30 @@ describe('setWorkerSecret', () => {
     );
     await expect(
       setWorkerSecret(credentials, 'my-script', 'NEKOROOT_TUNNEL_TOKEN', 'x', fetcher as unknown as typeof fetch)
-    ).rejects.toThrow('invalid token');
+    ).rejects.toThrow('invalid token(code undefined) [HTTP 403]');
   });
 
   it('ALLOWED_SECRET_NAMESにNEKOROOT_TUNNEL_TOKENとTAILSCALE_AUTHKEYを含む', () => {
     expect(ALLOWED_SECRET_NAMES).toContain('NEKOROOT_TUNNEL_TOKEN');
     expect(ALLOWED_SECRET_NAMES).toContain('TAILSCALE_AUTHKEY');
     expect(ALLOWED_SECRET_NAMES).toContain('CF_CONTAINER_API_TOKEN');
+  });
+});
+
+describe('verifyApiToken', () => {
+  it('Cloudflareのverify結果(エラーコード含む)をuser/account両方について返し、トークン値は含めない', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, result: null, errors: [{ code: 1000, message: 'Invalid API Token' }] }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, result: { status: 'active' } }), { status: 200 }));
+    const out = await verifyApiToken({ accountId: 'acc1', apiKey: 'secret-token' }, fetcher as unknown as typeof fetch);
+    expect(out).toBe('user: NG Invalid API Token(code 1000) [HTTP 401] / account: active');
+    expect(out).not.toContain('secret-token');
+    expect((fetcher.mock.calls[1] as [string])[0]).toBe('https://api.cloudflare.com/client/v4/accounts/acc1/tokens/verify');
+  });
+
+  it('fetch自体が失敗しても例外を投げず理由を返す', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+    const out = await verifyApiToken({ accountId: 'a', apiKey: 'k' }, fetcher as unknown as typeof fetch);
+    expect(out).toContain('検証呼び出し失敗 network down');
   });
 });
