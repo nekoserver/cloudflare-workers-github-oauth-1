@@ -23,6 +23,10 @@ CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 # デプロイ時にも送信先を維持し、未設定時のSlack送信へ戻らないよう明示する。
 # /tsubuyaki・/pts・インタラクティブ投稿の返信は専用のSlack送信経路を使う。
 NOTIFY_TARGET = "worker"
+# デモコンテナ内のcloudflared(トンネル名nekoroot)が公開するホスト名。
+# 旧Railway VM側のmynw-webトンネルがこのホスト名を使っていたが、2026-10-16
+# にユーザー確認済み(「もう使わない」)でnekoroot側へ付け替える。
+NEKOROOT_HOSTNAME = "mynw.nekomaneki.work"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID

@@ -58,7 +58,11 @@ async function nonAdminToken(): Promise<string> {
   return createJWT({ sub: 'other-user', name: 'Other', github_id: 1 }, JWT_SECRET);
 }
 
-function envWithContainer(demoContainer: unknown = {}) {
+// instanceId算出(DEMO_CONTAINER.idFromName('demo').toString())のため、
+// テストのDEMO_CONTAINERモックには最低限idFromNameが必要。
+const defaultDemoContainerBinding = { idFromName: vi.fn().mockReturnValue({ toString: () => 'fake-instance-id' }) };
+
+function envWithContainer(demoContainer: unknown = defaultDemoContainerBinding) {
   return { ...BASE_ENV, DB: makeDb(), JWT_SECRET, DEMO_CONTAINER: demoContainer };
 }
 
@@ -105,6 +109,22 @@ describe('GET /api/cf-containers/status', () => {
     expect(body.status).toBe('running');
   });
 
+  it('wrangler containers sshで使うinstanceIdを、DEMO_CONTAINER.idFromNameから返す(コンテナが起動していなくても計算できる)', async () => {
+    stubMethods.getState.mockRejectedValue(new Error('not running'));
+    const token = await adminToken();
+    const res = await app.request('/api/cf-containers/status', { headers: { Authorization: `Bearer ${token}` } }, envWithContainer());
+    const body = (await res.json()) as { instanceId: string | null };
+    expect(body.instanceId).toBe('fake-instance-id');
+  });
+
+  it('DEMO_CONTAINERバインディング未設定時はinstanceIdをnullで返す', async () => {
+    const token = await adminToken();
+    const env = { ...BASE_ENV, DB: makeDb(), JWT_SECRET };
+    const res = await app.request('/api/cf-containers/status', { headers: { Authorization: `Bearer ${token}` } }, env);
+    const body = (await res.json()) as { instanceId: string | null };
+    expect(body.instanceId).toBeNull();
+  });
+
   it('getState()が例外を投げた場合は「未起動または状態不明」として返す(停止済みと誤認させない)', async () => {
     stubMethods.getState.mockRejectedValue(new Error('container not found'));
     const token = await adminToken();
@@ -113,6 +133,50 @@ describe('GET /api/cf-containers/status', () => {
     expect(body.label).toBe('未起動または状態不明');
     expect(body.running).toBe(false);
     expect(body.error).toContain('container not found');
+  });
+
+  // authMiddlewareはBearerトークンでも`.prepare(sql).bind(userId).first()`で
+  // revokeチェックを行うため、usage集計用の`.prepare(sql).first()`(bind無し)
+  // と両方満たすdbモックが必要。
+  function makeUsageDb(firstImpl: () => Promise<unknown>) {
+    return {
+      prepare: vi.fn().mockReturnValue({
+        first: firstImpl,
+        bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }),
+      }),
+    };
+  }
+
+  it('D1のcf_container_operation_logから累計起動回数・直近起動からの経過時間を返す', async () => {
+    stubMethods.getState.mockResolvedValue({ lastChange: 0, status: 'running' });
+    const db = makeUsageDb(() =>
+      Promise.resolve({ cnt: 4, last_started_at: new Date(Date.now() - 65 * 60000).toISOString() })
+    );
+    const token = await adminToken();
+    const res = await app.request(
+      '/api/cf-containers/status',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { ...BASE_ENV, DB: db, JWT_SECRET, DEMO_CONTAINER: defaultDemoContainerBinding }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { usage: { totalStartCount: number; lastStartedAt: string; elapsedSinceLastStart: string } };
+    expect(body.usage.totalStartCount).toBe(4);
+    expect(body.usage.elapsedSinceLastStart).toBe('1時間5分');
+  });
+
+  it('D1クエリが失敗してもstatus本体の応答は返す(usageは付かないが握りつぶさずログに残す)', async () => {
+    stubMethods.getState.mockResolvedValue({ lastChange: 0, status: 'running' });
+    const db = makeUsageDb(() => Promise.reject(new Error('d1 read failed')));
+    const token = await adminToken();
+    const res = await app.request(
+      '/api/cf-containers/status',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { ...BASE_ENV, DB: db, JWT_SECRET, DEMO_CONTAINER: defaultDemoContainerBinding }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { running: boolean; usage?: unknown };
+    expect(body.running).toBe(true);
+    expect(body.usage).toBeUndefined();
   });
 });
 

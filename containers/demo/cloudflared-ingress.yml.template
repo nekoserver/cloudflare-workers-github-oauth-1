@@ -1,0 +1,22 @@
+# nekorootトンネルのingress設定テンプレート。__NEKOROOT_HOSTNAME__は
+# entrypoint.shがNEKOROOT_HOSTNAME環境変数で置換してから使う。
+# Apache(TLS、自己署名)のみをこのトンネル経由で公開する。SSHはこの
+# トンネル経由では公開しない(wrangler containers sshのみを使う方針、
+# 2026-10-16確認)。
+# WebSocketはcloudflaredが自動で中継するため特別な設定は不要。SSE用に
+# disableChunkedEncodingを明示的にfalse(既定)にし、長時間接続向けに
+# keepAlive系のタイムアウトを伸ばしている。
+originRequest:
+  noTLSVerify: true
+  disableChunkedEncoding: false
+  connectTimeout: 30s
+  tcpKeepAlive: 30s
+  keepAliveConnections: 100
+  keepAliveTimeout: 90s
+
+ingress:
+  - hostname: __NEKOROOT_HOSTNAME__
+    service: https://127.0.0.1:8443
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404
