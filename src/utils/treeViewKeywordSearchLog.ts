@@ -93,6 +93,45 @@ export function buildKeywordSearchSnapshotsByQuery(
  * 同数の場合はkeywordCount降順→query昇順で安定的に並べる(表示が実行
  * ごとにばらつかないようにする)。
  */
+/**
+ * dynamicnekoのtree-view検索結果パネルの「更新可」/「最新状態」バッジ判定
+ * (ユーザー要望2026-10-16)用。(repoName, query)の組で前回DBに保存済みの
+ * 直近1件のスナップショット(fileCount・keyword×occurrenceCount一覧)を
+ * 返す。一度も保存していない場合はnull(「一度も保存していない」ことと
+ * 「保存されているが結果0件」を呼び出し元が区別できるようにする)。
+ */
+export type LatestKeywordSearchLogSnapshot = {
+  fileCount: number;
+  searchedAt: string;
+  results: KeywordOccurrenceInputRow[];
+};
+
+export async function fetchLatestKeywordSearchLog(
+  db: D1Database,
+  userId: string,
+  repoName: string,
+  query: string,
+): Promise<LatestKeywordSearchLogSnapshot | null> {
+  const log = await db
+    .prepare(
+      'SELECT id, file_count AS fileCount, searched_at AS searchedAt FROM tree_view_keyword_search_log WHERE user_id = ? AND repo_name = ? AND query = ? ORDER BY searched_at DESC LIMIT 1',
+    )
+    .bind(userId, repoName, query)
+    .first<{ id: number; fileCount: number; searchedAt: string }>();
+  if (!log) return null;
+
+  const resultsQuery = await db
+    .prepare('SELECT keyword, occurrence_count AS occurrenceCount FROM tree_view_keyword_search_results WHERE search_log_id = ?')
+    .bind(log.id)
+    .all<{ keyword: string; occurrenceCount: number }>();
+
+  return {
+    fileCount: log.fileCount,
+    searchedAt: log.searchedAt,
+    results: (resultsQuery.results ?? []).map((r) => ({ keyword: r.keyword, occurrenceCount: r.occurrenceCount })),
+  };
+}
+
 export function sortKeywordSearchTrendQueriesByLatestOccurrenceDesc<
   T extends { query: string; snapshots: KeywordSearchSnapshot[] },
 >(queries: T[]): T[] {
