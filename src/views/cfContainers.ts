@@ -73,6 +73,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   無操作のまま<strong id="sleep-after-value">?</strong>経過すると自動停止します。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
 <div class="card">
+  <strong>トークン設定（CLI不要）</strong>
+  <p class="subtitle" style="margin:4px 0 10px;">nekorootトンネル・Tailscaleのトークンをここから設定できます。設定後、自動的にコンテナを再起動して反映します。</p>
+  <div class="status-row">
+    <label for="secret-name" style="font-size:13px;">対象:</label>
+    <select id="secret-name">
+      <option value="NEKOROOT_TUNNEL_TOKEN">NEKOROOT_TUNNEL_TOKEN（nekorootトンネル）</option>
+      <option value="TAILSCALE_AUTHKEY">TAILSCALE_AUTHKEY（Tailscale）</option>
+      <option value="CF_CONTAINER_API_TOKEN">CF_CONTAINER_API_TOKEN（コンテナ内cfコマンド）</option>
+    </select>
+  </div>
+  <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
+  <button id="btn-set-secret" type="button">設定して再起動</button>
+  <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+</div>
+<div class="card">
   <div class="status-row">
     <span id="status-chip" class="chip" data-running="false">状態取得中…</span>
     <button id="btn-refresh" type="button">状態を再取得</button>
@@ -98,21 +113,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <code id="ssh-command" style="display:block;margin-top:4px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;word-break:break-all;"></code>
     <button id="btn-copy-ssh" type="button" style="margin-top:6px;">コマンドをコピー</button>
   </div>
-</div>
-<div class="card">
-  <strong>トークン設定（CLI不要）</strong>
-  <p class="subtitle" style="margin:4px 0 10px;">nekorootトンネル・Tailscaleのトークンをここから設定できます。設定後、自動的にコンテナを再起動して反映します。</p>
-  <div class="status-row">
-    <label for="secret-name" style="font-size:13px;">対象:</label>
-    <select id="secret-name">
-      <option value="NEKOROOT_TUNNEL_TOKEN">NEKOROOT_TUNNEL_TOKEN（nekorootトンネル）</option>
-      <option value="TAILSCALE_AUTHKEY">TAILSCALE_AUTHKEY（Tailscale）</option>
-      <option value="CF_CONTAINER_API_TOKEN">CF_CONTAINER_API_TOKEN（コンテナ内cfコマンド）</option>
-    </select>
-  </div>
-  <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
-  <button id="btn-set-secret" type="button">設定して再起動</button>
-  <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
 </div>
 <div class="card">
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
