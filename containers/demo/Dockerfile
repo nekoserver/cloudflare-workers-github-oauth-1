@@ -66,9 +66,10 @@ RUN apt-get update && apt-get upgrade -y \
 WORKDIR /app
 COPY server.js ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
     && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite \
     && a2dissite 000-default \
     && a2ensite 000-demo \

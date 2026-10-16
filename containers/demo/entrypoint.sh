@@ -94,5 +94,15 @@ else
   log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
 fi
 
+# --- SSHログインシェルからもcfコマンドの認証情報を読めるようにする ---
+# sshdのセッションはこのプロセスの環境変数を引き継がないため書き出す。
+umask 077
+{
+  printf 'export CF_CONTAINER_API_TOKEN=%q\n' "${CF_CONTAINER_API_TOKEN:-}"
+  printf 'export CLOUDFLARE_ACCOUNT_ID=%q\n' "${CLOUDFLARE_ACCOUNT_ID:-}"
+} > /etc/profile.d/cf-env.sh
+umask 022
+log "cf env written to /etc/profile.d/cf-env.sh"
+
 log "exec: $*"
 exec "$@"

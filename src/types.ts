@@ -64,6 +64,11 @@ export type Bindings = {
    */
   TAILSCALE_AUTHKEY?: string;
   /**
+   * デモコンテナ内のcfコマンド(Cloudflare API簡易CLI)が使うAPI Token。
+   * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
+   */
+  CF_CONTAINER_API_TOKEN?: string;
+  /**
    * /wh-setting_github-to-slackページが、cf-auth(dynamicneko/cf-auth)側の
    * 設定状況(secretの有無)を横並びで比較表示するためのService Binding。
    * wrangler.tomlの[[services]]でcf-authをbindingすること。
