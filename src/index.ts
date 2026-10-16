@@ -19469,13 +19469,13 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
  * 必要）。CLOUDFLARE_API_KEY・CLOUDFLARE_ACCOUNT_IDはD1一覧機能と共用。
  */
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_KEY/CLOUDFLARE_ACCOUNT_IDが未設定です', tunnels: [] });
+  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_KEY') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
   }
   try {
     const tunnels = await listCloudflareTunnels({
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
-      apiKey: c.env.CLOUDFLARE_API_KEY,
+      apiKey: cfApiKey(c.env)!,
     });
     return jsonUtf8({ tunnels });
   } catch (err) {
@@ -19493,8 +19493,8 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
  * 限定し、JWT_SECRET等の重要なsecretを誤って上書きできないようにしている。
  */
 app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: 'CLOUDFLARE_API_KEY/CLOUDFLARE_ACCOUNT_IDが未設定です' }, 503);
+  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_KEY') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)' }, 503);
   }
   const body = await c.req.json<{ name?: string; value?: string }>().catch(() => null);
   const name = body?.name ?? '';
@@ -19512,7 +19512,7 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   try {
     // wrangler.tomlの name と一致させること(このWorker自身のスクリプト名)。
     await setWorkerSecret(
-      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: c.env.CLOUDFLARE_API_KEY },
+      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! },
       'cloudflare-workers-github-oauth-1',
       name as AllowedSecretName,
       value
@@ -27620,3 +27620,8 @@ app.onError((err, c) => {
 export { refreshTreeViewSnapshotsIfStale, syncAllTreeViewSnapshots };
 
 export default app;
+
+
+function cfApiKey(env: Bindings): string | undefined {
+  return env.CLOUDFLARE_API_KEY || (env as any).CLOUDFLARE_API_TOKEN || env.CF_CONTAINER_API_TOKEN;
+}
