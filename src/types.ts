@@ -48,6 +48,16 @@ export type Bindings = {
    */
   DEMO_CONTAINER?: DurableObjectNamespace<DemoContainer>;
   /**
+   * デモコンテナ内のcloudflared(トンネル名nekoroot)が公開するホスト名。
+   * コンテナのenvVars経由で渡す(src/containers/demoContainer.ts参照)。
+   */
+  NEKOROOT_HOSTNAME?: string;
+  /**
+   * 上記トンネルの接続トークン。秘密情報のため`wrangler secret put
+   * NEKOROOT_TUNNEL_TOKEN`で設定し、wrangler.tomlの[vars]には書かない。
+   */
+  NEKOROOT_TUNNEL_TOKEN?: string;
+  /**
    * /wh-setting_github-to-slackページが、cf-auth(dynamicneko/cf-auth)側の
    * 設定状況(secretの有無)を横並びで比較表示するためのService Binding。
    * wrangler.tomlの[[services]]でcf-authをbindingすること。
