@@ -46,15 +46,15 @@
 FROM ubuntu:24.04
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        ca-certificates nodejs tmux gnupg \
+        ca-certificates nodejs npm tmux gnupg \
         apache2 openssl openssh-server nftables curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i /tmp/cloudflared.deb \
     && rm -f /tmp/cloudflared.deb \
-    && curl -fsSL https://tailscale.com/install.sh | sh \
-    && npm install -g @openai/codex @anthropic-ai/claude-code
+    && (curl -fsSL https://tailscale.com/install.sh | sh || echo "WARN: tailscale install failed") \
+    && (npm install -g @openai/codex @anthropic-ai/claude-code || echo "WARN: codex/claude CLI install failed")
 
 # 2026-10-16(続き2): Codex CLI・Claude CLIを再度追加(利用者希望)。
 # npm install -gはこのサンドボックスの outbound HTTPS プロキシが
