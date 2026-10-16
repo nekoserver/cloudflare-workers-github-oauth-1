@@ -37,16 +37,31 @@
 # ホスト名・トンネルトークンはビルド時に埋め込まず、起動時に
 # NEKOROOT_HOSTNAME・NEKOROOT_TUNNEL_TOKEN環境変数(envVars経由、
 # src/containers/demoContainer.ts参照)から受け取る。
+# tailscaled: Railway VM側と同じTailscale経由のアクセス手段を揃えるため
+# 追加。Cloudflare Containersが/dev/net/tunを渡すかはこのセッションでは
+# 未確認のため、tailscaled起動時は`--tun=userspace-networking`(TUNデバイス
+# 不要なユーザー空間ネットワーキングモード)で起動する前提にしている
+# (entrypoint.sh参照)。認証キーはTAILSCALE_AUTHKEY環境変数(envVars経由)
+# で渡す想定、未設定ならtailscaled起動をスキップする。
 FROM ubuntu:24.04
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        ca-certificates nodejs tmux \
+        ca-certificates nodejs tmux gnupg \
         apache2 openssl openssh-server nftables curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i /tmp/cloudflared.deb \
-    && rm -f /tmp/cloudflared.deb
+    && rm -f /tmp/cloudflared.deb \
+    && curl -fsSL https://tailscale.com/install.sh | sh \
+    && npm install -g @openai/codex @anthropic-ai/claude-code
+
+# 2026-10-16(続き2): Codex CLI・Claude CLIを再度追加(利用者希望)。
+# npm install -gはこのサンドボックスの outbound HTTPS プロキシが
+# registry.npmjs.orgにSELF_SIGNED_CERT_IN_CHAINを返すため、このセッション
+# では検証できない。Cloudflare Workers Buildの実ビルド環境は通常の
+# インターネット接続を持つはずなので、実際のCI結果で成否を確認する
+# (失敗した場合はこの行を再び削除する)。
 
 WORKDIR /app
 COPY server.js ./

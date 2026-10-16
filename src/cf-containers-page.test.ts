@@ -114,6 +114,50 @@ describe('GET /api/cf-containers/status', () => {
     expect(body.running).toBe(false);
     expect(body.error).toContain('container not found');
   });
+
+  // authMiddlewareはBearerトークンでも`.prepare(sql).bind(userId).first()`で
+  // revokeチェックを行うため、usage集計用の`.prepare(sql).first()`(bind無し)
+  // と両方満たすdbモックが必要。
+  function makeUsageDb(firstImpl: () => Promise<unknown>) {
+    return {
+      prepare: vi.fn().mockReturnValue({
+        first: firstImpl,
+        bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ revoked_at: null }) }),
+      }),
+    };
+  }
+
+  it('D1のcf_container_operation_logから累計起動回数・直近起動からの経過時間を返す', async () => {
+    stubMethods.getState.mockResolvedValue({ lastChange: 0, status: 'running' });
+    const db = makeUsageDb(() =>
+      Promise.resolve({ cnt: 4, last_started_at: new Date(Date.now() - 65 * 60000).toISOString() })
+    );
+    const token = await adminToken();
+    const res = await app.request(
+      '/api/cf-containers/status',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { ...BASE_ENV, DB: db, JWT_SECRET, DEMO_CONTAINER: {} }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { usage: { totalStartCount: number; lastStartedAt: string; elapsedSinceLastStart: string } };
+    expect(body.usage.totalStartCount).toBe(4);
+    expect(body.usage.elapsedSinceLastStart).toBe('1時間5分');
+  });
+
+  it('D1クエリが失敗してもstatus本体の応答は返す(usageは付かないが握りつぶさずログに残す)', async () => {
+    stubMethods.getState.mockResolvedValue({ lastChange: 0, status: 'running' });
+    const db = makeUsageDb(() => Promise.reject(new Error('d1 read failed')));
+    const token = await adminToken();
+    const res = await app.request(
+      '/api/cf-containers/status',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { ...BASE_ENV, DB: db, JWT_SECRET, DEMO_CONTAINER: {} }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { running: boolean; usage?: unknown };
+    expect(body.running).toBe(true);
+    expect(body.usage).toBeUndefined();
+  });
 });
 
 describe('POST /api/cf-containers/action', () => {

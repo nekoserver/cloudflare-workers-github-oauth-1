@@ -63,11 +63,35 @@ apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
 if [ -n "${NEKOROOT_HOSTNAME:-}" ] && [ -n "${NEKOROOT_TUNNEL_TOKEN:-}" ]; then
   sed "s/__NEKOROOT_HOSTNAME__/${NEKOROOT_HOSTNAME}/g" \
     /etc/cloudflared/ingress.yml.template > /etc/cloudflared/ingress.yml
-  cloudflared tunnel --config /etc/cloudflared/ingress.yml run --token "${NEKOROOT_TUNNEL_TOKEN}" \
+  # --metrics: server.jsの/healthがローカルの/readyを叩いて接続状態を
+  # 確認できるようにする(127.0.0.1限定、外部には公開しない)。
+  cloudflared tunnel --config /etc/cloudflared/ingress.yml --metrics 127.0.0.1:20241 \
+    run --token "${NEKOROOT_TUNNEL_TOKEN}" \
     >/tmp/cloudflared.log 2>&1 &
   log "cloudflared(nekoroot) started (pid $!), hostname=${NEKOROOT_HOSTNAME}"
 else
   log "NEKOROOT_HOSTNAME/NEKOROOT_TUNNEL_TOKEN未設定のため、cloudflaredは起動しない"
+fi
+
+# --- tailscaled ---
+# /dev/net/tunがこの環境で使えるか未確認のため、TUNデバイス不要の
+# userspace-networkingモードで起動する(確実性を優先、通常のTUNモードより
+# 低速だが接続経路の有無自体は変わらない)。
+if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+  mkdir -p /var/lib/tailscale /var/run/tailscale
+  /usr/sbin/tailscaled \
+    --state=/var/lib/tailscale/tailscaled.state \
+    --socket=/var/run/tailscale/tailscaled.sock \
+    --tun=userspace-networking \
+    >/tmp/tailscaled.log 2>&1 &
+  log "tailscaled started (pid $!, userspace-networking)"
+  sleep 1
+  tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname=cf-demo-container --accept-dns=false \
+    >/tmp/tailscale-up.log 2>&1 \
+    && log "tailscale up succeeded" \
+    || log "WARN: tailscale up failed, see /tmp/tailscale-up.log"
+else
+  log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
 fi
 
 log "exec: $*"

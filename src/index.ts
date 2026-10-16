@@ -42,6 +42,8 @@ import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getCfContainersPage } from './views/cfContainers';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
+import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart } from './utils/cfContainerOperationLog';
+import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -638,6 +640,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_file_changes', migration: '0174', description: 'push webhookから自動蓄積するコミット単位のファイル変更記録(added/removed/modified)', syncPolicy: 'auto' },
   { name: 'tree_view_keyword_search_log', migration: '0176', description: 'dynamicnekoのtree-view検索窓で検索するたびに記録する検索ログ(repo_name・query・searched_at)', syncPolicy: 'auto' },
   { name: 'tree_view_keyword_search_results', migration: '0176', description: 'tree_view_keyword_search_log 1件ごとの切り出しキーとAIチャットでの出現回数', syncPolicy: 'auto' },
+  { name: 'cf_container_operation_log', migration: '0178', description: '/cf-containersでのデモコンテナ起動/停止/再起動操作ログ(action・実行者・結果)', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2792,6 +2795,15 @@ CREATE TABLE IF NOT EXISTS tree_view_keyword_search_results (
 CREATE INDEX IF NOT EXISTS idx_tvksr_search_log_id ON tree_view_keyword_search_results(search_log_id);
 CREATE INDEX IF NOT EXISTS idx_tvksr_keyword ON tree_view_keyword_search_results(keyword);`,
   '0177': `ALTER TABLE user_sessions ADD COLUMN tree_view_keyword_search_auto_save TEXT;`,
+  '0178': `CREATE TABLE IF NOT EXISTS cf_container_operation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  performed_by TEXT NOT NULL,
+  result TEXT NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_operation_log_created_at ON cf_container_operation_log(created_at);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2980,6 +2992,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_file_changes: { id: 'pk', repo_name: 'idx', commit_hash: 'idx', file_path: 'idx' },
   tree_view_keyword_search_log: { id: 'pk', user_id: 'idx', repo_name: 'idx', query: 'idx', searched_at: 'idx' },
   tree_view_keyword_search_results: { id: 'pk', search_log_id: 'fk', keyword: 'idx' },
+  cf_container_operation_log: { id: 'pk', created_at: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3149,6 +3162,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_file_changes: 'commit',
   tree_view_keyword_search_log: 'commit',
   tree_view_keyword_search_results: 'commit',
+  cf_container_operation_log: 'system',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -19395,10 +19409,46 @@ app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) 
   return c.html(getCfContainersPage());
 });
 
-/** デモコンテナの現在状態を返す（管理者認証が必要）。 */
+/**
+ * デモコンテナの現在状態を返す（管理者認証が必要）。あわせてD1の
+ * cf_container_operation_logから累計起動回数・直近起動からの経過時間も
+ * 返す(取得失敗してもstatus本体の応答は妨げない)。
+ */
 app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
-  return jsonUtf8(await buildContainerStatusResponse(stub));
+  const statusResponse = await buildContainerStatusResponse(stub);
+  let usage: { totalStartCount: number; lastStartedAt: string | null; elapsedSinceLastStart: string | null } | undefined;
+  if (c.env.DB) {
+    try {
+      const summary = await getContainerUsageSummary(c.env.DB);
+      usage = { ...summary, elapsedSinceLastStart: formatElapsedSinceLastStart(summary.lastStartedAt) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-status] 稼働ログ集計の取得に失敗', { error: message });
+    }
+  }
+  return jsonUtf8({ ...statusResponse, usage });
+});
+
+/**
+ * アカウント内のCloudflare Tunnel一覧（nekoroot含む）を返す（管理者認証が
+ * 必要）。CLOUDFLARE_API_KEY・CLOUDFLARE_ACCOUNT_IDはD1一覧機能と共用。
+ */
+app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.CLOUDFLARE_API_KEY || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_KEY/CLOUDFLARE_ACCOUNT_IDが未設定です', tunnels: [] });
+  }
+  try {
+    const tunnels = await listCloudflareTunnels({
+      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
+      apiKey: c.env.CLOUDFLARE_API_KEY,
+    });
+    return jsonUtf8({ tunnels });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });
+    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [] });
+  }
 });
 
 /** デモコンテナの起動/停止/再起動（管理者認証が必要）。 */
@@ -19410,6 +19460,9 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
   const stub = await getDemoContainerStub(c.env);
   if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
 
+  const user = c.get('user');
+  const performedBy = user?.sub ?? 'unknown';
+
   try {
     if (action === 'start') {
       await stub.start();
@@ -19419,10 +19472,16 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
       await stub.stop();
       await stub.start();
     }
+    await recordContainerOperation(c.env.DB, { action, performedBy, result: 'success' }, (message) =>
+      logger.error('[cf-containers-action] 操作ログの記録に失敗', { action, error: message })
+    );
     return jsonUtf8(await buildContainerStatusResponse(stub));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-action] 操作に失敗', { action, error: message });
+    await recordContainerOperation(c.env.DB, { action, performedBy, result: 'failure', detail: message }, (logMessage) =>
+      logger.error('[cf-containers-action] 操作ログの記録に失敗', { action, error: logMessage })
+    );
     return jsonUtf8({ error: '操作でサーバーエラーが発生しました: ' + message }, 500);
   }
 });

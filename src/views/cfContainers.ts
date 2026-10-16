@@ -57,6 +57,13 @@ button:hover { background: var(--bg); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 #log { margin-top: 14px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
 a.proxy-link { color: var(--link); font-size: 13px; }
+table.health-table, table.tunnel-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px; }
+table.health-table th, table.health-table td, table.tunnel-table th, table.tunnel-table td {
+  border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+}
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge[data-ok="true"] { background: var(--ok-bg); color: var(--ok); }
+.badge[data-ok="false"] { background: var(--err-bg); color: var(--err); }
 </style>
 </head>
 <body>
@@ -75,9 +82,34 @@ a.proxy-link { color: var(--link); font-size: 13px; }
   <button id="btn-stop" type="button">停止</button>
   <button id="btn-restart" type="button">再起動</button>
   <div id="log"></div>
+  <div id="usage-summary" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
 </div>
 <div class="card">
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
+</div>
+<div class="card">
+  <div class="status-row">
+    <strong>ヘルスチェック</strong>
+    <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
+  </div>
+  <table class="health-table" id="health-table" hidden>
+    <thead><tr><th>Apache(8443)</th><th>sshd(22)</th><th>cloudflared(nekoroot)</th><th>確認時刻</th></tr></thead>
+    <tbody><tr>
+      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-time"></td>
+    </tr></tbody>
+  </table>
+  <div id="health-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+</div>
+<div class="card">
+  <div class="status-row">
+    <strong>Cloudflare Tunnel一覧</strong>
+    <button id="btn-tunnels" type="button">取得</button>
+  </div>
+  <table class="tunnel-table" id="tunnel-table" hidden>
+    <thead><tr><th>name</th><th>status</th><th>connections</th><th>id</th></tr></thead>
+    <tbody id="tunnel-tbody"></tbody>
+  </table>
+  <div id="tunnel-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
 </div>
 <script>
 (function () {
@@ -96,9 +128,23 @@ a.proxy-link { color: var(--link); font-size: 13px; }
     });
   }
 
+  var usageSummary = document.getElementById('usage-summary');
+
   function renderStatus(data) {
     chip.textContent = data.label;
     chip.setAttribute('data-running', data.running ? 'true' : 'false');
+    if (data.usage) {
+      var parts = ['累計起動回数: ' + data.usage.totalStartCount + '回'];
+      if (data.usage.lastStartedAt) {
+        parts.push('直近起動: ' + data.usage.lastStartedAt);
+      }
+      if (data.usage.elapsedSinceLastStart) {
+        parts.push('経過: ' + data.usage.elapsedSinceLastStart);
+      }
+      usageSummary.textContent = parts.join(' / ');
+    } else {
+      usageSummary.textContent = '';
+    }
   }
 
   function fetchStatus() {
@@ -149,6 +195,67 @@ a.proxy-link { color: var(--link); font-size: 13px; }
   buttons.refresh.addEventListener('click', fetchStatus);
 
   fetchStatus();
+
+  function badge(ok) {
+    return '<span class="badge" data-ok="' + (ok ? 'true' : 'false') + '">' + (ok ? 'OK' : 'NG') + '</span>';
+  }
+
+  var btnHealth = document.getElementById('btn-health');
+  var healthTable = document.getElementById('health-table');
+  var healthLog = document.getElementById('health-log');
+  btnHealth.addEventListener('click', function () {
+    btnHealth.disabled = true;
+    healthLog.textContent = '確認中…(コンテナが停止中の場合は起動を待ちます)';
+    fetch('/cf-containers/proxy/health')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        document.getElementById('health-apache').innerHTML = badge(data.apache);
+        document.getElementById('health-sshd').innerHTML = badge(data.sshd);
+        document.getElementById('health-cloudflared').innerHTML = badge(data.cloudflared);
+        document.getElementById('health-time').textContent = data.checkedAt || '';
+        healthTable.hidden = false;
+        healthLog.textContent = '';
+      })
+      .catch(function (err) {
+        healthLog.textContent = 'エラー: ' + String(err);
+      })
+      .finally(function () {
+        btnHealth.disabled = false;
+      });
+  });
+
+  var btnTunnels = document.getElementById('btn-tunnels');
+  var tunnelTable = document.getElementById('tunnel-table');
+  var tunnelTbody = document.getElementById('tunnel-tbody');
+  var tunnelLog = document.getElementById('tunnel-log');
+  btnTunnels.addEventListener('click', function () {
+    btnTunnels.disabled = true;
+    tunnelLog.textContent = '取得中…';
+    fetch('/api/cf-containers/tunnels')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          tunnelLog.textContent = 'エラー: ' + data.error;
+          return;
+        }
+        tunnelTbody.innerHTML = '';
+        (data.tunnels || []).forEach(function (t) {
+          var tr = document.createElement('tr');
+          var statusBadge = badge(t.status === 'healthy');
+          tr.innerHTML = '<td>' + t.name + '</td><td>' + statusBadge + ' ' + t.status + '</td>' +
+            '<td>' + t.connectionCount + '</td><td><code>' + t.id + '</code></td>';
+          tunnelTbody.appendChild(tr);
+        });
+        tunnelTable.hidden = false;
+        tunnelLog.textContent = data.tunnels && data.tunnels.length ? '' : '(トンネルが見つかりません)';
+      })
+      .catch(function (err) {
+        tunnelLog.textContent = 'エラー: ' + String(err);
+      })
+      .finally(function () {
+        btnTunnels.disabled = false;
+      });
+  });
 })();
 </script>
 </body>

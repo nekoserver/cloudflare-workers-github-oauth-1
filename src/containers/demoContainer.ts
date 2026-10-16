@@ -23,6 +23,7 @@ export class DemoContainer extends Container<Bindings> {
     this.envVars = {
       NEKOROOT_HOSTNAME: env.NEKOROOT_HOSTNAME ?? '',
       NEKOROOT_TUNNEL_TOKEN: env.NEKOROOT_TUNNEL_TOKEN ?? '',
+      TAILSCALE_AUTHKEY: env.TAILSCALE_AUTHKEY ?? '',
     };
   }
 }
