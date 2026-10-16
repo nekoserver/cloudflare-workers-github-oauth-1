@@ -19427,7 +19427,11 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
       logger.error('[cf-containers-status] 稼働ログ集計の取得に失敗', { error: message });
     }
   }
-  return jsonUtf8({ ...statusResponse, usage });
+  // wrangler containers ssh <INSTANCE_ID>で使うインスタンスID。
+  // Durable ObjectのIDは固定名'demo'から導出される値のため、コンテナが
+  // 起動しているかに関わらずバインディングさえあれば常に計算できる。
+  const instanceId = c.env.DEMO_CONTAINER ? c.env.DEMO_CONTAINER.idFromName('demo').toString() : null;
+  return jsonUtf8({ ...statusResponse, usage, instanceId });
 });
 
 /**

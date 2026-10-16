@@ -83,6 +83,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <button id="btn-restart" type="button">再起動</button>
   <div id="log"></div>
   <div id="usage-summary" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
+  <div id="ssh-box" style="margin-top:10px;font-size:12px;" hidden>
+    <strong>SSH接続:</strong>
+    <code id="ssh-command" style="display:block;margin-top:4px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;word-break:break-all;"></code>
+    <button id="btn-copy-ssh" type="button" style="margin-top:6px;">コマンドをコピー</button>
+  </div>
 </div>
 <div class="card">
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
@@ -129,6 +134,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   }
 
   var usageSummary = document.getElementById('usage-summary');
+  var sshBox = document.getElementById('ssh-box');
+  var sshCommand = document.getElementById('ssh-command');
+  var btnCopySsh = document.getElementById('btn-copy-ssh');
+  btnCopySsh.addEventListener('click', function () {
+    navigator.clipboard.writeText(sshCommand.textContent).then(function () {
+      btnCopySsh.textContent = 'コピーしました';
+      setTimeout(function () { btnCopySsh.textContent = 'コマンドをコピー'; }, 1500);
+    });
+  });
 
   function renderStatus(data) {
     chip.textContent = data.label;
@@ -144,6 +158,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       usageSummary.textContent = parts.join(' / ');
     } else {
       usageSummary.textContent = '';
+    }
+    if (data.instanceId) {
+      sshBox.hidden = false;
+      sshCommand.textContent = 'ssh -o ProxyCommand="wrangler containers ssh %h" cloudchamber@' + data.instanceId;
+    } else {
+      sshBox.hidden = true;
     }
   }
 
