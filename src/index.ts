@@ -19405,6 +19405,14 @@ async function buildContainerStatusResponse(
 app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
+  // デプロイ後も古いHTML(課金注意文言等)がブラウザ・共有CDN・Cloudflare
+  // いずれかにキャッシュされて残らないようにする(ruby-wasmページと同じ
+  // パターン)。
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  c.header('Cloudflare-CDN-Cache-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
   if (!userSession) {
     return c.html(getSessionExpiredPage(c.req.path), 403);
   }
