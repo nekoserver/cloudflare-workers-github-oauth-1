@@ -100,6 +100,20 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
 </div>
 <div class="card">
+  <strong>トークン設定（CLI不要）</strong>
+  <p class="subtitle" style="margin:4px 0 10px;">nekorootトンネル・Tailscaleのトークンをここから設定できます。設定後、自動的にコンテナを再起動して反映します。</p>
+  <div class="status-row">
+    <label for="secret-name" style="font-size:13px;">対象:</label>
+    <select id="secret-name">
+      <option value="NEKOROOT_TUNNEL_TOKEN">NEKOROOT_TUNNEL_TOKEN（nekorootトンネル）</option>
+      <option value="TAILSCALE_AUTHKEY">TAILSCALE_AUTHKEY（Tailscale）</option>
+    </select>
+  </div>
+  <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
+  <button id="btn-set-secret" type="button">設定して再起動</button>
+  <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+</div>
+<div class="card">
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
 </div>
 <div class="card">
@@ -362,6 +376,41 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       })
       .finally(function () {
         btnTunnels.disabled = false;
+      });
+  });
+
+  var secretName = document.getElementById('secret-name');
+  var secretValue = document.getElementById('secret-value');
+  var btnSetSecret = document.getElementById('btn-set-secret');
+  var secretLog = document.getElementById('secret-log');
+  btnSetSecret.addEventListener('click', function () {
+    var value = secretValue.value.trim();
+    if (!value) {
+      secretLog.textContent = 'トークンを入力してください';
+      return;
+    }
+    btnSetSecret.disabled = true;
+    secretLog.textContent = '設定中…(設定後にコンテナを再起動するため少し時間がかかります)';
+    fetch('/api/cf-containers/secrets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: secretName.value, value: value })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          secretLog.textContent = 'エラー: ' + data.error;
+          return;
+        }
+        secretValue.value = '';
+        secretLog.textContent = data.warning ? data.warning : '設定・再起動が完了しました';
+        fetchStatus();
+      })
+      .catch(function (err) {
+        secretLog.textContent = 'エラー: ' + String(err);
+      })
+      .finally(function () {
+        btnSetSecret.disabled = false;
       });
   });
 })();

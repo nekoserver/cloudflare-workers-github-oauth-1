@@ -260,3 +260,101 @@ describe('ALL /cf-containers/proxy/*', () => {
     expect(new URL(forwardedRequest.url).pathname).toBe('/hello');
   });
 });
+
+describe('POST /api/cf-containers/secrets', () => {
+  // authMiddlewareのrevokeチェック(.bind().first())・recordContainerOperation
+  // のINSERT(.bind().run())の両方を満たすdbモック。
+  function makeSecretsDb() {
+    return {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue({ revoked_at: null }),
+          run: vi.fn().mockResolvedValue({}),
+        }),
+      }),
+    };
+  }
+
+  function envWithCfApi(extra: Record<string, unknown> = {}) {
+    return {
+      ...BASE_ENV,
+      DB: makeSecretsDb(),
+      JWT_SECRET,
+      DEMO_CONTAINER: defaultDemoContainerBinding,
+      CLOUDFLARE_API_KEY: 'cf-key',
+      CLOUDFLARE_ACCOUNT_ID: 'cf-account',
+      ...extra,
+    };
+  }
+
+  async function postSecret(name: string, value: string, env = envWithCfApi()) {
+    const token = await adminToken();
+    return app.request(
+      '/api/cf-containers/secrets',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name, value }) },
+      env
+    );
+  }
+
+  it('未ログインは401', async () => {
+    const res = await app.request(
+      '/api/cf-containers/secrets',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'NEKOROOT_TUNNEL_TOKEN', value: 'x' }) },
+      envWithCfApi()
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('許可リストにないnameは400で拒否され、fetchは一切呼ばれない', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const res = await postSecret('JWT_SECRET', 'x');
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('valueが空なら400で拒否する', async () => {
+    const res = await postSecret('NEKOROOT_TUNNEL_TOKEN', '   ');
+    expect(res.status).toBe(400);
+  });
+
+  it('CLOUDFLARE_API_KEY未設定なら503', async () => {
+    const res = await postSecret('NEKOROOT_TUNNEL_TOKEN', 'x', envWithCfApi({ CLOUDFLARE_API_KEY: undefined }));
+    expect(res.status).toBe(503);
+  });
+
+  it('正常系: secret設定APIを呼んだ後、コンテナをstop→startし、D1に記録する', async () => {
+    stubMethods.getState.mockResolvedValue({ lastChange: 0, status: 'running' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, result: {} }), { status: 200 })
+    );
+    const callOrder: string[] = [];
+    stubMethods.stop.mockImplementation(async () => { callOrder.push('stop'); });
+    stubMethods.start.mockImplementation(async () => { callOrder.push('start'); });
+
+    const res = await postSecret('NEKOROOT_TUNNEL_TOKEN', 'tok_abc123');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(callOrder).toEqual(['stop', 'start']);
+
+    const [url, init] = fetchSpy.mock.calls.find(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('/secrets')
+    ) as [string, RequestInit];
+    expect(url).toContain('/accounts/cf-account/workers/scripts/cloudflare-workers-github-oauth-1/secrets');
+    const sentBody = JSON.parse(init.body as string);
+    expect(sentBody).toEqual({ name: 'NEKOROOT_TUNNEL_TOKEN', text: 'tok_abc123', type: 'secret_text' });
+    fetchSpy.mockRestore();
+  });
+
+  it('Cloudflare API呼び出しが失敗したら502を返し、コンテナは再起動しない', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: false, result: null, errors: [{ message: 'bad token' }] }), { status: 403 })
+    );
+    const res = await postSecret('NEKOROOT_TUNNEL_TOKEN', 'x');
+    expect(res.status).toBe(502);
+    expect(stubMethods.stop).not.toHaveBeenCalled();
+    expect(stubMethods.start).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
