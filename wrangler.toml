@@ -122,6 +122,10 @@ binding = "AI"
 class_name = "DemoContainer"
 image = "./containers/demo/Dockerfile"
 max_instances = 1
+# standard-1(1/2 vCPU・4GiBメモリ・8GBディスク)。既定のlite(1/16 vCPU・
+# 256MiB)ではtmux上でCLIを動かすには心細いため、実用と節約のバランスを
+# とってstandardの中で最小のこの構成にしている。
+instance_type = "standard-1"
 
 # SSH(`wrangler containers ssh <INSTANCE_ID>` またはsshクライアント経由)で
 # コンテナにログインするための公開鍵。wranglerのSSHサポートはデフォルトで

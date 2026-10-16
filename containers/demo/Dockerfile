@@ -3,17 +3,33 @@
 # server.js自体はNode標準モジュールのみに依存する(ビルド時間・
 # イメージサイズを抑える)。
 #
-# ユーザー要望(2026-10-16)によりCodex CLI(@openai/codex)・Claude CLI
-# (@anthropic-ai/claude-code)をイメージに同梱する。現時点ではこれらを
-# ブラウザから操作するためのWeb化(ターミナルUI等)は未実装(「あとから
-# でいい」との回答)で、コンテナ内に実行ファイルがあるだけの状態。
-# 利用にはOPENAI_API_KEY(Codex CLI用)・ANTHROPIC_API_KEY(Claude CLI用、
-# 未設定の場合はClaude CLI側の対話ログインが必要)をコンテナ起動時の
-# 環境変数として渡す(src/containers/demoContainer.tsのenvVars参照)。
-# どちらもAPI呼び出し自体に課金が発生する。
-FROM node:22-alpine
-
-RUN npm install -g @openai/codex @anthropic-ai/claude-code
+# 2026-10-16: Codex CLI・Claude CLIをイメージにnpm install -gで同梱する
+# 変更を一度入れたが、Cloudflare Workers Buildのビルド環境・このセッション
+# のサンドボックスの両方でnpmレジストリへのTLS接続がSELF_SIGNED_CERT_IN_CHAIN
+# で失敗することをwrangler deploy --dry-runのローカルDockerビルドで確認した
+# (このサンドボックス固有の問題ではなく、実際のCI(Workers Builds)でも
+# ビルド失敗の原因になっていた)。さらにClaude/Codex CLIの実行自体は
+# SSH(wrangler containers ssh)で入ってから利用者自身が設定する方針に
+# 変更されたため、イメージへの事前インストールは撤回した。
+# ベースをUbuntu(利用者が使い慣れているディストリビューション)へ変更。
+# node:*系の公式イメージ(Debian/Alpine派生)ではなく、Ubuntu公式イメージへ
+# apt-getでNode.jsを導入する構成にしている。glibcベースのため、今後
+# cloudflared等のCloudflare公式配布バイナリを追加する際のmusl libc互換性
+# 問題も避けられる。
+#
+# tmux: SSH(wrangler containers ssh)で入った後、接続が切れても作業(Codex/
+# Claude CLI等のセッション)を継続できるようにするターミナルマルチプレクサ。
+#
+# Node.js: Ubuntu 24.04のapt既定パッケージ(18.x系、ディストリが追従する
+# LTSより古い)ではなく、NodeSourceの配布リポジトリから最新のNode.jsを導入。
+FROM ubuntu:24.04
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg tmux \
+    && curl -fsSL https://deb.nodesource.com/setup_current.x -o /tmp/nodesource_setup.sh \
+    && bash /tmp/nodesource_setup.sh \
+    && rm -f /tmp/nodesource_setup.sh \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY server.js ./
