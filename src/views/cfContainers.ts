@@ -123,7 +123,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
   </div>
   <table class="health-table" id="health-table" hidden>
-    <thead><tr><th>Apache(8443)</th><th>sshd(22)</th><th>cloudflared(nekoroot)</th><th>確認時刻</th></tr></thead>
+    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
       <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-time"></td>
     </tr></tbody>
