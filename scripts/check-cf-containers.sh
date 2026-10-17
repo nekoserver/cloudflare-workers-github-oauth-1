@@ -1,0 +1,79 @@
+#!/bin/bash
+# /cf-containers(デモコンテナ)まわりの変更を、push前にローカルで検証する。
+# Workers BuildsのPRビルドはコンテナイメージをビルドしないため、これを
+# 実行せずにmainへマージすると本番ビルドが一発勝負になる(CLAUDE.mdルール参照)。
+#
+# 使い方: bash scripts/check-cf-containers.sh [--offline]
+#   --offline  外部ダウンロード(cloudflared/tailscale/npm -g)を除いてビルドする。
+#              外部へ出られないサンドボックス用。省略時は本番と同じDockerfileでビルドする。
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+OFFLINE=0
+[ "${1:-}" = "--offline" ] && OFFLINE=1
+IMAGE=cf-demo:check
+NAME=cf-demo-check
+
+step() { echo; echo "=== $*"; }
+
+step "1/4 /cf-containers関連テスト(ページscriptの構文チェックを含む)"
+npx vitest run \
+  src/views/cfContainers.script-syntax.test.ts \
+  src/utils/cfBuildsApi.test.ts \
+  src/utils/cfWorkerSecretApi.test.ts \
+  src/utils/cloudflareTunnelApi.test.ts \
+  src/utils/cfContainerCost.test.ts \
+  src/utils/cfContainerOperationLog.test.ts \
+  $(ls src/*.test.ts | grep -i container)
+
+step "2/4 Workerのバンドル(wrangler deploy --dry-run)"
+npx wrangler deploy --dry-run --containers-rollout=none --outdir /tmp/cf-check-wrangler-out >/dev/null
+echo "OK"
+
+step "3/4 コンテナイメージのビルド"
+CTX=containers/demo
+if [ "$OFFLINE" = 1 ]; then
+  CTX=$(mktemp -d)
+  cp -r containers/demo/. "$CTX"/
+  python3 - "$CTX/Dockerfile" <<'EOF'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+a = s.index('    && rm -rf /var/lib/apt/lists/*')
+b = s.index('WORKDIR /app')
+open(p, 'w', encoding='utf-8').write(s[:a] + '    && rm -rf /var/lib/apt/lists/*\n\n' + s[b:])
+EOF
+  echo "WARN: --offline のため cloudflared/tailscale/npm -g のダウンロードは検証していない"
+fi
+docker build -q -t "$IMAGE" "$CTX" >/dev/null
+docker image ls "$IMAGE" --format 'image size: {{.Size}} (standard-1の上限は8GB)'
+docker run --rm --entrypoint bash "$IMAGE" -c '
+  set -e
+  node --version >/dev/null
+  ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
+  node --check /usr/local/bin/cf
+  node --check /app/server.js
+  if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
+'
+
+step "4/4 コンテナを起動して/health・8443を確認"
+docker rm -f "$NAME" >/dev/null 2>&1 || true
+docker run -d --name "$NAME" "$IMAGE" >/dev/null
+trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
+HEALTH=""
+for _ in $(seq 1 30); do
+  HEALTH=$(docker exec "$NAME" curl -fsS http://127.0.0.1:8080/health 2>/dev/null) && break
+  sleep 2
+done
+echo "/health: $HEALTH"
+docker exec "$NAME" curl -fsSk https://127.0.0.1:8443/health >/dev/null \
+  || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
+python3 -c '
+import json, sys
+h = json.loads(sys.argv[1])
+missing = [k for k in ("apache", "sshd") if h.get(k) is not True]
+if missing:
+    sys.exit(f"NG: 起動していないサービス: {missing}")
+' "$HEALTH" || { docker logs "$NAME"; exit 1; }
+
+echo; echo "ALL OK"
