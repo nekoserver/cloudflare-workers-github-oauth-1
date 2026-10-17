@@ -1,0 +1,95 @@
+# /cf-containers(デモコンテナ)まわりの変更を、mainへマージする前に検証する。
+# Workers BuildsのPRビルド(wrangler versions upload)はコンテナイメージを
+# ビルドしないため、イメージの不具合はmainマージ後の本番ビルドで初めて
+# 発覚していた(一発勝負)。ここでは本番と同じDockerfileを実際にビルド・起動し、
+# Workerのバンドルと関連テストも通ることをPR時点で確認する。
+name: cf-containers check
+
+on:
+  pull_request:
+    paths:
+      - 'containers/**'
+      - 'src/containers/**'
+      - 'src/views/cfContainers.ts'
+      - 'src/utils/cf*.ts'
+      - 'src/utils/cloudflareTunnelApi.ts'
+      - 'src/index.ts'
+      - 'src/types.ts'
+      - 'wrangler.toml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/cf-containers-check.yml'
+  workflow_dispatch:
+
+jobs:
+  container-image:
+    name: コンテナイメージのビルドと起動確認
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: イメージをビルド(本番と同じDockerfile)
+        run: docker build -t cf-demo:ci containers/demo
+
+      - name: 必須コマンドがイメージに入っているか
+        run: |
+          docker run --rm --entrypoint bash cf-demo:ci -c '
+            set -e
+            cloudflared --version
+            node --version
+            ip -V
+            ss -V
+            ping -V
+            dig -v
+            node --check /usr/local/bin/cf
+            node --check /app/server.js
+          '
+
+      - name: 任意のCLI(codex/claude)の有無を表示(無くても失敗にしない)
+        run: |
+          docker run --rm --entrypoint bash cf-demo:ci -c 'command -v codex || echo "WARN: codex なし"; command -v claude || echo "WARN: claude なし"; command -v tailscale || echo "WARN: tailscale なし"'
+
+      - name: コンテナを起動して/healthと/debug/netを確認
+        run: |
+          docker run -d --name cf-demo -p 8080:8080 cf-demo:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health > /tmp/health.json 2>/dev/null; then break; fi
+            sleep 2
+          done
+          echo "--- /health"; cat /tmp/health.json; echo
+          echo "--- /debug/net"; curl -fsS http://127.0.0.1:8080/debug/net; echo
+          echo "--- container log"; docker logs cf-demo
+          python3 - <<'EOF'
+          import json
+          h = json.load(open('/tmp/health.json'))
+          # cloudflaredはトンネルトークンが無いCIでは起動しないため対象外
+          missing = [k for k in ('apache', 'sshd') if h.get(k) is not True]
+          if missing:
+              raise SystemExit(f'起動していないサービス: {missing}')
+          print('OK', h)
+          EOF
+
+  worker:
+    name: Workerのバンドルと関連テスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Workerのバンドル(コンテナ部分は上のジョブで検証)
+        run: npx wrangler deploy --dry-run --containers-rollout=none --outdir /tmp/wrangler-out
+      - name: /cf-containers関連テスト(ページscriptの構文チェックを含む)
+        run: >-
+          npx vitest run
+          src/views/cfContainers.script-syntax.test.ts
+          src/utils/cfBuildsApi.test.ts
+          src/utils/cfWorkerSecretApi.test.ts
+          src/utils/cloudflareTunnelApi.test.ts
+          src/utils/cfContainerCost.test.ts
+          src/utils/cfContainerOperationLog.test.ts
+          $(ls src/*.test.ts | grep -i container)
