@@ -10,6 +10,20 @@ set -u
 
 log() { echo "[entrypoint] $*"; }
 
+# 本番(Cloudflare Containers)では起動のたびに/runが空になるため、Dockerfileで作ったディレクトリは
+# 残らない(2026-10-17: sshdが"Missing privilege separation directory: /run/sshd"、Apacheが
+# "/var/lock/apache2: No such file or directory"で起動していなかった)。ここで毎回作る。
+mkdir -p /run/sshd /run/lock /run/apache2 /var/lock/apache2 2>/dev/null || true
+
+# 貼り付けられたトンネルトークンから本体(eyJで始まるbase64)だけを取り出す。
+# 「cloudflared service install eyJ...」のようにコマンドごと貼られた場合や、
+# 前後の空白・改行・引用符が混ざった場合でも通るようにする。値そのものは出力しない。
+extract_tunnel_token() {
+  local raw="$1" tok
+  tok=$(printf '%s' "$raw" | grep -oE 'eyJ[A-Za-z0-9+/=_-]+' | tail -n 1)
+  if [ -n "$tok" ]; then printf '%s' "$tok"; else printf '%s' "$raw" | tr -d '[:space:]"'"'"; fi
+}
+
 # --- 自己署名証明書(Apache用、10年有効) ---
 TLS_DIR=/etc/apache2/tls
 if [ ! -f "$TLS_DIR/nekoroot.crt" ]; then
@@ -67,6 +81,13 @@ apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
   || log "WARN: apache2 configtest/start failed, see /tmp/apache-configtest.log /tmp/apache.log"
 
 # --- cloudflared(nekorootトンネル) ---
+NEKOROOT_TUNNEL_TOKEN=$(extract_tunnel_token "${NEKOROOT_TUNNEL_TOKEN:-}")
+if [ -n "$NEKOROOT_TUNNEL_TOKEN" ]; then
+  case "$NEKOROOT_TUNNEL_TOKEN" in
+    eyJ*) log "tunnel token: eyJ形式として取り出した(長さ${#NEKOROOT_TUNNEL_TOKEN})" ;;
+    *) log "WARN: tunnel tokenにeyJで始まる部分が無い(長さ${#NEKOROOT_TUNNEL_TOKEN})。ダッシュボードのトンネルのトークンを貼り直すこと" ;;
+  esac
+fi
 if [ -n "${NEKOROOT_HOSTNAME:-}" ] && [ -n "${NEKOROOT_TUNNEL_TOKEN:-}" ]; then
   sed "s/__NEKOROOT_HOSTNAME__/${NEKOROOT_HOSTNAME}/g" \
     /etc/cloudflared/ingress.yml.template > /etc/cloudflared/ingress.yml
