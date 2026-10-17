@@ -6238,7 +6238,8 @@ app.get('/md-preview', (c) => {
 /** 埋め込み先の死活確認（認証が必要）。 */
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  return c.json({ healthy: await conversationStreamHealthy() });
+  const availableHosts = await conversationStreamHealthy();
+  return c.json({ healthy: availableHosts.length > 0, availableHosts });
 });
 
 /** AI チャットページ（認証が必要）。 */
@@ -6273,7 +6274,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mygw.nekomaneki.work https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getAiChatPage({
     name: user.name,
