@@ -27,6 +27,8 @@
 
 - `/cf-containers` の「最新ビルドのログを取得」ボタン（[`b0963ad8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b0963ad8)、ページ分割対応 [`d7cda42f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d7cda42f)、応答の形の記録 [`5bb5d0a4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5bb5d0a4)）
 - Builds API には**ユーザー単位の API トークン**と「**Workers Build 構成**（Workers Builds Configuration）：編集」の権限が必要。無いと `Forbidden (code 12004) [HTTP 403]`
+- **本番ビルド失敗の本当の原因（ビルドログで確定）**: イメージのビルドは成功していた。失敗していたのは `registry.cloudflare.com` へのレイヤーのアップロードで、`failed commit on ref "layer-sha256:..." ... net/http: timeout awaiting response headers` → `Docker command exited with code: 1` となっていた。原因は、apt・cloudflared・tailscale・npm（Codex/Claude CLI）を `RUN` 1つにまとめた **1.9GB の単一レイヤー**。成功するかどうかが毎回変わっていたのは、送り切れるかどうかが運次第だったため。`RUN` を分割し、npm のキャッシュを削除して、最大のレイヤーを 566MB、全体を 2.97GB から 2.13GB にした。検証スクリプトに「800MB を超えるレイヤーがあれば NG」のチェックを追加した（古いイメージでは NG になることを確認済み）
+- メモリは原因ではない（実測で、待機中は約 21MiB、node は約 48MB。standard-1 は 4GiB）
 - 2026-10-17 時点の最新ビルドは `status=stopped`。ログは Docker が `load build definition` した直後で止まっており（ダッシュボードの表示も同じ）、失敗した行が無い。原因は**未特定**（新しいビルドへの置き換えによる取り消しの可能性。直近のビルド一覧で確認する）
 - ページ分割の形（`truncated` / `cursor`）は**想定で実装した**もので、実際の応答では未検証。「API応答の形」欄で実際の形を取得してから、テストを実応答のデータで作り直すこと
 
