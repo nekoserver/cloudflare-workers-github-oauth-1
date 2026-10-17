@@ -101,10 +101,21 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
 '
 
+step "3.5 トンネルトークンの取り出し(entrypoint.shのextract_tunnel_token)"
+FN=$(sed -n '/^extract_tunnel_token() {/,/^}/p' containers/demo/entrypoint.sh)
+TOK='eyJhIjoiYWJjIiwidCI6ImRlZiIsInMiOiJnaGkifQ=='
+for input in "$TOK" "  $TOK
+" "cloudflared service install $TOK" "sudo cloudflared tunnel run --token $TOK" "\"$TOK\""; do
+  got=$(bash -c "$FN"'; extract_tunnel_token "$1"' _ "$input")
+  [ "$got" = "$TOK" ] || { echo "NG: トークンの取り出しに失敗(入力の形: $(printf '%s' "$input" | cut -c1-30)...)"; exit 1; }
+done
+echo "OK: コマンドごと・空白/改行・引用符付きのトークンから本体を取り出せる"
+
 step "4/4 コンテナを起動して/health・8443を確認"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 # 本番と同じくnftablesを実際に効かせるためNET_ADMINを付け、外(ホスト側)から8080へ届くかも確認する
-docker run -d --name "$NAME" --cap-add NET_ADMIN -p 127.0.0.1::8080 "$IMAGE" >/dev/null
+# 本番は起動のたびに/runが空になる。--tmpfs /runで同じ条件にする(Dockerfileで作ったディレクトリに頼ると本番で壊れる)
+docker run -d --name "$NAME" --cap-add NET_ADMIN --tmpfs /run -p 127.0.0.1::8080 "$IMAGE" >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 HEALTH=""
 for _ in $(seq 1 30); do

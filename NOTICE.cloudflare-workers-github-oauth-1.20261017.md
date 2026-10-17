@@ -59,6 +59,14 @@
   - コンテナ内で Claude CLI を使っても、利用者の使い方では役に立たない（Claude Code Web で作業しており、コンテナ内で別途トークンを使い切っても意味がない）
   - 戻す場合は、先に Node 22 以上（NodeSource 等）を用意してから `npm install -g @anthropic-ai/claude-code` を独立した `RUN` で追加する。検証スクリプトに `command -v claude` の確認も戻すこと
 
+## 6.6 本番のコンテナでは /run が起動のたびに空になる
+
+- 本番の `/debug/logs` で判明: sshd は `Missing privilege separation directory: /run/sshd`、Apache は `/var/lock/apache2...: No such file or directory`（`/var/lock` は `/run/lock` へのリンク）で起動していなかった
+- Dockerfile で `mkdir -p /run/sshd` しても、本番では `/run` が空の状態で起動するので残らない。手元の Docker はイメージの `/run` をそのまま使うため再現しなかった
+- 対策: entrypoint.sh の冒頭で毎回作る。検証スクリプトは `--tmpfs /run` 付きで起動し、本番と同じ条件で確認する
+- cloudflared の `Provided Tunnel token is not valid.` は、トークンの貼り方（`cloudflared service install eyJ...` のようにコマンドごと貼る、空白・改行が入る など）で起きる。entrypoint.sh で `eyJ...` の部分だけを取り出すようにした
+- コンテナのネットワーク（Tailscale のログより）: `self=10.0.0.1`、`gw=10.0.0.254`。CIDR は `10.0.0.0/24` とみられる（`/debug/net` で確認すること）
+
 ## 7. Claude Code のクラウドサンドボックスでの検証方法
 
 - 外向きの HTTPS は MITM プロキシ（`$HTTPS_PROXY`、CA は `/root/.ccr/ca-bundle.crt`）経由でしか通らない。プロキシは http を扱わない（apt の http は `405` になる）が、apt の http は直接外へ出られる
