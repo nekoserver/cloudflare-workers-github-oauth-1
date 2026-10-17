@@ -45,6 +45,7 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
+import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
@@ -19468,6 +19469,25 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
  * アカウント内のCloudflare Tunnel一覧（nekoroot含む）を返す（管理者認証が
  * 必要）。CLOUDFLARE_API_KEY・CLOUDFLARE_ACCOUNT_IDはD1一覧機能と共用。
  */
+// Workers Builds(本番ビルド)のログを取得する。?build=<uuid>省略時は最新ビルド。
+app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'CF_CONTAINER_API_TOKEN/CLOUDFLARE_ACCOUNT_IDが未設定です' }, 503);
+  }
+  try {
+    const result = await fetchLatestBuildLog(
+      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! },
+      'cloudflare-workers-github-oauth-1',
+      c.req.query('build') || undefined
+    );
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-build-log] 取得に失敗', { error: message });
+    return jsonUtf8({ error: 'ビルドログの取得に失敗しました: ' + message + ' (使用トークン=' + cfApiKeySource(c.env) + '。Builds APIにはユーザートークンのWorkers Builds Configuration権限が必要)' }, 502);
+  }
+});
+
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });

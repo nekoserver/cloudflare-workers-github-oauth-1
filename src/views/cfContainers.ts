@@ -139,6 +139,13 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </div>
 <div class="card">
   <div class="status-row">
+    <strong>本番ビルド(Workers Builds)のログ</strong>
+    <button id="btn-buildlog" type="button">最新ビルドのログを取得</button>
+  </div>
+  <pre id="buildlog-log" style="margin-top:8px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
+</div>
+<div class="card">
+  <div class="status-row">
     <strong>Cloudflare Tunnel一覧</strong>
     <button id="btn-tunnels" type="button">取得</button>
   </div>
@@ -362,7 +369,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     fetch('/cf-containers/proxy/debug/net')
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        netLog.textContent = '[ip addr]\n' + (data.addr || '') + '\n\n[ip route]\n' + (data.route || '');
+        netLog.textContent = '[ip addr]\\n' + (data.addr || '') + '\\n\\n[ip route]\\n' + (data.route || '')
+          + '\\n\\n[/etc/resolv.conf]\\n' + (data.dns || '') + '\\n\\n[ss -tulpn]\\n' + (data.netstat || '');
       })
       .catch(function (err) {
         netLog.textContent = 'エラー: ' + String(err);
@@ -370,6 +378,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .finally(function () {
         btnNet.disabled = false;
       });
+  });
+
+  var btnBuildLog = document.getElementById('btn-buildlog');
+  var buildLogPre = document.getElementById('buildlog-log');
+  btnBuildLog.addEventListener('click', function () {
+    btnBuildLog.disabled = true;
+    buildLogPre.textContent = '取得中…';
+    fetch('/api/cf-containers/build-log')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) { buildLogPre.textContent = 'エラー: ' + data.error; return; }
+        buildLogPre.textContent = 'build=' + data.buildUuid + ' status=' + (data.status || '?') + '\\n\\n' + (data.log || '(ログ空)');
+      })
+      .catch(function (err) { buildLogPre.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnBuildLog.disabled = false; });
   });
 
   var btnTunnels = document.getElementById('btn-tunnels');

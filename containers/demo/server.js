@@ -71,11 +71,13 @@ function runCmd(cmd, args) {
 }
 
 async function buildNetDebug() {
-  const [addr, route] = await Promise.all([
+  const [addr, route, dns, netstat] = await Promise.all([
     runCmd('ip', ['-o', 'addr', 'show']),
     runCmd('ip', ['-o', 'route', 'show']),
+    runCmd('cat', ['/etc/resolv.conf']),
+    runCmd('ss', ['-tulpn']),
   ]);
-  return { addr, route, checkedAt: new Date().toISOString() };
+  return { addr, route, dns, netstat, checkedAt: new Date().toISOString() };
 }
 
 http
