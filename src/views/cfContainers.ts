@@ -123,9 +123,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
   </div>
   <table class="health-table" id="health-table" hidden>
-    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>確認時刻</th></tr></thead>
+    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
-      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-time"></td>
+      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-time"></td>
     </tr></tbody>
   </table>
   <div id="health-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
@@ -359,6 +359,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         document.getElementById('health-apache').innerHTML = badge(data.apache);
         document.getElementById('health-sshd').innerHTML = badge(data.sshd);
         document.getElementById('health-cloudflared').innerHTML = badge(data.cloudflared);
+        document.getElementById('health-tailscale').innerHTML = badge(data.tailscale);
         document.getElementById('health-time').textContent = data.checkedAt || '';
         healthTable.hidden = false;
         healthLog.textContent = '';

@@ -39,17 +39,29 @@ function probeCloudflaredReady() {
   });
 }
 
+// tailscaledの状態(BackendState)がRunningかどうか。落ちている・未登録のときはfalse。
+async function probeTailscaleRunning() {
+  const out = await runCmd('tailscale', ['--socket=/var/run/tailscale/tailscaled.sock', 'status', '--json']);
+  try {
+    return JSON.parse(out).BackendState === 'Running';
+  } catch {
+    return false;
+  }
+}
+
 async function buildHealth() {
-  const [apache, sshd, cloudflared] = await Promise.allSettled([
+  const [apache, sshd, cloudflared, tailscale] = await Promise.allSettled([
     probeTcp(8443),
     probeTcp(2222),
     probeCloudflaredReady(),
+    probeTailscaleRunning(),
   ]);
   const value = (settled) => (settled.status === 'fulfilled' ? settled.value : false);
   return {
     apache: value(apache),
     sshd: value(sshd),
     cloudflared: value(cloudflared),
+    tailscale: value(tailscale),
     checkedAt: new Date().toISOString(),
   };
 }
