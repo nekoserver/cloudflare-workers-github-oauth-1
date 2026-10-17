@@ -207,6 +207,14 @@
 
 39. **`containers/**`・`src/containers/**`・`src/views/cfContainers.ts`・`wrangler.toml`の`[[containers]]`を変更したら、push前に`bash scripts/check-cf-containers.sh`を必ず実行して`ALL OK`を確認しろ** — Workers BuildsのPRビルド(`wrangler versions upload`)はコンテナイメージをビルドしないため、検証せずにmainへマージすると本番ビルドが一発勝負になる(実例: 2026-10-16〜17、#2389以降の本番ビルド失敗、Apacheが8443で待ち受けていない不具合、ページscriptの構文エラーがいずれもマージ後に発覚した)。このスクリプトは関連テスト・Workerのバンドル(`wrangler deploy --dry-run`)・Dockerfileのビルド・コンテナ起動後の`/health`と8443確認を行う。Claude Codeのクラウドサンドボックスでも、スクリプトがプロキシのCAを注入して本番と同じダウンロード込みでビルドする。`--offline`(ダウンロードを除外)は検証不足なので、使った場合はその旨を報告に明記すること。GitHub Actionsはこのリポジトリでは使っていないので、CIに頼らないこと
 
+40. **コンテナイメージは「1レイヤー800MB以下」「イメージ全体がinstance_typeのディスク上限以下」を必ず守り、`scripts/check-cf-containers.sh`のサイズ検査でOKを確認してからpushしろ** — 本番ビルドは**イメージのビルド自体は成功しているのに**、`registry.cloudflare.com`へのレイヤーのアップロードが`net/http: timeout awaiting response headers`で失敗し続けていた(2026-10-16〜17、#2389〜#2398)。原因は、apt・cloudflared・tailscale・npm(Codex/Claude CLI)を`RUN`1つにまとめた**1.9GBの単一レイヤー**で、送り切れるかどうかは毎回変わるため成功と失敗が混在した(#2402でレイヤーを分割して解消。詳細は[`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md))。
+    - Dockerfileでは、大きなインストール(apt・外部バイナリ・`npm install -g`のパッケージごと)を**別々の`RUN`に分ける**。1つの`RUN`に`&&`で全部つなげない
+    - `npm install -g`の後は`npm cache clean --force`、aptの後は`rm -rf /var/lib/apt/lists/*`を**同じ`RUN`の中で**実行する(別の`RUN`で消してもレイヤーは小さくならない)
+    - `scripts/check-cf-containers.sh`は、`MAX_LAYER_MB`(既定800)を超えるレイヤーがあれば`NG`で止まる。この閾値を上げてNGを回避してはならない。超えた場合はレイヤーを分割する
+    - イメージ全体の上限は`instance_type`のディスク容量(standard-1は8GB)。スクリプトが表示する`image size`を報告に必ず記載する
+    - Codex/Claude CLIは今回の構成に必須のため削らない。サイズを減らすときは、CLIを外すのではなくレイヤーの分割とキャッシュの削除で対応する
+    - 本番ビルドの成否はGitHubの表示(後から書き換わる)で判断せず、`/cf-containers`の「最新ビルドのログを取得」で`Failed:`が無いことを確認する
+
 ---
 
 ## 自動アップロード対象の区別
