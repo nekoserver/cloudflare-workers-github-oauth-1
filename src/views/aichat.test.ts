@@ -1030,7 +1030,9 @@ describe('AIチャット: 過去ログモーダルの追加質問登録', () => 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openAddSubqueryModal(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const end = html.indexOf('\n    function ', idx + 1);
+    expect(end).toBeGreaterThan(idx);
+    const fn = html.slice(idx, end);
     expect(fn).toContain('/api/aichat/subqueries');
     expect(fn).toContain('fetch');
   });
@@ -1473,7 +1475,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1500);
+    const end = src.indexOf("if (!c.env.AI)", idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = src.slice(idx, end);
     expect(fn).toContain('fetchLatestCommitAgentLog:');
     expect(fn).toContain('SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1');
   });
@@ -1484,7 +1488,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 2400);
+    const end = src.indexOf("if (!c.env.AI)", idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = src.slice(idx, end);
     expect(fn).toContain('searchShares:');
     expect(fn).toContain('searchAiChatShares(');
     expect(fn).toContain('hitCount: results.length');
@@ -1512,7 +1518,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 3800);
+    const end = src.indexOf("if (!c.env.AI)", idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = src.slice(idx, end);
     expect(fn).toContain('vectorizedAnswers:');
     expect(fn).toContain('SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?');
     expect(fn).toContain('SELECT COUNT(*) AS cnt FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL');
@@ -1525,7 +1533,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 8600);
+    const end = src.indexOf("if (!c.env.AI)", idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = src.slice(idx, end);
     expect(fn).toContain('sha256ViaWasm:');
     // 静的importにするとVite/vitestの.wasmインポートがWebAssembly.Moduleでは
     // なくアセットパス文字列を返すため、index.tsを読み込む全テストが壊れる。
