@@ -389,7 +389,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) { buildLogPre.textContent = 'エラー: ' + data.error; return; }
-        buildLogPre.textContent = 'build=' + data.buildUuid + ' status=' + (data.status || '?') + '\\n\\n[直近のビルド]\\n' + (data.recentBuilds || []).join('\\n') + '\\n\\n' + (data.log || '(ログ空)');
+        buildLogPre.textContent = 'build=' + data.buildUuid + ' status=' + (data.status || '?') + '\\n\\n[直近のビルド]\\n' + (data.recentBuilds || []).join('\\n') + '\\n\\n[API応答の形]\\n' + (data.responseShape || []).join('\\n') + '\\n\\n' + (data.log || '(ログ空)');
       })
       .catch(function (err) { buildLogPre.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnBuildLog.disabled = false; });

@@ -45,7 +45,7 @@ export async function fetchLatestBuildLog(
   scriptName: string,
   buildUuid?: string,
   fetcher: typeof fetch = fetch
-): Promise<{ buildUuid: string; status: string | null; log: string; recentBuilds: string[] }> {
+): Promise<{ buildUuid: string; status: string | null; log: string; recentBuilds: string[]; responseShape: string[] }> {
   const account = `${API}/accounts/${encodeURIComponent(credentials.accountId)}`;
   let uuid = buildUuid;
   let status: string | null = null;
@@ -71,9 +71,12 @@ export async function fetchLatestBuildLog(
   const MAX_PAGES = 50;
   const lines: unknown[] = [];
   let cursor: string | undefined;
+  // 実APIの応答の形をそのまま記録する(想定したモックではなく実応答でテストを作るため)
+  const responseShape: string[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = `${account}/builds/builds/${encodeURIComponent(uuid)}/logs` + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '');
     const result = await call<{ lines?: unknown[]; truncated?: boolean; cursor?: string } | unknown[]>(url, credentials, fetcher);
+    responseShape.push(describeShape(page, result));
     if (Array.isArray(result)) {
       lines.push(...result);
       break;
@@ -82,5 +85,21 @@ export async function fetchLatestBuildLog(
     if (!result?.truncated || !result.cursor || result.cursor === cursor) break;
     cursor = result.cursor;
   }
-  return { buildUuid: uuid, status, log: formatBuildLogLines(lines), recentBuilds };
+  return { buildUuid: uuid, status, log: formatBuildLogLines(lines), recentBuilds, responseShape };
+}
+
+/** ログAPIの1ページ分の応答の形(値は含めない)を1行で表す。 */
+export function describeShape(page: number, result: unknown): string {
+  if (Array.isArray(result)) return `page${page}: array(len=${result.length}) first=${JSON.stringify(result[0] ?? null).slice(0, 80)}`;
+  if (result && typeof result === 'object') {
+    const obj = result as Record<string, unknown>;
+    const parts = Object.keys(obj).map((k) => {
+      const v = obj[k];
+      if (Array.isArray(v)) return `${k}:array(len=${v.length}) first=${JSON.stringify(v[0] ?? null).slice(0, 80)}`;
+      if (k === 'cursor') return `${k}:${v ? 'present' : String(v)}`;
+      return `${k}:${typeof v === 'object' ? 'object' : JSON.stringify(v)}`;
+    });
+    return `page${page}: {${parts.join(', ')}}`;
+  }
+  return `page${page}: ${typeof result}`;
 }

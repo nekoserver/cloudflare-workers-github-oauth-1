@@ -65,5 +65,11 @@ describe('fetchLatestBuildLog', () => {
     await fetchLatestBuildLog(creds, 'my-worker', 'b1', fetcher as unknown as typeof fetch);
     expect(fetcher.mock.calls.length).toBe(2);
   });
+
+  it('実応答の形(キー・件数・cursorの有無)を値を出さずに記録する', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ success: true, result: { lines: [[1, 'a']], truncated: false, cursor: 'secret-ish' } }));
+    const out = await fetchLatestBuildLog(creds, 'my-worker', 'b1', fetcher as unknown as typeof fetch);
+    expect(out.responseShape).toEqual(['page0: {lines:array(len=1) first=[1,"a"], truncated:false, cursor:present}']);
+  });
 });
 
