@@ -42,7 +42,7 @@ import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getCfContainersPage } from './views/cfContainers';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
-import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents } from './utils/cfContainerOperationLog';
+import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
@@ -19480,6 +19480,16 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
       'cloudflare-workers-github-oauth-1',
       c.req.query('build') || undefined
     );
+    await recordContainerOperation(
+      c.env.DB,
+      {
+        action: 'diag:build-log',
+        performedBy: c.get('user')?.sub ?? 'unknown',
+        result: 'success',
+        detail: truncateDiagDetail(`build=${result.buildUuid} status=${result.status}\n${result.recentBuilds.join('\n')}\n\n${result.log}`),
+      },
+      (m) => logger.error('[cf-containers-build-log] D1記録に失敗', { error: m })
+    );
     return jsonUtf8(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -19609,10 +19619,31 @@ app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, as
   const url = new URL(c.req.url);
   const forwardPath = url.pathname.slice(prefix.length) || '/';
   const forwardUrl = `${url.origin}${forwardPath}${url.search}`;
+  const diagAction = diagActionForProxyPath(forwardPath);
+  const user = c.get('user');
+  const recordDiag = (result: 'success' | 'failure', detail: string) =>
+    diagAction
+      ? recordContainerOperation(c.env.DB, { action: diagAction, performedBy: user?.sub ?? 'unknown', result, detail: truncateDiagDetail(detail) }, (m) =>
+          logger.error('[cf-containers-proxy] 診断結果のD1記録に失敗', { error: m })
+        )
+      : Promise.resolve(false);
   try {
-    return await stub.fetch(new Request(forwardUrl, c.req.raw));
+    // 応答が返らないまま待ち続けると原因が何も残らないため、診断系は30秒で打ち切って記録する
+    const res = diagAction
+      ? await Promise.race([
+          stub.fetch(new Request(forwardUrl, c.req.raw)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('コンテナが30秒以内に応答しませんでした(起動中・起動失敗・ポート未待ち受けの可能性)')), 30000)),
+        ])
+      : await stub.fetch(new Request(forwardUrl, c.req.raw));
+    if (diagAction) {
+      // 診断結果はD1にも残す(Claude CodeがMCP経由で読めるようにするため)
+      const body = await res.clone().text();
+      await recordDiag(res.ok ? 'success' : 'failure', `HTTP ${res.status}\n${body}`);
+    }
+    return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    await recordDiag('failure', 'プロキシでサーバーエラー: ' + message);
     return jsonUtf8({ error: 'プロキシでサーバーエラーが発生しました: ' + message }, 502);
   }
 });

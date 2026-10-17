@@ -96,3 +96,25 @@ export async function recordContainerOperation(
     return false;
   }
 }
+
+/**
+ * /cf-containersで取得した診断結果(ヘルスチェック・ログ・ネットワーク情報・ビルドログ)を
+ * D1に残すためのaction名を返す。Claude CodeからはCloudflare MCPのD1クエリで読めるため、
+ * 利用者が結果を貼り付けなくても調査できる。対象外のパスはnull。
+ * action名は'diag:'で始まり、起動回数・接続時間の集計(start/restart/stopのみ対象)には影響しない。
+ */
+export function diagActionForProxyPath(forwardPath: string): string | null {
+  const map: Record<string, string> = {
+    '/health': 'diag:health',
+    '/debug/logs': 'diag:logs',
+    '/debug/net': 'diag:net',
+  };
+  return map[forwardPath] ?? null;
+}
+
+/** 診断結果を1行に収まる大きさに切り詰める(末尾を残す。ログは末尾に原因が出るため)。 */
+export const DIAG_DETAIL_MAX_CHARS = 20000;
+export function truncateDiagDetail(text: string, max: number = DIAG_DETAIL_MAX_CHARS): string {
+  if (text.length <= max) return text;
+  return `[先頭${text.length - max}文字を省略]` + text.slice(text.length - max);
+}
