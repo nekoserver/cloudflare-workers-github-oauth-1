@@ -28,3 +28,17 @@ ZTモーダルの既存19件も未変更のmainで再現し、要素取得を修
 ## 注意事項
 
 この変更はWorkerのデプロイ後に本番画面へ反映される。配信サーバー側の会話observerは別途監視対象の指定が必要。
+
+# AIチャットのストリームiframeをCSPで許可
+
+**対象**: `/aichat` のContent-Security-Policyと、`mygw.nekomaneki.work` の会話ストリーム埋め込み。
+
+## 背景と故障想定
+
+`src/views/conversationStreamPanel.ts` はiframe接続先を `mygw.nekomaneki.work` に変更済みだったが、`/aichat` の個別CSPは `frame-src https://mynw.nekomaneki.work` のままだった。ブラウザはCSP違反としてiframeを読み込まず、埋め込みJavaScriptから親ページへ `conversation-state` が届かない。そのため開始/停止ボタンが無効のままになり、ストリーム領域も空になる。上流ヘルス確認が200でも、ブラウザのCSPがiframeを遮断する症状は検知できない。
+
+## 検証と修正
+
+修正前に認証付き `/aichat` の応答CSPを検査するテストを追加し、実際に `mynw` だけが許可され `mygw` が許可されないことを確認した。`/aichat` のCSPを `frame-src https://mygw.nekomaneki.work` に更新し、一般ページのCSPは変更しない。テストは認証付きページ応答から許可先を検査する。
+
+実ブラウザで本番と同じCSPを適用した親ページから公開iframeを読み込み、ハンドシェイク、会話表示、WebSocket/SSE切替、開始/停止操作を確認した。変更を有効にするにはWorkerのデプロイが必要。

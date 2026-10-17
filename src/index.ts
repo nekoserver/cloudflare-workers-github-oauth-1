@@ -6273,7 +6273,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mygw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getAiChatPage({
     name: user.name,
