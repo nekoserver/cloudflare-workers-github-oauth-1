@@ -132,7 +132,7 @@ echo "OK: 外から8080に届く"
 docker exec "$NAME" sh -c 'head -1 /etc/resolv.conf' | grep -q '^nameserver 1.1.1.1' \
   || { echo "NG: resolv.confの先頭がIPv4のリゾルバ(1.1.1.1)になっていない"; docker exec "$NAME" cat /etc/resolv.conf; exit 1; }
 echo "OK: resolv.confの先頭が1.1.1.1"
-curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; print("OK: /debug/logs")' \
+curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; assert "1.1.1.1" in d["logs"]["/tmp/dns.log"]; print("OK: /debug/logs")' \
   || { echo "NG: /debug/logsが返らない"; exit 1; }
 curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping") if k not in d]; assert not missing, missing; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
   || { echo "NG: /debug/netの項目が足りない"; exit 1; }

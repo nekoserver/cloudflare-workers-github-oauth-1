@@ -18,12 +18,23 @@ mkdir -p /run/sshd /run/lock /run/apache2 /var/lock/apache2 2>/dev/null || true
 # 本番の既定DNSはIPv6のリゾルバ(2606:4700:4700::1111・2620:fe::fe)だけで、このコンテナからは
 # 引けない(2026-10-17、/debug/netのdigで確認。@1.1.1.1なら引ける)。cloudflaredがエッジの
 # 名前解決に失敗して終了していたため、IPv4のリゾルバを先頭に置く。
-if ! grep -q '^nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null; then
-  { printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n'; grep -v '^nameserver' /etc/resolv.conf 2>/dev/null; } > /tmp/resolv.conf.new \
-    && cat /tmp/resolv.conf.new > /etc/resolv.conf \
-    && log "resolv.conf: IPv4のリゾルバ(1.1.1.1/1.0.0.1)に置き換えた" \
-    || log "WARN: resolv.confを書き換えられなかった"
-fi
+# 書き込めない場合(本番でresolv.confが読み取り専用に差し込まれている可能性)はbind mountで
+# 上書きする。起動後にランタイムが書き戻す可能性もあるため30秒ごとに確認し直す。
+# 結果は/tmp/dns.log(/debug/logsで読める)に残す。
+ensure_ipv4_dns() {
+  grep -q '^nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null && return 0
+  { printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n'; grep -v '^nameserver' /etc/resolv.conf 2>/dev/null; } > /tmp/resolv.conf.new
+  if cat /tmp/resolv.conf.new > /etc/resolv.conf 2>>/tmp/dns.log; then
+    echo "$(date -u +%FT%TZ) resolv.conf: 書き込みで1.1.1.1に置き換えた" >>/tmp/dns.log
+  elif mount --bind /tmp/resolv.conf.new /etc/resolv.conf 2>>/tmp/dns.log; then
+    echo "$(date -u +%FT%TZ) resolv.conf: 書き込めないためbind mountで置き換えた" >>/tmp/dns.log
+  else
+    echo "$(date -u +%FT%TZ) WARN: resolv.confを書き込みでもbind mountでも置き換えられなかった" >>/tmp/dns.log
+  fi
+  { echo "--- 現在のresolv.conf"; cat /etc/resolv.conf; } >>/tmp/dns.log 2>&1
+}
+ensure_ipv4_dns
+(while sleep 30; do ensure_ipv4_dns; done) &
 
 # 貼り付けられたトンネルトークンから本体(eyJで始まるbase64)だけを取り出す。
 # 「cloudflared service install eyJ...」のようにコマンドごと貼られた場合や、
@@ -125,7 +136,7 @@ fi
 if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
   mkdir -p /var/lib/tailscale /var/run/tailscale
   /usr/sbin/tailscaled \
-    --state=/var/lib/tailscale/tailscaled.state \
+    --state=mem: \
     --socket=/var/run/tailscale/tailscaled.sock \
     --tun=userspace-networking \
     >/tmp/tailscaled.log 2>&1 &
