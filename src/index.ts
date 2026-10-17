@@ -480,7 +480,7 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
 function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
-  return (message: string) => askTunnelSigner(fetcher, message);
+  return (message: string) => askTunnelSigner(fetcher, message, env.ASKGK_TUNNELS_URL);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
