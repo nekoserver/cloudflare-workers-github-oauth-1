@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { getMentionEditorPage } from './views/mentionEditor';
 import { extractFunctionSource } from './utils/extractFunctionSource';
@@ -567,7 +567,7 @@ describe('候補選択時の動作(default/typewriter)', () => {
     expect(dom.window.document.cookie).toContain('mentionEditorCopyMode=default');
   });
 
-  it('Cookieが typewriter のとき、候補選択は入力欄を変えずTypewriter領域へ表示する(1回だけ)', () => {
+  it('Cookieが typewriter のとき、候補選択は入力欄を変えずTypewriter領域へ表示する(1回だけ)', async () => {
     const dom = loadPage('mentionEditorCopyMode=typewriter');
     const toggle = dom.window.document.getElementById('copyModeToggle') as HTMLButtonElement;
     expect(toggle.textContent).toBe('typewriter');
@@ -581,13 +581,12 @@ describe('候補選択時の動作(default/typewriter)', () => {
     expect(box.hidden).toBe(false);
     expect(textEl.textContent).toBe('');
 
-    return new Promise<void>((resolve) => {
-      dom.window.setTimeout(() => {
+    try {
+      await vi.waitFor(() => {
         expect(textEl.textContent).toBe('/bold ');
         expect(input.value).toBe('');
-        resolve();
-      }, 60 * '/bold '.length + 30);
-    });
+      }, { timeout: 5000 });
+    } finally { dom.window.close(); }
   });
 
   it('Typewriter領域をタップするとコマンド入力欄へコピーし、Typewriter表示を消す', () => {
