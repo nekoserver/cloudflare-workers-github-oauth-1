@@ -29,7 +29,11 @@ describe('サブクエリを持つ質問一覧: モデルカラー表示', () =>
 
   it('リンク行にモデルカラードットを設定するコードを含む', () => {
     const html = buildPage();
-    expect(html).toContain('MODEL_COLORS[m]');
+    const start = html.indexOf('function renderLinkedQuestions(');
+    expect(start).toBeGreaterThan(-1);
+    const end = html.indexOf('\n    function ', start + 1);
+    expect(end).toBeGreaterThan(start);
+    expect(html.slice(start, end)).toContain('getModelDotColor(m)');
   });
 
   it('質問セルには border-left カラーを設定しない（リンク行に移動）', () => {

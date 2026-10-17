@@ -66,7 +66,7 @@ export function getConversationStreamPanel(): string {
     function load() {
       checkHealth();
       start.disabled = true; stop.disabled = true;
-      var url = new URL('https://mynw.nekomaneki.work/lib/conversation-embed.html');
+      var url = new URL('https://mygw.nekomaneki.work/lib/conversation-embed.html');
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());
       frame.src = url.href;
@@ -87,12 +87,12 @@ export function getConversationStreamPanel(): string {
       else frame.removeAttribute('src');
     }
     frame.addEventListener('load', function () {
-      if (!panel.hidden && frame.getAttribute('src')) frame.contentWindow.postMessage({ type: 'conversation-controls' }, 'https://mynw.nekomaneki.work');
+      if (!panel.hidden && frame.getAttribute('src')) frame.contentWindow.postMessage({ type: 'conversation-controls' }, 'https://mygw.nekomaneki.work');
     });
-    start.addEventListener('click', function () { frame.contentWindow.postMessage({ type: 'conversation-start' }, 'https://mynw.nekomaneki.work'); });
-    stop.addEventListener('click', function () { frame.contentWindow.postMessage({ type: 'conversation-stop' }, 'https://mynw.nekomaneki.work'); });
+    start.addEventListener('click', function () { frame.contentWindow.postMessage({ type: 'conversation-start' }, 'https://mygw.nekomaneki.work'); });
+    stop.addEventListener('click', function () { frame.contentWindow.postMessage({ type: 'conversation-stop' }, 'https://mygw.nekomaneki.work'); });
     window.addEventListener('message', function (event) {
-      if (event.origin !== 'https://mynw.nekomaneki.work' || event.source !== frame.contentWindow || panel.hidden) return;
+      if (event.origin !== 'https://mygw.nekomaneki.work' || event.source !== frame.contentWindow || panel.hidden) return;
       if (event.data && event.data.type === 'conversation-state' && typeof event.data.busy === 'boolean') {
         start.disabled = event.data.busy; stop.disabled = !event.data.busy;
       }
@@ -107,7 +107,7 @@ export function getConversationStreamPanel(): string {
       if (event.key === 'Escape' && !panel.hidden) { setOpen(false); toggle.focus(); }
     });
     new MutationObserver(function () {
-      if (!panel.hidden && frame.contentWindow) frame.contentWindow.postMessage({ type: 'conversation-theme', theme: theme() }, 'https://mynw.nekomaneki.work');
+      if (!panel.hidden && frame.contentWindow) frame.contentWindow.postMessage({ type: 'conversation-theme', theme: theme() }, 'https://mygw.nekomaneki.work');
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     window.addEventListener('pagehide', function () {
       frame.removeAttribute('src'); clearInterval(healthTimer); healthTimer = null;

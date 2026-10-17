@@ -96,7 +96,11 @@ describe('ZTモーダルのHTML構造: 📖アイコン・一覧モーダル・�
 
 async function setupZtUi() {
   const html = buildPage();
-  document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+  const page = new DOMParser().parseFromString(html, 'text/html');
+  const scripts = page.querySelectorAll('script:not([src])');
+  const scriptSrc = scripts[scripts.length - 1].textContent!;
+  page.querySelectorAll('script').forEach(script => script.remove());
+  document.body.innerHTML = page.body.innerHTML;
 
   const fetchMock = vi.fn((url: string) => {
     const u = String(url);
@@ -153,7 +157,6 @@ async function setupZtUi() {
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.resolve() } });
 
-  const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
   // eslint-disable-next-line no-new-func
   new Function(scriptSrc)();
 

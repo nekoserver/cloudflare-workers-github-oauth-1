@@ -7,7 +7,7 @@ describe('conversation stream upstream health', () => {
     const probe = vi.fn().mockResolvedValue(new Response(null, { status }));
     vi.stubGlobal('fetch', probe);
     expect(await conversationStreamHealthy()).toBe(status === 200);
-    expect(probe).toHaveBeenCalledWith('https://mynw.nekomaneki.work/lib/conversation-embed.html', expect.objectContaining({
+    expect(probe).toHaveBeenCalledWith('https://mygw.nekomaneki.work/lib/conversation-embed.html', expect.objectContaining({
       method: 'HEAD', redirect: 'manual', signal: expect.any(AbortSignal),
     }));
   });
