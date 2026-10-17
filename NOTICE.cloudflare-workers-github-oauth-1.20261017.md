@@ -67,6 +67,14 @@
 - cloudflared の `Provided Tunnel token is not valid.` は、トークンの貼り方（`cloudflared service install eyJ...` のようにコマンドごと貼る、空白・改行が入る など）で起きる。entrypoint.sh で `eyJ...` の部分だけを取り出すようにした
 - コンテナのネットワーク（Tailscale のログより）: `self=10.0.0.1`、`gw=10.0.0.254`。CIDR は `10.0.0.0/24` とみられる（`/debug/net` で確認すること）
 
+## 6.7 診断結果の受け渡しは D1 経由にする（貼り付け不要）
+
+- `/cf-containers` のヘルスチェック・`/cf-containers/proxy/debug/logs`・ネットワーク情報・「最新ビルドのログを取得」の結果は、D1 の `cf_container_operation_log` に `action='diag:health' / 'diag:logs' / 'diag:net' / 'diag:build-log'` として保存される（PR #2407）。Claude Code は Cloudflare MCP の `d1_database_query` で直接読めるので、利用者は「押した」と伝えるだけでよい
+- 読み方: `SELECT created_at, action, result, detail FROM cf_container_operation_log WHERE action LIKE 'diag:%' ORDER BY id DESC LIMIT 5`（database_id は `wrangler.toml` の D1 設定を参照）
+- 診断系の問い合わせは30秒で打ち切り、タイムアウトも `result='failure'` として残す（応答が返らないまま待ち続けると、何も記録されないため）
+- `diag:*` の行は、起動回数・接続時間の集計（start/restart/stop だけが対象）には影響しない
+- **落とし穴**: 本番の D1 にはマイグレーション 0178（`cf_container_operation_log`）が適用されていなかった（MCP で `no such table` を確認し、2026-10-17 にコンソールで CREATE した）。それまでは起動・停止の記録もすべて失敗していた（エラーはログに出るだけで止まらない）。新しいテーブルに依存する機能を足したら、本番の D1 にテーブルがあるかを MCP で必ず確認すること
+
 ## 7. Claude Code のクラウドサンドボックスでの検証方法
 
 - 外向きの HTTPS は MITM プロキシ（`$HTTPS_PROXY`、CA は `/root/.ccr/ca-bundle.crt`）経由でしか通らない。プロキシは http を扱わない（apt の http は `405` になる）が、apt の http は直接外へ出られる
