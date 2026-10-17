@@ -2,8 +2,8 @@
 // 内部ネットワークを通り外へ出ないため任意の値でよい(dynamicWorkerPing.tsと同じ)。
 const SEND_PATH = 'https://internal/tunnel-signer/send';
 
-/** rust-worker-sqlx-d1がサーバー側署名で実際にPOSTする対象URL(/tunnel-signer自体のデフォルト値と同じ)。 */
-const TUNNELS_URL = 'https://mynw.nekomaneki.work/lib/api/tunnels';
+/** rust-worker-sqlx-d1がサーバー側署名で実際にPOSTする対象URL。現行のnekorootトンネルへ送る。 */
+const DEFAULT_TUNNELS_URL = 'https://mygw.nekomaneki.work/lib/api/tunnels';
 
 export type AskFetcher = Pick<Fetcher, 'fetch'>;
 
@@ -66,13 +66,13 @@ export function resolveAskgkCommand(input: string): string {
  * 質問と区別しているため(2026-10-04、接頭語を剥がして渡してしまい先方の
  * 判定が効かなくなる不具合があった)。
  */
-export async function askTunnelSigner(fetcher: AskFetcher, message: string): Promise<AskTunnelSignerResult> {
+export async function askTunnelSigner(fetcher: AskFetcher, message: string, tunnelsUrl?: string): Promise<AskTunnelSignerResult> {
   const payload = JSON.stringify({ status: 'healthy', format: 'json', message: resolveAskgkCommand(message) });
 
   const res = await fetcher.fetch(SEND_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: TUNNELS_URL, contentType: 'application/json', body: payload }),
+    body: JSON.stringify({ url: tunnelsUrl?.trim() || DEFAULT_TUNNELS_URL, contentType: 'application/json', body: payload }),
   });
 
   if (!res.ok) {
