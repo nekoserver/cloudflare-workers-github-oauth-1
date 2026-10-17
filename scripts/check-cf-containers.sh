@@ -68,6 +68,29 @@ EOF2
 fi
 docker build -q "${BUILD_ARGS[@]}" -t "$IMAGE" "$CTX" >/dev/null
 docker image ls "$IMAGE" --format 'image size: {{.Size}} (standard-1の上限は8GB)'
+# 本番ビルドは巨大な単一レイヤーのアップロードがタイムアウトして失敗した(2026-10-17)。
+# 1レイヤーがこれを超えたらNGにする。
+MAX_LAYER_MB=${MAX_LAYER_MB:-800}
+python3 - "$IMAGE" "$MAX_LAYER_MB" <<'EOF3'
+import json, subprocess, sys
+image, limit = sys.argv[1], int(sys.argv[2])
+out = subprocess.run(['docker', 'history', '--no-trunc', '--format', '{{json .}}', image], capture_output=True, text=True, check=True).stdout
+units = {'B': 1, 'kB': 1e3, 'KB': 1e3, 'MB': 1e6, 'GB': 1e9}
+big = []
+for line in out.splitlines():
+    h = json.loads(line)
+    size = h['Size']
+    num = float(''.join(c for c in size if c.isdigit() or c == '.') or 0)
+    unit = ''.join(c for c in size if c.isalpha()) or 'B'
+    mb = num * units.get(unit, 1) / 1e6
+    if mb > limit:
+        big.append(f'{size} {h["CreatedBy"][:100]}')
+if big:
+    print(f'NG: {limit}MBを超えるレイヤーがある(レジストリへのアップロードがタイムアウトしうる):')
+    print('\n'.join(big))
+    sys.exit(1)
+print(f'OK: 全レイヤーが{limit}MB以下')
+EOF3
 docker run --rm --entrypoint bash "$IMAGE" -c '
   set -e
   node --version >/dev/null

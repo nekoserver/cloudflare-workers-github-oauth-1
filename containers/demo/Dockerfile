@@ -44,19 +44,28 @@
 # (entrypoint.sh参照)。認証キーはTAILSCALE_AUTHKEY環境変数(envVars経由)
 # で渡す想定、未設定ならtailscaled起動をスキップする。
 FROM ubuntu:24.04
+# 2026-10-17: 以前は下記をRUN 1つにまとめており1.9GBの単一レイヤーになっていた。
+# 本番ビルドでregistry.cloudflare.comへのレイヤーアップロードが
+# "net/http: timeout awaiting response headers" で失敗していたため、
+# レイヤーを分割して1回のアップロードを小さくする(scripts/check-cf-containers.shで
+# 1レイヤーの上限を検証している)。
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates nodejs npm tmux gnupg \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i /tmp/cloudflared.deb \
-    && rm -f /tmp/cloudflared.deb \
-    && (curl -fsSL --retry 5 --retry-delay 3 https://tailscale.com/install.sh | sh || echo "WARN: tailscale install failed") \
-    && (npm install -g @openai/codex @anthropic-ai/claude-code || echo "WARN: codex/claude CLI install failed")
+    && rm -f /tmp/cloudflared.deb
+RUN (curl -fsSL --retry 5 --retry-delay 3 https://tailscale.com/install.sh | sh || echo "WARN: tailscale install failed") \
+    && rm -rf /var/lib/apt/lists/*
+RUN (npm install -g @openai/codex || echo "WARN: codex CLI install failed") \
+    && npm cache clean --force
+RUN (npm install -g @anthropic-ai/claude-code || echo "WARN: claude CLI install failed") \
+    && npm cache clean --force
 
 # 2026-10-16(続き2): Codex CLI・Claude CLIを再度追加(利用者希望)。
 # npm install -gはこのサンドボックスの outbound HTTPS プロキシが
