@@ -71,8 +71,8 @@ EOF
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-/usr/sbin/sshd >/tmp/sshd.log 2>&1 &
-log "sshd started (pid $!)"
+/usr/sbin/sshd -p 2222 >/tmp/sshd.log 2>&1 &
+log "sshd started on 2222 (pid $!)"
 
 # --- ファイアウォール ---
 # INPUT: ループバック・確立済み/関連・新規(NEW)を許可し、不正(invalid)のみ破棄する。
