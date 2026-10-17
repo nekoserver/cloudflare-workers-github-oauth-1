@@ -54,7 +54,7 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates nodejs npm tmux gnupg \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git gh \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
