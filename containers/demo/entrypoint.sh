@@ -15,6 +15,16 @@ log() { echo "[entrypoint] $*"; }
 # "/var/lock/apache2: No such file or directory"で起動していなかった)。ここで毎回作る。
 mkdir -p /run/sshd /run/lock /run/apache2 /var/lock/apache2 2>/dev/null || true
 
+# 本番の既定DNSはIPv6のリゾルバ(2606:4700:4700::1111・2620:fe::fe)だけで、このコンテナからは
+# 引けない(2026-10-17、/debug/netのdigで確認。@1.1.1.1なら引ける)。cloudflaredがエッジの
+# 名前解決に失敗して終了していたため、IPv4のリゾルバを先頭に置く。
+if ! grep -q '^nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null; then
+  { printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n'; grep -v '^nameserver' /etc/resolv.conf 2>/dev/null; } > /tmp/resolv.conf.new \
+    && cat /tmp/resolv.conf.new > /etc/resolv.conf \
+    && log "resolv.conf: IPv4のリゾルバ(1.1.1.1/1.0.0.1)に置き換えた" \
+    || log "WARN: resolv.confを書き換えられなかった"
+fi
+
 # 貼り付けられたトンネルトークンから本体(eyJで始まるbase64)だけを取り出す。
 # 「cloudflared service install eyJ...」のようにコマンドごと貼られた場合や、
 # 前後の空白・改行・引用符が混ざった場合でも通るようにする。値そのものは出力しない。
@@ -93,10 +103,17 @@ if [ -n "${NEKOROOT_HOSTNAME:-}" ] && [ -n "${NEKOROOT_TUNNEL_TOKEN:-}" ]; then
     /etc/cloudflared/ingress.yml.template > /etc/cloudflared/ingress.yml
   # --metrics: server.jsの/healthがローカルの/readyを叩いて接続状態を
   # 確認できるようにする(127.0.0.1限定、外部には公開しない)。
-  cloudflared tunnel --config /etc/cloudflared/ingress.yml --metrics 127.0.0.1:20241 \
-    run --token "${NEKOROOT_TUNNEL_TOKEN}" \
-    >/tmp/cloudflared.log 2>&1 &
-  log "cloudflared(nekoroot) started (pid $!), hostname=${NEKOROOT_HOSTNAME}"
+  # --edge-ip-version 4: このコンテナはIPv6で外に出られない(DNSも含む)ため。
+  # 終了しても5秒後に起動し直す(終了のたびにログへ記録する)。
+  (
+    while true; do
+      cloudflared tunnel --config /etc/cloudflared/ingress.yml --metrics 127.0.0.1:20241 \
+        --edge-ip-version 4 run --token "${NEKOROOT_TUNNEL_TOKEN}"
+      echo "[entrypoint] cloudflared exited (code $?) at $(date -u +%FT%TZ), restarting in 5s"
+      sleep 5
+    done
+  ) >>/tmp/cloudflared.log 2>&1 &
+  log "cloudflared(nekoroot) supervisor started (pid $!), hostname=${NEKOROOT_HOSTNAME}"
 else
   log "NEKOROOT_HOSTNAME/NEKOROOT_TUNNEL_TOKEN未設定のため、cloudflaredは起動しない"
 fi
