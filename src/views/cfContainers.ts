@@ -70,7 +70,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <h1>Cloudflare Containers（デモ）</h1>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
 <div class="notice">
-  無操作のまま<strong id="sleep-after-value">?</strong>経過すると自動停止します。単価・累計接続時間・予定支出は下の表を参照してください。
+  自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
 <div class="card">
   <strong>トークン設定（CLI不要）</strong>
@@ -123,9 +123,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
   </div>
   <table class="health-table" id="health-table" hidden>
-    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>確認時刻</th></tr></thead>
+    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
-      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-time"></td>
+      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
     </tr></tbody>
   </table>
   <div id="health-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
@@ -252,7 +252,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     } else {
       sshBox.hidden = true;
     }
-    if (!sleepAfterShown && data.sleepAfter) {
+    if (sleepAfterValue && !sleepAfterShown && data.sleepAfter) {
       sleepAfterValue.textContent = formatSleepAfter(data.sleepAfter);
       sleepAfterShown = true;
     }
@@ -360,6 +360,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         document.getElementById('health-sshd').innerHTML = badge(data.sshd);
         document.getElementById('health-cloudflared').innerHTML = badge(data.cloudflared);
         document.getElementById('health-tailscale').innerHTML = badge(data.tailscale);
+        document.getElementById('health-docker').innerHTML = badge(data.docker);
         document.getElementById('health-time').textContent = data.checkedAt || '';
         healthTable.hidden = false;
         healthLog.textContent = '';

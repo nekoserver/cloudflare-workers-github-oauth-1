@@ -54,7 +54,9 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates nodejs npm tmux gnupg \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
@@ -68,9 +70,17 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex \
     && command -v codex \
     && npm cache clean --force
-# Claude CLIは2026-10-17に外した(NOTICE.cloudflare-workers-github-oauth-1.20261017.md参照)。
-# Node 22以上が必要なのにUbuntu 24.04のnodejsは18であり、約560MBを占める割に
-# この構成では使う予定がないため。
+# Claude CLI: 2026-10-17に一度外したが利用者希望で再追加。Node 22以上が必要なため、
+# システムのnode(18、server.js・Codex用)とは別にnodejs.orgのNode 22を/opt/node22へ置き、
+# そのnpmで入れる。claude.ai/install.shはこのセッションのサンドボックスから403で検証できないため使わない。
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.xz \
+        https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz \
+    && mkdir -p /opt/node22 && tar -xJf /tmp/node22.tar.xz -C /opt/node22 --strip-components=1 \
+    && rm -f /tmp/node22.tar.xz
+RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code \
+    && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
+    && claude --version \
+    && /opt/node22/bin/npm cache clean --force
 
 # 2026-10-16(続き2): Codex CLI・Claude CLIを再度追加(利用者希望)。
 # npm install -gはこのサンドボックスの outbound HTTPS プロキシが
