@@ -54,7 +54,7 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates nodejs npm tmux gnupg \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny \
+        netcat-openbsd tcpdump mtr-tiny whois procps \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \

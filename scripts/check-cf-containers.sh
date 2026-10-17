@@ -97,6 +97,7 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
   node --check /usr/local/bin/cf
   node --check /app/server.js
+  for c in netstat top whois dig ping; do command -v $c >/dev/null || { echo "NG: $c が入っていない"; exit 1; }; done
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
   if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
 '
@@ -130,6 +131,8 @@ curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/health" >/dev/null \
 echo "OK: 外から8080に届く"
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; print("OK: /debug/logs")' \
   || { echo "NG: /debug/logsが返らない"; exit 1; }
+curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping") if k not in d]; assert not missing, missing; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
+  || { echo "NG: /debug/netの項目が足りない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
 python3 -c '

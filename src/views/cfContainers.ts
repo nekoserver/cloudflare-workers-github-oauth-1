@@ -370,7 +370,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(function (res) { return res.json(); })
       .then(function (data) {
         netLog.textContent = '[ip addr]\\n' + (data.addr || '') + '\\n\\n[ip route]\\n' + (data.route || '')
-          + '\\n\\n[/etc/resolv.conf]\\n' + (data.dns || '') + '\\n\\n[ss -tulpn]\\n' + (data.netstat || '');
+          + '\\n\\n[/etc/resolv.conf]\\n' + (data.dns || '') + '\\n\\n[ss -tulpn]\\n' + (data.netstat || '')
+          + '\\n\\n[netstat -tunap]\\n' + (data.netstatLegacy || '') + '\\n\\n[top]\\n' + (data.top || '')
+          + '\\n\\n[dig 既定DNS region1.v2.argotunnel.com]\\n' + (data.digDefault || '') + '\\n\\n[dig @1.1.1.1 region1.v2.argotunnel.com]\\n' + (data.digV4 || '')
+          + '\\n\\n[dig @1.1.1.1 controlplane.tailscale.com]\\n' + (data.digTailscale || '') + '\\n\\n[ping 1.1.1.1]\\n' + (data.ping || '')
+          + '\\n\\n[whois nekomaneki.work]\\n' + (data.whois || '');
       })
       .catch(function (err) {
         netLog.textContent = 'エラー: ' + String(err);
