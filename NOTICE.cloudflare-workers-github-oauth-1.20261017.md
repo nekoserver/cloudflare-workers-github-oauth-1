@@ -75,6 +75,14 @@
 - `diag:*` の行は、起動回数・接続時間の集計（start/restart/stop だけが対象）には影響しない
 - **落とし穴**: 本番の D1 にはマイグレーション 0178（`cf_container_operation_log`）が適用されていなかった（MCP で `no such table` を確認し、2026-10-17 にコンソールで CREATE した）。それまでは起動・停止の記録もすべて失敗していた（エラーはログに出るだけで止まらない）。新しいテーブルに依存する機能を足したら、本番の D1 にテーブルがあるかを MCP で必ず確認すること
 
+## 6.8 本番のコンテナの DNS は IPv6 のリゾルバだけで、引けない（cloudflared が NG の原因）
+
+- 本番の `/etc/resolv.conf` は `2606:4700:4700::1111`・`2620:fe::fe` だけ。`/debug/net` の dig で、既定の DNS では `region1.v2.argotunnel.com` が引けず、`@1.1.1.1` なら引けることを確認した（D1 の `diag:net`）
+- cloudflared はエッジの名前解決に失敗して終了していた（プロセスが残っていなかった）。トークンには問題がなかった
+- 対策: entrypoint.sh で `/etc/resolv.conf` の先頭に `1.1.1.1`・`1.0.0.1` を置く。cloudflared は `--edge-ip-version 4` で起動し、終了したら5秒後に起動し直す（終了のたびに `/tmp/cloudflared.log` へ記録する）
+- コンテナのネットワーク（`/debug/net` で確定）: `cfeth0 10.0.0.1/24`、ゲートウェイ `10.0.0.254`、IPv6 は `fd00::11/8`。Worker からの接続は `10.1.0.0` から 8080 番に来る。ICMP（ping）は通らない
+- 22 番で待ち受けているのは Cloudflare 側の `dropbear`（`wrangler containers ssh` 用）で、自前の sshd ではない
+
 ## 7. Claude Code のクラウドサンドボックスでの検証方法
 
 - 外向きの HTTPS は MITM プロキシ（`$HTTPS_PROXY`、CA は `/root/.ccr/ca-bundle.crt`）経由でしか通らない。プロキシは http を扱わない（apt の http は `405` になる）が、apt の http は直接外へ出られる
