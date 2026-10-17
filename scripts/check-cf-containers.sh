@@ -98,7 +98,6 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   node --check /usr/local/bin/cf
   node --check /app/server.js
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
-  command -v claude >/dev/null || { echo "NG: claude CLIが入っていない"; exit 1; }
   if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
 '
 

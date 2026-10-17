@@ -53,7 +53,11 @@
 - 現在のルール: INPUT は lo・確立済み・関連・新規（NEW）を許可し、不正（invalid）だけ破棄する。FORWARD は許可
 - 検証スクリプトは `--cap-add NET_ADMIN` を付けて起動し、**コンテナの外から** 8080 番に届くことを確認する
 - Codex/Claude CLI の `npm install -g` は、以前は失敗しても WARN を出して続行していたため、Claude CLI が入っていないイメージが通っていた。現在は失敗したらビルドを止める。検証スクリプトも両方の存在を確認する
-- Ubuntu 24.04 の nodejs は 18。Claude CLI は Node 22 以上を要求している（`EBADENGINE` 警告）。現時点では起動するが、将来動かなくなるおそれがある（未対応）
+- **Claude CLI はイメージから外した（2026-10-17）。** 外した理由:
+  - Claude CLI（`@anthropic-ai/claude-code`）は Node 22 以上を要求している（`EBADENGINE` 警告）が、Ubuntu 24.04 の nodejs は 18
+  - イメージのうち約 560MB を占める
+  - コンテナ内で Claude CLI を使っても、利用者の使い方では役に立たない（Claude Code Web で作業しており、コンテナ内で別途トークンを使い切っても意味がない）
+  - 戻す場合は、先に Node 22 以上（NodeSource 等）を用意してから `npm install -g @anthropic-ai/claude-code` を独立した `RUN` で追加する。検証スクリプトに `command -v claude` の確認も戻すこと
 
 ## 7. Claude Code のクラウドサンドボックスでの検証方法
 
