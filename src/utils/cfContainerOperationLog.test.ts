@@ -84,3 +84,20 @@ describe('formatElapsedSinceLastStart', () => {
     expect(formatElapsedSinceLastStart('2026-10-16T13:00:00.000Z', now)).toBe('0分');
   });
 });
+
+describe('diagActionForProxyPath / truncateDiagDetail', () => {
+  it('診断用のパスだけdiag:のaction名を返し、それ以外はnull', async () => {
+    const { diagActionForProxyPath } = await import('./cfContainerOperationLog');
+    expect(diagActionForProxyPath('/health')).toBe('diag:health');
+    expect(diagActionForProxyPath('/debug/logs')).toBe('diag:logs');
+    expect(diagActionForProxyPath('/debug/net')).toBe('diag:net');
+    expect(diagActionForProxyPath('/')).toBeNull();
+    expect(diagActionForProxyPath('/debug/logs/x')).toBeNull();
+  });
+
+  it('長い診断結果は末尾を残して切り詰め、省略した文字数を示す', async () => {
+    const { truncateDiagDetail } = await import('./cfContainerOperationLog');
+    expect(truncateDiagDetail('abc', 5)).toBe('abc');
+    expect(truncateDiagDetail('0123456789', 4)).toBe('[先頭6文字を省略]6789');
+  });
+});
