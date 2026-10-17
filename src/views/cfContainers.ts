@@ -286,7 +286,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   function fetchStatus() {
     return fetch('/api/cf-containers/status')
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         if (data.error) {
           chip.textContent = 'エラー: ' + data.error;
@@ -309,7 +309,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: action })
     })
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         if (data.error) {
           log.textContent = 'エラー: ' + data.error;
@@ -333,6 +333,16 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   fetchStatus();
 
+  // JSON以外(例: コンテナ停止中のHTTP 500のテキスト)が返っても、Safariの
+  // "The string did not match the expected pattern" ではなく本文をそのまま見せる
+  function readJsonOrText(res) {
+    return res.text().then(function (text) {
+      try { return JSON.parse(text); } catch (e) {
+        throw new Error('HTTP ' + res.status + ': ' + text.slice(0, 300));
+      }
+    });
+  }
+
   function badge(ok) {
     return '<span class="badge" data-ok="' + (ok ? 'true' : 'false') + '">' + (ok ? 'OK' : 'NG') + '</span>';
   }
@@ -344,7 +354,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     btnHealth.disabled = true;
     healthLog.textContent = '確認中…(コンテナが停止中の場合は起動を待ちます)';
     fetch('/cf-containers/proxy/health')
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         document.getElementById('health-apache').innerHTML = badge(data.apache);
         document.getElementById('health-sshd').innerHTML = badge(data.sshd);
@@ -367,7 +377,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     btnNet.disabled = true;
     netLog.textContent = '取得中…';
     fetch('/cf-containers/proxy/debug/net')
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         netLog.textContent = '[ip addr]\\n' + (data.addr || '') + '\\n\\n[ip route]\\n' + (data.route || '')
           + '\\n\\n[/etc/resolv.conf]\\n' + (data.dns || '') + '\\n\\n[ss -tulpn]\\n' + (data.netstat || '')
@@ -390,7 +400,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     btnBuildLog.disabled = true;
     buildLogPre.textContent = '取得中…';
     fetch('/api/cf-containers/build-log')
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         if (data.error) { buildLogPre.textContent = 'エラー: ' + data.error; return; }
         buildLogPre.textContent = 'build=' + data.buildUuid + ' status=' + (data.status || '?') + '\\n\\n[直近のビルド]\\n' + (data.recentBuilds || []).join('\\n') + '\\n\\n[API応答の形]\\n' + (data.responseShape || []).join('\\n') + '\\n\\n' + (data.log || '(ログ空)');
@@ -407,7 +417,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     btnTunnels.disabled = true;
     tunnelLog.textContent = '取得中…';
     fetch('/api/cf-containers/tunnels')
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         if (data.error) {
           tunnelLog.textContent = 'エラー: ' + data.error;
@@ -449,7 +459,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: secretName.value, value: value })
     })
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         if (data.error) {
           secretLog.textContent = 'エラー: ' + data.error;
