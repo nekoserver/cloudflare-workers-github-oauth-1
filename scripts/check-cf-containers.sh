@@ -97,12 +97,15 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
   node --check /usr/local/bin/cf
   node --check /app/server.js
+  command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
+  command -v claude >/dev/null || { echo "NG: claude CLIが入っていない"; exit 1; }
   if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
 '
 
 step "4/4 コンテナを起動して/health・8443を確認"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-docker run -d --name "$NAME" "$IMAGE" >/dev/null
+# 本番と同じくnftablesを実際に効かせるためNET_ADMINを付け、外(ホスト側)から8080へ届くかも確認する
+docker run -d --name "$NAME" --cap-add NET_ADMIN -p 127.0.0.1::8080 "$IMAGE" >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 HEALTH=""
 for _ in $(seq 1 30); do
@@ -110,6 +113,13 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 echo "/health: $HEALTH"
+HOST_PORT=$(docker port "$NAME" 8080/tcp | head -1 | sed 's/.*://')
+docker logs "$NAME" 2>&1 | grep -a "nftables" || true
+curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/health" >/dev/null \
+  || { echo "NG: コンテナの外から8080に届かない(Workerからの操作が応答しなくなる。nftablesの許可漏れ等)"; docker logs "$NAME"; exit 1; }
+echo "OK: 外から8080に届く"
+curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; print("OK: /debug/logs")' \
+  || { echo "NG: /debug/logsが返らない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
 python3 -c '

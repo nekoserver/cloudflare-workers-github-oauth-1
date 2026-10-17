@@ -46,6 +46,15 @@
 - `apache-demo.conf` の VirtualHost は `*:8443` なのに `Listen 8443` が無く、Apache は 80/443 でしか待ち受けていなかった。cloudflared の転送先（8443）に届かない状態（[`34588564`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/34588564) で修正。起動確認テストで初めて判明）
 - コンテナのディスクは毎回使い捨て。`stop()`→`start()` で、イメージからまっさらな状態で起動し、entrypoint.sh が新しい環境変数で再実行される
 
+## 6.5 コンテナのファイアウォール（nftables）と、テストで見逃した理由
+
+- INPUT を「確立済み・lo のみ許可、ほかは破棄」にしていたため、**Worker が Durable Object 経由で 8080 番へ入ってくる新規接続まで破棄**され、本番で `/cf-containers` の操作（ヘルスチェック・ネットワーク情報）がすべて応答しなくなった
+- 手元のテストで見逃した理由: (1) 確認を `docker exec` によるコンテナ内部（127.0.0.1）からの接続でしかしていなかった (2) `--cap-add NET_ADMIN` を付けずに起動していたため、手元では nftables の設定自体が失敗していてルールが効いていなかった
+- 現在のルール: INPUT は lo・確立済み・関連・新規（NEW）を許可し、不正（invalid）だけ破棄する。FORWARD は許可
+- 検証スクリプトは `--cap-add NET_ADMIN` を付けて起動し、**コンテナの外から** 8080 番に届くことを確認する
+- Codex/Claude CLI の `npm install -g` は、以前は失敗しても WARN を出して続行していたため、Claude CLI が入っていないイメージが通っていた。現在は失敗したらビルドを止める。検証スクリプトも両方の存在を確認する
+- Ubuntu 24.04 の nodejs は 18。Claude CLI は Node 22 以上を要求している（`EBADENGINE` 警告）。現時点では起動するが、将来動かなくなるおそれがある（未対応）
+
 ## 7. Claude Code のクラウドサンドボックスでの検証方法
 
 - 外向きの HTTPS は MITM プロキシ（`$HTTPS_PROXY`、CA は `/root/.ccr/ca-bundle.crt`）経由でしか通らない。プロキシは http を扱わない（apt の http は `405` になる）が、apt の http は直接外へ出られる

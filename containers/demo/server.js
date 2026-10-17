@@ -80,8 +80,28 @@ async function buildNetDebug() {
   return { addr, route, dns, netstat, checkedAt: new Date().toISOString() };
 }
 
+// /debug/logs: entrypoint.shが各デーモンの出力を書く/tmp/*.logの末尾を返す
+// (cloudflaredがNGのときの原因調査用。/cf-containers/proxy/*は管理者のみ到達可能)。
+const fs = require('node:fs');
+const DEBUG_LOG_FILES = ['/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log'];
+function tailFile(path, maxBytes) {
+  try {
+    const buf = fs.readFileSync(path);
+    return buf.subarray(Math.max(0, buf.length - maxBytes)).toString('utf8');
+  } catch (err) {
+    return `[読めない: ${err.code || err.message}]`;
+  }
+}
+
 http
   .createServer((req, res) => {
+    if (req.url === '/debug/logs') {
+      const logs = {};
+      for (const f of DEBUG_LOG_FILES) logs[f] = tailFile(f, 4000);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ logs, checkedAt: new Date().toISOString() }));
+      return;
+    }
     if (req.url === '/debug/net') {
       buildNetDebug().then((net_) => {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
