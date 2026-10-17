@@ -60,7 +60,7 @@ async function buildHealth() {
 // 追加の認証は行わない(Worker側のアクセス制御に委ねる)。
 function runCmd(cmd, args) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: PROBE_TIMEOUT_MS * 2 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         resolve(`[実行失敗: ${err.message}] ${stderr || ''}`.trim());
       } else {
@@ -70,14 +70,31 @@ function runCmd(cmd, args) {
   });
 }
 
+// cloudflaredの接続先(エッジ)の名前解決を、既定のDNS(IPv6のみの場合がある)と
+// IPv4の1.1.1.1の両方で試し、名前解決で止まっているかを切り分ける。
+const EDGE_HOST = 'region1.v2.argotunnel.com';
 async function buildNetDebug() {
-  const [addr, route, dns, netstat] = await Promise.all([
+  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping] = await Promise.all([
     runCmd('ip', ['-o', 'addr', 'show']),
     runCmd('ip', ['-o', 'route', 'show']),
     runCmd('cat', ['/etc/resolv.conf']),
     runCmd('ss', ['-tulpn']),
+    runCmd('netstat', ['-tunap']),
+    runCmd('top', ['-b', '-n', '1']),
+    runCmd('dig', ['+time=2', '+tries=1', EDGE_HOST]),
+    runCmd('dig', ['+time=2', '+tries=1', '@1.1.1.1', EDGE_HOST]),
+    runCmd('dig', ['+time=2', '+tries=1', '@1.1.1.1', 'controlplane.tailscale.com']),
+    runCmd('whois', ['nekomaneki.work']),
+    runCmd('ping', ['-c', '2', '-W', '2', '1.1.1.1']),
   ]);
-  return { addr, route, dns, netstat, checkedAt: new Date().toISOString() };
+  return {
+    addr, route, dns, netstat, netstatLegacy,
+    top: top.split('\n').slice(0, 25).join('\n'),
+    digDefault, digV4, digTailscale,
+    whois: whois.split('\n').slice(0, 40).join('\n'),
+    ping,
+    checkedAt: new Date().toISOString(),
+  };
 }
 
 // /debug/logs: entrypoint.shが各デーモンの出力を書く/tmp/*.logの末尾を返す
