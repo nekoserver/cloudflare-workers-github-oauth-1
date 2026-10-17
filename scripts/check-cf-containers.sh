@@ -45,7 +45,28 @@ open(p, 'w', encoding='utf-8').write(s[:a] + '    && rm -rf /var/lib/apt/lists/*
 EOF
   echo "WARN: --offline のため cloudflared/tailscale/npm -g のダウンロードは検証していない"
 fi
-docker build -q -t "$IMAGE" "$CTX" >/dev/null
+BUILD_ARGS=()
+if [ "$OFFLINE" = 0 ] && [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
+  # Claude Codeのクラウドサンドボックス: HTTPSはMITMプロキシ経由でしか外に出られない。
+  # ビルド用コピーにプロキシのCAとhttps_proxyだけを足し(aptのhttpは直接出られる)、
+  # --network hostでビルドコンテナからホストの127.0.0.1のプロキシへ届くようにする。
+  CTX=$(mktemp -d)
+  cp -r containers/demo/. "$CTX"/
+  cp /root/.ccr/ca-bundle.crt "$CTX/proxy-ca.crt"
+  python3 - "$CTX/Dockerfile" "$HTTPS_PROXY" <<'EOF2'
+import sys
+p, proxy = sys.argv[1], sys.argv[2]
+ca = '/usr/local/share/ca-certificates/proxy-ca.crt'
+inj = (f'FROM ubuntu:24.04\nCOPY proxy-ca.crt {ca}\n'
+       f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
+       f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca}\n')
+s = open(p, encoding='utf-8').read()
+open(p, 'w', encoding='utf-8').write(s.replace('FROM ubuntu:24.04\n', inj, 1))
+EOF2
+  BUILD_ARGS=(--network host)
+  echo "INFO: サンドボックスのプロキシ経由で本番と同じダウンロード込みのビルドを行う"
+fi
+docker build -q "${BUILD_ARGS[@]}" -t "$IMAGE" "$CTX" >/dev/null
 docker image ls "$IMAGE" --format 'image size: {{.Size}} (standard-1の上限は8GB)'
 docker run --rm --entrypoint bash "$IMAGE" -c '
   set -e
@@ -62,11 +83,11 @@ docker run -d --name "$NAME" "$IMAGE" >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 HEALTH=""
 for _ in $(seq 1 30); do
-  HEALTH=$(docker exec "$NAME" curl -fsS http://127.0.0.1:8080/health 2>/dev/null) && break
+  HEALTH=$(docker exec "$NAME" curl --noproxy '*' -fsS http://127.0.0.1:8080/health 2>/dev/null) && break
   sleep 2
 done
 echo "/health: $HEALTH"
-docker exec "$NAME" curl -fsSk https://127.0.0.1:8443/health >/dev/null \
+docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
 python3 -c '
 import json, sys
