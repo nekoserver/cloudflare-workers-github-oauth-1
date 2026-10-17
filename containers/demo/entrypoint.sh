@@ -150,6 +150,13 @@ else
   log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
 fi
 
+# --- dockerd ---
+# 起動できない環境でも他のサービスは止めない(状態は/healthのdockerで見る)。
+if command -v dockerd >/dev/null 2>&1; then
+  dockerd >/tmp/dockerd.log 2>&1 &
+  log "dockerd started (pid $!)"
+fi
+
 # --- SSHログインシェルからもcfコマンドの認証情報を読めるようにする ---
 # sshdのセッションはこのプロセスの環境変数を引き継がないため書き出す。
 umask 077

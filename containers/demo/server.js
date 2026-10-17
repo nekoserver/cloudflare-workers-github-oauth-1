@@ -39,17 +39,37 @@ function probeCloudflaredReady() {
   });
 }
 
+// tailscaledの状態(BackendState)がRunningかどうか。落ちている・未登録のときはfalse。
+async function probeTailscaleRunning() {
+  const out = await runCmd('tailscale', ['--socket=/var/run/tailscale/tailscaled.sock', 'status', '--json']);
+  try {
+    return JSON.parse(out).BackendState === 'Running';
+  } catch {
+    return false;
+  }
+}
+
+// dockerdに接続できるかどうか(docker infoが成功すればtrue)。
+async function probeDockerRunning() {
+  const out = await runCmd('docker', ['info', '--format', '{{.ServerVersion}}']);
+  return /^[0-9]/.test(out.trim());
+}
+
 async function buildHealth() {
-  const [apache, sshd, cloudflared] = await Promise.allSettled([
+  const [apache, sshd, cloudflared, tailscale, docker] = await Promise.allSettled([
     probeTcp(8443),
     probeTcp(2222),
     probeCloudflaredReady(),
+    probeTailscaleRunning(),
+    probeDockerRunning(),
   ]);
   const value = (settled) => (settled.status === 'fulfilled' ? settled.value : false);
   return {
     apache: value(apache),
     sshd: value(sshd),
     cloudflared: value(cloudflared),
+    tailscale: value(tailscale),
+    docker: value(docker),
     checkedAt: new Date().toISOString(),
   };
 }
@@ -100,7 +120,7 @@ async function buildNetDebug() {
 // /debug/logs: entrypoint.shが各デーモンの出力を書く/tmp/*.logの末尾を返す
 // (cloudflaredがNGのときの原因調査用。/cf-containers/proxy/*は管理者のみ到達可能)。
 const fs = require('node:fs');
-const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log'];
+const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log', '/tmp/dockerd.log'];
 function tailFile(path, maxBytes) {
   try {
     const buf = fs.readFileSync(path);

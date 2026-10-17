@@ -23,6 +23,11 @@ export class DemoContainer extends Container<Bindings> {
   defaultPort = 8080;
   sleepAfter = SLEEP_AFTER;
 
+  // SSH・Tailscale・トンネル経由の通信はこのDurable Objectを通らないため、
+  // 使用中でも「無操作」と判定されて止められていた。自動停止はせず、
+  // 停止は/cf-containersの停止ボタンだけで行う(タイマーは基底クラスが延長する)。
+  override async onActivityExpired(): Promise<void> {}
+
   constructor(ctx: DurableObject['ctx'], env: Bindings) {
     super(ctx, env);
     // nekorootトンネル(cloudflared)・SSH用の設定をコンテナのenvVars経由で
