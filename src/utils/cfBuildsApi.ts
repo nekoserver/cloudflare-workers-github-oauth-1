@@ -45,10 +45,11 @@ export async function fetchLatestBuildLog(
   scriptName: string,
   buildUuid?: string,
   fetcher: typeof fetch = fetch
-): Promise<{ buildUuid: string; status: string | null; log: string }> {
+): Promise<{ buildUuid: string; status: string | null; log: string; recentBuilds: string[] }> {
   const account = `${API}/accounts/${encodeURIComponent(credentials.accountId)}`;
   let uuid = buildUuid;
   let status: string | null = null;
+  let recentBuilds: string[] = [];
   if (!uuid) {
     const scripts = await call<Array<{ id: string; tag: string }>>(`${account}/workers/scripts`, credentials, fetcher);
     const tag = scripts.find((s) => s.id === scriptName)?.tag;
@@ -58,16 +59,28 @@ export async function fetchLatestBuildLog(
       credentials,
       fetcher
     );
-    const latest = [...builds].sort((a, b) => String(b.created_on ?? '').localeCompare(String(a.created_on ?? '')))[0];
+    const sorted = [...builds].sort((a, b) => String(b.created_on ?? '').localeCompare(String(a.created_on ?? '')));
+    // 「停止(stopped)」が新しいビルドに置き換えられたものかを判別できるよう直近の状態も返す
+    recentBuilds = sorted.slice(0, 8).map((b) => `${b.created_on ?? '?'} ${b.status ?? '?'} ${b.build_uuid}`);
+    const latest = sorted[0];
     if (!latest) throw new Error('ビルド履歴がありません');
     uuid = latest.build_uuid;
     status = latest.status ?? null;
   }
-  const result = await call<{ lines?: unknown[] } | unknown[]>(
-    `${account}/builds/builds/${encodeURIComponent(uuid)}/logs`,
-    credentials,
-    fetcher
-  );
-  const lines = Array.isArray(result) ? result : result?.lines ?? [];
-  return { buildUuid: uuid, status, log: formatBuildLogLines(lines) };
+  // ログAPIはページ分割(truncated + cursor)で返るため、続きがある間は読み進める
+  const MAX_PAGES = 50;
+  const lines: unknown[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url = `${account}/builds/builds/${encodeURIComponent(uuid)}/logs` + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '');
+    const result = await call<{ lines?: unknown[]; truncated?: boolean; cursor?: string } | unknown[]>(url, credentials, fetcher);
+    if (Array.isArray(result)) {
+      lines.push(...result);
+      break;
+    }
+    lines.push(...(result?.lines ?? []));
+    if (!result?.truncated || !result.cursor || result.cursor === cursor) break;
+    cursor = result.cursor;
+  }
+  return { buildUuid: uuid, status, log: formatBuildLogLines(lines), recentBuilds };
 }
