@@ -205,6 +205,8 @@
     - 既存の静的Bearer方式(`AICHAT_EXTERNAL_SECRET`・`CF_AUTH_WEBHOOK_SECRET`・`NOTIFY_WORKER_SECRET`等、本文を署名対象にせず単純比較のみ)は**後方互換のため残してよいが、新規追加はしない**。既存分の移行は呼び出し元リポジトリ側の送信コードも同時に変更する必要があるため、個別タスクとして計画すること
     - rust-worker-sqlx-d1が自ら署名してtunnels.rbへ送る`ORIGIN_HMAC_SECRET`(本Workerはシークレットを扱わない中継のみ、`src/utils/tunnelSignerAsk.ts`)はこの方針の対象外(他リポジトリの実装に委ねる)
 
+39. **`containers/**`・`src/containers/**`・`src/views/cfContainers.ts`・`wrangler.toml`の`[[containers]]`を変更したら、push前に`bash scripts/check-cf-containers.sh`を必ず実行して`ALL OK`を確認しろ** — Workers BuildsのPRビルド(`wrangler versions upload`)はコンテナイメージをビルドしないため、検証せずにmainへマージすると本番ビルドが一発勝負になる(実例: 2026-10-16〜17、#2389以降の本番ビルド失敗、Apacheが8443で待ち受けていない不具合、ページscriptの構文エラーがいずれもマージ後に発覚した)。このスクリプトは関連テスト・Workerのバンドル(`wrangler deploy --dry-run`)・Dockerfileのビルド・コンテナ起動後の`/health`と8443確認を行う。外部へ出られないサンドボックスでは`--offline`を付ける(cloudflared等のダウンロードだけ検証対象外になる旨を報告に明記すること)。GitHub Actionsはこのリポジトリでは使っていないので、CIに頼らないこと
+
 ---
 
 ## 自動アップロード対象の区別
