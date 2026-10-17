@@ -132,6 +132,13 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </div>
 <div class="card">
   <div class="status-row">
+    <strong>コンテナのネットワーク情報(IPアドレス・CIDR)</strong>
+    <button id="btn-net" type="button">ip addr / ip route を取得</button>
+  </div>
+  <pre id="net-log" style="margin-top:8px;font-size:12px;white-space:pre-wrap;"></pre>
+</div>
+<div class="card">
+  <div class="status-row">
     <strong>Cloudflare Tunnel一覧</strong>
     <button id="btn-tunnels" type="button">取得</button>
   </div>
@@ -344,6 +351,24 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       })
       .finally(function () {
         btnHealth.disabled = false;
+      });
+  });
+
+  var btnNet = document.getElementById('btn-net');
+  var netLog = document.getElementById('net-log');
+  btnNet.addEventListener('click', function () {
+    btnNet.disabled = true;
+    netLog.textContent = '取得中…';
+    fetch('/cf-containers/proxy/debug/net')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        netLog.textContent = '[ip addr]\n' + (data.addr || '') + '\n\n[ip route]\n' + (data.route || '');
+      })
+      .catch(function (err) {
+        netLog.textContent = 'エラー: ' + String(err);
+      })
+      .finally(function () {
+        btnNet.disabled = false;
       });
   });
 

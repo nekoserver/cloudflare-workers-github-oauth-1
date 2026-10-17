@@ -7,6 +7,7 @@
 // 1つの確認が失敗しても他の結果に影響しない(Promise.allSettled)。
 const http = require('node:http');
 const net = require('node:net');
+const { execFile } = require('node:child_process');
 
 const PORT = process.env.PORT || 8080;
 const PROBE_TIMEOUT_MS = 1500;
@@ -53,8 +54,39 @@ async function buildHealth() {
   };
 }
 
+// /debug/net: コンテナ自身のIPアドレス・ルーティング情報を返す。
+// /cf-containers/proxy/* はauthMiddleware+cfDashboardAdminMiddleware経由
+// (認証済み管理者のみ)でしかこのコンテナに到達できないため、ここでは
+// 追加の認証は行わない(Worker側のアクセス制御に委ねる)。
+function runCmd(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: PROBE_TIMEOUT_MS * 2 }, (err, stdout, stderr) => {
+      if (err) {
+        resolve(`[実行失敗: ${err.message}] ${stderr || ''}`.trim());
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+  });
+}
+
+async function buildNetDebug() {
+  const [addr, route] = await Promise.all([
+    runCmd('ip', ['-o', 'addr', 'show']),
+    runCmd('ip', ['-o', 'route', 'show']),
+  ]);
+  return { addr, route, checkedAt: new Date().toISOString() };
+}
+
 http
   .createServer((req, res) => {
+    if (req.url === '/debug/net') {
+      buildNetDebug().then((net_) => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(net_));
+      });
+      return;
+    }
     if (req.url === '/health') {
       buildHealth().then((health) => {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
