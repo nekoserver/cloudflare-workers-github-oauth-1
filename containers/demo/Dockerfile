@@ -47,7 +47,9 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates nodejs npm tmux gnupg \
-        apache2 openssl openssh-server nftables curl iproute2 \
+        apache2 openssl openssh-server nftables curl \
+        iproute2 iputils-ping net-tools dnsutils traceroute \
+        netcat-openbsd tcpdump mtr-tiny \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \

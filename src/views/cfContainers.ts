@@ -362,7 +362,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     fetch('/cf-containers/proxy/debug/net')
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        netLog.textContent = '[ip addr]\n' + (data.addr || '') + '\n\n[ip route]\n' + (data.route || '');
+        netLog.textContent = '[ip addr]\n' + (data.addr || '') + '\n\n[ip route]\n' + (data.route || '')
+          + '\n\n[/etc/resolv.conf]\n' + (data.dns || '') + '\n\n[ss -tulpn]\n' + (data.netstat || '');
       })
       .catch(function (err) {
         netLog.textContent = 'エラー: ' + String(err);
