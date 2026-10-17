@@ -21,13 +21,21 @@ on:
       - '.github/workflows/cf-containers-check.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   container-image:
     name: コンテナイメージのビルドと起動確認
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: チェックアウト(外部アクションを使わない)
+        run: |
+          git init -q .
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git fetch -q --depth 1 origin "${{ github.ref }}"
+          git checkout -q FETCH_HEAD
 
       - name: イメージをビルド(本番と同じDockerfile)
         run: docker build -t cf-demo:ci containers/demo
@@ -75,11 +83,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
+      - name: チェックアウト(外部アクションを使わない)
+        run: |
+          git init -q .
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git fetch -q --depth 1 origin "${{ github.ref }}"
+          git checkout -q FETCH_HEAD
+      - run: node --version && npm --version
       - run: npm ci
       - name: Workerのバンドル(コンテナ部分は上のジョブで検証)
         run: npx wrangler deploy --dry-run --containers-rollout=none --outdir /tmp/wrangler-out
