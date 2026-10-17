@@ -2,7 +2,7 @@
 // プロキシ対象にする、最小限のHTTPサーバー。外部依存を持たず、Node標準の
 // http/netモジュールだけで動く(イメージサイズ・ビルド時間を抑えるため)。
 //
-// /healthは、entrypoint.shが起動するApache(8443)・sshd(22)・
+// /healthは、entrypoint.shが起動するApache(8443)・sshd(2222)・
 // cloudflared(ローカルmetrics 20241)の疎通をそれぞれ独立に確認して返す。
 // 1つの確認が失敗しても他の結果に影響しない(Promise.allSettled)。
 const http = require('node:http');
@@ -42,7 +42,7 @@ function probeCloudflaredReady() {
 async function buildHealth() {
   const [apache, sshd, cloudflared] = await Promise.allSettled([
     probeTcp(8443),
-    probeTcp(22),
+    probeTcp(2222),
     probeCloudflaredReady(),
   ]);
   const value = (settled) => (settled.status === 'fulfilled' ? settled.value : false);
