@@ -212,7 +212,7 @@
     - `npm install -g`の後は`npm cache clean --force`、aptの後は`rm -rf /var/lib/apt/lists/*`を**同じ`RUN`の中で**実行する(別の`RUN`で消してもレイヤーは小さくならない)
     - `scripts/check-cf-containers.sh`は、`MAX_LAYER_MB`(既定800)を超えるレイヤーがあれば`NG`で止まる。この閾値を上げてNGを回避してはならない。超えた場合はレイヤーを分割する
     - イメージ全体の上限は`instance_type`のディスク容量(standard-1は8GB)。スクリプトが表示する`image size`を報告に必ず記載する
-    - Codex/Claude CLIは今回の構成に必須のため削らない。サイズを減らすときは、CLIを外すのではなくレイヤーの分割とキャッシュの削除で対応する
+    - Codex CLIは今回の構成に必須のため削らない。サイズを減らすときは、CLIを外すのではなくレイヤーの分割とキャッシュの削除で対応する。Claude CLIは2026-10-17に外した(理由はNOTICE。Node 22以上が必要・この構成では使わない)。戻す場合はNode 22以上を先に用意すること
     - 本番ビルドの成否はGitHubの表示(後から書き換わる)で判断せず、`/cf-containers`の「最新ビルドのログを取得」で`Failed:`が無いことを確認する
 
 ---
