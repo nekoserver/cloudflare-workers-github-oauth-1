@@ -104,3 +104,10 @@
 - CSPはiframeの読み込み自体を遮断する。その結果、埋め込み側から親へ送る `conversation-state` が届かず、親側の開始/停止ボタンは初期状態のまま無効になり、パネルも空に見える。上流URLへのHTTP 200だけのヘルスチェックではブラウザのCSP遮断を検出できない
 - `/aichat` のCSPを `frame-src https://mygw.nekomaneki.work` に更新し、認証付きページ応答を検査する回帰テストを追加した。実ブラウザで本番と同じCSPを使い、iframeのハンドシェイク、WebSocket/SSE、開始/停止、会話表示を確認した
 - このWorker変更はデプロイ後に反映される。Apache側で埋め込みHTMLを正しく返すだけでは、Worker側CSPが旧ホストのままの場合は復旧しない
+
+## 10. ストリーム接続先は自動・mygw・mynwから選択
+
+- パネル内の接続先リストは「自動」を先頭にし、`mygw.nekomaneki.work` と `mynw.nekomaneki.work` を手動選択できる
+- 自動はWorker側で両方の埋め込みURLをGETし、HTTP 200だけでなくHTML Content-Type、会話埋め込みマーカー、module scriptを確認する。利用可能なホストをmygw優先で返し、どちらか一方だけが応答する場合はそのホストを選ぶ
+- 自動選択中は30秒ごとに確認し、現在のホストが一覧から消えたら他方へ切り替える。両方停止した場合はiframeを解除し、開始/停止を無効にする。復旧後の次の確認で再接続する
+- `/aichat` CSPは両ホストを許可する。新しいWorker APIはデプロイ後に有効になる
