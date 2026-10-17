@@ -112,6 +112,15 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'conversation-theme', theme: 'dark' }, 'https://mygw.nekomaneki.work'));
     } finally { dom.window.close(); }
   });
+  it('キー入力フォームの送信を許可し、無関係なsandbox権限を追加しない', () => {
+    const dom = makeDom();
+    try {
+      const frame = dom.window.document.getElementById('conversationStreamFrame')!;
+      expect(new Set(frame.getAttribute('sandbox')!.split(/\s+/))).toEqual(new Set([
+        'allow-scripts', 'allow-same-origin', 'allow-forms', 'allow-popups', 'allow-popups-to-escape-sandbox',
+      ]));
+    } finally { dom.window.close(); }
+  });
   it('本体ページに接続先選択欄があり、生成された全スクリプトを解析できる', () => {
     const html = getAiChatPage({ username: 'testuser', aiChatModel: 'test-model' });
     expect(html).toContain('id="conversationStreamPanel"');
