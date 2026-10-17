@@ -62,9 +62,14 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudf
     && rm -f /tmp/cloudflared.deb
 RUN (curl -fsSL --retry 5 --retry-delay 3 https://tailscale.com/install.sh | sh || echo "WARN: tailscale install failed") \
     && rm -rf /var/lib/apt/lists/*
-RUN (npm install -g @openai/codex || echo "WARN: codex CLI install failed") \
+# Codex/Claude CLIは構成上必須。失敗を握りつぶさずビルドを失敗させる
+# (2026-10-17: WARNで続行していたためClaude CLIが入っていないイメージが通っていた)。
+RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
+    && npm install -g @openai/codex \
+    && command -v codex \
     && npm cache clean --force
-RUN (npm install -g @anthropic-ai/claude-code || echo "WARN: claude CLI install failed") \
+RUN npm install -g @anthropic-ai/claude-code \
+    && command -v claude \
     && npm cache clean --force
 
 # 2026-10-16(続き2): Codex CLI・Claude CLIを再度追加(利用者希望)。
