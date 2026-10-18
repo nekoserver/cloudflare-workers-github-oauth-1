@@ -3,14 +3,15 @@
 # Workers BuildsのPRビルドはコンテナイメージをビルドしないため、これを
 # 実行せずにmainへマージすると本番ビルドが一発勝負になる(CLAUDE.mdルール参照)。
 #
-# 使い方: bash scripts/check-cf-containers.sh [--offline]
-#   --offline  外部ダウンロード(cloudflared/tailscale/npm -g)を除いてビルドする。
-#              外部へ出られないサンドボックス用。省略時は本番と同じDockerfileでビルドする。
+# 使い方: bash scripts/check-cf-containers.sh
+# 必須のNode/CLIを除去した別イメージでは、本番構成を検証できない。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OFFLINE=0
-[ "${1:-}" = "--offline" ] && OFFLINE=1
+if [ "${1:-}" = "--offline" ]; then
+  echo "ERROR: --offline removes required Node/CLI runtimes and cannot validate this image. Run the full build with network access." >&2
+  exit 2
+fi
 IMAGE=cf-demo:check
 NAME=cf-demo-check
 
@@ -32,21 +33,8 @@ echo "OK"
 
 step "3/4 コンテナイメージのビルド"
 CTX=containers/demo
-if [ "$OFFLINE" = 1 ]; then
-  CTX=$(mktemp -d)
-  cp -r containers/demo/. "$CTX"/
-  python3 - "$CTX/Dockerfile" <<'EOF'
-import sys
-p = sys.argv[1]
-s = open(p, encoding='utf-8').read()
-a = s.index('    && rm -rf /var/lib/apt/lists/*')
-b = s.index('WORKDIR /app')
-open(p, 'w', encoding='utf-8').write(s[:a] + '    && rm -rf /var/lib/apt/lists/*\n\n' + s[b:])
-EOF
-  echo "WARN: --offline のため cloudflared/tailscale/npm -g のダウンロードは検証していない"
-fi
 BUILD_ARGS=()
-if [ "$OFFLINE" = 0 ] && [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
+if [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
   # Claude Codeのクラウドサンドボックス: HTTPSはMITMプロキシ経由でしか外に出られない。
   # ビルド用コピーにプロキシのCAとhttps_proxyだけを足し(aptのhttpは直接出られる)、
   # --network hostでビルドコンテナからホストの127.0.0.1のプロキシへ届くようにする。
@@ -94,11 +82,16 @@ EOF3
 docker run --rm --entrypoint bash "$IMAGE" -c '
   set -e
   node --version >/dev/null
+  gh --version
   ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
   node --check /usr/local/bin/cf
   node --check /app/server.js
   for c in netstat top whois dig ping; do command -v $c >/dev/null || { echo "NG: $c が入っていない"; exit 1; }; done
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
+  codex --version
+  claude --version
+  node -e "if (parseInt(process.versions.node) < 22) process.exit(1)"
+  test -x /opt/node22/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host
   if command -v cloudflared >/dev/null; then cloudflared --version; else echo "WARN: cloudflaredなし(--offline時は想定どおり)"; fi
 '
 
@@ -138,6 +131,12 @@ curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python
   || { echo "NG: /debug/netの項目が足りない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
+# Public TLS ingress must not expose diagnostics; authenticated management
+# access through :8080 remains available to the checks above.
+for debug_path in /debug /debug/logs /debug/net; do
+  status=$(docker exec "$NAME" curl --noproxy '*' -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:8443${debug_path}")
+  [ "$status" = 403 ] || { echo "NG: public diagnostics returned $status for $debug_path"; exit 1; }
+done
 python3 -c '
 import json, sys
 h = json.loads(sys.argv[1])
