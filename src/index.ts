@@ -5,6 +5,7 @@
 
 import { formatAskgkPromptQuestion } from './utils/codexAskgkQuestion';
 import { Hono, type Context } from 'hono';
+import { requireRouteParam } from './utils/routeParam';
 import { cors } from 'hono/cors';
 import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
@@ -8035,7 +8036,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const threadId = c.req.param('threadId');
+  const threadId = requireRouteParam(c.req.param('threadId'));
   if (!isThreadId(threadId)) return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
 
   try {
@@ -9742,7 +9743,7 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
 app.patch('/api/aichat/keyword-categories/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(requireRouteParam(c.req.param('id')), 10);
   if (!Number.isFinite(id)) return jsonUtf8({ error: '不正なIDです' }, 400);
   const body = await c.req.json<{ color?: string }>();
   const color = typeof body.color === 'string' ? body.color.trim() : '';
@@ -11437,7 +11438,7 @@ app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
 app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const id = c.req.param('id');
+  const id = requireRouteParam(c.req.param('id'));
   // target=moondream3.1 は /answer-graph の起点検索でmoondream3.1をヒットさせた
   // 質問文リンクから開かれた場合。検索対象として指定した画像分析モデルの
   // 出力結果が応答バブルモーダルに表示されるよう、getAichatShareDetailへ
@@ -14269,7 +14270,7 @@ app.get('/workflow', authMiddleware, async (c) => {
 
 app.get('/workflow/:no', authMiddleware, async (c) => {
   const user = c.get('user');
-  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  const workflowNo = normalizeWorkflowNo(requireRouteParam(c.req.param('no')));
   const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
   const hierarchy = c.env.DB ? await loadWorkflowHierarchy(c.env.DB) : [];
   if (!workflowNo || !c.env.DB) {
@@ -14438,7 +14439,7 @@ app.get('/api/workflow', authMiddleware, async (c) => {
 
 app.get('/api/workflow/:no', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  const workflowNo = normalizeWorkflowNo(requireRouteParam(c.req.param('no')));
   if (!workflowNo) return jsonUtf8({ error: '無効なワークフロー番号です' }, 400);
   const workflow = await c.env.DB.prepare(
     'SELECT workflow_no, title, page_path, summary FROM workflow_registry WHERE workflow_no = ?'
@@ -19352,7 +19353,7 @@ app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMid
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: c.env.CLOUDFLARE_API_KEY,
       apiEmail: c.env.CLOUDFLARE_API_EMAIL,
-    }, c.req.param('dbId'));
+    }, requireRouteParam(c.req.param('dbId')));
     const { wranglerBlake3Hex } = await import('./utils/wranglerBlake3Server');
     const digest = await wranglerBlake3Hex(JSON.stringify(tables));
     return jsonUtf8({ tables, wasm: { module: 'wrangler/blake3-wasm', digest } });
@@ -20326,7 +20327,7 @@ app.get('/status', authMiddleware, async (c) => {
 app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
 
   if (!db) {
     return jsonUtf8({ error: 'Table not found' }, 404);
@@ -20409,7 +20410,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
 
 app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const tableDefinition = getStatusTableDefinition(tableName);
 
   if (!db || !tableDefinition) {
@@ -20442,7 +20443,7 @@ app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
 
 app.get('/api/status/tables/:table/calendar', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const ym = c.req.query('ym');
   const tableDefinition = getStatusTableDefinition(tableName);
 
@@ -20474,7 +20475,7 @@ app.get('/api/status/tables/:table/calendar', authMiddleware, async (c) => {
 });
 
 app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
-  const migration = c.req.param('migration');
+  const migration = requireRouteParam(c.req.param('migration'));
   const sql = STATUS_MIGRATION_SQL[migration];
 
   if (!sql) {
@@ -21499,7 +21500,7 @@ app.get('/api/status/column-stats/verify', authMiddleware, async (c) => {
 });
 
 app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c) => {
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const tableDefinition = getStatusTableDefinition(tableName);
 
   if (!tableDefinition) {
@@ -21525,7 +21526,7 @@ app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c)
 
 app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
 
   const tableDescriptions: Record<string, string> = {};
   for (const tbl of getEffectiveStatusTableDefinitions()) {
@@ -25634,7 +25635,7 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
  */
 app.post('/api/preferences/:key', authMiddleware, async (c) => {
   const user = c.get('user');
-  const key = c.req.param('key');
+  const key = requireRouteParam(c.req.param('key'));
   const def = USER_PREFERENCE_KEYS[key];
   if (!def) {
     return c.json({ error: `未知の設定キーです: ${key}` }, 400);
@@ -25675,7 +25676,7 @@ app.post('/api/preferences/:key', authMiddleware, async (c) => {
  */
 app.get('/api/preferences/:key', authMiddleware, async (c) => {
   const user = c.get('user');
-  const key = c.req.param('key');
+  const key = requireRouteParam(c.req.param('key'));
   const def = USER_PREFERENCE_KEYS[key];
   if (!def) {
     return c.json({ error: `未知の設定キーです: ${key}` }, 400);
@@ -26397,7 +26398,7 @@ app.patch('/api/repo-colors/:repoName{.+}', authMiddleware, async (c) => {
   if (!db) {
     return c.json({ error: 'D1 is not configured' }, 500);
   }
-  const repoName = c.req.param('repoName');
+  const repoName = requireRouteParam(c.req.param('repoName'));
   try {
     const body = await c.req.json<{ colorCode?: string; tags?: string; isVisible?: boolean; displayOrder?: number }>();
     const wsInfo = await getCurrentWorkspace(db, user.sub);
@@ -26600,7 +26601,7 @@ app.patch('/api/repo-groups/:id', authMiddleware, async (c) => {
   if (!db) {
     return c.json({ error: 'D1 is not configured' }, 500);
   }
-  const groupId = c.req.param('id');
+  const groupId = requireRouteParam(c.req.param('id'));
   try {
     const body = await c.req.json<{
       name?: string;
@@ -26801,7 +26802,7 @@ app.delete('/api/repo-groups/:id/oauth-apps/:appName', authMiddleware, async (c)
   if (!db) return c.json({ error: 'D1 is not configured' }, 500);
 
   const groupId = c.req.param('id');
-  const appName = decodeURIComponent(c.req.param('appName'));
+  const appName = decodeURIComponent(requireRouteParam(c.req.param('appName')));
   try {
     const wsInfo = await getCurrentWorkspace(db, user.sub);
     const workspaceId = wsInfo?.workspaceId ?? '';

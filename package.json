@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
-    "hono": "^4.0.0",
+    "hono": "^4.13.13",
     "playwright": "^1.61.1",
     "web-bot-auth": "^0.2.0"
   },
@@ -36,7 +36,7 @@
     "jsdom": "^29.1.1",
     "tree-sitter-typescript": "^0.23.2",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.11",
     "wrangler": "^4.151.1"
   }
 }
