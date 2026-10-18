@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+'use strict';
+
+const API = 'https://api.cloudflare.com/client/v4';
+
+function usage() {
+  console.log(`Usage:
+  cf tunnels list [--json]     List Cloudflare Tunnels
+  cf tunnels get <name|id>     Show one tunnel as JSON
+  cf workers list [--json]     List Workers
+  cf api <path>                Make an authenticated Cloudflare API GET request`);
+}
+
+function token() {
+  return process.env.CF_CONTAINER_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN;
+}
+
+async function call(path) {
+  const apiToken = token();
+  if (!apiToken) {
+    throw new Error('CF_CONTAINER_API_TOKEN or CLOUDFLARE_API_TOKEN is required');
+  }
+  const response = await fetch(API + path, {
+    headers: { Authorization: `Bearer ${apiToken}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.success === false) {
+    const message =
+      (body.errors || []).map((error) => error.message).join(', ') ||
+      `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return body.result;
+}
+
+function account() {
+  if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
+    throw new Error('CLOUDFLARE_ACCOUNT_ID is required');
+  }
+  return encodeURIComponent(process.env.CLOUDFLARE_ACCOUNT_ID);
+}
+
+function table(rows, columns) {
+  const widths = columns.map((column) =>
+    Math.max(column.length, ...rows.map((row) => String(row[column] ?? '').length))
+  );
+  const line = (values) =>
+    values.map((value, index) => String(value ?? '').padEnd(widths[index])).join('  ');
+  console.log(line(columns));
+  rows.forEach((row) => console.log(line(columns.map((column) => row[column]))));
+}
+
+async function main(argv) {
+  const [group, command, argument] = argv;
+  const json = argv.includes('--json');
+  if (group === 'tunnels' && command === 'list') {
+    const result = await call(`/accounts/${account()}/cfd_tunnel?is_deleted=false`);
+    const rows = result.map((tunnel) => ({
+      name: tunnel.name,
+      status: (tunnel.connections || []).length ? 'healthy' : 'down',
+      connections: (tunnel.connections || []).length,
+      id: tunnel.id,
+    }));
+    return json
+      ? console.log(JSON.stringify(rows, null, 2))
+      : table(rows, ['name', 'status', 'connections', 'id']);
+  }
+  if (group === 'tunnels' && command === 'get' && argument) {
+    const result = await call(`/accounts/${account()}/cfd_tunnel?is_deleted=false`);
+    const tunnel = result.find((item) => item.id === argument || item.name === argument);
+    if (!tunnel) throw new Error(`Tunnel not found: ${argument}`);
+    return console.log(JSON.stringify(tunnel, null, 2));
+  }
+  if (group === 'workers' && command === 'list') {
+    const result = await call(`/accounts/${account()}/workers/scripts`);
+    const rows = result.map((worker) => ({
+      name: worker.id,
+      modified_on: worker.modified_on,
+    }));
+    return json
+      ? console.log(JSON.stringify(rows, null, 2))
+      : table(rows, ['name', 'modified_on']);
+  }
+  if (group === 'api' && command) {
+    return console.log(JSON.stringify(await call(command), null, 2));
+  }
+  usage();
+  process.exitCode = group ? 1 : 0;
+}
+
+main(process.argv.slice(2)).catch((error) => {
+  console.error(`cf: ${error.message}`);
+  process.exitCode = 1;
+});

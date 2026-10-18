@@ -1122,6 +1122,9 @@ export function getAiChatPage(user: {
           <textarea class="chat-input" id="chatInput" placeholder="メッセージを入力... (Ctrl+Enter または Shift+Enter で送信)" rows="1"></textarea>
           <button type="submit" class="chat-send-btn" id="chatSendBtn">送信</button>
         </form>
+        <label style="display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:5px;font-size:11px;color:var(--text-muted);cursor:pointer;">
+          <input type="checkbox" id="aichatStreamToggle" checked> 応答をリアルタイム表示
+        </label>
       </div>
     </div>
   </div>
@@ -7189,12 +7192,17 @@ export function getAiChatPage(user: {
     var chatForm = document.getElementById('chatForm');
     var chatInput = document.getElementById('chatInput');
     var chatSendBtn = document.getElementById('chatSendBtn');
+    var aichatStreamToggle = document.getElementById('aichatStreamToggle');
     var chatAttachBtn = document.getElementById('chatAttachBtn');
     var chatImageInput = document.getElementById('chatImageInput');
     var chatImagePreviewRow = document.getElementById('chatImagePreviewRow');
     var chatImagePreviewImg = document.getElementById('chatImagePreviewImg');
     var chatImagePreviewRemove = document.getElementById('chatImagePreviewRemove');
     var pendingImageDataUrl = null;
+    aichatStreamToggle.checked = localStorage.getItem('aichat_stream_enabled') !== 'off';
+    aichatStreamToggle.addEventListener('change', function() {
+      localStorage.setItem('aichat_stream_enabled', aichatStreamToggle.checked ? 'on' : 'off');
+    });
     // thread-trackerから開いた場合は既存の再質問IDを引き継ぐ。それ以外は
     // ページを開いている間に発行されたIDで後続ターンを束ねる。
     var trackerParams = new URLSearchParams(location.search);
@@ -8153,6 +8161,52 @@ ${getRubyWasmLoaderScript()}
       });
     }
 
+    function readAichatResponse(res, onDelta) {
+      var contentType = res.headers.get('content-type') || '';
+      if (contentType.indexOf('text/event-stream') === -1 || !res.body) return res.json();
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var metadata = {};
+      function consumeBlock(block) {
+        var eventName = 'message';
+        var dataLines = [];
+        block.split(/\r?\n/).forEach(function(line) {
+          if (line.indexOf('event:') === 0) eventName = line.slice(6).trim();
+          if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).trimStart());
+        });
+        if (!dataLines.length) return;
+        var data = JSON.parse(dataLines.join('\n'));
+        if (eventName === 'start') metadata = Object.assign(metadata, data);
+        if (eventName === 'delta' && data.text) onDelta(data.text, metadata);
+        if (eventName === 'done') metadata = Object.assign(metadata, data);
+        if (eventName === 'error') throw new Error(data.error || 'AIストリームの受信に失敗しました');
+      }
+      function pump() {
+        return reader.read().then(function(result) {
+          buffer += decoder.decode(result.value, { stream: !result.done });
+          var blocks = buffer.split(/\r?\n\r?\n/);
+          buffer = result.done ? '' : (blocks.pop() || '');
+          blocks.forEach(consumeBlock);
+          if (result.done) return metadata;
+          return pump();
+        });
+      }
+      return pump();
+    }
+
+    function renderAichatDelta(state, delta, streamMeta, thinking) {
+      state.text += delta;
+      if (thinking.isConnected) thinking.remove();
+      if (!state.bubble) {
+        state.bubble = appendBubble(state.text, 'assistant', lastModel, !!streamMeta.fallbackUsed);
+      } else {
+        state.bubble.innerHTML = parseMd(state.text);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+      return state.bubble;
+    }
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
@@ -8165,7 +8219,7 @@ ${getRubyWasmLoaderScript()}
       chatSendBtn.disabled = true;
       var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
-      var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox', threadId: currentThreadId };
+      var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox', threadId: currentThreadId, stream: aichatStreamToggle.checked };
       if (attachedImage) {
         payload.image = attachedImage;
         payload.preferMoondream = aichatPreferMoondream;
@@ -8212,10 +8266,15 @@ ${getRubyWasmLoaderScript()}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then(function(res) { return res.json(); })
+        .then(function(res) {
+          var streamState = { text: '', bubble: null };
+          return readAichatResponse(res, function(delta, streamMeta) {
+            assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
+          });
+        })
         .then(prepareAichatRubyResponse)
         .then(function(data) {
-          thinking.remove();
+          if (thinking.isConnected) thinking.remove();
           if (data.error) {
             appendBubble('エラー: ' + data.error, 'error');
           } else {
@@ -8226,7 +8285,13 @@ ${getRubyWasmLoaderScript()}
             if (!isLocalCommand) {
               showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);
             }
-            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
+            if (!assistantBubbleEl) {
+              assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
+            } else {
+              var completedBubble = buildAssistantBubble(responseText, lastModel, data.fallbackUsed, respUsage, false, null, null, null, data.shareId);
+              assistantBubbleEl.replaceWith(completedBubble);
+              assistantBubbleEl = completedBubble;
+            }
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {
@@ -8235,7 +8300,7 @@ ${getRubyWasmLoaderScript()}
             if (data.threadId) currentThreadId = data.threadId;
           }
         })
-        .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
+        .catch(function(err) { if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
         .finally(function() { chatSendBtn.disabled = false; chatInput.focus(); });
     });
 
