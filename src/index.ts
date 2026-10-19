@@ -94,6 +94,7 @@ import { getMentionEditorPage } from './views/mentionEditor';
 import { getSecureminePage } from './views/securemine';
 import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
 import { proxyRedmine } from './utils/redmineProxy';
+import { proxyDockerDashboard } from './utils/dockerDashboardProxy';
 import { securemineLogin, securemineSession } from './utils/securemineLogin';
 import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
@@ -19620,6 +19621,12 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
  * デモコンテナへのプロキシ（管理者認証が必要）。コンテナが停止していれば
  * Container.fetch経由で起動を待ってからリクエストを転送する。
  */
+// Docker diagnostics share the existing administrator-only container dashboard.
+app.get('/cf-containers/docker.html', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.get('/cf-containers/docker-dashboard.css', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.get('/cf-containers/docker-dashboard.mjs', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.all('/cf-containers/api/docker/*', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+
 app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
