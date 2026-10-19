@@ -72,3 +72,22 @@ GitHub App のプラットフォーム仕様による。
 - GitHub App の権限変更は「開発者側の設定変更」と「インストール側の承認」の2段階であることを意識する
 - 権限を追加した場合は、必ず既存インストールの承認または再インストールが必要
 - この挙動は GitHub / Slack など主要プラットフォーム共通のパターン
+
+---
+
+# Node.js 26をDockerイメージで動かすにはlibatomic1が必要（2026-10-19）
+
+**対象**: 本体Workerの`containers/demo/Dockerfile`、Ubuntu 26.10上のNode.js 26.12.0。
+
+Node.jsの取得とSHA256検証が成功しても、`node --version`で次のエラーが出る場合は、実行時ライブラリが不足している。
+
+```text
+node: error while loading shared libraries: libatomic.so.1:
+cannot open shared object file: No such file or directory
+```
+
+Dockerfileの最初の`apt-get install --no-install-recommends`へ`libatomic1`を追加し、Node.jsを実行する前に導入する。[PR #2429](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2429)で対応した。Node.js 26.12.0の固定バージョンとチェックサムは維持している。配置先の`/opt/node22`は互換性のための名前であり、中身はNode.js 26。
+
+Workers Builds自身のNode.jsとDockerイメージ内のNode.jsは別環境。Workerのバンドル成功やPRビルド成功だけでは、Dockerイメージの成功確認にはならない。今回の修正は軽量テストで確認しており、Dockerイメージ全体の再ビルド成功は別途確認する。
+
+詳細: [コンテナ用NOTICE・Node.js 26対応](NOTICE.cloudflare-workers-github-oauth-1.20261017.md#11-nodejs-26はlibatomic1を入れてから起動する2026-10-19追記)。
