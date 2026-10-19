@@ -81,6 +81,7 @@ import {
 import { resolveHideAuthorFromCookie, mergePrMergeableStates } from './utils/ghPrList';
 import { getD1BindingCount, validateD1BindingValues } from './utils/d1QueryBindings';
 import { buildThreadGrowthWindow, createThreadId, isThreadId, parseGrowingThreadLimit } from './utils/aichatThreads';
+import { encodeSseEvent, parseAichatStreamData } from './utils/aichatSse';
 import {
   buildGithubRepositoryApiUrl,
   buildGithubTreeApiUrl,
@@ -5936,7 +5937,7 @@ async function logNekoMultiSearchResults(
 
 type AichatRequestBody = {
   message?: string; model?: string; systemPromptMode?: string;
-  source?: string; image?: string; preferMoondream?: boolean; threadId?: string;
+  source?: string; image?: string; preferMoondream?: boolean; threadId?: string; stream?: boolean;
 };
 
 async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
@@ -6441,6 +6442,111 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     (m, i, arr): m is string => !!m && arr.indexOf(m) === i
   );
   let lastErr: unknown = null;
+
+  // Streaming is deliberately opt-in at the API boundary. The interactive chat enables it,
+  // while slash commands, re-ask modals, automation and existing API clients retain the
+  // atomic JSON contract. This keeps partial output away from workflows that require a
+  // complete, persisted answer.
+  if (body.stream) {
+    for (let i = 0; i < candidates.length; i++) {
+      const model = candidates[i];
+      try {
+        const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+        const textMessages = addThreadHistoryToAiMessages(buildAiMessages(message, systemPromptMode), threadHistory);
+        const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
+        const baseParams = model === AICHAT_MOONDREAM3_MODEL && image
+          ? buildMoondream3RunParams(image, message)
+          : getModelRunParams(model, { messages, max_tokens: maxTokens });
+        const upstream = await c.env.AI!.run(
+          model as Parameters<typeof c.env.AI.run>[0],
+          { ...(baseParams as Record<string, unknown>), stream: true } as Parameters<typeof c.env.AI.run>[1]
+        ) as unknown;
+        if (!(upstream instanceof ReadableStream)) throw new Error('AI streaming response is not a ReadableStream');
+
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        const isFallback = i > 0;
+        const responseStream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(encoder.encode(encodeSseEvent('start', {
+              usedModel: model,
+              systemPromptMode,
+              ...(isFallback ? { fallbackUsed: true } : {}),
+            })));
+            const reader = upstream.getReader();
+            let buffer = '';
+            let rawResponse = '';
+            let emittedResponse = '';
+            let usage: AiUsage = { input_tokens: null, output_tokens: null, total_tokens: null };
+            try {
+              while (true) {
+                const { value, done } = await reader.read();
+                buffer += decoder.decode(value, { stream: !done });
+                const blocks = buffer.split(/\r?\n\r?\n/);
+                buffer = done ? '' : (blocks.pop() ?? '');
+                for (const block of blocks) {
+                  const data = block.split(/\r?\n/)
+                    .filter((line) => line.startsWith('data:'))
+                    .map((line) => line.slice(5).trimStart()).join('\n');
+                  const parsed = parseAichatStreamData(data);
+                  if (!parsed) continue;
+                  rawResponse += parsed.text;
+                  if (parsed.usage) usage = extractAiUsage(parsed.usage);
+                  const cleaned = stripThinkTags(rawResponse);
+                  if (cleaned.startsWith(emittedResponse) && cleaned.length > emittedResponse.length) {
+                    const delta = cleaned.slice(emittedResponse.length);
+                    emittedResponse = cleaned;
+                    controller.enqueue(encoder.encode(encodeSseEvent('delta', { text: delta })));
+                  }
+                }
+                if (done) break;
+              }
+              const response = stripThinkTags(rawResponse);
+              if (!response) throw new Error(`AI returned empty streaming response [model=${model}]`);
+              const saved = await autoSave(response, model, usage);
+              if ('saveError' in saved && requestedThreadId) {
+                throw new Error('追加質問をスレッドへ保存できませんでした: ' + saved.saveError);
+              }
+              controller.enqueue(encoder.encode(encodeSseEvent('done', {
+                response,
+                usedModel: model,
+                systemPromptMode,
+                ...(isFallback ? { fallbackUsed: true } : {}),
+                ...usage,
+                ...('saveError' in saved ? {} : saved),
+              })));
+            } catch (err) {
+              logger.warn('AI chat stream failed', { model, user: user.sub, error: err instanceof Error ? err.message : 'Unknown error' });
+              controller.enqueue(encoder.encode(encodeSseEvent('error', {
+                error: err instanceof Error ? err.message : 'AIストリームの受信に失敗しました',
+              })));
+            } finally {
+              reader.releaseLock();
+              controller.close();
+            }
+          },
+          cancel() {
+            void upstream.cancel('client disconnected');
+          },
+        });
+        return new Response(responseStream, {
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
+          },
+        });
+      } catch (err) {
+        lastErr = err;
+        logger.warn('AI chat stream setup failed, trying fallback', {
+          model, next: candidates[i + 1], user: user.sub,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+    return jsonUtf8({ error: 'AI ストリームの開始に失敗しました' }, 500);
+  }
+
   for (let i = 0; i < candidates.length; i++) {
     const model = candidates[i];
     try {

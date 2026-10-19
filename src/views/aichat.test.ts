@@ -1369,7 +1369,7 @@ describe('回答バブル コピーボタン', () => {
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
-    const submitFn = html.slice(submitIdx, submitIdx + 3600);
+    const submitFn = html.slice(submitIdx, submitIdx + 5000);
     expect(submitFn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 });
@@ -1451,7 +1451,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3600);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
     expect(fn).toContain("assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
@@ -1460,7 +1460,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3600);
+    const fn = html.slice(idx, idx + 5000);
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const shareBtnIdx = fn.indexOf('appendShareBtn(currentMsg,');
     expect(guardIdx).toBeGreaterThan(-1);
@@ -2172,7 +2172,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3600);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain('data.shareId');
   });
 
@@ -2180,7 +2180,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3600);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain('data.userHash');
   });
 });
