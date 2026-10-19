@@ -111,3 +111,38 @@
 - 自動はWorker側で両方の埋め込みURLをGETし、HTTP 200だけでなくHTML Content-Type、会話埋め込みマーカー、module scriptを確認する。利用可能なホストをmygw優先で返し、どちらか一方だけが応答する場合はそのホストを選ぶ
 - 自動選択中は30秒ごとに確認し、現在のホストが一覧から消えたら他方へ切り替える。両方停止した場合はiframeを解除し、開始/停止を無効にする。復旧後の次の確認で再接続する
 - `/aichat` CSPは両ホストを許可する。新しいWorker APIはデプロイ後に有効になる
+
+## 11. Node.js 26はlibatomic1を入れてから起動する（2026-10-19追記）
+
+**対象**: `containers/demo/Dockerfile`、Ubuntu 26.10上のNode.js 26.12.0、Workers BuildsのDockerイメージビルド。
+
+### 発生したエラーと原因
+
+2026-10-19 11:14 UTCの本番ビルドは、Node.js公式アーカイブのダウンロード・SHA256検証・展開まで成功したが、直後の`node --version`で次のエラーになり、exit 127で停止した。
+
+```text
+node: error while loading shared libraries: libatomic.so.1:
+cannot open shared object file: No such file or directory
+```
+
+最小のUbuntuイメージにNode.js 26の実行時依存である`libatomic.so.1`がなかった。このライブラリはUbuntuの`libatomic1`パッケージで提供される。Node.jsの取得失敗やチェックサム不一致ではない。先行するapt処理のdebconf・sysctlのメッセージがあっても、ログ上はその工程はDONEになっている。失敗したRUNと最後のエラーを確認すること。
+
+### 適用した処置
+
+Dockerfileの最初の`apt-get install --no-install-recommends`に`libatomic1`を明示的に追加した。Node.jsを起動するRUNより前にインストールする。
+
+```diff
+-        ca-certificates tmux gnupg \
++        ca-certificates tmux gnupg libatomic1 \
+```
+
+Node.js 26.12.0のバージョン指定、SHA256、公式配布からの取得は維持する。既存互換のため配置先名は`/opt/node22`だが、中身のバージョンは`NODE_VERSION`で決まる。nvmは導入していない。
+
+Workers Builds自身のNode.js（今回のログでは24.21.0）と、Dockerイメージ内のNode.js（26.12.0）は別環境。ビルド環境のバージョン変更では、このイメージ内の共有ライブラリ不足は直らない。
+
+### 検証範囲と関連変更
+
+- 修正: [PR #2429](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2429)、コミット[`bae141f1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bae141f1)。mainへマージ済み。
+- 関連する既存の軽量テスト3件と`git diff --check`は成功。Workerだけのバンドル成功やPRビルド成功は、Dockerイメージの成功確認にはならない。
+- この環境では`AGENTS.md`・`AGENT.md`の制約によりDockerビルドは実行していない。対応する実行環境でのイメージ再ビルドと`node --version`以降の工程完走は別途確認する。修正がマージされたことだけで、本番ビルド・コンテナ起動まで成功したとは扱わない。
+- 詳細記録: [SPEC.cloudflare-workers-github-oauth-1.20261019.node26-libatomic.md](SPEC.cloudflare-workers-github-oauth-1.20261019.node26-libatomic.md)。
