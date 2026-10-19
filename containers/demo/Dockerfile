@@ -13,10 +13,11 @@ ARG CLOUDFLARED_VERSION=2026.10.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
+# Node.js 26 requires libatomic.so.1 (provided by libatomic1).
 # Keep large packages in separate layers to avoid registry upload timeouts.
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        ca-certificates tmux gnupg \
+        ca-certificates tmux gnupg libatomic1 \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
