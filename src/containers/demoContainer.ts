@@ -10,6 +10,7 @@
  */
 import { Container } from '@cloudflare/containers';
 import type { Bindings } from '../types';
+import { ALLOWED_SECRET_NAMES, type AllowedSecretName } from '../utils/cfWorkerSecretApi';
 import { recordContainerOperation } from '../utils/cfContainerOperationLog';
 
 // 無操作でこの時間が経過すると自動停止する(課金を抑えるため)。/cf-containers
@@ -78,9 +79,15 @@ export class DemoContainer extends Container<Bindings> {
    * stop→startを1回のロック取得で実行する(index.ts側でstop()とstart()を
    * 別々に呼ぶと、その間に別リクエストが割り込める隙間が生まれるため)。
    */
-  async restart(): Promise<void> {
+  async restart(secret?: { name: AllowedSecretName; value: string }): Promise<void> {
     return this.withLock(async () => {
+      if (secret && (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(secret.name) || !secret.value.trim())) {
+        throw new Error('更新するsecretが不正です');
+      }
       await super.stop();
+      // このRPCを処理しているDOには旧デプロイのenvが残る場合がある。
+      // 保存に成功した値を明示的に渡し、直後の再起動にも反映する。
+      if (secret) this.envVars = { ...this.envVars, [secret.name]: secret.value };
       await super.start();
     });
   }

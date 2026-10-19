@@ -354,6 +354,56 @@ describe('POST /api/cf-containers/secrets', () => {
     fetchSpy.mockRestore();
   });
 
+  it.each(['expired-token', undefined])('旧トークンが%sでも入力した新トークンで更新し、再起動へ渡す', async (oldToken) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, result: {} }), { status: 200 })
+    );
+    try {
+      const res = await postSecret('CF_CONTAINER_API_TOKEN', '  new-token  ', envWithCfApi({
+        CF_CONTAINER_API_TOKEN: oldToken, CLOUDFLARE_API_KEY: undefined,
+      }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      const [, init] = fetchSpy.mock.calls[0];
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer new-token');
+      expect(JSON.parse(init?.body as string).text).toBe('new-token');
+      expect(stubMethods.restart).toHaveBeenCalledWith({ name: 'CF_CONTAINER_API_TOKEN', value: 'new-token' });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('新トークンが拒否されたら更新失敗を返し再起動せず、値も返さない', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ success: false, result: null, errors: [{ message: 'rejected new-token' }] }), { status: 401 })
+    );
+    try {
+      const res = await postSecret('CF_CONTAINER_API_TOKEN', 'new-token', envWithCfApi({ CF_CONTAINER_API_TOKEN: 'expired-token' }));
+      expect(res.status).toBe(502);
+      expect(await res.text()).not.toContain('new-token');
+      expect(stubMethods.restart).not.toHaveBeenCalled();
+      for (const [, init] of fetchSpy.mock.calls) {
+        expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer new-token');
+      }
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('保存後の再起動が失敗した場合は保存済みの警告を返す', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, result: {} }), { status: 200 })
+    );
+    stubMethods.restart.mockRejectedValueOnce(new Error('restart failed'));
+    try {
+      const res = await postSecret('CF_CONTAINER_API_TOKEN', 'new-token');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, warning: expect.stringContaining('保存しましたが') });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('Cloudflare API呼び出しが失敗したら502を返し、コンテナは再起動しない', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ success: false, result: null, errors: [{ message: 'bad token' }] }), { status: 403 })

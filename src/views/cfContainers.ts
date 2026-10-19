@@ -74,7 +74,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </div>
 <div class="card">
   <strong>トークン設定（CLI不要）</strong>
-  <p class="subtitle" style="margin:4px 0 10px;">nekorootトンネル・Tailscaleのトークンをここから設定できます。設定後、自動的にコンテナを再起動して反映します。</p>
+  <p class="subtitle" style="margin:4px 0 10px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
   <div class="status-row">
     <label for="secret-name" style="font-size:13px;">対象:</label>
     <select id="secret-name">
@@ -84,7 +84,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     </select>
   </div>
   <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
-  <button id="btn-set-secret" type="button">設定して再起動</button>
+  <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
 </div>
 <div class="card">

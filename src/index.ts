@@ -19525,12 +19525,9 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
  * 限定し、JWT_SECRET等の重要なsecretを誤って上書きできないようにしている。
  */
 app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)' }, 503);
-  }
-  const body = await c.req.json<{ name?: string; value?: string }>().catch(() => null);
-  const name = body?.name ?? '';
-  const value = body?.value ?? '';
+  const body = await c.req.json<{ name?: unknown; value?: unknown }>().catch(() => null);
+  const name = typeof body?.name === 'string' ? body.name : '';
+  const value = typeof body?.value === 'string' ? body.value.trim() : '';
   if (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(name)) {
     return jsonUtf8({ error: `nameは${ALLOWED_SECRET_NAMES.join('/')}のいずれかを指定してください` }, 400);
   }
@@ -19538,21 +19535,31 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
     return jsonUtf8({ error: 'valueが空です' }, 400);
   }
 
+  // 自身のトークン更新は入力値で認証する。保存済みトークンが期限切れでも更新可能。
+  const apiKey = name === 'CF_CONTAINER_API_TOKEN' ? value : cfApiKey(c.env);
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: !c.env.CLOUDFLARE_ACCOUNT_ID
+      ? 'CLOUDFLARE_ACCOUNT_IDが未設定です'
+      : 'CF_CONTAINER_API_TOKENを先に入力・更新してください（Workers Scripts:Edit権限が必要です）' }, 503);
+  }
+  const credentials = { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey };
+  const redact = (message: string) => message.split(value).join('[REDACTED]').split(apiKey).join('[REDACTED]');
+
   const user = c.get('user');
   const performedBy = user?.sub ?? 'unknown';
 
   try {
     // wrangler.tomlの name と一致させること(このWorker自身のスクリプト名)。
     await setWorkerSecret(
-      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! },
+      credentials,
       'cloudflare-workers-github-oauth-1',
       name as AllowedSecretName,
       value
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const verify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! });
-    const diag = `使用トークン=${cfApiKeySource(c.env)} / アカウントID=${c.env.CLOUDFLARE_ACCOUNT_ID} / トークン検証: ${verify}`;
+    const message = redact(err instanceof Error ? err.message : String(err));
+    const verify = redact(await verifyApiToken(credentials));
+    const diag = `使用トークン=${name === 'CF_CONTAINER_API_TOKEN' ? '入力された新しいトークン' : cfApiKeySource(c.env)} / アカウントID=${c.env.CLOUDFLARE_ACCOUNT_ID} / トークン検証: ${verify}`;
     logger.error('[cf-containers-secrets] secret設定に失敗', { name, error: message, diag });
     return jsonUtf8({ error: 'secretの設定に失敗しました: ' + message + ' (' + diag + ')' }, 502);
   }
@@ -19560,18 +19567,17 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   // secretを設定しただけではコンテナ内の環境変数は更新されない
   // (DemoContainerのenvVarsはコンテナ起動時にしか反映されない)ため、
   // 続けて再起動して新しい値を反映する。
-  const stub = await getDemoContainerStub(c.env);
-  if (stub) {
-    try {
-      await stub.restart();
-      await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
-        logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('[cf-containers-secrets] secret設定後の再起動に失敗', { error: message });
-      return jsonUtf8({ ok: true, warning: 'secretは設定しましたが、再起動に失敗しました: ' + message });
-    }
+  try {
+    const stub = await getDemoContainerStub(c.env);
+    if (!stub) return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、DEMO_CONTAINERが未設定のためコンテナへ反映できませんでした' });
+    await stub.restart({ name: name as AllowedSecretName, value });
+    await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
+      logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
+    );
+  } catch (err) {
+    const message = redact(err instanceof Error ? err.message : String(err));
+    logger.error('[cf-containers-secrets] secret設定後の再起動に失敗', { error: message });
+    return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、コンテナへの反映に失敗しました。再起動してください: ' + message });
   }
   return jsonUtf8({ ok: true });
 });
