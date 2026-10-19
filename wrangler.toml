@@ -1,7 +1,22 @@
 name = "cloudflare-workers-github-oauth-1"
 main = "src/worker-entry.ts"
-compatibility_date = "2024-11-17"
+compatibility_date = "2026-10-19"
 assets = { directory = "./public" }
+
+# Cloudflare Containers demo image. The Durable Object class owns each
+# container instance and forwards traffic to the HTTP server on port 8080.
+[[containers]]
+class_name = "DemoContainer"
+image = "./containers/demo/Dockerfile"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "DEMO_CONTAINER"
+class_name = "DemoContainer"
+
+[exports.DemoContainer]
+type = "durable-object"
+storage = "sqlite"
 
 # 本番で Cloudflare DNS 上のサブドメインを Workers Route として使う場合の例。
 # GitHub OAuth/App 側の callback/setup/webhook/homepage URL も同じホストへ統一する。

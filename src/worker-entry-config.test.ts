@@ -22,11 +22,21 @@ describe('Workerエントリポイントがworkerdの起動時named-export検証
     expect(toml).toMatch(/^main\s*=\s*"src\/worker-entry\.ts"/m);
   });
 
-  it('src/worker-entry.ts は default export のみを持ち、他の named export を持たない', () => {
+  it('src/worker-entry.ts は default export とContainer用Durable Objectだけを公開する', () => {
     const src = readFileSync('src/worker-entry.ts', 'utf8');
     const namedExportRe = /^export\s+(?!default\b)(const|function|class|let|var|\{|interface|type|enum)/gm;
-    expect(src.match(namedExportRe)).toBeNull();
+    expect(src.match(namedExportRe)).toEqual(['export {']);
+    expect(src).toContain("export { DemoContainer } from './containers/demoContainer';");
     expect(src).toContain('export default {');
+  });
+
+  it('DemoContainerのイメージ、Durable Object binding、SQLite storageが設定されている', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    expect(toml).toContain('class_name = "DemoContainer"');
+    expect(toml).toContain('image = "./containers/demo/Dockerfile"');
+    expect(toml).toContain('name = "DEMO_CONTAINER"');
+    expect(toml).toContain('[exports.DemoContainer]');
+    expect(toml).toContain('storage = "sqlite"');
   });
 
   it('src/index.ts は default export(Honoアプリ本体)を持つ', () => {

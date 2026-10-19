@@ -2,6 +2,8 @@ import app, { syncAllTreeViewSnapshots } from './index';
 import type { Bindings } from './types';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
 
+export { DemoContainer } from './containers/demoContainer';
+
 export default {
   fetch: app.fetch,
   // wrangler.tomlの[triggers]crons(6時間ごと)から呼ばれる。
