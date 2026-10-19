@@ -1,15 +1,16 @@
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
-FROM ubuntu:24.04
+FROM ubuntu:26.10
 
 # Use one supported Node runtime for the server and both CLIs. The archive
 # digest is pinned independently of the download, so corruption fails the build.
-ARG NODE_VERSION=22.23.3
-ARG NODE_SHA256=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
-ARG NPM_VERSION=11.19.1
+ARG NODE_VERSION=26.12.0
+ARG NODE_SHA256=fd47865ecd6391ebb431fc815e01b9135bf83ded5cf373247e9331e196b7aded
+ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.163.0
-ARG CLAUDE_VERSION=2.1.302
+ARG CLAUDE_VERSION=2.1.303
 ARG CLOUDFLARED_VERSION=2026.10.1
+# Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
 # Keep large packages in separate layers to avoid registry upload timeouts.
@@ -18,10 +19,30 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates tmux gnupg \
         apache2 openssl openssh-server nftables curl \
         iproute2 iputils-ping net-tools dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git gh \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
+# Use Caddy's official stable repository for current stable packages.
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+        -o /tmp/caddy-stable.gpg.key https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
+    && gpg --batch --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg /tmp/caddy-stable.gpg.key \
+    && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+        -o /etc/apt/sources.list.d/caddy-stable.list https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt \
+    && chmod 644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list \
+    && apt-get update && apt-get install -y --no-install-recommends caddy \
+    && caddy version \
+    && rm -f /tmp/caddy-stable.gpg.key \
+    && rm -rf /var/lib/apt/lists/*
+# Install the upstream stable GitHub CLI rather than the Ubuntu archive version.
+ARG GH_VERSION=2.102.0
+ARG GH_SHA256=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.deb \
+        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" \
+    && echo "${GH_SHA256}  /tmp/gh.deb" | sha256sum -c - \
+    && dpkg -i /tmp/gh.deb \
+    && gh --version \
+    && rm -f /tmp/gh.deb
 ARG CLOUDFLARED_SHA256=200573c872174ab449965655febadef8edfbb144ebcaa391b700b2dedbadb3cd
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
