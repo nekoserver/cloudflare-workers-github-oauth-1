@@ -133,6 +133,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
 </div>
 <div class="card">
+  <p><a class="proxy-link" href="/cf-containers/docker.html" target="_blank" rel="noreferrer">Docker コマンドセンターを開く（管理者認証で接続）</a></p>
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
 </div>
 <div class="card">
