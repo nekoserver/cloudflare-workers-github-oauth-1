@@ -1,5 +1,7 @@
 # このアプリインストール後にプライベートリポジトリを表示させる方法
 
+Node.js 26・npm 12への更新時のDocker対応（`libatomic1`とClaudeのpostinstall許可）は、[2026-10-19のNOTICE](NOTICE.cloudflare-workers-github-oauth-1.20261019.npm12.md)を参照。
+
 ## Q. GitHub OAuth でログインしても `/repositories` にプライベートリポジトリが表示されない。どうすればいい？
 
 ### A. GitHub App の「Install App」フローでリポジトリへのアクセス権を付与する

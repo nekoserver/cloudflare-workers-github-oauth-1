@@ -74,7 +74,8 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
-RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} \
+# npm 12 blocks install scripts by default; allow only Claude's native installer.
+RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && claude --version \
     && /opt/node22/bin/npm cache clean --force
