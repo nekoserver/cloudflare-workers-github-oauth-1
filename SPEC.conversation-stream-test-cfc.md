@@ -1,33 +1,31 @@
-# AIチャットの test.cfc ストリーム接続
+# AIチャットのトンネル専用ストリーム接続
 
-接続先を src/utils/conversationStreamHosts.ts に集約し、
-`https://test.cfc.nekomaneki.work/http/lib/conversation-embed.html` を第一候補へ追加。
-選択UI、自動検出、iframe CSP、postMessageのOriginを同じ接続先設定に合わせた。
-任意URLの自由入力は追加していない。埋め込み先のページには利用者がHMAC鍵を入力するため、
-任意の第三者サイトを許可する設計は避ける。接続先を追加する場合は管理された許可リストを更新する。
-health応答に未知の候補が混入しても、UIは許可済み候補のみを使用する。
+接続先は `https://stream.test.cfc.nekomaneki.work/lib/conversation-embed.html`。
+管理画面 `test.cfc.nekomaneki.work` は引き続き cfc-standalone Worker が担当する。
+ストリーム専用ホストはWorkerカスタムドメインに登録せず、DNS CNAMEをトンネルへ割り当てる。
+トンネルではパス指定なしで `https://localhost:8443` へ転送する。
 
-## コンテナ側
+接続先URLを src/utils/conversationStreamHosts.ts に集約し、選択UI・自動検出・
+iframe CSP・postMessageのOriginを揃える。旧mygw / mynwも手動候補として維持する。
+任意URL入力は追加しない。埋め込み先へ利用者がHMAC鍵を入力するため、
+許可済みの接続先に限定する。未知のhealth候補もUIで拒否する。
 
-/root/lib のチャット画面で /http 配下ならAPIの接続先も同じプレフィックスを使うよう修正。
-配信サーバーは既存パスと /http プレフィックスの双方を受け付ける。
-HTTP署名は送信したパスに束縛し、WebSocket署名も実際の接続パスで照合する。
-Apacheは静的ファイルの /http リライトを維持し、認証付きストリームはパスを保持してプロキシする。
-変更は稼働コンテナのコード・静的アセット・Apacheへ反映した。
+## 配信側の設定
 
-## 検証と公開状態
+- 証明書が専用ホストをカバーすることと、更新方法を確認する。
+- 同名のWorkerカスタムドメインがあれば専用ホスト分だけ解除する。
+- DNSは稼働トンネルの `<tunnel-id>.cfargotunnel.com` へproxied CNAMEを設定する。
+- cloudflaredの公開ホストは専用ホスト、パス指定なし、HTTPS localhost:8443、自己署名証明書のTLS検証無効。
+- Apacheが `/lib/conversation-embed.html` と静的アセットを配信し、
+  `/lib/api/chat/ws` を8091、HTTPストリーム・セッションAPIを8092へ中継する。
+- 配信プロセスのLIB_CHAT_ORIGINSへ専用ホストのHTTPS Originを追加する。
+- HMAC・セッション認証、parent postMessageの許可リストは維持する。
+- 実会話observerは、対象会話とapp-serverソケットを照合してから起動する。
 
-- Worker側の関連4ファイル・15テスト成功。
-- Pythonのチャット関連31テスト成功。プレフィックス付きの認証と署名使い回し拒否を含む。
-- ローカルApache TLSで /http 配下の画面、SSE、NDJSON、JSON-seq、WebSocketを確認。
-- 正常署名セッション200、不正署名401、未許可Origin403、WebSocket不正鍵1008。
-- 全体のTypeScript型検査は変更対象外の複数テストファイルの型エラーで失敗。
-- Workerリポジトリの変更は未デプロイ。Dockerビルドは実行していない。
-- 公開URLは現在 cfc-standalone Worker の認証により401で、実会話配信は未完了。
+## 検証
 
-トンネル側には /http の経路があるが、同ホストのWorkerカスタムドメインが先に要求を受け、
-cfc-standalone の route() が認証を要求する。公開接続を完了するには、この入口側で
-対象の静的配信とチャットAPIをコンテナのApacheへ中継する必要がある。
-チャットAPI自身のHMAC・セッション認証を維持し、管理APIの認証を外さない。
-また実会話observerは対象会話の選択と起動が必要。
-MCP化は後続作業とし、この修正の前提にしない。
+関連4ファイルの15テストで選択・自動検出・CSP・Origin・未知ホスト拒否を確認する。
+実環境では専用ホスト経由のHTML、モジュール、WebSocket認証、HTTPストリームの逐次受信を確認する。
+コードのビルド成功、トンネル接続正常、公開ストリーム受信成功を別々に記録する。
+Dockerビルドはこのコンテナでは実行しない。
+MCP化は後続作業とし、この接続修正の前提にしない。
