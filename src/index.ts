@@ -17,6 +17,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
+import { CONVERSATION_STREAM_FRAME_ORIGINS } from './utils/conversationStreamHosts';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
@@ -6276,7 +6277,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mygw.nekomaneki.work https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${CONVERSATION_STREAM_FRAME_ORIGINS}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   return c.html(getAiChatPage({
     name: user.name,
