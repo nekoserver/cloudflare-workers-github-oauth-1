@@ -1,18 +1,14 @@
 import * as logger from './logger';
 
-export type ConversationStreamHost = 'mygw' | 'mynw';
+import { CONVERSATION_STREAM_URLS, type ConversationStreamHost } from './conversationStreamHosts';
+export type { ConversationStreamHost } from './conversationStreamHosts';
 
-const EMBED_URLS: Record<ConversationStreamHost, string> = {
-  mygw: 'https://mygw.nekomaneki.work/lib/conversation-embed.html',
-  mynw: 'https://mynw.nekomaneki.work/lib/conversation-embed.html',
-};
-
-/** Returns reachable embed hosts in preference order (mygw, then mynw). */
+/** Returns reachable trusted embeds, preferring the container host. */
 export async function conversationStreamHealthy(): Promise<ConversationStreamHost[]> {
-  const hosts = Object.keys(EMBED_URLS) as ConversationStreamHost[];
+  const hosts = Object.keys(CONVERSATION_STREAM_URLS) as ConversationStreamHost[];
   const results = await Promise.all(hosts.map(async host => {
     try {
-      const response = await fetch(EMBED_URLS[host], {
+      const response = await fetch(CONVERSATION_STREAM_URLS[host], {
         method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000),
         headers: { 'Cache-Control': 'no-cache' },
       });

@@ -1,3 +1,5 @@
+import { CONVERSATION_STREAM_URLS } from '../utils/conversationStreamHosts';
+
 /** 通常のチャット入力から独立した、認証付き会話ストリームの埋め込み。 */
 export function getConversationStreamToggle(): string {
   return '<button type="button" class="search-hist-btn conversation-stream-toggle" id="conversationStreamToggle" aria-controls="conversationStreamPanel" aria-expanded="false" aria-pressed="false" title="ストリーム">ストリーム</button>';
@@ -28,6 +30,7 @@ export function getConversationStreamPanel(): string {
       <label for="conversationStreamHost">接続先</label>
       <select id="conversationStreamHost" aria-label="ストリーム接続先">
         <option value="auto" selected>自動</option>
+        <option value="testcfc">test.cfc.nekomaneki.work</option>
         <option value="mygw">mygw.nekomaneki.work</option>
         <option value="mynw">mynw.nekomaneki.work</option>
       </select>
@@ -51,7 +54,8 @@ export function getConversationStreamPanel(): string {
     var hostPreference = 'auto';
     var activeHost = null;
     var loadGeneration = 0;
-    var origins = { mygw: 'https://mygw.nekomaneki.work', mynw: 'https://mynw.nekomaneki.work' };
+    var embedUrls = ${JSON.stringify(CONVERSATION_STREAM_URLS)};
+    var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
     var protocol = 'websocket';
     var healthTimer = null;
     var checkingHealth = false;
@@ -77,7 +81,7 @@ export function getConversationStreamPanel(): string {
         var data = await requestHealth();
         if (hostPreference === 'auto' && !panel.hidden) {
           var candidates = data && Array.isArray(data.availableHosts) ? data.availableHosts : [];
-          var next = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates[0] || null;
+          var next = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
           if (next !== activeHost) load(data);
           else if (!next && activeHost) {
             loadGeneration++;
@@ -106,17 +110,17 @@ export function getConversationStreamPanel(): string {
         var health = preloadedHealth || await requestHealth();
         if (generation !== loadGeneration || panel.hidden) return;
         var candidates = health && Array.isArray(health.availableHosts) ? health.availableHosts : [];
-        host = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates[0] || null;
+        host = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
       }
-      if (!host || !origins[host]) {
+      if (!host || !Object.prototype.hasOwnProperty.call(embedUrls, host)) {
         activeHost = null;
         hostStatus.textContent = '自動: 接続先が見つかりません';
         start.disabled = true; stop.disabled = true;
         return;
       }
       activeHost = host;
-      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + host;
-      var url = new URL('/lib/conversation-embed.html', origins[host]);
+      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + new URL(embedUrls[host]).host;
+      var url = new URL(embedUrls[host]);
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());
       frame.src = url.href;

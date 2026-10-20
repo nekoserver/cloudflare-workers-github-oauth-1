@@ -55,7 +55,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
     const toggle = doc.getElementById('conversationStreamToggle')!;
     const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw']);
+    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'testcfc', 'mygw', 'mynw']);
     expect(host.value).toBe('auto');
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
@@ -78,6 +78,29 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     expect((doc.getElementById('conversationStreamPanel') as HTMLElement).hidden).toBe(true);
     expect(frame.getAttribute('src')).toBeNull();
     dom.window.close();
+  });
+  it('test.cfcを自動選択し、/http配下の埋め込みと正確なOriginを使う', async () => {
+    const dom = makeDom(['testcfc', 'mygw']);
+    try {
+      const doc = dom.window.document;
+      doc.getElementById('conversationStreamToggle')!.click();
+      const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
+      await vi.waitFor(() => expect(frame.src).toContain('https://test.cfc.nekomaneki.work/http/lib/conversation-embed.html'));
+      const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {});
+      frame.dispatchEvent(new dom.window.Event('load'));
+      expect(post).toHaveBeenCalledWith({ type: 'conversation-controls' }, 'https://test.cfc.nekomaneki.work');
+      const select = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
+      select.value = 'testcfc'; select.dispatchEvent(new dom.window.Event('change'));
+      await vi.waitFor(() => expect(new URL(frame.src).pathname).toBe('/http/lib/conversation-embed.html'));
+    } finally { dom.window.close(); }
+  });
+  it('死活確認に未知の接続先が混入しても許可済み候補だけを使う', async () => {
+    const dom = makeDom(['https://evil.example', '__proto__', 'testcfc']);
+    try {
+      dom.window.document.getElementById('conversationStreamToggle')!.click();
+      const frame = dom.window.document.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
+      await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://test.cfc.nekomaneki.work'));
+    } finally { dom.window.close(); }
   });
   it('選択中ホストだけへ操作を送り、そのホストからの通知だけを受信する', async () => {
     const dom = makeDom();
