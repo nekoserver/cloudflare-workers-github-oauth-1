@@ -30,7 +30,7 @@ export function getConversationStreamPanel(): string {
       <label for="conversationStreamHost">接続先</label>
       <select id="conversationStreamHost" aria-label="ストリーム接続先">
         <option value="auto" selected>自動</option>
-        <option value="testcfc">test.cfc.nekomaneki.work</option>
+        <option value="testcfc">stream.test.cfc.nekomaneki.work</option>
         <option value="mygw">mygw.nekomaneki.work</option>
         <option value="mynw">mynw.nekomaneki.work</option>
       </select>
