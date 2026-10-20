@@ -1,9 +1,11 @@
+import { CONVERSATION_STREAM_URLS } from './conversationStreamHosts';
+
 // Service Bindingのfetch()に渡すパスのホストは、リクエストがCloudflareの
 // 内部ネットワークを通り外へ出ないため任意の値でよい(dynamicWorkerPing.tsと同じ)。
 const SEND_PATH = 'https://internal/tunnel-signer/send';
 
-/** rust-worker-sqlx-d1がサーバー側署名で実際にPOSTする対象URL。現行のnekorootトンネルへ送る。 */
-const DEFAULT_TUNNELS_URL = 'https://mygw.nekomaneki.work/lib/api/tunnels';
+/** 署名付きPOSTは会話配信と同じ稼働中トンネルへ送る。環境設定で上書き可能。 */
+const DEFAULT_TUNNELS_URL = new URL('/lib/api/tunnels', CONVERSATION_STREAM_URLS.testcfc).href;
 
 export type AskFetcher = Pick<Fetcher, 'fetch'>;
 

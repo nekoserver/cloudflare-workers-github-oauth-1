@@ -29,8 +29,8 @@ NOTIFY_TARGET = "worker"
 # 旧Railway VM側のmynw-webトンネルがこのホスト名を使っていたが、2026-10-16
 # にユーザー確認済み(「もう使わない」)でnekoroot側へ付け替える。
 NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
-# askgk転送先。mynwを使う場合もこのURLの変更で切り替え可能。
-ASKGK_TUNNELS_URL = "https://mygw.nekomaneki.work/lib/api/tunnels"
+# askgk転送先。会話配信と同じ稼働中トンネルへ送る。
+ASKGK_TUNNELS_URL = "https://stream.test.cfc.nekomaneki.work/lib/api/tunnels"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID

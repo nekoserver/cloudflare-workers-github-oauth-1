@@ -10,8 +10,7 @@ function sendResultResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe('askTunnelSigner', () => {
-  it.each(['mygw', 'mynw'])('設定した%sへ質問を送信する', async (host) => {
-    const url = `https://${host}.nekomaneki.work/lib/api/tunnels`;
+  it.each(['https://mygw.nekomaneki.work/lib/api/tunnels', 'https://mynw.nekomaneki.work/lib/api/tunnels', 'https://stream.test.cfc.nekomaneki.work/lib/api/tunnels'])('設定した%sへ質問を送信する', async (url) => {
     const fetcher = makeFetcher(async (_input, init) => {
       const sent = JSON.parse(String(init?.body));
       expect(sent.url).toBe(url);
@@ -80,7 +79,7 @@ describe('askTunnelSigner', () => {
     const fetcher = makeFetcher(async (input, init) => {
       expect(String(input)).toContain('/tunnel-signer/send');
       const sentBody = JSON.parse(String(init?.body));
-      expect(sentBody.url).toBe('https://mygw.nekomaneki.work/lib/api/tunnels');
+      expect(sentBody.url).toBe('https://stream.test.cfc.nekomaneki.work/lib/api/tunnels');
       expect(sentBody.contentType).toBe('application/json');
       const innerPayload = JSON.parse(sentBody.body);
       expect(innerPayload.message).toBe('元気？');
