@@ -83,6 +83,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge[data-ok="true"] { background: var(--ok-bg); color: var(--ok); }
 .badge[data-ok="false"] { background: var(--err-bg); color: var(--err); }
+.badge[data-level="ok"] { background: var(--ok-bg); color: var(--ok); }
+.badge[data-level="warn"] { background: var(--warn-bg); color: var(--warn); }
+.badge[data-level="ng"] { background: var(--err-bg); color: var(--err); }
 </style>
 </head>
 <body>
@@ -146,6 +149,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <tbody><tr>
       <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
     </tr></tbody>
+  </table>
+  <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
+  <table class="health-table" id="version-table" hidden>
+    <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>想定の版</th><th>判定</th></tr></thead>
+    <tbody id="version-tbody"></tbody>
   </table>
   <div id="health-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
 </div>
@@ -358,6 +366,45 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     return '<span class="badge" data-ok="' + (ok ? 'true' : 'false') + '">' + (ok ? 'OK' : 'NG') + '</span>';
   }
 
+  // 版の判定: ok=想定どおり(緑)、warn=想定と違う(黄)、ng=無い・最低版より古い(赤)
+  var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG' };
+  function renderVersions(versions) {
+    var table = document.getElementById('version-table');
+    var tbody = document.getElementById('version-tbody');
+    tbody.innerHTML = '';
+    if (!versions || !versions.items) { table.hidden = true; return; }
+    versions.items.forEach(function (v) {
+      var tr = document.createElement('tr');
+      var cells = [v.name, v.actual || '(取得できず)', v.expected || (v.minimum ? v.minimum + '以上' : '-')];
+      cells.forEach(function (text) {
+        var td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      });
+      var tdLevel = document.createElement('td');
+      var span = document.createElement('span');
+      span.className = 'badge';
+      span.setAttribute('data-level', v.level);
+      span.textContent = VERSION_LABELS[v.level] || v.level;
+      span.title = v.raw || '';
+      tdLevel.appendChild(span);
+      tr.appendChild(tdLevel);
+      tbody.appendChild(tr);
+    });
+    table.hidden = false;
+  }
+
+  // どのコミット・ビルドから作ったイメージかを表示する(build-info.json)
+  function renderBuild(build) {
+    var el = document.getElementById('image-build');
+    if (!build) { el.hidden = true; return; }
+    el.textContent = build.error
+      ? 'イメージのビルド情報: 取得できず(' + build.error + ')'
+      : 'イメージ: commit ' + String(build.commit || '?').slice(0, 7) + ' / branch ' + (build.branch || '?') +
+        ' / build ' + (build.buildUuid || '?') + ' / 作成 ' + (build.builtAt || '?');
+    el.hidden = false;
+  }
+
   var btnHealth = document.getElementById('btn-health');
   var healthTable = document.getElementById('health-table');
   var healthLog = document.getElementById('health-log');
@@ -374,6 +421,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         document.getElementById('health-docker').innerHTML = badge(data.docker);
         document.getElementById('health-time').textContent = data.checkedAt || '';
         healthTable.hidden = false;
+        renderVersions(data.versions);
+        renderBuild(data.build);
         healthLog.textContent = '';
       })
       .catch(function (err) {
@@ -445,7 +494,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
           tunnelTbody.appendChild(tr);
         });
         tunnelTable.hidden = false;
-        tunnelLog.textContent = data.tunnels && data.tunnels.length ? '' : '(トンネルが見つかりません)';
+        var q = data.queriedWith || {};
+        tunnelLog.textContent = data.tunnels && data.tunnels.length ? '' :
+          '(トンネルが見つかりません: アカウント末尾' + (q.accountIdTail || '?') + '、トークン=' + (q.tokenSource || '?') + '。このアカウントに削除されていないトンネルが無いか、トンネルが別のアカウントにあります)';
       })
       .catch(function (err) {
         tunnelLog.textContent = 'エラー: ' + String(err);

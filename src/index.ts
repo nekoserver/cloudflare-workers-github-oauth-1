@@ -19538,7 +19538,8 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
     });
-    return jsonUtf8({ tunnels });
+    // 0件のとき、どのアカウント・どのトークンで問い合わせたかを画面で追えるようにする
+    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });

@@ -55,6 +55,88 @@ async function probeDockerRunning() {
   return /^[0-9]/.test(out.trim());
 }
 
+// 各コマンドの出力から版(例: 26.12.1、10.2p1)を取り出す。取れなければnull。
+function extractVersion(text) {
+  const m = String(text || '').match(/(\d+\.\d+(?:\.\d+)?(?:p\d+)?)/);
+  return m ? m[1] : null;
+}
+
+// 版を数値の並びとして比べる(a>bなら正、a<bなら負、同じなら0)。
+function compareVersions(a, b) {
+  const pa = String(a).split(/\D+/).filter(Boolean).map(Number);
+  const pb = String(b).split(/\D+/).filter(Boolean).map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+// 無い・最低版より古い→ng(赤)、想定の版と違う→warn(黄)、それ以外→ok(緑)。
+function judgeVersion(actual, expected, minimum) {
+  if (!actual) return 'ng';
+  if (minimum && compareVersions(actual, minimum) < 0) return 'ng';
+  if (expected && actual !== expected) return 'warn';
+  return 'ok';
+}
+
+// key: /etc/image-versions.json(Dockerfileで固定した版)の項目名。minimum: 既知の脆弱性を避ける最低版
+// (Node 26.12.1は2026-10-21のセキュリティリリース。CVE-2026-111497等)。
+const VERSION_SOURCES = [
+  { name: 'node', cmd: process.execPath, args: ['--version'], key: 'node', minimum: '26.12.1' },
+  { name: 'apache', cmd: 'apache2ctl', args: ['-v'] },
+  { name: 'openssh', cmd: 'ssh', args: ['-V'] },
+  { name: 'openssl', cmd: 'openssl', args: ['version'] },
+  { name: 'cloudflared', cmd: 'cloudflared', args: ['--version'], key: 'cloudflared' },
+  { name: 'tailscale', cmd: 'tailscale', args: ['version'], key: 'tailscale' },
+  { name: 'docker', cmd: 'docker', args: ['--version'] },
+  { name: 'codex', cmd: 'codex', args: ['--version'], key: 'codex' },
+  { name: 'claude', cmd: 'claude', args: ['--version'], key: 'claude' },
+  { name: 'gh', cmd: 'gh', args: ['--version'], key: 'gh' },
+  { name: 'git', cmd: 'git', args: ['--version'] },
+  { name: 'jj', cmd: 'jj', args: ['--version'], key: 'jj' },
+];
+
+// ssh -Vのように版を標準エラーに出すコマンドもあるため、両方をつなげて返す。
+function runVersionCmd(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 8000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve(`${stdout || ''}${stderr || ''}${err && !stdout && !stderr ? `[実行失敗: ${err.message}]` : ''}`.trim());
+    });
+  });
+}
+
+let versionsCache = null;
+
+// どのコミット・ビルドから作ったイメージか(wrangler.tomlの[build]が書き出す)。無ければnull。
+function readBuildInfo() {
+  try {
+    return JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, 'build-info.json'), 'utf8'));
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+async function collectVersions() {
+  let expected = {};
+  let expectedError = null;
+  try {
+    expected = JSON.parse(require('node:fs').readFileSync('/etc/image-versions.json', 'utf8'));
+  } catch (err) {
+    expectedError = err.message;
+  }
+  const items = await Promise.all(
+    VERSION_SOURCES.map(async (s) => {
+      const raw = await runVersionCmd(s.cmd, s.args);
+      const actual = extractVersion(raw.split('\n')[0]);
+      const exp = s.key ? expected[s.key] || null : null;
+      return { name: s.name, actual, expected: exp, minimum: s.minimum || null, level: judgeVersion(actual, exp, s.minimum), raw: raw.split('\n')[0].slice(0, 120) };
+    })
+  );
+  versionsCache = { items, expectedError, checkedAt: new Date().toISOString() };
+  return versionsCache;
+}
+
 async function buildHealth() {
   const [apache, sshd, cloudflared, tailscale, docker] = await Promise.allSettled([
     probeTcp(8443),
@@ -70,6 +152,9 @@ async function buildHealth() {
     cloudflared: value(cloudflared),
     tailscale: value(tailscale),
     docker: value(docker),
+    // 版の取得は時間がかかるため、起動時と10分ごとに取ったものを返す(初回は取得を待つ)
+    versions: versionsCache || (await collectVersions()),
+    build: readBuildInfo(),
     checkedAt: new Date().toISOString(),
   };
 }
@@ -135,7 +220,7 @@ function tailFile(path, maxBytes) {
   }
 }
 
-http
+const server = http
   .createServer((req, res) => {
     if (req.url === '/debug/logs') {
       const logs = {};
@@ -168,6 +253,15 @@ http
       })
     );
   })
-  .listen(PORT, () => {
+  ;
+
+module.exports = { extractVersion, compareVersions, judgeVersion };
+
+// テストからrequireしたときは起動しない
+if (require.main === module) {
+  server.listen(PORT, () => {
     console.log(`demo container listening on port ${PORT}`);
   });
+  collectVersions();
+  setInterval(collectVersions, 10 * 60 * 1000).unref();
+}
