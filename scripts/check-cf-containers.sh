@@ -45,11 +45,14 @@ if [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
 import sys
 p, proxy = sys.argv[1], sys.argv[2]
 ca = '/usr/local/share/ca-certificates/proxy-ca.crt'
-inj = (f'FROM ubuntu:24.04\nCOPY proxy-ca.crt {ca}\n'
-       f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
-       f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca}\n')
-s = open(p, encoding='utf-8').read()
-open(p, 'w', encoding='utf-8').write(s.replace('FROM ubuntu:24.04\n', inj, 1))
+extra = [f'COPY proxy-ca.crt {ca}',
+         f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
+         f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca} PIP_CERT={ca}']
+lines = open(p, encoding='utf-8').read().split('\n')
+# FROM行(ベースイメージのバージョン)に依存せず、最初のFROMの直後に挿入する
+i = next(k for k, l in enumerate(lines) if l.startswith('FROM '))
+lines[i + 1:i + 1] = extra
+open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 EOF2
   BUILD_ARGS=(--network host)
   echo "INFO: サンドボックスのプロキシ経由で本番と同じダウンロード込みのビルドを行う"
