@@ -24883,7 +24883,7 @@ async function handleResendWebhookCore(
     }
   }
 
-  const notifyUrl = new URL('https://mynw.nekomaneki.work/lib/resend-webhook.shtml');
+  const notifyUrl = new URL('https://test.cfc.nekomaneki.work/lib/resend-webhook.shtml');
   notifyUrl.searchParams.set('event', eventType);
 
   let proxyResultText: string | null = null;
