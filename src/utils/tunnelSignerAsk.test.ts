@@ -79,7 +79,7 @@ describe('askTunnelSigner', () => {
     const fetcher = makeFetcher(async (input, init) => {
       expect(String(input)).toContain('/tunnel-signer/send');
       const sentBody = JSON.parse(String(init?.body));
-      expect(sentBody.url).toBe('https://stream.test.cfc.nekomaneki.work/lib/api/tunnels');
+      expect(sentBody.url).toBe('https://mygw.nekomaneki.work/lib/api/tunnels');
       expect(sentBody.contentType).toBe('application/json');
       const innerPayload = JSON.parse(sentBody.body);
       expect(innerPayload.message).toBe('元気？');

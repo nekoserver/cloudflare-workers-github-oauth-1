@@ -49,13 +49,13 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       await vi.waitFor(() => expect(frame.getAttribute('src')).toContain('/lib/conversation-embed.html'));
     } finally { dom.window.close(); }
   });
-  it('自動と手動のCFC選択、および4方式の切替に対応する', async () => {
+  it('自動選択・mygw/mynw/CFCの手動選択と4方式の切替に対応する', async () => {
     const dom = makeDom();
     const doc = dom.window.document;
     const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
     const toggle = doc.getElementById('conversationStreamToggle')!;
     const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'testcfc']);
+    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw', 'testcfc']);
     expect(host.value).toBe('auto');
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
@@ -64,6 +64,10 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     for (const protocol of ['sse', 'websocket', 'ndjson', 'jsonseq']) {
       (doc.querySelector('[data-conversation-protocol="' + protocol + '"]') as unknown as HTMLButtonElement).click();
       await vi.waitFor(() => expect(new URL(frame.src).searchParams.get('protocol')).toBe(protocol));
+    }
+    for (const name of ['mygw', 'mynw']) {
+      host.value = name; host.dispatchEvent(new dom.window.Event('change'));
+      await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://' + name + '.nekomaneki.work'));
     }
     host.value = 'testcfc'; host.dispatchEvent(new dom.window.Event('change'));
     await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
@@ -115,7 +119,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       }));
       frame.dispatchEvent(new dom.window.Event('load'));
       expect(post).toHaveBeenCalledWith({ type: 'conversation-controls' }, 'https://stream.test.cfc.nekomaneki.work');
-      notify('https://mynw.nekomaneki.work');
+      notify('https://untrusted.example');
       expect(start.disabled).toBe(true);
       notify('https://stream.test.cfc.nekomaneki.work', dom.window as unknown as Window);
       expect(start.disabled).toBe(true);

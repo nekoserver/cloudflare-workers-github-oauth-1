@@ -30,11 +30,11 @@ CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 # デプロイ時にも送信先を維持し、未設定時のSlack送信へ戻らないよう明示する。
 # /tsubuyaki・/pts・インタラクティブ投稿の返信は専用のSlack送信経路を使う。
 NOTIFY_TARGET = "worker"
-# コンテナ公開はCFCの専用Tunnelホストへ統一。親test.cfcは管理Worker用。
+# 本体nekorootはmygwを維持。CFC用Tunnel・Secretとは分離する。
 # src/utils/containerEndpoints.tsと同じ接続先を使用する。
-NEKOROOT_HOSTNAME = "stream.test.cfc.nekomaneki.work"
+NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
 # askgk転送先。会話配信と同じ稼働中トンネルへ送る。
-ASKGK_TUNNELS_URL = "https://stream.test.cfc.nekomaneki.work/lib/api/tunnels"
+ASKGK_TUNNELS_URL = "https://mygw.nekomaneki.work/lib/api/tunnels"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
