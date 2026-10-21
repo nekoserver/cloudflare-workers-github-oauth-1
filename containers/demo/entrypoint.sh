@@ -93,6 +93,8 @@ fi
 #   (2026-10-17: 以前はNEWを破棄していたため、WorkerからDurable Object経由で
 #    8080へ入る接続まで破棄され、/cf-containersの操作がすべて応答しなくなった)
 # FORWARD: 許可。
+# IPv6: ループバック以外は受信・転送とも破棄する。ssh・Tailscale・cloudflared・Workerからの
+#   8080はすべてIPv4で、IPv6の外向きルートも無い(2026-10-21 /debug/netの実測で確認)。
 if command -v nft >/dev/null 2>&1; then
   {
     nft add table inet filter 2>/dev/null
@@ -101,10 +103,12 @@ if command -v nft >/dev/null 2>&1; then
     nft flush chain inet filter input
     nft flush chain inet filter forward
     nft add rule inet filter input iif lo accept
+    nft add rule inet filter input meta nfproto ipv6 drop
+    nft add rule inet filter forward meta nfproto ipv6 drop
     nft add rule inet filter input ct state invalid drop
     nft add rule inet filter input ct state established,related,new accept
   } >/tmp/nftables.log 2>&1 \
-    && log "nftables INPUT: lo/established/related/new accept, invalid drop / FORWARD: accept" \
+    && log "nftables INPUT: lo accept, ipv6 drop, invalid drop, established/related/new accept / FORWARD: ipv6 drop, accept" \
     || log "WARN: nftables setup failed (see /tmp/nftables.log; kernel may not support nf_tables in this environment)"
 else
   log "WARN: nft command not found, firewall not applied"

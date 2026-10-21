@@ -24,3 +24,14 @@ describe('demoコンテナのCodexネットワーク許可', () => {
     expect(ep).toContain("printf '\\n[sandbox_workspace_write]\\nnetwork_access = true\\n' >> /root/.codex/config.toml");
   });
 });
+
+describe('demoコンテナのIPv6遮断', () => {
+  it('ループバックを許可した後でIPv6の受信と転送を破棄する', () => {
+    const ep = readFileSync('containers/demo/entrypoint.sh', 'utf8');
+    const lo = ep.indexOf('nft add rule inet filter input iif lo accept');
+    const v6 = ep.indexOf('nft add rule inet filter input meta nfproto ipv6 drop');
+    expect(lo).toBeGreaterThan(-1);
+    expect(v6).toBeGreaterThan(lo);
+    expect(ep).toContain('nft add rule inet filter forward meta nfproto ipv6 drop');
+  });
+});
