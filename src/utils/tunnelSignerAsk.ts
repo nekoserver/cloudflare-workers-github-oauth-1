@@ -1,11 +1,11 @@
-import { CONVERSATION_STREAM_URLS } from './conversationStreamHosts';
+import { CONTAINER_ENDPOINTS } from './containerEndpoints';
 
 // Service Bindingのfetch()に渡すパスのホストは、リクエストがCloudflareの
 // 内部ネットワークを通り外へ出ないため任意の値でよい(dynamicWorkerPing.tsと同じ)。
 const SEND_PATH = 'https://internal/tunnel-signer/send';
 
 /** 署名付きPOSTは会話配信と同じ稼働中トンネルへ送る。環境設定で上書き可能。 */
-const DEFAULT_TUNNELS_URL = new URL('/lib/api/tunnels', CONVERSATION_STREAM_URLS.testcfc).href;
+const DEFAULT_TUNNELS_URL = CONTAINER_ENDPOINTS.tunnels;
 
 export type AskFetcher = Pick<Fetcher, 'fetch'>;
 

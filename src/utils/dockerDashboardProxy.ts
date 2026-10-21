@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../types';
+import { CONTAINER_ENDPOINTS } from './containerEndpoints';
 
-const ORIGIN = 'https://mygw.nekomaneki.work';
+const ORIGIN = CONTAINER_ENDPOINTS.docker;
 const SIGNER = 'https://internal/tunnel-signer/send';
 const ASSETS: Record<string, string> = {
   '/cf-containers/docker.html': '/lib/docker.html',

@@ -17,13 +17,31 @@ ENV PATH="/opt/node22/bin:${PATH}"
 # Keep large packages in separate layers to avoid registry upload timeouts.
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        ca-certificates tmux gnupg libatomic1 \
+        ca-certificates tmux expect gnupg libatomic1 \
         apache2 openssl openssh-server nftables curl \
+        python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
+# Bootstrap the dependency firewall from a pinned, digest-checked release.
+# Free edition blocks confirmed malware; unscanned packages are not blocked.
+ARG SFW_VERSION=1.15.4
+ARG SFW_SHA256=cf9f55b8343e1ef6e6dcccdb09b99c70c0430a22ed7d0079286eccddeaf72670
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/sfw \
+        "https://github.com/SocketDev/sfw-free/releases/download/v${SFW_VERSION}/sfw-free-linux-x86_64" \
+    && echo "${SFW_SHA256}  /tmp/sfw" | sha256sum -c - \
+    && install -m 755 /tmp/sfw /usr/local/bin/sfw \
+    && rm -f /tmp/sfw \
+    && sfw --help
+# Keep chat dependencies isolated from Ubuntu's system Python.
+COPY chat-requirements.txt /tmp/lib-chat-requirements.txt
+RUN python3 -m venv /opt/lib-chat \
+    && sfw /opt/lib-chat/bin/python -m pip install --no-cache-dir -r /tmp/lib-chat-requirements.txt \
+    && /opt/lib-chat/bin/python -m pip check \
+    && /opt/lib-chat/bin/python -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)" \
+    && rm -f /tmp/lib-chat-requirements.txt
 # Use Caddy's official stable repository for current stable packages.
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
         -o /tmp/caddy-stable.gpg.key https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
@@ -68,14 +86,16 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.x
     && mkdir -p /opt/node22 && tar -xJf /tmp/node22.tar.xz -C /opt/node22 --strip-components=1 \
     && rm -f /tmp/node22.tar.xz \
     && node --version
-RUN npm install -g npm@${NPM_VERSION} \
-    && npm --version
+RUN npm cache clean --force \
+    && sfw npm install -g npm@${NPM_VERSION} --ignore-scripts \
+    && /opt/node22/bin/npm --version \
+    && /opt/node22/bin/npm cache clean --force
 RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
-    && npm install -g @openai/codex@${CODEX_VERSION} \
+    && sfw npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
+RUN sfw /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && claude --version \
     && /opt/node22/bin/npm cache clean --force
@@ -87,7 +107,7 @@ COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid \
     && a2dissite 000-default \
     && a2ensite 000-demo \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \

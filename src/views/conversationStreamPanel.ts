@@ -31,8 +31,6 @@ export function getConversationStreamPanel(): string {
       <select id="conversationStreamHost" aria-label="ストリーム接続先">
         <option value="auto" selected>自動</option>
         <option value="testcfc">stream.test.cfc.nekomaneki.work</option>
-        <option value="mygw">mygw.nekomaneki.work</option>
-        <option value="mynw">mynw.nekomaneki.work</option>
       </select>
       <span id="conversationStreamHostStatus" role="status" aria-live="polite">自動</span>
       <button type="button" id="conversationStreamStart" disabled>表示を開始</button>

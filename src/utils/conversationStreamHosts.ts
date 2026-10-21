@@ -1,8 +1,8 @@
-/** Only trusted embeds may receive stream credentials and parent controls. */
+import { CONTAINER_ENDPOINTS } from './containerEndpoints';
+
+/** Only the active CFC container may receive stream credentials and controls. */
 export const CONVERSATION_STREAM_URLS = {
-  testcfc: 'https://stream.test.cfc.nekomaneki.work/lib/conversation-embed.html',
-  mygw: 'https://mygw.nekomaneki.work/lib/conversation-embed.html',
-  mynw: 'https://mynw.nekomaneki.work/lib/conversation-embed.html',
+  testcfc: CONTAINER_ENDPOINTS.conversation,
 } as const;
 
 export type ConversationStreamHost = keyof typeof CONVERSATION_STREAM_URLS;
