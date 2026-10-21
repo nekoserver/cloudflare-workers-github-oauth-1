@@ -68,6 +68,9 @@ export type Bindings = {
    * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
    */
   CF_CONTAINER_API_TOKEN?: string;
+  // コンテナ内のgh(GitHub CLI)用のfine-grainedトークン。コンテナにはGH_TOKENとして渡す。
+  // Worker本体のGITHUB_TOKEN(GitHub API呼び出し用)とは別にする。
+  CONTAINER_GH_TOKEN?: string;
   /**
    * /wh-setting_github-to-slackページが、cf-auth(dynamicneko/cf-auth)側の
    * 設定状況(secretの有無)を横並びで比較表示するためのService Binding。

@@ -41,6 +41,8 @@ export class DemoContainer extends Container<Bindings> {
       // CLOUDFLARE_API_KEYは流用せず、コンテナ専用のトークンを渡す。
       CF_CONTAINER_API_TOKEN: env.CF_CONTAINER_API_TOKEN ?? '',
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID ?? '',
+      // コンテナ内のgh用(ghはGH_TOKENを自動で読む)。Worker本体のGITHUB_TOKENは流用しない。
+      GH_TOKEN: env.CONTAINER_GH_TOKEN ?? '',
     };
   }
 

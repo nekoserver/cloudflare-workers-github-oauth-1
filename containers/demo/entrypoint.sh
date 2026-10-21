@@ -216,9 +216,22 @@ umask 077
 {
   printf 'export CF_CONTAINER_API_TOKEN=%q\n' "${CF_CONTAINER_API_TOKEN:-}"
   printf 'export CLOUDFLARE_ACCOUNT_ID=%q\n' "${CLOUDFLARE_ACCOUNT_ID:-}"
+  # gh(GitHub CLI)用。空のGH_TOKENを書くとghが未ログイン扱いになるので、値があるときだけ書く
+  if [ -n "${GH_TOKEN:-}" ]; then printf 'export GH_TOKEN=%q\n' "$GH_TOKEN"; fi
 } > /etc/profile.d/cf-env.sh
 umask 022
+# ログインしない対話シェル(bash -i)でも同じ認証情報を読む
+grep -q 'cf-env.sh' /etc/bash.bashrc 2>/dev/null \
+  || printf '\n[ -r /etc/profile.d/cf-env.sh ] && . /etc/profile.d/cf-env.sh\n' >> /etc/bash.bashrc
 log "cf env written to /etc/profile.d/cf-env.sh"
+# git pushなどもGH_TOKENで認証できるよう、gitの認証をghに任せる(値はログに出さない)
+if [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+  gh auth setup-git >/tmp/gh-setup-git.log 2>&1 \
+    && log "gh: GH_TOKENあり、git の認証を gh に設定" \
+    || log "WARN: gh auth setup-git failed (see /tmp/gh-setup-git.log)"
+else
+  log "gh: GH_TOKEN未設定(CONTAINER_GH_TOKENを設定すると使える)"
+fi
 
 log "exec: $*"
 exec "$@"
