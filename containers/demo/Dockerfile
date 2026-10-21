@@ -1,14 +1,14 @@
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
-FROM ubuntu:26.10
+FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
 # digest is pinned independently of the download, so corruption fails the build.
-ARG NODE_VERSION=26.12.0
-ARG NODE_SHA256=fd47865ecd6391ebb431fc815e01b9135bf83ded5cf373247e9331e196b7aded
+ARG NODE_VERSION=26.12.1
+ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.163.0
-ARG CLAUDE_VERSION=2.1.303
+ARG CLAUDE_VERSION=2.1.306
 ARG CLOUDFLARED_VERSION=2026.10.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
@@ -120,7 +120,7 @@ COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include \
     && a2dissite 000-default \
     && a2ensite 000-demo \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
