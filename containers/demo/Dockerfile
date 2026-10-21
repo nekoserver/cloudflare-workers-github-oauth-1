@@ -1,3 +1,11 @@
+# Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
+# pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
+FROM golang:1.27.1-trixie AS tailscale-build
+ARG TAILSCALE_VERSION=1.104.1
+RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
+    && /go/bin/tailscale version \
+    && /go/bin/tailscaled --version
+
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
 FROM ubuntu:26.04
@@ -61,18 +69,8 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudf
     && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
     && dpkg -i /tmp/cloudflared.deb \
     && rm -f /tmp/cloudflared.deb
-# Pin the static Tailscale distribution and validate its published digest.
-ARG TAILSCALE_VERSION=1.104.1
-ARG TAILSCALE_SHA256=108d1d96ecf410d305571e173516f27038f870919a9b89c914a167c6d33a4528
-RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/tailscale.tgz \
-        "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz" \
-    && echo "${TAILSCALE_SHA256}  /tmp/tailscale.tgz" | sha256sum -c - \
-    && mkdir -p /tmp/tailscale \
-    && tar -xzf /tmp/tailscale.tgz -C /tmp/tailscale --strip-components=1 \
-    && install -m 755 /tmp/tailscale/tailscale /usr/bin/tailscale \
-    && install -m 755 /tmp/tailscale/tailscaled /usr/sbin/tailscaled \
-    && tailscale version \
-    && rm -rf /tmp/tailscale /tmp/tailscale.tgz
+COPY --from=tailscale-build /go/bin/tailscale /usr/bin/tailscale
+COPY --from=tailscale-build /go/bin/tailscaled /usr/sbin/tailscaled
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.xz \
         "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && echo "${NODE_SHA256}  /tmp/node22.tar.xz" | sha256sum -c - \

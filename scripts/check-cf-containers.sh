@@ -50,8 +50,13 @@ extra = [f'COPY proxy-ca.crt {ca}',
          f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca} PIP_CERT={ca}']
 lines = open(p, encoding='utf-8').read().split('\n')
 # FROM行(ベースイメージのバージョン)に依存せず、最初のFROMの直後に挿入する
-i = next(k for k, l in enumerate(lines) if l.startswith('FROM '))
-lines[i + 1:i + 1] = extra
+# マルチステージのビルドでは各FROMごとにCAが必要なので、すべてのFROMの直後に挿入する
+out = []
+for l in lines:
+    out.append(l)
+    if l.startswith('FROM '):
+        out.extend(extra)
+lines = out
 open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 EOF2
   BUILD_ARGS=(--network host)
