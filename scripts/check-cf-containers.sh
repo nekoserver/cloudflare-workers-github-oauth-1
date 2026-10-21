@@ -132,6 +132,13 @@ docker logs "$NAME" 2>&1 | grep -a "nftables" || true
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/health" >/dev/null \
   || { echo "NG: コンテナの外から8080に届かない(Workerからの操作が応答しなくなる。nftablesの許可漏れ等)"; docker logs "$NAME"; exit 1; }
 echo "OK: 外から8080に届く"
+# SSHのセッションと同じ条件(空の環境のログインシェル)で主要コマンドが見つかるか
+docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc 'for c in node npm codex claude wrangler gh jj git cf; do command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }; done' \
+  && echo "OK: SSHと同じ条件で node/npm/codex/claude/wrangler/gh/jj/git/cf が見つかる" \
+  || { echo "NG: SSHのログインシェルで見つからないコマンドがある"; exit 1; }
+docker exec "$NAME" env -i HOME=/root TERM=xterm bash -ic 'command -v npx >/dev/null && echo "$PATH" | grep -q /opt/node22/bin' 2>/dev/null \
+  && echo "OK: ログインしない対話シェルでもPATHに/opt/node22/binが入る" \
+  || { echo "NG: 対話シェル(bash -i)のPATHに/opt/node22/binが無い"; exit 1; }
 docker exec "$NAME" sh -c 'head -1 /etc/resolv.conf' | grep -q '^nameserver 1.1.1.1' \
   || { echo "NG: resolv.confの先頭がIPv4のリゾルバ(1.1.1.1)になっていない"; docker exec "$NAME" cat /etc/resolv.conf; exit 1; }
 echo "OK: resolv.confの先頭が1.1.1.1"
