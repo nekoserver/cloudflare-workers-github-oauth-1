@@ -8,6 +8,12 @@ RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_
 
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
+# ghはGoのソース(proxy.golang.org)からビルドする。リリースのdebは使わない。
+FROM golang:1.27.1-trixie AS gh-build
+ARG GH_VERSION=2.103.0
+RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
+    && /go/bin/gh --version
+
 FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
@@ -54,15 +60,7 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/sfw \
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
-# Install the upstream stable GitHub CLI rather than the Ubuntu archive version.
-ARG GH_VERSION=2.102.0
-ARG GH_SHA256=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
-RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.deb \
-        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" \
-    && echo "${GH_SHA256}  /tmp/gh.deb" | sha256sum -c - \
-    && dpkg -i /tmp/gh.deb \
-    && gh --version \
-    && rm -f /tmp/gh.deb
+COPY --from=gh-build /go/bin/gh /usr/bin/gh
 ARG CLOUDFLARED_SHA256=200573c872174ab449965655febadef8edfbb144ebcaa391b700b2dedbadb3cd
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
