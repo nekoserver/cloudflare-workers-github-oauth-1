@@ -171,6 +171,15 @@ if command -v dockerd >/dev/null 2>&1; then
   log "dockerd started (pid $!)"
 fi
 
+# --- Codex: サンドボックス内のコマンドに外部通信を許可する ---
+# 既定ではseccompでsocket/connectが止まり、tunnels.rb・observerが起動しない
+# (cf-containerのNOTICE.codex-sandbox-network.md参照)。既存の設定は残し、無い場合だけ追記する。
+mkdir -p /root/.codex
+if ! grep -q '^\[sandbox_workspace_write\]' /root/.codex/config.toml 2>/dev/null; then
+  printf '\n[sandbox_workspace_write]\nnetwork_access = true\n' >> /root/.codex/config.toml
+  log "codex: network_access = true を追記"
+fi
+
 # --- SSHログインシェルからもcfコマンドの認証情報を読めるようにする ---
 # sshdのセッションはこのプロセスの環境変数を引き継がないため書き出す。
 umask 077
