@@ -1,4 +1,4 @@
-import app, { syncAllTreeViewSnapshots } from './index';
+import app, { syncAllTreeViewSnapshots, runCfContainerCronReport } from './index';
 import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
 import type { Bindings } from './types';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
@@ -35,6 +35,14 @@ export default {
           countdownsRegistered: countdown.registered,
         });
       })
+    );
+    // /cf-containersの6時間レポート(稼働数・支出・版の新旧)。tree-viewの同期とは独立に動かし、失敗はログに残す。
+    ctx.waitUntil(
+      runCfContainerCronReport(env)
+        .then((r) => {
+          if (!r.ok) console.error('[scheduled] cf-containers report failed', r.error);
+        })
+        .catch((err) => console.error('[scheduled] cf-containers report errored', err instanceof Error ? err.message : String(err)))
     );
   },
 };

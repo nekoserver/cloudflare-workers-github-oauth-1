@@ -70,9 +70,10 @@ describe('コンテナのイメージのビルド情報', () => {
 
 describe('前回表示時との差分', () => {
   const view = readFileSync('src/views/cfContainers.ts', 'utf8');
-  it('開いた時点の前回値を比較元に固定し、今回の値で上書き保存する', () => {
-    expect(view).toContain("var SNAPSHOT_KEY = 'cf-containers:snapshot';");
-    expect(view).toContain("prevSnapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null')");
+  it('開いた時点でD1の前回の記録を読み、ヘルスチェックのたびにD1へ記録する', () => {
+    expect(view).toContain("fetch('/api/cf-containers/snapshot/latest')");
+    expect(view).toContain("fetch('/api/cf-containers/snapshot', {");
+    expect(view).toContain('recordSnapshotToServer();');
   });
   it('接続時間・支出・版・コミットの差分を色分けする', () => {
     expect(view).toContain("el.className = dSec > 0 || dUsd > 0 ? 'diff-up' : 'diff-same';");
@@ -93,5 +94,26 @@ describe('配布元の最新版のバッジ', () => {
     const index = readFileSync('src/index.ts', 'utf8');
     expect(index).toContain("app.get('/api/cf-containers/latest-versions'");
     expect(index).toContain("'max-age=21600'");
+  });
+});
+
+describe('6時間レポートとSlack通知のON/OFF', () => {
+  const index = readFileSync('src/index.ts', 'utf8');
+  it('cronが稼働数・支出・版を記録してSlackへ報告し、OFFなら送らない', () => {
+    expect(readFileSync('src/worker-entry.ts', 'utf8')).toContain('runCfContainerCronReport(env)');
+    expect(index).toContain('runningContainers: status.error ? null : status.running ? 1 : 0,');
+    expect(index).toContain('if (!(await getCronReportSlackEnabled(env.DB))) return { ok: true };');
+  });
+  it('ページのトグルでD1の設定を切り替える', () => {
+    const view = readFileSync('src/views/cfContainers.ts', 'utf8');
+    expect(view).toContain('id="report-slack-toggle"');
+    expect(view).toContain("fetch('/api/cf-containers/report-settings', {");
+  });
+  it('テーブルを/statusの各定義に登録する(ルール23)', () => {
+    for (const t of ['cf_container_snapshots', 'cf_container_snapshot_diffs']) {
+      expect(index).toContain(`{ name: '${t}', migration: '0179'`);
+      expect(index).toContain(`  ${t}: 'system',`);
+    }
+    expect(index).toContain("cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },");
   });
 });

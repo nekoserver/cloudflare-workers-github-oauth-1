@@ -172,6 +172,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
+<details class="card" data-section="report">
+  <summary>6時間レポート(Slack通知)</summary>
+  <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="report-slack-toggle" disabled />
+    6時間ごとのレポート(稼働数・支出・版の新旧)をSlackに送る
+  </label>
+  <div id="report-slack-log" style="margin-top:4px;font-size:12px;color:var(--muted);">OFFでもD1への記録は続けます。</div>
+</details>
 <details class="card" data-section="net">
   <summary>コンテナのネットワーク情報(IPアドレス・CIDR)</summary>
   <div class="status-row">
@@ -198,14 +206,53 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <div id="tunnel-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <script>
-  // 前回表示時の数字(このブラウザのlocalStorage)。開いた時点の値を比較元として固定し、今回の値で上書き保存する。
-  var SNAPSHOT_KEY = 'cf-containers:snapshot';
+  // 前回のヘルスチェック時の記録(D1のcf_container_snapshots)。開いた時点で読み、比較元として固定する。
+  // ヘルスチェックのたびに今回の値をD1へ記録する(差分はcf_container_snapshot_diffsに残る)。
   var prevSnapshot = null;
-  var currentSnapshot = { savedAt: new Date().toISOString() };
-  try { prevSnapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null'); } catch (e) { prevSnapshot = null; }
+  var prevSnapshotLoaded = false;
+  var currentSnapshot = {};
+  var onPrevSnapshotLoaded = [];
+  fetch('/api/cf-containers/snapshot/latest')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var r = data && data.snapshot;
+      if (data && data.error) console.error('[cf-containers] 前回の記録の取得に失敗', data.error);
+      prevSnapshot = r ? {
+        savedAt: r.createdAt,
+        cost: r.connectedSeconds === null ? null : { cumulativeConnectedSeconds: r.connectedSeconds, estimatedCostUsd: r.estimatedCostUsd },
+        commit: r.imageCommit,
+        versions: r.versions || {}
+      } : null;
+    })
+    .catch(function (err) { console.error('[cf-containers] 前回の記録の取得に失敗', err); })
+    .finally(function () {
+      prevSnapshotLoaded = true;
+      onPrevSnapshotLoaded.forEach(function (fn) { fn(); });
+    });
   function saveSnapshot(part) {
     Object.keys(part).forEach(function (k) { currentSnapshot[k] = part[k]; });
-    try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(currentSnapshot)); } catch (e) {}
+  }
+  // ヘルスチェックの結果がそろったら、今回の値をD1へ記録する
+  function recordSnapshotToServer() {
+    var c = currentSnapshot.cost || {};
+    fetch('/api/cf-containers/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        runningContainers: typeof currentSnapshot.running === 'boolean' ? (currentSnapshot.running ? 1 : 0) : null,
+        connectedSeconds: typeof c.cumulativeConnectedSeconds === 'number' ? c.cumulativeConnectedSeconds : null,
+        estimatedCostUsd: typeof c.estimatedCostUsd === 'number' ? c.estimatedCostUsd : null,
+        imageCommit: currentSnapshot.commit || null,
+        versions: currentSnapshot.versions || {}
+      })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var el = document.getElementById('health-log');
+        if (data.error) { el.textContent = '記録に失敗: ' + data.error; return; }
+        el.textContent = '今回の値を記録しました(前回からの変更 ' + (data.diffs ? data.diffs.length : 0) + '件)';
+      })
+      .catch(function (err) { document.getElementById('health-log').textContent = '記録に失敗: ' + String(err); });
   }
   function prevSince() {
     return prevSnapshot && prevSnapshot.savedAt ? '前回(' + prevSnapshot.savedAt.replace('T', ' ').slice(0, 16) + ' UTC)から' : '';
@@ -327,6 +374,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
           : '');
       renderCostDiff(data.cost);
     }
+    if (typeof data.running === 'boolean') saveSnapshot({ running: data.running });
     if (liveClockTimer) {
       clearInterval(liveClockTimer);
       liveClockTimer = null;
@@ -488,6 +536,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   // 累計接続時間・予定支出の前回表示時からの増分
   function renderCostDiff(cost) {
+    if (!prevSnapshotLoaded) { onPrevSnapshotLoaded.push(function () { renderCostDiff(cost); }); return; }
     var el = document.getElementById('cost-diff');
     var prev = prevSnapshot && prevSnapshot.cost;
     if (prev) {
@@ -497,7 +546,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       el.textContent = prevSince() + ': 接続時間 +' + formatHms(Math.max(0, dSec)) + ' / 支出 +$' + Math.max(0, dUsd).toFixed(4);
     } else {
       el.className = 'diff-same';
-      el.textContent = '(前回の記録なし。次回から差分を表示します)';
+      el.textContent = '(前回の記録なし。ヘルスチェックを実行すると記録され、次回から差分を表示します)';
     }
     saveSnapshot({ cost: { cumulativeConnectedSeconds: cost.cumulativeConnectedSeconds, estimatedCostUsd: cost.estimatedCostUsd } });
   }
@@ -521,6 +570,33 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     el.hidden = false;
   }
 
+  // 6時間レポートのSlack通知のON/OFF(D1に保存)
+  var reportToggle = document.getElementById('report-slack-toggle');
+  var reportLog = document.getElementById('report-slack-log');
+  fetch('/api/cf-containers/report-settings')
+    .then(readJsonOrText)
+    .then(function (data) {
+      if (data.error) { reportLog.textContent = 'エラー: ' + data.error; return; }
+      reportToggle.checked = !!data.slackEnabled;
+      reportToggle.disabled = false;
+    })
+    .catch(function (err) { reportLog.textContent = 'エラー: ' + String(err); });
+  reportToggle.addEventListener('change', function () {
+    reportToggle.disabled = true;
+    fetch('/api/cf-containers/report-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slackEnabled: reportToggle.checked })
+    })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) { reportLog.textContent = 'エラー: ' + data.error; reportToggle.checked = !reportToggle.checked; return; }
+        reportLog.textContent = data.slackEnabled ? 'ONにしました(次回の6時間cronから送ります)' : 'OFFにしました(D1への記録は続けます)';
+      })
+      .catch(function (err) { reportLog.textContent = 'エラー: ' + String(err); reportToggle.checked = !reportToggle.checked; })
+      .finally(function () { reportToggle.disabled = false; });
+  });
+
   var btnHealth = document.getElementById('btn-health');
   var healthTable = document.getElementById('health-table');
   var healthLog = document.getElementById('health-log');
@@ -541,6 +617,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         renderVersions(data.versions);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
+        recordSnapshotToServer();
         healthLog.textContent = '';
       })
       .catch(function (err) {

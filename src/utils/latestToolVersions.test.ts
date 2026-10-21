@@ -51,7 +51,7 @@ describe('fetchLatestToolVersions', () => {
   });
 
   it('GitHubのトークンがあればAuthorizationを付ける', async () => {
-    const fetcher = vi.fn(async () => json({ tag_name: 'v1.0.0', version: '1.0.0', crate: { max_stable_version: '1.0.0' } }));
+    const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => json({ tag_name: 'v1.0.0', version: '1.0.0', crate: { max_stable_version: '1.0.0' } }));
     await fetchLatestToolVersions({ nodeMajor: 26, githubToken: 'tok' }, fetcher as unknown as typeof fetch);
     const gh = fetcher.mock.calls.find((c) => String(c[0]).includes('api.github.com')) as unknown as [string, RequestInit];
     expect((gh[1].headers as Record<string, string>).Authorization).toBe('Bearer tok');

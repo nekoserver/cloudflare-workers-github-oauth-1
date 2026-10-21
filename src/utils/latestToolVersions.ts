@@ -20,7 +20,7 @@ export async function fetchLatestToolVersions(
   options: { nodeMajor: number; githubToken?: string },
   fetcher: typeof fetch = fetch
 ): Promise<LatestToolVersions> {
-  const gh = options.githubToken ? { Authorization: `Bearer ${options.githubToken}` } : {};
+  const gh: Record<string, string> = options.githubToken ? { Authorization: `Bearer ${options.githubToken}` } : {};
   const githubLatest = (repo: string) => async () =>
     stripV(String(((await getJson(`https://api.github.com/repos/${repo}/releases/latest`, fetcher, gh)) as { tag_name?: string }).tag_name ?? ''));
   const npmLatest = (pkg: string) => async () =>
