@@ -1,45 +1,43 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { conversationStreamHealthy } from './conversationStreamHealth';
+import { CONTAINER_ENDPOINTS } from './containerEndpoints';
 import * as logger from './logger';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const embedHtml = '<!doctype html><html data-embed="conversation"><script type="module" src="/chat/app.mjs"></script></html>';
-function response(status: number, contentType = 'text/html') {
-  return new Response(status === 200 ? embedHtml : null, { status, headers: { 'Content-Type': contentType } });
+function response(body = embedHtml, contentType = 'text/html', status = 200) {
+  return new Response(body, { status, headers: { 'Content-Type': contentType } });
 }
 describe('conversation stream upstream health', () => {
-  it('自動選択用に両ホストを調べ、接続可能な候補をmygw優先で返す', async () => {
-    const probe = vi.fn().mockImplementation((url: string) => Promise.resolve(
-      response(url.includes('mynw') ? 200 : 503),
-    ));
+  it('probes only the active CFC host and requests its HTML entry', async () => {
+    const probe = vi.fn().mockResolvedValue(response());
     vi.stubGlobal('fetch', probe);
-    expect(await conversationStreamHealthy()).toEqual(['mynw']);
-    expect(probe).toHaveBeenCalledTimes(3);
-    expect(probe).toHaveBeenCalledWith('https://mygw.nekomaneki.work/lib/conversation-embed.html', expect.objectContaining({
+    expect(await conversationStreamHealthy()).toEqual(['testcfc']);
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).toHaveBeenCalledWith(CONTAINER_ENDPOINTS.conversation, expect.objectContaining({
       method: 'GET', redirect: 'manual', signal: expect.any(AbortSignal),
-    }));
-    expect(probe).toHaveBeenCalledWith('https://mynw.nekomaneki.work/lib/conversation-embed.html', expect.objectContaining({
-      method: 'GET', redirect: 'manual', signal: expect.any(AbortSignal),
+      headers: expect.objectContaining({ Accept: 'text/html' }),
     }));
   });
-  it('JSON 200や無関係なHTMLを接続可能としない', async () => {
-    const probe = vi.fn().mockImplementation((url: string) => Promise.resolve(url.includes('mygw')
-      ? response(200, 'application/json')
-      : new Response('<html><title>login</title></html>', { status: 200, headers: { 'Content-Type': 'text/html' } })));
-    vi.stubGlobal('fetch', probe);
-    expect(await conversationStreamHealthy()).toEqual([]);
+  it('does not treat unrelated login pages, JSON or failure statuses as healthy', async () => {
+    for (const upstream of [response('{}', 'application/json'), response('<html><title>login</title></html>'), response('down', 'text/html', 503)]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(upstream));
+      expect(await conversationStreamHealthy()).toEqual([]);
+    }
+  });
+  it('recognizes the protected conversation key-entry shell without credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('<html data-auth-gate="conversation"><form id="login"></form></html>')));
+    expect(await conversationStreamHealthy()).toEqual(['testcfc']);
+  });
+  it('does not recognize an incomplete authentication marker', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('<html data-auth-gate="conversation"></html>')));
     expect(await conversationStreamHealthy()).toEqual([]);
   });
-  it('有効なHTMLを返す両ホストを優先順で返す', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(response(200))));
-    expect(await conversationStreamHealthy()).toEqual(['testcfc', 'mygw', 'mynw']);
-    expect(await conversationStreamHealthy()).toEqual(['testcfc', 'mygw', 'mynw']);
-  });
-  it('DNS/connection failures are unhealthy and logged', async () => {
+  it('logs connection failures without retrying retired hosts', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
     const warning = vi.spyOn(logger, 'warn');
     expect(await conversationStreamHealthy()).toEqual([]);
-    expect(warning).toHaveBeenCalledTimes(3);
-    expect(warning).toHaveBeenCalledWith('Conversation stream embed host probe failed', expect.objectContaining({ host: 'mygw', error: 'fetch failed' }));
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith('Conversation stream embed host probe failed', expect.objectContaining({ host: 'testcfc', error: 'fetch failed' }));
   });
 });

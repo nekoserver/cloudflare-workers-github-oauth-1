@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import { getConversationStreamPanel, getConversationStreamToggle } from './conversationStreamPanel';
 import { getAiChatPage } from './aichat';
 
-function makeDom(availableHosts: string[] = ['mygw', 'mynw']) {
+function makeDom(availableHosts: string[] = ['testcfc']) {
   const dom = new JSDOM(getConversationStreamToggle() + getConversationStreamPanel(), {
     runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://example.com/aichat',
     beforeParse(window) {
@@ -35,42 +35,40 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       await vi.waitFor(() => expect(toggle.getAttribute('data-server-state')).toBe('error'));
       expect(dom.window.getComputedStyle(toggle).borderTopColor).toBe('rgb(220, 38, 38)');
       expect(dom.window.getComputedStyle(toggle).backgroundColor).toBe('rgba(0, 0, 0, 0)');
-      availableHosts = ['mynw'];
+      availableHosts = ['testcfc'];
       dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
       await vi.waitFor(() => expect(toggle.getAttribute('data-server-state')).toBe('healthy'));
       expect(dom.window.getComputedStyle(toggle).borderTopColor).toBe('rgb(22, 163, 74)');
       expect(dom.window.getComputedStyle(toggle).backgroundColor).toBe('rgba(0, 0, 0, 0)');
       toggle.click();
       const frame = dom.window.document.getElementById('conversationStreamFrame')!;
-      await vi.waitFor(() => expect(new URL((frame as HTMLIFrameElement).src).origin).toBe('https://mynw.nekomaneki.work'));
+      await vi.waitFor(() => expect(new URL((frame as HTMLIFrameElement).src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
       dom.window.dispatchEvent(new dom.window.Event('pagehide'));
       expect(frame.getAttribute('src')).toBeNull();
       dom.window.dispatchEvent(new dom.window.Event('pageshow'));
       await vi.waitFor(() => expect(frame.getAttribute('src')).toContain('/lib/conversation-embed.html'));
     } finally { dom.window.close(); }
   });
-  it('自動は上から優先し、手動のmygw/mynw選択と4方式の切替に対応する', async () => {
+  it('自動と手動のCFC選択、および4方式の切替に対応する', async () => {
     const dom = makeDom();
     const doc = dom.window.document;
     const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
     const toggle = doc.getElementById('conversationStreamToggle')!;
     const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'testcfc', 'mygw', 'mynw']);
+    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'testcfc']);
     expect(host.value).toBe('auto');
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
-    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://mygw.nekomaneki.work'));
+    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
     expect(new URL(frame.src).searchParams.get('protocol')).toBe('websocket');
     for (const protocol of ['sse', 'websocket', 'ndjson', 'jsonseq']) {
       (doc.querySelector('[data-conversation-protocol="' + protocol + '"]') as unknown as HTMLButtonElement).click();
       await vi.waitFor(() => expect(new URL(frame.src).searchParams.get('protocol')).toBe(protocol));
     }
-    host.value = 'mynw'; host.dispatchEvent(new dom.window.Event('change'));
-    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://mynw.nekomaneki.work'));
-    host.value = 'mygw'; host.dispatchEvent(new dom.window.Event('change'));
-    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://mygw.nekomaneki.work'));
+    host.value = 'testcfc'; host.dispatchEvent(new dom.window.Event('change'));
+    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
     host.value = 'auto'; host.dispatchEvent(new dom.window.Event('change'));
-    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://mygw.nekomaneki.work'));
+    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
     doc.getElementById('conversationStreamClose')!.click();
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
@@ -80,7 +78,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     dom.window.close();
   });
   it('トンネル専用ホストを自動選択し、正確なパスとOriginを使う', async () => {
-    const dom = makeDom(['testcfc', 'mygw']);
+    const dom = makeDom(['testcfc']);
     try {
       const doc = dom.window.document;
       doc.getElementById('conversationStreamToggle')!.click();
@@ -108,7 +106,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       const doc = dom.window.document;
       doc.getElementById('conversationStreamToggle')!.click();
       const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
-      await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://mygw.nekomaneki.work'));
+      await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
       const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {});
       const start = doc.getElementById('conversationStreamStart') as unknown as HTMLButtonElement;
       const stop = doc.getElementById('conversationStreamStop') as unknown as HTMLButtonElement;
@@ -116,23 +114,23 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
         origin, source: source as unknown as Window, data: { type: 'conversation-state', busy: false },
       }));
       frame.dispatchEvent(new dom.window.Event('load'));
-      expect(post).toHaveBeenCalledWith({ type: 'conversation-controls' }, 'https://mygw.nekomaneki.work');
+      expect(post).toHaveBeenCalledWith({ type: 'conversation-controls' }, 'https://stream.test.cfc.nekomaneki.work');
       notify('https://mynw.nekomaneki.work');
       expect(start.disabled).toBe(true);
-      notify('https://mygw.nekomaneki.work', dom.window as unknown as Window);
+      notify('https://stream.test.cfc.nekomaneki.work', dom.window as unknown as Window);
       expect(start.disabled).toBe(true);
-      notify('https://mygw.nekomaneki.work');
+      notify('https://stream.test.cfc.nekomaneki.work');
       expect(start.disabled).toBe(false);
       start.click();
-      expect(post).toHaveBeenCalledWith({ type: 'conversation-start' }, 'https://mygw.nekomaneki.work');
+      expect(post).toHaveBeenCalledWith({ type: 'conversation-start' }, 'https://stream.test.cfc.nekomaneki.work');
       dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
-        origin: 'https://mygw.nekomaneki.work', source: frame.contentWindow as unknown as Window,
+        origin: 'https://stream.test.cfc.nekomaneki.work', source: frame.contentWindow as unknown as Window,
         data: { type: 'conversation-state', busy: true },
       }));
       stop.click();
-      expect(post).toHaveBeenCalledWith({ type: 'conversation-stop' }, 'https://mygw.nekomaneki.work');
+      expect(post).toHaveBeenCalledWith({ type: 'conversation-stop' }, 'https://stream.test.cfc.nekomaneki.work');
       doc.documentElement.setAttribute('data-theme', 'dark');
-      await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'conversation-theme', theme: 'dark' }, 'https://mygw.nekomaneki.work'));
+      await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'conversation-theme', theme: 'dark' }, 'https://stream.test.cfc.nekomaneki.work'));
     } finally { dom.window.close(); }
   });
   it('キー入力フォームの送信を許可し、無関係なsandbox権限を追加しない', () => {

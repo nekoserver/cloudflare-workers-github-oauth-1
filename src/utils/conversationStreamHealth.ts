@@ -10,12 +10,16 @@ export async function conversationStreamHealthy(): Promise<ConversationStreamHos
     try {
       const response = await fetch(CONVERSATION_STREAM_URLS[host], {
         method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000),
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: { 'Cache-Control': 'no-cache', Accept: 'text/html' },
       });
       if (response.status !== 200) return null;
       const contentType = response.headers.get('Content-Type');
       if (!contentType || !/^text\/html(?:;|$)/i.test(contentType)) return null;
       const html = await response.text();
+      // The protected page intentionally returns only its key-entry shell until
+      // authentication. Reachable does not mean the caller is authenticated.
+      if (/<html\b[^>]*\bdata-auth-gate=["']conversation["']/i.test(html)
+        && /<form\b[^>]*\bid=["']login["']/i.test(html)) return host;
       if (!/<html\b[^>]*\bdata-embed=["']conversation["']/i.test(html)) return null;
       if (!/<script\b(?=[^>]*\btype=["']module["'])(?=[^>]*\bsrc=["'][^"']+\.mjs(?:[?#][^"']*)?["'])[^>]*>/i.test(html)) return null;
       return host;

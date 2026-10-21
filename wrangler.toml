@@ -25,10 +25,9 @@ CF_DASHBOARD_ADMIN_GITHUB_IDS = "85157166"
 # デプロイ時にも送信先を維持し、未設定時のSlack送信へ戻らないよう明示する。
 # /tsubuyaki・/pts・インタラクティブ投稿の返信は専用のSlack送信経路を使う。
 NOTIFY_TARGET = "worker"
-# デモコンテナ内のcloudflared(トンネル名nekoroot)が公開するホスト名。
-# 旧Railway VM側のmynw-webトンネルがこのホスト名を使っていたが、2026-10-16
-# にユーザー確認済み(「もう使わない」)でnekoroot側へ付け替える。
-NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
+# コンテナ公開はCFCの専用Tunnelホストへ統一。親test.cfcは管理Worker用。
+# src/utils/containerEndpoints.tsと同じ接続先を使用する。
+NEKOROOT_HOSTNAME = "stream.test.cfc.nekomaneki.work"
 # askgk転送先。会話配信と同じ稼働中トンネルへ送る。
 ASKGK_TUNNELS_URL = "https://stream.test.cfc.nekomaneki.work/lib/api/tunnels"
 
