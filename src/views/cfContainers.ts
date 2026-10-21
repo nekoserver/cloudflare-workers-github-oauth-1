@@ -2,7 +2,23 @@
  * /cf-containers（Cloudflare Containersのデモ用管理ページ、管理者限定）の
  * HTML。コンテナの状態参照・起動/停止/再起動・プロキシへの導線を持つ。
  */
+import { CONFIGURED_INSTANCE_TYPE, CONFIGURED_INSTANCE_SPEC, computeHourlyRate } from '../utils/cfContainerCost';
+
 export function getCfContainersPage(): string {
+  const instancePrices = [
+    { name: CONFIGURED_INSTANCE_TYPE, spec: CONFIGURED_INSTANCE_SPEC },
+    { name: 'standard-2', spec: { vcpu: 1, memoryGiB: 6, diskGB: 12 } },
+  ].map(({ name, spec }) => {
+    const rate = computeHourlyRate(spec);
+    const selected = name === CONFIGURED_INSTANCE_TYPE;
+    return `<tr>
+      <th scope="row"><span class="instance-model" data-selected="${selected}">${name}</span>${selected ? '（選択中）' : ''}</th>
+      <td>${spec.vcpu} vCPU<br>$${rate.vcpuUsdPerHour.toFixed(5)}</td>
+      <td>${spec.memoryGiB} GiB<br>$${rate.memoryUsdPerHour.toFixed(5)}</td>
+      <td>${spec.diskGB} GB<br>$${rate.diskUsdPerHour.toFixed(5)}</td>
+      <td>$${rate.totalUsdPerHour.toFixed(5)}</td>
+    </tr>`;
+  }).join('');
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -61,6 +77,9 @@ table.health-table, table.tunnel-table { border-collapse: collapse; width: 100%;
 table.health-table th, table.health-table td, table.tunnel-table th, table.tunnel-table td {
   border: 1px solid var(--border); padding: 6px 10px; text-align: left;
 }
+.instance-model[data-selected="true"] { color: var(--ok); font-weight: 700; }
+.pricing-scroll { overflow-x: auto; }
+.pricing-table { min-width: 540px; }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge[data-ok="true"] { background: var(--ok-bg); color: var(--ok); }
 .badge[data-ok="false"] { background: var(--err-bg); color: var(--err); }
@@ -74,7 +93,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </div>
 <div class="card">
   <strong>トークン設定（CLI不要）</strong>
-  <p class="subtitle" style="margin:4px 0 10px;">nekorootトンネル・Tailscaleのトークンをここから設定できます。設定後、自動的にコンテナを再起動して反映します。</p>
+  <p class="subtitle" style="margin:4px 0 10px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
   <div class="status-row">
     <label for="secret-name" style="font-size:13px;">対象:</label>
     <select id="secret-name">
@@ -84,7 +103,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     </select>
   </div>
   <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
-  <button id="btn-set-secret" type="button">設定して再起動</button>
+  <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
 </div>
 <div class="card">
@@ -93,15 +112,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-refresh" type="button">状態を再取得</button>
   </div>
   <div id="live-clock" style="font-size:20px;font-weight:600;margin-bottom:10px;" hidden>00:00:00</div>
-  <table class="health-table" style="margin-bottom:10px;">
-    <thead><tr><th></th><th>vCPU(0.5)</th><th>メモリ(4GiB)</th><th>ディスク(8GB)</th><th>合計</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>$/時間</td>
-        <td id="rate-vcpu"></td><td id="rate-memory"></td><td id="rate-disk"></td><td id="rate-total"></td>
-      </tr>
-    </tbody>
-  </table>
+  <strong>Cloudflare Containers 単価表（USD/時間）</strong>
+  <div class="pricing-scroll">
+    <table class="health-table pricing-table" style="margin-bottom:10px;">
+      <thead><tr><th scope="col">モデル</th><th scope="col">vCPU</th><th scope="col">メモリ</th><th scope="col">ディスク</th><th scope="col">合計</th></tr></thead>
+      <tbody>${instancePrices}</tbody>
+    </table>
+  </div>
+  <p class="subtitle">無料枠未考慮・CPUを上限まで使用した場合の目安。CPUは実使用量、メモリ・ディスクは確保量で課金されます。通信・Workers・Durable Objects等の料金は別途。<a class="proxy-link" href="https://developers.cloudflare.com/containers/platform/pricing/" target="_blank" rel="noreferrer">公式料金</a></p>
   <div id="cost-summary" style="font-size:13px;"></div>
   <button id="btn-start" type="button">起動</button>
   <button id="btn-stop" type="button">停止</button>
@@ -115,6 +133,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
 </div>
 <div class="card">
+  <p><a class="proxy-link" href="/cf-containers/docker.html" target="_blank" rel="noreferrer">Docker コマンドセンターを開く（管理者認証で接続）</a></p>
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
 </div>
 <div class="card">
@@ -201,12 +220,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var sleepAfterValue = document.getElementById('sleep-after-value');
   var liveClock = document.getElementById('live-clock');
   var costSummary = document.getElementById('cost-summary');
-  var rateCells = {
-    vcpu: document.getElementById('rate-vcpu'),
-    memory: document.getElementById('rate-memory'),
-    disk: document.getElementById('rate-disk'),
-    total: document.getElementById('rate-total')
-  };
   var liveClockTimer = null;
   var sleepAfterShown = false;
 
@@ -257,17 +270,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       sleepAfterShown = true;
     }
     if (data.cost) {
-      rateCells.vcpu.textContent = '$' + data.cost.hourlyRate.vcpuUsdPerHour.toFixed(5);
-      rateCells.memory.textContent = '$' + data.cost.hourlyRate.memoryUsdPerHour.toFixed(5);
-      rateCells.disk.textContent = '$' + data.cost.hourlyRate.diskUsdPerHour.toFixed(5);
-      rateCells.total.textContent = '$' + data.cost.hourlyRate.totalUsdPerHour.toFixed(5);
       costSummary.textContent =
         '累計接続時間: ' + formatHms(data.cost.cumulativeConnectedSeconds) +
         ' / 予定支出(概算、無料枠未考慮): $' + data.cost.estimatedCostUsd.toFixed(4) +
         (data.cost.cumulativeConnectedSeconds > 0
           ? ' / 実質時間単価(総経費÷総接続時間): $' + (data.cost.estimatedCostUsd / (data.cost.cumulativeConnectedSeconds / 3600)).toFixed(5) + '/時間'
-          : '') +
-        '（' + data.cost.instanceType + '）';
+          : '');
     }
     if (liveClockTimer) {
       clearInterval(liveClockTimer);

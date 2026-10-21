@@ -81,6 +81,8 @@ export type Bindings = {
    * wrangler.tomlの[[services]]でrust-worker-sqlx-d1をbindingすること。
    */
   RUST_WORKER?: Fetcher;
+  /** /neko askgk の転送先。未指定時は会話配信用トンネルの tunnels API。 */
+  ASKGK_TUNNELS_URL?: string;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   /**

@@ -37,9 +37,11 @@ model=claude, message=質問 → /neko askgk claude_prompt="質問"
 ブラウザ → 本体 POST /api/aichat
          → interpretAichatSlashCommand
          → RUST_WORKER（Service Binding）POST /tunnel-signer/send
-         → https://mynw.nekomaneki.work/lib/api/tunnels
+         → ASKGK_TUNNELS_URL（既定: https://mygw.nekomaneki.work/lib/api/tunnels）
          → 外部Bot／CLI → reply → 本体で整形・保存 → JSON応答
 ```
+
+転送先はWorker環境変数 `ASKGK_TUNNELS_URL` で指定する。`mygw` と `mynw` のどちらも指定でき、未指定・空文字の場合は `mygw` を使用する。自動再送や別ホストへのフォールバックは行わない。
 
 本体は `/neko askgk` の後ろを生テキストで取り出す。引用符・改行・内部の空白・`claude_prompt=` / `codex_prompt=` の接頭語は中継時に除去しない。接頭語は送信先の判別に必要である。保存・表示用には、引用符で囲まれたprompt形式から質問本文を取り出す。
 

@@ -5,6 +5,7 @@
 
 import { formatAskgkPromptQuestion } from './utils/codexAskgkQuestion';
 import { Hono, type Context } from 'hono';
+import { requireRouteParam } from './utils/routeParam';
 import { cors } from 'hono/cors';
 import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
@@ -16,6 +17,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
+import { CONVERSATION_STREAM_FRAME_ORIGINS } from './utils/conversationStreamHosts';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
@@ -55,6 +57,8 @@ import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
 import { getJevPlaygroundPage } from './views/jevPlayground';
 import { getClefPlaygroundPage } from './views/clefPlayground';
 import { callClefPlaygroundModel, buildClefPlaygroundResponseBody, type ClefAiBinding } from './utils/clefPlayground';
+import { getRerankerPlaygroundPage } from './views/rerankerPlayground';
+import { rerankPlaygroundContexts, validateRerankerPlaygroundInput, type RerankerAiBinding } from './utils/rerankerPlayground';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getEarthComposer25Page } from './views/earthComposer25';
@@ -93,6 +97,7 @@ import { getMentionEditorPage } from './views/mentionEditor';
 import { getSecureminePage } from './views/securemine';
 import { readWorkspaceCommitDays } from './utils/securemineCommitDays';
 import { proxyRedmine } from './utils/redmineProxy';
+import { proxyDockerDashboard } from './utils/dockerDashboardProxy';
 import { securemineLogin, securemineSession } from './utils/securemineLogin';
 import { validateMentionEditorConfig, validateMentionEditorTitle } from './utils/mentionEditorConfig';
 import { getJsonExplorerPage } from './views/jsonExplorer';
@@ -480,7 +485,7 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
 function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
-  return (message: string) => askTunnelSigner(fetcher, message);
+  return (message: string) => askTunnelSigner(fetcher, message, env.ASKGK_TUNNELS_URL);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
@@ -5445,6 +5450,31 @@ app.post('/api/clef-playground', authMiddleware, async (c) => {
 });
 
 /**
+ * 固定サンプル候補を使い、Workers AIのcross-encoderリランカーを試すページ。
+ * 入力候補の検索や回答生成はせず、質問と最大8件の候補文を採点順に並べる。
+ */
+app.get('/reranker-playground', authMiddleware, (c) => {
+  return c.html(getRerankerPlaygroundPage());
+});
+
+app.post('/api/reranker-playground', authMiddleware, async (c) => {
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => null);
+  const validation = validateRerankerPlaygroundInput(body);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  try {
+    const results = await rerankPlaygroundContexts(c.env.AI as RerankerAiBinding, validation.query, validation.contexts);
+    return jsonUtf8({ model: '@cf/baai/bge-reranker-base', results });
+  } catch (error) {
+    logger.warn('[reranker-playground] Workers AI reranker failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return jsonUtf8({ error: 'リランカーモデルの呼び出しに失敗しました。' }, 502);
+  }
+});
+
+/**
  * dynamicnekoの/clef-pg-reactページ用。jev-playground-externalと同じ
  * 専用Bearer secret + userToken認可パターンで提供する(専用secretが
  * 未配備の環境だけAICHAT_EXTERNAL_SECRETへフォールバック)。
@@ -6238,7 +6268,8 @@ app.get('/md-preview', (c) => {
 /** 埋め込み先の死活確認（認証が必要）。 */
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  return c.json({ healthy: await conversationStreamHealthy() });
+  const availableHosts = await conversationStreamHealthy();
+  return c.json({ healthy: availableHosts.length > 0, availableHosts });
 });
 
 /** AI チャットページ（認証が必要）。 */
@@ -6273,7 +6304,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src https://mynw.nekomaneki.work; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${CONVERSATION_STREAM_FRAME_ORIGINS}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   return c.html(getAiChatPage({
     name: user.name,
@@ -8034,7 +8065,7 @@ app.get('/api/aichat/threads/seed', authMiddleware, async (c) => {
 app.get('/api/aichat/threads/:threadId', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const threadId = c.req.param('threadId');
+  const threadId = requireRouteParam(c.req.param('threadId'));
   if (!isThreadId(threadId)) return jsonUtf8({ error: 'threadIdの形式が不正です' }, 400);
 
   try {
@@ -9741,7 +9772,7 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
 app.patch('/api/aichat/keyword-categories/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(requireRouteParam(c.req.param('id')), 10);
   if (!Number.isFinite(id)) return jsonUtf8({ error: '不正なIDです' }, 400);
   const body = await c.req.json<{ color?: string }>();
   const color = typeof body.color === 'string' ? body.color.trim() : '';
@@ -11436,7 +11467,7 @@ app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
 app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const id = c.req.param('id');
+  const id = requireRouteParam(c.req.param('id'));
   // target=moondream3.1 は /answer-graph の起点検索でmoondream3.1をヒットさせた
   // 質問文リンクから開かれた場合。検索対象として指定した画像分析モデルの
   // 出力結果が応答バブルモーダルに表示されるよう、getAichatShareDetailへ
@@ -14268,7 +14299,7 @@ app.get('/workflow', authMiddleware, async (c) => {
 
 app.get('/workflow/:no', authMiddleware, async (c) => {
   const user = c.get('user');
-  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  const workflowNo = normalizeWorkflowNo(requireRouteParam(c.req.param('no')));
   const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
   const hierarchy = c.env.DB ? await loadWorkflowHierarchy(c.env.DB) : [];
   if (!workflowNo || !c.env.DB) {
@@ -14437,7 +14468,7 @@ app.get('/api/workflow', authMiddleware, async (c) => {
 
 app.get('/api/workflow/:no', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  const workflowNo = normalizeWorkflowNo(requireRouteParam(c.req.param('no')));
   if (!workflowNo) return jsonUtf8({ error: '無効なワークフロー番号です' }, 400);
   const workflow = await c.env.DB.prepare(
     'SELECT workflow_no, title, page_path, summary FROM workflow_registry WHERE workflow_no = ?'
@@ -19351,7 +19382,7 @@ app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMid
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: c.env.CLOUDFLARE_API_KEY,
       apiEmail: c.env.CLOUDFLARE_API_EMAIL,
-    }, c.req.param('dbId'));
+    }, requireRouteParam(c.req.param('dbId')));
     const { wranglerBlake3Hex } = await import('./utils/wranglerBlake3Server');
     const digest = await wranglerBlake3Hex(JSON.stringify(tables));
     return jsonUtf8({ tables, wasm: { module: 'wrangler/blake3-wasm', digest } });
@@ -19523,12 +19554,9 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
  * 限定し、JWT_SECRET等の重要なsecretを誤って上書きできないようにしている。
  */
 app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)' }, 503);
-  }
-  const body = await c.req.json<{ name?: string; value?: string }>().catch(() => null);
-  const name = body?.name ?? '';
-  const value = body?.value ?? '';
+  const body = await c.req.json<{ name?: unknown; value?: unknown }>().catch(() => null);
+  const name = typeof body?.name === 'string' ? body.name : '';
+  const value = typeof body?.value === 'string' ? body.value.trim() : '';
   if (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(name)) {
     return jsonUtf8({ error: `nameは${ALLOWED_SECRET_NAMES.join('/')}のいずれかを指定してください` }, 400);
   }
@@ -19536,21 +19564,31 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
     return jsonUtf8({ error: 'valueが空です' }, 400);
   }
 
+  // 自身のトークン更新は入力値で認証する。保存済みトークンが期限切れでも更新可能。
+  const apiKey = name === 'CF_CONTAINER_API_TOKEN' ? value : cfApiKey(c.env);
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: !c.env.CLOUDFLARE_ACCOUNT_ID
+      ? 'CLOUDFLARE_ACCOUNT_IDが未設定です'
+      : 'CF_CONTAINER_API_TOKENを先に入力・更新してください（Workers Scripts:Edit権限が必要です）' }, 503);
+  }
+  const credentials = { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey };
+  const redact = (message: string) => message.split(value).join('[REDACTED]').split(apiKey).join('[REDACTED]');
+
   const user = c.get('user');
   const performedBy = user?.sub ?? 'unknown';
 
   try {
     // wrangler.tomlの name と一致させること(このWorker自身のスクリプト名)。
     await setWorkerSecret(
-      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! },
+      credentials,
       'cloudflare-workers-github-oauth-1',
       name as AllowedSecretName,
       value
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const verify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! });
-    const diag = `使用トークン=${cfApiKeySource(c.env)} / アカウントID=${c.env.CLOUDFLARE_ACCOUNT_ID} / トークン検証: ${verify}`;
+    const message = redact(err instanceof Error ? err.message : String(err));
+    const verify = redact(await verifyApiToken(credentials));
+    const diag = `使用トークン=${name === 'CF_CONTAINER_API_TOKEN' ? '入力された新しいトークン' : cfApiKeySource(c.env)} / アカウントID=${c.env.CLOUDFLARE_ACCOUNT_ID} / トークン検証: ${verify}`;
     logger.error('[cf-containers-secrets] secret設定に失敗', { name, error: message, diag });
     return jsonUtf8({ error: 'secretの設定に失敗しました: ' + message + ' (' + diag + ')' }, 502);
   }
@@ -19558,18 +19596,17 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   // secretを設定しただけではコンテナ内の環境変数は更新されない
   // (DemoContainerのenvVarsはコンテナ起動時にしか反映されない)ため、
   // 続けて再起動して新しい値を反映する。
-  const stub = await getDemoContainerStub(c.env);
-  if (stub) {
-    try {
-      await stub.restart();
-      await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
-        logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('[cf-containers-secrets] secret設定後の再起動に失敗', { error: message });
-      return jsonUtf8({ ok: true, warning: 'secretは設定しましたが、再起動に失敗しました: ' + message });
-    }
+  try {
+    const stub = await getDemoContainerStub(c.env);
+    if (!stub) return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、DEMO_CONTAINERが未設定のためコンテナへ反映できませんでした' });
+    await stub.restart({ name: name as AllowedSecretName, value });
+    await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
+      logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
+    );
+  } catch (err) {
+    const message = redact(err instanceof Error ? err.message : String(err));
+    logger.error('[cf-containers-secrets] secret設定後の再起動に失敗', { error: message });
+    return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、コンテナへの反映に失敗しました。再起動してください: ' + message });
   }
   return jsonUtf8({ ok: true });
 });
@@ -19612,6 +19649,12 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
  * デモコンテナへのプロキシ（管理者認証が必要）。コンテナが停止していれば
  * Container.fetch経由で起動を待ってからリクエストを転送する。
  */
+// Docker diagnostics share the existing administrator-only container dashboard.
+app.get('/cf-containers/docker.html', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.get('/cf-containers/docker-dashboard.css', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.get('/cf-containers/docker-dashboard.mjs', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+app.all('/cf-containers/api/docker/*', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
+
 app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
@@ -20325,7 +20368,7 @@ app.get('/status', authMiddleware, async (c) => {
 app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
 
   if (!db) {
     return jsonUtf8({ error: 'Table not found' }, 404);
@@ -20408,7 +20451,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
 
 app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const tableDefinition = getStatusTableDefinition(tableName);
 
   if (!db || !tableDefinition) {
@@ -20441,7 +20484,7 @@ app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
 
 app.get('/api/status/tables/:table/calendar', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const ym = c.req.query('ym');
   const tableDefinition = getStatusTableDefinition(tableName);
 
@@ -20473,7 +20516,7 @@ app.get('/api/status/tables/:table/calendar', authMiddleware, async (c) => {
 });
 
 app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
-  const migration = c.req.param('migration');
+  const migration = requireRouteParam(c.req.param('migration'));
   const sql = STATUS_MIGRATION_SQL[migration];
 
   if (!sql) {
@@ -21498,7 +21541,7 @@ app.get('/api/status/column-stats/verify', authMiddleware, async (c) => {
 });
 
 app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c) => {
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
   const tableDefinition = getStatusTableDefinition(tableName);
 
   if (!tableDefinition) {
@@ -21524,7 +21567,7 @@ app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c)
 
 app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const tableName = c.req.param('table');
+  const tableName = requireRouteParam(c.req.param('table'));
 
   const tableDescriptions: Record<string, string> = {};
   for (const tbl of getEffectiveStatusTableDefinitions()) {
@@ -25633,7 +25676,7 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
  */
 app.post('/api/preferences/:key', authMiddleware, async (c) => {
   const user = c.get('user');
-  const key = c.req.param('key');
+  const key = requireRouteParam(c.req.param('key'));
   const def = USER_PREFERENCE_KEYS[key];
   if (!def) {
     return c.json({ error: `未知の設定キーです: ${key}` }, 400);
@@ -25674,7 +25717,7 @@ app.post('/api/preferences/:key', authMiddleware, async (c) => {
  */
 app.get('/api/preferences/:key', authMiddleware, async (c) => {
   const user = c.get('user');
-  const key = c.req.param('key');
+  const key = requireRouteParam(c.req.param('key'));
   const def = USER_PREFERENCE_KEYS[key];
   if (!def) {
     return c.json({ error: `未知の設定キーです: ${key}` }, 400);
@@ -26396,7 +26439,7 @@ app.patch('/api/repo-colors/:repoName{.+}', authMiddleware, async (c) => {
   if (!db) {
     return c.json({ error: 'D1 is not configured' }, 500);
   }
-  const repoName = c.req.param('repoName');
+  const repoName = requireRouteParam(c.req.param('repoName'));
   try {
     const body = await c.req.json<{ colorCode?: string; tags?: string; isVisible?: boolean; displayOrder?: number }>();
     const wsInfo = await getCurrentWorkspace(db, user.sub);
@@ -26599,7 +26642,7 @@ app.patch('/api/repo-groups/:id', authMiddleware, async (c) => {
   if (!db) {
     return c.json({ error: 'D1 is not configured' }, 500);
   }
-  const groupId = c.req.param('id');
+  const groupId = requireRouteParam(c.req.param('id'));
   try {
     const body = await c.req.json<{
       name?: string;
@@ -26800,7 +26843,7 @@ app.delete('/api/repo-groups/:id/oauth-apps/:appName', authMiddleware, async (c)
   if (!db) return c.json({ error: 'D1 is not configured' }, 500);
 
   const groupId = c.req.param('id');
-  const appName = decodeURIComponent(c.req.param('appName'));
+  const appName = decodeURIComponent(requireRouteParam(c.req.param('appName')));
   try {
     const wsInfo = await getCurrentWorkspace(db, user.sub);
     const workspaceId = wsInfo?.workspaceId ?? '';
