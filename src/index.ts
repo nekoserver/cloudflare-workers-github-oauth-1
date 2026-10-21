@@ -1,3 +1,4 @@
+import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
  * Cloudflare Workers GitHub OAuth
  * GitHub OAuthとJWT認証の実装
@@ -19562,6 +19563,22 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
     return jsonUtf8({ error: 'ビルドログの取得に失敗しました: ' + message + ' (使用トークン=' + cfApiKeySource(c.env) + '。Builds APIにはユーザートークンのWorkers Builds Configuration権限が必要)' }, 502);
   }
 });
+
+export async function runCfContainerFirewallCron(env: Bindings, now = new Date()): Promise<void> {
+  if (!env.DB) throw new Error('DB binding missing');
+  await recordFirewallSnapshot(env.DB, async () => {
+    const stub = await getDemoContainerStub(env);
+    const status = await buildContainerStatusResponse(stub);
+    if (!stub || status.error || !status.running) {
+      return { available: false, error: status.error ?? 'container_stopped' };
+    }
+    const response = await stub.fetch(new Request('http://container/debug/firewall', {
+      signal: AbortSignal.timeout(15000),
+    }));
+    if (!response.ok) throw new Error('firewall_http_' + response.status);
+    return response.json();
+  }, now);
+}
 
 /**
  * 6時間cron(worker-entry.tsのscheduled)から呼ぶ。コンテナを起動せずに状態(getState)だけを取り、

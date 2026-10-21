@@ -115,6 +115,8 @@ RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscal
 WORKDIR /app
 # build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
 COPY server.js build-info*.json ./
+# Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
+COPY firewall-stats.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf

@@ -96,11 +96,13 @@ fi
 # IPv6: ループバック以外は受信・転送とも破棄する。ssh・Tailscale・cloudflared・Workerからの
 #   8080はすべてIPv4で、IPv6の外向きルートも無い(2026-10-21 /debug/netの実測で確認)。
 if command -v nft >/dev/null 2>&1; then
-  # 破棄する前に、送信元(動的セット・要素ごとの件数付き・1日で消える)、ルールの件数、
-  # カーネルログ(接頭辞nft-drop、毎秒10件まで)を取る。/debug/netのnftRuleset・dropLogで見る。
-  {
-    nft list table inet filter >/dev/null 2>&1 && nft delete table inet filter
-    nft -f - <<'NFT'
+  # Counters count all drops; only kernel logging is rate limited.
+  # Replace the table atomically after validating the complete transaction.
+  nft_file=$(mktemp /tmp/nekoroot-firewall.XXXXXX)
+  if nft list table inet filter >/dev/null 2>&1; then
+    echo 'delete table inet filter' >> "$nft_file"
+  fi
+  cat >> "$nft_file" <<'NFT'
 table inet filter {
   set drop_src4 {
     type ipv4_addr
@@ -118,14 +120,14 @@ table inet filter {
     type filter hook input priority 0; policy drop;
     iif lo accept
     meta nfproto ipv6 update @drop_src6 { ip6 saddr counter } counter
-    meta nfproto ipv6 limit rate 10/second log prefix "nft-drop ipv6 "
+    meta nfproto ipv6 limit rate 10/second burst 20 packets log prefix "nft-drop ipv6 "
     meta nfproto ipv6 drop
     ct state invalid update @drop_src4 { ip saddr counter } counter
-    ct state invalid limit rate 10/second log prefix "nft-drop invalid "
+    ct state invalid limit rate 10/second burst 20 packets log prefix "nft-drop invalid "
     ct state invalid drop
     ct state established,related,new accept
     meta nfproto ipv4 update @drop_src4 { ip saddr counter } counter
-    limit rate 10/second log prefix "nft-drop policy "
+    limit rate 10/second burst 20 packets log prefix "nft-drop policy "
   }
   chain forward {
     type filter hook forward priority 0; policy accept;
@@ -133,9 +135,22 @@ table inet filter {
   }
 }
 NFT
-  } >/tmp/nftables.log 2>&1 \
-    && log "nftables INPUT: lo accept, ipv6 log+count+drop, invalid log+count+drop, established/related/new accept, その他 log+count後にpolicy drop / FORWARD: ipv6 drop" \
-    || log "WARN: nftables setup failed (see /tmp/nftables.log; kernel may not support nf_tables in this environment)"
+  firewall_mode=rate-limited-log
+  if ! nft -c -f "$nft_file" >/tmp/nftables.log 2>&1; then
+    # Some container kernels lack nft_limit/log. Preserve filtering and counters.
+    sed -i '/limit rate/d' "$nft_file"
+    firewall_mode=counters-only
+    log "WARN: limited logging unsupported; validating firewall counters without logging"
+  fi
+  if nft -c -f "$nft_file" >>/tmp/nftables.log 2>&1 && nft -f "$nft_file" >>/tmp/nftables.log 2>&1; then
+    printf '%s\n' "$firewall_mode" > /run/nekoroot-firewall-mode
+    date -u +%FT%TZ > /run/nekoroot-firewall-counter-epoch
+    log "nftables applied: $firewall_mode (log limit 10/second, burst 20 packets when supported)"
+  else
+    printf '%s\n' failed > /run/nekoroot-firewall-mode
+    log "WARN: firewall update failed; previous rules retained (see /tmp/nftables.log)"
+  fi
+  rm -f "$nft_file"
 else
   log "WARN: nft command not found, firewall not applied"
 fi
