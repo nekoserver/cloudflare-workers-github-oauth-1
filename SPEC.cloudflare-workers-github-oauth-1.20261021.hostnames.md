@@ -15,7 +15,7 @@
 
 - A と B は cf-container の `NOTICE.custom-domain-tunnel-routing.md` に定義がある。
 - C は本体 Worker が resend の webhook を受けた後、`src/index.ts` で転送する先（`https://mynw.nekomaneki.work/lib/resend-webhook.shtml`）。Resend 側の受信先は Worker の固定ドメインで、転送先（mynw）は lib がドキュメントルート下に置かれている前提で選んでいる。
-- D の `NEKOROOT_HOSTNAME` は Worker のシークレット。値は未確定で、今は変更しない。
+- D の `NEKOROOT_HOSTNAME` は `wrangler.toml` の `[vars]`（現在値 `stream.test.cfc.nekomaneki.work`）。シークレットではないので `wrangler secret put` で変えると競合する。今は変更しない。
 
 ## 2. 重要な注意
 
