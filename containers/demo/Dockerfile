@@ -34,7 +34,7 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates tmux expect gnupg libatomic1 \
         apache2 openssl openssh-server nftables curl \
         python3 python3-venv ruby cron sudo bubblewrap \
-        iproute2 iputils-ping net-tools dnsutils traceroute \
+        iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git gh locales \
     && rm -rf /var/lib/apt/lists/*
 # 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
