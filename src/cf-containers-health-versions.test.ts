@@ -67,3 +67,31 @@ describe('コンテナのイメージのビルド情報', () => {
     expect(readFileSync('src/views/cfContainers.ts', 'utf8')).toContain("'イメージ: commit ' + String(build.commit || '?').slice(0, 7)");
   });
 });
+
+describe('前回表示時との差分', () => {
+  const view = readFileSync('src/views/cfContainers.ts', 'utf8');
+  it('開いた時点の前回値を比較元に固定し、今回の値で上書き保存する', () => {
+    expect(view).toContain("var SNAPSHOT_KEY = 'cf-containers:snapshot';");
+    expect(view).toContain("prevSnapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null')");
+  });
+  it('接続時間・支出・版・コミットの差分を色分けする', () => {
+    expect(view).toContain("el.className = dSec > 0 || dUsd > 0 ? 'diff-up' : 'diff-same';");
+    expect(view).toContain("td.className = changed ? 'diff-up' : '';");
+    expect(view).toContain("'変更: ' + String(prevCommit).slice(0, 7)");
+    expect(view).toContain('.diff-up { color: var(--warn);');
+  });
+});
+
+describe('配布元の最新版のバッジ', () => {
+  const view = readFileSync('src/views/cfContainers.ts', 'utf8');
+  it('最新版を取りに行き、今の版より新しければ黄の「新版あり」バッジを出す', () => {
+    expect(view).toContain("fetch('/api/cf-containers/latest-versions?nodeMajor='");
+    expect(view).toContain("nb.textContent = '新版あり ' + info.latest;");
+    expect(view).toContain('compareVer(info.latest, v.actual) > 0');
+  });
+  it('Worker側は6時間キャッシュする', () => {
+    const index = readFileSync('src/index.ts', 'utf8');
+    expect(index).toContain("app.get('/api/cf-containers/latest-versions'");
+    expect(index).toContain("'max-age=21600'");
+  });
+});

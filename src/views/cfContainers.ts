@@ -46,18 +46,18 @@ export function getCfContainersPage(): string {
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font: 14px/1.6 system-ui, sans-serif; padding: 24px; max-width: 760px; margin: 0 auto; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; padding: 12px; max-width: 760px; margin: 0 auto; }
 h1 { font-size: 20px; margin-bottom: 4px; }
-.subtitle { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+.subtitle { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .notice {
   background: var(--warn-bg); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 14px 18px; margin-bottom: 20px; font-size: 13px; line-height: 1.7; color: var(--text);
+  padding: 8px 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.5; color: var(--text);
 }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 20px; margin-bottom: 16px;
+  padding: 8px 12px; margin-bottom: 8px;
 }
-.status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
@@ -71,7 +71,13 @@ button {
 }
 button:hover { background: var(--bg); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-#log { margin-top: 14px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+#log { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+details.card > summary { cursor: pointer; font-weight: 600; color: var(--text); padding: 2px 0; }
+details.card[open] > summary { margin-bottom: 6px; }
+/* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
+.diff-up { color: var(--warn); font-weight: 600; }
+.diff-same { color: var(--muted); }
+details.sub > summary { cursor: pointer; font-weight: 600; color: var(--text); margin: 6px 0 4px; }
 a.proxy-link { color: var(--link); font-size: 13px; }
 table.health-table, table.tunnel-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px; }
 table.health-table th, table.health-table td, table.tunnel-table th, table.tunnel-table td {
@@ -94,9 +100,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <div class="notice">
   自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
-<div class="card">
-  <strong>トークン設定（CLI不要）</strong>
-  <p class="subtitle" style="margin:4px 0 10px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
+<details class="card" data-section="secrets">
+  <summary>トークン設定（CLI不要）</summary>
+  <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
   <div class="status-row">
     <label for="secret-name" style="font-size:13px;">対象:</label>
     <select id="secret-name">
@@ -107,15 +113,17 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
   <button id="btn-set-secret" type="button">保存・更新して再起動</button>
-  <div id="secret-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
-</div>
-<div class="card">
+  <div id="secret-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<details class="card" data-section="control" open>
+  <summary>コンテナの操作（起動・停止・状態）</summary>
   <div class="status-row">
     <span id="status-chip" class="chip" data-running="false">状態取得中…</span>
     <button id="btn-refresh" type="button">状態を再取得</button>
   </div>
-  <div id="live-clock" style="font-size:20px;font-weight:600;margin-bottom:10px;" hidden>00:00:00</div>
-  <strong>Cloudflare Containers 単価表（USD/時間）</strong>
+  <div id="live-clock" style="font-size:18px;font-weight:600;margin-bottom:4px;" hidden>00:00:00</div>
+  <details class="sub" data-section="pricing">
+  <summary>Cloudflare Containers 単価表（USD/時間）</summary>
   <div class="pricing-scroll">
     <table class="health-table pricing-table" style="margin-bottom:10px;">
       <thead><tr><th scope="col">モデル</th><th scope="col">vCPU</th><th scope="col">メモリ</th><th scope="col">ディスク</th><th scope="col">合計</th></tr></thead>
@@ -123,7 +131,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     </table>
   </div>
   <p class="subtitle">無料枠未考慮・CPUを上限まで使用した場合の目安。CPUは実使用量、メモリ・ディスクは確保量で課金されます。通信・Workers・Durable Objects等の料金は別途。<a class="proxy-link" href="https://developers.cloudflare.com/containers/platform/pricing/" target="_blank" rel="noreferrer">公式料金</a></p>
+  </details>
   <div id="cost-summary" style="font-size:13px;"></div>
+  <div id="cost-diff" style="font-size:12px;"></div>
   <button id="btn-start" type="button">起動</button>
   <button id="btn-stop" type="button">停止</button>
   <button id="btn-restart" type="button">再起動</button>
@@ -134,54 +144,85 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <code id="ssh-command" style="display:block;margin-top:4px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;word-break:break-all;"></code>
     <button id="btn-copy-ssh" type="button" style="margin-top:6px;">コマンドをコピー</button>
   </div>
-</div>
-<div class="card">
+</details>
+<details class="card" data-section="links">
+  <summary>リンク（Docker コマンドセンター・プロキシ）</summary>
   <p><a class="proxy-link" href="/cf-containers/docker.html" target="_blank" rel="noreferrer">Docker コマンドセンターを開く（管理者認証で接続）</a></p>
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
-</div>
-<div class="card">
+</details>
+<details class="card" data-section="health" open>
+  <summary>ヘルスチェック</summary>
   <div class="status-row">
-    <strong>ヘルスチェック</strong>
     <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
   </div>
+  <div class="pricing-scroll">
   <table class="health-table" id="health-table" hidden>
     <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
       <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
     </tr></tbody>
   </table>
+  </div>
   <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
+  <div class="pricing-scroll">
   <table class="health-table" id="version-table" hidden>
-    <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>想定の版</th><th>判定</th></tr></thead>
+    <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>配布元の最新</th></tr></thead>
     <tbody id="version-tbody"></tbody>
   </table>
-  <div id="health-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
-</div>
-<div class="card">
+  </div>
+  <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<details class="card" data-section="net">
+  <summary>コンテナのネットワーク情報(IPアドレス・CIDR)</summary>
   <div class="status-row">
-    <strong>コンテナのネットワーク情報(IPアドレス・CIDR)</strong>
     <button id="btn-net" type="button">ip addr / ip route を取得</button>
   </div>
-  <pre id="net-log" style="margin-top:8px;font-size:12px;white-space:pre-wrap;"></pre>
-</div>
-<div class="card">
+  <pre id="net-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+</details>
+<details class="card" data-section="buildlog">
+  <summary>本番ビルド(Workers Builds)のログ</summary>
   <div class="status-row">
-    <strong>本番ビルド(Workers Builds)のログ</strong>
     <button id="btn-buildlog" type="button">最新ビルドのログを取得</button>
   </div>
-  <pre id="buildlog-log" style="margin-top:8px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
-</div>
-<div class="card">
+  <pre id="buildlog-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
+</details>
+<details class="card" data-section="tunnels">
+  <summary>Cloudflare Tunnel一覧</summary>
   <div class="status-row">
-    <strong>Cloudflare Tunnel一覧</strong>
     <button id="btn-tunnels" type="button">取得</button>
   </div>
   <table class="tunnel-table" id="tunnel-table" hidden>
     <thead><tr><th>name</th><th>status</th><th>connections</th><th>id</th></tr></thead>
     <tbody id="tunnel-tbody"></tbody>
   </table>
-  <div id="tunnel-log" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
-</div>
+  <div id="tunnel-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<script>
+  // 前回表示時の数字(このブラウザのlocalStorage)。開いた時点の値を比較元として固定し、今回の値で上書き保存する。
+  var SNAPSHOT_KEY = 'cf-containers:snapshot';
+  var prevSnapshot = null;
+  var currentSnapshot = { savedAt: new Date().toISOString() };
+  try { prevSnapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null'); } catch (e) { prevSnapshot = null; }
+  function saveSnapshot(part) {
+    Object.keys(part).forEach(function (k) { currentSnapshot[k] = part[k]; });
+    try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(currentSnapshot)); } catch (e) {}
+  }
+  function prevSince() {
+    return prevSnapshot && prevSnapshot.savedAt ? '前回(' + prevSnapshot.savedAt.replace('T', ' ').slice(0, 16) + ' UTC)から' : '';
+  }
+
+  // 各セクションの開閉をブラウザに覚えさせる(保存できない環境でも表示は既定のまま動く)
+  document.querySelectorAll('details[data-section]').forEach(function (d) {
+    var key = 'cf-containers:open:' + d.getAttribute('data-section');
+    try {
+      var saved = localStorage.getItem(key);
+      if (saved !== null) d.open = saved === '1';
+    } catch (e) {}
+    d.addEventListener('toggle', function () {
+      try { localStorage.setItem(key, d.open ? '1' : '0'); } catch (e) {}
+    });
+  });
+</script>
 <script>
 (function () {
   var chip = document.getElementById('status-chip');
@@ -284,6 +325,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         (data.cost.cumulativeConnectedSeconds > 0
           ? ' / 実質時間単価(総経費÷総接続時間): $' + (data.cost.estimatedCostUsd / (data.cost.cumulativeConnectedSeconds / 3600)).toFixed(5) + '/時間'
           : '');
+      renderCostDiff(data.cost);
     }
     if (liveClockTimer) {
       clearInterval(liveClockTimer);
@@ -368,17 +410,42 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   // 版の判定: ok=想定どおり(緑)、warn=想定と違う(黄)、ng=無い・最低版より古い(赤)
   var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG' };
+  // 版を数値の並びとして比べる(server.jsのcompareVersionsと同じ考え方)
+  function compareVer(a, b) {
+    var pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number);
+    var pb = String(b).split(/[^0-9]+/).filter(Boolean).map(Number);
+    for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+      var d = (pa[i] || 0) - (pb[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  }
+  var latestVersions = null;
+  var lastVersions = null;
+  function loadLatestVersions(versions) {
+    var node = (versions.items || []).filter(function (v) { return v.name === 'node'; })[0];
+    var major = node && node.actual ? String(node.actual).split('.')[0] : '26';
+    fetch('/api/cf-containers/latest-versions?nodeMajor=' + encodeURIComponent(major))
+      .then(readJsonOrText)
+      .then(function (data) { latestVersions = data.latest || null; renderVersions(lastVersions); })
+      .catch(function (err) { latestVersions = { _error: String(err) }; renderVersions(lastVersions); });
+  }
   function renderVersions(versions) {
+    lastVersions = versions;
     var table = document.getElementById('version-table');
     var tbody = document.getElementById('version-tbody');
     tbody.innerHTML = '';
     if (!versions || !versions.items) { table.hidden = true; return; }
     versions.items.forEach(function (v) {
       var tr = document.createElement('tr');
-      var cells = [v.name, v.actual || '(取得できず)', v.expected || (v.minimum ? v.minimum + '以上' : '-')];
-      cells.forEach(function (text) {
+      var prevVersions = (prevSnapshot && prevSnapshot.versions) || {};
+      var before = prevVersions[v.name];
+      var changed = before !== undefined && before !== v.actual;
+      var cells = [v.name, v.actual || '(取得できず)', before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
+      cells.forEach(function (text, i) {
         var td = document.createElement('td');
         td.textContent = text;
+        if (i === 1 || i === 2) td.className = changed ? 'diff-up' : '';
         tr.appendChild(td);
       });
       var tdLevel = document.createElement('td');
@@ -389,9 +456,50 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       span.title = v.raw || '';
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
+      // 配布元に新しい版があれば黄のバッジ(aptで入れるものは対象外で「-」)
+      var tdLatest = document.createElement('td');
+      var info = latestVersions && latestVersions[v.name];
+      if (!latestVersions) {
+        tdLatest.textContent = '確認中…';
+      } else if (!info) {
+        tdLatest.textContent = '-';
+      } else if (!info.latest) {
+        tdLatest.textContent = '取得できず';
+        tdLatest.title = (info.source || '') + ': ' + (info.error || '');
+      } else if (v.actual && compareVer(info.latest, v.actual) > 0) {
+        var nb = document.createElement('span');
+        nb.className = 'badge';
+        nb.setAttribute('data-level', 'warn');
+        nb.textContent = '新版あり ' + info.latest;
+        nb.title = info.source;
+        tdLatest.appendChild(nb);
+      } else {
+        tdLatest.textContent = info.latest;
+        tdLatest.title = info.source;
+      }
+      tr.appendChild(tdLatest);
       tbody.appendChild(tr);
     });
     table.hidden = false;
+    var snap = {};
+    versions.items.forEach(function (v) { snap[v.name] = v.actual; });
+    saveSnapshot({ versions: snap });
+  }
+
+  // 累計接続時間・予定支出の前回表示時からの増分
+  function renderCostDiff(cost) {
+    var el = document.getElementById('cost-diff');
+    var prev = prevSnapshot && prevSnapshot.cost;
+    if (prev) {
+      var dSec = cost.cumulativeConnectedSeconds - prev.cumulativeConnectedSeconds;
+      var dUsd = cost.estimatedCostUsd - prev.estimatedCostUsd;
+      el.className = dSec > 0 || dUsd > 0 ? 'diff-up' : 'diff-same';
+      el.textContent = prevSince() + ': 接続時間 +' + formatHms(Math.max(0, dSec)) + ' / 支出 +$' + Math.max(0, dUsd).toFixed(4);
+    } else {
+      el.className = 'diff-same';
+      el.textContent = '(前回の記録なし。次回から差分を表示します)';
+    }
+    saveSnapshot({ cost: { cumulativeConnectedSeconds: cost.cumulativeConnectedSeconds, estimatedCostUsd: cost.estimatedCostUsd } });
   }
 
   // どのコミット・ビルドから作ったイメージかを表示する(build-info.json)
@@ -402,6 +510,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       ? 'イメージのビルド情報: 取得できず(' + build.error + ')'
       : 'イメージ: commit ' + String(build.commit || '?').slice(0, 7) + ' / branch ' + (build.branch || '?') +
         ' / build ' + (build.buildUuid || '?') + ' / 作成 ' + (build.builtAt || '?');
+    var prevCommit = prevSnapshot && prevSnapshot.commit;
+    if (!build.error && prevCommit && prevCommit !== build.commit) {
+      el.textContent += '(' + prevSince() + '変更: ' + String(prevCommit).slice(0, 7) + ' → ' + String(build.commit).slice(0, 7) + ')';
+      el.className = 'diff-up';
+    } else {
+      el.className = '';
+    }
+    if (!build.error) saveSnapshot({ commit: build.commit });
     el.hidden = false;
   }
 
@@ -421,7 +537,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         document.getElementById('health-docker').innerHTML = badge(data.docker);
         document.getElementById('health-time').textContent = data.checkedAt || '';
         healthTable.hidden = false;
+        latestVersions = null;
         renderVersions(data.versions);
+        if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
         healthLog.textContent = '';
       })

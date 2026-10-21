@@ -47,6 +47,7 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
+import { fetchLatestToolVersions } from './utils/latestToolVersions';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
@@ -19527,6 +19528,23 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
     logger.error('[cf-containers-build-log] 取得に失敗', { error: message });
     return jsonUtf8({ error: 'ビルドログの取得に失敗しました: ' + message + ' (使用トークン=' + cfApiKeySource(c.env) + '。Builds APIにはユーザートークンのWorkers Builds Configuration権限が必要)' }, 502);
   }
+});
+
+// 各ツールの配布元の最新版(/cf-containersのバージョン表の「新版あり」バッジ用)。配布元への問い合わせを減らすため6時間キャッシュする。
+app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const nodeMajor = Number(c.req.query('nodeMajor') || '26') || 26;
+  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}`);
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const hit = cache ? await cache.match(cacheKey) : undefined;
+  if (hit) return hit;
+  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN });
+  const res = jsonUtf8({ latest, checkedAt: new Date().toISOString() });
+  if (cache) {
+    const toCache = res.clone();
+    toCache.headers.set('Cache-Control', 'max-age=21600');
+    try { c.executionCtx.waitUntil(cache.put(cacheKey, toCache)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
+  }
+  return res;
 });
 
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
