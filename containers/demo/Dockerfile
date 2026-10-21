@@ -41,24 +41,11 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/sfw \
     && install -m 755 /tmp/sfw /usr/local/bin/sfw \
     && rm -f /tmp/sfw \
     && sfw --help
-# Keep chat dependencies isolated from Ubuntu's system Python.
-COPY chat-requirements.txt /tmp/lib-chat-requirements.txt
-RUN python3 -m venv /opt/lib-chat \
-    && sfw /opt/lib-chat/bin/python -m pip install --no-cache-dir -r /tmp/lib-chat-requirements.txt \
-    && /opt/lib-chat/bin/python -m pip check \
-    && /opt/lib-chat/bin/python -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)" \
-    && rm -f /tmp/lib-chat-requirements.txt
-# Use Caddy's official stable repository for current stable packages.
-RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
-        -o /tmp/caddy-stable.gpg.key https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
-    && gpg --batch --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg /tmp/caddy-stable.gpg.key \
-    && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
-        -o /etc/apt/sources.list.d/caddy-stable.list https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt \
-    && chmod 644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list \
-    && apt-get update && apt-get install -y --no-install-recommends caddy \
-    && caddy version \
-    && rm -f /tmp/caddy-stable.gpg.key \
-    && rm -rf /var/lib/apt/lists/*
+# chat用のPythonライブラリはUbuntuのapt版を使う(pipはPyPIへの証明書検証が
+# このビルド環境で通らず、apt版ならアーカイブ経由で取得でき依存を固定しやすいため)。
+RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
 # Install the upstream stable GitHub CLI rather than the Ubuntu archive version.
 ARG GH_VERSION=2.102.0
 ARG GH_SHA256=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0

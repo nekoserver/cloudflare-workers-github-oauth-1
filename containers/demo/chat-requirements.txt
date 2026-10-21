@@ -1,3 +1,0 @@
-# Latest stable releases verified against PyPI on 2026-10-21.
-websockets==17.3
-aiohttp==3.14.5
