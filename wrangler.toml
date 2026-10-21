@@ -10,6 +10,11 @@ assets = { directory = "./public" }
 # ]
 
 # 環境変数（本番環境ではwrangler secretを使用）
+# Dockerのビルドより前に、どのコミット・ビルドから作ったイメージかを
+# containers/demo/build-info.json に書き出す(/cf-containersのヘルス表に出す)。
+[build]
+command = "sh scripts/write-container-build-info.sh"
+
 [vars]
 ENVIRONMENT = "development"
 # アカウントIDは秘密情報ではないため[vars]に置く(/cf-containersのトークン設定・トンネル一覧で使用)

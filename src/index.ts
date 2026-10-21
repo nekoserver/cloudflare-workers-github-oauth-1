@@ -47,6 +47,8 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
+import { fetchLatestToolVersions } from './utils/latestToolVersions';
+import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
@@ -649,6 +651,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_keyword_search_log', migration: '0176', description: 'dynamicnekoのtree-view検索窓で検索するたびに記録する検索ログ(repo_name・query・searched_at)', syncPolicy: 'auto' },
   { name: 'tree_view_keyword_search_results', migration: '0176', description: 'tree_view_keyword_search_log 1件ごとの切り出しキーとAIチャットでの出現回数', syncPolicy: 'auto' },
   { name: 'cf_container_operation_log', migration: '0178', description: '/cf-containersでのデモコンテナ起動/停止/再起動操作ログ(action・実行者・結果)', syncPolicy: 'auto' },
+  { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
+  { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -2812,6 +2816,30 @@ CREATE INDEX IF NOT EXISTS idx_tvksr_keyword ON tree_view_keyword_search_results
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cf_container_operation_log_created_at ON cf_container_operation_log(created_at);`,
+  '0179': `CREATE TABLE IF NOT EXISTS cf_container_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  prev_snapshot_id INTEGER,
+  running_containers INTEGER,
+  connected_seconds INTEGER,
+  estimated_cost_usd REAL,
+  image_commit TEXT,
+  versions_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (prev_snapshot_id) REFERENCES cf_container_snapshots(id)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_snapshots_user_created ON cf_container_snapshots(user_id, created_at);
+CREATE TABLE IF NOT EXISTS cf_container_snapshot_diffs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_id INTEGER NOT NULL,
+  metric TEXT NOT NULL,
+  before_value TEXT,
+  after_value TEXT,
+  delta REAL,
+  FOREIGN KEY (snapshot_id) REFERENCES cf_container_snapshots(id)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_snapshot_diffs_snapshot ON cf_container_snapshot_diffs(snapshot_id);
+ALTER TABLE notification_settings ADD COLUMN cf_containers_report_slack INTEGER NOT NULL DEFAULT 1;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -3001,6 +3029,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   tree_view_keyword_search_log: { id: 'pk', user_id: 'idx', repo_name: 'idx', query: 'idx', searched_at: 'idx' },
   tree_view_keyword_search_results: { id: 'pk', search_log_id: 'fk', keyword: 'idx' },
   cf_container_operation_log: { id: 'pk', created_at: 'idx' },
+  cf_container_snapshots: { id: 'pk', user_id: 'fk', prev_snapshot_id: 'fk', created_at: 'idx' },
+  cf_container_snapshot_diffs: { id: 'pk', snapshot_id: 'fk' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3171,6 +3201,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   tree_view_keyword_search_log: 'commit',
   tree_view_keyword_search_results: 'commit',
   cf_container_operation_log: 'system',
+  cf_container_snapshots: 'system',
+  cf_container_snapshot_diffs: 'system',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -3426,6 +3458,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
   tree_view_keyword_search_results: { search_log_id: 'tree_view_keyword_search_log' },
+  cf_container_snapshots: { user_id: 'user_sessions', prev_snapshot_id: 'cf_container_snapshots' },
+  cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },
   commit_summary_topic_links: { topic_id: 'commit_summary_topics', summary_log_id: 'ai_summary_log' },
   ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
@@ -19529,6 +19563,126 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
   }
 });
 
+/**
+ * 6時間cron(worker-entry.tsのscheduled)から呼ぶ。コンテナを起動せずに状態(getState)だけを取り、
+ * 稼働数・累計接続時間・支出と、最後にヘルスチェックで記録された版をcf_container_snapshotsへ
+ * 記録し(前回cronとの差分はcf_container_snapshot_diffs)、配布元の最新版と合わせてSlackへ報告する。
+ */
+export async function runCfContainerCronReport(env: Bindings, now = new Date()): Promise<{ ok: boolean; error?: string }> {
+  if (!env.DB) return { ok: false, error: 'DBバインディングがありません' };
+  const status = await buildContainerStatusResponse(await getDemoContainerStub(env));
+  const seconds = computeCumulativeConnectedSeconds(await getContainerOperationEvents(env.DB));
+  const lastVersions = await getLatestVersionSnapshot(env.DB);
+  const cur = {
+    runningContainers: status.error ? null : status.running ? 1 : 0,
+    connectedSeconds: seconds,
+    estimatedCostUsd: estimateCostUsd(seconds, CONFIGURED_INSTANCE_SPEC),
+    imageCommit: lastVersions?.imageCommit ?? null,
+    versions: lastVersions?.versions ?? {},
+  };
+  const { diffs } = await recordSnapshot(env.DB, CRON_SNAPSHOT_USER_ID, cur, now);
+  const nodeMajor = Number(String(lastVersions?.versions.node ?? '26').split('.')[0]) || 26;
+  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: env.GITHUB_TOKEN });
+  const text = [
+    buildCronHeader(cur, diffs),
+    status.error ? '状態の取得に失敗: ' + status.error : '',
+    buildVersionReport(lastVersions ? { createdAt: lastVersions.createdAt, versions: lastVersions.versions } : null, latest),
+  ].filter(Boolean).join('\n');
+  // /cf-containersのトグルでOFFにされていれば、記録だけしてSlackには送らない
+  if (!(await getCronReportSlackEnabled(env.DB))) return { ok: true };
+  if (!env.SOT || !env.SLACK_CHANNEL_ID) return { ok: false, error: 'SOT / SLACK_CHANNEL_ID が未設定です(記録はD1に保存済み)' };
+  const posted = await postSlackMessage({
+    token: env.SOT,
+    channel: env.SLACK_CHANNEL_ID,
+    text: 'cf-containers 6時間レポート\n' + text,
+    blocks: buildFreeTextSlackBlocks('cf-containers 6時間レポート', text, 'interactive_sample'),
+  });
+  return posted.ok ? { ok: true } : { ok: false, error: posted.error };
+}
+
+// 6時間レポートのSlack通知のON/OFF(D1のnotification_settings.cf_containers_report_slack)
+app.get('/api/cf-containers/report-settings', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  try {
+    return jsonUtf8({ slackEnabled: await getCronReportSlackEnabled(c.env.DB) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonUtf8({ error: '設定の取得に失敗しました: ' + message + '(列が無ければmigration 0179を適用)' }, 500);
+  }
+});
+app.post('/api/cf-containers/report-settings', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  const body = await c.req.json<{ slackEnabled?: unknown }>().catch(() => null);
+  if (typeof body?.slackEnabled !== 'boolean') return jsonUtf8({ error: 'slackEnabled(true/false)が必要です' }, 400);
+  try {
+    await setCronReportSlackEnabled(c.env.DB, body.slackEnabled);
+    return jsonUtf8({ slackEnabled: body.slackEnabled });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonUtf8({ error: '設定の保存に失敗しました: ' + message + '(列が無ければmigration 0179を適用)' }, 500);
+  }
+});
+
+// 前回のヘルスチェック時の記録(画面の「前回との差分」の比較元)。記録しない。
+app.get('/api/cf-containers/snapshot/latest', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const userId = c.get('user')?.sub ?? 'unknown';
+  try {
+    if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません', snapshot: null }, 503);
+    return jsonUtf8({ snapshot: await getLatestSnapshot(c.env.DB, userId) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-snapshot] 前回の記録の取得に失敗', { error: message });
+    return jsonUtf8({ error: '前回の記録の取得に失敗しました: ' + message + '(テーブル未作成ならmigration 0179を適用)', snapshot: null }, 500);
+  }
+});
+
+// ヘルスチェックのたびに今回の値を記録し、前回の記録との差分をcf_container_snapshot_diffsに残す。
+app.post('/api/cf-containers/snapshot', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json<{
+    runningContainers?: unknown; connectedSeconds?: unknown; estimatedCostUsd?: unknown; imageCommit?: unknown; versions?: unknown;
+  }>().catch(() => null);
+  if (!body) return jsonUtf8({ error: 'JSONの本文が必要です' }, 400);
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const versions: Record<string, string | null> = {};
+  if (body.versions && typeof body.versions === 'object') {
+    for (const [k, v] of Object.entries(body.versions as Record<string, unknown>)) {
+      if (/^[a-z0-9_-]{1,32}$/.test(k)) versions[k] = typeof v === 'string' ? v.slice(0, 64) : null;
+    }
+  }
+  try {
+    if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+    const result = await recordSnapshot(c.env.DB, c.get('user')?.sub ?? 'unknown', {
+      runningContainers: num(body.runningContainers),
+      connectedSeconds: num(body.connectedSeconds),
+      estimatedCostUsd: num(body.estimatedCostUsd),
+      imageCommit: typeof body.imageCommit === 'string' ? body.imageCommit.slice(0, 64) : null,
+      versions,
+    });
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-snapshot] 記録に失敗', { error: message });
+    return jsonUtf8({ error: '記録に失敗しました: ' + message + '(テーブル未作成ならmigration 0179を適用)' }, 500);
+  }
+});
+
+// 各ツールの配布元の最新版(/cf-containersのバージョン表の「新版あり」バッジ用)。配布元への問い合わせを減らすため6時間キャッシュする。
+app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const nodeMajor = Number(c.req.query('nodeMajor') || '26') || 26;
+  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}`);
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const hit = cache ? await cache.match(cacheKey) : undefined;
+  if (hit) return hit;
+  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN });
+  const res = jsonUtf8({ latest, checkedAt: new Date().toISOString() });
+  if (cache) {
+    const toCache = res.clone();
+    toCache.headers.set('Cache-Control', 'max-age=21600');
+    try { c.executionCtx.waitUntil(cache.put(cacheKey, toCache)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
+  }
+  return res;
+});
+
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
@@ -19538,7 +19692,8 @@ app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
     });
-    return jsonUtf8({ tunnels });
+    // 0件のとき、どのアカウント・どのトークンで問い合わせたかを画面で追えるようにする
+    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });

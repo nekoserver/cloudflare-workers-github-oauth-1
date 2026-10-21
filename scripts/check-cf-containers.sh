@@ -125,6 +125,8 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 echo "/health: $HEALTH"
+echo "$HEALTH" | python3 -c 'import json,sys; d=json.load(sys.stdin); v={i["name"]:i for i in d["versions"]["items"]}; [print("  version:", i["name"], i["actual"], "expected="+str(i["expected"]), i["level"]) for i in d["versions"]["items"]]; assert v["node"]["level"]=="ok", v["node"]; assert d["versions"]["expectedError"] is None, d["versions"]["expectedError"]; assert len(d["build"].get("commit") or "")==40, d["build"]; print("OK: /healthのバージョン表(nodeが想定どおり・image-versions.jsonを読めた)とビルド情報(commit "+d["build"]["commit"][:7]+")")' \
+  || { echo "NG: /healthのバージョン表が想定と違う"; exit 1; }
 HOST_PORT=$(docker port "$NAME" 8080/tcp | head -1 | sed 's/.*://')
 docker logs "$NAME" 2>&1 | grep -a "nftables" || true
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/health" >/dev/null \

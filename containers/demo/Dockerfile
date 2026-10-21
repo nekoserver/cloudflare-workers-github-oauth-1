@@ -1,7 +1,12 @@
+# ソースからビルドする版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
+ARG TAILSCALE_VERSION=1.104.1
+ARG GH_VERSION=2.103.0
+ARG JJ_VERSION=0.46.0
+
 # Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
 # pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
 FROM golang:1.27.1-trixie AS tailscale-build
-ARG TAILSCALE_VERSION=1.104.1
+ARG TAILSCALE_VERSION
 RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
     && /go/bin/tailscale version \
     && /go/bin/tailscaled --version
@@ -10,13 +15,13 @@ RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_
 # at startup; do not COPY login state or secrets into this image.
 # ghはGoのソース(proxy.golang.org)からビルドする。リリースのdebは使わない。
 FROM golang:1.27.1-trixie AS gh-build
-ARG GH_VERSION=2.103.0
+ARG GH_VERSION
 RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
     && /go/bin/gh --version
 
 # jj(Jujutsu)はaptに無いため、crates.ioのソースからビルドする。
 FROM rust:1-trixie AS jj-build
-ARG JJ_VERSION=0.46.0
+ARG JJ_VERSION
 RUN cargo install --locked jj-cli@${JJ_VERSION} \
     && /usr/local/cargo/bin/jj --version
 
@@ -93,8 +98,18 @@ RUN PATH=/opt/node22/bin:$PATH npm install -g wrangler \
     && wrangler --version \
     && PATH=/opt/node22/bin:$PATH npm cache clean --force
 
+# /healthのバージョン表で「想定の版」として使う(実際の版と比べて色を付ける)。
+ARG TAILSCALE_VERSION
+ARG GH_VERSION
+ARG JJ_VERSION
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" \
+        > /etc/image-versions.json \
+    && cat /etc/image-versions.json
+
 WORKDIR /app
-COPY server.js ./
+# build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
+COPY server.js build-info*.json ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
