@@ -9,3 +9,6 @@ CREATE TABLE IF NOT EXISTS cf_container_firewall_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
   ON cf_container_firewall_snapshots(collected_at);
+
+CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_container_time
+  ON cf_container_firewall_snapshots(container_name, collected_at);

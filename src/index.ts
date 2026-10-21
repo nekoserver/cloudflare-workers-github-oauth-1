@@ -1,3 +1,5 @@
+import { getContainerDiagnosticsPage } from './views/containerDiagnostics';
+import { firewallHistoryRange, listFirewallHistory, getFirewallHistorySnapshot } from './utils/cfContainerFirewallHistory';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
  * Cloudflare Workers GitHub OAuth
@@ -19469,6 +19471,53 @@ async function buildContainerStatusResponse(
  * 起動・停止・再起動・状態参照・プロキシのデモ。注意: Durable Objects・
  * Containersはどちらも使用量課金が発生する。使い終わったら必ず停止すること。
  */
+app.get('/cf-containers/diagnostics', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'");
+  return c.html(getContainerDiagnosticsPage());
+});
+
+app.get('/api/cf-containers/diagnostics', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const stub = await getDemoContainerStub(c.env);
+  const state = await buildContainerStatusResponse(stub);
+  if (!stub || !state.running || state.error) return c.json({ ...state, checkedAt: new Date().toISOString() });
+  async function read(path: string) {
+    const response = await stub!.fetch(new Request('http://container' + path, { signal: AbortSignal.timeout(15000) }));
+    if (!response.ok) throw new Error('取得失敗: HTTP ' + response.status);
+    return response.json() as Promise<Record<string, unknown>>;
+  }
+  const [health, firewall] = await Promise.allSettled([read('/health'), read('/debug/firewall')]);
+  const healthData = health.status === 'fulfilled' && ['apache', 'sshd', 'cloudflared', 'tailscale', 'docker']
+    .some(key => typeof health.value[key] === 'boolean') ? health.value : null;
+  return c.json({ ...state, checkedAt: new Date().toISOString(), health: healthData,
+    healthError: healthData ? null : 'ヘルスチェックを取得できませんでした',
+    firewall: firewall.status === 'fulfilled' && typeof firewall.value.available === 'boolean'
+      ? firewall.value : { available: false, error: 'ファイアウォール統計を取得できませんでした' } });
+});
+
+app.get('/api/cf-containers/firewall/history', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  let range;
+  try { range = firewallHistoryRange(new URL(c.req.url).searchParams); }
+  catch { return c.json({ error: '期間は31日以内、件数は1〜744で指定してください' }, 400); }
+  if (!c.env.DB) return c.json({ error: '履歴データベースが設定されていません' }, 503);
+  try { return c.json(await listFirewallHistory(c.env.DB, range)); }
+  catch { return c.json({ error: '保存履歴を取得できません。データベースの準備状態を確認してください' }, 503); }
+});
+
+app.get('/api/cf-containers/firewall/history/:id', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const raw = c.req.param('id');
+  const id = Number(raw);
+  if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(id)) return c.json({ error: '記録IDが不正です' }, 400);
+  if (!c.env.DB) return c.json({ error: '履歴データベースが設定されていません' }, 503);
+  try {
+    const snapshot = await getFirewallHistorySnapshot(c.env.DB, id);
+    return snapshot ? c.json(snapshot) : c.json({ error: '記録が見つかりません' }, 404);
+  } catch { return c.json({ error: '記録の詳細を取得できませんでした' }, 503); }
+});
+
 app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);

@@ -96,6 +96,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </head>
 <body>
 <h1>Cloudflare Containers（デモ）</h1>
+<p><a href="/cf-containers/diagnostics">コンテナ診断 — ヘルスチェック・通信統計・保存履歴</a></p>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
 <div class="notice">
   自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。

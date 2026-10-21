@@ -18,3 +18,17 @@
 一時Nodeサーバーの実IPv6統計API、bash/Node構文を確認。
 現コンテナにはファイアウォールのフォールバックとCLI `/usr/local/sbin/firewall-stats` を適用。
 Dockerビルド・新イメージ配布・Worker反映・本番D1 migrationは未実施。毎時D1保存はまだ稼働していない。
+
+## 本体の「コンテナ診断」ページ
+
+- `/cf-containers/diagnostics`。既存のコンテナ管理画面からリンクし、管理者認証を必須にする。
+- Apache・sshd・cloudflared・Tailscale・Dockerの現在のヘルスと、IPv4/IPv6の統計を表示。
+- 専用live APIは停止中のコンテナへfetchしない。ヘルスと統計の一方の失敗を他方の結果と分離する。
+- 履歴の取得API `/api/cf-containers/firewall/history` はfrom/to、limit、beforeによる期間指定・ページング。期間は最大31日、1回最大744件。
+- 一覧SQLはJSONから累積packets/bytesなどの要約だけを抽出。詳細JSONは `/api/cf-containers/firewall/history/:id` で1件ずつ取得する。
+- IPv4 /24・IPv6 /64、WHOIS割当CIDR、送信元のPTRとWHOISを詳細表示。WHOISなどの外部文字列はtextContentで表示する。
+- データベース未準備・取得失敗と、空の履歴や0件を区別。履歴行を合計して時間内の流量にしない。
+
+ページ追加の検証: 認証・停止時の無通信・障害分離・履歴API・ブラウザDOMのXSS対策を含む
+関連35テスト、SQLiteで実際のIPv4/IPv6要約SQL、追加した履歴ユーティリティとviewの型検査を通過。
+本番Worker・DBは未反映。
