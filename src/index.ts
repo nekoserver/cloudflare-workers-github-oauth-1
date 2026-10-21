@@ -57,6 +57,8 @@ import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
 import { getJevPlaygroundPage } from './views/jevPlayground';
 import { getClefPlaygroundPage } from './views/clefPlayground';
 import { callClefPlaygroundModel, buildClefPlaygroundResponseBody, type ClefAiBinding } from './utils/clefPlayground';
+import { getRerankerPlaygroundPage } from './views/rerankerPlayground';
+import { rerankPlaygroundContexts, validateRerankerPlaygroundInput, type RerankerAiBinding } from './utils/rerankerPlayground';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getEarthComposer25Page } from './views/earthComposer25';
@@ -5445,6 +5447,31 @@ app.post('/api/clef-playground', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'Clefモデルの呼び出しに失敗しました: ' + outcome.errorDetail }, 502);
   }
   return jsonUtf8(buildClefPlaygroundResponseBody(outcome));
+});
+
+/**
+ * 固定サンプル候補を使い、Workers AIのcross-encoderリランカーを試すページ。
+ * 入力候補の検索や回答生成はせず、質問と最大8件の候補文を採点順に並べる。
+ */
+app.get('/reranker-playground', authMiddleware, (c) => {
+  return c.html(getRerankerPlaygroundPage());
+});
+
+app.post('/api/reranker-playground', authMiddleware, async (c) => {
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json().catch(() => null);
+  const validation = validateRerankerPlaygroundInput(body);
+  if (!validation.ok) return jsonUtf8({ error: validation.error }, 400);
+
+  try {
+    const results = await rerankPlaygroundContexts(c.env.AI as RerankerAiBinding, validation.query, validation.contexts);
+    return jsonUtf8({ model: '@cf/baai/bge-reranker-base', results });
+  } catch (error) {
+    logger.warn('[reranker-playground] Workers AI reranker failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return jsonUtf8({ error: 'リランカーモデルの呼び出しに失敗しました。' }, 502);
+  }
 });
 
 /**
