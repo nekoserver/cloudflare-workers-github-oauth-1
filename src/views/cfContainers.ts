@@ -272,7 +272,10 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     if (data.cost) {
       costSummary.textContent =
         '累計接続時間: ' + formatHms(data.cost.cumulativeConnectedSeconds) +
-        ' / 予定支出(概算、無料枠未考慮): $' + data.cost.estimatedCostUsd.toFixed(4);
+        ' / 予定支出(概算、無料枠未考慮): $' + data.cost.estimatedCostUsd.toFixed(4) +
+        (data.cost.cumulativeConnectedSeconds > 0
+          ? ' / 実質時間単価(総経費÷総接続時間): $' + (data.cost.estimatedCostUsd / (data.cost.cumulativeConnectedSeconds / 3600)).toFixed(5) + '/時間'
+          : '');
     }
     if (liveClockTimer) {
       clearInterval(liveClockTimer);

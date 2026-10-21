@@ -21,8 +21,14 @@ RUN apt-get update && apt-get upgrade -y \
         apache2 openssl openssh-server nftables curl \
         python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git gh locales \
     && rm -rf /var/lib/apt/lists/*
+# 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
+# ログインシェル(/etc/profile.d)とsshd経由のセッション(/etc/default/locale)の両方で既定にする。
+RUN locale-gen ja_JP.UTF-8 \
+    && printf 'LANG=ja_JP.UTF-8\n' > /etc/default/locale \
+    && printf 'export LANG=ja_JP.UTF-8\n' > /etc/profile.d/locale.sh
+ENV LANG=ja_JP.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
 # Bootstrap the dependency firewall from a pinned, digest-checked release.
@@ -99,6 +105,13 @@ RUN sfw /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSIO
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && claude --version \
     && /opt/node22/bin/npm cache clean --force
+# wrangler: Node 20以上が必要なためClaude CLIと同じ/opt/node22のnpmで入れる。
+# npmも起動スクリプトも`env node`でPATH上のnode 18を拾うため、PATHの先頭に/opt/node22/binを置く。
+RUN PATH=/opt/node22/bin:$PATH npm install -g wrangler \
+    && printf '#!/bin/sh\nPATH=/opt/node22/bin:$PATH exec /opt/node22/bin/wrangler "$@"\n' > /usr/local/bin/wrangler \
+    && chmod +x /usr/local/bin/wrangler \
+    && wrangler --version \
+    && PATH=/opt/node22/bin:$PATH npm cache clean --force
 
 WORKDIR /app
 COPY server.js ./
