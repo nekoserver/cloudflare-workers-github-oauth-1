@@ -1,5 +1,7 @@
 # コンテナ接続先のCFC統一
 
+> 後続のユーザー指示で本体mygwの維持・mynw/mygwの選択復元へ方針変更。最新の方針は `SPEC.cloudflare-workers-github-oauth-1.20261021.restore-host-selection.md` を参照。以下は変更当時の記録。
+
 mygwの公開要求がHTTP530となることを確認し、稼働中のCFCコンテナへ統一。
 
 - コンテナAPI・会話配信・Docker管理のoriginは `https://stream.test.cfc.nekomaneki.work`。

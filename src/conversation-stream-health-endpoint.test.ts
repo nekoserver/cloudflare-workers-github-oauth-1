@@ -20,5 +20,5 @@ it.each([200, 503])('認証済みの利用者へ利用可能な埋め込み先�
   }, { JWT_SECRET: secret });
   expect(response.status).toBe(200);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
-  expect(await response.json()).toEqual({ healthy: status === 200, availableHosts: status === 200 ? ['testcfc', 'mygw', 'mynw'] : [] });
+  expect(await response.json()).toEqual({ healthy: status === 200, availableHosts: status === 200 ? ['mygw', 'mynw', 'testcfc'] : [] });
 });

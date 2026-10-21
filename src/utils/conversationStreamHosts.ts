@@ -1,8 +1,10 @@
-import { CONTAINER_ENDPOINTS } from './containerEndpoints';
+import { CFC_CONTAINER_ORIGIN, CONTAINER_ENDPOINTS } from './containerEndpoints';
 
-/** Only the active CFC container may receive stream credentials and controls. */
+/** Trusted stream destinations; each host keeps its own authentication. */
 export const CONVERSATION_STREAM_URLS = {
-  testcfc: CONTAINER_ENDPOINTS.conversation,
+  mygw: CONTAINER_ENDPOINTS.conversation,
+  mynw: 'https://mynw.nekomaneki.work/lib/conversation-embed.html',
+  testcfc: new URL('/lib/conversation-embed.html', CFC_CONTAINER_ORIGIN).href,
 } as const;
 
 export type ConversationStreamHost = keyof typeof CONVERSATION_STREAM_URLS;
