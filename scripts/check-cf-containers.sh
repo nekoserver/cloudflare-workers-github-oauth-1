@@ -139,6 +139,13 @@ curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python
   || { echo "NG: /debug/netの項目が足りない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }
+# Access経由の判定: ループバック以外からはCf-Access-Jwt-Assertionが無ければ403、有れば通る
+CIP=$(docker exec "$NAME" sh -c "ip -4 -o addr show scope global | awk '{print \$4}' | cut -d/ -f1 | head -1")
+code=$(docker exec "$NAME" curl --noproxy '*' -sk -o /dev/null -w '%{http_code}' "https://${CIP}:8443/health")
+[ "$code" = "403" ] || { echo "NG: ヘッダー無しの非ループバックが403にならない(${code})"; exit 1; }
+code=$(docker exec "$NAME" curl --noproxy '*' -sk -o /dev/null -w '%{http_code}' -H 'Cf-Access-Jwt-Assertion: x' "https://${CIP}:8443/health")
+[ "$code" = "200" ] || { echo "NG: Access経由のヘッダー有りが通らない(${code})"; exit 1; }
+echo "OK: 8443はAccess経由(ヘッダー有り)とループバックだけ通る"
 # Public TLS ingress must not expose diagnostics; authenticated management
 # access through :8080 remains available to the checks above.
 for debug_path in /debug /debug/logs /debug/net; do
