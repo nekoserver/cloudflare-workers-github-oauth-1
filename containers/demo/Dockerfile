@@ -85,6 +85,11 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
+# SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
+# よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
+RUN for b in node npm npx codex; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
+    && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
+    && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \

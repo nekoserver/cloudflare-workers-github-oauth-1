@@ -117,3 +117,18 @@ describe('6時間レポートとSlack通知のON/OFF', () => {
     expect(index).toContain("cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },");
   });
 });
+
+describe('今の版と最新版のリリース日', () => {
+  const view = readFileSync('src/views/cfContainers.ts', 'utf8');
+  it('今の版を渡して、今の版と最新版のリリース日を表に出す', () => {
+    expect(view).toContain("'&current=' + encodeURIComponent(current)");
+    expect(view).toContain('<th>今の版のリリース日</th><th>配布元の最新(リリース日)</th>');
+    expect(view).toContain("info.currentDate");
+    expect(view).toContain("' (' + info.latestDate + ')'");
+  });
+  it('Worker側は今の版を検証してキャッシュの鍵にも含める', () => {
+    const index = readFileSync('src/index.ts', 'utf8');
+    expect(index).toContain('/^[0-9A-Za-z.+-]{1,40}$/.test(ver)');
+    expect(index).toContain('&current=${encodeURIComponent(currentKey)}');
+  });
+});

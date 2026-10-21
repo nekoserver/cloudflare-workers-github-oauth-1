@@ -19582,7 +19582,7 @@ export async function runCfContainerCronReport(env: Bindings, now = new Date()):
   };
   const { diffs } = await recordSnapshot(env.DB, CRON_SNAPSHOT_USER_ID, cur, now);
   const nodeMajor = Number(String(lastVersions?.versions.node ?? '26').split('.')[0]) || 26;
-  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: env.GITHUB_TOKEN });
+  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: env.GITHUB_TOKEN, current: lastVersions?.versions ?? {} });
   const text = [
     buildCronHeader(cur, diffs),
     status.error ? '状態の取得に失敗: ' + status.error : '',
@@ -19669,11 +19669,18 @@ app.post('/api/cf-containers/snapshot', authMiddleware, cfDashboardAdminMiddlewa
 // 各ツールの配布元の最新版(/cf-containersのバージョン表の「新版あり」バッジ用)。配布元への問い合わせを減らすため6時間キャッシュする。
 app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const nodeMajor = Number(c.req.query('nodeMajor') || '26') || 26;
-  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}`);
+  // 今入っている版(リリース日を出すため)。"name:ver,name:ver"の形で受け、名前と版は安全な文字だけ通す
+  const current: Record<string, string> = {};
+  for (const pair of String(c.req.query('current') || '').split(',')) {
+    const [name, ver] = pair.split(':');
+    if (name && ver && /^[a-z0-9_-]{1,32}$/.test(name) && /^[0-9A-Za-z.+-]{1,40}$/.test(ver)) current[name] = ver;
+  }
+  const currentKey = Object.keys(current).sort().map((k) => `${k}:${current[k]}`).join(',');
+  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}&current=${encodeURIComponent(currentKey)}`);
   const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
   const hit = cache ? await cache.match(cacheKey) : undefined;
   if (hit) return hit;
-  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN });
+  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN, current });
   const res = jsonUtf8({ latest, checkedAt: new Date().toISOString() });
   if (cache) {
     const toCache = res.clone();

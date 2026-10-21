@@ -166,7 +166,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
   <div class="pricing-scroll">
   <table class="health-table" id="version-table" hidden>
-    <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>配布元の最新</th></tr></thead>
+    <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>今の版のリリース日</th><th>配布元の最新(リリース日)</th></tr></thead>
     <tbody id="version-tbody"></tbody>
   </table>
   </div>
@@ -246,7 +246,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         versions: currentSnapshot.versions || {}
       })
     })
-      .then(function (res) { return res.json(); })
+      .then(readJsonOrText)
       .then(function (data) {
         var el = document.getElementById('health-log');
         if (data.error) { el.textContent = '記録に失敗: ' + data.error; return; }
@@ -473,7 +473,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   function loadLatestVersions(versions) {
     var node = (versions.items || []).filter(function (v) { return v.name === 'node'; })[0];
     var major = node && node.actual ? String(node.actual).split('.')[0] : '26';
-    fetch('/api/cf-containers/latest-versions?nodeMajor=' + encodeURIComponent(major))
+    var current = (versions.items || []).filter(function (v) { return v.actual; })
+      .map(function (v) { return v.name + ':' + v.actual; }).join(',');
+    fetch('/api/cf-containers/latest-versions?nodeMajor=' + encodeURIComponent(major) + '&current=' + encodeURIComponent(current))
       .then(readJsonOrText)
       .then(function (data) { latestVersions = data.latest || null; renderVersions(lastVersions); })
       .catch(function (err) { latestVersions = { _error: String(err) }; renderVersions(lastVersions); });
@@ -504,9 +506,13 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       span.title = v.raw || '';
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
+      // 今の版のリリース日(配布元から取れたもの。aptで入れるものは「-」)
+      var info = latestVersions && latestVersions[v.name];
+      var tdCurDate = document.createElement('td');
+      tdCurDate.textContent = !latestVersions ? '確認中…' : (info && info.currentDate) ? info.currentDate : '-';
+      tr.appendChild(tdCurDate);
       // 配布元に新しい版があれば黄のバッジ(aptで入れるものは対象外で「-」)
       var tdLatest = document.createElement('td');
-      var info = latestVersions && latestVersions[v.name];
       if (!latestVersions) {
         tdLatest.textContent = '確認中…';
       } else if (!info) {
@@ -521,8 +527,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         nb.textContent = '新版あり ' + info.latest;
         nb.title = info.source;
         tdLatest.appendChild(nb);
+        if (info.latestDate) tdLatest.appendChild(document.createTextNode(' (' + info.latestDate + ')'));
       } else {
-        tdLatest.textContent = info.latest;
+        tdLatest.textContent = info.latest + (info.latestDate ? ' (' + info.latestDate + ')' : '');
         tdLatest.title = info.source;
       }
       tr.appendChild(tdLatest);
