@@ -47,7 +47,7 @@ p, proxy = sys.argv[1], sys.argv[2]
 ca = '/usr/local/share/ca-certificates/proxy-ca.crt'
 extra = [f'COPY proxy-ca.crt {ca}',
          f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
-         f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca} PIP_CERT={ca}']
+         f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca} PIP_CERT={ca} CARGO_HTTP_CAINFO={ca}']
 lines = open(p, encoding='utf-8').read().split('\n')
 # FROM行(ベースイメージのバージョン)に依存せず、最初のFROMの直後に挿入する
 # マルチステージのビルドでは各FROMごとにCAが必要なので、すべてのFROMの直後に挿入する

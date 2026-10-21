@@ -14,6 +14,12 @@ ARG GH_VERSION=2.103.0
 RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
     && /go/bin/gh --version
 
+# jj(Jujutsu)はaptに無いため、crates.ioのソースからビルドする。
+FROM rust:1-trixie AS jj-build
+ARG JJ_VERSION=0.46.0
+RUN cargo install --locked jj-cli@${JJ_VERSION} \
+    && /usr/local/cargo/bin/jj --version
+
 FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
@@ -35,7 +41,7 @@ RUN apt-get update && apt-get upgrade -y \
         apache2 openssl openssh-server nftables curl \
         python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git gh locales \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
     && rm -rf /var/lib/apt/lists/*
 # 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
 # ログインシェル(/etc/profile.d)とsshd経由のセッション(/etc/default/locale)の両方で既定にする。
@@ -45,22 +51,13 @@ RUN locale-gen ja_JP.UTF-8 \
 ENV LANG=ja_JP.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
     && rm -rf /var/lib/apt/lists/*
-# Bootstrap the dependency firewall from a pinned, digest-checked release.
-# Free edition blocks confirmed malware; unscanned packages are not blocked.
-ARG SFW_VERSION=1.15.4
-ARG SFW_SHA256=cf9f55b8343e1ef6e6dcccdb09b99c70c0430a22ed7d0079286eccddeaf72670
-RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/sfw \
-        "https://github.com/SocketDev/sfw-free/releases/download/v${SFW_VERSION}/sfw-free-linux-x86_64" \
-    && echo "${SFW_SHA256}  /tmp/sfw" | sha256sum -c - \
-    && install -m 755 /tmp/sfw /usr/local/bin/sfw \
-    && rm -f /tmp/sfw \
-    && sfw --help
 # chat用のPythonライブラリはUbuntuのapt版を使う(pipはPyPIへの証明書検証が
 # このビルド環境で通らず、apt版ならアーカイブ経由で取得でき依存を固定しやすいため)。
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
 COPY --from=gh-build /go/bin/gh /usr/bin/gh
+COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj
 ARG CLOUDFLARED_SHA256=200573c872174ab449965655febadef8edfbb144ebcaa391b700b2dedbadb3cd
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
@@ -76,15 +73,15 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.x
     && rm -f /tmp/node22.tar.xz \
     && node --version
 RUN npm cache clean --force \
-    && sfw npm install -g npm@${NPM_VERSION} --ignore-scripts \
+    && npm install -g npm@${NPM_VERSION} --ignore-scripts \
     && /opt/node22/bin/npm --version \
     && /opt/node22/bin/npm cache clean --force
 RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
-    && sfw npm install -g @openai/codex@${CODEX_VERSION} \
+    && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-RUN sfw /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
+RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && claude --version \
     && /opt/node22/bin/npm cache clean --force

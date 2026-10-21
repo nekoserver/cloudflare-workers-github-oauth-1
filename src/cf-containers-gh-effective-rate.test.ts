@@ -9,7 +9,8 @@ describe('/cf-containers 実質時間単価とgh', () => {
     expect(view).toContain('data.cost.cumulativeConnectedSeconds > 0');
   });
   it('イメージにgitとghを入れる', () => {
-    expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('procps xz-utils git gh locales \\');
+    expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('procps xz-utils git locales sshguard silversearcher-ag ripgrep \\');
+    expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('COPY --from=gh-build /go/bin/gh /usr/bin/gh');
   });
 });
 

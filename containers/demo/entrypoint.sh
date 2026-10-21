@@ -71,8 +71,22 @@ EOF
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-/usr/sbin/sshd -p 2222 >/tmp/sshd.log 2>&1 &
+/usr/sbin/sshd -p 2222 -E /tmp/sshd.log &
 log "sshd started on 2222 (pid $!)"
+# sshguard: sshdのログファイルを監視し、総当たりの送信元をnftablesで遮断する。
+if command -v sshguard >/dev/null 2>&1; then
+  touch /tmp/sshd.log
+  cat > /etc/sshguard/sshguard.conf <<'EOF2'
+BACKEND="/usr/libexec/sshguard/sshg-fw-nft-sets"
+LOGREADER="LANG=C tail -F -n 0 /tmp/sshd.log"
+THRESHOLD=30
+BLOCK_TIME=120
+DETECTION_TIME=1800
+WHITELIST_FILE=/etc/sshguard/whitelist
+EOF2
+  sshguard >/tmp/sshguard.log 2>&1 &
+  log "sshguard started (pid $!)"
+fi
 
 # --- ファイアウォール ---
 # INPUT: ループバック・確立済み/関連・新規(NEW)を許可し、不正(invalid)のみ破棄する。
