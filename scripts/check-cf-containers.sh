@@ -45,11 +45,19 @@ if [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
 import sys
 p, proxy = sys.argv[1], sys.argv[2]
 ca = '/usr/local/share/ca-certificates/proxy-ca.crt'
-inj = (f'FROM ubuntu:24.04\nCOPY proxy-ca.crt {ca}\n'
-       f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
-       f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca}\n')
-s = open(p, encoding='utf-8').read()
-open(p, 'w', encoding='utf-8').write(s.replace('FROM ubuntu:24.04\n', inj, 1))
+extra = [f'COPY proxy-ca.crt {ca}',
+         f'ENV https_proxy={proxy} HTTPS_PROXY={proxy} SSL_CERT_FILE={ca} CURL_CA_BUNDLE={ca} '
+         f'NODE_EXTRA_CA_CERTS={ca} npm_config_cafile={ca} PIP_CERT={ca} CARGO_HTTP_CAINFO={ca}']
+lines = open(p, encoding='utf-8').read().split('\n')
+# FROM行(ベースイメージのバージョン)に依存せず、最初のFROMの直後に挿入する
+# マルチステージのビルドでは各FROMごとにCAが必要なので、すべてのFROMの直後に挿入する
+out = []
+for l in lines:
+    out.append(l)
+    if l.startswith('FROM '):
+        out.extend(extra)
+lines = out
+open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 EOF2
   BUILD_ARGS=(--network host)
   echo "INFO: サンドボックスのプロキシ経由で本番と同じダウンロード込みのビルドを行う"
@@ -127,7 +135,7 @@ docker exec "$NAME" sh -c 'head -1 /etc/resolv.conf' | grep -q '^nameserver 1.1.
 echo "OK: resolv.confの先頭が1.1.1.1"
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; assert "1.1.1.1" in d["logs"]["/tmp/dns.log"]; print("OK: /debug/logs")' \
   || { echo "NG: /debug/logsが返らない"; exit 1; }
-curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping") if k not in d]; assert not missing, missing; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
+curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping","nftRuleset","dropLog") if k not in d]; assert not missing, missing; assert "set drop_src6" in d["nftRuleset"], d["nftRuleset"][:500]; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
   || { echo "NG: /debug/netの項目が足りない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }

@@ -94,7 +94,7 @@ function runCmd(cmd, args) {
 // IPv4の1.1.1.1の両方で試し、名前解決で止まっているかを切り分ける。
 const EDGE_HOST = 'region1.v2.argotunnel.com';
 async function buildNetDebug() {
-  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping] = await Promise.all([
+  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping, nftRuleset, dropLog] = await Promise.all([
     runCmd('ip', ['-o', 'addr', 'show']),
     runCmd('ip', ['-o', 'route', 'show']),
     runCmd('cat', ['/etc/resolv.conf']),
@@ -106,6 +106,9 @@ async function buildNetDebug() {
     runCmd('dig', ['+time=2', '+tries=1', '@1.1.1.1', 'controlplane.tailscale.com']),
     runCmd('whois', ['nekomaneki.work']),
     runCmd('ping', ['-c', '2', '-W', '2', '1.1.1.1']),
+    // 破棄したパケットの件数と送信元(drop_src4/drop_src6)、カーネルログのnft-drop行
+    runCmd('nft', ['list', 'ruleset']),
+    runCmd('sh', ['-c', 'dmesg 2>/dev/null | grep nft-drop | tail -n 50']),
   ]);
   return {
     addr, route, dns, netstat, netstatLegacy,
@@ -113,6 +116,8 @@ async function buildNetDebug() {
     digDefault, digV4, digTailscale,
     whois: whois.split('\n').slice(0, 40).join('\n'),
     ping,
+    nftRuleset,
+    dropLog,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -120,7 +125,7 @@ async function buildNetDebug() {
 // /debug/logs: entrypoint.shが各デーモンの出力を書く/tmp/*.logの末尾を返す
 // (cloudflaredがNGのときの原因調査用。/cf-containers/proxy/*は管理者のみ到達可能)。
 const fs = require('node:fs');
-const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log', '/tmp/dockerd.log'];
+const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log', '/tmp/dockerd.log', '/tmp/sshguard.log'];
 function tailFile(path, maxBytes) {
   try {
     const buf = fs.readFileSync(path);

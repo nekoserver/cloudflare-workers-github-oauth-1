@@ -71,26 +71,70 @@ EOF
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-/usr/sbin/sshd -p 2222 >/tmp/sshd.log 2>&1 &
+/usr/sbin/sshd -p 2222 -E /tmp/sshd.log &
 log "sshd started on 2222 (pid $!)"
+# sshguard: sshdのログファイルを監視し、総当たりの送信元をnftablesで遮断する。
+if command -v sshguard >/dev/null 2>&1; then
+  touch /tmp/sshd.log
+  cat > /etc/sshguard/sshguard.conf <<'EOF2'
+BACKEND="/usr/libexec/sshguard/sshg-fw-nft-sets"
+LOGREADER="LANG=C tail -F -n 0 /tmp/sshd.log"
+THRESHOLD=30
+BLOCK_TIME=120
+DETECTION_TIME=1800
+WHITELIST_FILE=/etc/sshguard/whitelist
+EOF2
+  sshguard >/tmp/sshguard.log 2>&1 &
+  log "sshguard started (pid $!)"
+fi
 
 # --- ファイアウォール ---
 # INPUT: ループバック・確立済み/関連・新規(NEW)を許可し、不正(invalid)のみ破棄する。
 #   (2026-10-17: 以前はNEWを破棄していたため、WorkerからDurable Object経由で
 #    8080へ入る接続まで破棄され、/cf-containersの操作がすべて応答しなくなった)
 # FORWARD: 許可。
+# IPv6: ループバック以外は受信・転送とも破棄する。ssh・Tailscale・cloudflared・Workerからの
+#   8080はすべてIPv4で、IPv6の外向きルートも無い(2026-10-21 /debug/netの実測で確認)。
 if command -v nft >/dev/null 2>&1; then
+  # 破棄する前に、送信元(動的セット・要素ごとの件数付き・1日で消える)、ルールの件数、
+  # カーネルログ(接頭辞nft-drop、毎秒10件まで)を取る。/debug/netのnftRuleset・dropLogで見る。
   {
-    nft add table inet filter 2>/dev/null
-    nft add chain inet filter input '{ type filter hook input priority 0; policy drop; }' 2>/dev/null
-    nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }' 2>/dev/null
-    nft flush chain inet filter input
-    nft flush chain inet filter forward
-    nft add rule inet filter input iif lo accept
-    nft add rule inet filter input ct state invalid drop
-    nft add rule inet filter input ct state established,related,new accept
+    nft list table inet filter >/dev/null 2>&1 && nft delete table inet filter
+    nft -f - <<'NFT'
+table inet filter {
+  set drop_src4 {
+    type ipv4_addr
+    flags dynamic, timeout
+    timeout 1d
+    size 65536
+  }
+  set drop_src6 {
+    type ipv6_addr
+    flags dynamic, timeout
+    timeout 1d
+    size 65536
+  }
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    meta nfproto ipv6 update @drop_src6 { ip6 saddr counter } counter
+    meta nfproto ipv6 limit rate 10/second log prefix "nft-drop ipv6 "
+    meta nfproto ipv6 drop
+    ct state invalid update @drop_src4 { ip saddr counter } counter
+    ct state invalid limit rate 10/second log prefix "nft-drop invalid "
+    ct state invalid drop
+    ct state established,related,new accept
+    meta nfproto ipv4 update @drop_src4 { ip saddr counter } counter
+    limit rate 10/second log prefix "nft-drop policy "
+  }
+  chain forward {
+    type filter hook forward priority 0; policy accept;
+    meta nfproto ipv6 counter drop
+  }
+}
+NFT
   } >/tmp/nftables.log 2>&1 \
-    && log "nftables INPUT: lo/established/related/new accept, invalid drop / FORWARD: accept" \
+    && log "nftables INPUT: lo accept, ipv6 log+count+drop, invalid log+count+drop, established/related/new accept, その他 log+count後にpolicy drop / FORWARD: ipv6 drop" \
     || log "WARN: nftables setup failed (see /tmp/nftables.log; kernel may not support nf_tables in this environment)"
 else
   log "WARN: nft command not found, firewall not applied"
@@ -155,6 +199,15 @@ fi
 if command -v dockerd >/dev/null 2>&1; then
   dockerd >/tmp/dockerd.log 2>&1 &
   log "dockerd started (pid $!)"
+fi
+
+# --- Codex: サンドボックス内のコマンドに外部通信を許可する ---
+# 既定ではseccompでsocket/connectが止まり、tunnels.rb・observerが起動しない
+# (cf-containerのNOTICE.codex-sandbox-network.md参照)。既存の設定は残し、無い場合だけ追記する。
+mkdir -p /root/.codex
+if ! grep -q '^\[sandbox_workspace_write\]' /root/.codex/config.toml 2>/dev/null; then
+  printf '\n[sandbox_workspace_write]\nnetwork_access = true\n' >> /root/.codex/config.toml
+  log "codex: network_access = true を追記"
 fi
 
 # --- SSHログインシェルからもcfコマンドの認証情報を読めるようにする ---
