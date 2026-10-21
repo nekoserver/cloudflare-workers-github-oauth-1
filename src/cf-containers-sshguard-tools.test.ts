@@ -16,3 +16,11 @@ describe('demoコンテナのsshguardと検索ツール', () => {
     expect(dockerfile).toContain('COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj');
   });
 });
+
+describe('demoコンテナのCodexネットワーク許可', () => {
+  it('起動時にsandbox_workspace_writeが無ければnetwork_access = trueを追記する', () => {
+    const ep = readFileSync('containers/demo/entrypoint.sh', 'utf8');
+    expect(ep).toContain("grep -q '^\\[sandbox_workspace_write\\]' /root/.codex/config.toml");
+    expect(ep).toContain("printf '\\n[sandbox_workspace_write]\\nnetwork_access = true\\n' >> /root/.codex/config.toml");
+  });
+});
