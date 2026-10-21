@@ -15,7 +15,7 @@ For subsequent installations in a running container, explicitly use:
 
 ```sh
 sfw npm install <package>@<version>
-sfw /opt/lib-chat/bin/python -m pip install --no-cache-dir <package>==<version>
+sfw npm install -g <package>@<version>
 ```
 
 Plain npm/pip commands are still available; installing `sfw` does not globally
