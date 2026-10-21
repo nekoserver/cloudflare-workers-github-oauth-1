@@ -135,7 +135,7 @@ docker exec "$NAME" sh -c 'head -1 /etc/resolv.conf' | grep -q '^nameserver 1.1.
 echo "OK: resolv.confの先頭が1.1.1.1"
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/debug/logs" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "/tmp/cloudflared.log" in d["logs"]; assert "1.1.1.1" in d["logs"]["/tmp/dns.log"]; print("OK: /debug/logs")' \
   || { echo "NG: /debug/logsが返らない"; exit 1; }
-curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping") if k not in d]; assert not missing, missing; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
+curl --noproxy '*' -fsS -m 30 "http://127.0.0.1:${HOST_PORT}/debug/net" | python3 -c 'import json,sys; d=json.load(sys.stdin); missing=[k for k in ("addr","route","netstat","netstatLegacy","top","digDefault","digV4","whois","ping","nftRuleset","dropLog") if k not in d]; assert not missing, missing; assert "set drop_src6" in d["nftRuleset"], d["nftRuleset"][:500]; print("OK: /debug/net (top/netstat/dig/whois/ping含む)")' \
   || { echo "NG: /debug/netの項目が足りない"; exit 1; }
 docker exec "$NAME" curl --noproxy '*' -fsSk https://127.0.0.1:8443/health >/dev/null \
   || { echo "NG: Apache(8443)経由でserver.jsに届かない"; docker logs "$NAME"; exit 1; }

@@ -25,13 +25,30 @@ describe('demoコンテナのCodexネットワーク許可', () => {
   });
 });
 
-describe('demoコンテナのIPv6遮断', () => {
-  it('ループバックを許可した後でIPv6の受信と転送を破棄する', () => {
-    const ep = readFileSync('containers/demo/entrypoint.sh', 'utf8');
-    const lo = ep.indexOf('nft add rule inet filter input iif lo accept');
-    const v6 = ep.indexOf('nft add rule inet filter input meta nfproto ipv6 drop');
+describe('demoコンテナのファイアウォール', () => {
+  const ep = readFileSync('containers/demo/entrypoint.sh', 'utf8');
+  it('ループバックの後、IPv6は送信元・件数・ログを取ってから破棄する', () => {
+    const lo = ep.indexOf('    iif lo accept');
+    const v6 = ep.indexOf('meta nfproto ipv6 update @drop_src6 { ip6 saddr counter } counter');
+    const v6log = ep.indexOf('meta nfproto ipv6 limit rate 10/second log prefix "nft-drop ipv6 "');
+    const v6drop = ep.indexOf('    meta nfproto ipv6 drop');
     expect(lo).toBeGreaterThan(-1);
     expect(v6).toBeGreaterThan(lo);
-    expect(ep).toContain('nft add rule inet filter forward meta nfproto ipv6 drop');
+    expect(v6log).toBeGreaterThan(v6);
+    expect(v6drop).toBeGreaterThan(v6log);
+  });
+  it('NEWは許可し、それ以外は送信元・件数・ログを取ってからpolicy dropで破棄する', () => {
+    expect(ep).toContain('type filter hook input priority 0; policy drop;');
+    const accept = ep.indexOf('ct state established,related,new accept');
+    const rest = ep.indexOf('meta nfproto ipv4 update @drop_src4 { ip saddr counter } counter');
+    expect(accept).toBeGreaterThan(-1);
+    expect(rest).toBeGreaterThan(accept);
+    expect(ep).toContain('limit rate 10/second log prefix "nft-drop policy "');
+    expect(ep).toContain('ct state invalid limit rate 10/second log prefix "nft-drop invalid "');
+  });
+  it('/debug/netで件数・送信元とカーネルログを見られる', () => {
+    const server = readFileSync('containers/demo/server.js', 'utf8');
+    expect(server).toContain("runCmd('nft', ['list', 'ruleset'])");
+    expect(server).toContain('grep nft-drop');
   });
 });
