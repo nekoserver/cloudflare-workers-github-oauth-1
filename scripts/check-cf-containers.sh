@@ -117,7 +117,8 @@ step "4/4 コンテナを起動して/health・8443を確認"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 # 本番と同じくnftablesを実際に効かせるためNET_ADMINを付け、外(ホスト側)から8080へ届くかも確認する
 # 本番は起動のたびに/runが空になる。--tmpfs /runで同じ条件にする(Dockerfileで作ったディレクトリに頼ると本番で壊れる)
-docker run -d --name "$NAME" --cap-add NET_ADMIN --tmpfs /run -p 127.0.0.1::8080 "$IMAGE" >/dev/null
+# GH_TOKENはダミー(通信はしない)。SSH用の書き出しとgitの認証設定を確認するため
+docker run -d --name "$NAME" --cap-add NET_ADMIN --tmpfs /run -e GH_TOKEN=dummy-token-for-check -p 127.0.0.1::8080 "$IMAGE" >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 HEALTH=""
 for _ in $(seq 1 30); do
@@ -132,6 +133,9 @@ docker logs "$NAME" 2>&1 | grep -a "nftables" || true
 curl --noproxy '*' -fsS -m 8 "http://127.0.0.1:${HOST_PORT}/health" >/dev/null \
   || { echo "NG: コンテナの外から8080に届かない(Workerからの操作が応答しなくなる。nftablesの許可漏れ等)"; docker logs "$NAME"; exit 1; }
 echo "OK: 外から8080に届く"
+docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc '[ "$GH_TOKEN" = dummy-token-for-check ] && git config --global --get-regexp "credential.*helper" | grep -q "gh auth git-credential"' \
+  && echo "OK: SSHのシェルでGH_TOKENが読め、gitの認証がghに設定されている" \
+  || { echo "NG: GH_TOKENの書き出しかgh auth setup-gitが効いていない"; docker exec "$NAME" cat /tmp/gh-setup-git.log; exit 1; }
 # SSHのセッションと同じ条件(空の環境のログインシェル)で主要コマンドが見つかるか
 docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc 'for c in node npm codex claude wrangler gh jj git cf; do command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }; done' \
   && echo "OK: SSHと同じ条件で node/npm/codex/claude/wrangler/gh/jj/git/cf が見つかる" \
