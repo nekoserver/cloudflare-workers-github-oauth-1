@@ -649,7 +649,10 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
           + '\\n\\n[netstat -tunap]\\n' + (data.netstatLegacy || '') + '\\n\\n[top]\\n' + (data.top || '')
           + '\\n\\n[dig 既定DNS region1.v2.argotunnel.com]\\n' + (data.digDefault || '') + '\\n\\n[dig @1.1.1.1 region1.v2.argotunnel.com]\\n' + (data.digV4 || '')
           + '\\n\\n[dig @1.1.1.1 controlplane.tailscale.com]\\n' + (data.digTailscale || '') + '\\n\\n[ping 1.1.1.1]\\n' + (data.ping || '')
-          + '\\n\\n[whois nekomaneki.work]\\n' + (data.whois || '');
+          + '\\n\\n[whois nekomaneki.work]\\n' + (data.whois || '')
+          + '\\n\\n[ファイアウォール: 送信元・逆引き・WHOIS・CIDR集計]\\n' + JSON.stringify(data.firewallStats || {}, null, 2)
+          + '\\n\\n[nft ruleset / counters]\\n' + (data.nftRuleset || '')
+          + '\\n\\n[drop log]\\n' + (data.dropLog || '');
       })
       .catch(function (err) {
         netLog.textContent = 'エラー: ' + String(err);

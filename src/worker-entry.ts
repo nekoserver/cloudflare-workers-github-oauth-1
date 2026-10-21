@@ -1,4 +1,4 @@
-import app, { syncAllTreeViewSnapshots, runCfContainerCronReport } from './index';
+import app, { syncAllTreeViewSnapshots, runCfContainerCronReport, runCfContainerFirewallCron } from './index';
 import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
 import type { Bindings } from './types';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
@@ -18,6 +18,11 @@ export default {
   // についてGitHub Trees APIから取得し直す。GitHub Appの権限に他のリポジトリが
   // 追加されても、cronがtree_view_snapshotsへ新しい対象を勝手に追加しない。
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void> {
+    if (_event.cron === '5 * * * *') {
+      ctx.waitUntil(runCfContainerFirewallCron(env, new Date(_event.scheduledTime))
+        .catch((error) => console.error('[scheduled] firewall snapshot failed', error instanceof Error ? error.message : String(error))));
+      return;
+    }
     ctx.waitUntil(
       Promise.all([
         syncAllTreeViewSnapshots(env),

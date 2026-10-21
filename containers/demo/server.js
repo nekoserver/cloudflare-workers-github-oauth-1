@@ -179,7 +179,7 @@ function runCmd(cmd, args) {
 // IPv4の1.1.1.1の両方で試し、名前解決で止まっているかを切り分ける。
 const EDGE_HOST = 'region1.v2.argotunnel.com';
 async function buildNetDebug() {
-  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping, nftRuleset, dropLog] = await Promise.all([
+  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping, nftRuleset, dropLog, firewallStatsRaw] = await Promise.all([
     runCmd('ip', ['-o', 'addr', 'show']),
     runCmd('ip', ['-o', 'route', 'show']),
     runCmd('cat', ['/etc/resolv.conf']),
@@ -194,6 +194,7 @@ async function buildNetDebug() {
     // 破棄したパケットの件数と送信元(drop_src4/drop_src6)、カーネルログのnft-drop行
     runCmd('nft', ['list', 'ruleset']),
     runCmd('sh', ['-c', 'dmesg 2>/dev/null | grep nft-drop | tail -n 50']),
+    runCmd('python3', [require('node:path').join(__dirname, 'firewall-stats.py')]),
   ]);
   return {
     addr, route, dns, netstat, netstatLegacy,
@@ -203,6 +204,7 @@ async function buildNetDebug() {
     ping,
     nftRuleset,
     dropLog,
+    firewallStats: (() => { try { return JSON.parse(firewallStatsRaw); } catch { return { available: false, error: firewallStatsRaw }; } })(),
     checkedAt: new Date().toISOString(),
   };
 }
@@ -227,6 +229,19 @@ const server = http
       for (const f of DEBUG_LOG_FILES) logs[f] = tailFile(f, 4000);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ logs, checkedAt: new Date().toISOString() }));
+      return;
+    }
+    if (req.url === '/debug/firewall') {
+      runCmd('python3', [require('node:path').join(__dirname, 'firewall-stats.py')]).then((raw) => {
+        try {
+          const snapshot = JSON.parse(raw);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify(snapshot));
+        } catch {
+          res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ available: false, error: 'firewall_collection_failed' }));
+        }
+      });
       return;
     }
     if (req.url === '/debug/net') {
