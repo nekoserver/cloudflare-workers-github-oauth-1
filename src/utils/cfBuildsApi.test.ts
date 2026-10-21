@@ -30,6 +30,31 @@ describe('fetchLatestBuildLog', () => {
     expect((fetcher.mock.calls[2] as [string])[0]).toBe('https://api.cloudflare.com/client/v4/accounts/acc/builds/builds/new/logs');
   });
 
+  it('指定が無ければmainブランチの最新ビルドを選び、一覧にブランチと結果を出す', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ success: true, result: [{ id: 'my-worker', tag: 'tag1' }] }))
+      .mockResolvedValueOnce(json({ success: true, result: [
+        { build_uuid: 'pr', status: 'stopped', build_outcome: 'success', created_on: '2026-10-21T18:00:00Z', build_trigger_metadata: { branch: 'claude/x' } },
+        { build_uuid: 'prod', status: 'stopped', build_outcome: 'fail', created_on: '2026-10-21T17:49:00Z', build_trigger_metadata: { branch: 'main' } },
+      ] }))
+      .mockResolvedValueOnce(json({ success: true, result: { lines: ['deploy'] } }));
+    const out = await fetchLatestBuildLog(creds, 'my-worker', undefined, fetcher as unknown as typeof fetch);
+    expect(out.buildUuid).toBe('prod');
+    expect(out.status).toBe('stopped/fail');
+    expect(out.recentBuilds[0]).toBe('2026-10-21T18:00:00Z stopped/success branch=claude/x pr');
+    expect(out.recentBuilds[1]).toBe('2026-10-21T17:49:00Z stopped/fail branch=main prod');
+  });
+
+  it('ブランチ情報が無い一覧では、従来どおり最新ビルドを選ぶ', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ success: true, result: [{ id: 'my-worker', tag: 'tag1' }] }))
+      .mockResolvedValueOnce(json({ success: true, result: [{ build_uuid: 'a', status: 'stopped', created_on: '2026-10-21T00:00:00Z' }] }))
+      .mockResolvedValueOnce(json({ success: true, result: { lines: ['x'] } }));
+    const out = await fetchLatestBuildLog(creds, 'my-worker', undefined, fetcher as unknown as typeof fetch);
+    expect(out.buildUuid).toBe('a');
+    expect(out.recentBuilds[0]).toBe('2026-10-21T00:00:00Z stopped branch=? a');
+  });
+
   it('build_uuid指定時はscripts/buildsを呼ばずそのビルドのログを取る', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(json({ success: true, result: { lines: ['x'] } }));
     const out = await fetchLatestBuildLog(creds, 'my-worker', 'b1', fetcher as unknown as typeof fetch);

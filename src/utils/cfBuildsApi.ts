@@ -54,18 +54,27 @@ export async function fetchLatestBuildLog(
     const scripts = await call<Array<{ id: string; tag: string }>>(`${account}/workers/scripts`, credentials, fetcher);
     const tag = scripts.find((s) => s.id === scriptName)?.tag;
     if (!tag) throw new Error(`Worker ${scriptName} が一覧に見つかりません`);
-    const builds = await call<Array<{ build_uuid: string; status?: string; created_on?: string }>>(
+    const builds = await call<Array<{
+      build_uuid: string;
+      status?: string;
+      build_outcome?: string | null;
+      created_on?: string;
+      build_trigger_metadata?: { branch?: string | null } | null;
+    }>>(
       `${account}/builds/workers/${encodeURIComponent(tag)}/builds`,
       credentials,
       fetcher
     );
     const sorted = [...builds].sort((a, b) => String(b.created_on ?? '').localeCompare(String(a.created_on ?? '')));
-    // 「停止(stopped)」が新しいビルドに置き換えられたものかを判別できるよう直近の状態も返す
-    recentBuilds = sorted.slice(0, 8).map((b) => `${b.created_on ?? '?'} ${b.status ?? '?'} ${b.build_uuid}`);
-    const latest = sorted[0];
+    const branchOf = (b: (typeof sorted)[number]) => b.build_trigger_metadata?.branch ?? null;
+    const stateOf = (b: (typeof sorted)[number]) => (b.build_outcome ? `${b.status ?? '?'}/${b.build_outcome}` : (b.status ?? '?'));
+    // ブランチと結果も並べ、プレビュー(main以外)と本番のビルドを見分けられるようにする
+    recentBuilds = sorted.slice(0, 8).map((b) => `${b.created_on ?? '?'} ${stateOf(b)} branch=${branchOf(b) ?? '?'} ${b.build_uuid}`);
+    // ブランチのpushで本番(main)のビルドが隠れないよう、mainの最新を優先する。情報が無ければ最新。
+    const latest = sorted.find((b) => branchOf(b) === 'main') ?? sorted[0];
     if (!latest) throw new Error('ビルド履歴がありません');
     uuid = latest.build_uuid;
-    status = latest.status ?? null;
+    status = stateOf(latest);
   }
   // ログAPIはページ分割(truncated + cursor)で返るため、続きがある間は読み進める
   const MAX_PAGES = 50;
