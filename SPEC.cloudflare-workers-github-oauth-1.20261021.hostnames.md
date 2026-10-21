@@ -14,7 +14,7 @@
 | D: nekoroot（コンテナのトンネル） | Tunnel `nekoroot`（SSH・Apache） | 未定 | 停止中。コンテナの置き場所が決まるまで触らない |
 
 - A と B は cf-container の `NOTICE.custom-domain-tunnel-routing.md` に定義がある。
-- C は `src/index.ts` の resend webhook（`https://mynw.nekomaneki.work/lib/resend-webhook.shtml`）が使う。
+- C は本体 Worker が resend の webhook を受けた後、`src/index.ts` で転送する先（`https://mynw.nekomaneki.work/lib/resend-webhook.shtml`）。Resend 側の受信先は Worker の固定ドメインで、転送先（mynw）は lib がドキュメントルート下に置かれている前提で選んでいる。
 - D の `NEKOROOT_HOSTNAME` は Worker のシークレット。値は未確定で、今は変更しない。
 
 ## 2. 重要な注意
