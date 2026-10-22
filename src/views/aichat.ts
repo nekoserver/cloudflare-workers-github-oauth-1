@@ -27,8 +27,16 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/qwen/qwen3.8-27b', label: 'qwen3.8-27b' },
 ];
 
+// タブのタイトル。管理者(containerStatusを渡されたとき)だけ、コンテナが稼働中なら🟢、停止中なら⚫️を行末に付ける。
+// 管理者以外はnull(表示しない)で、通常のタイトルのまま。
+export function aichatTabTitle(containerRunning: boolean | null): string {
+  if (containerRunning === null) return 'AI チャット';
+  return 'AI チャット ' + (containerRunning ? '🟢' : '⚫️');
+}
+
 export function getAiChatPage(user: {
   name?: string;
+  containerRunning?: boolean | null;
   username: string;
   aiChatModel: string;
   aiChatModelConfigured?: boolean;
@@ -73,7 +81,7 @@ export function getAiChatPage(user: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-  <title>AI チャット</title>
+  <title>${aichatTabTitle(user.containerRunning === undefined ? null : user.containerRunning)}</title>
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}

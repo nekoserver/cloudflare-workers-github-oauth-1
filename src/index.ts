@@ -12,7 +12,7 @@ import { createJWT, verifyJWT, JWTPayload, extractBearerToken } from './utils/jw
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
-import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware, cfDashboardAdminMiddleware } from './middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware, cfDashboardAdminMiddleware, isCfDashboardAdmin } from './middleware/auth';
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
@@ -6634,6 +6634,24 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 });
 
 /** AI チャットページ（認証が必要）。 */
+// AIチャットのタブのタイトル用。コンテナの状態を読むだけ(getState)で、停止中のコンテナは起こさない。
+// 応答が遅い・失敗したときは停止中(false)として扱い、ページ表示を待たせない。
+async function getAichatContainerRunning(env: Bindings, isAdmin: boolean): Promise<boolean | null> {
+  // 管理者(CF_DASHBOARD_ADMIN_GITHUB_IDS)以外には状態を見せない(null=表示しない)
+  if (!isAdmin) return null;
+  const stub = await getDemoContainerStub(env);
+  if (!stub) return false;
+  try {
+    const state = (await Promise.race([
+      stub.getState(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+    ])) as ContainerStateLike;
+    return isContainerRunning(state);
+  } catch {
+    return false;
+  }
+}
+
 app.get('/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
@@ -6667,8 +6685,10 @@ app.get('/aichat', authMiddleware, async (c) => {
     'Content-Security-Policy',
     `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${CONVERSATION_STREAM_FRAME_ORIGINS}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
+  const containerRunning = await getAichatContainerRunning(c.env, isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS));
   return c.html(getAiChatPage({
     name: user.name,
+    containerRunning,
     username: user.sub,
     aiChatModel,
     aiChatModelConfigured: !!configuredModel,
