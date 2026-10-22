@@ -77,6 +77,12 @@ details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
 .diff-up { color: var(--warn); font-weight: 600; }
 .diff-ok { color: var(--ok); font-weight: 600; }
+.menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 13px; }
+.menu-toggle { padding: 0 8px; font-size: 12px; }
+.menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
+.menu-modal[hidden] { display: none; }
+.menu-panel { background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; width: min(420px, 100%); margin-top: 40px; }
+
 .diff-same { color: var(--muted); }
 details.sub > summary { cursor: pointer; font-weight: 600; color: var(--text); margin: 6px 0 4px; }
 a.proxy-link { color: var(--link); font-size: 13px; }
@@ -101,7 +107,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <div class="notice">
   自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
-<details class="card" data-section="secrets">
+<nav id="page-menu" class="card" aria-label="ページ内メニュー"><strong>ページ内メニュー</strong><div class="menu-row"><a href="#sec-secrets">トークン設定（CLI不要）</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定（CLI不要） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-control">コンテナの操作（起動・停止・状態）</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作（起動・停止・状態） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-links">リンク</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-report">6時間レポート（Slack通知）</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート（Slack通知） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-net">ネットワーク情報（IP・CIDR）</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報（IP・CIDR） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div><div class="menu-row"><a href="#sec-tunnels">Cloudflare Tunnel一覧</a><button type="button" class="menu-toggle" data-section="tunnels" aria-expanded="false" aria-label="Cloudflare Tunnel一覧 の設定状況">&#9660;</button></div></nav>
+<details id="sec-secrets" class="card" data-section="secrets">
   <summary>トークン設定（CLI不要）</summary>
   <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
   <div class="status-row">
@@ -117,14 +124,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
-<details class="card" data-section="control" open>
+<details id="sec-control" class="card" data-section="control" open>
   <summary>コンテナの操作（起動・停止・状態）</summary>
   <div class="status-row">
     <span id="status-chip" class="chip" data-running="false">状態取得中…</span>
     <button id="btn-refresh" type="button">状態を再取得</button>
   </div>
   <div id="live-clock" style="font-size:18px;font-weight:600;margin-bottom:4px;" hidden>00:00:00</div>
-  <details class="sub" data-section="pricing">
+  <details id="sec-pricing" class="sub" data-section="pricing">
   <summary>Cloudflare Containers 単価表（USD/時間）</summary>
   <div class="pricing-scroll">
     <table class="health-table pricing-table" style="margin-bottom:10px;">
@@ -147,12 +154,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-copy-ssh" type="button" style="margin-top:6px;">コマンドをコピー</button>
   </div>
 </details>
-<details class="card" data-section="links">
+<details id="sec-links" class="card" data-section="links">
   <summary>リンク（Docker コマンドセンター・プロキシ）</summary>
   <p><a class="proxy-link" href="/cf-containers/docker.html" target="_blank" rel="noreferrer">Docker コマンドセンターを開く（管理者認証で接続）</a></p>
   <p><a class="proxy-link" href="/cf-containers/proxy/" target="_blank" rel="noreferrer">プロキシ経由でコンテナのレスポンスを開く(新しいタブ)</a></p>
 </details>
-<details class="card" data-section="health" open>
+<details id="sec-health" class="card" data-section="health" open>
   <summary>ヘルスチェック</summary>
   <div class="status-row">
     <button id="btn-health" type="button">コンテナ内部の状態を確認</button>
@@ -182,7 +189,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
-<details class="card" data-section="report">
+<details id="sec-report" class="card" data-section="report">
   <summary>6時間レポート(Slack通知)</summary>
   <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
     <input type="checkbox" id="report-slack-toggle" disabled />
@@ -190,21 +197,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </label>
   <div id="report-slack-log" style="margin-top:4px;font-size:12px;color:var(--muted);">OFFでもD1への記録は続けます。</div>
 </details>
-<details class="card" data-section="net">
+<details id="sec-net" class="card" data-section="net">
   <summary>コンテナのネットワーク情報(IPアドレス・CIDR)</summary>
   <div class="status-row">
     <button id="btn-net" type="button">ip addr / ip route を取得</button>
   </div>
   <pre id="net-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
 </details>
-<details class="card" data-section="buildlog">
+<details id="sec-buildlog" class="card" data-section="buildlog">
   <summary>本番ビルド(Workers Builds)のログ</summary>
   <div class="status-row">
     <button id="btn-buildlog" type="button">最新ビルドのログを取得</button>
   </div>
   <pre id="buildlog-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
 </details>
-<details class="card" data-section="tunnels">
+<details id="sec-tunnels" class="card" data-section="tunnels">
   <summary>Cloudflare Tunnel一覧</summary>
   <div class="status-row">
     <button id="btn-tunnels" type="button">取得</button>
@@ -215,6 +222,16 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   <div id="tunnel-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
+<div id="menu-modal" class="menu-modal" hidden>
+  <div class="menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+    <div class="status-row"><strong id="menu-title"></strong></div>
+    <div id="menu-body" style="font-size:13px;margin:6px 0;"></div>
+    <div class="status-row">
+      <button type="button" id="menu-change">変更する</button>
+      <button type="button" id="menu-close">閉じる</button>
+    </div>
+  </div>
+</div>
 <script>
   // 前回のヘルスチェック時の記録(D1のcf_container_snapshots)。開いた時点で読み、比較元として固定する。
   // ヘルスチェックのたびに今回の値をD1へ記録する(差分はcf_container_snapshot_diffsに残る)。
@@ -267,6 +284,62 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   function prevSince() {
     return prevSnapshot && prevSnapshot.savedAt ? '前回(' + prevSnapshot.savedAt.replace('T', ' ').slice(0, 16) + ' UTC)から' : '';
   }
+
+  // ページ内メニュー: 行末の▼で現在の設定状況を最上位のモーダルに出し、「変更する」で該当セクションへ飛ぶ
+  function getNextZ() {
+    var max = 1000;
+    document.querySelectorAll('*').forEach(function (el) {
+      var z = parseInt(getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    });
+    return max + 100;
+  }
+  function sectionText(id) {
+    var el = document.getElementById(id);
+    return el ? (el.textContent || '').trim().slice(0, 160) : '';
+  }
+  function sectionStatus(name) {
+    var lines = [];
+    if (name === 'secrets') lines.push('対象: ' + document.getElementById('secret-name').value + '（値は表示しません）');
+    if (name === 'control') lines.push('コンテナの状態: ' + document.getElementById('status-chip').textContent);
+    if (name === 'pricing') lines.push(sectionText('cost-summary') || '未取得');
+    if (name === 'health') lines.push(document.getElementById('health-table').hidden ? '未確認' : '確認済み: ' + document.getElementById('health-time').textContent);
+    if (name === 'report') lines.push('Slack通知: ' + (document.getElementById('report-slack-toggle').checked ? 'ON' : 'OFF'));
+    if (name === 'net') lines.push(document.getElementById('net-log').textContent ? '取得済み' : '未取得');
+    if (name === 'buildlog') lines.push(document.getElementById('buildlog-log').textContent ? '取得済み' : '未取得');
+    if (name === 'tunnels') lines.push(document.getElementById('tunnel-table').hidden ? '未取得' : '一覧: ' + document.getElementById('tunnel-tbody').rows.length + '件');
+    if (name === 'links' || name === 'pricing') { /* 上の行で足りる */ }
+    return lines.join('\\n');
+  }
+  var menuModal = document.getElementById('menu-modal');
+  var menuTarget = null;
+  function closeMenu() {
+    menuModal.hidden = true;
+    document.querySelectorAll('.menu-toggle').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '▼'; });
+  }
+  document.querySelectorAll('.menu-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var name = btn.getAttribute('data-section');
+      menuTarget = name;
+      document.getElementById('menu-title').textContent = btn.getAttribute('aria-label');
+      document.getElementById('menu-body').textContent = sectionStatus(name);
+      menuModal.style.zIndex = String(getNextZ());
+      menuModal.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      btn.textContent = '▲';
+    });
+  });
+  document.getElementById('menu-close').addEventListener('click', closeMenu);
+  menuModal.addEventListener('click', function (e) { if (e.target === menuModal) closeMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menuModal.hidden) closeMenu(); });
+  document.getElementById('menu-change').addEventListener('click', function () {
+    var section = document.getElementById('sec-' + menuTarget);
+    closeMenu();
+    if (section) {
+      section.open = true;
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
 
   // 各セクションの開閉をブラウザに覚えさせる(保存できない環境でも表示は既定のまま動く)
   document.querySelectorAll('details[data-section]').forEach(function (d) {
