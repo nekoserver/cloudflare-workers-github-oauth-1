@@ -1,9 +1,11 @@
 import { expect, it, vi } from 'vitest';
 vi.mock('./index', () => ({ default: { fetch: vi.fn() }, syncAllTreeViewSnapshots: vi.fn(), runCfContainerCronReport: vi.fn(), runCfContainerFirewallCron: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./containers/demoContainer', () => ({ DemoContainer: class {} }));
+vi.mock('./utils/codexResetCountdown', () => ({ runCodexResetCountdownCron: vi.fn() }));
 import worker from './worker-entry';
 import { runCfContainerFirewallCron, runCfContainerCronReport, syncAllTreeViewSnapshots } from './index';
 import type { Bindings } from './types';
+import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 it('runs hourly DB collection without invoking six-hour reports or notifications', async () => {
   const pending: Promise<unknown>[] = [];
   const env = {} as Bindings;
@@ -13,4 +15,5 @@ it('runs hourly DB collection without invoking six-hour reports or notifications
   expect(runCfContainerFirewallCron).toHaveBeenCalledWith(env, new Date(timestamp));
   expect(runCfContainerCronReport).not.toHaveBeenCalled();
   expect(syncAllTreeViewSnapshots).not.toHaveBeenCalled();
+  expect(runCodexResetCountdownCron).not.toHaveBeenCalled();
 });

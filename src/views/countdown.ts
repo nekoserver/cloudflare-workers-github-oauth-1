@@ -2,6 +2,7 @@ import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getCountdownWidgetCSS, getCountdownWidgetHTML, getCountdownWidgetScript } from '../utils/countdownWidget';
 import { getCronHealthStatus } from './cronStatus';
+import { TREE_VIEW_REPOSITORY_CRON_ENABLED } from '../utils/treeViewCronPolicy';
 
 export interface CountdownCronStatusInput {
   generatedAt: string;
@@ -20,7 +21,7 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
   dataAvailable: false,
 }): string {
   const safeUsername = escapeHtml(username);
-  const cronStatus = getCronHealthStatus(
+  const cronStatus = !TREE_VIEW_REPOSITORY_CRON_ENABLED ? { state: 'unknown', label: '停止中' } : getCronHealthStatus(
     cronStatusInput.generatedAt,
     cronStatusInput.latestScheduledAt ? { executedAt: cronStatusInput.latestScheduledAt, failed: false } : null,
     cronStatusInput.dataAvailable,
@@ -404,6 +405,7 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     var treeViewCronTooltipDescription = document.getElementById('treeViewCronTooltipDescription');
     var cronHealthState = ${JSON.stringify(cronStatus.state)};
     var cronHealthLabel = ${JSON.stringify(cronStatus.label)};
+    var repositoryCronEnabled = ${TREE_VIEW_REPOSITORY_CRON_ENABLED};
 
     var today = new Date();
     var viewYear = today.getFullYear();
@@ -428,8 +430,10 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     }
     if (treeViewCronTooltipDescription) {
       var nextTreeViewUpdate = nextTreeViewCronAt(new Date());
-      treeViewCronTooltipDescription.textContent = 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に更新されます。次回: '
-        + nextTreeViewUpdate.toLocaleString() + '（' + nextTreeViewUpdate.toISOString() + '）';
+      treeViewCronTooltipDescription.textContent = repositoryCronEnabled
+        ? 'tree-viewは6時間ごと（UTC 00:00 / 06:00 / 12:00 / 18:00）に更新されます。次回: '
+          + nextTreeViewUpdate.toLocaleString() + '（' + nextTreeViewUpdate.toISOString() + '）'
+        : 'リポジトリのcronチェックはユーザー指定により停止中です。次回実行予定はありません。';
     }
 
     // カレンダーで選択した日付(dateKey形式)でイベント一覧を絞り込む純粋関数。
@@ -664,7 +668,7 @@ export function getCountdownPage(username: string, cronStatusInput: CountdownCro
     loadEvents();
 
     // ===== 画面右下の常時カウントダウンウィジェット =====
-    ${getCountdownWidgetScript(cronStatus)}
+    ${getCountdownWidgetScript(cronStatus, username)}
   </script>
 </body>
 </html>`;

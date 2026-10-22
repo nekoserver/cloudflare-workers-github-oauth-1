@@ -1,4 +1,5 @@
 /** tree-view の定期更新に対応するカウントダウン予定名。 */
+import { TREE_VIEW_REPOSITORY_CRON_ENABLED } from './treeViewCronPolicy';
 export const TREE_VIEW_CRON_COUNTDOWN_LABEL = 'tree-view cron更新';
 
 /**
@@ -14,16 +15,17 @@ export function getNextTreeViewCronAt(now: Date): string {
 
 /**
  * cron 実行後、ログイン可能な全ユーザーの次回 tree-view 更新予定を置換する。
- * DELETE と INSERT ... SELECT を使い、ユーザーごとに予定が増殖しないようにする。
+ * 論理削除と INSERT ... SELECT で、有効な予定をユーザーごとに置換する。
  */
 export async function registerNextTreeViewCronCountdown(
   db: D1Database | undefined,
   executedAt = new Date()
-): Promise<{ registered: number; targetAt: string }> {
+): Promise<{ registered: number; targetAt: string | null }> {
+  if (!TREE_VIEW_REPOSITORY_CRON_ENABLED) return { registered: 0, targetAt: null };
   const targetAt = getNextTreeViewCronAt(executedAt);
   if (!db) return { registered: 0, targetAt };
 
-  const deleteExisting = db.prepare('DELETE FROM countdown_events WHERE label = ?')
+  const deleteExisting = db.prepare("UPDATE countdown_events SET deleted_at = datetime('now') WHERE label = ? AND deleted_at IS NULL")
     .bind(TREE_VIEW_CRON_COUNTDOWN_LABEL);
   const insertNext = db.prepare(
     `INSERT INTO countdown_events (user_id, label, target_at, group_id)
@@ -42,11 +44,12 @@ export async function ensureTreeViewCronCountdownForUser(
   db: D1Database,
   userId: string,
   now = new Date()
-): Promise<{ targetAt: string }> {
+): Promise<{ targetAt: string | null }> {
+  if (!TREE_VIEW_REPOSITORY_CRON_ENABLED) return { targetAt: null };
   const targetAt = getNextTreeViewCronAt(now);
   await db.prepare(
-    `DELETE FROM countdown_events
-     WHERE user_id = ? AND label = ?`
+    `UPDATE countdown_events SET deleted_at = datetime('now')
+     WHERE user_id = ? AND label = ? AND deleted_at IS NULL`
   ).bind(userId, TREE_VIEW_CRON_COUNTDOWN_LABEL).run();
   await db.prepare(
     `INSERT INTO countdown_events (user_id, label, target_at, group_id)

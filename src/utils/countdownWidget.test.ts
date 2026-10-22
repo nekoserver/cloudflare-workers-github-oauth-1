@@ -261,7 +261,7 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
 
     const toast = window.document.getElementById('countdownToast')!;
     expect(toast.className).toContain('visible');
-    expect(toast.textContent).toBe('#7 ok');
+    expect(toast.textContent).toContain('#7 ok — 会議');
   });
 
   it('一括登録グループの予定は「index/total ok」形式でトーストを表示する', async () => {
@@ -278,7 +278,79 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
     await flushMicrotasks();
 
     const toast = window.document.getElementById('countdownToast')!;
-    expect(toast.textContent).toBe('2/3 ok');
+    expect(toast.textContent).toContain('2/3 ok — 会議B');
+  });
+
+  it('複数の完了通知を保持し、再読み込み後も復元して個別に閉じられる', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const targetAt = new Date(Date.now() - 1000).toISOString();
+    (window as any).fetch = vi.fn().mockResolvedValueOnce({ json: async () => ({ events: [
+      { id: 10, label: 'tree-view cron更新', targetAt },
+      { id: 11, label: '別の予定', targetAt },
+    ] }) }).mockResolvedValue({ json: async () => ({ events: [] }) });
+    (window as any).setInterval = () => 0;
+    const timeouts = vi.spyOn(window, 'setTimeout');
+    window.eval(getCountdownWidgetScript(undefined, 'alice'));
+    await flushMicrotasks();
+    expect(window.document.querySelectorAll('.countdown-toast-item')).toHaveLength(2);
+    expect(timeouts).not.toHaveBeenCalled();
+
+    const restored = setupDom() as unknown as Window & typeof globalThis;
+    restored.localStorage.setItem('countdownNotifications:alice', window.localStorage.getItem('countdownNotifications:alice')!);
+    (restored as any).fetch = vi.fn().mockResolvedValue({ json: async () => ({ events: [] }) });
+    (restored as any).setInterval = () => 0;
+    restored.eval(getCountdownWidgetScript(undefined, 'alice'));
+    await flushMicrotasks();
+    expect(restored.document.querySelectorAll('.countdown-toast-item')).toHaveLength(2);
+    (restored.document.querySelector('.countdown-toast-close') as HTMLButtonElement).click();
+    expect(restored.document.querySelectorAll('.countdown-toast-item')).toHaveLength(1);
+    const state = JSON.parse(restored.localStorage.getItem('countdownNotifications:alice')!);
+    expect(state.notifications).toHaveLength(1);
+    expect(state.completedKeys).toHaveLength(2);
+  });
+
+  it('cronが予定を置換した後にポーリング応答が届いても前の完了通知を落とさない', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const now = Date.now();
+    vi.spyOn(window.Date, 'now').mockReturnValue(now);
+    const targetAt = new Date(now + 1000).toISOString();
+    const nextTargetAt = new Date(now + 6 * 3600000).toISOString();
+    (window as any).fetch = vi.fn().mockResolvedValueOnce({ json: async () => ({ events: [
+      { id: 12, label: 'tree-view cron更新', targetAt },
+    ] }) }).mockResolvedValue({ json: async () => ({ events: [
+      { id: 13, label: 'tree-view cron更新', targetAt: nextTargetAt },
+    ] }) });
+    const intervals: Array<() => void> = [];
+    (window as any).setInterval = (callback: () => void) => { intervals.push(callback); return 0; };
+    window.eval(getCountdownWidgetScript());
+    await flushMicrotasks();
+    vi.mocked(window.Date.now).mockReturnValue(now + 2000);
+    intervals[1](); // Poll before the next timer tick.
+    await flushMicrotasks();
+    expect(window.document.querySelectorAll('.countdown-toast-item')).toHaveLength(1);
+    expect(window.document.getElementById('countdownToast')!.textContent).toContain('#12 ok');
+    intervals[0]();
+    intervals[1]();
+    await flushMicrotasks();
+    expect(window.document.querySelectorAll('.countdown-toast-item')).toHaveLength(1);
+  });
+
+  it('保存済みの予定がページを閉じている間に期限を迎えた場合も復元し、ユーザーごとに分ける', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    window.localStorage.setItem('countdownNotifications:bob', JSON.stringify({
+      notifications: [{ key: 'private', text: '他ユーザーの通知' }],
+    }));
+    window.localStorage.setItem('countdownNotifications:alice', JSON.stringify({
+      upcomingEvents: [{ id: 20, label: 'tree-view cron更新', targetAt: new Date(Date.now() - 1000).toISOString() }],
+    }));
+    (window as any).fetch = vi.fn().mockResolvedValue({ json: async () => ({ events: [] }) });
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript(undefined, 'alice'));
+    await flushMicrotasks();
+    const toast = window.document.getElementById('countdownToast')!;
+    expect(toast.textContent).toContain('#20 ok');
+    expect(toast.textContent).not.toContain('他ユーザー');
+    expect(toast.querySelectorAll('.countdown-toast-item')).toHaveLength(1);
   });
 
   it('残り時間が0にならない限りトーストは表示されない', async () => {
@@ -293,5 +365,26 @@ describe('タイマー完了時のトースト表示(実DOM実行)', () => {
 
     const toast = window.document.getElementById('countdownToast')!;
     expect(toast.className).not.toContain('visible');
+  });
+
+  it('論理削除IDを受け取ると稼働タイマーと保存済み通知を除き、完了通知を出さない', async () => {
+    const window = setupDom() as unknown as Window & typeof globalThis;
+    const targetAt = new Date(Date.now() + 3600000).toISOString();
+    window.localStorage.setItem('countdownNotifications:alice', JSON.stringify({
+      notifications: [{ key: '40:' + targetAt, text: '古いCodexリセット' }, { key: '50:' + targetAt, text: '残す通知' }],
+      completedKeys: [],
+      upcomingEvents: [{ id: 41, label: '取消済み', targetAt }],
+    }));
+    (window as any).fetch = vi.fn().mockResolvedValue({ json: async () => ({ events: [], deletedIds: [40, 41] }) });
+    (window as any).setInterval = () => 0;
+    window.eval(getCountdownWidgetScript(undefined, 'alice'));
+    await flushMicrotasks();
+    expect(window.document.querySelectorAll('.countdown-widget-timer')).toHaveLength(0);
+    expect(window.document.getElementById('countdownToast')!.textContent).toContain('残す通知');
+    expect(window.document.getElementById('countdownToast')!.textContent).not.toContain('古いCodex');
+    const state = JSON.parse(window.localStorage.getItem('countdownNotifications:alice')!);
+    expect(state.notifications).toHaveLength(1);
+    expect(state.upcomingEvents).toHaveLength(0);
+    expect(state.completedKeys).toHaveLength(0);
   });
 });

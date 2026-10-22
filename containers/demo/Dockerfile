@@ -43,7 +43,7 @@ ENV PATH="/opt/node22/bin:${PATH}"
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates tmux expect gnupg libatomic1 \
-        apache2 openssl openssh-server nftables curl \
+        apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
@@ -116,13 +116,13 @@ WORKDIR /app
 # build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
 COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
-COPY firewall-stats.py ./
+COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
     && a2dissite 000-default \
     && a2ensite 000-demo \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \

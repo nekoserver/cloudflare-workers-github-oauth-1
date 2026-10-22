@@ -863,6 +863,22 @@ describe('/neko askgk claude_prompt="..."', () => {
   const now = new Date('2026-10-04T12:00:00Z');
   const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
 
+  it('Codex /statusを日本時間のリセット日時だけの中央寄せ応答に置換する', async () => {
+    const result = await interpretAichatSlashCommand('/neko askgk codex_prompt="/status"', now, {
+      ...unusedDeps,
+      askTunnelSigner: vi.fn().mockResolvedValue({ reply: 'Codex /status\ncodex 5時間枠: 残り 86%（使用 14%）、リセット 2026-10-22 14:14:36 UTC\ncodex 168時間枠: 残り 28%（使用 72%）、リセット 2026-10-27 08:22:28 UTC' }),
+    });
+    expect(result).toEqual({ handled: true, response: '2026-10-22 23:14:36', responseAlign: 'center', saveAsAiResponse: false });
+  });
+
+  it('Codex /statusでリセット日時が不明なら時刻を捏造せずエラーを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko askgk codex_prompt="/status"', now, {
+      ...unusedDeps, askTunnelSigner: vi.fn().mockResolvedValue({ reply: '残り枠は不明' }),
+    });
+    expect(result.handled && result.response).toContain('❌');
+    expect(result.handled && result.saveAsAiResponse).toBe(false);
+  });
+
   // tunnels.rb(先方)が`claude_prompt="..."`という接頭語そのものを見て、
   // 自由記述の質問と区別している。そのため、ここで接頭語を解析・除去して
   // 中身の値だけを渡してはならず、askgkの後ろの生テキストを丸ごと
