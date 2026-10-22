@@ -11,7 +11,7 @@ export function getCfContainersPage(): string {
   ].map(({ name, spec }) => {
     const rate = computeHourlyRate(spec);
     const selected = name === CONFIGURED_INSTANCE_TYPE;
-    return `<tr>
+    return `<tr data-applied="${selected}" ${selected ? '' : 'hidden'}>
       <th scope="row"><span class="instance-model" data-selected="${selected}">${name}</span>${selected ? '（選択中）' : ''}</th>
       <td>${spec.vcpu} vCPU<br>$${rate.vcpuUsdPerHour.toFixed(5)}</td>
       <td>${spec.memoryGiB} GiB<br>$${rate.memoryUsdPerHour.toFixed(5)}</td>
@@ -132,7 +132,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div id="live-clock" style="font-size:18px;font-weight:600;margin-bottom:4px;" hidden>00:00:00</div>
   <details id="sec-pricing" class="sub" data-section="pricing">
-  <summary>Cloudflare Containers 単価表（USD/時間）</summary>
+  <summary>Cloudflare Containers 単価表（USD/時間）<button type="button" id="pricing-mode" aria-pressed="false" style="margin-left:8px;font-size:12px;">適用中のみ表示</button></summary>
   <div class="pricing-scroll">
     <table class="health-table pricing-table" style="margin-bottom:10px;">
       <thead><tr><th scope="col">モデル</th><th scope="col">vCPU</th><th scope="col">メモリ</th><th scope="col">ディスク</th><th scope="col">合計</th></tr></thead>
@@ -652,6 +652,19 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     versions.items.forEach(function (v) { snap[v.name] = v.actual; });
     saveSnapshot({ versions: snap });
   }
+
+  // 単価表: 既定は適用中のプランだけ。切り替えで全プランを表示する(適用中は緑のまま)
+  var pricingModeBtn = document.getElementById('pricing-mode');
+  pricingModeBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var showAll = pricingModeBtn.getAttribute('aria-pressed') !== 'true';
+    pricingModeBtn.setAttribute('aria-pressed', showAll ? 'true' : 'false');
+    pricingModeBtn.textContent = showAll ? '全プランを表示中' : '適用中のみ表示';
+    document.querySelectorAll('#sec-pricing tbody tr').forEach(function (row) {
+      row.hidden = !showAll && row.getAttribute('data-applied') !== 'true';
+    });
+  });
 
   // 累計接続時間・予定支出の前回表示時からの増分
   function renderCostDiff(cost) {

@@ -28,3 +28,15 @@ describe('/cf-containers のページ内メニュー', () => {
     expect(view).not.toMatch(/z-index:\s*\d{3,}/);
   });
 });
+
+describe('単価表の表示切り替え(適用中のみ / すべて表示)', () => {
+  const view = readFileSync('src/views/cfContainers.ts', 'utf8');
+  it('既定は適用中のプランだけを出し、それ以外の行は隠す', () => {
+    expect(view).toContain('data-applied="${selected}" ${selected ? \'\' : \'hidden\'}');
+  });
+  it('単価表の見出しの行末にトグルを置き、押すと全プランを表示し、適用中は緑のまま', () => {
+    expect(view).toContain('id="pricing-mode"');
+    expect(view).toContain('pricingModeBtn.addEventListener');
+    expect(view).toContain(".instance-model[data-selected=\"true\"] { color: var(--ok)");
+  });
+});
