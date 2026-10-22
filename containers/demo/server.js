@@ -97,6 +97,67 @@ const VERSION_SOURCES = [
   { name: 'jj', cmd: 'jj', args: ['--version'], key: 'jj' },
 ];
 
+// aptで入れたネットワーク・CLIツール。実際の版(dpkg-query)と、Ubuntuアーカイブの最新(apt-cache policyのCandidate)を比べる。
+const APT_TOOLS = [
+  { name: 'rg', pkg: 'ripgrep' },
+  { name: 'ag', pkg: 'silversearcher-ag' },
+  { name: 'sshguard', pkg: 'sshguard' },
+  { name: 'dig', pkg: 'bind9-dnsutils' },
+  { name: 'ping', pkg: 'iputils-ping' },
+  { name: 'ip', pkg: 'iproute2' },
+  { name: 'netstat', pkg: 'net-tools' },
+  { name: 'traceroute', pkg: 'traceroute' },
+  { name: 'tcpdump', pkg: 'tcpdump' },
+  { name: 'mtr', pkg: 'mtr-tiny' },
+  { name: 'nft', pkg: 'nftables' },
+  { name: 'nc', pkg: 'netcat-openbsd' },
+  { name: 'whois', pkg: 'whois' },
+  { name: 'top', pkg: 'procps' },
+  { name: 'tmux', pkg: 'tmux' },
+  { name: 'expect', pkg: 'expect' },
+  { name: 'ruby', pkg: 'ruby' },
+  { name: 'python3', pkg: 'python3' },
+  { name: 'sudo', pkg: 'sudo' },
+  { name: 'cron', pkg: 'cron' },
+];
+
+// apt-cache policyの出力から候補版(Candidate)を取り出す。候補が無いと(none)。
+function parseAptCandidate(policyText) {
+  const m = String(policyText || '').match(/^\s*Candidate:\s*(\S+)/m);
+  return m && m[1] !== '(none)' ? m[1] : null;
+}
+
+// 入っていない=ng(赤)、最新が取れない=warn(黄)、最新より古い=warn(黄)、最新と同じか新しい=ok(緑)。
+function judgeAptVersion(installed, latest) {
+  if (!installed) return 'ng';
+  if (!latest) return 'warn';
+  return compareVersions(installed, latest) < 0 ? 'warn' : 'ok';
+}
+
+let aptToolsCache = null;
+
+// apt-get updateは6時間に1回だけ。/healthの応答を遅くしないため、起動時と定期実行の中でだけ動かす。
+async function refreshAptTools() {
+  await new Promise((resolve) => {
+    execFile('apt-get', ['update', '-qq'], { timeout: 300000, maxBuffer: 4 * 1024 * 1024 }, () => resolve());
+  });
+  const items = await Promise.all(
+    APT_TOOLS.map(async (t) => {
+      const installed = await new Promise((resolve) => {
+        execFile('dpkg-query', ['-W', '-f=${Version}', t.pkg], { timeout: 8000 }, (err, out) => resolve(err ? null : out.trim() || null));
+      });
+      const latest = parseAptCandidate(await runVersionCmd('apt-cache', ['policy', t.pkg]));
+      return { name: t.name, pkg: t.pkg, actual: installed, latest, level: judgeAptVersion(installed, latest) };
+    })
+  );
+  // cfは自作(リポジトリ同梱)なので配布元の最新は無い。イメージのコミットで版の代わりにする。
+  const build = readBuildInfo();
+  const commit = build && build.commit && build.commit !== 'unknown' ? String(build.commit).slice(0, 7) : null;
+  items.push({ name: 'cf', pkg: null, actual: commit, latest: null, level: commit ? 'ok' : 'warn', note: '自作(リポジトリ同梱・イメージのコミット)' });
+  aptToolsCache = { items, checkedAt: new Date().toISOString() };
+  return aptToolsCache;
+}
+
 // ssh -Vのように版を標準エラーに出すコマンドもあるため、両方をつなげて返す。
 function runVersionCmd(cmd, args) {
   return new Promise((resolve) => {
@@ -155,6 +216,7 @@ async function buildHealth() {
     // 版の取得は時間がかかるため、起動時と10分ごとに取ったものを返す(初回は取得を待つ)
     versions: versionsCache || (await collectVersions()),
     build: readBuildInfo(),
+    aptTools: aptToolsCache,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -255,7 +317,7 @@ const server = http
   })
   ;
 
-module.exports = { extractVersion, compareVersions, judgeVersion };
+module.exports = { extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
@@ -263,5 +325,7 @@ if (require.main === module) {
     console.log(`demo container listening on port ${PORT}`);
   });
   collectVersions();
+  refreshAptTools().catch((err) => console.error('[aptTools] refresh failed', err && err.message));
   setInterval(collectVersions, 10 * 60 * 1000).unref();
+  setInterval(() => refreshAptTools().catch((err) => console.error('[aptTools] refresh failed', err && err.message)), 6 * 60 * 60 * 1000).unref();
 }

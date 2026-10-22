@@ -76,6 +76,7 @@ details.card > summary { cursor: pointer; font-weight: 600; color: var(--text); 
 details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
 .diff-up { color: var(--warn); font-weight: 600; }
+.diff-ok { color: var(--ok); font-weight: 600; }
 .diff-same { color: var(--muted); }
 details.sub > summary { cursor: pointer; font-weight: 600; color: var(--text); margin: 6px 0 4px; }
 a.proxy-link { color: var(--link); font-size: 13px; }
@@ -170,6 +171,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>今の版のリリース日</th><th>配布元の最新(リリース日)</th></tr></thead>
     <tbody id="version-tbody"></tbody>
   </table>
+  <div class="pricing-scroll">
+  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール(apt。最新はコンテナ内のapt-cacheの候補版、6時間ごとに更新)</p>
+  <table class="health-table" id="apt-table" hidden>
+    <thead><tr><th>コマンド</th><th>パッケージ</th><th>実際の版</th><th>最新(apt候補)</th><th>判定</th></tr></thead>
+    <tbody id="apt-tbody"></tbody>
+  </table>
+  </div>
+  <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
   </div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
@@ -481,6 +490,33 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(function (data) { latestVersions = data.latest || null; renderVersions(lastVersions); })
       .catch(function (err) { latestVersions = { _error: String(err) }; renderVersions(lastVersions); });
   }
+  // ネットワーク・CLIツールの表(apt)。最新と同じか新しければ緑、古ければ黄、入っていなければ赤。
+  function renderApt(tools) {
+    var table = document.getElementById('apt-table');
+    var tbody = document.getElementById('apt-tbody');
+    tbody.innerHTML = '';
+    if (!tools || !tools.items) { table.hidden = true; return; }
+    tools.items.forEach(function (t) {
+      var tr = document.createElement('tr');
+      var cells = [t.name, t.pkg || '-', t.actual || '(入っていない)', t.latest || (t.note || '-')];
+      cells.forEach(function (text, i) {
+        var td = document.createElement('td');
+        td.textContent = text;
+        if (i === 2) td.className = t.level === 'ok' ? 'diff-ok' : (t.level === 'warn' ? 'diff-up' : '');
+        tr.appendChild(td);
+      });
+      var tdLevel = document.createElement('td');
+      var span = document.createElement('span');
+      span.className = 'badge';
+      span.setAttribute('data-level', t.level);
+      span.textContent = { ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level;
+      tdLevel.appendChild(span);
+      tr.appendChild(tdLevel);
+      tbody.appendChild(tr);
+    });
+    table.hidden = false;
+  }
+
   function renderVersions(versions) {
     lastVersions = versions;
     var table = document.getElementById('version-table');
@@ -492,11 +528,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var prevVersions = (prevSnapshot && prevSnapshot.versions) || {};
       var before = prevVersions[v.name];
       var changed = before !== undefined && before !== v.actual;
+      var info = latestVersions && latestVersions[v.name];
+      var isLatest = !!(info && info.latest && v.actual && compareVer(v.actual, info.latest) >= 0);
       var cells = [v.name, v.actual || '(取得できず)', before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
       cells.forEach(function (text, i) {
         var td = document.createElement('td');
         td.textContent = text;
-        if (i === 1 || i === 2) td.className = changed ? 'diff-up' : '';
+        if (i === 1) td.className = isLatest ? 'diff-ok' : (changed ? 'diff-up' : '');
+        if (i === 2) td.className = changed ? 'diff-up' : '';
         tr.appendChild(td);
       });
       var tdLevel = document.createElement('td');
@@ -508,7 +547,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
       // 今の版のリリース日(配布元から取れたもの。aptで入れるものは「-」)
-      var info = latestVersions && latestVersions[v.name];
       var tdCurDate = document.createElement('td');
       tdCurDate.textContent = !latestVersions ? '確認中…' : (info && info.currentDate) ? info.currentDate : '-';
       tr.appendChild(tdCurDate);
@@ -623,6 +661,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         healthTable.hidden = false;
         latestVersions = null;
         renderVersions(data.versions);
+        renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
         recordSnapshotToServer();
