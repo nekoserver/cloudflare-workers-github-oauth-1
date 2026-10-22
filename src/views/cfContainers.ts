@@ -121,15 +121,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <summary>ページ内メニュー</summary>
     <a href="/cf-containers/planner">コンテナ構成プランナー</a>
     <nav aria-label="コンテナ管理の各セクション">
-      <a href="#section-secrets">トークン設定</a>
-      <a href="#section-control">コンテナの操作</a>
-      <a href="#section-pricing">単価表</a>
-      <a href="#section-links">リンク・プロキシ</a>
-      <a href="#section-health">ヘルスチェック</a>
-      <a href="#section-report">6時間レポート</a>
-      <a href="#section-net">ネットワーク情報</a>
-      <a href="#section-buildlog">本番ビルドのログ</a>
-      <a href="#section-tunnels">Tunnel一覧</a>
+      <div class="menu-row"><a href="#section-secrets">トークン設定</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-control">コンテナの操作</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-tunnels">Tunnel一覧</a><button type="button" class="menu-toggle" data-section="tunnels" aria-expanded="false" aria-label="Tunnel一覧 の設定状況">&#9660;</button></div>
     </nav>
   </details>
 </aside>
@@ -140,7 +140,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
   </details>
-<nav id="page-menu" class="card" aria-label="ページ内メニュー"><strong>ページ内メニュー</strong><div class="menu-row"><a href="#section-secrets">トークン設定（CLI不要）</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定（CLI不要） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-control">コンテナの操作（起動・停止・状態）</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作（起動・停止・状態） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-links">リンク</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-report">6時間レポート（Slack通知）</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート（Slack通知） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-net">ネットワーク情報（IP・CIDR）</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報（IP・CIDR） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-tunnels">Cloudflare Tunnel一覧</a><button type="button" class="menu-toggle" data-section="tunnels" aria-expanded="false" aria-label="Cloudflare Tunnel一覧 の設定状況">&#9660;</button></div></nav>
 <details class="card" id="section-secrets" tabindex="-1" data-section="secrets">
   <summary>トークン設定（CLI不要）</summary>
   <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
