@@ -34,6 +34,12 @@ export function aichatTabTitle(containerRunning: boolean | null): string {
   return '💬チャット ' + (containerRunning ? '🟢' : '⚫️');
 }
 
+/** コンテナ稼働中は緑、停止中は灰色の四角をファビコンにする(null=取得できず・非管理者は灰色)。 */
+export function aichatFaviconHref(containerRunning: boolean | null): string {
+  const color = containerRunning === true ? '%2322c55e' : '%239ca3af';
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='${color}'/%3E%3C/svg%3E`;
+}
+
 export function getAiChatPage(user: {
   name?: string;
   containerRunning?: boolean | null;
@@ -82,6 +88,7 @@ export function getAiChatPage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>${aichatTabTitle(user.containerRunning === undefined ? null : user.containerRunning)}</title>
+  <link rel="icon" href="${aichatFaviconHref(user.containerRunning === undefined ? null : user.containerRunning)}">
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
