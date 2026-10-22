@@ -13,6 +13,10 @@ export interface ContainerOperationLogEntry {
   performedBy: string;
   result: 'success' | 'failure';
   detail?: string;
+  containerKey?: string;
+  containerLabel?: string;
+  hourlyRateUsd?: number;
+  costBasis?: Record<string, unknown>;
 }
 
 export interface ContainerUsageSummary {
@@ -85,9 +89,9 @@ export async function recordContainerOperation(
   try {
     await db
       .prepare(
-        'INSERT INTO cf_container_operation_log (action, performed_by, result, detail, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO cf_container_operation_log (action, performed_by, result, detail, created_at, container_key, container_label, hourly_rate_usd, cost_basis_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(entry.action, entry.performedBy, entry.result, entry.detail ?? null, new Date().toISOString())
+      .bind(entry.action, entry.performedBy, entry.result, entry.detail ?? null, new Date().toISOString(), entry.containerKey ?? null, entry.containerLabel ?? null, entry.hourlyRateUsd ?? null, entry.costBasis ? JSON.stringify(entry.costBasis) : null)
       .run();
     return true;
   } catch (err) {

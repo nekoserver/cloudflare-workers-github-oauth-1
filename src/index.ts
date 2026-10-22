@@ -44,6 +44,9 @@ import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getCfContainersPage } from './views/cfContainers';
+import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
+import { getContainerPlannerPage } from './views/containerPlanner';
+import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
@@ -653,6 +656,19 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'tree_view_keyword_search_log', migration: '0176', description: 'dynamicnekoのtree-view検索窓で検索するたびに記録する検索ログ(repo_name・query・searched_at)', syncPolicy: 'auto' },
   { name: 'tree_view_keyword_search_results', migration: '0176', description: 'tree_view_keyword_search_log 1件ごとの切り出しキーとAIチャットでの出現回数', syncPolicy: 'auto' },
   { name: 'cf_container_operation_log', migration: '0178', description: '/cf-containersでのデモコンテナ起動/停止/再起動操作ログ(action・実行者・結果)', syncPolicy: 'auto' },
+  { name: 'cf_container_image_records', migration: '0185', description: 'イメージ・稼働分析・ビルド実測のJSON原本', syncPolicy: 'auto' },
+  { name: 'cf_container_build_measurements', migration: '0184', description: 'Dockerビルドログの実測観測記録。再取得・並行収集でも過去観測を保持', syncPolicy: 'auto' },
+  { name: 'cf_container_build_steps', migration: '0184', description: 'ビルド観測ごとのBuildKitステップ所要秒・キャッシュ・成否', syncPolicy: 'auto' },
+  { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
+  { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
+  { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
+  { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
+  { name: 'cf_container_session_targets', migration: '0187', description: '任意の対象物と稼働セッションの関連', syncPolicy: 'auto' },
+  { name: 'cf_container_runtime_notes', migration: '0187', description: 'セッション内の複数作業・目的・分類・使用ツールと追記型改訂履歴', syncPolicy: 'auto' },
+  { name: 'cf_container_cost_observations', migration: '0187', description: '通貨別の実費・概算・上限・不明を区別した費用観測履歴', syncPolicy: 'auto' },
+  { name: 'cf_container_filesystem_policies', migration: '0187', description: 'イメージ・コンテナの書き込み先とread-only設計', syncPolicy: 'auto' },
+  { name: 'cf_container_filesystem_observations', migration: '0187', description: 'ユーザー別の書き込み可否・マウント・失敗理由の実測履歴', syncPolicy: 'auto' },
+  { name: 'cf_container_session_notes', migration: '0186', description: '起動・再起動を起点とするセッション別の作業内容。追記型の改訂履歴', syncPolicy: 'auto' },
   { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
@@ -2849,6 +2865,303 @@ ON countdown_events(user_id, target_at) WHERE deleted_at IS NULL;`,
 ALTER TABLE countdown_events ADD COLUMN deletion_reason TEXT;
 ALTER TABLE countdown_events ADD COLUMN created_by TEXT;
 ALTER TABLE countdown_events ADD COLUMN creation_reason TEXT;`,
+  '0187': `-- Multi-container aggregation. Work targets are optional; revenue and cost allocation are deferred.
+-- Apply after 0185. 0186 supports the legacy operation-log/session-note UI.
+-- All timestamps supplied below are ISO 8601 UTC (Z), not client-local dates.
+
+CREATE TABLE IF NOT EXISTS cf_container_resources (
+  container_id TEXT PRIMARY KEY NOT NULL,
+  provider TEXT NOT NULL,
+  account_ref TEXT NOT NULL,
+  application_ref TEXT NOT NULL,
+  instance_ref TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  parent_container_id TEXT REFERENCES cf_container_resources(container_id),
+  created_at TEXT NOT NULL CHECK(julianday(created_at) IS NOT NULL AND substr(created_at,-1)='Z'),
+  CHECK(parent_container_id IS NULL OR parent_container_id <> container_id),
+  UNIQUE(provider, account_ref, application_ref, instance_ref)
+);
+
+CREATE TABLE IF NOT EXISTS cf_container_runtime_sessions (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  container_id TEXT NOT NULL REFERENCES cf_container_resources(container_id),
+  image_record_hash TEXT REFERENCES cf_container_image_records(record_hash),
+  started_at TEXT NOT NULL CHECK(julianday(started_at) IS NOT NULL AND substr(started_at,-1)='Z'),
+  ended_at TEXT CHECK(ended_at IS NULL OR (julianday(ended_at) IS NOT NULL AND substr(ended_at,-1)='Z' AND julianday(ended_at)>=julianday(started_at))),
+  state TEXT NOT NULL CHECK(state IN ('running','ended','incomplete')),
+  evidence TEXT NOT NULL CHECK(evidence IN ('observed','inferred','imported')),
+  configuration_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(configuration_json)),
+  created_at TEXT NOT NULL CHECK(julianday(created_at) IS NOT NULL AND substr(created_at,-1)='Z'),
+  CHECK((state='ended' AND ended_at IS NOT NULL) OR (state IN ('running','incomplete') AND ended_at IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_container_one_running_session
+  ON cf_container_runtime_sessions(container_id) WHERE state='running';
+CREATE INDEX IF NOT EXISTS idx_container_sessions_interval
+  ON cf_container_runtime_sessions(container_id,started_at,ended_at);
+
+CREATE TABLE IF NOT EXISTS cf_container_runtime_events (
+  event_id TEXT PRIMARY KEY NOT NULL,
+  container_id TEXT REFERENCES cf_container_resources(container_id),
+  session_id TEXT REFERENCES cf_container_runtime_sessions(session_id),
+  source TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  occurred_at TEXT NOT NULL CHECK(julianday(occurred_at) IS NOT NULL AND substr(occurred_at,-1)='Z'),
+  recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  event_type TEXT NOT NULL,
+  result TEXT NOT NULL CHECK(result IN ('success','failure','unknown')),
+  actor TEXT,
+  detail_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(detail_json)),
+  CHECK(session_id IS NULL OR container_id IS NOT NULL),
+  UNIQUE(source,source_event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_container_runtime_events_time
+  ON cf_container_runtime_events(container_id,occurred_at);
+CREATE TRIGGER IF NOT EXISTS container_event_identity_insert
+BEFORE INSERT ON cf_container_runtime_events WHEN NEW.session_id IS NOT NULL
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM cf_container_runtime_sessions s
+    WHERE s.session_id=NEW.session_id AND s.container_id=NEW.container_id
+  ) THEN RAISE(ABORT,'event/session container mismatch') END;
+END;
+
+CREATE TABLE IF NOT EXISTS cf_container_work_targets (
+  target_id TEXT PRIMARY KEY NOT NULL,
+  kind TEXT NOT NULL CHECK(length(trim(kind))>0), -- project, task, research, analysis, product, etc.; extensible
+  display_name TEXT NOT NULL,
+  parent_target_id TEXT REFERENCES cf_container_work_targets(target_id),
+  state TEXT NOT NULL CHECK(state IN ('active','paused','completed','archived')),
+  description TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK(julianday(created_at) IS NOT NULL AND substr(created_at,-1)='Z'),
+  CHECK(parent_target_id IS NULL OR parent_target_id<>target_id)
+);
+
+-- Optional labels only. An empty association set is valid and never blocks statistics.
+CREATE TABLE IF NOT EXISTS cf_container_session_targets (
+  session_id TEXT NOT NULL REFERENCES cf_container_runtime_sessions(session_id),
+  target_id TEXT NOT NULL REFERENCES cf_container_work_targets(target_id),
+  PRIMARY KEY(session_id,target_id)
+);
+CREATE TABLE IF NOT EXISTS cf_container_runtime_notes (
+  note_id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL REFERENCES cf_container_runtime_sessions(session_id),
+  entry_key TEXT NOT NULL DEFAULT 'session-summary' CHECK(length(trim(entry_key))>0),
+  revision INTEGER NOT NULL CHECK(revision>0),
+  content TEXT NOT NULL CHECK(length(content)<=8000),
+  work_category TEXT CHECK(work_category IS NULL OR length(trim(work_category))>0),
+  purpose TEXT,
+  outcome TEXT,
+  tools_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(tools_json) AND json_type(tools_json)='array'),
+  classification_source TEXT NOT NULL DEFAULT 'unknown' CHECK(classification_source IN ('manual','rule','ai','unknown')),
+  evidence_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(evidence_json) AND json_type(evidence_json)='array'),
+  work_started_at TEXT CHECK(work_started_at IS NULL OR (julianday(work_started_at) IS NOT NULL AND substr(work_started_at,-1)='Z')),
+  work_ended_at TEXT CHECK(work_ended_at IS NULL OR (work_started_at IS NOT NULL AND julianday(work_ended_at) IS NOT NULL AND substr(work_ended_at,-1)='Z' AND julianday(work_ended_at)>=julianday(work_started_at))),
+  recorded_by TEXT NOT NULL,
+  recorded_at TEXT NOT NULL CHECK(julianday(recorded_at) IS NOT NULL AND substr(recorded_at,-1)='Z'),
+  UNIQUE(session_id,entry_key,revision)
+);
+
+-- Monetary amounts use integer millionths of the named currency; NULL is unknown.
+-- Each cost_key identifies ONE charge component. A new revision replaces its estimate.
+CREATE TABLE IF NOT EXISTS cf_container_cost_observations (
+  cost_record_id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL REFERENCES cf_container_runtime_sessions(session_id),
+  cost_key TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK(revision>0),
+  category TEXT NOT NULL CHECK(category IN ('cpu','memory','disk','network','build','model','other')),
+  currency TEXT NOT NULL CHECK(currency GLOB '[A-Z][A-Z][A-Z]'),
+  amount_micros INTEGER CHECK(amount_micros IS NULL OR (typeof(amount_micros)='integer' AND amount_micros>=0 AND amount_micros<=9007199254740991)),
+  basis TEXT NOT NULL CHECK(basis IN ('actual','estimate','upper_bound','unknown')),
+  voided INTEGER NOT NULL DEFAULT 0 CHECK(voided IN (0,1)),
+  source TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  measured_at TEXT NOT NULL CHECK(julianday(measured_at) IS NOT NULL AND substr(measured_at,-1)='Z'),
+  recorded_by TEXT NOT NULL,
+  calculation_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(calculation_json)),
+  CHECK((basis='unknown' AND amount_micros IS NULL) OR (basis<>'unknown' AND amount_micros IS NOT NULL)),
+  CHECK(voided=0 OR (amount_micros IS NULL AND basis='unknown')),
+  UNIQUE(session_id,cost_key,revision),
+  UNIQUE(source,source_ref)
+);
+
+CREATE TABLE IF NOT EXISTS cf_container_filesystem_policies (
+  policy_id TEXT PRIMARY KEY NOT NULL,
+  image_record_hash TEXT REFERENCES cf_container_image_records(record_hash),
+  container_id TEXT REFERENCES cf_container_resources(container_id),
+  path TEXT NOT NULL CHECK(substr(path,1,1)='/'),
+  principal TEXT NOT NULL,
+  mount_kind TEXT NOT NULL CHECK(mount_kind IN ('rootfs','bind','volume','tmpfs','other','unknown')),
+  writable INTEGER CHECK(writable IS NULL OR writable IN (0,1)),
+  persistence TEXT NOT NULL CHECK(persistence IN ('ephemeral','external','unknown')),
+  definition_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(definition_json)),
+  recorded_at TEXT NOT NULL CHECK(julianday(recorded_at) IS NOT NULL AND substr(recorded_at,-1)='Z'),
+  CHECK(image_record_hash IS NOT NULL OR container_id IS NOT NULL)
+);
+CREATE TABLE IF NOT EXISTS cf_container_filesystem_observations (
+  observation_id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL REFERENCES cf_container_runtime_sessions(session_id),
+  policy_id TEXT REFERENCES cf_container_filesystem_policies(policy_id),
+  path TEXT NOT NULL CHECK(substr(path,1,1)='/'),
+  principal TEXT NOT NULL,
+  uid INTEGER CHECK(uid IS NULL OR uid>=0),
+  gid INTEGER CHECK(gid IS NULL OR gid>=0),
+  mount_mode TEXT NOT NULL CHECK(mount_mode IN ('ro','rw','unknown')),
+  write_status TEXT NOT NULL CHECK(write_status IN ('allowed','denied','unknown','untested')),
+  failure_reason TEXT CHECK(failure_reason IS NULL OR failure_reason IN ('read_only','permission','capacity','other')),
+  probe_method TEXT NOT NULL CHECK(probe_method IN ('metadata','access','create_delete','other')),
+  observed_at TEXT NOT NULL CHECK(julianday(observed_at) IS NOT NULL AND substr(observed_at,-1)='Z'),
+  source TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  detail_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(detail_json)),
+  CHECK(failure_reason IS NULL OR write_status='denied'),
+  CHECK(mount_mode<>'ro' OR write_status<>'allowed'),
+  UNIQUE(source,source_ref)
+);
+
+CREATE VIEW IF NOT EXISTS cf_container_latest_costs AS
+SELECT c.* FROM cf_container_cost_observations c
+WHERE NOT EXISTS (SELECT 1 FROM cf_container_cost_observations newer WHERE newer.session_id=c.session_id AND newer.cost_key=c.cost_key AND newer.revision>c.revision);
+
+CREATE VIEW IF NOT EXISTS cf_container_latest_runtime_notes AS
+SELECT n.* FROM cf_container_runtime_notes n WHERE NOT EXISTS (
+  SELECT 1 FROM cf_container_runtime_notes newer WHERE newer.session_id=n.session_id AND newer.entry_key=n.entry_key AND newer.revision>n.revision
+);
+
+-- Event/observation records are append-only. Corrections use a new event or revision.
+CREATE TRIGGER IF NOT EXISTS cf_container_runtime_events_update_immutable
+BEFORE UPDATE ON cf_container_runtime_events
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_runtime_events_delete_immutable
+BEFORE DELETE ON cf_container_runtime_events
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_runtime_notes_update_immutable
+BEFORE UPDATE ON cf_container_runtime_notes
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_runtime_notes_delete_immutable
+BEFORE DELETE ON cf_container_runtime_notes
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_cost_observations_update_immutable
+BEFORE UPDATE ON cf_container_cost_observations
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_cost_observations_delete_immutable
+BEFORE DELETE ON cf_container_cost_observations
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_filesystem_policies_update_immutable
+BEFORE UPDATE ON cf_container_filesystem_policies
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_filesystem_policies_delete_immutable
+BEFORE DELETE ON cf_container_filesystem_policies
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_filesystem_observations_update_immutable
+BEFORE UPDATE ON cf_container_filesystem_observations
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+CREATE TRIGGER IF NOT EXISTS cf_container_filesystem_observations_delete_immutable
+BEFORE DELETE ON cf_container_filesystem_observations
+BEGIN SELECT RAISE(ABORT,'append-only record; add a correction revision'); END;
+
+CREATE TRIGGER IF NOT EXISTS container_session_identity_guard
+BEFORE UPDATE ON cf_container_runtime_sessions
+WHEN NEW.session_id<>OLD.session_id OR NEW.container_id<>OLD.container_id OR NEW.started_at<>OLD.started_at
+BEGIN SELECT RAISE(ABORT,'session identity is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS container_session_delete_guard
+BEFORE DELETE ON cf_container_runtime_sessions
+BEGIN SELECT RAISE(ABORT,'retain session history'); END;
+CREATE TRIGGER IF NOT EXISTS container_session_overlap_insert
+BEFORE INSERT ON cf_container_runtime_sessions WHEN NEW.state<>'incomplete'
+BEGIN
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM cf_container_runtime_sessions s WHERE s.container_id=NEW.container_id AND s.state<>'incomplete'
+      AND julianday(s.started_at)<COALESCE(julianday(NEW.ended_at),1e20)
+      AND julianday(NEW.started_at)<COALESCE(julianday(s.ended_at),1e20)
+  ) THEN RAISE(ABORT,'overlapping sessions for the same container') END;
+END;
+CREATE TRIGGER IF NOT EXISTS container_session_overlap_update
+BEFORE UPDATE ON cf_container_runtime_sessions WHEN NEW.state<>'incomplete'
+BEGIN
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM cf_container_runtime_sessions s WHERE s.container_id=NEW.container_id AND s.session_id<>NEW.session_id AND s.state<>'incomplete'
+      AND julianday(s.started_at)<COALESCE(julianday(NEW.ended_at),1e20)
+      AND julianday(NEW.started_at)<COALESCE(julianday(s.ended_at),1e20)
+  ) THEN RAISE(ABORT,'overlapping sessions for the same container') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS container_closed_session_guard
+BEFORE UPDATE ON cf_container_runtime_sessions WHEN OLD.state='ended'
+BEGIN SELECT RAISE(ABORT,'closed session is immutable; retain correction evidence separately'); END;
+CREATE TRIGGER IF NOT EXISTS container_filesystem_policy_identity_guard
+BEFORE INSERT ON cf_container_filesystem_observations WHEN NEW.policy_id IS NOT NULL
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM cf_container_filesystem_policies p JOIN cf_container_runtime_sessions s ON s.session_id=NEW.session_id
+    WHERE p.policy_id=NEW.policy_id
+      AND (p.container_id IS NULL OR p.container_id=s.container_id)
+      AND (p.image_record_hash IS NULL OR p.image_record_hash=s.image_record_hash)
+  ) THEN RAISE(ABORT,'filesystem policy/session mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS container_work_note_interval_guard
+BEFORE INSERT ON cf_container_runtime_notes WHEN NEW.work_started_at IS NOT NULL
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM cf_container_runtime_sessions s WHERE s.session_id=NEW.session_id
+      AND julianday(NEW.work_started_at)>=julianday(s.started_at)
+      AND (s.ended_at IS NULL OR julianday(NEW.work_started_at)<=julianday(s.ended_at))
+      AND (NEW.work_ended_at IS NULL OR s.ended_at IS NULL OR julianday(NEW.work_ended_at)<=julianday(s.ended_at))
+  ) THEN RAISE(ABORT,'work interval outside runtime session') END;
+END;
+`,
+  '0185': `CREATE TABLE IF NOT EXISTS cf_container_image_records (
+  record_hash TEXT PRIMARY KEY,
+  build_uuid TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('build-timing','runtime-analysis','image-manifest')),
+  measured_at TEXT,
+  recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  record_json TEXT NOT NULL CHECK(json_valid(record_json))
+);
+CREATE INDEX IF NOT EXISTS idx_container_image_records_build
+  ON cf_container_image_records(build_uuid,kind,measured_at DESC);
+`,
+  '0186': `-- Existing rows have no trusted container identity; do not guess or backfill it.
+ALTER TABLE cf_container_operation_log ADD COLUMN container_key TEXT;
+ALTER TABLE cf_container_operation_log ADD COLUMN container_label TEXT;
+ALTER TABLE cf_container_operation_log ADD COLUMN hourly_rate_usd REAL CHECK(hourly_rate_usd IS NULL OR hourly_rate_usd >= 0);
+ALTER TABLE cf_container_operation_log ADD COLUMN cost_basis_json TEXT CHECK(cost_basis_json IS NULL OR json_valid(cost_basis_json));
+CREATE INDEX IF NOT EXISTS idx_container_operation_identity_time ON cf_container_operation_log(container_key,created_at,id);
+
+CREATE TABLE IF NOT EXISTS cf_container_session_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  start_operation_id INTEGER NOT NULL REFERENCES cf_container_operation_log(id),
+  revision INTEGER NOT NULL CHECK(revision > 0),
+  content TEXT NOT NULL CHECK(length(content) <= 8000),
+  recorded_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(start_operation_id, revision)
+);
+`,
+  '0184': `-- Immutable observations: concurrent/partial fetches cannot overwrite a completed measurement.
+CREATE TABLE IF NOT EXISTS cf_container_build_measurements (
+  snapshot_key TEXT PRIMARY KEY,
+  build_uuid TEXT NOT NULL,
+  build_created_on TEXT,
+  build_status TEXT,
+  log_complete INTEGER NOT NULL CHECK(log_complete IN (0,1)),
+  step_count INTEGER NOT NULL,
+  terminal_count INTEGER NOT NULL,
+  collected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  parser_version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_container_build_measurements_build
+  ON cf_container_build_measurements(build_uuid, terminal_count DESC, step_count DESC);
+CREATE TABLE IF NOT EXISTS cf_container_build_steps (
+  snapshot_key TEXT NOT NULL REFERENCES cf_container_build_measurements(snapshot_key),
+  step_id INTEGER NOT NULL,
+  label TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('running','done','cached','error','canceled')),
+  seconds REAL CHECK(seconds IS NULL OR seconds >= 0),
+  PRIMARY KEY(snapshot_key, step_id)
+);
+`,
   '0183': `UPDATE countdown_events
 SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
     deleted_by = 'system',
@@ -19463,6 +19776,15 @@ app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) =
  * リクエストを処理するときにだけdynamic importする
  * (src/containers/demoContainer.tsのコメント参照)。
  */
+function demoContainerOperationContext(env: Bindings) {
+  return {
+    containerKey: env.DEMO_CONTAINER ? 'DemoContainer:' + env.DEMO_CONTAINER.idFromName('demo').toString() : undefined,
+    containerLabel: 'デモコンテナ',
+    hourlyRateUsd: computeHourlyRate(CONFIGURED_INSTANCE_SPEC).totalUsdPerHour,
+    costBasis: {instanceType:CONFIGURED_INSTANCE_TYPE,spec:CONFIGURED_INSTANCE_SPEC,hourlyRate:computeHourlyRate(CONFIGURED_INSTANCE_SPEC),method:'CPUを上限まで使用・無料枠未考慮。通信等は含まない概算'}
+  };
+}
+
 async function getDemoContainerStub(env: Bindings) {
   if (!env.DEMO_CONTAINER) return null;
   const { getContainer } = await import('@cloudflare/containers');
@@ -19487,6 +19809,20 @@ async function buildContainerStatusResponse(
  * 起動・停止・再起動・状態参照・プロキシのデモ。注意: Durable Objects・
  * Containersはどちらも使用量課金が発生する。使い終わったら必ず停止すること。
  */
+// Offline estimates only: no container build, installation, or server-side plan storage.
+app.get('/cf-containers/planner', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  c.header('Cache-Control', 'no-store');
+  if (!userSession) return c.html(getSessionExpiredPage(c.req.path), 403);
+  try {
+    return c.html(getContainerPlannerPage(await loadBuildTimings(c.env.DB)));
+  } catch (error) {
+    logger.error('[container-planner] measurements unavailable', {error:String(error)});
+    return c.html(getContainerPlannerPage([], '実測記録を読み込めませんでした。D1 migration 0184の適用と接続状態を確認してください。'));
+  }
+});
+
 app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
@@ -19553,7 +19889,57 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
  * アカウント内のCloudflare Tunnel一覧（nekoroot含む）を返す（管理者認証が
  * 必要）。CLOUDFLARE_API_KEY・CLOUDFLARE_ACCOUNT_IDはD1一覧機能と共用。
  */
+/** Collect existing logs only; never starts a Docker build. Up to eight recent builds per sweep. */
+export async function runCfContainerBuildTimingCollection(env: Bindings) {
+  if (!cfApiKey(env) || !env.CLOUDFLARE_ACCOUNT_ID) throw new Error('Builds API認証が未設定です');
+  const credentials = {accountId:env.CLOUDFLARE_ACCOUNT_ID,apiKey:cfApiKey(env)!};
+  const latest = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1');
+  const records = [await storeBuildTimings(env.DB,latest)];
+  const errors: string[] = [];
+  for (const item of latest.recentBuildMetadata) {
+    if (item.buildUuid === latest.buildUuid) continue;
+    try {
+      const result = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1',item.buildUuid);
+      records.push(await storeBuildTimings(env.DB,{...result,status:item.status,createdOn:item.createdOn}));
+    } catch (error) {
+      errors.push(item.buildUuid + ': ' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+  return {recordedBuilds:records.length,errors};
+}
+
+app.post('/api/cf-containers/build-timings/refresh', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  try { return jsonUtf8(await runCfContainerBuildTimingCollection(c.env)); }
+  catch (error) {
+    logger.error('[container-build-timings] collection failed',{error:String(error)});
+    return jsonUtf8({error:'実測の収集に失敗しました。Builds APIの権限・D1 migration 0184を確認してください。'},502);
+  }
+});
+
 // Workers Builds(本番ビルド)のログを取得する。?build=<uuid>省略時は最新ビルド。
+app.get('/api/cf-containers/sessions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control','no-store');
+  try { return jsonUtf8(await loadContainerSessions(c.env.DB,c.req.query('container')||undefined)); }
+  catch(error) {
+    logger.error('[container-sessions] load failed',{error:String(error)});
+    return jsonUtf8({error:'セッション記録を取得できません。D1接続とmigration 0186を確認してください。'},503);
+  }
+});
+app.post('/api/cf-containers/sessions/:id/note', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  let payload: {content?:unknown;revision?:unknown};
+  const id=Number(c.req.param('id'));
+  try { payload=await c.req.json(); } catch { return jsonUtf8({error:'JSONが不正です'},400); }
+  if(!payload || !Number.isSafeInteger(id)||id<=0||typeof payload.content!=='string'||payload.content.length>8000||typeof payload.revision!=='number'||!Number.isSafeInteger(payload.revision)||payload.revision<0) return jsonUtf8({error:'作業メモ・版番号が不正です（8000文字まで）'},400);
+  try {
+    const saved=await appendSessionNote(c.env.DB,id,payload.revision,payload.content,c.get('user').sub);
+    if(!saved) return jsonUtf8({error:'他の更新があるか、対象が見つかりません。再取得して確認してください。'},409);
+    return jsonUtf8({saved:true,revision:payload.revision+1});
+  } catch(error) {
+    logger.error('[container-sessions] note save failed',{error:String(error)});
+    return jsonUtf8({error:'作業メモを保存できませんでした'},503);
+  }
+});
+
 app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
     return jsonUtf8({ error: 'CF_CONTAINER_API_TOKEN/CLOUDFLARE_ACCOUNT_IDが未設定です' }, 503);
@@ -19567,6 +19953,7 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
     await recordContainerOperation(
       c.env.DB,
       {
+        ...demoContainerOperationContext(c.env),
         action: 'diag:build-log',
         performedBy: c.get('user')?.sub ?? 'unknown',
         result: 'success',
@@ -19574,7 +19961,13 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
       },
       (m) => logger.error('[cf-containers-build-log] D1記録に失敗', { error: m })
     );
-    return jsonUtf8(result);
+    let timingWarning: string | null = null;
+    try { await storeBuildTimings(c.env.DB,result); }
+    catch (error) {
+      timingWarning = 'ログは取得できましたが、ステップ実測の保存に失敗しました。migration 0184・ログ形式を確認してください。';
+      logger.error('[container-build-timings] save failed',{error:String(error)});
+    }
+    return jsonUtf8({...result,timingWarning});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-build-log] 取得に失敗', { error: message });
@@ -19797,7 +20190,7 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
     const stub = await getDemoContainerStub(c.env);
     if (!stub) return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、DEMO_CONTAINERが未設定のためコンテナへ反映できませんでした' });
     await stub.restart({ name: name as AllowedSecretName, value });
-    await recordContainerOperation(c.env.DB, { action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
+    await recordContainerOperation(c.env.DB, { ...demoContainerOperationContext(c.env), action: 'restart', performedBy, result: 'success', detail: `secret更新: ${name}` }, (message) =>
       logger.error('[cf-containers-secrets] 操作ログの記録に失敗', { error: message })
     );
   } catch (err) {
@@ -19828,14 +20221,14 @@ app.post('/api/cf-containers/action', authMiddleware, cfDashboardAdminMiddleware
     } else {
       await stub.restart();
     }
-    await recordContainerOperation(c.env.DB, { action, performedBy, result: 'success' }, (message) =>
+    await recordContainerOperation(c.env.DB, { ...demoContainerOperationContext(c.env), action, performedBy, result: 'success' }, (message) =>
       logger.error('[cf-containers-action] 操作ログの記録に失敗', { action, error: message })
     );
     return jsonUtf8(await buildContainerStatusResponse(stub));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-action] 操作に失敗', { action, error: message });
-    await recordContainerOperation(c.env.DB, { action, performedBy, result: 'failure', detail: message }, (logMessage) =>
+    await recordContainerOperation(c.env.DB, { ...demoContainerOperationContext(c.env), action, performedBy, result: 'failure', detail: message }, (logMessage) =>
       logger.error('[cf-containers-action] 操作ログの記録に失敗', { action, error: logMessage })
     );
     return jsonUtf8({ error: '操作でサーバーエラーが発生しました: ' + message }, 500);
@@ -19863,7 +20256,7 @@ app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, as
   const user = c.get('user');
   const recordDiag = (result: 'success' | 'failure', detail: string) =>
     diagAction
-      ? recordContainerOperation(c.env.DB, { action: diagAction, performedBy: user?.sub ?? 'unknown', result, detail: truncateDiagDetail(detail) }, (m) =>
+      ? recordContainerOperation(c.env.DB, { ...demoContainerOperationContext(c.env), action: diagAction, performedBy: user?.sub ?? 'unknown', result, detail: truncateDiagDetail(detail) }, (m) =>
           logger.error('[cf-containers-proxy] 診断結果のD1記録に失敗', { error: m })
         )
       : Promise.resolve(false);

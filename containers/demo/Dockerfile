@@ -56,8 +56,12 @@ RUN locale-gen ja_JP.UTF-8 \
     && printf 'LANG=ja_JP.UTF-8\n' > /etc/default/locale \
     && printf 'export LANG=ja_JP.UTF-8\n' > /etc/profile.d/locale.sh
 ENV LANG=ja_JP.UTF-8
-RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
-    && rm -rf /var/lib/apt/lists/*
+ARG INSTALL_DOCKER=false
+RUN case "$INSTALL_DOCKER" in true|false) ;; *) echo "INSTALL_DOCKER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_DOCKER" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends docker.io \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 # chat用のPythonライブラリはUbuntuのapt版を使う(pipはPyPIへの証明書検証が
 # このビルド環境で通らず、apt版ならアーカイブ経由で取得でき依存を固定しやすいため)。
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
@@ -88,15 +92,23 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && codex --version \
     && npm cache clean --force
 # Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
-RUN npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
+ARG INSTALL_VITEST=true
+RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_VITEST" = "true" ]; then \
+    npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
     && vitest --version \
-    && npm cache clean --force
-RUN npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
+    && npm cache clean --force; \
+    fi
+ARG INSTALL_TYPESCRIPT=true
+RUN case "$INSTALL_TYPESCRIPT" in true|false) ;; *) echo "INSTALL_TYPESCRIPT must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_TYPESCRIPT" = "true" ]; then \
+    npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
     && tsc --version \
-    && npm cache clean --force
+    && npm cache clean --force; \
+    fi
 # SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
 # よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
-RUN for b in node npm npx codex vitest tsc tsserver; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
+RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev/null 2>&1; then ln -sf /opt/node22/bin/$b /usr/local/bin/$b; fi; done \
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
@@ -106,11 +118,19 @@ RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} -
     && /opt/node22/bin/npm cache clean --force
 # wrangler: Node 20以上が必要なためClaude CLIと同じ/opt/node22のnpmで入れる。
 # npmも起動スクリプトも`env node`でPATH上のnode 18を拾うため、PATHの先頭に/opt/node22/binを置く。
-RUN PATH=/opt/node22/bin:$PATH npm install -g wrangler \
+ARG INSTALL_WRANGLER=true
+RUN case "$INSTALL_WRANGLER" in true|false) ;; *) echo "INSTALL_WRANGLER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_WRANGLER" = "true" ]; then \
+    PATH=/opt/node22/bin:$PATH npm install -g wrangler \
     && printf '#!/bin/sh\nPATH=/opt/node22/bin:$PATH exec /opt/node22/bin/wrangler "$@"\n' > /usr/local/bin/wrangler \
     && chmod +x /usr/local/bin/wrangler \
     && wrangler --version \
-    && PATH=/opt/node22/bin:$PATH npm cache clean --force
+    && PATH=/opt/node22/bin:$PATH npm cache clean --force; \
+    fi
+
+# Record the exact non-secret bundle choices for health checks and later analysis.
+RUN printf '{"docker":%s,"vitest":%s,"typescript":%s,"wrangler":%s}\n' \
+      "$INSTALL_DOCKER" "$INSTALL_VITEST" "$INSTALL_TYPESCRIPT" "$INSTALL_WRANGLER" > /etc/container-features.json
 
 # /healthのバージョン表で「想定の版」として使う(実際の版と比べて色を付ける)。
 ARG TAILSCALE_VERSION

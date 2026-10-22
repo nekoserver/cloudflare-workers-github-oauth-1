@@ -1,4 +1,4 @@
-import app, { runCfContainerCronReport, runCfContainerFirewallCron } from './index';
+import app, { runCfContainerCronReport, runCfContainerFirewallCron, runCfContainerBuildTimingCollection } from './index';
 import type { Bindings } from './types';
 import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 // Durable Objectのclass_nameバインディング(wrangler.tomlの
@@ -21,6 +21,10 @@ export default {
         .catch((error) => console.error('[scheduled] firewall snapshot failed', error instanceof Error ? error.message : String(error))));
       return;
     }
+    // Collect step measurements from existing Builds logs independently of Slack and reports.
+    ctx.waitUntil(runCfContainerBuildTimingCollection(env)
+      .then(result => { if (result.errors.length) console.error('[scheduled] build timing partial collection',result.errors); })
+      .catch(error => console.error('[scheduled] build timing collection failed',error instanceof Error ? error.message : String(error))));
     // Independent of tree sync, Slack configuration and the container report.
     ctx.waitUntil(runCodexResetCountdownCron(env)
       .then((result) => console.log('[scheduled] Codex reset countdown registered', result))

@@ -45,11 +45,14 @@ export async function fetchLatestBuildLog(
   scriptName: string,
   buildUuid?: string,
   fetcher: typeof fetch = fetch
-): Promise<{ buildUuid: string; status: string | null; log: string; recentBuilds: string[]; responseShape: string[] }> {
+): Promise<{ buildUuid: string; status: string | null; log: string; recentBuilds: string[]; responseShape: string[]; logComplete: boolean; createdOn: string | null; recentBuildIds: string[]; recentBuildMetadata: {buildUuid:string;status:string;createdOn:string|null}[] }> {
   const account = `${API}/accounts/${encodeURIComponent(credentials.accountId)}`;
   let uuid = buildUuid;
   let status: string | null = null;
   let recentBuilds: string[] = [];
+  let recentBuildIds: string[] = [];
+  let createdOn: string | null = null;
+  let recentBuildMetadata: {buildUuid:string;status:string;createdOn:string|null}[] = [];
   if (!uuid) {
     const scripts = await call<Array<{ id: string; tag: string }>>(`${account}/workers/scripts`, credentials, fetcher);
     const tag = scripts.find((s) => s.id === scriptName)?.tag;
@@ -73,12 +76,16 @@ export async function fetchLatestBuildLog(
     // ブランチのpushで本番(main)のビルドが隠れないよう、mainの最新を優先する。情報が無ければ最新。
     const latest = sorted.find((b) => branchOf(b) === 'main') ?? sorted[0];
     if (!latest) throw new Error('ビルド履歴がありません');
+    recentBuildIds = sorted.slice(0, 8).map(b => b.build_uuid);
+    recentBuildMetadata = sorted.slice(0,8).map(b=>({buildUuid:b.build_uuid,status:stateOf(b),createdOn:b.created_on ?? null}));
+    createdOn = latest.created_on ?? null;
     uuid = latest.build_uuid;
     status = stateOf(latest);
   }
   // ログAPIはページ分割(truncated + cursor)で返るため、続きがある間は読み進める
   const MAX_PAGES = 50;
   const lines: unknown[] = [];
+  let logComplete = false;
   let cursor: string | undefined;
   // 実APIの応答の形をそのまま記録する(想定したモックではなく実応答でテストを作るため)
   const responseShape: string[] = [];
@@ -88,13 +95,15 @@ export async function fetchLatestBuildLog(
     responseShape.push(describeShape(page, result));
     if (Array.isArray(result)) {
       lines.push(...result);
+      logComplete = true;
       break;
     }
     lines.push(...(result?.lines ?? []));
-    if (!result?.truncated || !result.cursor || result.cursor === cursor) break;
+    if (!result?.truncated) { logComplete = true; break; }
+    if (!result.cursor || result.cursor === cursor) break;
     cursor = result.cursor;
   }
-  return { buildUuid: uuid, status, log: formatBuildLogLines(lines), recentBuilds, responseShape };
+  return { buildUuid: uuid, status, log: formatBuildLogLines(lines), recentBuilds, responseShape, logComplete, createdOn, recentBuildIds, recentBuildMetadata };
 }
 
 /** ログAPIの1ページ分の応答の形(値は含めない)を1行で表す。 */

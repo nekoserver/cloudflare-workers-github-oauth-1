@@ -126,7 +126,7 @@ async function collectVersions() {
     expectedError = err.message;
   }
   const items = await Promise.all(
-    VERSION_SOURCES.map(async (s) => {
+    VERSION_SOURCES.filter(s => !(s.name === 'docker' && readContainerFeatures()?.docker === false)).map(async (s) => {
       const raw = await runVersionCmd(s.cmd, s.args);
       const actual = extractVersion(raw.split('\n')[0]);
       const exp = s.key ? expected[s.key] || null : null;
@@ -135,6 +135,11 @@ async function collectVersions() {
   );
   versionsCache = { items, expectedError, checkedAt: new Date().toISOString() };
   return versionsCache;
+}
+
+function readContainerFeatures() {
+  try { return JSON.parse(require('node:fs').readFileSync('/etc/container-features.json','utf8')); }
+  catch { return null; } // Older images have no declared bundle choices.
 }
 
 async function buildHealth() {
@@ -152,6 +157,7 @@ async function buildHealth() {
     cloudflared: value(cloudflared),
     tailscale: value(tailscale),
     docker: value(docker),
+    features: readContainerFeatures(),
     // 版の取得は時間がかかるため、起動時と10分ごとに取ったものを返す(初回は取得を待つ)
     versions: versionsCache || (await collectVersions()),
     build: readBuildInfo(),

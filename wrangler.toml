@@ -133,6 +133,8 @@ binding = "AI"
 [[containers]]
 class_name = "DemoContainer"
 image = "./containers/demo/Dockerfile"
+# Purpose-specific bundle: Docker is optional; keep the development tools currently used.
+image_vars = { INSTALL_DOCKER = "false", INSTALL_VITEST = "true", INSTALL_TYPESCRIPT = "true", INSTALL_WRANGLER = "true" }
 max_instances = 1
 # standard-1(1/2 vCPU・4GiBメモリ・8GBディスク)。既定のlite(1/16 vCPU・
 # 256MiB)ではtmux上でCLIを動かすには心細いため、実用と節約のバランスを

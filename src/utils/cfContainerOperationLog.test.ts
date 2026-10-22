@@ -18,7 +18,7 @@ describe('recordContainerOperation', () => {
     );
     expect(ok).toBe(true);
     expect(prepare).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO cf_container_operation_log'));
-    expect(bind).toHaveBeenCalledWith('start', 'admin-user', 'success', null, expect.any(String));
+    expect(bind).toHaveBeenCalledWith('start', 'admin-user', 'success', null, expect.any(String), null, null, null, null);
     expect(onError).not.toHaveBeenCalled();
   });
 
