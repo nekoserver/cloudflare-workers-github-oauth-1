@@ -30,8 +30,8 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
 // タブのタイトル。管理者(containerStatusを渡されたとき)だけ、コンテナが稼働中なら🟢、停止中なら⚫️を行末に付ける。
 // 管理者以外はnull(表示しない)で、通常のタイトルのまま。
 export function aichatTabTitle(containerRunning: boolean | null): string {
-  if (containerRunning === null) return 'AI チャット';
-  return 'AI チャット ' + (containerRunning ? '🟢' : '⚫️');
+  if (containerRunning === null) return '💬チャット';
+  return '💬チャット ' + (containerRunning ? '🟢' : '⚫️');
 }
 
 export function getAiChatPage(user: {

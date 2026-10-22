@@ -4,9 +4,9 @@ import { aichatTabTitle } from './views/aichat';
 
 describe('AI チャットのタブのタイトル(コンテナ稼働中なら🟢、停止中なら⚫️)', () => {
   it('稼働中は行末に🟢、停止中は⚫️、管理者以外(null)は何も付けない', () => {
-    expect(aichatTabTitle(true)).toBe('AI チャット 🟢');
-    expect(aichatTabTitle(false)).toBe('AI チャット ⚫️');
-    expect(aichatTabTitle(null)).toBe('AI チャット');
+    expect(aichatTabTitle(true)).toBe('💬チャット 🟢');
+    expect(aichatTabTitle(false)).toBe('💬チャット ⚫️');
+    expect(aichatTabTitle(null)).toBe('💬チャット');
   });
   it('ページのtitleに実際に入る', () => {
     const src = readFileSync('src/views/aichat.ts', 'utf8');

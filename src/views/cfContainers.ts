@@ -11,7 +11,7 @@ export function getCfContainersPage(): string {
   ].map(({ name, spec }) => {
     const rate = computeHourlyRate(spec);
     const selected = name === CONFIGURED_INSTANCE_TYPE;
-    return `<tr>
+    return `<tr data-applied="${selected}" ${selected ? '' : 'hidden'}>
       <th scope="row"><span class="instance-model" data-selected="${selected}">${name}</span>${selected ? '（選択中）' : ''}</th>
       <td>${spec.vcpu} vCPU<br>$${rate.vcpuUsdPerHour.toFixed(5)}</td>
       <td>${spec.memoryGiB} GiB<br>$${rate.memoryUsdPerHour.toFixed(5)}</td>
@@ -89,6 +89,13 @@ details.card > summary { cursor: pointer; font-weight: 600; color: var(--text); 
 details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
 .diff-up { color: var(--warn); font-weight: 600; }
+.diff-ok { color: var(--ok); font-weight: 600; }
+.menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 13px; }
+.menu-toggle { padding: 0 8px; font-size: 12px; }
+.menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
+.menu-modal[hidden] { display: none; }
+.menu-panel { background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; width: min(420px, 100%); margin-top: 40px; }
+
 .diff-same { color: var(--muted); }
 details.sub > summary { cursor: pointer; font-weight: 600; color: var(--text); margin: 6px 0 4px; }
 a.proxy-link { color: var(--link); font-size: 13px; }
@@ -132,6 +139,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <div class="notice">
   自動停止はしません(停止ボタンで止めるまで動き続け、課金も続きます)。単価・累計接続時間・予定支出は下の表を参照してください。
 </div>
+  </details>
+<nav id="page-menu" class="card" aria-label="ページ内メニュー"><strong>ページ内メニュー</strong><div class="menu-row"><a href="#section-secrets">トークン設定（CLI不要）</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定（CLI不要） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-control">コンテナの操作（起動・停止・状態）</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作（起動・停止・状態） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-links">リンク</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-report">6時間レポート（Slack通知）</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート（Slack通知） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-net">ネットワーク情報（IP・CIDR）</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報（IP・CIDR） の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div><div class="menu-row"><a href="#section-tunnels">Cloudflare Tunnel一覧</a><button type="button" class="menu-toggle" data-section="tunnels" aria-expanded="false" aria-label="Cloudflare Tunnel一覧 の設定状況">&#9660;</button></div></nav>
 <details class="card" id="section-secrets" tabindex="-1" data-section="secrets">
   <summary>トークン設定（CLI不要）</summary>
   <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
@@ -156,7 +165,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div id="live-clock" style="font-size:18px;font-weight:600;margin-bottom:4px;" hidden>00:00:00</div>
   <details class="sub" id="section-pricing" tabindex="-1" data-section="pricing">
-  <summary>Cloudflare Containers 単価表（USD/時間）</summary>
+  <summary>Cloudflare Containers 単価表（USD/時間）<button type="button" id="pricing-mode" aria-pressed="false" style="margin-left:8px;font-size:12px;">適用中のみ表示</button></summary>
   <div class="pricing-scroll">
     <table class="health-table pricing-table" style="margin-bottom:10px;">
       <thead><tr><th scope="col">モデル</th><th scope="col">vCPU</th><th scope="col">メモリ</th><th scope="col">ディスク</th><th scope="col">合計</th></tr></thead>
@@ -202,8 +211,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>今の版のリリース日</th><th>配布元の最新(リリース日)</th></tr></thead>
     <tbody id="version-tbody"></tbody>
   </table>
-  <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
   </div>
+  <div class="pricing-scroll">
+  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール(apt。最新はコンテナ内のapt-cacheの候補版、6時間ごとに更新)</p>
+  <table class="health-table" id="apt-table" hidden>
+    <thead><tr><th>コマンド</th><th>パッケージ</th><th>実際の版</th><th>最新(apt候補)</th><th>判定</th></tr></thead>
+    <tbody id="apt-tbody"></tbody>
+  </table>
+  </div>
+  <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-report" tabindex="-1" data-section="report">
@@ -239,6 +255,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   <div id="tunnel-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
+<div id="menu-modal" class="menu-modal" hidden>
+  <div class="menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+    <div class="status-row"><strong id="menu-title"></strong></div>
+    <div id="menu-body" style="font-size:13px;margin:6px 0;"></div>
+    <div class="status-row">
+      <button type="button" id="menu-change">変更する</button>
+      <button type="button" id="menu-close">閉じる</button>
+    </div>
+  </div>
 </main>
 </div>
 <script>
@@ -293,6 +318,62 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   function prevSince() {
     return prevSnapshot && prevSnapshot.savedAt ? '前回(' + prevSnapshot.savedAt.replace('T', ' ').slice(0, 16) + ' UTC)から' : '';
   }
+
+  // ページ内メニュー: 行末の▼で現在の設定状況を最上位のモーダルに出し、「変更する」で該当セクションへ飛ぶ
+  function getNextZ() {
+    var max = 1000;
+    document.querySelectorAll('*').forEach(function (el) {
+      var z = parseInt(getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    });
+    return max + 100;
+  }
+  function sectionText(id) {
+    var el = document.getElementById(id);
+    return el ? (el.textContent || '').trim().slice(0, 160) : '';
+  }
+  function sectionStatus(name) {
+    var lines = [];
+    if (name === 'secrets') lines.push('対象: ' + document.getElementById('secret-name').value + '（値は表示しません）');
+    if (name === 'control') lines.push('コンテナの状態: ' + document.getElementById('status-chip').textContent);
+    if (name === 'pricing') lines.push(sectionText('cost-summary') || '未取得');
+    if (name === 'health') lines.push(document.getElementById('health-table').hidden ? '未確認' : '確認済み: ' + document.getElementById('health-time').textContent);
+    if (name === 'report') lines.push('Slack通知: ' + (document.getElementById('report-slack-toggle').checked ? 'ON' : 'OFF'));
+    if (name === 'net') lines.push(document.getElementById('net-log').textContent ? '取得済み' : '未取得');
+    if (name === 'buildlog') lines.push(document.getElementById('buildlog-log').textContent ? '取得済み' : '未取得');
+    if (name === 'tunnels') lines.push(document.getElementById('tunnel-table').hidden ? '未取得' : '一覧: ' + document.getElementById('tunnel-tbody').rows.length + '件');
+    if (name === 'links' || name === 'pricing') { /* 上の行で足りる */ }
+    return lines.join('\\n');
+  }
+  var menuModal = document.getElementById('menu-modal');
+  var menuTarget = null;
+  function closeMenu() {
+    menuModal.hidden = true;
+    document.querySelectorAll('.menu-toggle').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '▼'; });
+  }
+  document.querySelectorAll('.menu-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var name = btn.getAttribute('data-section');
+      menuTarget = name;
+      document.getElementById('menu-title').textContent = btn.getAttribute('aria-label');
+      document.getElementById('menu-body').textContent = sectionStatus(name);
+      menuModal.style.zIndex = String(getNextZ());
+      menuModal.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      btn.textContent = '▲';
+    });
+  });
+  document.getElementById('menu-close').addEventListener('click', closeMenu);
+  menuModal.addEventListener('click', function (e) { if (e.target === menuModal) closeMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menuModal.hidden) closeMenu(); });
+  document.getElementById('menu-change').addEventListener('click', function () {
+    var section = document.getElementById('section-' + menuTarget);
+    closeMenu();
+    if (section) {
+      section.open = true;
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
 
   // 各セクションの開閉をブラウザに覚えさせる(保存できない環境でも表示は既定のまま動く)
   document.querySelectorAll('details[data-section]').forEach(function (d) {
@@ -535,6 +616,33 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(function (data) { latestVersions = data.latest || null; renderVersions(lastVersions); })
       .catch(function (err) { latestVersions = { _error: String(err) }; renderVersions(lastVersions); });
   }
+  // ネットワーク・CLIツールの表(apt)。最新と同じか新しければ緑、古ければ黄、入っていなければ赤。
+  function renderApt(tools) {
+    var table = document.getElementById('apt-table');
+    var tbody = document.getElementById('apt-tbody');
+    tbody.innerHTML = '';
+    if (!tools || !tools.items) { table.hidden = true; return; }
+    tools.items.forEach(function (t) {
+      var tr = document.createElement('tr');
+      var cells = [t.name, t.pkg || '-', t.actual || '(入っていない)', t.latest || (t.note || '-')];
+      cells.forEach(function (text, i) {
+        var td = document.createElement('td');
+        td.textContent = text;
+        if (i === 2) td.className = t.level === 'ok' ? 'diff-ok' : (t.level === 'warn' ? 'diff-up' : '');
+        tr.appendChild(td);
+      });
+      var tdLevel = document.createElement('td');
+      var span = document.createElement('span');
+      span.className = 'badge';
+      span.setAttribute('data-level', t.level);
+      span.textContent = { ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level;
+      tdLevel.appendChild(span);
+      tr.appendChild(tdLevel);
+      tbody.appendChild(tr);
+    });
+    table.hidden = false;
+  }
+
   function renderVersions(versions) {
     lastVersions = versions;
     var table = document.getElementById('version-table');
@@ -546,11 +654,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var prevVersions = (prevSnapshot && prevSnapshot.versions) || {};
       var before = prevVersions[v.name];
       var changed = before !== undefined && before !== v.actual;
+      var info = latestVersions && latestVersions[v.name];
+      var isLatest = !!(info && info.latest && v.actual && compareVer(v.actual, info.latest) >= 0);
       var cells = [v.name, v.actual || '(取得できず)', before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
       cells.forEach(function (text, i) {
         var td = document.createElement('td');
         td.textContent = text;
-        if (i === 1 || i === 2) td.className = changed ? 'diff-up' : '';
+        if (i === 1) td.className = isLatest ? 'diff-ok' : (changed ? 'diff-up' : '');
+        if (i === 2) td.className = changed ? 'diff-up' : '';
         tr.appendChild(td);
       });
       var tdLevel = document.createElement('td');
@@ -562,7 +673,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
       // 今の版のリリース日(配布元から取れたもの)
-      var info = latestVersions && latestVersions[v.name];
       var tdCurDate = document.createElement('td');
       tdCurDate.textContent = !latestVersions ? '確認中…' : (info && info.currentDate) ? info.currentDate : '-';
       tr.appendChild(tdCurDate);
@@ -595,6 +705,19 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     versions.items.forEach(function (v) { snap[v.name] = v.actual; });
     saveSnapshot({ versions: snap });
   }
+
+  // 単価表: 既定は適用中のプランだけ。切り替えで全プランを表示する(適用中は緑のまま)
+  var pricingModeBtn = document.getElementById('pricing-mode');
+  pricingModeBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var showAll = pricingModeBtn.getAttribute('aria-pressed') !== 'true';
+    pricingModeBtn.setAttribute('aria-pressed', showAll ? 'true' : 'false');
+    pricingModeBtn.textContent = showAll ? '全プランを表示中' : '適用中のみ表示';
+    document.querySelectorAll('#section-pricing tbody tr').forEach(function (row) {
+      row.hidden = !showAll && row.getAttribute('data-applied') !== 'true';
+    });
+  });
 
   // 累計接続時間・予定支出の前回表示時からの増分
   function renderCostDiff(cost) {
@@ -681,6 +804,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         healthTable.hidden = false;
         latestVersions = null;
         renderVersions(data.versions);
+        renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
         recordSnapshotToServer();
