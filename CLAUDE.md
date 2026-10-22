@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+設定・状態を扱う機能拡張では、[AGENTS.md「機能拡張の前提となる整合性と復元可能性」](AGENTS.md#機能拡張の前提となる整合性と復元可能性) を共通の最低品質として適用する。
+
 ## ワークフロー: cloudflare-workers-github-oauth プロビジョニング
 
 本リポジトリはワークフロー **「cloudflare-workers-github-oauth プロビジョニング」** により

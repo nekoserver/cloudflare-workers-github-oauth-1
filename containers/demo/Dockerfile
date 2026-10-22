@@ -34,6 +34,8 @@ ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.163.0
 ARG CLAUDE_VERSION=2.1.306
+ARG VITEST_VERSION=5.0.5
+ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
@@ -43,7 +45,7 @@ ENV PATH="/opt/node22/bin:${PATH}"
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates tmux expect gnupg libatomic1 \
-        apache2 openssl openssh-server nftables curl \
+        apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
@@ -85,9 +87,16 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
+# Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
+RUN npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
+    && vitest --version \
+    && npm cache clean --force
+RUN npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
+    && tsc --version \
+    && npm cache clean --force
 # SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
 # よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
-RUN for b in node npm npx codex; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
+RUN for b in node npm npx codex vitest tsc tsserver; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
@@ -116,13 +125,13 @@ WORKDIR /app
 # build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
 COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
-COPY firewall-stats.py ./
+COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
     && a2dissite 000-default \
     && a2ensite 000-demo \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \

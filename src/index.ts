@@ -409,6 +409,7 @@ import { getD1QueryCatalogPage, type D1QueryCatalogRow, type D1QueryCatalogTable
 import { getLegacyStorageInventoryPage } from './views/legacyStorageInventory';
 import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
+import { TREE_VIEW_REPOSITORY_CRON_ENABLED } from './utils/treeViewCronPolicy';
 import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, replaceCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
@@ -2841,6 +2842,18 @@ CREATE TABLE IF NOT EXISTS cf_container_snapshot_diffs (
 );
 CREATE INDEX IF NOT EXISTS idx_cf_container_snapshot_diffs_snapshot ON cf_container_snapshot_diffs(snapshot_id);
 ALTER TABLE notification_settings ADD COLUMN cf_containers_report_slack INTEGER NOT NULL DEFAULT 1;`,
+  '0181': `ALTER TABLE countdown_events ADD COLUMN deleted_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_countdown_events_active_user_target
+ON countdown_events(user_id, target_at) WHERE deleted_at IS NULL;`,
+  '0182': `ALTER TABLE countdown_events ADD COLUMN deleted_by TEXT;
+ALTER TABLE countdown_events ADD COLUMN deletion_reason TEXT;
+ALTER TABLE countdown_events ADD COLUMN created_by TEXT;
+ALTER TABLE countdown_events ADD COLUMN creation_reason TEXT;`,
+  '0183': `UPDATE countdown_events
+SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    deleted_by = 'system',
+    deletion_reason = 'ユーザー指定によるリポジトリcronチェックの停止'
+WHERE label = 'tree-view cron更新' AND deleted_at IS NULL;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -4224,7 +4237,7 @@ async function upsertCfAuthDeadlineCountdown(
   const targetAt = computeCfAuthDeadlineTargetAt(loginAt);
   try {
     const existing = await db.prepare(
-      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? LIMIT 1'
+      'SELECT id FROM countdown_events WHERE user_id = ? AND label = ? AND deleted_at IS NULL LIMIT 1'
     ).bind(userId, CF_AUTH_DEADLINE_LABEL).first<{ id: number }>();
     if (existing) {
       await db.prepare('UPDATE countdown_events SET target_at = ? WHERE id = ?').bind(targetAt, existing.id).run();
@@ -6723,7 +6736,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     countdownList: async () => {
       if (!c.env.DB) return [];
       const rows = await c.env.DB.prepare(
-        'SELECT label, target_at FROM countdown_events WHERE user_id = ? AND target_at > ? ORDER BY target_at ASC'
+        'SELECT label, target_at FROM countdown_events WHERE user_id = ? AND deleted_at IS NULL AND target_at > ? ORDER BY target_at ASC'
       ).bind(user.sub, new Date().toISOString()).all<{ label: string; target_at: string }>();
       return (rows.results ?? []).map((r) => ({ label: r.label, targetAt: r.target_at }));
     },
@@ -6914,6 +6927,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({
       ...saved,
       response: slashCommand.response,
+      responseAlign: slashCommand.responseAlign,
       usedModel: askgkModel ?? (slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko'),
       systemPromptMode,
       nekoResults: slashCommand.resultsForModal ?? null,
@@ -12774,7 +12788,7 @@ app.get('/api/countdown', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   try {
     const rows = await c.env.DB.prepare(
-      'SELECT id, label, target_at FROM countdown_events WHERE user_id = ? ORDER BY target_at ASC'
+      'SELECT id, label, target_at FROM countdown_events WHERE user_id = ? AND deleted_at IS NULL ORDER BY target_at ASC'
     ).bind(user.sub).all<{ id: number; label: string; target_at: string }>();
     return jsonUtf8({ events: rows.results ?? [] });
   } catch (err) {
@@ -12793,9 +12807,11 @@ app.get('/api/countdown/next', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
   try {
     const rows = await c.env.DB.prepare(
-      'SELECT id, label, target_at, group_id FROM countdown_events WHERE user_id = ?'
-    ).bind(user.sub).all<{ id: number; label: string; target_at: string; group_id: string | null }>();
-    const results = rows.results ?? [];
+      'SELECT id, label, target_at, group_id, deleted_at FROM countdown_events WHERE user_id = ?'
+    ).bind(user.sub).all<{ id: number; label: string; target_at: string; group_id: string | null; deleted_at?: string | null }>();
+    const allRows = rows.results ?? [];
+    const results = allRows.filter((row) => !row.deleted_at);
+    const deletedIds = allRows.filter((row) => row.deleted_at).map((row) => row.id);
     const upcoming = findUpcomingCountdownEvents(results, new Date().toISOString());
     const events = upcoming.map((item) => {
       const groupPosition = computeCountdownGroupPosition(results, item.id);
@@ -12810,6 +12826,7 @@ app.get('/api/countdown/next', authMiddleware, async (c) => {
     return jsonUtf8({
       event: events[0] ?? null,
       events,
+      deletedIds,
     });
   } catch (err) {
     logger.error('countdown next lookup failed', { error: err instanceof Error ? err.message : 'Unknown error' });
@@ -12908,7 +12925,7 @@ app.delete('/api/countdown/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare(
-      'DELETE FROM countdown_events WHERE id = ? AND user_id = ?'
+      "UPDATE countdown_events SET deleted_at = datetime('now') WHERE id = ? AND user_id = ? AND deleted_at IS NULL"
     ).bind(id, user.sub).run();
     return jsonUtf8({ ok: true });
   } catch (err) {
@@ -17593,6 +17610,7 @@ function listAddedTreeViewPaths(
  * 作成するための発見元としては使用しない。
  */
 async function syncAllTreeViewSnapshots(env: Bindings): Promise<{ synced: string[]; skipped: string[]; failed: { repoName: string; error: string }[] }> {
+  if (!TREE_VIEW_REPOSITORY_CRON_ENABLED) return { synced: [], skipped: [], failed: [] };
   return syncTreeViewSnapshots(env, 'scheduled', new Date());
 }
 

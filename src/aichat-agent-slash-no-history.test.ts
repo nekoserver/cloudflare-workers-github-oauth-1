@@ -34,10 +34,13 @@ describe('エージェントのスラッシュコマンドは通常のAI応答�
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       // 保存しない操作では古いスレッドIDによる保存用の検証も不要。
       body: JSON.stringify({ ...request, threadId: 'invalid-old-thread' }),
-    }, { JWT_SECRET: 'test-secret', DB, RUST_WORKER: { fetch: async () => new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'コマンド実行結果' }) })) } });
+    }, { JWT_SECRET: 'test-secret', DB, RUST_WORKER: { fetch: async () => new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: request.message === '/neko askgk codex_prompt="/status"' ? 'codex 5時間枠: 残り 86%（使用 14%）、リセット 2099-01-01 00:00:36 UTC' : 'コマンド実行結果' }) })) } });
     const body = await response.json() as Record<string, unknown>;
     expect(response.status).toBe(200);
-    expect(body.response).toBe('コマンド実行結果');
+    if (request.message === '/neko askgk codex_prompt="/status"') {
+      expect(body.response).toBe('2099-01-01 09:00:36');
+      expect(body.responseAlign).toBe('center');
+    } else expect(body.response).toBe('コマンド実行結果');
     expect(body.shareId).toBeUndefined();
     expect(body.usage).toBeUndefined();
     expect(writes.some(sql => /ai_chat_shares|aichat_model_colors/.test(sql))).toBe(false);

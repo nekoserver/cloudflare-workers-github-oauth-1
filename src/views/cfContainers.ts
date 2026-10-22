@@ -170,6 +170,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <thead><tr><th>デーモン・CLI</th><th>実際の版</th><th>前回の版</th><th>想定の版</th><th>判定</th><th>今の版のリリース日</th><th>配布元の最新(リリース日)</th></tr></thead>
     <tbody id="version-tbody"></tbody>
   </table>
+  <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
   </div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
@@ -507,12 +508,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       span.title = v.raw || '';
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
-      // 今の版のリリース日(配布元から取れたもの。aptで入れるものは「-」)
+      // 今の版のリリース日(配布元から取れたもの)
       var info = latestVersions && latestVersions[v.name];
       var tdCurDate = document.createElement('td');
       tdCurDate.textContent = !latestVersions ? '確認中…' : (info && info.currentDate) ? info.currentDate : '-';
       tr.appendChild(tdCurDate);
-      // 配布元に新しい版があれば黄のバッジ(aptで入れるものは対象外で「-」)
+      // 配布元に新しい版があれば黄のバッジ
       var tdLatest = document.createElement('td');
       if (!latestVersions) {
         tdLatest.textContent = '確認中…';

@@ -32,7 +32,7 @@ describe('次回ログイン用セッション期間とカウントダウンの�
 
     expect(result).toEqual({ ok: true, registered: true });
     expect(db.calls).toHaveLength(2);
-    expect(db.calls[0].sql).toContain('DELETE FROM countdown_events');
+    expect(db.calls[0].sql).toContain('UPDATE countdown_events SET deleted_at');
     expect(db.calls[0].args).toEqual(['octocat', 'セッション有効期限']);
     expect(db.calls[1].sql).toContain('INSERT INTO countdown_events');
     expect(db.calls[1].args.slice(0, 3)).toEqual(['octocat', 'セッション有効期限', '2026-09-17T00:00:00.000Z']);

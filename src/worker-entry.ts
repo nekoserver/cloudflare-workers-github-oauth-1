@@ -1,7 +1,6 @@
-import app, { syncAllTreeViewSnapshots, runCfContainerCronReport, runCfContainerFirewallCron } from './index';
-import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
+import app, { runCfContainerCronReport, runCfContainerFirewallCron } from './index';
 import type { Bindings } from './types';
-import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
+import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 // Durable Objectのclass_nameバインディング(wrangler.tomlの
 // [[durable_objects.bindings]])には、workerdから見えるエントリモジュール
 // (このファイル)自身がそのクラスをexportしている必要がある。クラスの
@@ -14,33 +13,18 @@ export { DemoContainer } from './containers/demoContainer';
 export default {
   fetch: app.fetch,
   // wrangler.tomlの[triggers]crons(6時間ごと)から呼ばれる。
-  // /tree-view(dynamicneko)のサイドバーツリーを、保存済みの固定2リポジトリ
-  // についてGitHub Trees APIから取得し直す。GitHub Appの権限に他のリポジトリが
-  // 追加されても、cronがtree_view_snapshotsへ新しい対象を勝手に追加しない。
+  // Repository checks and their Slack notifications are stopped by user request
+  // (2026-10-22). Other scheduled jobs remain independent.
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void> {
     if (_event.cron === '5 * * * *') {
       ctx.waitUntil(runCfContainerFirewallCron(env, new Date(_event.scheduledTime))
         .catch((error) => console.error('[scheduled] firewall snapshot failed', error instanceof Error ? error.message : String(error))));
       return;
     }
-    ctx.waitUntil(
-      Promise.all([
-        syncAllTreeViewSnapshots(env),
-        registerNextTreeViewCronCountdown(env.DB),
-      ]).then(async ([result, countdown]) => {
-        const notification = await notifyTreeViewCronUpdate(env, result, new Date(), countdown.targetAt);
-        if (!notification.ok) {
-          console.error('[scheduled] cron update notification failed', notification.error);
-        }
-        console.log('[scheduled] tree-view-snapshot sync', {
-          synced: result.synced.length,
-          skipped: result.skipped.length,
-          failed: result.failed,
-          nextUpdateAt: countdown.targetAt,
-          countdownsRegistered: countdown.registered,
-        });
-      })
-    );
+    // Independent of tree sync, Slack configuration and the container report.
+    ctx.waitUntil(runCodexResetCountdownCron(env)
+      .then((result) => console.log('[scheduled] Codex reset countdown registered', result))
+      .catch((error) => console.error('[scheduled] Codex reset countdown failed', error instanceof Error ? error.message : String(error))));
     // /cf-containersの6時間レポート(稼働数・支出・版の新旧)。tree-viewの同期とは独立に動かし、失敗はログに残す。
     ctx.waitUntil(
       runCfContainerCronReport(env)

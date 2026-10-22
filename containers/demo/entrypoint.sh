@@ -71,7 +71,18 @@ EOF
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-/usr/sbin/sshd -p 2222 -E /tmp/sshd.log &
+# -D keeps sshd attached to its stderr stream; -e sends events there instead
+# of directly to a file. Prefix each event with UTC time in syslog format so
+# authentication events retain timestamps and remain parseable by sshguard.
+# Create the log privately before the redirect (which otherwise uses umask).
+(umask 077; touch /tmp/sshd.log)
+chmod 600 /tmp/sshd.log
+/usr/sbin/sshd -D -e -p 2222 2> >(
+  export TZ=UTC
+  while IFS= read -r sshd_line || [ -n "$sshd_line" ]; do
+    printf '%(%Y-%m-%dT%H:%M:%SZ)T %s sshd: %s\n' -1 "${HOSTNAME:-localhost}" "$sshd_line"
+  done >> /tmp/sshd.log
+) &
 log "sshd started on 2222 (pid $!)"
 # sshguard: sshdのログファイルを監視し、総当たりの送信元をnftablesで遮断する。
 if command -v sshguard >/dev/null 2>&1; then
@@ -89,6 +100,9 @@ EOF2
 fi
 
 # --- ファイアウォール ---
+# Rule diagnostics and packet/counter events use separate private log files.
+(umask 077; touch /tmp/firewall.log /tmp/nftables.log /tmp/firewall-collector.log)
+chmod 600 /tmp/firewall.log /tmp/nftables.log /tmp/firewall-collector.log
 # INPUT: ループバック・確立済み/関連・新規(NEW)を許可し、不正(invalid)のみ破棄する。
 #   (2026-10-17: 以前はNEWを破棄していたため、WorkerからDurable Object経由で
 #    8080へ入る接続まで破棄され、/cf-containersの操作がすべて応答しなくなった)
@@ -131,7 +145,7 @@ table inet filter {
   }
   chain forward {
     type filter hook forward priority 0; policy accept;
-    meta nfproto ipv6 counter drop
+    meta nfproto ipv6 update @drop_src6 { ip6 saddr counter } counter drop
   }
 }
 NFT
@@ -146,14 +160,21 @@ NFT
     printf '%s\n' "$firewall_mode" > /run/nekoroot-firewall-mode
     date -u +%FT%TZ > /run/nekoroot-firewall-counter-epoch
     log "nftables applied: $firewall_mode (log limit 10/second, burst 20 packets when supported)"
+    TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T %s firewall: rules applied mode=%s\n' -1 "${HOSTNAME:-localhost}" "$firewall_mode" >> /tmp/firewall.log
   else
     printf '%s\n' failed > /run/nekoroot-firewall-mode
     log "WARN: firewall update failed; previous rules retained (see /tmp/nftables.log)"
+    TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T %s firewall: rule update failed; see /tmp/nftables.log\n' -1 "${HOSTNAME:-localhost}" >> /tmp/firewall.log
   fi
   rm -f "$nft_file"
 else
   log "WARN: nft command not found, firewall not applied"
 fi
+
+# Persist drop counters even when the container kernel cannot load nft_log or
+# nft_limit. The collector also follows kernel events when those are supported.
+python3 /app/firewall-log.py >> /tmp/firewall-collector.log 2>&1 &
+log "firewall log collector started (pid $!)"
 
 # --- Apache(server.jsへのTLSプロキシ) ---
 apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \

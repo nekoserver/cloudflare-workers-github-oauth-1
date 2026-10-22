@@ -1662,7 +1662,7 @@ export function getAiChatPage(user: {
 
   <script>
     ${getThemeToggleScript()}
-    ${getCountdownWidgetScript()}
+    ${getCountdownWidgetScript(undefined, user.username)}
     ${getCountdownQuickAddModalScript()}
 
     // ===== ドロップダウン =====
@@ -4187,6 +4187,7 @@ export function getAiChatPage(user: {
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
       var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
+      if (data.responseAlign === 'center') ansBubble.style.textAlign = 'center';
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -8436,6 +8437,7 @@ ${getRubyWasmLoaderScript()}
               assistantBubbleEl.replaceWith(completedBubble);
               assistantBubbleEl = completedBubble;
             }
+            if (data.responseAlign === 'center' && assistantBubbleEl) assistantBubbleEl.style.textAlign = 'center';
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {
