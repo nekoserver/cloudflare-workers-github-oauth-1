@@ -1,81 +1,42 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 vi.mock('./index', () => ({
   default: { fetch: vi.fn() }, syncAllTreeViewSnapshots: vi.fn(),
+  runCfContainerCronReport: vi.fn().mockResolvedValue({ ok: true }),
+  runCfContainerFirewallCron: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('./utils/codexResetCountdown', () => ({ runCodexResetCountdownCron: vi.fn().mockResolvedValue({ registered: 2 }) }));
 vi.mock('./utils/treeViewCronCountdown', () => ({ registerNextTreeViewCronCountdown: vi.fn() }));
-// worker-entry.tsはDurable Object(DemoContainer)をre-exportしており、
-// その実体(@cloudflare/containers)はworkerdのみに存在するcloudflare:workers
-// を読み込むため、プレーンNode環境のこのテストではモックに置き換える
-// (このテストが検証したいのはscheduled()ハンドラの挙動であり、
-// DemoContainerのexport自体の検証はsrc/worker-entry-config.test.tsが担う)。
+vi.mock('./utils/treeViewCronNotify', () => ({ notifyTreeViewCronUpdate: vi.fn() }));
 vi.mock('./containers/demoContainer', () => ({ DemoContainer: class {} }));
 import worker from './worker-entry';
-import { syncAllTreeViewSnapshots } from './index';
+import { syncAllTreeViewSnapshots, runCfContainerCronReport } from './index';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
+import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
+import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 import type { Bindings } from './types';
-
-const result = { synced: ['nekoserver/dynamicneko'], skipped: ['nekoserver/cloudflare-workers-github-oauth-1'], failed: [] };
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.clearAllMocks(); });
-
-async function runCron(env: Partial<Bindings>) {
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+async function runCron() {
   const pending: Promise<unknown>[] = [];
-  await worker.scheduled({} as ScheduledEvent, env as Bindings, {
-    waitUntil: (promise: Promise<unknown>) => { pending.push(promise); },
-    passThroughOnException() {}, props: {},
-  } as ExecutionContext);
+  await worker.scheduled({ cron: '0 */6 * * *', scheduledTime: Date.now() } as ScheduledEvent, {
+    SOT: 'configured', SLACK_CHANNEL_ID: 'C123', GITHUB_TOKEN: 'configured',
+  } as Bindings, { waitUntil: (promise: Promise<unknown>) => { pending.push(promise); } } as ExecutionContext);
   await Promise.all(pending);
 }
-
-describe('tree-view cron更新通知', () => {
-  it('同期完了後に更新時間を本文へ入れ、ボタン付きでSlackに直接投稿する', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-07T06:01:02Z'));
-    let complete!: (value: typeof result) => void;
-    vi.mocked(syncAllTreeViewSnapshots).mockImplementation(() => new Promise(resolve => { complete = resolve; }));
-    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: '2026-10-07T12:00:00Z' });
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const pending = runCron({ SOT: 'test-token', SLACK_CHANNEL_ID: 'C123', NOTIFY_TARGET: 'worker' });
-    expect(fetchMock).not.toHaveBeenCalled();
-    complete(result);
-    await pending;
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://slack.com/api/chat.postMessage');
-    const body = JSON.parse(options.body as string);
-    expect(body.channel).toBe('C123');
-    expect(body.text).toContain('2026/10/7 15:01:02');
-    expect(body.text).toContain('更新時間: 2026/10/7 15:01:02（日本時間）\n次回予定: 2026/10/7 21:00:00（日本時間）\n更新:');
-    expect(body.text).toContain('更新: 1件 / 変更なし: 1件 / 失敗: 0件');
-    expect(body.blocks[0].text.text).toContain('cronトリガー更新通知');
-    expect(body.blocks.find((b: any) => b.type === 'actions').elements).toHaveLength(2);
-    expect(registerNextTreeViewCronCountdown).toHaveBeenCalled();
+describe('repository checks are fully stopped for cron', () => {
+  it('does not check repositories, register their next run, or send their Slack notifications even with credentials', async () => {
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await runCron();
+    expect(syncAllTreeViewSnapshots).not.toHaveBeenCalled();
+    expect(registerNextTreeViewCronCountdown).not.toHaveBeenCalled();
+    expect(notifyTreeViewCronUpdate).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(runCodexResetCountdownCron).toHaveBeenCalledOnce();
+    expect(runCfContainerCronReport).toHaveBeenCalledOnce();
   });
-
-  it.each(['missing', 'network'])('通知の%sエラーでも同期と次回予定登録を完了する', async (mode) => {
-    vi.mocked(syncAllTreeViewSnapshots).mockResolvedValue({ ...result, failed: [{ repoName: 'test', error: 'failed' }] });
-    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: '2026-10-07T12:00:00Z' });
-    const fetchMock = vi.fn().mockRejectedValue(new Error('network failed'));
-    vi.stubGlobal('fetch', fetchMock);
-    await expect(runCron(mode === 'missing' ? {} : { SOT: 'test', SLACK_CHANNEL_ID: 'C123' })).resolves.toBeUndefined();
-    expect(registerNextTreeViewCronCountdown).toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(mode === 'missing' ? 0 : 1);
-  });
-
-  it('失敗したリポジトリと原因を次回予定とともにSlack本文へ表示する', async () => {
-    vi.mocked(syncAllTreeViewSnapshots).mockResolvedValue({
-      synced: [], skipped: [], failed: [{ repoName: '(all)', error: 'GITHUB_TOKENが未設定です' }],
-    });
-    vi.mocked(registerNextTreeViewCronCountdown).mockResolvedValue({ registered: 2, targetAt: '2026-10-07T18:00:00Z' });
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
-    vi.stubGlobal('fetch', fetchMock);
-    await runCron({ SOT: 'test', SLACK_CHANNEL_ID: 'C123' });
-    const [, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.text).toContain('次回予定: 2026/10/8 3:00:00（日本時間）');
-    expect(body.text).toContain('失敗: 1件');
-    expect(body.text).toContain('失敗理由: (all): GITHUB_TOKENが未設定です');
-    expect(body.blocks.find((block: any) => block.type === 'section').text.text).toContain('失敗理由:');
+  it('keeps the remaining scheduled jobs independent when Codex fails', async () => {
+    vi.mocked(runCodexResetCountdownCron).mockRejectedValueOnce(new Error('unavailable'));
+    await expect(runCron()).resolves.toBeUndefined();
+    expect(runCfContainerCronReport).toHaveBeenCalledOnce();
+    expect(syncAllTreeViewSnapshots).not.toHaveBeenCalled();
   });
 });

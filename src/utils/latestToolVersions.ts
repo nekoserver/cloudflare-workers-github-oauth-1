@@ -1,7 +1,8 @@
 /**
  * /cf-containersのバージョン表で「新しい版が出ているか」と各版のリリース日を示すため、各ツールの
  * 配布元から最新版・そのリリース日・今入っている版のリリース日を取る。
- * aptで入れるもの(apache・openssh・openssl・docker・git)はUbuntuのアーカイブ次第なので対象外。
+ * OpenSSH・OpenSSLは上流の版を比較する(Ubuntuの修正バックポートの有無は判定しない)。
+ * apache・docker・gitの最新版取得は対象外。
  * 1つの配布元が失敗しても他は返し、失敗はerrorに理由を残す(画面のツールチップで見える)。
  */
 export type LatestToolVersion = {
@@ -13,7 +14,7 @@ export type LatestToolVersion = {
   source: string;
   error?: string;
 };
-export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj';
+export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj' | 'openssl' | 'openssh';
 export type LatestToolVersions = Record<ToolName, LatestToolVersion>;
 
 const UA = 'cloudflare-workers-github-oauth-1 (cf-containers version check)';
@@ -46,7 +47,8 @@ export async function fetchLatestToolVersions(
         .then((r) => day((r as { published_at?: string }).published_at))
         .catch(() => null);
     }
-    return { latest: stripV(String(latest.tag_name ?? '')), latestDate: day(latest.published_at), currentDate };
+    const tag = String(latest.tag_name ?? '');
+    return { latest: tagPrefix && tag.startsWith(tagPrefix) ? tag.slice(tagPrefix.length) : stripV(tag), latestDate: day(latest.published_at), currentDate };
   };
   // npmはパッケージ情報のtime(版ごとの公開日時)から日付を取る
   const npmPackage = (pkg: string, name: ToolName) => async (): Promise<Found> => {
@@ -73,6 +75,23 @@ export async function fetchLatestToolVersions(
     gh: { source: 'GitHub', get: githubRelease('cli/cli', 'v', 'gh') },
     cloudflared: { source: 'GitHub', get: githubRelease('cloudflare/cloudflared', '', 'cloudflared') },
     tailscale: { source: 'GitHub', get: githubRelease('tailscale/tailscale', 'v', 'tailscale') },
+    openssl: { source: 'OpenSSL公式 (GitHub・上流版)', get: githubRelease('openssl/openssl', 'openssl-', 'openssl') },
+    openssh: {
+      source: 'OpenSSH公式 (上流版)',
+      get: async () => {
+        const res = await fetcher('https://www.openssh.org/releasenotes.html', { headers: { 'User-Agent': UA, Accept: 'text/html' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        // Portable release identifiers and dates in the official release headings.
+        const releases = [...html.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/gi)].flatMap((heading) => {
+          const version = heading[1].match(/\b(\d+\.\d+p\d+)\b/);
+          const date = heading[1].match(/\((\d{4}-\d{2}-\d{2})\)/);
+          return version && date ? [{ version: version[1], date: date[1] }] : [];
+        });
+        return { latest: releases[0]?.version ?? '', latestDate: releases[0]?.date ?? null,
+          currentDate: releases.find((r) => r.version === current.openssh)?.date ?? null };
+      },
+    },
     jj: {
       source: 'crates.io',
       get: async () => {

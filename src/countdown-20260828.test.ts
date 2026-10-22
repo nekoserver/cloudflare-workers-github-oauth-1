@@ -23,11 +23,11 @@ async function makeAuthHeader(sub = 'test-user') {
   return `Bearer ${token}`;
 }
 
-type Row = { id: number; user_id: string; label: string; target_at: string; group_id?: string | null };
+type Row = { id: number; user_id: string; label: string; target_at: string; group_id?: string | null; deleted_at?: string | null };
 type StoredRow = Required<Row>;
 
 function createMockDb(initialRows: Row[] = []) {
-  const rows: StoredRow[] = initialRows.map((r) => ({ group_id: null, ...r }));
+  const rows: StoredRow[] = initialRows.map((r) => ({ group_id: null, deleted_at: null, ...r }));
   let nextId = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : 1;
 
   function makeStatement(sql: string, params: unknown[]) {
@@ -37,17 +37,17 @@ function createMockDb(initialRows: Row[] = []) {
         return null;
       },
       all: async () => {
-        if (sql.includes('SELECT id, label, target_at, group_id FROM countdown_events')) {
+        if (sql.includes('SELECT id, label, target_at, group_id, deleted_at FROM countdown_events')) {
           const userId = params[0] as string;
           const matched = rows
             .filter((r) => r.user_id === userId)
-            .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at, group_id: r.group_id }));
+            .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at, group_id: r.group_id, deleted_at: r.deleted_at }));
           return { results: matched };
         }
         if (sql.includes('SELECT id, label, target_at FROM countdown_events')) {
           const userId = params[0] as string;
           const matched = rows
-            .filter((r) => r.user_id === userId)
+            .filter((r) => r.user_id === userId && !r.deleted_at)
             .sort((a, b) => a.target_at.localeCompare(b.target_at))
             .map((r) => ({ id: r.id, label: r.label, target_at: r.target_at }));
           return { results: matched };
@@ -58,13 +58,13 @@ function createMockDb(initialRows: Row[] = []) {
         if (sql.includes('INSERT INTO countdown_events')) {
           const [userId, label, targetAt, groupId] = params as [string, string, string, string | null];
           const id = nextId++;
-          rows.push({ id, user_id: userId, label, target_at: targetAt, group_id: groupId ?? null });
+          rows.push({ id, user_id: userId, label, target_at: targetAt, group_id: groupId ?? null, deleted_at: null });
           return { meta: { last_row_id: id } };
         }
-        if (sql.includes('DELETE FROM countdown_events')) {
+        if (sql.includes('UPDATE countdown_events SET deleted_at')) {
           const [id, userId] = params as [string, string];
           const idx = rows.findIndex((r) => String(r.id) === String(id) && r.user_id === userId);
-          if (idx !== -1) rows.splice(idx, 1);
+          if (idx !== -1 && !rows[idx].deleted_at) rows[idx].deleted_at = new Date().toISOString();
           return { success: true };
         }
         return { success: true };
@@ -286,6 +286,20 @@ describe('POST /api/countdown: 一括登録(events配列)', () => {
 });
 
 describe('DELETE /api/countdown/:id', () => {
+  it('論理削除された行は一覧・次回予定から除外し、本人の削除IDだけをウィジェットへ返す', async () => {
+    const { db } = createMockDb([
+      { id: 1, user_id: 'test-user', label: '削除済み', target_at: '2099-01-01T00:00:00.000Z', deleted_at: '2026-10-22T00:00:00Z' },
+      { id: 2, user_id: 'test-user', label: '有効', target_at: '2099-01-02T00:00:00.000Z' },
+      { id: 3, user_id: 'other-user', label: '他人の削除済み', target_at: '2099-01-01T00:00:00.000Z', deleted_at: '2026-10-22T00:00:00Z' },
+    ]);
+    const headers = { Authorization: await makeAuthHeader('test-user') };
+    const list = await app.request('/api/countdown', { headers }, { JWT_SECRET, DB: db });
+    expect((await list.json() as any).events.map((row: any) => row.id)).toEqual([2]);
+    const next = await app.request('/api/countdown/next', { headers }, { JWT_SECRET, DB: db });
+    const data = await next.json() as any;
+    expect(data.events.map((row: any) => row.id)).toEqual([2]);
+    expect(data.deletedIds).toEqual([1]);
+  });
   it('自分の予定を削除できる', async () => {
     const { db, rows } = createMockDb([
       { id: 1, user_id: 'test-user', label: '削除対象', target_at: '2026-09-01T00:00:00.000Z' },
@@ -293,7 +307,8 @@ describe('DELETE /api/countdown/:id', () => {
     const authHeader = await makeAuthHeader('test-user');
     const res = await app.request('/api/countdown/1', { method: 'DELETE', headers: { Authorization: authHeader } }, { JWT_SECRET, DB: db });
     expect(res.status).toBe(200);
-    expect(rows.length).toBe(0);
+    expect(rows.length).toBe(1);
+    expect(rows[0].deleted_at).toBeTruthy();
   });
 
   it('他ユーザーの予定は削除できない(user_id条件で絞り込まれる)', async () => {

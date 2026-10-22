@@ -1,5 +1,9 @@
 # cloudflare-workers-github-oauth
 
+コード・稼働環境・ユーザー指定の未解消の差分は [DEPLOYMENT-STATE.md](DEPLOYMENT-STATE.md) を参照してください。
+
+コンテナの経路・Apache実IP・SSH・ファイアウォールログの再構築と確認は [ネットワーク手順書](containers/demo/NETWORK-RUNBOOK.md) を参照してください。
+
 GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 
 ## 機能

@@ -14,4 +14,10 @@ describe('demo container sshd port', () => {
     expect(s).toMatch(/probeTcp\(2222\)/);
     expect(s).not.toMatch(/probeTcp\(22\)/);
   });
+  it('routes the nekoroot tunnel to the same SSH port and Apache 8443', () => {
+    const ingress = readFileSync('containers/demo/cloudflared-ingress.yml.template', 'utf8');
+    expect(ingress).toContain('service: ssh://127.0.0.1:2222');
+    expect(ingress).toContain('service: https://127.0.0.1:8443');
+    expect(ingress).not.toMatch(/service: ssh:\/\/127\.0\.0\.1:22\s/);
+  });
 });

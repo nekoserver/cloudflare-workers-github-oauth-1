@@ -8,8 +8,8 @@ describe('/cf-containers のページ内メニュー', () => {
     expect(view).toContain('id="page-menu"');
     expect(view).toContain('class="menu-toggle"');
     for (const name of ['secrets', 'control', 'health', 'report', 'net', 'buildlog', 'tunnels']) {
-      expect(view).toContain(`href="#sec-${name}"`);
-      expect(view).toContain(`id="sec-${name}"`);
+      expect(view).toContain(`href="#section-${name}"`);
+      expect(view).toContain(`id="section-${name}"`);
     }
   });
   it('開いている間は▲、閉じたら▼に戻る', () => {

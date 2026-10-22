@@ -27,8 +27,16 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/qwen/qwen3.8-27b', label: 'qwen3.8-27b' },
 ];
 
+// タブのタイトル。管理者(containerStatusを渡されたとき)だけ、コンテナが稼働中なら🟢、停止中なら⚫️を行末に付ける。
+// 管理者以外はnull(表示しない)で、通常のタイトルのまま。
+export function aichatTabTitle(containerRunning: boolean | null): string {
+  if (containerRunning === null) return '💬チャット';
+  return '💬チャット ' + (containerRunning ? '🟢' : '⚫️');
+}
+
 export function getAiChatPage(user: {
   name?: string;
+  containerRunning?: boolean | null;
   username: string;
   aiChatModel: string;
   aiChatModelConfigured?: boolean;
@@ -73,7 +81,7 @@ export function getAiChatPage(user: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-  <title>AI チャット</title>
+  <title>${aichatTabTitle(user.containerRunning === undefined ? null : user.containerRunning)}</title>
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
@@ -1662,7 +1670,7 @@ export function getAiChatPage(user: {
 
   <script>
     ${getThemeToggleScript()}
-    ${getCountdownWidgetScript()}
+    ${getCountdownWidgetScript(undefined, user.username)}
     ${getCountdownQuickAddModalScript()}
 
     // ===== ドロップダウン =====
@@ -4187,6 +4195,7 @@ export function getAiChatPage(user: {
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
       var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);
+      if (data.responseAlign === 'center') ansBubble.style.textAlign = 'center';
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -8436,6 +8445,7 @@ ${getRubyWasmLoaderScript()}
               assistantBubbleEl.replaceWith(completedBubble);
               assistantBubbleEl = completedBubble;
             }
+            if (data.responseAlign === 'center' && assistantBubbleEl) assistantBubbleEl.style.textAlign = 'center';
             if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {

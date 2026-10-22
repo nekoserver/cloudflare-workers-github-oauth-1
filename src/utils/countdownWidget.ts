@@ -99,10 +99,16 @@ export function getCountdownWidgetCSS(): string {
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
       z-index: 600;
       opacity: 0;
-      pointer-events: none;
+      pointer-events: auto;
+      max-height: 50vh;
+      max-width: min(380px, calc(100vw - 40px));
+      overflow-y: auto;
       transition: opacity 0.3s ease;
     }
     #countdownToast.visible { opacity: 1; }
+    .countdown-toast-item { display: flex; align-items: center; gap: 12px; }
+    .countdown-toast-item + .countdown-toast-item { border-top: 1px solid #a8e6f5; margin-top: 8px; padding-top: 8px; }
+    .countdown-toast-close { margin-left: auto; cursor: pointer; }
   `;
 }
 
@@ -118,7 +124,7 @@ export function getCountdownWidgetHTML(): string {
     <ul><li><label><input id="countdownWidgetShowUrgent" type="checkbox" checked>ウィジェットクローズ時も3日以内のタイマーを表示する</label></li></ul>
     <form method="dialog"><button type="submit">閉じる</button></form>
   </dialog>
-  <div id="countdownToast"></div>
+  <div id="countdownToast" role="log" aria-live="polite" aria-label="カウントダウン完了通知"></div>
   `;
 }
 
@@ -131,9 +137,10 @@ export function getCountdownWidgetHTML(): string {
 export function getCountdownWidgetScript(cronHealth: { state: string; label: string } = {
   state: 'unknown',
   label: '確認できません',
-}): string {
+}, username = ''): string {
   const safeState = JSON.stringify(cronHealth.state);
   const safeLabel = JSON.stringify(cronHealth.label);
+  const safeStorageKey = JSON.stringify('countdownNotifications:' + username).replace(/</g, '\\u003c');
   return `
     (function() {
       var widget = document.getElementById('countdownWidget');
@@ -169,7 +176,15 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
       }
       var upcomingEvents = []; // [{ id, label, targetAt, groupIndex, groupTotal }]
       var POSITION_STORAGE_KEY = 'countdownWidgetPosition';
-      var toastHideTimer = null;
+      var NOTIFICATION_STORAGE_KEY = ${safeStorageKey};
+      var notifications = [];
+      var completedKeys = [];
+      try {
+        var savedNotifications = JSON.parse(window.localStorage.getItem(NOTIFICATION_STORAGE_KEY) || '{}');
+        if (Array.isArray(savedNotifications.notifications)) notifications = savedNotifications.notifications;
+        if (Array.isArray(savedNotifications.completedKeys)) completedKeys = savedNotifications.completedKeys;
+        if (Array.isArray(savedNotifications.upcomingEvents)) upcomingEvents = savedNotifications.upcomingEvents;
+      } catch (e) { console.warn('カウントダウン通知の復元に失敗しました', e); }
       var cronHealthState = ${safeState};
       var cronHealthLabel = ${safeLabel};
 
@@ -289,17 +304,50 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
         return days > 0 ? (days + '日 ' + clock) : clock;
       }
 
-      // タイマー完了時のトースト表示(薄水色)。timerid(◯/△形式は一括登録グループ内での
-      // 順番、単発登録は#idのまま)+「ok」を表示する。5秒後に自動で消える。
+      function saveNotifications() {
+        try {
+          window.localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify({ notifications: notifications, completedKeys: completedKeys, upcomingEvents: upcomingEvents }));
+        } catch (e) { console.warn('カウントダウン通知の保存に失敗しました', e); }
+      }
+
+      function renderNotifications() {
+        if (!toastEl) return;
+        toastEl.innerHTML = '';
+        notifications.forEach(function(item) {
+          var row = document.createElement('div');
+          row.className = 'countdown-toast-item';
+          var text = document.createElement('span');
+          text.textContent = item.text;
+          var close = document.createElement('button');
+          close.type = 'button';
+          close.className = 'countdown-toast-close';
+          close.textContent = '×';
+          close.setAttribute('aria-label', '通知を閉じる: ' + item.text);
+          close.addEventListener('click', function() {
+            notifications = notifications.filter(function(n) { return n.key !== item.key; });
+            saveNotifications();
+            renderNotifications();
+          });
+          row.appendChild(text);
+          row.appendChild(close);
+          toastEl.appendChild(row);
+        });
+        toastEl.classList.toggle('visible', notifications.length > 0);
+        toastEl.hidden = notifications.length === 0;
+      }
+
+      // 完了通知は予定日時ごとに積み重ね、個別に閉じるまで保持する。
       function showCountdownToast(completedEvent) {
         if (!toastEl) return;
+        var key = String(completedEvent.id) + ':' + completedEvent.targetAt;
+        if (completedKeys.indexOf(key) !== -1) return;
+        completedKeys.push(key);
         var idLabel = completedEvent.groupTotal
           ? (completedEvent.groupIndex + '/' + completedEvent.groupTotal)
           : ('#' + completedEvent.id);
-        toastEl.textContent = idLabel + ' ok';
-        toastEl.classList.add('visible');
-        if (toastHideTimer) clearTimeout(toastHideTimer);
-        toastHideTimer = setTimeout(function() { toastEl.classList.remove('visible'); }, 5000);
+        notifications.push({ key: key, text: idLabel + ' ok — ' + completedEvent.label + ' (' + new Date(completedEvent.targetAt).toLocaleString() + ')' });
+        saveNotifications();
+        renderNotifications();
       }
 
       // タイマー完了時の処理エントリポイント。将来的にここへ、完了したタイマーに
@@ -364,6 +412,7 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
             return new Date(event.targetAt).getTime() > Date.now();
           });
           completed.forEach(onTimerCompleted);
+          saveNotifications();
           renderTimers();
           fetchNextEvent();
         }
@@ -390,13 +439,25 @@ export function getCountdownWidgetScript(cronHealth: { state: string; label: str
 
       function fetchNextEvent() {
         fetch('/api/countdown/next').then(function(res) { return res.json(); }).then(function(data) {
+          // Deleted schedules must disappear from both running timers and
+          // persisted completion notifications, without firing completion.
+          var deletedIds = Array.isArray(data.deletedIds) ? data.deletedIds.map(String) : [];
+          upcomingEvents = upcomingEvents.filter(function(event) { return deletedIds.indexOf(String(event.id)) === -1; });
+          notifications = notifications.filter(function(item) { return deletedIds.indexOf(String(item.key).split(':')[0]) === -1; });
+          renderNotifications();
+          // Polling can arrive after a deadline and after cron replaced its DB row.
+          // Complete the previously observed events before replacing the list.
+          upcomingEvents.filter(function(event) { return new Date(event.targetAt).getTime() <= Date.now(); }).forEach(onTimerCompleted);
           // events未対応の旧APIでも直近1件は引き続き表示できる。
           upcomingEvents = Array.isArray(data.events) ? data.events : (data.event ? [data.event] : []);
+          saveNotifications();
           renderTimers();
           tickWidget();
         }).catch(function() {});
       }
 
+      renderNotifications();
+      tickWidget();
       fetchNextEvent();
       setInterval(tickWidget, 1000);
       setInterval(fetchNextEvent, 30000);

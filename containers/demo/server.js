@@ -187,7 +187,7 @@ async function collectVersions() {
     expectedError = err.message;
   }
   const items = await Promise.all(
-    VERSION_SOURCES.map(async (s) => {
+    VERSION_SOURCES.filter(s => !(s.name === 'docker' && readContainerFeatures()?.docker === false)).map(async (s) => {
       const raw = await runVersionCmd(s.cmd, s.args);
       const actual = extractVersion(raw.split('\n')[0]);
       const exp = s.key ? expected[s.key] || null : null;
@@ -196,6 +196,11 @@ async function collectVersions() {
   );
   versionsCache = { items, expectedError, checkedAt: new Date().toISOString() };
   return versionsCache;
+}
+
+function readContainerFeatures() {
+  try { return JSON.parse(require('node:fs').readFileSync('/etc/container-features.json','utf8')); }
+  catch { return null; } // Older images have no declared bundle choices.
 }
 
 async function buildHealth() {
@@ -213,6 +218,7 @@ async function buildHealth() {
     cloudflared: value(cloudflared),
     tailscale: value(tailscale),
     docker: value(docker),
+    features: readContainerFeatures(),
     // 版の取得は時間がかかるため、起動時と10分ごとに取ったものを返す(初回は取得を待つ)
     versions: versionsCache || (await collectVersions()),
     build: readBuildInfo(),
@@ -241,7 +247,7 @@ function runCmd(cmd, args) {
 // IPv4の1.1.1.1の両方で試し、名前解決で止まっているかを切り分ける。
 const EDGE_HOST = 'region1.v2.argotunnel.com';
 async function buildNetDebug() {
-  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping, nftRuleset, dropLog] = await Promise.all([
+  const [addr, route, dns, netstat, netstatLegacy, top, digDefault, digV4, digTailscale, whois, ping, nftRuleset, dropLog, firewallStatsRaw] = await Promise.all([
     runCmd('ip', ['-o', 'addr', 'show']),
     runCmd('ip', ['-o', 'route', 'show']),
     runCmd('cat', ['/etc/resolv.conf']),
@@ -256,6 +262,7 @@ async function buildNetDebug() {
     // 破棄したパケットの件数と送信元(drop_src4/drop_src6)、カーネルログのnft-drop行
     runCmd('nft', ['list', 'ruleset']),
     runCmd('sh', ['-c', 'dmesg 2>/dev/null | grep nft-drop | tail -n 50']),
+    runCmd('python3', [require('node:path').join(__dirname, 'firewall-stats.py')]),
   ]);
   return {
     addr, route, dns, netstat, netstatLegacy,
@@ -265,6 +272,7 @@ async function buildNetDebug() {
     ping,
     nftRuleset,
     dropLog,
+    firewallStats: (() => { try { return JSON.parse(firewallStatsRaw); } catch { return { available: false, error: firewallStatsRaw }; } })(),
     checkedAt: new Date().toISOString(),
   };
 }
@@ -272,7 +280,7 @@ async function buildNetDebug() {
 // /debug/logs: entrypoint.shが各デーモンの出力を書く/tmp/*.logの末尾を返す
 // (cloudflaredがNGのときの原因調査用。/cf-containers/proxy/*は管理者のみ到達可能)。
 const fs = require('node:fs');
-const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log', '/tmp/dockerd.log', '/tmp/sshguard.log', '/tmp/gh-setup-git.log'];
+const DEBUG_LOG_FILES = ['/tmp/dns.log', '/tmp/cloudflared.log', '/tmp/nftables.log', '/tmp/firewall.log', '/tmp/firewall-collector.log', '/tmp/apache.log', '/tmp/apache-configtest.log', '/tmp/sshd.log', '/tmp/tailscaled.log', '/tmp/tailscale-up.log', '/tmp/dockerd.log', '/tmp/sshguard.log', '/tmp/gh-setup-git.log'];
 function tailFile(path, maxBytes) {
   try {
     const buf = fs.readFileSync(path);
@@ -289,6 +297,19 @@ const server = http
       for (const f of DEBUG_LOG_FILES) logs[f] = tailFile(f, 4000);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ logs, checkedAt: new Date().toISOString() }));
+      return;
+    }
+    if (req.url === '/debug/firewall') {
+      runCmd('python3', [require('node:path').join(__dirname, 'firewall-stats.py')]).then((raw) => {
+        try {
+          const snapshot = JSON.parse(raw);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify(snapshot));
+        } catch {
+          res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ available: false, error: 'firewall_collection_failed' }));
+        }
+      });
       return;
     }
     if (req.url === '/debug/net') {

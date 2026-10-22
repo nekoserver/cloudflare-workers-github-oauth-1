@@ -5,7 +5,7 @@ import { getCfContainersPage } from './cfContainers';
 describe('getCfContainersPage', () => {
   it('埋め込みscriptがJavaScriptとして構文エラーにならない', () => {
     const html = getCfContainersPage();
-    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     expect(scripts.length).toBeGreaterThan(0);
     for (const src of scripts) {
       expect(() => new Function(src)).not.toThrow();

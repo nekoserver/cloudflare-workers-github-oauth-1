@@ -7,6 +7,7 @@ export type CountdownEventRow = {
   id: number;
   label: string;
   target_at: string;
+  deleted_at?: string | null;
 };
 
 export type CountdownGroupRow = {
@@ -50,7 +51,7 @@ export function findUpcomingCountdownEvents(rows: CountdownEventRow[], nowIso: s
   const now = new Date(nowIso).getTime();
   return rows
     .map((row) => ({ row, at: new Date(row.target_at).getTime() }))
-    .filter(({ at }) => !Number.isNaN(at) && at > now)
+    .filter(({ row, at }) => !row.deleted_at && !Number.isNaN(at) && at > now)
     .sort((a, b) => a.at - b.at || a.row.id - b.row.id)
     .map(({ row }) => row);
 }
@@ -179,7 +180,7 @@ export async function replaceCountdownEvent(
   }
   try {
     await db.prepare(
-      'DELETE FROM countdown_events WHERE user_id = ? AND label = ?'
+      "UPDATE countdown_events SET deleted_at = datetime('now') WHERE user_id = ? AND label = ? AND deleted_at IS NULL"
     ).bind(params.userId, params.label).run();
     await db.prepare(
       'INSERT INTO countdown_events (user_id, label, target_at, group_id) VALUES (?, ?, ?, ?)'

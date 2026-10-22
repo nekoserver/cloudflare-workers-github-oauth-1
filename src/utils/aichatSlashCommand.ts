@@ -1,5 +1,6 @@
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
+import { parseCodexFiveHourReset } from './codexResetCountdown';
 import { isAskgkSlashPrompt } from './codexAskgkQuestion';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
@@ -1313,7 +1314,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; claudeAskgk?: boolean; saveAsAiResponse?: boolean }
+  | { handled: true; response: string; responseAlign?: 'center'; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; claudeAskgk?: boolean; saveAsAiResponse?: boolean }
   | { handled: false };
 
 /**
@@ -2039,6 +2040,14 @@ export async function interpretAichatSlashCommand(
     // model='codex'として保存し、通常のAI応答と同じ経路(✂️/📔ボタン・
     // 左サイドパネル検索)に乗せる(2026-10-04、ユーザー要望)。
     if (isAskgkSlashPrompt(question)) {
+      if (/^codex_(?:prompt|prmpt)\s*=\s*(?:"\/status"|“\/status”|\/status)\s*$/i.test(question)) {
+        try {
+          const { japanTime } = parseCodexFiveHourReset(outcome.value.reply, now);
+          return { handled: true, response: japanTime, responseAlign: 'center', saveAsAiResponse: false };
+        } catch (error) {
+          return { handled: true, response: '❌ ' + (error instanceof Error ? error.message : 'Codexリセット日時を取得できませんでした'), saveAsAiResponse: false };
+        }
+      }
       const response = /^codex_(?:prompt|prmpt)\b/i.test(question)
         ? parseCodexAskgkReply(outcome.value.reply).answer
         : outcome.value.reply.trim();

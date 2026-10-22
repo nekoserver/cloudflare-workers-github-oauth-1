@@ -27,7 +27,7 @@ describe('Docker dashboard Worker gateway', () => {
     expect(await response.text()).toContain('<meta name="docker-auth-mode" content="worker">');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(signer.fetch).not.toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledWith('https://stream.test.cfc.nekomaneki.work/lib/docker.html', expect.objectContaining({ redirect: 'manual' }));
+    expect(fetch).toHaveBeenCalledWith('https://mygw.nekomaneki.work/lib/docker.html', expect.objectContaining({ redirect: 'manual' }));
   });
   it.each(['css', 'mjs'])('serves the fixed %s asset', async (ext) => {
     vi.mocked(fetch).mockResolvedValue(new Response('asset'));
@@ -50,14 +50,14 @@ describe('Docker dashboard Worker gateway', () => {
     const { request, signer } = setup();
     expect((await request('/cf-containers/api/docker/catalog')).status).toBe(200);
     const body = JSON.parse(String(signer.fetch.mock.calls[0][1]?.body));
-    expect(body).toEqual({ url: 'https://stream.test.cfc.nekomaneki.work/lib/api/docker/worker/catalog', contentType: 'application/json', body: '{}' });
+    expect(body).toEqual({ url: 'https://mygw.nekomaneki.work/lib/api/docker/worker/catalog', contentType: 'application/json', body: '{}' });
   });
   it('forwards only command and target, stripping user URLs and secrets', async () => {
     const { request, signer } = setup();
     const response = await request('/cf-containers/api/docker/run', { method: 'POST', headers: { Origin: workerOrigin }, body: JSON.stringify({ command: 'container_logs', target: 'abc123', url: 'https://evil.example', secret: 'do-not-forward' }) });
     expect(response.status).toBe(200);
     const outer = JSON.parse(String(signer.fetch.mock.calls[0][1]?.body));
-    expect(outer.url).toBe('https://stream.test.cfc.nekomaneki.work/lib/api/docker/worker/run');
+    expect(outer.url).toBe('https://mygw.nekomaneki.work/lib/api/docker/worker/run');
     expect(JSON.parse(outer.body)).toEqual({ command: 'container_logs', target: 'abc123' });
     expect(response.headers.get('Cache-Control')).toBe('no-store');
   });

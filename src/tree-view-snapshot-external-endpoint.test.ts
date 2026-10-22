@@ -277,100 +277,15 @@ describe('POST /api/tree-view-snapshot-refresh-external', () => {
   });
 });
 
-describe('syncAllTreeViewSnapshots (cron)', () => {
-  it('保存済みの固定2リポジトリだけを同期し、権限にある別リポジトリは追加しない', async () => {
-    const db = setupDb({});
-    insertSnapshot(db, 'nekoserver/dynamicneko', { name: 'nekoserver/dynamicneko', type: 'dir' });
-    insertInstallationRepo(db, 'nekoserver/unrequested');
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'a.ts', type: 'blob' }] }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
-
-    expect(result.synced).toEqual(['nekoserver/dynamicneko']);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('nekoserver/dynamicneko');
-    expect(db.prepare('SELECT repo_name FROM tree_view_snapshots ORDER BY repo_name').all()).toEqual([
-      { repo_name: 'nekoserver/dynamicneko' },
-    ]);
-  });
-
-  it('DBに不要な過去データが残っていても固定リスト外は同期しない', async () => {
-    const db = setupDb({});
-    insertSnapshot(db, 'nekoserver/unrequested', { name: 'nekoserver/unrequested', type: 'dir' });
+describe('syncAllTreeViewSnapshots (cron stopped)', () => {
+  it('does not read or write DB or contact GitHub when called directly', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-
-    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
-
+    const prepare = vi.fn(() => { throw new Error('repository cron must not access DB'); });
+    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: { prepare } } as never);
     expect(result).toEqual({ synced: [], skipped: [], failed: [] });
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('内容が前回と変わっていないリポジトリはD1へ書き込まない(skippedに入る)', async () => {
-    const db = setupDb({});
-    const existingTree = { name: 'nekoserver/dynamicneko', type: 'dir', children: [{ name: 'a.ts', type: 'file' }] };
-    insertSnapshot(db, 'nekoserver/dynamicneko', existingTree, '2026-09-18T00:00:00.000Z');
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ tree: [{ path: 'a.ts', type: 'blob' }] }), { status: 200 })));
-
-    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
-    expect(result.skipped).toEqual(['nekoserver/dynamicneko']);
-    expect(result.synced).toEqual([]);
-    const row = db.prepare('SELECT updated_at FROM tree_view_snapshots WHERE repo_name = ?').get('nekoserver/dynamicneko') as { updated_at: string };
-    expect(row.updated_at).toBe('2026-09-18T00:00:00.000Z');
-    expect(db.prepare('SELECT update_source, changed FROM tree_view_update_log').get()).toEqual({ update_source: 'scheduled', changed: 0 });
-  });
-
-  it('truncatedでないGitHubの最新状態で全置換する(削除されたファイルも消える)', async () => {
-    const db = setupDb({});
-    insertSnapshot(db, 'nekoserver/dynamicneko', {
-      name: 'nekoserver/dynamicneko',
-      type: 'dir',
-      children: [{ name: 'database-only.ts', type: 'file' }],
-    });
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      tree: [{ path: 'latest-only.ts', type: 'blob' }],
-    }), { status: 200 })));
-
-    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
-
-    expect(result.synced).toEqual(['nekoserver/dynamicneko']);
-    const row = db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?')
-      .get('nekoserver/dynamicneko') as { tree_json: string };
-    expect(JSON.parse(row.tree_json)).toEqual({
-      name: 'nekoserver/dynamicneko',
-      type: 'dir',
-      children: [
-        { name: 'latest-only.ts', type: 'file' },
-      ],
-    });
-  });
-
-  it('GitHub Trees APIがtruncated:trueを返したときは不足ノードだけをD1へ追加し、既存ノードは保持する', async () => {
-    const db = setupDb({});
-    insertSnapshot(db, 'nekoserver/dynamicneko', {
-      name: 'nekoserver/dynamicneko',
-      type: 'dir',
-      children: [{ name: 'database-only.ts', type: 'file' }],
-    });
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      tree: [{ path: 'latest-only.ts', type: 'blob' }],
-      truncated: true,
-    }), { status: 200 })));
-
-    const result = await syncAllTreeViewSnapshots({ ...BASE_ENV, DB: wrapD1(db) } as never);
-
-    expect(result.synced).toEqual(['nekoserver/dynamicneko']);
-    const row = db.prepare('SELECT tree_json FROM tree_view_snapshots WHERE repo_name = ?')
-      .get('nekoserver/dynamicneko') as { tree_json: string };
-    expect(JSON.parse(row.tree_json)).toEqual({
-      name: 'nekoserver/dynamicneko',
-      type: 'dir',
-      children: [
-        { name: 'database-only.ts', type: 'file' },
-        { name: 'latest-only.ts', type: 'file' },
-      ],
-    });
+    expect(prepare).not.toHaveBeenCalled();
   });
 });
 

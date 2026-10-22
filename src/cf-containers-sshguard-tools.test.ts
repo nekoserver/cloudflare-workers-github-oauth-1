@@ -30,7 +30,7 @@ describe('demoコンテナのファイアウォール', () => {
   it('ループバックの後、IPv6は送信元・件数・ログを取ってから破棄する', () => {
     const lo = ep.indexOf('    iif lo accept');
     const v6 = ep.indexOf('meta nfproto ipv6 update @drop_src6 { ip6 saddr counter } counter');
-    const v6log = ep.indexOf('meta nfproto ipv6 limit rate 10/second log prefix "nft-drop ipv6 "');
+    const v6log = ep.indexOf('meta nfproto ipv6 limit rate 10/second burst 20 packets log prefix "nft-drop ipv6 "');
     const v6drop = ep.indexOf('    meta nfproto ipv6 drop');
     expect(lo).toBeGreaterThan(-1);
     expect(v6).toBeGreaterThan(lo);
@@ -43,8 +43,8 @@ describe('demoコンテナのファイアウォール', () => {
     const rest = ep.indexOf('meta nfproto ipv4 update @drop_src4 { ip saddr counter } counter');
     expect(accept).toBeGreaterThan(-1);
     expect(rest).toBeGreaterThan(accept);
-    expect(ep).toContain('limit rate 10/second log prefix "nft-drop policy "');
-    expect(ep).toContain('ct state invalid limit rate 10/second log prefix "nft-drop invalid "');
+    expect(ep).toContain('limit rate 10/second burst 20 packets log prefix "nft-drop policy "');
+    expect(ep).toContain('ct state invalid limit rate 10/second burst 20 packets log prefix "nft-drop invalid "');
   });
   it('/debug/netで件数・送信元とカーネルログを見られる', () => {
     const server = readFileSync('containers/demo/server.js', 'utf8');

@@ -34,6 +34,8 @@ ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.163.0
 ARG CLAUDE_VERSION=2.1.306
+ARG VITEST_VERSION=5.0.5
+ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
@@ -43,7 +45,7 @@ ENV PATH="/opt/node22/bin:${PATH}"
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates tmux expect gnupg libatomic1 \
-        apache2 openssl openssh-server nftables curl \
+        apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv ruby cron sudo bubblewrap \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
@@ -54,8 +56,12 @@ RUN locale-gen ja_JP.UTF-8 \
     && printf 'LANG=ja_JP.UTF-8\n' > /etc/default/locale \
     && printf 'export LANG=ja_JP.UTF-8\n' > /etc/profile.d/locale.sh
 ENV LANG=ja_JP.UTF-8
-RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
-    && rm -rf /var/lib/apt/lists/*
+ARG INSTALL_DOCKER=false
+RUN case "$INSTALL_DOCKER" in true|false) ;; *) echo "INSTALL_DOCKER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_DOCKER" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends docker.io \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 # chat用のPythonライブラリはUbuntuのapt版を使う(pipはPyPIへの証明書検証が
 # このビルド環境で通らず、apt版ならアーカイブ経由で取得でき依存を固定しやすいため)。
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
@@ -85,9 +91,24 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
+# Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
+ARG INSTALL_VITEST=true
+RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_VITEST" = "true" ]; then \
+    npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
+    && vitest --version \
+    && npm cache clean --force; \
+    fi
+ARG INSTALL_TYPESCRIPT=true
+RUN case "$INSTALL_TYPESCRIPT" in true|false) ;; *) echo "INSTALL_TYPESCRIPT must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_TYPESCRIPT" = "true" ]; then \
+    npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
+    && tsc --version \
+    && npm cache clean --force; \
+    fi
 # SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
 # よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
-RUN for b in node npm npx codex; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
+RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev/null 2>&1; then ln -sf /opt/node22/bin/$b /usr/local/bin/$b; fi; done \
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
@@ -97,11 +118,19 @@ RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} -
     && /opt/node22/bin/npm cache clean --force
 # wrangler: Node 20以上が必要なためClaude CLIと同じ/opt/node22のnpmで入れる。
 # npmも起動スクリプトも`env node`でPATH上のnode 18を拾うため、PATHの先頭に/opt/node22/binを置く。
-RUN PATH=/opt/node22/bin:$PATH npm install -g wrangler \
+ARG INSTALL_WRANGLER=true
+RUN case "$INSTALL_WRANGLER" in true|false) ;; *) echo "INSTALL_WRANGLER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_WRANGLER" = "true" ]; then \
+    PATH=/opt/node22/bin:$PATH npm install -g wrangler \
     && printf '#!/bin/sh\nPATH=/opt/node22/bin:$PATH exec /opt/node22/bin/wrangler "$@"\n' > /usr/local/bin/wrangler \
     && chmod +x /usr/local/bin/wrangler \
     && wrangler --version \
-    && PATH=/opt/node22/bin:$PATH npm cache clean --force
+    && PATH=/opt/node22/bin:$PATH npm cache clean --force; \
+    fi
+
+# Record the exact non-secret bundle choices for health checks and later analysis.
+RUN printf '{"docker":%s,"vitest":%s,"typescript":%s,"wrangler":%s}\n' \
+      "$INSTALL_DOCKER" "$INSTALL_VITEST" "$INSTALL_TYPESCRIPT" "$INSTALL_WRANGLER" > /etc/container-features.json
 
 # /healthのバージョン表で「想定の版」として使う(実際の版と比べて色を付ける)。
 ARG TAILSCALE_VERSION
@@ -115,12 +144,14 @@ RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscal
 WORKDIR /app
 # build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
 COPY server.js build-info*.json ./
+# Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
+COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
     && a2dissite 000-default \
     && a2ensite 000-demo \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
