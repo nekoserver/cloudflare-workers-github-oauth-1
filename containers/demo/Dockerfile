@@ -34,6 +34,8 @@ ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.163.0
 ARG CLAUDE_VERSION=2.1.306
+ARG VITEST_VERSION=5.0.5
+ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
@@ -85,9 +87,16 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
+# Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
+RUN npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
+    && vitest --version \
+    && npm cache clean --force
+RUN npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
+    && tsc --version \
+    && npm cache clean --force
 # SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
 # よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
-RUN for b in node npm npx codex; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
+RUN for b in node npm npx codex vitest tsc tsserver; do ln -sf /opt/node22/bin/$b /usr/local/bin/$b; done \
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
