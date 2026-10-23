@@ -5,7 +5,7 @@ const view = readFileSync('src/views/cfContainers.ts', 'utf8');
 
 describe('/cf-containers のページ内メニュー', () => {
   it('各セクションへのリンクと、行末の▲▼トグルを持つ', () => {
-    expect(view).toContain('id="page-menu"');
+    expect(view).toContain('class="section-sidebar"');
     expect(view).toContain('class="menu-toggle"');
     for (const name of ['secrets', 'control', 'health', 'report', 'net', 'buildlog', 'tunnels']) {
       expect(view).toContain(`href="#section-${name}"`);
