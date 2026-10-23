@@ -95,6 +95,7 @@ const VERSION_SOURCES = [
   { name: 'gh', cmd: 'gh', args: ['--version'], key: 'gh' },
   { name: 'git', cmd: 'git', args: ['--version'] },
   { name: 'jj', cmd: 'jj', args: ['--version'], key: 'jj' },
+  { name: 'ruby', cmd: 'ruby', args: ['--version'], key: 'ruby' },
 ];
 
 // aptで入れたネットワーク・CLIツール。実際の版(dpkg-query)と、Ubuntuアーカイブの最新(apt-cache policyのCandidate)を比べる。
@@ -115,7 +116,6 @@ const APT_TOOLS = [
   { name: 'top', pkg: 'procps' },
   { name: 'tmux', pkg: 'tmux' },
   { name: 'expect', pkg: 'expect' },
-  { name: 'ruby', pkg: 'ruby' },
   { name: 'python3', pkg: 'python3' },
   { name: 'sudo', pkg: 'sudo' },
   { name: 'cron', pkg: 'cron' },
@@ -338,7 +338,7 @@ const server = http
   })
   ;
 
-module.exports = { extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion };
+module.exports = { extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {

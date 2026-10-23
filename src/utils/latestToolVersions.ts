@@ -14,7 +14,7 @@ export type LatestToolVersion = {
   source: string;
   error?: string;
 };
-export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj' | 'openssl' | 'openssh';
+export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj' | 'openssl' | 'openssh' | 'ruby';
 export type LatestToolVersions = Record<ToolName, LatestToolVersion>;
 
 const UA = 'cloudflare-workers-github-oauth-1 (cf-containers version check)';
@@ -90,6 +90,25 @@ export async function fetchLatestToolVersions(
         });
         return { latest: releases[0]?.version ?? '', latestDate: releases[0]?.date ?? null,
           currentDate: releases.find((r) => r.version === current.openssh)?.date ?? null };
+      },
+    },
+    ruby: {
+      source: 'ruby-lang.org',
+      // 公式のリリース一覧(表)から、プレビュー・RCを除いた最も新しい版を取る
+      get: async () => {
+        const res = await fetcher('https://www.ruby-lang.org/en/downloads/releases/', { headers: { 'User-Agent': UA, Accept: 'text/html' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        const releases = [...html.matchAll(/<td>Ruby (\d+\.\d+\.\d+)<\/td>\s*<td>(\d{4}-\d{2}-\d{2})<\/td>/g)].map((m) => ({ version: m[1], date: m[2] }));
+        const num = (v: string) => v.split('.').map(Number);
+        const newest = releases.reduce<{ version: string; date: string } | null>((best, r) => {
+          if (!best) return r;
+          const [a, b] = [num(r.version), num(best.version)];
+          for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i] ? r : best;
+          return best;
+        }, null);
+        return { latest: newest?.version ?? '', latestDate: newest?.date ?? null,
+          currentDate: releases.find((r) => r.version === current.ruby)?.date ?? null };
       },
     },
     jj: {
