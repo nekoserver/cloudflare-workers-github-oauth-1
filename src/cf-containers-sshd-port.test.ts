@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 describe('demo container sshd port', () => {
   it('entrypoint.sh starts sshd on 2222', () => {
     const s = readFileSync('containers/demo/entrypoint.sh', 'utf-8');
-    expect(s).toMatch(/\/usr\/sbin\/sshd -p 2222 /);
+    expect(s).toMatch(/\/usr\/sbin\/sshd -D -e -p 2222 /);
   });
 
   it('server.js health probes 2222 for sshd', () => {

@@ -90,3 +90,17 @@ describe('fetchLatestToolVersions', () => {
     expect((gh[1]!.headers as Record<string, string>).Authorization).toBe('Bearer tok');
   });
 });
+
+describe('fetchLatestToolVersions: Ruby', () => {
+  const page = '<tr>\n<td>Ruby 4.1.0-preview1</td>\n<td>2026-10-01</td>\n</tr>\n<tr>\n<td>Ruby 4.0.9</td>\n<td>2026-10-23</td>\n</tr>\n<tr>\n<td>Ruby 3.4.12</td>\n<td>2026-10-23</td>\n</tr>\n<tr>\n<td>Ruby 4.0.8</td>\n<td>2026-09-30</td>\n</tr>';
+  it('ruby-lang.orgのリリース一覧から、プレビューを除いた最も新しい版とその日付を取る', async () => {
+    const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response(page) });
+    const result = await fetchLatestToolVersions({ nodeMajor: 26, current: { ...current, ruby: '4.0.8' } }, fetcher as unknown as typeof fetch);
+    expect(result.ruby).toEqual({ latest: '4.0.9', latestDate: '2026-10-23', currentDate: '2026-09-30', source: 'ruby-lang.org' });
+  });
+  it('一覧から版が読めなければerrorに理由を残す', async () => {
+    const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response('<html></html>') });
+    const result = await fetchLatestToolVersions({ nodeMajor: 26, current }, fetcher as unknown as typeof fetch);
+    expect(result.ruby).toMatchObject({ latest: null, error: '版が見つかりません' });
+  });
+});

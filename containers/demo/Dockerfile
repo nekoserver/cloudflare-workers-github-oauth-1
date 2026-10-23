@@ -2,6 +2,7 @@
 ARG TAILSCALE_VERSION=1.104.1
 ARG GH_VERSION=2.103.0
 ARG JJ_VERSION=0.46.0
+ARG RUBY_VERSION=4.0.9
 
 # Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
 # pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
@@ -25,6 +26,27 @@ ARG JJ_VERSION
 RUN cargo install --locked jj-cli@${JJ_VERSION} \
     && /usr/local/cargo/bin/jj --version
 
+# Rubyは公式のソース(cache.ruby-lang.org)からビルドする。aptのrubyは古いため使わない。
+# sha256はhttps://www.ruby-lang.org/en/downloads/ に載っている値で固定し、取得物の改ざん・破損で失敗させる。
+FROM ubuntu:26.04 AS ruby-build
+ARG RUBY_VERSION
+ARG RUBY_SHA256=c35350682ff050b79702d57ade4516e7336063f510155d19fb2fb5b3f3909511
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl build-essential autoconf bison pkg-config \
+        libssl-dev libyaml-dev zlib1g-dev libffi-dev libgmp-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/ruby.tar.gz \
+        "https://cache.ruby-lang.org/pub/ruby/${RUBY_VERSION%.*}/ruby-${RUBY_VERSION}.tar.gz" \
+    && echo "${RUBY_SHA256}  /tmp/ruby.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/ruby-src && tar -xzf /tmp/ruby.tar.gz -C /tmp/ruby-src --strip-components=1 \
+    && cd /tmp/ruby-src \
+    && ./configure --prefix=/opt/ruby --disable-install-doc \
+    && make -j"$(nproc)" \
+    && make install \
+    && rm -rf /tmp/ruby-src /tmp/ruby.tar.gz \
+    && /opt/ruby/bin/ruby --version \
+    && /opt/ruby/bin/ruby -ropenssl -ryaml -rzlib -rfiddle -e 'puts OpenSSL::OPENSSL_LIBRARY_VERSION'
+
 FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
@@ -32,8 +54,8 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.12.1
 ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
-ARG CODEX_VERSION=0.163.0
-ARG CLAUDE_VERSION=2.1.306
+ARG CODEX_VERSION=0.164.0
+ARG CLAUDE_VERSION=2.1.309
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.1
@@ -46,7 +68,7 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates tmux expect gnupg libatomic1 \
         apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
-        python3 python3-venv ruby cron sudo bubblewrap \
+        python3 python3-venv cron sudo bubblewrap libyaml-0-2 libffi8 libgmp10 \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
     && rm -rf /var/lib/apt/lists/*
@@ -77,6 +99,11 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudf
     && rm -f /tmp/cloudflared.deb
 COPY --from=tailscale-build /go/bin/tailscale /usr/bin/tailscale
 COPY --from=tailscale-build /go/bin/tailscaled /usr/sbin/tailscaled
+# ソースからビルドしたRuby。SSHのセッションでも見えるよう/usr/local/binにリンクする。
+COPY --from=ruby-build /opt/ruby /opt/ruby
+RUN for b in ruby gem irb erb rake bundle bundler rdoc ri; do if [ -x /opt/ruby/bin/$b ]; then ln -sf /opt/ruby/bin/$b /usr/local/bin/$b; fi; done \
+    && ruby --version \
+    && ruby -ropenssl -ryaml -rzlib -e 'puts "ruby ok"'
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.xz \
         "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && echo "${NODE_SHA256}  /tmp/node22.tar.xz" | sha256sum -c - \
@@ -136,8 +163,9 @@ RUN printf '{"docker":%s,"vitest":%s,"typescript":%s,"wrangler":%s}\n' \
 ARG TAILSCALE_VERSION
 ARG GH_VERSION
 ARG JJ_VERSION
-RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s"}\n' \
-        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" \
+ARG RUBY_VERSION
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" \
         > /etc/image-versions.json \
     && cat /etc/image-versions.json
 

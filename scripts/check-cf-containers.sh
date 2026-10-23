@@ -137,8 +137,8 @@ docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc '[ "$GH_TOKEN" = dummy
   && echo "OK: SSHのシェルでGH_TOKENが読め、gitの認証がghに設定されている" \
   || { echo "NG: GH_TOKENの書き出しかgh auth setup-gitが効いていない"; docker exec "$NAME" cat /tmp/gh-setup-git.log; exit 1; }
 # SSHのセッションと同じ条件(空の環境のログインシェル)で主要コマンドが見つかるか
-docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc 'for c in node npm codex claude wrangler gh jj git cf; do command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }; done' \
-  && echo "OK: SSHと同じ条件で node/npm/codex/claude/wrangler/gh/jj/git/cf が見つかる" \
+docker exec "$NAME" env -i HOME=/root TERM=xterm bash -lc 'for c in node npm codex claude wrangler gh jj git cf ruby gem; do command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }; done' \
+  && echo "OK: SSHと同じ条件で node/npm/codex/claude/wrangler/gh/jj/git/cf/ruby/gem が見つかる" \
   || { echo "NG: SSHのログインシェルで見つからないコマンドがある"; exit 1; }
 docker exec "$NAME" env -i HOME=/root TERM=xterm bash -ic 'command -v npx >/dev/null && echo "$PATH" | grep -q /opt/node22/bin' 2>/dev/null \
   && echo "OK: ログインしない対話シェルでもPATHに/opt/node22/binが入る" \
