@@ -1,37 +1,16 @@
 import { prepareImageRecord } from './containerImageRecords';
+import { analyzeBuildLog } from './moonbitBuildLog';
 export interface BuildTimingStep { id: number; label: string; state: 'running' | 'done' | 'cached' | 'error' | 'canceled'; seconds: number | null }
 export interface BuildTimingRecord { snapshotKey: string; buildUuid: string; createdOn: string | null; status: string | null; logComplete: boolean; collectedAt: string; steps: BuildTimingStep[] }
 
-/** BuildKit plain progress only. A RUN instruction is one step, including all shell commands inside it. */
+/**
+ * BuildKit plain progress only. A RUN instruction is one step, including all shell commands inside it.
+ * 解析本体はMoonBit(moonbit/buildlog/)。失敗(ステップ番号の再使用・件数超過・想定外の出力)は例外にする。
+ */
 export function parseBuildTimings(log: string): BuildTimingStep[] {
-  const steps = new Map<number, BuildTimingStep>();
-  for (const raw of log.split(/\r?\n|\r/)) {
-    const line = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
-    const match = line.match(/^(?:\d{4}-\d\d-\d\d[T ][\d:.]+Z?\s+)?#(\d+)\s+(.+)$/);
-    if (!match) continue;
-    const id = Number(match[1]); const text = match[2];
-    if (!Number.isSafeInteger(id)) continue;
-    const terminal = text.match(/^(DONE)(?:\s+([\d.]+)s)?$|^(CACHED)$|^(ERROR:)|^(CANCELED)$/);
-    let step = steps.get(id);
-    if (terminal) {
-      if (!step) { step = { id, label: '（処理名未取得）', state:'running',seconds:null }; steps.set(id, step); }
-      step.state = text.startsWith('DONE') ? 'done' : text === 'CACHED' ? 'cached' : text === 'CANCELED' ? 'canceled' : 'error';
-      const seconds = terminal[2] === undefined ? null : Number(terminal[2]);
-      step.seconds = seconds !== null && Number.isFinite(seconds) ? seconds : null;
-      continue;
-    }
-    // Vertex output and transfer progress do not define a new instruction.
-    if (/^\d/.test(text) || /^(?:transferring|exporting layers|exporting manifest|exporting config|naming to|unpacking to|pushing layers|pushing manifest|writing image)\b/.test(text)) continue;
-    if (!/^\[|^(?:exporting to image|exporting cache|importing cache manifest|building with|resolve image config|preparing build context)\b/.test(text)) continue;
-    if (step && step.label !== '（処理名未取得）' && step.label !== text.slice(0,1500)) {
-      // Multiple Docker invocations may reuse #N; do not merge unrelated timings.
-      throw new Error('ステップ番号が再使用されています。複数ビルドのログを分離してください');
-    }
-    if (step) step.label = text.slice(0, 1500);
-    else steps.set(id, {id,label:text.slice(0,1500),state:'running',seconds:null});
-  }
-  if (steps.size > 500) throw new Error('ステップ数が500件を超えています');
-  return [...steps.values()].sort((a,b)=>a.id-b.id);
+  const result = analyzeBuildLog(log);
+  if (!result.ok) throw new Error(result.detail);
+  return result.steps;
 }
 
 export function summarizeBuildTimings(steps: BuildTimingStep[]) {
