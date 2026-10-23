@@ -11,3 +11,4 @@ wasm/*/target/
 
 # wrangler.tomlの[build]が毎回書き出すコンテナのビルド情報
 containers/demo/build-info.json
+.moonbit-toolchain/
