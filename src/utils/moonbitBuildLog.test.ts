@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { analyzeBuildLog, parseAnalysisOutput } from './moonbitBuildLog';
 import { parseBuildTimings } from './containerBuildTimings';
 
@@ -110,5 +113,22 @@ describe('MoonBitのビルドログ解析', () => {
 
   it('空のログは空のステップ一覧を返す', () => {
     expect(analyzeBuildLog('')).toEqual({ ok: true, steps: [] });
+  });
+});
+
+describe('MoonBitの生成物はWorkersのグローバルスコープ制限を守る', () => {
+  // Workersはモジュール読み込み時の乱数生成・タイマー・I/Oを禁止し、デプロイ時の検証(code 10021)で失敗する。
+  // 実例: MoonBitのMapが読み込み時にcrypto.getRandomValuesで乱数シードを作り、本番ビルドが失敗した(2026-10-23)
+  it('読み込み時に乱数を生成しない(getRandomValues・Math.randomを禁止した環境で読み込める)', () => {
+    const url = pathToFileURL(resolve('src/generated/moonbit/buildlog.js')).href;
+    const script = [
+      "globalThis.crypto.getRandomValues = () => { throw new Error('getRandomValues at global scope'); };",
+      "Math.random = () => { throw new Error('Math.random at global scope'); };",
+      "globalThis.setTimeout = () => { throw new Error('setTimeout at global scope'); };",
+      `const m = await import(${JSON.stringify(url)});`,
+      "console.log(m.analyze_build_log('#1 [a] RUN a'));",
+    ].join('\n');
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+    expect(JSON.parse(out)).toEqual({ ok: true, steps: [{ id: 1, label: '[a] RUN a', state: 'running', seconds: null }] });
   });
 });

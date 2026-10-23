@@ -8,20 +8,7 @@ function $i64_reinterpret_f64(a) {
 function _M0TPB13StringBuilder(param0) {
   this.val = param0;
 }
-const _M0FPB12random__seed = () => {
-  if (globalThis.crypto?.getRandomValues) {
-    const array = new Uint32Array(1);
-    globalThis.crypto.getRandomValues(array);
-    return array[0] | 0; // Convert to signed 32
-  } else {
-    return Math.floor(Math.random() * 0x100000000) | 0; // Fallback to Math.random
-  }
-};
 const _M0FPB21int64__to__string__js = (num, radix) => BigInt.asIntN(64, num).toString(radix);
-function _M0TPB4IterGUlRP210nekoserver8buildlog4StepEE(param0, param1) {
-  this.f = param0;
-  this.size_hint = param1;
-}
 class $PanicError extends Error {}
 function $panic() {
   throw new $PanicError();
@@ -40,31 +27,7 @@ function _M0TPB12MutArrayViewGRP210nekoserver8buildlog4StepE(param0, param1, par
   this.start = param1;
   this.end = param2;
 }
-function $make_array_len_and_init(a, b) {
-  const arr = new Array(a);
-  arr.fill(b);
-  return arr;
-}
-function _M0TPB3MapGlRP210nekoserver8buildlog4StepE(param0, param1, param2, param3, param4, param5, param6) {
-  this.entries = param0;
-  this.size = param1;
-  this.capacity = param2;
-  this.capacity_mask = param3;
-  this.grow_at = param4;
-  this.head = param5;
-  this.tail = param6;
-}
-function _M0TPB5EntryGlRP210nekoserver8buildlog4StepE(param0, param1, param2, param3, param4, param5) {
-  this.prev = param0;
-  this.next = param1;
-  this.psl = param2;
-  this.hash = param3;
-  this.key = param4;
-  this.value = param5;
-}
-function _M0TPB8MutLocalGORPB5EntryGlRP210nekoserver8buildlog4StepEE(param0) {
-  this.val = param0;
-}
+const _M0MPB7JSArray4copy = (arr) => arr.slice(0);
 function _M0TPB8MutLocalGiE(param0) {
   this.val = param0;
 }
@@ -90,27 +53,13 @@ function _M0DTPC16option6OptionGdE4Some(param0) {
 }
 _M0DTPC16option6OptionGdE4Some.prototype.$tag = 1;
 const _M0FP210nekoserver8buildlog20js__number__to__json = (v) => JSON.stringify(v);
-function _M0TPB9ArrayViewGUlRP210nekoserver8buildlog4StepEE(param0, param1, param2) {
-  this.buf = param0;
-  this.start = param1;
-  this.end = param2;
-}
 const _M0FPB18double__max__value = $i64_reinterpret_f64(9218868437227405311n);
 const _M0FPB18double__min__value = $i64_reinterpret_f64(18442240474082181119n);
-const _M0MPB4Iter4nextN6constrS9385GUlRP210nekoserver8buildlog4StepEE = 0;
-const _M0MPB4Iter4nextN6constrS9386GUlRP210nekoserver8buildlog4StepEE = 0;
-const _M0MPB4Iter3newN6constrS9393GUlRP210nekoserver8buildlog4StepEE = 0;
 const _M0FP210nekoserver8buildlog11placeholder = "（処理名未取得）";
 const _M0FP210nekoserver8buildlog18max__safe__integer = 9007199254740991n;
 const _M0FP210nekoserver8buildlog11skip__words = ["transferring", "exporting layers", "exporting manifest", "exporting config", "naming to", "unpacking to", "pushing layers", "pushing manifest", "writing image"];
 const _M0FP210nekoserver8buildlog11step__words = ["exporting to image", "exporting cache", "importing cache manifest", "building with", "resolve image config", "preparing build context"];
-const _M0FP210nekoserver8buildlog12json__stringN3hexS19 = "0123456789abcdef";
-const _M0FPB4seed = _M0FPB12random__seed();
-function _M0FPB13consume4__acc(acc, input) {
-  const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
-  const _p$2 = 17;
-  return Math.imul(_p << _p$2 | (_p >>> (32 - _p$2 | 0) | 0), 668265263) | 0;
-}
+const _M0FP210nekoserver8buildlog12json__stringN3hexS18 = "0123456789abcdef";
 function _M0MPB13StringBuilder21StringBuilder_2einner(size_hint) {
   return new _M0TPB13StringBuilder("");
 }
@@ -120,47 +69,8 @@ function _M0IPB13StringBuilderPB6Logger11write__char(self, ch) {
 function _M0IPB13StringBuilderPB6Logger13write__string(self, str) {
   self.val = `${self.val}${str}`;
 }
-function _M0FPB14avalanche__acc(acc) {
-  let acc$2 = acc;
-  acc$2 = acc$2 ^ (acc$2 >>> 15 | 0);
-  acc$2 = Math.imul(acc$2, -2048144777) | 0;
-  acc$2 = acc$2 ^ (acc$2 >>> 13 | 0);
-  acc$2 = Math.imul(acc$2, -1028477379) | 0;
-  acc$2 = acc$2 ^ (acc$2 >>> 16 | 0);
-  return acc$2;
-}
-function _M0FPB13finalize__acc(acc) {
-  return _M0FPB14avalanche__acc(acc);
-}
-function _M0MPB4Iter4nextGUlRP210nekoserver8buildlog4StepEE(self) {
-  const _func = self.f;
-  const result = _func();
-  const _bind = self.size_hint;
-  if (result === undefined) {
-    self.size_hint = _M0MPB4Iter4nextN6constrS9386GUlRP210nekoserver8buildlog4StepEE;
-  } else {
-    if (_bind === undefined) {
-    } else {
-      const _Some = _bind;
-      const _n = _Some;
-      self.size_hint = _n > 0 ? _n - 1 | 0 : _M0MPB4Iter4nextN6constrS9385GUlRP210nekoserver8buildlog4StepEE;
-    }
-  }
-  return result;
-}
 function _M0MPC15int645Int6418to__string_2einner(self, radix) {
   return _M0FPB21int64__to__string__js(self, radix);
-}
-function _M0MPB4Iter3newGUlRP210nekoserver8buildlog4StepEE(f, size_hint) {
-  let size_hint$2;
-  if (size_hint === undefined) {
-    size_hint$2 = undefined;
-  } else {
-    const _Some = size_hint;
-    const _n = _Some;
-    size_hint$2 = _n > 0 ? _n : _M0MPB4Iter3newN6constrS9393GUlRP210nekoserver8buildlog4StepEE;
-  }
-  return new _M0TPB4IterGUlRP210nekoserver8buildlog4StepEE(f, size_hint$2);
 }
 function _M0MPC16string10StringView9to__owned(self) {
   return self.str.substring(self.start, self.end);
@@ -179,7 +89,7 @@ function _M0MPC16string6String12view_2einner(self, start_offset, end_offset) {
     return $panic();
   }
 }
-function _M0MPC15array5Array4pushGRP210nekoserver8buildlog4StepE(self, value) {
+function _M0MPC15array5Array4pushGsE(self, value) {
   _M0MPB7JSArray4push(self, value);
 }
 function _M0MPC15array5Array4pushGiE(self, value) {
@@ -222,311 +132,8 @@ function _M0MPC15array12MutArrayView17mut__view_2einnerGRP210nekoserver8buildlog
     return $panic();
   }
 }
-function _M0MPC13int3Int20next__power__of__two(self) {
-  if (self >= 0) {
-    if (self <= 1) {
-      return 1;
-    }
-    if (self > 1073741824) {
-      return 1073741824;
-    }
-    return (2147483647 >> (Math.clz32(self - 1 | 0) - 1 | 0)) + 1 | 0;
-  } else {
-    return $panic();
-  }
-}
-function _M0FPB8new__mapGlRP210nekoserver8buildlog4StepE(capacity) {
-  const capacity$2 = _M0MPC13int3Int20next__power__of__two(capacity);
-  const _bind = capacity$2 - 1 | 0;
-  const _bind$2 = (Math.imul(capacity$2, 13) | 0) / 16 | 0;
-  const _bind$3 = $make_array_len_and_init(capacity$2, undefined);
-  const _bind$4 = undefined;
-  return new _M0TPB3MapGlRP210nekoserver8buildlog4StepE(_bind$3, 0, capacity$2, _bind, _bind$2, _bind$4, -1);
-}
-function _M0FPB21capacity__for__length(length) {
-  let capacity = _M0MPC13int3Int20next__power__of__two(length);
-  const _p = capacity;
-  if (length > ((Math.imul(_p, 13) | 0) / 16 | 0)) {
-    capacity = Math.imul(capacity, 2) | 0;
-  }
-  return capacity;
-}
-function _M0MPB3Map20add__entry__to__tailGlRP210nekoserver8buildlog4StepE(self, idx, entry) {
-  const _bind = self.tail;
-  if (_bind === -1) {
-    self.head = entry;
-  } else {
-    const _tmp = self.entries;
-    $bound_check(_tmp, _bind);
-    const _p = _tmp[_bind];
-    let _tmp$2;
-    if (_p === undefined) {
-      _tmp$2 = $panic();
-    } else {
-      const _p$2 = _p;
-      _tmp$2 = _p$2;
-    }
-    _tmp$2.next = entry;
-  }
-  self.tail = idx;
-  const _tmp = self.entries;
-  $bound_check(_tmp, idx);
-  _tmp[idx] = entry;
-  self.size = self.size + 1 | 0;
-}
-function _M0MPB3Map10set__entryGlRP210nekoserver8buildlog4StepE(self, entry, new_idx) {
-  const _bind = entry.next;
-  if (_bind === undefined) {
-    self.tail = new_idx;
-  } else {
-    const _Some = _bind;
-    const _next = _Some;
-    _next.prev = new_idx;
-  }
-  const _tmp = self.entries;
-  $bound_check(_tmp, new_idx);
-  _tmp[new_idx] = entry;
-}
-function _M0MPB3Map10push__awayGlRP210nekoserver8buildlog4StepE(self, idx, entry) {
-  let _tmp = entry.psl + 1 | 0;
-  let _tmp$2 = idx + 1 & self.capacity_mask;
-  let _tmp$3 = entry;
-  while (true) {
-    const psl = _tmp;
-    const idx$2 = _tmp$2;
-    const entry$2 = _tmp$3;
-    const _tmp$4 = self.entries;
-    $bound_check(_tmp$4, idx$2);
-    const _bind = _tmp$4[idx$2];
-    if (_bind === undefined) {
-      entry$2.psl = psl;
-      _M0MPB3Map10set__entryGlRP210nekoserver8buildlog4StepE(self, entry$2, idx$2);
-      return;
-    } else {
-      const _Some = _bind;
-      const _curr_entry = _Some;
-      if (psl > _curr_entry.psl) {
-        entry$2.psl = psl;
-        _M0MPB3Map10set__entryGlRP210nekoserver8buildlog4StepE(self, entry$2, idx$2);
-        _tmp = _curr_entry.psl + 1 | 0;
-        _tmp$2 = idx$2 + 1 & self.capacity_mask;
-        _tmp$3 = _curr_entry;
-        continue;
-      } else {
-        _tmp = psl + 1 | 0;
-        _tmp$2 = idx$2 + 1 & self.capacity_mask;
-        continue;
-      }
-    }
-  }
-}
-function _M0MPB3Map20rehash__place__entryGlRP210nekoserver8buildlog4StepE(self, outer) {
-  const hash = outer.hash;
-  let _tmp = 0;
-  let _tmp$2 = hash & self.capacity_mask;
-  while (true) {
-    const psl = _tmp;
-    const idx = _tmp$2;
-    const _tmp$3 = self.entries;
-    $bound_check(_tmp$3, idx);
-    const _bind = _tmp$3[idx];
-    if (_bind === undefined) {
-      outer.psl = psl;
-      outer.prev = self.tail;
-      _M0MPB3Map20add__entry__to__tailGlRP210nekoserver8buildlog4StepE(self, idx, outer);
-      return undefined;
-    } else {
-      const _Some = _bind;
-      const _curr = _Some;
-      if (psl > _curr.psl) {
-        _M0MPB3Map10push__awayGlRP210nekoserver8buildlog4StepE(self, idx, _curr);
-        outer.psl = psl;
-        outer.prev = self.tail;
-        _M0MPB3Map20add__entry__to__tailGlRP210nekoserver8buildlog4StepE(self, idx, outer);
-        return undefined;
-      } else {
-        _tmp = psl + 1 | 0;
-        _tmp$2 = idx + 1 & self.capacity_mask;
-        continue;
-      }
-    }
-  }
-}
-function _M0MPB3Map4growGlRP210nekoserver8buildlog4StepE(self) {
-  const old_head = self.head;
-  const new_capacity = self.capacity << 1;
-  self.entries = $make_array_len_and_init(new_capacity, undefined);
-  self.capacity = new_capacity;
-  self.capacity_mask = new_capacity - 1 | 0;
-  const _p = self.capacity;
-  self.grow_at = (Math.imul(_p, 13) | 0) / 16 | 0;
-  self.size = 0;
-  self.head = undefined;
-  self.tail = -1;
-  let _tmp = old_head;
-  while (true) {
-    const x = _tmp;
-    if (x === undefined) {
-      return;
-    } else {
-      const _Some = x;
-      const _e = _Some;
-      const next_in_chain = _e.next;
-      _e.next = undefined;
-      _M0MPB3Map20rehash__place__entryGlRP210nekoserver8buildlog4StepE(self, _e);
-      _tmp = next_in_chain;
-      continue;
-    }
-  }
-}
-function _M0MPB3Map15set__with__hashGlRP210nekoserver8buildlog4StepE(self, key, value, hash) {
-  let _tmp = 0;
-  let _tmp$2 = hash & self.capacity_mask;
-  while (true) {
-    const psl = _tmp;
-    const idx = _tmp$2;
-    const _tmp$3 = self.entries;
-    $bound_check(_tmp$3, idx);
-    const _bind = _tmp$3[idx];
-    if (_bind === undefined) {
-      if (self.size >= self.grow_at) {
-        _M0MPB3Map4growGlRP210nekoserver8buildlog4StepE(self);
-        _tmp = 0;
-        _tmp$2 = hash & self.capacity_mask;
-        continue;
-      }
-      const _bind$2 = self.tail;
-      const _bind$3 = undefined;
-      const entry = new _M0TPB5EntryGlRP210nekoserver8buildlog4StepE(_bind$2, _bind$3, psl, hash, key, value);
-      _M0MPB3Map20add__entry__to__tailGlRP210nekoserver8buildlog4StepE(self, idx, entry);
-      return undefined;
-    } else {
-      const _Some = _bind;
-      const _curr_entry = _Some;
-      if (_curr_entry.hash === hash && BigInt.asUintN(64, _curr_entry.key) === BigInt.asUintN(64, key)) {
-        _curr_entry.value = value;
-        return undefined;
-      }
-      if (psl > _curr_entry.psl) {
-        if (self.size >= self.grow_at) {
-          _M0MPB3Map4growGlRP210nekoserver8buildlog4StepE(self);
-          _tmp = 0;
-          _tmp$2 = hash & self.capacity_mask;
-          continue;
-        }
-        _M0MPB3Map10push__awayGlRP210nekoserver8buildlog4StepE(self, idx, _curr_entry);
-        const _bind$2 = self.tail;
-        const _bind$3 = undefined;
-        const entry = new _M0TPB5EntryGlRP210nekoserver8buildlog4StepE(_bind$2, _bind$3, psl, hash, key, value);
-        _M0MPB3Map20add__entry__to__tailGlRP210nekoserver8buildlog4StepE(self, idx, entry);
-        return undefined;
-      }
-      _tmp = psl + 1 | 0;
-      _tmp$2 = idx + 1 & self.capacity_mask;
-      continue;
-    }
-  }
-}
-function _M0MPB3Map3setGlRP210nekoserver8buildlog4StepE(self, key, value) {
-  _M0MPB3Map15set__with__hashGlRP210nekoserver8buildlog4StepE(self, key, value, _M0IPC15int645Int64PB4Hash4hash(key));
-}
-function _M0MPB3Map3MapGlRP210nekoserver8buildlog4StepE(arr, capacity) {
-  const length = arr.end - arr.start | 0;
-  let capacity$2;
-  if (capacity === undefined) {
-    capacity$2 = length === 0 ? 8 : _M0FPB21capacity__for__length(length);
-  } else {
-    const _Some = capacity;
-    const _capacity = _Some;
-    const _p = _M0FPB21capacity__for__length(length);
-    capacity$2 = _capacity > _p ? _capacity : _p;
-  }
-  const m = _M0FPB8new__mapGlRP210nekoserver8buildlog4StepE(capacity$2);
-  const _bind = arr.end - arr.start | 0;
-  let _tmp = 0;
-  while (true) {
-    const _ = _tmp;
-    if (_ < _bind) {
-      const e = arr.buf[arr.start + _ | 0];
-      _M0MPB3Map3setGlRP210nekoserver8buildlog4StepE(m, e._0, e._1);
-      _tmp = _ + 1 | 0;
-      continue;
-    } else {
-      break;
-    }
-  }
-  return m;
-}
-function _M0MPB3Map3getGlRP210nekoserver8buildlog4StepE(self, key) {
-  const hash = _M0IPC15int645Int64PB4Hash4hash(key);
-  let _tmp = 0;
-  let _tmp$2 = hash & self.capacity_mask;
-  while (true) {
-    const i = _tmp;
-    const idx = _tmp$2;
-    const _tmp$3 = self.entries;
-    $bound_check(_tmp$3, idx);
-    const _bind = _tmp$3[idx];
-    if (_bind === undefined) {
-      return undefined;
-    } else {
-      const _Some = _bind;
-      const _entry = _Some;
-      if (_entry.hash === hash && BigInt.asUintN(64, _entry.key) === BigInt.asUintN(64, key)) {
-        return _entry.value;
-      }
-      if (i > _entry.psl) {
-        return undefined;
-      }
-      _tmp = i + 1 | 0;
-      _tmp$2 = idx + 1 & self.capacity_mask;
-      continue;
-    }
-  }
-}
-function _M0MPB3Map4iterGlRP210nekoserver8buildlog4StepE(self) {
-  const curr_entry = new _M0TPB8MutLocalGORPB5EntryGlRP210nekoserver8buildlog4StepEE(self.head);
-  const len = self.size;
-  const remaining = new _M0TPB8MutLocalGiE(len);
-  return _M0MPB4Iter3newGUlRP210nekoserver8buildlog4StepEE(() => {
-    _L: {
-      if (remaining.val > 0) {
-        const _bind = curr_entry.val;
-        if (_bind === undefined) {
-          break _L;
-        } else {
-          const _Some = _bind;
-          const _x = _Some;
-          const _key = _x.key;
-          const _value = _x.value;
-          const _next = _x.next;
-          curr_entry.val = _next;
-          remaining.val = remaining.val - 1 | 0;
-          return { _0: _key, _1: _value };
-        }
-      } else {
-        break _L;
-      }
-    }
-    return undefined;
-  }, len);
-}
-function _M0MPB3Map5iter2GlRP210nekoserver8buildlog4StepE(self) {
-  return _M0MPB3Map4iterGlRP210nekoserver8buildlog4StepE(self);
-}
-function _M0MPB5Iter24nextGlRP210nekoserver8buildlog4StepE(self) {
-  return _M0MPB4Iter4nextGUlRP210nekoserver8buildlog4StepEE(self);
-}
-function _M0IPC15int645Int64PB4Hash4hash(self) {
-  return _M0IPC16uint646UInt64PB4Hash4hash(self);
-}
-function _M0IPC16uint646UInt64PB4Hash4hash(self) {
-  const acc = (((_M0FPB4seed >>> 0) + (374761393 >>> 0) | 0) >>> 0) + (8 >>> 0) | 0;
-  const low = Number(BigInt.asUintN(32, BigInt.asUintN(64, self & 4294967295n))) | 0;
-  const high = Number(BigInt.asUintN(32, BigInt.asUintN(64, BigInt.asUintN(64, BigInt.asUintN(64, self) >> BigInt(32 & 63)) & 4294967295n))) | 0;
-  const acc$2 = _M0FPB13consume4__acc(acc, low);
-  const acc$3 = _M0FPB13consume4__acc(acc$2, high);
-  return _M0FPB13finalize__acc(acc$3);
+function _M0MPC15array5Array4copyGRP210nekoserver8buildlog4StepE(self) {
+  return _M0MPB7JSArray4copy(self);
 }
 function _M0MPC15array12MutArrayView4swapGRP210nekoserver8buildlog4StepE(arr, i, j) {
   const temp = arr.buf[arr.start + i | 0];
@@ -1019,7 +626,7 @@ function _M0FP210nekoserver8buildlog12split__lines(log) {
       $bound_check(log, _p);
       const c = log.charCodeAt(_p);
       if (c === 13 || c === 10) {
-        _M0MPC15array5Array4pushGRP210nekoserver8buildlog4StepE(lines, _M0FP210nekoserver8buildlog5slice(log, start, i));
+        _M0MPC15array5Array4pushGsE(lines, _M0FP210nekoserver8buildlog5slice(log, start, i));
         let _tmp;
         if (c === 13) {
           let _tmp$2;
@@ -1045,7 +652,7 @@ function _M0FP210nekoserver8buildlog12split__lines(log) {
       break;
     }
   }
-  _M0MPC15array5Array4pushGRP210nekoserver8buildlog4StepE(lines, _M0FP210nekoserver8buildlog5slice(log, start, n));
+  _M0MPC15array5Array4pushGsE(lines, _M0FP210nekoserver8buildlog5slice(log, start, n));
   return lines;
 }
 function _M0FP210nekoserver8buildlog12starts__with(s, prefix) {
@@ -1389,6 +996,24 @@ function _M0FP210nekoserver8buildlog15is__instruction(text) {
   }
   return false;
 }
+function _M0FP210nekoserver8buildlog10find__step(steps, id) {
+  const _bind = steps.length;
+  let _tmp = 0;
+  while (true) {
+    const _ = _tmp;
+    if (_ < _bind) {
+      const step = steps[_];
+      if (BigInt.asUintN(64, step.id) === BigInt.asUintN(64, id)) {
+        return step;
+      }
+      _tmp = _ + 1 | 0;
+      continue;
+    } else {
+      break;
+    }
+  }
+  return undefined;
+}
 function _M0FP210nekoserver8buildlog12handle__line(steps, raw) {
   const line = _M0FP210nekoserver8buildlog4trim(_M0FP210nekoserver8buildlog11strip__ansi(raw));
   const _bind = _M0FP210nekoserver8buildlog17parse__step__line(line);
@@ -1406,11 +1031,11 @@ function _M0FP210nekoserver8buildlog12handle__line(steps, raw) {
       const _x$2 = _Some$2;
       const _state = _x$2._0;
       const _seconds_text = _x$2._1;
-      const _bind$3 = _M0MPB3Map3getGlRP210nekoserver8buildlog4StepE(steps, _id);
+      const _bind$3 = _M0FP210nekoserver8buildlog10find__step(steps, _id);
       let step;
       if (_bind$3 === undefined) {
         const s = new _M0TP210nekoserver8buildlog4Step(_id, _M0FP210nekoserver8buildlog11placeholder, "running", _M0DTPC16option6OptionGdE4None__);
-        _M0MPB3Map3setGlRP210nekoserver8buildlog4StepE(steps, _id, s);
+        _M0MPC15array5Array4pushGsE(steps, s);
         step = s;
       } else {
         const _Some$3 = _bind$3;
@@ -1433,9 +1058,9 @@ function _M0FP210nekoserver8buildlog12handle__line(steps, raw) {
       return 0;
     }
     const label = _text.length > 1500 ? _M0FP210nekoserver8buildlog5slice(_text, 0, 1500) : _text;
-    const _bind$3 = _M0MPB3Map3getGlRP210nekoserver8buildlog4StepE(steps, _id);
+    const _bind$3 = _M0FP210nekoserver8buildlog10find__step(steps, _id);
     if (_bind$3 === undefined) {
-      _M0MPB3Map3setGlRP210nekoserver8buildlog4StepE(steps, _id, new _M0TP210nekoserver8buildlog4Step(_id, label, "running", _M0DTPC16option6OptionGdE4None__));
+      _M0MPC15array5Array4pushGsE(steps, new _M0TP210nekoserver8buildlog4Step(_id, label, "running", _M0DTPC16option6OptionGdE4None__));
     } else {
       const _Some$2 = _bind$3;
       const _step = _Some$2;
@@ -1472,8 +1097,8 @@ function _M0FP210nekoserver8buildlog12json__string(b, s) {
         } else {
           if (c < 32) {
             _M0IPB13StringBuilderPB6Logger13write__string(b, "\\u00");
-            _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog5slice(_M0FP210nekoserver8buildlog12json__stringN3hexS19, c / 16 | 0, (c / 16 | 0) + 1 | 0));
-            _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog5slice(_M0FP210nekoserver8buildlog12json__stringN3hexS19, c % 16 | 0, (c % 16 | 0) + 1 | 0));
+            _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog5slice(_M0FP210nekoserver8buildlog12json__stringN3hexS18, c / 16 | 0, (c / 16 | 0) + 1 | 0));
+            _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog5slice(_M0FP210nekoserver8buildlog12json__stringN3hexS18, c % 16 | 0, (c % 16 | 0) + 1 | 0));
           } else {
             _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog5slice(s, i, i + 1 | 0));
           }
@@ -1497,17 +1122,16 @@ function _M0FP210nekoserver8buildlog11error__json(code, detail) {
   return b.val;
 }
 function _M0FP210nekoserver8buildlog19analyze__build__log(log) {
-  const _bind = [];
-  const steps = _M0MPB3Map3MapGlRP210nekoserver8buildlog4StepE(new _M0TPB9ArrayViewGUlRP210nekoserver8buildlog4StepEE(_bind, 0, 0), undefined);
-  const _bind$2 = _M0FP210nekoserver8buildlog12split__lines(log);
-  const _bind$3 = _bind$2.length;
+  const steps = [];
+  const _bind = _M0FP210nekoserver8buildlog12split__lines(log);
+  const _bind$2 = _bind.length;
   let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ < _bind$3) {
-      const raw = _bind$2[_];
-      const _bind$4 = _M0FP210nekoserver8buildlog12handle__line(steps, raw);
-      if (_bind$4 === 1) {
+    if (_ < _bind$2) {
+      const raw = _bind[_];
+      const _bind$3 = _M0FP210nekoserver8buildlog12handle__line(steps, raw);
+      if (_bind$3 === 1) {
         return _M0FP210nekoserver8buildlog11error__json("step_id_reused", "ステップ番号が再使用されています。複数ビルドのログを分離してください");
       }
       _tmp = _ + 1 | 0;
@@ -1516,31 +1140,18 @@ function _M0FP210nekoserver8buildlog19analyze__build__log(log) {
       break;
     }
   }
-  if (steps.size > 500) {
+  if (steps.length > 500) {
     return _M0FP210nekoserver8buildlog11error__json("too_many_steps", "ステップ数が500件を超えています");
   }
-  const list = [];
-  const _it = _M0MPB3Map5iter2GlRP210nekoserver8buildlog4StepE(steps);
-  while (true) {
-    const _bind$4 = _M0MPB5Iter24nextGlRP210nekoserver8buildlog4StepE(_it);
-    if (_bind$4 === undefined) {
-      break;
-    } else {
-      const _Some = _bind$4;
-      const _x = _Some;
-      const _step = _x._1;
-      _M0MPC15array5Array4pushGRP210nekoserver8buildlog4StepE(list, _step);
-      continue;
-    }
-  }
+  const list = _M0MPC15array5Array4copyGRP210nekoserver8buildlog4StepE(steps);
   _M0MPC15array5Array13sort__by__keyGRP210nekoserver8buildlog4SteplE(list, (s) => s.id);
   const b = _M0MPB13StringBuilder21StringBuilder_2einner(0);
   _M0IPB13StringBuilderPB6Logger13write__string(b, "{\"ok\":true,\"steps\":[");
-  const _bind$4 = list.length;
+  const _bind$3 = list.length;
   let _tmp$2 = 0;
   while (true) {
     const i = _tmp$2;
-    if (i < _bind$4) {
+    if (i < _bind$3) {
       const step = list[i];
       if (i > 0) {
         _M0IPB13StringBuilderPB6Logger11write__char(b, 44);
@@ -1552,9 +1163,9 @@ function _M0FP210nekoserver8buildlog19analyze__build__log(log) {
       _M0IPB13StringBuilderPB6Logger13write__string(b, ",\"state\":");
       _M0FP210nekoserver8buildlog12json__string(b, step.state);
       _M0IPB13StringBuilderPB6Logger13write__string(b, ",\"seconds\":");
-      const _bind$5 = step.seconds;
-      if (_bind$5.$tag === 1) {
-        const _Some = _bind$5;
+      const _bind$4 = step.seconds;
+      if (_bind$4.$tag === 1) {
+        const _Some = _bind$4;
         const _v = _Some._0;
         _M0IPB13StringBuilderPB6Logger13write__string(b, _M0FP210nekoserver8buildlog20js__number__to__json(_v));
       } else {

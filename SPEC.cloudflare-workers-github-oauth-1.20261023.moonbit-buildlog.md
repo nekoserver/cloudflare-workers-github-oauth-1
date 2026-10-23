@@ -47,3 +47,4 @@
 - 標準ライブラリはサードパーティ(tutuca)がnpmに置いた公式ビルドの出力を使っている。公式の `moon` CLI(cli.moonbitlang.com)はこの環境から届かないため。`moon` CLIが使える環境に移るなら、置き換えを検討する。
 - ツールチェインは `.moonbit-toolchain/`(gitignore済み)にインストールされ、本番の依存(`package.json` の dependencies)には入らない。
 - 警告が1件でもあれば生成を失敗にしている。
+- **MoonBitの `Map` / `Set` などハッシュを使う型は使わない**。読み込み時に乱数シードを作り、Workersのデプロイが code 10021 で失敗する(経緯は [`REPORT.cloudflare-workers-github-oauth-1.MOONBIT-BUILDLOG.20261023.md`](REPORT.cloudflare-workers-github-oauth-1.MOONBIT-BUILDLOG.20261023.md))。`scripts/build-moonbit.mjs` は、生成物に乱数・タイマー・I/Oの呼び出しがあれば失敗にする。

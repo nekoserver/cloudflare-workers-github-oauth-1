@@ -70,9 +70,14 @@ function compile(tc, { name, pkg, exports }) {
     exportedFunctions: exports, outputFormat: 'wasm', testMode: false, debug: false, noOpt: false,
     sourceMap: false, sources: {}, stopOnMain: false,
   });
+  const js = Buffer.from(linked.result).toString('utf8');
+  // Workersはグローバルスコープ(モジュール読み込み時)での乱数生成・タイマー・I/Oを禁止しており、
+  // 含まれているとデプロイ時の検証(code 10021)で失敗する。MoonBitのMap等は読み込み時に乱数シードを作るため検出して止める
+  const forbidden = ['getRandomValues', 'Math.random', 'setTimeout', 'setInterval', 'fetch('].filter((w) => js.includes(w));
+  if (forbidden.length) throw new Error(`${name}: Workersのグローバルスコープで禁止されている処理が生成物に含まれます: ${forbidden.join(', ')}(Map/Set等の乱数シードを使う型を避けること)`);
   const header = `// このファイルは scripts/build-moonbit.mjs が moonbit/${name}/ から生成する。手で編集しないこと。\n` +
     `// コンパイラ: @moonbit/moonc-worker ${tc.workerVersion} (moonc ${tc.toolchain}) / target: js\n`;
-  return header + Buffer.from(linked.result).toString('utf8');
+  return header + js;
 }
 
 const check = process.argv.includes('--check');

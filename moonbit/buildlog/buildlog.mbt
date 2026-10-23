@@ -289,16 +289,28 @@ fn is_instruction(text : String) -> Bool {
 }
 
 ///|
-fn handle_line(steps : Map[Int64, Step], raw : String) -> LineResult {
+/// 番号でステップを探す。Map(ハッシュ表)はモジュール読み込み時に乱数シードを作り、
+/// Workersのグローバルスコープでは乱数の生成が禁止されているため使わない。
+fn find_step(steps : Array[Step], id : Int64) -> Step? {
+  for step in steps {
+    if step.id == id {
+      return Some(step)
+    }
+  }
+  None
+}
+
+///|
+fn handle_line(steps : Array[Step], raw : String) -> LineResult {
   let line = trim(strip_ansi(raw))
   guard parse_step_line(line) is Some((id, text)) else { return Continue }
   match parse_terminal(text) {
     Some((state, seconds_text)) => {
-      let step = match steps.get(id) {
+      let step = match find_step(steps, id) {
         Some(s) => s
         None => {
           let s = { id, label: placeholder, state: "running", seconds: None }
-          steps[id] = s
+          steps.push(s)
           s
         }
       }
@@ -326,7 +338,7 @@ fn handle_line(steps : Map[Int64, Step], raw : String) -> LineResult {
   } else {
     text
   }
-  match steps.get(id) {
+  match find_step(steps, id) {
     Some(step) => {
       // 複数の docker 実行が同じ #N を使うことがあるため、無関係な計測を合算しない
       if step.label != placeholder && step.label != label {
@@ -334,7 +346,7 @@ fn handle_line(steps : Map[Int64, Step], raw : String) -> LineResult {
       }
       step.label = label
     }
-    None => steps[id] = { id, label, state: "running", seconds: None }
+    None => steps.push({ id, label, state: "running", seconds: None })
   }
   Continue
 }
@@ -376,7 +388,7 @@ fn error_json(code : String, detail : String) -> String {
 /// 成功: {"ok":true,"steps":[{"id":1,"label":"...","state":"done","seconds":1.5}, ...]}
 /// 失敗: {"ok":false,"errorCode":"step_id_reused"|"too_many_steps","detail":"..."}
 pub fn analyze_build_log(log : String) -> String {
-  let steps : Map[Int64, Step] = Map([])
+  let steps : Array[Step] = []
   for raw in split_lines(log) {
     match handle_line(steps, raw) {
       Reused =>
@@ -389,10 +401,7 @@ pub fn analyze_build_log(log : String) -> String {
   if steps.length() > max_steps {
     return error_json("too_many_steps", "ステップ数が500件を超えています")
   }
-  let list = []
-  for _, step in steps {
-    list.push(step)
-  }
+  let list = steps.copy()
   list.sort_by_key(fn(s) { s.id })
   let b = StringBuilder::new()
   b.write_string("{\"ok\":true,\"steps\":[")
