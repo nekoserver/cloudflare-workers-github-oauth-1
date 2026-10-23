@@ -255,3 +255,5 @@ SecureMineは既存Redmineの普段使い用フロントとして、データの
 - 本体の認証JWTとCookieも接続成功時から604800秒（7日）へ更新する。SESSION_IDLE_TIMEOUT_SECONDSが明示設定されている場合、そのアイドル期限は引き続き優先する。強制revokeの確認も継続する。
 - 再読み込み時は `GET /api/securemine/session` から最後にログインした接続先を復元し、Workerが所有者・期限・接続先を確認して保存済みAPIキーを復号する。復元ではログイン履歴の追記や完了トースト表示をしない。
 - ページ内で追加した複数アカウントは引き続き切り替え可能。再読み込みで復元する接続先は最後にログインした1件。課題・プロジェクトのデータ本体はRedmineに置いたまま。
+
+ログイン情報の保存失敗はHTTP 502とし、画面にも `Redmine HTTP 502: ログイン情報を保存できません。接続設定とDBの状態を確認してください。` を表示する。テーブル作成SQLは `migrations/0168_create_securemine_sessions.sql`。既存user_sessionsには0054（last_activity_at）と0060（idle_timeout_seconds）の適用も必要。

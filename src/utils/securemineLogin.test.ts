@@ -31,7 +31,7 @@ describe('SecureMine persistent login',()=>{
   });
   it('does not issue success cookies when DB saving fails',async()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({user:{id:4,login:'alice'}}))));
-    const response=await fixture(true).login();expect(response.status).toBe(503);expect(response.headers.has('Set-Cookie')).toBe(false);
+    const response=await fixture(true).login();expect(response.status).toBe(502);expect(response.headers.has('Set-Cookie')).toBe(false);expect(await response.text()).toContain('Redmine HTTP 502: ログイン情報を保存できません。');
   });
   it('rejects cross-origin login and invalid Redmine credentials without DB writes',async()=>{
     const remote=vi.fn(async()=>new Response('{}',{status:401}));vi.stubGlobal('fetch',remote);
