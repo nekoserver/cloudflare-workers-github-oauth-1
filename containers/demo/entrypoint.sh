@@ -181,7 +181,8 @@ log "firewall log collector started (pid $!)"
 # 可能性があるため、DBが無ければ毎回ここで作る。bundle installはビルド時済みのため
 # ここではdb:migrateのみ実行する(失敗してもApache自体は起動を試みる)。
 REDMINE_DB=/opt/redmine/storage/redmine.sqlite3
-if [ ! -f "$REDMINE_DB" ]; then
+# /opt/redmineはDockerfile.redmineでビルドしたイメージにだけある(通常のDockerfileには無い)。
+if [ -d /opt/redmine ] && [ ! -f "$REDMINE_DB" ]; then
   ( cd /opt/redmine \
     && su -s /bin/sh www-data -c 'PATH=/usr/local/bin:$PATH RAILS_ENV=production bundle exec rake db:migrate' \
       >/tmp/redmine-migrate.log 2>&1 \

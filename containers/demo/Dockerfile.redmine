@@ -1,0 +1,247 @@
+# Redmine・Passenger・minitest-mock入りの版(2026-10-24にローカルのビルドが失敗したため、通常のDockerfileとは別に保存している。
+# 失敗の原因を直したら、このファイルをDockerfileに戻す)。通常のDockerfileとの差分はgit diff containers/demo/Dockerfile containers/demo/Dockerfile.redmine。
+# ソースからビルドする版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
+ARG TAILSCALE_VERSION=1.104.1
+ARG GH_VERSION=2.103.0
+ARG JJ_VERSION=0.46.0
+ARG RUBY_VERSION=4.0.9
+ARG MINITEST_MOCK_VERSION=5.27.0
+ARG PASSENGER_VERSION=6.2.1
+ARG REDMINE_VERSION=7.0.2
+ARG REDMINE_COMMIT=c1be3264e52d65f2870c05d30509520964c5580f
+
+# Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
+# pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
+FROM golang:1.27.1-trixie AS tailscale-build
+ARG TAILSCALE_VERSION
+RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
+    && /go/bin/tailscale version \
+    && /go/bin/tailscaled --version
+
+# Ubuntu-based container for /cf-containers. Runtime credentials are supplied
+# at startup; do not COPY login state or secrets into this image.
+# ghはGoのソース(proxy.golang.org)からビルドする。リリースのdebは使わない。
+FROM golang:1.27.1-trixie AS gh-build
+ARG GH_VERSION
+RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
+    && /go/bin/gh --version
+
+# Redmineはgemではなくソース配布(Rails本体)のため、公式リポジトリのgitタグから取得し、
+# タグが指すコミットを固定値と照合する(タグの付け替えで中身が変わったら失敗させる)。
+FROM ubuntu:26.04 AS redmine-src
+ARG REDMINE_VERSION
+ARG REDMINE_COMMIT
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "${REDMINE_VERSION}" https://github.com/redmine/redmine.git /src \
+    && test "$(git -C /src rev-parse HEAD)" = "${REDMINE_COMMIT}" \
+    && rm -rf /src/.git
+
+# jj(Jujutsu)はaptに無いため、crates.ioのソースからビルドする。
+FROM rust:1-trixie AS jj-build
+ARG JJ_VERSION
+RUN cargo install --locked jj-cli@${JJ_VERSION} \
+    && /usr/local/cargo/bin/jj --version
+
+# Rubyは公式のソース(cache.ruby-lang.org)からビルドする。aptのrubyは古いため使わない。
+# sha256はhttps://www.ruby-lang.org/en/downloads/ に載っている値で固定し、取得物の改ざん・破損で失敗させる。
+FROM ubuntu:26.04 AS ruby-build
+ARG RUBY_VERSION
+ARG RUBY_SHA256=c35350682ff050b79702d57ade4516e7336063f510155d19fb2fb5b3f3909511
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl build-essential autoconf bison pkg-config \
+        libssl-dev libyaml-dev zlib1g-dev libffi-dev libgmp-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/ruby.tar.gz \
+        "https://cache.ruby-lang.org/pub/ruby/${RUBY_VERSION%.*}/ruby-${RUBY_VERSION}.tar.gz" \
+    && echo "${RUBY_SHA256}  /tmp/ruby.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/ruby-src && tar -xzf /tmp/ruby.tar.gz -C /tmp/ruby-src --strip-components=1 \
+    && cd /tmp/ruby-src \
+    && ./configure --prefix=/opt/ruby --disable-install-doc \
+    && make -j"$(nproc)" \
+    && make install \
+    && rm -rf /tmp/ruby-src /tmp/ruby.tar.gz \
+    && /opt/ruby/bin/ruby --version \
+    && /opt/ruby/bin/ruby -ropenssl -ryaml -rzlib -rfiddle -e 'puts OpenSSL::OPENSSL_LIBRARY_VERSION'
+
+FROM ubuntu:26.04
+
+# Use one supported Node runtime for the server and both CLIs. The archive
+# digest is pinned independently of the download, so corruption fails the build.
+ARG NODE_VERSION=26.12.1
+ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
+ARG NPM_VERSION=12.2.0
+ARG CODEX_VERSION=0.164.0
+ARG CLAUDE_VERSION=2.1.309
+ARG VITEST_VERSION=5.0.5
+ARG TYPESCRIPT_VERSION=7.0.2
+ARG CLOUDFLARED_VERSION=2026.10.1
+# Retain the installation path used by existing runtime checks.
+ENV PATH="/opt/node22/bin:${PATH}"
+
+# Node.js 26 requires libatomic.so.1 (provided by libatomic1).
+# Keep large packages in separate layers to avoid registry upload timeouts.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates tmux expect gnupg libatomic1 \
+        apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
+        python3 python3-venv cron sudo bubblewrap libyaml-0-2 libffi8 libgmp10 \
+        build-essential apache2-dev sqlite3 libsqlite3-dev imagemagick \
+        iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+# 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
+# ログインシェル(/etc/profile.d)とsshd経由のセッション(/etc/default/locale)の両方で既定にする。
+RUN locale-gen ja_JP.UTF-8 \
+    && printf 'LANG=ja_JP.UTF-8\n' > /etc/default/locale \
+    && printf 'export LANG=ja_JP.UTF-8\n' > /etc/profile.d/locale.sh
+ENV LANG=ja_JP.UTF-8
+ARG INSTALL_DOCKER=false
+RUN case "$INSTALL_DOCKER" in true|false) ;; *) echo "INSTALL_DOCKER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_DOCKER" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends docker.io \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+# chat用のPythonライブラリはUbuntuのapt版を使う(pipはPyPIへの証明書検証が
+# このビルド環境で通らず、apt版ならアーカイブ経由で取得でき依存を固定しやすいため)。
+RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
+COPY --from=gh-build /go/bin/gh /usr/bin/gh
+COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj
+ARG CLOUDFLARED_SHA256=200573c872174ab449965655febadef8edfbb144ebcaa391b700b2dedbadb3cd
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
+        "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
+    && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
+    && dpkg -i /tmp/cloudflared.deb \
+    && rm -f /tmp/cloudflared.deb
+COPY --from=tailscale-build /go/bin/tailscale /usr/bin/tailscale
+COPY --from=tailscale-build /go/bin/tailscaled /usr/sbin/tailscaled
+# ソースからビルドしたRuby。SSHのセッションでも見えるよう/usr/local/binにリンクする。
+COPY --from=ruby-build /opt/ruby /opt/ruby
+RUN for b in ruby gem irb erb rake bundle bundler rdoc ri; do if [ -x /opt/ruby/bin/$b ]; then ln -sf /opt/ruby/bin/$b /usr/local/bin/$b; fi; done \
+    && ruby --version \
+    && ruby -ropenssl -ryaml -rzlib -e 'puts "ruby ok"'
+
+# minitest-mock: minitest本体からmock機能だけを切り出したgem(テストで単独利用する場合用)。
+ARG MINITEST_MOCK_VERSION
+RUN gem install minitest-mock -v "${MINITEST_MOCK_VERSION}" --no-document \
+    && ruby -e 'require "minitest/mock"; puts "minitest-mock ok"'
+
+# Phusion Passenger: Apacheモジュールとしてビルドし、Rails(Redmine)をApache経由で動かす。
+# --snippetで出力される3行(LoadModule/PassengerRoot/PassengerDefaultRuby)を
+# そのままapache2の設定に取り込む(パスはビルドごとに変わるため、固定値を書かない)。
+ARG PASSENGER_VERSION
+RUN gem install passenger -v "${PASSENGER_VERSION}" --no-document \
+    && /opt/ruby/bin/passenger-config --version \
+    && /opt/ruby/bin/passenger-install-apache2-module --auto --languages ruby \
+    && /opt/ruby/bin/passenger-install-apache2-module --snippet > /etc/apache2/mods-available/passenger.load \
+    && test -s /etc/apache2/mods-available/passenger.load
+
+# Redmine(Ruby on Rails製の課題管理)。DBはSQLite3を専用に使う。
+# RedmineのGemfileはconfig/database.ymlのadapter設定からDBのgemを自動選択するため、
+# bundle installの前にsqlite3アダプタを指定したdatabase.ymlを置く(無いとpg/mysql2等が入らず済むだけで、
+# sqlite3 gemも入らずRedmineが起動できない)。本番用のDBファイル自体はentrypoint.shが起動時に用意する。
+ARG REDMINE_VERSION
+ENV RAILS_ENV=production
+COPY --from=redmine-src /src /opt/redmine
+RUN cd /opt/redmine \
+    && printf 'production:\n  adapter: sqlite3\n  database: storage/redmine.sqlite3\n' > config/database.yml \
+    && bundle config set --local without "development test" \
+    && bundle config set --local deployment false \
+    && bundle install --jobs "$(nproc)" \
+    && mkdir -p log tmp tmp/pdf tmp/thumbnails public/plugin_assets files storage \
+    && bundle exec rake generate_secret_token \
+    && printf '%s\n' "${REDMINE_VERSION}" > REDMINE_VERSION
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.xz \
+        "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    && echo "${NODE_SHA256}  /tmp/node22.tar.xz" | sha256sum -c - \
+    && mkdir -p /opt/node22 && tar -xJf /tmp/node22.tar.xz -C /opt/node22 --strip-components=1 \
+    && rm -f /tmp/node22.tar.xz \
+    && node --version
+RUN npm cache clean --force \
+    && npm install -g npm@${NPM_VERSION} --ignore-scripts \
+    && /opt/node22/bin/npm --version \
+    && /opt/node22/bin/npm cache clean --force
+RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
+    && npm install -g @openai/codex@${CODEX_VERSION} \
+    && codex --version \
+    && npm cache clean --force
+# Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
+ARG INSTALL_VITEST=true
+RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_VITEST" = "true" ]; then \
+    npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
+    && vitest --version \
+    && npm cache clean --force; \
+    fi
+ARG INSTALL_TYPESCRIPT=true
+RUN case "$INSTALL_TYPESCRIPT" in true|false) ;; *) echo "INSTALL_TYPESCRIPT must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_TYPESCRIPT" = "true" ]; then \
+    npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
+    && tsc --version \
+    && npm cache clean --force; \
+    fi
+# SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
+# よく使うものは/usr/local/binにリンクし、あとからnpm install -gしたものもログインシェルで見えるようPATHも通す。
+RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev/null 2>&1; then ln -sf /opt/node22/bin/$b /usr/local/bin/$b; fi; done \
+    && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
+    && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
+# npm 12 blocks install scripts by default; allow only Claude's native installer.
+RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
+    && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
+    && claude --version \
+    && /opt/node22/bin/npm cache clean --force
+# wrangler: Node 20以上が必要なためClaude CLIと同じ/opt/node22のnpmで入れる。
+# npmも起動スクリプトも`env node`でPATH上のnode 18を拾うため、PATHの先頭に/opt/node22/binを置く。
+ARG INSTALL_WRANGLER=true
+RUN case "$INSTALL_WRANGLER" in true|false) ;; *) echo "INSTALL_WRANGLER must be true or false" >&2; exit 1 ;; esac; \
+    if [ "$INSTALL_WRANGLER" = "true" ]; then \
+    PATH=/opt/node22/bin:$PATH npm install -g wrangler \
+    && printf '#!/bin/sh\nPATH=/opt/node22/bin:$PATH exec /opt/node22/bin/wrangler "$@"\n' > /usr/local/bin/wrangler \
+    && chmod +x /usr/local/bin/wrangler \
+    && wrangler --version \
+    && PATH=/opt/node22/bin:$PATH npm cache clean --force; \
+    fi
+
+# Record the exact non-secret bundle choices for health checks and later analysis.
+RUN printf '{"docker":%s,"vitest":%s,"typescript":%s,"wrangler":%s}\n' \
+      "$INSTALL_DOCKER" "$INSTALL_VITEST" "$INSTALL_TYPESCRIPT" "$INSTALL_WRANGLER" > /etc/container-features.json
+
+# /healthのバージョン表で「想定の版」として使う(実際の版と比べて色を付ける)。
+ARG TAILSCALE_VERSION
+ARG GH_VERSION
+ARG JJ_VERSION
+ARG RUBY_VERSION
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" \
+        > /etc/image-versions.json \
+    && cat /etc/image-versions.json
+
+WORKDIR /app
+# build-info.jsonはwrangler.tomlの[build]が書き出す。無い場合(直接docker build)もビルドは通す。
+COPY server.js build-info*.json ./
+# Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
+COPY firewall-stats.py firewall-log.py ./
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY cf /usr/local/bin/cf
+COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
+COPY apache-redmine.conf /etc/apache2/sites-available/010-redmine.conf
+COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
+COPY redmine-dump /usr/local/bin/redmine-dump
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf /usr/local/bin/redmine-dump \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip passenger \
+    && a2dissite 000-default \
+    && a2ensite 000-demo 010-redmine \
+    && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
+    && mkdir -p /run/sshd \
+    && chown -R www-data:www-data /opt/redmine
+
+EXPOSE 8080
+ENV PORT=8080
+# Redmineの外部から見える実際のパス(/cf-containers/proxy/redmine、認証済み管理プロキシ経由)。
+# Apache(127.0.0.1:8444)自身はRedmineをルート直下にマウントしているため、
+# リンク生成だけをこの値に合わせる(Redmineがネイティブに対応する設定)。
+ENV RAILS_RELATIVE_URL_ROOT=/cf-containers/proxy/redmine
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["node", "server.js"]
