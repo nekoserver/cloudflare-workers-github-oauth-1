@@ -25,6 +25,7 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
   { value: '@cf/ibm-granite/granite-4.0-h-micro', label: 'granite-4.0-h-micro' },
   { value: '@cf/qwen/qwen3.8-27b', label: 'qwen3.8-27b' },
+  { value: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', label: 'deepseek-v4.1-flash-1017' },
 ];
 
 // タブのタイトル。管理者(containerStatusを渡されたとき)だけ、コンテナが稼働中なら🟢、停止中なら⚫️を行末に付ける。

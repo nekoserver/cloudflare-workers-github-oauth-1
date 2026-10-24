@@ -6718,6 +6718,7 @@ app.get('/thread-tracker', authMiddleware, async (c) => {
  * AI チャット API（認証が必要）
  */
 const AICHAT_ALLOWED_MODELS = new Set([
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017',
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   '@cf/meta/llama-3.1-8b-instruct-fp8',
   '@cf/meta/llama-3.1-70b-instruct',

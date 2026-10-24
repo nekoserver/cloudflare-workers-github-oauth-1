@@ -37,6 +37,7 @@ export const AICHAT_COLOR_PALETTE: readonly string[] = [
  */
 const FIXED_MODEL_COLORS: Readonly<Record<string, string>> = {
   claude: '#f97316', // オレンジ
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017': '#14b8a6', // ティール
 };
 
 const FIXED_MODEL_COLOR_VALUES = new Set(
@@ -106,6 +107,9 @@ export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
  * 許容するが、デフォルトモデルには採用しないこと。
  */
 export const AICHAT_MODEL_EXTRA_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017': {
+    reasoning_effort: 'high',
+  },
   '@cf/google/gemma-4-26b-a4b-it': {
     chat_template_kwargs: { enable_thinking: false },
   },
