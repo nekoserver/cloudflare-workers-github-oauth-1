@@ -243,6 +243,33 @@ function runCmd(cmd, args) {
   });
 }
 
+// The admin-only /cf-containers page can request this fixed, read-only CLI
+// operation through the Worker proxy. Never accept a command or arguments from
+// the request; pass the container-scoped token only through the child process
+// environment and redact it from any captured output.
+function runWranglerContainersList(res) {
+  const token = process.env.CF_CONTAINER_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'CF_CONTAINER_API_TOKEN is not configured' }));
+    return;
+  }
+  const childEnv = { ...process.env, CLOUDFLARE_API_TOKEN: token, NO_COLOR: '1' };
+  execFile('wrangler', ['containers', 'list'], { env: childEnv, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const redact = (value) => String(value || '').split(token).join('[REDACTED]').slice(0, 2 * 1024 * 1024);
+    const result = {
+      command: 'wrangler containers list',
+      stdout: redact(stdout),
+      stderr: redact(stderr),
+      exitCode: err ? (typeof err.code === 'number' ? err.code : null) : 0,
+      error: err ? redact(err.message) : null,
+      checkedAt: new Date().toISOString(),
+    };
+    res.writeHead(err ? 502 : 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(result));
+  });
+}
+
 // cloudflaredの接続先(エッジ)の名前解決を、既定のDNS(IPv6のみの場合がある)と
 // IPv4の1.1.1.1の両方で試し、名前解決で止まっているかを切り分ける。
 const EDGE_HOST = 'region1.v2.argotunnel.com';
@@ -355,6 +382,10 @@ const server = http
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(net_));
       });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/debug/wrangler/containers-list') {
+      runWranglerContainersList(res);
       return;
     }
     if (req.url === '/health') {
