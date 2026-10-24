@@ -97,3 +97,13 @@ AIチャットの選択肢とAPI許可リストへ `@cf/deepseek-ai/deepseek-v4.
 ## 2026-10-24: tunnels.rb応答内のアンダースコア表示
 
 libのMarkdown表示と本体Worker共通Markdown表示で、`_`・`__`による強調解釈を停止。`*`による強調は維持し、APIのJSON応答は変更しない。libはキャッシュ対策のハッシュ付き資産を再生成し、稼働コンテナ `/var/www/html/lib` に反映した。本体Workerはソース修正のみで未デプロイ。libの5テストとWorkerの24テスト成功（Workerは環境内のVitest 5.0.5を使用）。ブラウザ実操作・本番Workerでの表示は未確認。
+
+
+## 2026-10-24 10:41 UTC observer・r9の差分解消
+
+ユーザー指定でapp-serverのソケットを `/run/lib-chat-app/app-server.sock` に統一し、現在の会話を読み取りAPIで照合した後observerを接続。mygw・streamの公開WebSocket/SSE/NDJSON/JSON-seqで実会話とheartbeat、SSEで会話の更新を確認した。r9の既存転送先に合わせループバックTLS10443を追加し、署名付きtunnels.rb・uptunnels.rbのHTTP200を確認。上記のobserver・r9未解決という記録は今回解消。Claude認証と起動元ENVの一覧トークン不一致は残る。コンテナ内へ適用済み、Dockerビルド・デプロイ・再作成後検証は未実施。詳細は当日NETWORK REPORT末尾。
+
+
+## 2026-10-24 10:53 UTC r9をRedmineへ割り当て
+
+r9専用TLS10443からRedmine7.0.2/Puma3009へ切り替えた。既存DBがなく新規PostgreSQL18.6を構成。公開ログイン画面・CSS200、未認証API401、新規管理者のログイン成功と初回パスワード変更画面を確認。mygw/stream/r8のlib API200を維持。r9で以前提供していたlib APIの疎通結果は切替前の履歴であり、現在の用途はRedmine。コンテナ内適用済み、再作成後は未確認。詳細は [Redmine REPORT](REPORT.cloudflare-workers-github-oauth-1.REDMINE-R9.20261024.md)。
