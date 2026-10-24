@@ -81,3 +81,19 @@
 - 先に提示した欠落補完SQLの3テーブル・12索引・4トリガー・4列がすべて反映済み。取得対象のオブジェクト数は437から456。移行履歴テーブルがないため、適用実行者・日時・順序は未確認。この照合では本番への書き込みはしていない。
 - スキーマ反映は新台帳への全収集経路の接続、過去データのバックフィル、比較画面の完成を証明しない。トリガーの本番発火試験・性能測定も未実施。
 - 詳細: [DB拡張・欠落補完SPEC](SPEC.cloudflare-workers-github-oauth-1.database-schema-extensions-20261022.md)、[複数コンテナ統計SPEC](SPEC.cloudflare-workers-github-oauth-1.multi-container-statistics.md)。
+
+## 2026-10-23 ネットワーク復旧
+
+現コンテナのTLS8443、tunnels.rb、WebSocket/HTTP配信、隔離Codexワーカーを適用し、公開署名付きAPIの実回答を確認。observer用app-server UnixソケットとClaude専用認証は未解決。起動元ENVの一覧トークンは0件・稼働トンネル取得拒否で、別プロセスの検証済み既存値をcron用ファイルへ反映。Secret・イメージは未更新。詳細は [ネットワークREPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261023.md)。Dockerビルド・デプロイ・再作成後検証なし。
+
+## 2026-10-23 DeepSeek V4.1 Flash 1017追加
+
+AIチャットの選択肢とAPI許可リストへ `@cf/deepseek-ai/deepseek-v4.1-flash-1017` を追加。表示色はティール `#14b8a6`。既存の共通色割当・D1保存経路を利用。関連モデル一覧・色設定テスト52件成功。Workerデプロイ・実モデルへの推論確認は未実施。
+
+## 2026-10-24 ネットワーク再配置
+
+現コンテナへlib CGI・Codex実行ワーカー・WebSocket・HTTPストリームを配置し、mygwの署名付きCodex実行、mygwとstream.test.cfcの配信認証、SSHトンネルのバナーを確認した。observerの対象Unixソケット、Claude認証、r9の10443待受は未解決。既存ENVの優先と取得失敗時のキャッシュ保持を維持し、非秘密の起動・更新設定をcf-containerへ保存した。起動元Secret、DNS、リモートTunnel設定、Worker、イメージは変更していない。再作成後の復元成功は未確認。詳細とセキュリティ情報は [当日REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261024.md) を参照。
+
+## 2026-10-24: tunnels.rb応答内のアンダースコア表示
+
+libのMarkdown表示と本体Worker共通Markdown表示で、`_`・`__`による強調解釈を停止。`*`による強調は維持し、APIのJSON応答は変更しない。libはキャッシュ対策のハッシュ付き資産を再生成し、稼働コンテナ `/var/www/html/lib` に反映した。本体Workerはソース修正のみで未デプロイ。libの5テストとWorkerの24テスト成功（Workerは環境内のVitest 5.0.5を使用）。ブラウザ実操作・本番Workerでの表示は未確認。
