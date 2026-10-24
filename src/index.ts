@@ -47,6 +47,8 @@ import { getCfContainersPage } from './views/cfContainers';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
+import { analyzeBuildLog } from './utils/moonbitBuildLog';
+import { getMoonbitSamplePage } from './views/moonbitSample';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
@@ -19207,9 +19209,25 @@ app.get('/chess-tsume-17te', authMiddleware, async (c) => {
   return c.html(getChessTsumePage());
 });
 
-/**
- * HTMLRewriter デモページ
- */
+/** MoonBitのBuildKitログ解析を本体Worker内で実行して結果を表示するサンプル。 */
+app.get('/moonbit-sample', authMiddleware, (c) => {
+  const samples = [
+    {
+      title: 'RUNの所要時間とキャッシュ',
+      description: '完了したRUNは秒数を返し、キャッシュ済みステップの秒数は不明のままです。',
+      log: '#1 [build 1/2] RUN npm ci\n#2 [build 2/2] RUN npm run build\n#1 DONE 4.25s\n#2 CACHED',
+    },
+    {
+      title: '失敗と進行中',
+      description: '失敗したステップと、まだ終了行がないステップを区別します。',
+      log: '#1 [build 1/2] RUN install packages\n#2 [build 2/2] RUN compile\n#1 ERROR: process exited with code 1',
+    },
+  ].map((sample) => ({ ...sample, result: analyzeBuildLog(sample.log) }));
+  c.header('Cache-Control', 'no-store');
+  return c.html(getMoonbitSamplePage(samples));
+});
+
+/** HTMLRewriter デモページ */
 app.get('/htmlrewriter-demo', authMiddleware, async (c) => {
   const user = c.get('user');
 
@@ -19915,18 +19933,24 @@ export async function runCfContainerBuildTimingCollection(env: Bindings) {
   if (!cfApiKey(env) || !env.CLOUDFLARE_ACCOUNT_ID) throw new Error('Builds API認証が未設定です');
   const credentials = {accountId:env.CLOUDFLARE_ACCOUNT_ID,apiKey:cfApiKey(env)!};
   const latest = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1');
-  const records = [await storeBuildTimings(env.DB,latest)];
+  const records = [];
   const errors: string[] = [];
+  let ignoredBuilds = 0;
+  const latestRecord = await storeBuildTimings(env.DB,latest);
+  if (latestRecord.stored) records.push(latestRecord);
+  else ignoredBuilds++;
   for (const item of latest.recentBuildMetadata) {
     if (item.buildUuid === latest.buildUuid) continue;
     try {
       const result = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1',item.buildUuid);
-      records.push(await storeBuildTimings(env.DB,{...result,status:item.status,createdOn:item.createdOn}));
+      const record = await storeBuildTimings(env.DB,{...result,status:item.status,createdOn:item.createdOn});
+      if (record.stored) records.push(record);
+      else ignoredBuilds++;
     } catch (error) {
       errors.push(item.buildUuid + ': ' + (error instanceof Error ? error.message : String(error)));
     }
   }
-  return {recordedBuilds:records.length,errors};
+  return {recordedBuilds:records.length,ignoredBuilds,errors};
 }
 
 app.post('/api/cf-containers/build-timings/refresh', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
@@ -19983,7 +20007,10 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
       (m) => logger.error('[cf-containers-build-log] D1記録に失敗', { error: m })
     );
     let timingWarning: string | null = null;
-    try { await storeBuildTimings(c.env.DB,result); }
+    try {
+      const stored = await storeBuildTimings(c.env.DB,result);
+      if (!stored.stored) timingWarning = 'ログは取得できましたが、BuildKitステップが見つからないため実測履歴には追加していません。';
+    }
     catch (error) {
       timingWarning = 'ログは取得できましたが、ステップ実測の保存に失敗しました。migration 0184・ログ形式を確認してください。';
       logger.error('[container-build-timings] save failed',{error:String(error)});

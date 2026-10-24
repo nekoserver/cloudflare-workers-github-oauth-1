@@ -8,6 +8,12 @@ function page(demo = true) {
   return dom;
 }
 describe('SecureMine', () => {
+  it('uses r9 as the initial connection URL without requiring the user to type it', () => {
+    const dom = page(false);
+    expect(dom.window.document.querySelector<HTMLInputElement>('#serverUrl')!.value).toBe('https://r9.nekomaneki.work');
+    dom.window.close();
+  });
+
   it('renders executable scripts and demo issues; filters and shows detail safely', () => {
     const dom = page();
     const d = dom.window.document;
@@ -99,6 +105,18 @@ function remotePage(fail = false, empty = false, restored = false) {
   return {dom,d,calls,control};
 }
 describe('SecureMine Redmine REST integration', () => {
+  it('exposes native features for the connected project and clears them on demo switch', async () => {
+    const {dom,d}=remotePage();
+    await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));
+    expect(d.querySelector<HTMLAnchorElement>('[data-redmine-feature="account"]')?.href).toBe('https://redmine.example/redmine/my/account');
+    (d.querySelector('#projects button') as HTMLElement).click();
+    await vi.waitFor(()=>expect(d.querySelector<HTMLAnchorElement>('[data-redmine-feature="wiki"]')?.href).toBe('https://redmine.example/redmine/projects/remote/wiki'));
+    expect(d.querySelector('#redmineFeaturesLinks')!.innerHTML).not.toContain('private-api-key');
+    const select=d.querySelector<HTMLSelectElement>('#account')!;select.value='demo';select.dispatchEvent(new dom.window.Event('change'));
+    expect(d.querySelectorAll('#redmineFeaturesLinks a')).toHaveLength(0);
+    dom.window.close();
+  });
+
   it('connects a subdirectory server, filters assigned issues, creates and reloads a real issue', async () => {
     const {dom,d,calls}=remotePage();
     await vi.waitFor(()=>expect(d.querySelector('#syncState')!.textContent).toContain('同期済み'));

@@ -28,7 +28,8 @@ export function allowedRedminePath(method: string, path: string): boolean {
 
 export async function proxyRedmine(c: Context<{ Bindings: Bindings; Variables: Variables }>): Promise<Response> {
   const error = (message: string, status: 400 | 403 | 413 | 502 | 503) => c.json({ errors: [message] }, status, { 'Cache-Control': 'no-store' });
-  if (!c.env.REDMINE_HMAC_SECRET || !c.env.REDMINE_HMAC_TARGETS) return error('Redmine HMAC接続がWorkerに設定されていません。', 503);
+  const sharedSecret = c.env.ORIGIN_HMAC_SECRET?.trim() || c.env.HMAC_SECRET?.trim() || c.env.REDMINE_HMAC_SECRET?.trim();
+  if (!sharedSecret || !c.env.REDMINE_HMAC_TARGETS) return error('Redmine HMAC接続がWorkerに設定されていません。', 503);
   const origin = c.req.header('Origin');
   if ((origin && origin !== new URL(c.req.url).origin) || (c.req.method !== 'GET' && !origin)) return error('同じオリジンから操作してください。', 403);
   const base = c.req.query('base') || '', path = c.req.query('path') || '';
@@ -66,7 +67,7 @@ export async function proxyRedmine(c: Context<{ Bindings: Bindings; Variables: V
   const contentType = c.req.method === 'GET' ? '' : c.req.header('Content-Type') || 'application/json';
   if (contentType && !['application/json', 'application/octet-stream'].includes(contentType)) return error('未対応のContent-Typeです。', 400);
   const timestamp = String(Math.floor(Date.now() / 1000)), nonce = crypto.randomUUID();
-  const signature = await redmineSignature(c.env.REDMINE_HMAC_SECRET, c.req.method, path, timestamp, nonce, apiKey, contentType, body.buffer);
+  const signature = await redmineSignature(sharedSecret, c.req.method, path, timestamp, nonce, apiKey, contentType, body.buffer);
   gateway.searchParams.set('path', path);
   try {
     const response = await fetch(gateway, { method: c.req.method, redirect: 'manual', signal: AbortSignal.timeout(30000), headers: {

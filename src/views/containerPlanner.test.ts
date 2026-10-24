@@ -16,8 +16,9 @@ describe('コンテナ構成プランナー', () => {
     expect(route).toContain('getContainerPlannerPage(await loadBuildTimings(c.env.DB))');
   });
   it('生成されたブラウザ側の計算関数が動作する', () => {
-    const script = getContainerPlannerPage().match(/const calculate = ([\s\S]*?);\nconst keys/)![1];
-    const calculate = new Function('return (' + script + ')')();
+    const script = getContainerPlannerPage().match(/<script>\s*(function calculate[\s\S]*?)\nconst keys/)![1];
+    expect(script).not.toContain('__name');
+    const calculate = new Function(script + '; return calculate;')();
     const result = calculate({ baseMiB: 100, baseSeconds: 20, limitMiB: 200, limitSeconds: 60, selected: ['a'], packages: [{id:'a',sizeMiB:30,seconds:5,dependencies:[]}] });
     expect(result.imageMiB).toBe(130);
     expect(result.buildSeconds).toBe(25);

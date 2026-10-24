@@ -54,6 +54,12 @@
 - プランナー生成時はD1から直近5ビルドの代表観測を読み込み、履歴切替・ステップ選択累計・実測時間の構成候補への追加に対応。並列作業の累計を経過時間と扱わず、キャッシュ・未完了の時間を0秒のコールドビルドと扱わない。イメージサイズはこのログから推測しない。
 - ローカルVitest、実SQLiteで再取得重複除外・batch失敗ロールバック、Workerソースの構文を確認。本番migration・デプロイ、実ビルドでの収集、ブラウザ実機は未実施。Dockerビルドは行っていない。
 
+### 2026-10-24 実測履歴の空レコード混入を修正
+
+- 本番D1を読み取り照合したところ、25観測のうち一部は `step_count=0` で、Workers Builds API上ではWorkerのプレビュー等に対応する短いログだった。これらが `log_complete=1` として保存され、作成時刻の新しい順に5件表示枠を占有していた。0件のBuildKitステップを「実測履歴」として表示する不具合を確認。
+- ソースではBuildKitステップが0件の観測を新規保存せず、既存の0件観測もプランナーの選択対象から除外。更新操作では保存数・ステップなしで除外した数・取得失敗の詳細を表示する。
+- 変更はローカルソースのみ。Vitest・本番反映後の再照合は未実施。
+
 ## 2026-10-22 用途別の同梱指定
 
 - 単一Dockerfileに INSTALL_DOCKER / INSTALL_VITEST / INSTALL_TYPESCRIPT / INSTALL_WRANGLER を追加し、Wranglerのimage_varsから選択可能にした。Dockerのみ既定false、現在利用する開発CLIは既定trueを維持する。
@@ -97,3 +103,28 @@ AIチャットの選択肢とAPI許可リストへ `@cf/deepseek-ai/deepseek-v4.
 ## 2026-10-24: tunnels.rb応答内のアンダースコア表示
 
 libのMarkdown表示と本体Worker共通Markdown表示で、`_`・`__`による強調解釈を停止。`*`による強調は維持し、APIのJSON応答は変更しない。libはキャッシュ対策のハッシュ付き資産を再生成し、稼働コンテナ `/var/www/html/lib` に反映した。本体Workerはソース修正のみで未デプロイ。libの5テストとWorkerの24テスト成功（Workerは環境内のVitest 5.0.5を使用）。ブラウザ実操作・本番Workerでの表示は未確認。
+
+
+## 2026-10-24 10:41 UTC observer・r9の差分解消
+
+ユーザー指定でapp-serverのソケットを `/run/lib-chat-app/app-server.sock` に統一し、現在の会話を読み取りAPIで照合した後observerを接続。mygw・streamの公開WebSocket/SSE/NDJSON/JSON-seqで実会話とheartbeat、SSEで会話の更新を確認した。r9の既存転送先に合わせループバックTLS10443を追加し、署名付きtunnels.rb・uptunnels.rbのHTTP200を確認。上記のobserver・r9未解決という記録は今回解消。Claude認証と起動元ENVの一覧トークン不一致は残る。コンテナ内へ適用済み、Dockerビルド・デプロイ・再作成後検証は未実施。詳細は当日NETWORK REPORT末尾。
+
+
+## 2026-10-24 10:53 UTC r9をRedmineへ割り当て
+
+r9専用TLS10443からRedmine7.0.2/Puma3009へ切り替えた。既存DBがなく新規PostgreSQL18.6を構成。公開ログイン画面・CSS200、未認証API401、新規管理者のログイン成功と初回パスワード変更画面を確認。mygw/stream/r8のlib API200を維持。r9で以前提供していたlib APIの疎通結果は切替前の履歴であり、現在の用途はRedmine。コンテナ内適用済み、再作成後は未確認。詳細は [Redmine REPORT](REPORT.cloudflare-workers-github-oauth-1.REDMINE-R9.20261024.md)。
+
+
+## 2026-10-24 12:13 UTC 現在のドメイン割り当て表
+
+CloudflareのCustom Domains・Routes・DNS・Tunnel ingressと稼働Apacheを読み取りで確認し、[ドメイン割り当て表](NOTICE.cloudflare-workers-github-oauth-1.DOMAIN-ASSIGNMENTS.20261024.md) を追加。本体は `1.wr1.nekomaneki.work`、SecureMineは同ホストの `/securemine`、Redmineはr9、AIチャットの接続先はmygwを維持。Route登録のみで対応DNSが見当たらない別名や、停止中cfc-tunnelの旧ingressも区別して記録した。表作成に伴う設定変更は行っていない。
+
+SecureMine用HMACゲートウェイと接続先マップはr9へ適用済み。共通鍵そのもの・AIチャット設定は未変更。画面の既定URLと共通鍵の直接参照を行うソース修正は未デプロイで、利用者のAPIキーによる画面内の接続成功は未確認。
+
+## 2026-10-24 SecureMineのRedmine機能メニュー
+
+接続中のRedmineの全体機能と、選択したプロジェクトのWiki・作業時間・ガント・カレンダー・ロードマップ・文書・ファイル等を開くメニューをサイドバーに追加。APIキーを転送しない別タブの画面リンクで、権限・有効モジュールの判定はRedmineへ委ねる。管理リンクはAPIの管理者フラグに連動。未接続・デモ・接続先切替で旧リンクを破棄する。関連47テスト成功。ソースのみで未デプロイ・未push、実ブラウザ/iOS未確認。
+
+## 2026-10-24 MoonBitサンプルページ
+
+認証後 `/moonbit-sample` を開くと、本体Worker内の生成済みMoonBit BuildKitログ解析へ例を渡し、完了秒数・キャッシュ・エラー・未完了の解析結果を表示する。コンテナ構成プランナーにもリンクを追加。ソース追加のみで、テスト・Workerデプロイ・ブラウザ表示は未確認。

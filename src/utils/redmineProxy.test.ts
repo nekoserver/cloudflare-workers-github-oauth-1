@@ -8,6 +8,16 @@ app.all('/api/securemine/redmine', proxyRedmine);
 const url = (path = 'projects.json') => 'https://worker.example/api/securemine/redmine?' + new URLSearchParams({base:'https://redmine.example/redmine', path});
 afterEach(() => vi.unstubAllGlobals());
 describe('Redmine HMAC proxy', () => {
+  it('prefers the shared origin secret over the legacy Redmine binding', async () => {
+    const common = env.REDMINE_HMAC_SECRET;
+    const fetcher = vi.fn(async () => new Response('{}', {headers:{'Content-Type':'application/json'}}));
+    vi.stubGlobal('fetch', fetcher);
+    const response = await app.request(url(), {headers:{'X-Redmine-API-Key':'key'}}, {...env, ORIGIN_HMAC_SECRET: common, REDMINE_HMAC_SECRET: common + '-legacy'});
+    expect(response.status).toBe(200);
+    const headers = (fetcher.mock.calls[0] as unknown as [URL,RequestInit])[1].headers as Record<string,string>;
+    expect(headers['X-Redmine-Signature']).toBe(await redmineSignature(common, 'GET', 'projects.json', headers['X-Redmine-Timestamp'], headers['X-Redmine-Nonce'], 'key', '', new ArrayBuffer(0)));
+  });
+
   it('signs a fixed cross-language vector and binds body, API key and method', async () => {
     const body = new TextEncoder().encode('{"issue":{"subject":"日本語"}}').buffer;
     const args = ['test-secret-with-at-least-32-chars','POST','issues.json','1791475200','12345678-1234-1234-1234-123456789abc','api-key','application/json',body] as const;

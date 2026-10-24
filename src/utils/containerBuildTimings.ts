@@ -22,6 +22,11 @@ export function summarizeBuildTimings(steps: BuildTimingStep[]) {
 
 export async function storeBuildTimings(db: D1Database, build: {buildUuid:string;status:string|null;log:string;logComplete?:boolean;createdOn?:string|null}) {
   const steps = parseBuildTimings(build.log);
+  // Worker-only/preview builds can have a complete API log without any BuildKit
+  // steps. They are not measurements and must not displace useful history.
+  if (steps.length === 0) {
+    return {snapshotKey:null,stepCount:0,...summarizeBuildTimings(steps),stored:false};
+  }
   const complete = build.logComplete === true;
   const bytes = new TextEncoder().encode(JSON.stringify({version:1,build:build.buildUuid,status:build.status,createdOn:build.createdOn ?? null,complete,steps}));
   const snapshotKey = [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -38,7 +43,7 @@ export async function storeBuildTimings(db: D1Database, build: {buildUuid:string
   });
   statements.push(imageRecord.statement);
   await db.batch(statements);
-  return {snapshotKey,stepCount:steps.length,...summarizeBuildTimings(steps)};
+  return {snapshotKey,stepCount:steps.length,...summarizeBuildTimings(steps),stored:true};
 }
 
 export async function loadBuildTimings(db: D1Database): Promise<BuildTimingRecord[]> {
@@ -46,6 +51,7 @@ export async function loadBuildTimings(db: D1Database): Promise<BuildTimingRecor
   const {results} = await db.prepare(`SELECT * FROM (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY build_uuid ORDER BY terminal_count DESC, step_count DESC, log_complete DESC, collected_at DESC, snapshot_key DESC) AS rank
     FROM cf_container_build_measurements
+    WHERE step_count > 0
   ) WHERE rank=1 ORDER BY COALESCE(build_created_on,collected_at) DESC, build_uuid DESC LIMIT 5`).all<{
     snapshot_key:string;build_uuid:string;build_created_on:string|null;build_status:string|null;log_complete:number;collected_at:string;step_count:number;terminal_count:number;
   }>();
