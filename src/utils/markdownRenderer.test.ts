@@ -25,6 +25,15 @@ describe('getMarkdownParserScript', () => {
     expect(parseMd('~~strike~~')).toContain('<del>strike</del>');
   });
 
+  it('API応答のアンダースコアとリンク先を文字のまま保持する', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('前_中_後 _reply_ __reply__ codex_prompt NETWORK_PROMPT_OK [link](https://example.com/a_b_c)');
+    expect(html).toContain('前_中_後 _reply_ __reply__ codex_prompt NETWORK_PROMPT_OK');
+    expect(html).toContain('href="https://example.com/a_b_c"');
+    expect(html).not.toContain('<em>');
+    expect(html).not.toContain('<strong>');
+  });
+
   it('箇条書き・番号リストをul/olに変換する', () => {
     const parseMd = loadParseMd();
     expect(parseMd('- a\n- b')).toContain('<ul><li>a</li><li>b</li></ul>');
