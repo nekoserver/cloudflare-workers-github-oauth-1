@@ -11,6 +11,9 @@ import type { DemoContainer } from './containers/demoContainer';
 export type Bindings = {
   /** Redmine公開URL→Apache HMACゲートウェイURLのJSONマップ */
   REDMINE_HMAC_TARGETS?: string;
+  /** Shared origin HMAC; legacy Redmine-specific binding remains a fallback. */
+  ORIGIN_HMAC_SECRET?: string;
+  HMAC_SECRET?: string;
   REDMINE_HMAC_SECRET?: string;
   JWT_SECRET: string;
   ENVIRONMENT: string;

@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 import tempfile
 import time
 import unittest
@@ -18,6 +19,9 @@ loader.exec_module(gateway)
 
 class GatewayTests(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, {}, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.config = {'secret': 'test-secret-with-at-least-32-chars', 'upstream': 'http://127.0.0.1:3000/redmine', 'nonce_db': self.temp.name + '/nonces.db'}
@@ -38,6 +42,14 @@ class GatewayTests(unittest.TestCase):
         result = []
         payload = gateway.application(environ, lambda status, headers: result.append((status, headers)))
         return result[0][0], b''.join(payload)
+
+    def test_shared_environment_secret_precedence(self):
+        common = self.config['secret']
+        with patch.dict(os.environ, {'ORIGIN_HMAC_SECRET': ' ' + common + ' ', 'HMAC_SECRET': common + '-other'}):
+            self.assertEqual(gateway.load_secret({}), common)
+        with patch.dict(os.environ, {'ORIGIN_HMAC_SECRET': ' ', 'HMAC_SECRET': common}):
+            self.assertEqual(gateway.load_secret({}), common)
+        self.assertEqual(gateway.load_secret({}), '')
 
     def test_current_user_only(self):
         self.assertTrue(gateway.allowed('GET', 'users/current.json'))

@@ -107,3 +107,14 @@ libのMarkdown表示と本体Worker共通Markdown表示で、`_`・`__`による
 ## 2026-10-24 10:53 UTC r9をRedmineへ割り当て
 
 r9専用TLS10443からRedmine7.0.2/Puma3009へ切り替えた。既存DBがなく新規PostgreSQL18.6を構成。公開ログイン画面・CSS200、未認証API401、新規管理者のログイン成功と初回パスワード変更画面を確認。mygw/stream/r8のlib API200を維持。r9で以前提供していたlib APIの疎通結果は切替前の履歴であり、現在の用途はRedmine。コンテナ内適用済み、再作成後は未確認。詳細は [Redmine REPORT](REPORT.cloudflare-workers-github-oauth-1.REDMINE-R9.20261024.md)。
+
+
+## 2026-10-24 12:13 UTC 現在のドメイン割り当て表
+
+CloudflareのCustom Domains・Routes・DNS・Tunnel ingressと稼働Apacheを読み取りで確認し、[ドメイン割り当て表](NOTICE.cloudflare-workers-github-oauth-1.DOMAIN-ASSIGNMENTS.20261024.md) を追加。本体は `1.wr1.nekomaneki.work`、SecureMineは同ホストの `/securemine`、Redmineはr9、AIチャットの接続先はmygwを維持。Route登録のみで対応DNSが見当たらない別名や、停止中cfc-tunnelの旧ingressも区別して記録した。表作成に伴う設定変更は行っていない。
+
+SecureMine用HMACゲートウェイと接続先マップはr9へ適用済み。共通鍵そのもの・AIチャット設定は未変更。画面の既定URLと共通鍵の直接参照を行うソース修正は未デプロイで、利用者のAPIキーによる画面内の接続成功は未確認。
+
+## 2026-10-24 SecureMineのRedmine機能メニュー
+
+接続中のRedmineの全体機能と、選択したプロジェクトのWiki・作業時間・ガント・カレンダー・ロードマップ・文書・ファイル等を開くメニューをサイドバーに追加。APIキーを転送しない別タブの画面リンクで、権限・有効モジュールの判定はRedmineへ委ねる。管理リンクはAPIの管理者フラグに連動。未接続・デモ・接続先切替で旧リンクを破棄する。関連47テスト成功。ソースのみで未デプロイ・未push、実ブラウザ/iOS未確認。

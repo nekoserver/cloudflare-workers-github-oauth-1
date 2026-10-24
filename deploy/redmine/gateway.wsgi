@@ -3,6 +3,7 @@ from contextlib import closing
 import hashlib
 import hmac
 import json
+import os
 import re
 import sqlite3
 import ssl
@@ -39,6 +40,12 @@ def canonical(method, path, timestamp, nonce, key, content_type, body):
     return '\n'.join(('redmine-v1', method, path, timestamp, nonce, sha(key.encode()), sha(content_type.encode()), sha(body))).encode()
 
 
+def load_secret(config):
+    return (os.environ.get('ORIGIN_HMAC_SECRET', '').strip()
+            or os.environ.get('HMAC_SECRET', '').strip()
+            or str(config.get('secret', '')).strip())
+
+
 def application(environ, start_response):
     def respond(status, data, content_type='application/json'):
         start_response(status, [('Content-Type', content_type), ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff')])
@@ -50,7 +57,8 @@ def application(environ, start_response):
     try:
         with open('/etc/redmine-hmac.json', encoding='utf-8') as f:
             config = json.load(f)
-        if len(config['secret']) < 32:
+        secret = load_secret(config)
+        if len(secret) < 32:
             return error('503 Service Unavailable', 'HMAC設定が不正です。')
         method = environ['REQUEST_METHOD']
         query = urllib.parse.parse_qs(environ.get('QUERY_STRING', ''), keep_blank_values=True)
@@ -72,7 +80,7 @@ def application(environ, start_response):
         body = environ['wsgi.input'].read(length)
         if len(body) != length or (method == 'GET' and body):
             return error('400 Bad Request', 'Invalid body')
-        expected = hmac.new(config['secret'].encode(), canonical(method, path, timestamp, nonce, key, content_type, body), hashlib.sha256).hexdigest()
+        expected = hmac.new(secret.encode(), canonical(method, path, timestamp, nonce, key, content_type, body), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
             return error('403 Forbidden', 'HMAC authentication failed')
         with closing(sqlite3.connect(config['nonce_db'], timeout=5)) as db, db:

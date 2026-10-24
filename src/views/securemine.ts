@@ -1,3 +1,4 @@
+import { getSecuremineRedmineFeaturesScript } from '../utils/securemineRedmineFeatures';
 import { getSecuremineSectionTabsScript } from '../utils/securemineSectionTabs';
 import { getSecuremineCalendarScript } from '../utils/securemineCalendar';
 import { getThemeCSS, getThemeInitScript } from '../utils/theme';
@@ -15,6 +16,7 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 .auto-sync-drawer{display:flex;align-items:center;flex-shrink:0}.auto-sync-clip{width:170px;overflow:hidden;transition:width .28s ease,visibility 0s}.auto-sync{width:170px;white-space:nowrap;transition:transform .28s ease,opacity .28s ease}.auto-sync-drawer.is-closed .auto-sync-clip{width:0;visibility:hidden;transition:width .28s ease,visibility 0s .28s}.auto-sync-drawer.is-closed .auto-sync{transform:translateX(110%);opacity:0}#autoSyncToggle{padding:0 9px;font-size:22px;line-height:28px}@media(prefers-reduced-motion:reduce){.auto-sync-clip,.auto-sync{transition:none!important}}
 #settings.is-connected>summary{color:#86efac}.connection-status{margin-left:8px;font-weight:700;color:#86efac;-webkit-text-fill-color:transparent;-webkit-text-stroke:.7px currentColor}
 .section-toggle{position:fixed;right:6px;z-index:20;width:36px;height:128px;padding:8px 0;writing-mode:vertical-rl;text-orientation:upright;line-height:1.2;touch-action:none;user-select:none;cursor:ns-resize;background:var(--card-bg);box-shadow:0 2px 8px #0002;font-size:12px}.section-toggle[aria-expanded="true"]{border-color:var(--accent-color);color:var(--accent-color)}.section-toggle::before{content:"⋮";opacity:.6}.section-toggle.is-dragging{box-shadow:0 4px 12px #0004}.layout.issues-closed{grid-template-columns:230px}.project-section{overflow-wrap:anywhere}.project-section h2{font-size:16px}main{width:calc(100% - 48px);margin-right:48px;padding:0 16px}@media(max-width:1050px){.layout{grid-template-columns:1fr}#detail{grid-column:auto}.layout.issues-closed{grid-template-columns:1fr}}@media(max-width:680px){main{width:calc(100% - 44px);margin-right:44px;padding:0 8px}.section-toggle{right:4px;width:32px;font-size:11px}.issue-tabs{gap:2px}.issue-tabs button{font-size:12px;padding:10px 4px}.sync-bar{gap:4px;flex-wrap:wrap}.auto-sync-drawer{margin-left:auto}}
+.redmine-feature-list{display:flex;flex-wrap:wrap;gap:6px}.redmine-feature-list a{display:block;padding:7px 10px;border:1px solid var(--border-color);border-radius:6px;text-decoration:none;color:var(--accent-color,#2563eb)}.redmine-feature-list a:hover{background:var(--bg-secondary)}#redmineFeatures h3{font-size:13px;margin:12px 0 6px}#redmineFeaturesStatus{display:block;line-height:1.6}
 </style></head><body>
 <header><strong id="brand">▣ SecureMine</strong><select id="account" aria-label="アカウント"><option value="">未接続</option><option value="demo">操作デモ</option></select><button id="theme" aria-label="テーマ切替">◐</button></header>
 <nav aria-label="セクションの開閉"><button type="button" class="section-toggle" id="issuesToggle" aria-controls="issueWorkspace detail" aria-expanded="true" title="クリックで課題を開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">課題</button><button type="button" class="section-toggle" id="projectsToggle" aria-controls="projectSection" aria-expanded="true" title="クリックでプロジェクトを開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">プロジェクト</button><button type="button" class="section-toggle" id="commitsToggle" aria-controls="commitSection" aria-expanded="true" title="クリックでコミットログを開閉、上下にドラッグで移動。上下矢印キーでも移動できます。">コミット</button></nav>
@@ -22,7 +24,8 @@ ${getThemeInitScript()}<style>${getThemeCSS()}${getMarkdownPreviewCSS()}
 <div class="sync-bar"><span id="syncState" role="status" aria-live="polite">未接続</span><div class="auto-sync-drawer" id="autoSyncDrawer"><div class="auto-sync-clip" id="autoSyncControls"><label class="auto-sync"><input id="autoSync" type="checkbox">自動同期（60秒）</label></div><button type="button" id="autoSyncToggle" aria-controls="autoSyncControls" aria-expanded="true" aria-label="自動同期設定を閉じる">›</button></div></div>
 <div id="message" role="status" aria-live="polite"></div>
 <div class="layout"><aside class="panel side"><section class="commit-calendar-panel" id="commitSection" aria-label="コミットログ"><h2>コミットログ</h2><div class="heading"><h2 id="calendarMonth">当月カレンダー</h2><button id="calendarRefresh" class="calendar-refresh" aria-label="コミットログを再取得">↻</button></div><table class="commit-calendar" id="commitCalendar"><thead><tr><th scope="col">日</th><th scope="col">月</th><th scope="col">火</th><th scope="col">水</th><th scope="col">木</th><th scope="col">金</th><th scope="col">土</th></tr></thead><tbody></tbody></table><small id="calendarStatus" role="status" aria-live="polite"></small></section><section class="project-section" id="projectSection" aria-label="プロジェクト"><h2>プロジェクト</h2><button id="overview">プロジェクト一覧</button><div id="projects"></div><div id="projectOverview"></div></section>
-<details id="settings"><summary>Redmineに接続<span id="connectionStatus" class="connection-status" hidden>接続中</span></summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" placeholder="https://redmine.example.com" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIとWorker・ApacheのHMAC接続設定が必要です。APIキーはWorkerで暗号化して保存します。ログイン状態は標準で7日間保持します。</small></form></details></aside>
+<section id="redmineFeatures" aria-label="Redmineの機能"><details><summary>Redmineの機能を開く</summary><small id="redmineFeaturesStatus" role="status"></small><div id="redmineFeaturesLinks"></div></details></section>
+<details id="settings"><summary>Redmineに接続<span id="connectionStatus" class="connection-status" hidden>接続中</span></summary><form id="connection"><label>アカウント名<input id="serverName" maxlength="80" placeholder="仕事用 Redmine"></label><label>Redmine URL<input id="serverUrl" type="url" value="https://r9.nekomaneki.work" placeholder="https://r9.nekomaneki.work" required></label><label>APIキー<input id="apiKey" type="password" autocomplete="off" required></label><button class="primary">接続・追加</button><small>REST APIとWorker・ApacheのHMAC接続設定が必要です。APIキーはWorkerで暗号化して保存します。ログイン状態は標準で7日間保持します。</small></form></details></aside>
 <section class="panel" id="issueWorkspace"><div class="issue-tabs" role="tablist" aria-label="課題一覧"><button id="all" role="tab" aria-selected="true" aria-controls="issueTabPanel" class="active">すべての課題</button><button id="mine" role="tab" aria-selected="false" aria-controls="issueTabPanel" tabindex="-1">自分の担当課題</button></div><div id="issueTabPanel" role="tabpanel" aria-labelledby="all"><div class="issue-create"><button class="primary" id="newIssue">＋ 課題を作成</button></div><div class="heading"><h2 id="listTitle">課題一覧</h2><button id="refresh" aria-label="Redmineのデータを同期">↻ 同期</button></div><div class="filters"><input id="search" type="search" aria-label="課題を検索" placeholder="課題名・番号で検索"><select id="status" aria-label="ステータス"></select><select id="priority" aria-label="優先度"></select><select id="due" aria-label="期限"><option value="">すべての期限</option><option value="late">期限超過</option><option value="week">7日以内</option><option value="none">期限なし</option></select></div><small id="count"></small><div id="issues"></div><div class="pager"><button id="prev">前へ</button><small id="pageInfo"></small><button id="next">次へ</button></div></div></section>
 <section class="panel" id="detail"><div class="empty">課題を選択すると、詳細と変更履歴を表示します。</div></section></div>
 <footer><a href="/">ホーム</a></footer></main>
@@ -33,6 +36,7 @@ ${getSecuremineSectionTabsScript()}
 (function() {
   ${getMarkdownParserScript()}
   const $ = (id) => document.getElementById(id);
+  ${getSecuremineRedmineFeaturesScript()}
   const state = { accounts: [], account: null, project: "", mine: false, issues: [], projects: [], statuses: [], priorities: [], trackers: [], members: [], selected: null, offset: 0, total: 0, busy: false, generation: 0, demo: false, syncing: false, loaded: false, lastSync: null, user: null };
   const demoStatuses = [{ id: 1, name: "新規" }, { id: 2, name: "進行中" }, { id: 3, name: "完了", is_closed: true }];
   const demoPriorities = [{ id: 1, name: "低" }, { id: 2, name: "通常" }, { id: 3, name: "高" }];
@@ -97,6 +101,7 @@ ${getSecuremineSectionTabsScript()}
     if (p.updated_on) parent.append(element("small", "更新: " + new Date(p.updated_on).toLocaleString()));
   }
   function overview() {
+    renderRedmineFeatures(state.account, null);
     state.selected = null;
     $("detail").replaceChildren(element("div", "課題を選択すると、詳細と変更履歴を表示します。", "empty"));
     const d = $("projectOverview"); d.replaceChildren(element("h2", "プロジェクト一覧"));
@@ -124,6 +129,7 @@ ${getSecuremineSectionTabsScript()}
     load();
   }
   function projectDetail(p) {
+    renderRedmineFeatures(state.account, p);
     const d = $("detail"); d.replaceChildren(element("h2", "プロジェクト情報"));
     projectInfo(p, d);
     d.append(element("p", "このプロジェクトの課題を一覧から選択して編集できます。"));
@@ -139,7 +145,7 @@ ${getSecuremineSectionTabsScript()}
     const trackers = (await api(a, "trackers.json")).trackers;
     if (![statuses, priorities, trackers].every(Array.isArray)) throw new Error("Redmineの設定データの形式が不正です。");
     // Keep only display identity; /users/current can return sensitive extra fields.
-    return {user: {id: current.id, login: current.login, firstname: current.firstname, lastname: current.lastname}, projects, statuses, priorities, trackers};
+    return {user: {id: current.id, login: current.login, firstname: current.firstname, lastname: current.lastname, admin: current.admin === true}, projects, statuses, priorities, trackers};
   }
   function hideConnectionSummary() {
     $("mode").textContent = "";
@@ -205,6 +211,7 @@ ${getSecuremineSectionTabsScript()}
     render(); overview(); updateSync("操作デモ · 実際のRedmineには反映されません");
   }
   function setup() {
+    renderRedmineFeatures(state.account, state.projects.find(p => p.id === Number(state.project)));
     options("status", state.statuses, "全ステータス");
     options("priority", state.priorities, "全優先度");
     $("projects").replaceChildren();
@@ -264,6 +271,7 @@ ${getSecuremineSectionTabsScript()}
     return state.issues.filter((i) => (!state.project || i.project.id === Number(state.project)) && (!state.mine || state.account || i.assigned_to?.id === 1) && (!$("status").value || i.status.id === Number($("status").value)) && (!$("priority").value || i.priority.id === Number($("priority").value)) && (!q || i.subject.toLowerCase().includes(q) || String(i.id) === q) && (!$("due").value || ($("due").value === "none" ? !i.due_date : $("due").value === "late" ? i.due_date && i.due_date < today : i.due_date && i.due_date >= today && i.due_date <= week)));
   }
   function selectIssueTab(mine) {
+    renderRedmineFeatures(state.account, null);
     $("all").setAttribute("aria-selected", String(!mine));
     $("mine").setAttribute("aria-selected", String(mine));
     $("all").tabIndex = mine ? -1 : 0;
@@ -368,6 +376,7 @@ ${getSecuremineSectionTabsScript()}
     }
   }
   function detail(i) {
+    renderRedmineFeatures(state.account, state.projects.find(p => p.id === i.project?.id));
     const d = $("detail");
     d.replaceChildren();
     const top = element("div", void 0, "heading");
