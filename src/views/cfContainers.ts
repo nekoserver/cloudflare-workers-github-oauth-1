@@ -129,6 +129,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-container-list">Container一覧</a><button type="button" class="menu-toggle" data-section="container-list" aria-expanded="false" aria-label="Container一覧 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-tunnels">Tunnel一覧</a><button type="button" class="menu-toggle" data-section="tunnels" aria-expanded="false" aria-label="Tunnel一覧 の設定状況">&#9660;</button></div>
     </nav>
   </details>
@@ -142,7 +143,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </details>
 <details class="card" id="section-secrets" tabindex="-1" data-section="secrets">
   <summary>トークン設定（CLI不要）</summary>
-  <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:EditとCloudflare Tunnel:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
+  <p class="subtitle" style="margin:0 0 6px;">CF API・nekorootトンネル・Tailscaleのトークンを設定・更新できます。CF APIトークンは期限切れでも、新しいトークンを入力して更新できます。新しいCF APIトークンには対象アカウントのWorkers Scripts:Edit、Cloudflare Tunnel:Read、Containers:Read権限が必要です。保存後、コンテナを再起動して反映します。</p>
   <div class="status-row">
     <label for="secret-name" style="font-size:13px;">対象:</label>
     <select id="secret-name">
@@ -242,6 +243,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-buildlog" type="button">最新ビルドのログを取得</button>
   </div>
   <pre id="buildlog-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
+</details>
+<details class="card" id="section-container-list" tabindex="-1" data-section="container-list">
+  <summary>Container一覧（wrangler containers list）</summary>
+  <p class="subtitle">デモコンテナ内で読み取り専用の一覧コマンドを実行します。Cloudflare APIトークンにはContainers Read権限が必要です。</p>
+  <div class="status-row">
+    <button id="btn-container-list" type="button">wrangler containers list を実行</button>
+  </div>
+  <pre id="container-list-output" style="margin-top:6px;font-size:12px;white-space:pre;max-height:480px;overflow:auto;" aria-live="polite">未実行</pre>
 </details>
 <details class="card" id="section-tunnels" tabindex="-1" data-section="tunnels">
   <summary>Cloudflare Tunnel一覧</summary>
@@ -857,6 +866,25 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       })
       .catch(function (err) { buildLogPre.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnBuildLog.disabled = false; });
+  });
+
+  var btnContainerList = document.getElementById('btn-container-list');
+  var containerListOutput = document.getElementById('container-list-output');
+  btnContainerList.addEventListener('click', function () {
+    btnContainerList.disabled = true;
+    containerListOutput.textContent = '実行中…';
+    fetch('/cf-containers/proxy/debug/wrangler/containers-list', { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        var lines = ['$ ' + (data.command || 'wrangler containers list')];
+        if (data.stdout) lines.push(data.stdout.replace(/\\s+$/, ''));
+        if (data.stderr) lines.push('[stderr]\\n' + data.stderr.replace(/\\s+$/, ''));
+        if (data.error) lines.push('[error] ' + data.error);
+        if (data.checkedAt) lines.push('[取得時刻] ' + data.checkedAt);
+        containerListOutput.textContent = lines.join('\\n\\n');
+      })
+      .catch(function (err) { containerListOutput.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnContainerList.disabled = false; });
   });
 
   var btnTunnels = document.getElementById('btn-tunnels');
