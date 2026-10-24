@@ -1,4 +1,4 @@
-import { calculateContainerPlan } from '../utils/containerPlan';
+import { containerPlanBrowserSource } from '../utils/containerPlan';
 import { summarizeBuildTimings, type BuildTimingRecord } from '../utils/containerBuildTimings';
 
 export function getContainerPlannerPage(records: BuildTimingRecord[] = [], warning = ''): string {
@@ -20,7 +20,7 @@ export function getContainerPlannerPage(records: BuildTimingRecord[] = [], warni
 <a href="/cf-containers">← コンテナ管理</a><h1>コンテナ構成プランナー</h1>
 <p>構成候補を選び、インストール後のイメージサイズとビルド時間を試算します。実測値または自分の見積値を入力してください。空欄は「不明」として扱います。</p>
 <section><h2>ビルドステップの実測履歴</h2>
-<p>既存のWorkers Buildsログを解析してD1に保存します。6時間ごとの自動収集・管理ページでのログ取得・下の更新ボタンで記録します。ページ表示時は保存済み記録を読み込みます。</p>
+<p>既存のWorkers Buildsログを解析してD1に保存します。BuildKitステップのないログは実測履歴から除外します。6時間ごとの自動収集・管理ページでのログ取得・下の更新ボタンで記録します。ページ表示時は保存済み記録を読み込みます。</p>
 <p>ステップ累計は並列処理も足した作業時間で、実際の経過時間ではありません。キャッシュの時間は不明扱いでコールドビルドの見積もりには使いません。一つのRUN内の処理はまとめて一ステップです。</p>
 <p role="status">${escape(warning)}</p>
 <button id="refresh-measurements" type="button">最新ログから実測を収集</button>
@@ -45,7 +45,7 @@ ${measurements}
 <label for="json">プランJSON</label><textarea id="json" spellcheck="false"></textarea><p id="message" role="status"></p></section>
 <p class="muted">これは入力値に基づく概算です。レイヤーに残る削除済みファイル、圧縮・転送、並列ビルド、キャッシュ、ネットワーク変動、ビルド中の一時容量・メモリは別途確認が必要です。実際のインストールやDockerビルドは実行しません。</p>
 <script>
-const calculate = ${calculateContainerPlan.toString()};
+${containerPlanBrowserSource}
 const keys = ['baseMiB','baseSeconds','limitMiB','limitSeconds'];
 const storageKey = 'container-planner:v1';
 const tbody = document.getElementById('packages');
@@ -120,8 +120,15 @@ document.getElementById('refresh-measurements').addEventListener('click',async f
   try {
     const response=await fetch('/api/cf-containers/build-timings/refresh',{method:'POST',headers:{'Accept':'application/json'}});
     const data=await response.json();if(!response.ok)throw new Error(data.error || '収集失敗');
-    if(data.errors.length) {el.textContent=data.recordedBuilds+'ビルドを保存しました。一部の取得に失敗しました。ページを再表示して保存分を確認してください。';}
-    else {el.textContent=data.recordedBuilds+'ビルドを保存しました。再読み込みして表示します。';window.location.reload();}
+    const errors=Array.isArray(data.errors)?data.errors:[];
+    const ignored=Number.isFinite(data.ignoredBuilds)?data.ignoredBuilds:0;
+    const summary=data.recordedBuilds+'ビルドを保存、BuildKitステップなし '+ignored+' ビルドを履歴から除外しました。';
+    if(errors.length) {
+      el.textContent=summary+' 一部のログを取得できませんでした: '+errors.slice(0,3).join(' / ');
+      if(data.recordedBuilds>0)window.setTimeout(function(){window.location.reload();},1500);
+    }
+    else if(data.recordedBuilds>0) {el.textContent=summary+' 履歴を更新します。';window.location.reload();}
+    else {el.textContent=summary+' 保存済み履歴は変わりません。';}
   } catch(e) {el.textContent=e.message;} finally {button.disabled=false;}
 });
 document.addEventListener('input',function(e){

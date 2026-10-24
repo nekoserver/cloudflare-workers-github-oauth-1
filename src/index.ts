@@ -19915,18 +19915,24 @@ export async function runCfContainerBuildTimingCollection(env: Bindings) {
   if (!cfApiKey(env) || !env.CLOUDFLARE_ACCOUNT_ID) throw new Error('Builds API認証が未設定です');
   const credentials = {accountId:env.CLOUDFLARE_ACCOUNT_ID,apiKey:cfApiKey(env)!};
   const latest = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1');
-  const records = [await storeBuildTimings(env.DB,latest)];
+  const records = [];
   const errors: string[] = [];
+  let ignoredBuilds = 0;
+  const latestRecord = await storeBuildTimings(env.DB,latest);
+  if (latestRecord.stored) records.push(latestRecord);
+  else ignoredBuilds++;
   for (const item of latest.recentBuildMetadata) {
     if (item.buildUuid === latest.buildUuid) continue;
     try {
       const result = await fetchLatestBuildLog(credentials,'cloudflare-workers-github-oauth-1',item.buildUuid);
-      records.push(await storeBuildTimings(env.DB,{...result,status:item.status,createdOn:item.createdOn}));
+      const record = await storeBuildTimings(env.DB,{...result,status:item.status,createdOn:item.createdOn});
+      if (record.stored) records.push(record);
+      else ignoredBuilds++;
     } catch (error) {
       errors.push(item.buildUuid + ': ' + (error instanceof Error ? error.message : String(error)));
     }
   }
-  return {recordedBuilds:records.length,errors};
+  return {recordedBuilds:records.length,ignoredBuilds,errors};
 }
 
 app.post('/api/cf-containers/build-timings/refresh', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
@@ -19983,7 +19989,10 @@ app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddlewa
       (m) => logger.error('[cf-containers-build-log] D1記録に失敗', { error: m })
     );
     let timingWarning: string | null = null;
-    try { await storeBuildTimings(c.env.DB,result); }
+    try {
+      const stored = await storeBuildTimings(c.env.DB,result);
+      if (!stored.stored) timingWarning = 'ログは取得できましたが、BuildKitステップが見つからないため実測履歴には追加していません。';
+    }
     catch (error) {
       timingWarning = 'ログは取得できましたが、ステップ実測の保存に失敗しました。migration 0184・ログ形式を確認してください。';
       logger.error('[container-build-timings] save failed',{error:String(error)});
