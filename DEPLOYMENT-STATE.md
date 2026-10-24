@@ -89,11 +89,3 @@
 ## 2026-10-23 DeepSeek V4.1 Flash 1017追加
 
 AIチャットの選択肢とAPI許可リストへ `@cf/deepseek-ai/deepseek-v4.1-flash-1017` を追加。表示色はティール `#14b8a6`。既存の共通色割当・D1保存経路を利用。関連モデル一覧・色設定テスト52件成功。Workerデプロイ・実モデルへの推論確認は未実施。
-
-## 2026-10-24 ネットワーク再配置
-
-現コンテナへlib CGI・Codex実行ワーカー・WebSocket・HTTPストリームを配置し、mygwの署名付きCodex実行、mygwとstream.test.cfcの配信認証、SSHトンネルのバナーを確認した。observerの対象Unixソケット、Claude認証、r9の10443待受は未解決。既存ENVの優先と取得失敗時のキャッシュ保持を維持し、非秘密の起動・更新設定をcf-containerへ保存した。起動元Secret、DNS、リモートTunnel設定、Worker、イメージは変更していない。再作成後の復元成功は未確認。詳細とセキュリティ情報は [当日REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261024.md) を参照。
-
-## 2026-10-24: tunnels.rb応答内のアンダースコア表示
-
-libのMarkdown表示と本体Worker共通Markdown表示で、`_`・`__`による強調解釈を停止。`*`による強調は維持し、APIのJSON応答は変更しない。libはキャッシュ対策のハッシュ付き資産を再生成し、稼働コンテナ `/var/www/html/lib` に反映した。本体Workerはソース修正のみで未デプロイ。libの5テストとWorkerの24テスト成功（Workerは環境内のVitest 5.0.5を使用）。ブラウザ実操作・本番Workerでの表示は未確認。
