@@ -3,6 +3,10 @@ ARG TAILSCALE_VERSION=1.104.1
 ARG GH_VERSION=2.103.0
 ARG JJ_VERSION=0.46.0
 ARG RUBY_VERSION=4.0.9
+ARG MINITEST_MOCK_VERSION=5.27.0
+ARG PASSENGER_VERSION=6.2.1
+ARG REDMINE_VERSION=7.0.2
+ARG REDMINE_COMMIT=c1be3264e52d65f2870c05d30509520964c5580f
 
 # Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
 # pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
@@ -19,6 +23,17 @@ FROM golang:1.27.1-trixie AS gh-build
 ARG GH_VERSION
 RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
     && /go/bin/gh --version
+
+# Redmineはgemではなくソース配布(Rails本体)のため、公式リポジトリのgitタグから取得し、
+# タグが指すコミットを固定値と照合する(タグの付け替えで中身が変わったら失敗させる)。
+FROM ubuntu:26.04 AS redmine-src
+ARG REDMINE_VERSION
+ARG REDMINE_COMMIT
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "${REDMINE_VERSION}" https://github.com/redmine/redmine.git /src \
+    && test "$(git -C /src rev-parse HEAD)" = "${REDMINE_COMMIT}" \
+    && rm -rf /src/.git
 
 # jj(Jujutsu)はaptに無いため、crates.ioのソースからビルドする。
 FROM rust:1-trixie AS jj-build
@@ -69,6 +84,7 @@ RUN apt-get update && apt-get upgrade -y \
         ca-certificates tmux expect gnupg libatomic1 \
         apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv cron sudo bubblewrap libyaml-0-2 libffi8 libgmp10 \
+        build-essential apache2-dev sqlite3 libsqlite3-dev imagemagick \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
         netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
     && rm -rf /var/lib/apt/lists/*
@@ -104,6 +120,37 @@ COPY --from=ruby-build /opt/ruby /opt/ruby
 RUN for b in ruby gem irb erb rake bundle bundler rdoc ri; do if [ -x /opt/ruby/bin/$b ]; then ln -sf /opt/ruby/bin/$b /usr/local/bin/$b; fi; done \
     && ruby --version \
     && ruby -ropenssl -ryaml -rzlib -e 'puts "ruby ok"'
+
+# minitest-mock: minitest本体からmock機能だけを切り出したgem(テストで単独利用する場合用)。
+ARG MINITEST_MOCK_VERSION
+RUN gem install minitest-mock -v "${MINITEST_MOCK_VERSION}" --no-document \
+    && ruby -e 'require "minitest/mock"; puts "minitest-mock ok"'
+
+# Phusion Passenger: Apacheモジュールとしてビルドし、Rails(Redmine)をApache経由で動かす。
+# --snippetで出力される3行(LoadModule/PassengerRoot/PassengerDefaultRuby)を
+# そのままapache2の設定に取り込む(パスはビルドごとに変わるため、固定値を書かない)。
+ARG PASSENGER_VERSION
+RUN gem install passenger -v "${PASSENGER_VERSION}" --no-document \
+    && passenger-config --version \
+    && passenger-install-apache2-module --auto --languages ruby \
+    && passenger-install-apache2-module --snippet > /etc/apache2/mods-available/passenger.load \
+    && test -s /etc/apache2/mods-available/passenger.load
+
+# Redmine(Ruby on Rails製の課題管理)。DBはSQLite3を専用に使う。
+# RedmineのGemfileはconfig/database.ymlのadapter設定からDBのgemを自動選択するため、
+# bundle installの前にsqlite3アダプタを指定したdatabase.ymlを置く(無いとpg/mysql2等が入らず済むだけで、
+# sqlite3 gemも入らずRedmineが起動できない)。本番用のDBファイル自体はentrypoint.shが起動時に用意する。
+ARG REDMINE_VERSION
+ENV RAILS_ENV=production
+COPY --from=redmine-src /src /opt/redmine
+RUN cd /opt/redmine \
+    && printf 'production:\n  adapter: sqlite3\n  database: storage/redmine.sqlite3\n' > config/database.yml \
+    && bundle config set --local without "development test" \
+    && bundle config set --local deployment false \
+    && bundle install --jobs "$(nproc)" \
+    && mkdir -p log tmp tmp/pdf tmp/thumbnails public/plugin_assets files storage \
+    && bundle exec rake generate_secret_token \
+    && printf '%s\n' "${REDMINE_VERSION}" > REDMINE_VERSION
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.xz \
         "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && echo "${NODE_SHA256}  /tmp/node22.tar.xz" | sha256sum -c - \
@@ -177,15 +224,22 @@ COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
+COPY apache-redmine.conf /etc/apache2/sites-available/010-redmine.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
-    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
+COPY redmine-dump /usr/local/bin/redmine-dump
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf /usr/local/bin/redmine-dump \
+    && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip passenger \
     && a2dissite 000-default \
-    && a2ensite 000-demo \
+    && a2ensite 000-demo 010-redmine \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
-    && mkdir -p /run/sshd
+    && mkdir -p /run/sshd \
+    && chown -R www-data:www-data /opt/redmine
 
 EXPOSE 8080
 ENV PORT=8080
+# Redmineの外部から見える実際のパス(/cf-containers/proxy/redmine、認証済み管理プロキシ経由)。
+# Apache(127.0.0.1:8444)自身はRedmineをルート直下にマウントしているため、
+# リンク生成だけをこの値に合わせる(Redmineがネイティブに対応する設定)。
+ENV RAILS_RELATIVE_URL_ROOT=/cf-containers/proxy/redmine
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "server.js"]
