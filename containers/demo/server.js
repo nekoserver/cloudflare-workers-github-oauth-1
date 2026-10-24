@@ -290,13 +290,51 @@ function tailFile(path, maxBytes) {
   }
 }
 
+// Redmine(Passenger配下、127.0.0.1:8444のみで待ち受け)への内部プロキシ。
+// /redmine prefixを剥いで転送する(Apache側のVirtualHostはRedmineをルート直下に
+// マウントしている)。外部からの到達は/cf-containers/proxy/*の認証経由のみ
+// (ここに来る時点でWorker側のcfDashboardAdminMiddlewareを通過済み)。
+const REDMINE_PREFIX = '/redmine';
+function proxyToRedmine(req, res) {
+  const forwardPath = req.url.slice(REDMINE_PREFIX.length) || '/';
+  const upstream = http.request(
+    { host: '127.0.0.1', port: 8444, method: req.method, path: forwardPath, headers: req.headers },
+    (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+      upstreamRes.pipe(res);
+    }
+  );
+  upstream.on('error', (err) => {
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Redmineへのプロキシに失敗しました: ' + (err.code || err.message) }));
+  });
+  req.pipe(upstream);
+}
+
 const server = http
   .createServer((req, res) => {
+    if (req.url === REDMINE_PREFIX || req.url.startsWith(REDMINE_PREFIX + '/') || req.url.startsWith(REDMINE_PREFIX + '?')) {
+      proxyToRedmine(req, res);
+      return;
+    }
     if (req.url === '/debug/logs') {
       const logs = {};
       for (const f of DEBUG_LOG_FILES) logs[f] = tailFile(f, 4000);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ logs, checkedAt: new Date().toISOString() }));
+      return;
+    }
+    if (req.url === '/debug/redmine-dump') {
+      // runCmdは失敗時も[実行失敗: ...]という文字列で解決する(例外にしない)ため、ここで判別する。
+      runCmd('redmine-dump', []).then((sql) => {
+        if (sql.startsWith('[実行失敗:')) {
+          res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'redmine-dumpの実行に失敗しました: ' + sql }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/sql; charset=utf-8', 'Content-Disposition': 'attachment; filename="redmine-dump.sql"' });
+        res.end(sql);
+      });
       return;
     }
     if (req.url === '/debug/firewall') {

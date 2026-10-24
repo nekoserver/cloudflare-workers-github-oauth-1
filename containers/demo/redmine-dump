@@ -1,0 +1,27 @@
+#!/bin/sh
+# RedmineのSQLite3データベースをダンプする。引数なしなら標準出力にSQL全体、
+# -o <path>なら指定ファイルへ書き出す(/cf-containers/proxy経由で後から読み出せる)。
+set -eu
+DB=/opt/redmine/storage/redmine.sqlite3
+
+usage() {
+  echo "使い方:
+  redmine-dump              標準出力にSQL dumpを出す
+  redmine-dump -o <path>    <path>にSQL dumpを書き出す" >&2
+}
+
+if [ ! -f "$DB" ]; then
+  echo "redmine-dump: DBファイルが見つかりません: $DB (まだ初回起動が済んでいない可能性があります)" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "-o" ]; then
+  [ -n "${2:-}" ] || { usage; exit 2; }
+  sqlite3 "$DB" .dump > "$2"
+  echo "redmine-dump: $2 に書き出しました"
+elif [ -z "${1:-}" ]; then
+  sqlite3 "$DB" .dump
+else
+  usage
+  exit 2
+fi

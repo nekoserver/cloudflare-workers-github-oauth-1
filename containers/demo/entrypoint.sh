@@ -176,7 +176,21 @@ fi
 python3 /app/firewall-log.py >> /tmp/firewall-collector.log 2>&1 &
 log "firewall log collector started (pid $!)"
 
-# --- Apache(server.jsへのTLSプロキシ) ---
+# --- Redmine(SQLite3のDB初期化・マイグレーション) ---
+# 本番(Cloudflare Containers)では起動のたびに/opt/redmineの永続化がリセットされる
+# 可能性があるため、DBが無ければ毎回ここで作る。bundle installはビルド時済みのため
+# ここではdb:migrateのみ実行する(失敗してもApache自体は起動を試みる)。
+REDMINE_DB=/opt/redmine/storage/redmine.sqlite3
+if [ ! -f "$REDMINE_DB" ]; then
+  ( cd /opt/redmine \
+    && su -s /bin/sh www-data -c 'PATH=/usr/local/bin:$PATH RAILS_ENV=production bundle exec rake db:migrate' \
+      >/tmp/redmine-migrate.log 2>&1 \
+    && log "redmine db:migrate done" ) \
+    || log "WARN: redmine db:migrate failed, see /tmp/redmine-migrate.log"
+  chown www-data:www-data "$REDMINE_DB" 2>/dev/null || true
+fi
+
+# --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
 apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
   && (apache2ctl start >/tmp/apache.log 2>&1 && log "apache2 started") \
   || log "WARN: apache2 configtest/start failed, see /tmp/apache-configtest.log /tmp/apache.log"
