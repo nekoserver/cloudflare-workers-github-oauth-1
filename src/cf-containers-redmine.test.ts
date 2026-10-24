@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const dockerfile = readFileSync('containers/demo/Dockerfile', 'utf8');
+const dockerfile = readFileSync('containers/demo/Dockerfile.redmine', 'utf8');
 const entrypoint = readFileSync('containers/demo/entrypoint.sh', 'utf8');
 const redmineConf = readFileSync('containers/demo/apache-redmine.conf', 'utf8');
 const serverJs = readFileSync('containers/demo/server.js', 'utf8');
 const redmineDump = readFileSync('containers/demo/redmine-dump', 'utf8');
 
-describe('demoコンテナ: minitest-mock・Passenger・Redmineの追加', () => {
+describe('demoコンテナ(Dockerfile.redmine): minitest-mock・Passenger・Redmineの追加', () => {
+  it('通常のDockerfileにはRedmine・Passengerを入れない(ビルド失敗のため別名で保存している)', () => {
+    const plain = readFileSync('containers/demo/Dockerfile', 'utf8');
+    expect(plain).not.toMatch(/redmine|passenger/i);
+  });
   it('minitest-mockを最新版でgem installする', () => {
     expect(dockerfile).toMatch(/^ARG MINITEST_MOCK_VERSION=5\.27\.0$/m);
     expect(dockerfile).toContain('gem install minitest-mock -v "${MINITEST_MOCK_VERSION}"');
