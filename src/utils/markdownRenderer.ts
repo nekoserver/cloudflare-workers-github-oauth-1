@@ -183,9 +183,8 @@ export function getMarkdownParserScript(): string {
       });
       text = text.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
       text = text.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
-      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
       text = text.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-      text = text.replace(/_(.+?)_/g, '<em>$1</em>');
+      // API identifiers and URLs retain literal underscores; use * for emphasis.
       text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
       text = text.replace(/\\n/g, '<br>');
       return text;
