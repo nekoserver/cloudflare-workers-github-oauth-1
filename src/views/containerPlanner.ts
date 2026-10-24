@@ -17,7 +17,7 @@ export function getContainerPlannerPage(records: BuildTimingRecord[] = [], warni
 <title>コンテナ構成プランナー</title><style>
 :root{color-scheme:light dark;font:15px/1.6 system-ui,sans-serif}body{max-width:1100px;margin:auto;padding:16px}h1{font-size:24px}a{color:light-dark(#0969da,#79c0ff)}fieldset,section{border:1px solid #8886;border-radius:8px;padding:16px;margin:16px 0}label{display:inline-block;margin:6px}input,button,textarea{font:inherit;padding:8px;max-width:100%;box-sizing:border-box}input[type=number]{width:130px}button{cursor:pointer;min-height:44px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:8px;border-bottom:1px solid #8886}td input{width:150px}td input[type=checkbox]{width:24px;height:24px}.scroll{overflow:auto}.muted{opacity:.75}#result{white-space:pre-wrap}textarea{width:100%;min-height:160px}#message{white-space:pre-wrap}#result[data-over=true]{border-left:4px solid #d44;padding-left:12px}
 </style></head><body>
-<a href="/cf-containers">← コンテナ管理</a><h1>コンテナ構成プランナー</h1>
+<a href="/cf-containers">← コンテナ管理</a> · <a href="/moonbit-sample">MoonBitサンプル</a><h1>コンテナ構成プランナー</h1>
 <p>構成候補を選び、インストール後のイメージサイズとビルド時間を試算します。実測値または自分の見積値を入力してください。空欄は「不明」として扱います。</p>
 <section><h2>ビルドステップの実測履歴</h2>
 <p>既存のWorkers Buildsログを解析してD1に保存します。BuildKitステップのないログは実測履歴から除外します。6時間ごとの自動収集・管理ページでのログ取得・下の更新ボタンで記録します。ページ表示時は保存済み記録を読み込みます。</p>

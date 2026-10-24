@@ -47,6 +47,8 @@ import { getCfContainersPage } from './views/cfContainers';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
+import { analyzeBuildLog } from './utils/moonbitBuildLog';
+import { getMoonbitSamplePage } from './views/moonbitSample';
 import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning, type ContainerStateLike } from './utils/cfContainerStatus';
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
@@ -19207,9 +19209,25 @@ app.get('/chess-tsume-17te', authMiddleware, async (c) => {
   return c.html(getChessTsumePage());
 });
 
-/**
- * HTMLRewriter デモページ
- */
+/** MoonBitのBuildKitログ解析を本体Worker内で実行して結果を表示するサンプル。 */
+app.get('/moonbit-sample', authMiddleware, (c) => {
+  const samples = [
+    {
+      title: 'RUNの所要時間とキャッシュ',
+      description: '完了したRUNは秒数を返し、キャッシュ済みステップの秒数は不明のままです。',
+      log: '#1 [build 1/2] RUN npm ci\n#2 [build 2/2] RUN npm run build\n#1 DONE 4.25s\n#2 CACHED',
+    },
+    {
+      title: '失敗と進行中',
+      description: '失敗したステップと、まだ終了行がないステップを区別します。',
+      log: '#1 [build 1/2] RUN install packages\n#2 [build 2/2] RUN compile\n#1 ERROR: process exited with code 1',
+    },
+  ].map((sample) => ({ ...sample, result: analyzeBuildLog(sample.log) }));
+  c.header('Cache-Control', 'no-store');
+  return c.html(getMoonbitSamplePage(samples));
+});
+
+/** HTMLRewriter デモページ */
 app.get('/htmlrewriter-demo', authMiddleware, async (c) => {
   const user = c.get('user');
 
