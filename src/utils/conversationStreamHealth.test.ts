@@ -12,8 +12,8 @@ describe('conversation stream upstream health', () => {
   it('probes the trusted selectable hosts and requests its HTML entry', async () => {
     const probe = vi.fn().mockImplementation(async () => response());
     vi.stubGlobal('fetch', probe);
-    expect(await conversationStreamHealthy()).toEqual(['mygw', 'mynw', 'testcfc']);
-    expect(probe).toHaveBeenCalledTimes(3);
+    expect(await conversationStreamHealthy()).toEqual(['redmine', 'mygw', 'mynw', 'testcfc']);
+    expect(probe).toHaveBeenCalledTimes(4);
     expect(probe).toHaveBeenCalledWith(CONTAINER_ENDPOINTS.conversation, expect.objectContaining({
       method: 'GET', redirect: 'manual', signal: expect.any(AbortSignal),
       headers: expect.objectContaining({ Accept: 'text/html' }),
@@ -31,7 +31,7 @@ describe('conversation stream upstream health', () => {
   });
   it('recognizes the protected conversation key-entry shell without credentials', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response('<html data-auth-gate="conversation"><form id="login"></form></html>')));
-    expect(await conversationStreamHealthy()).toEqual(['mygw', 'mynw', 'testcfc']);
+    expect(await conversationStreamHealthy()).toEqual(['redmine', 'mygw', 'mynw', 'testcfc']);
   });
   it('does not recognize an incomplete authentication marker', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response('<html data-auth-gate="conversation"></html>')));
@@ -41,7 +41,7 @@ describe('conversation stream upstream health', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
     const warning = vi.spyOn(logger, 'warn');
     expect(await conversationStreamHealthy()).toEqual([]);
-    expect(warning).toHaveBeenCalledTimes(3);
+    expect(warning).toHaveBeenCalledTimes(4);
     expect(warning).toHaveBeenCalledWith('Conversation stream embed host probe failed', expect.objectContaining({ host: 'testcfc', error: 'fetch failed' }));
   });
 });
