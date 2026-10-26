@@ -36,11 +36,12 @@ Example request body for adding a destination:
 ```
 
 Automatic selection probes enabled hosts and chooses the first reachable host
-in ascending priority order. Manual selection remains pinned to its host while
-that record exists; an unavailable host is shown as unavailable rather than
-silently replaced. If a manually selected record is deleted, the panel returns
-to automatic selection. Requests already sent to a host are never replayed on a
-different host.
+in ascending priority order. It stays on that host while it remains reachable;
+if it becomes unavailable, the next reachable host takes over. Manual selection
+remains pinned to its host while that record exists; an unavailable host is
+shown as unavailable rather than silently replaced. If a manually selected
+record is deleted, the panel returns to automatic selection. Requests already
+sent to a host are never replayed on a different host.
 
 The registry is intentionally separate from Cloudflare tunnel status. A tunnel
 being connected does not prove that its conversation observer is configured;
