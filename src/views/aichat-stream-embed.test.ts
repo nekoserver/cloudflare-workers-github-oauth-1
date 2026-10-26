@@ -183,7 +183,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
     const toggle = doc.getElementById('conversationStreamToggle')!;
     const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw', 'testcfc']);
+    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw', 'testcfc', 'redmine']);
     expect(host.value).toBe('auto');
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
@@ -199,6 +199,8 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     }
     host.value = 'testcfc'; host.dispatchEvent(new dom.window.Event('change'));
     await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
+    host.value = 'redmine'; host.dispatchEvent(new dom.window.Event('change'));
+    await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://r9.nekomaneki.work'));
     host.value = 'auto'; host.dispatchEvent(new dom.window.Event('change'));
     await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
     doc.getElementById('conversationStreamClose')!.click();

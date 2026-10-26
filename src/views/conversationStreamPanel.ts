@@ -43,6 +43,7 @@ export function getConversationStreamPanel(): string {
         <option value="mygw">mygw.nekomaneki.work</option>
         <option value="mynw">mynw.nekomaneki.work</option>
         <option value="testcfc">stream.test.cfc.nekomaneki.work</option>
+        <option value="redmine">r9.nekomaneki.work (Redmine)</option>
       </select>
       </span>
       <span id="conversationStreamHostStatus" role="status" aria-live="polite">自動</span>

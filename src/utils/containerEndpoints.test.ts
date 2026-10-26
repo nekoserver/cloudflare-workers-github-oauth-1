@@ -8,7 +8,8 @@ describe('main container endpoints', () => {
     for (const url of Object.values(CONTAINER_ENDPOINTS)) expect(new URL(url).origin).toBe(MAIN_CONTAINER_ORIGIN);
     expect(CONVERSATION_STREAM_URLS.mygw).toBe(CONTAINER_ENDPOINTS.conversation);
     expect(CONVERSATION_STREAM_URLS.mynw).toBe('https://mynw.nekomaneki.work/lib/conversation-embed.html');
-    expect(CONVERSATION_STREAM_FRAME_ORIGINS.split(' ')).toEqual([MAIN_CONTAINER_ORIGIN, 'https://mynw.nekomaneki.work', 'https://stream.test.cfc.nekomaneki.work']);
+    expect(CONVERSATION_STREAM_URLS.redmine).toBe('https://r9.nekomaneki.work/lib/conversation-embed.html');
+    expect(CONVERSATION_STREAM_FRAME_ORIGINS.split(' ')).toEqual(['https://r9.nekomaneki.work', MAIN_CONTAINER_ORIGIN, 'https://mynw.nekomaneki.work', 'https://stream.test.cfc.nekomaneki.work']);
   });
   it('keeps the deployment tunnel hostname and askgk override aligned', () => {
     const config = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
