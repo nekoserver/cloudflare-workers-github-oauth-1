@@ -116,6 +116,52 @@ export function getConversationStreamPanel(): string {
     var latestHealth = null;
     var loadGeneration = 0;
     var embedUrls = ${JSON.stringify(CONVERSATION_STREAM_URLS)};
+    function installStreamDirectory(streams) {
+      var next = {};
+      streams.forEach(function (stream) {
+        if (!stream || typeof stream.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/i.test(stream.id)
+          || typeof stream.embedUrl !== 'string') return;
+        try {
+          var url = new URL(stream.embedUrl);
+          if (url.protocol !== 'https:' || url.pathname !== '/lib/conversation-embed.html') return;
+          next[stream.id] = url.href;
+        } catch {}
+      });
+      var previousPreference = hostPreference;
+      embedUrls = next;
+      origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
+      hostSelect.innerHTML = '<option value="auto">自動</option>';
+      Object.keys(embedUrls).forEach(function (id) {
+        var stream = streams.find(function (item) { return item.id === id; });
+        var option = document.createElement('option');
+        option.value = id;
+        option.textContent = (stream && stream.label ? stream.label + ' — ' : '') + new URL(embedUrls[id]).host;
+        hostSelect.appendChild(option);
+      });
+      hostOptions.innerHTML = '';
+      hostChoices = {};
+      Array.from(hostSelect.options).forEach(function (option) {
+        var choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'conversation-stream-host-option';
+        choice.setAttribute('role', 'option');
+        choice.dataset.value = option.value;
+        choice.tabIndex = -1;
+        choice.textContent = option.textContent;
+        choice.addEventListener('click', function () {
+          hostSelect.value = option.value;
+          hostSelect.dispatchEvent(new Event('change'));
+          setHostMenuOpen(false, true);
+        });
+        hostChoices[option.value] = choice;
+        hostOptions.appendChild(choice);
+      });
+      var removedManualChoice = previousPreference !== 'auto' && !Object.prototype.hasOwnProperty.call(embedUrls, previousPreference);
+      hostPreference = previousPreference !== 'auto' && !removedManualChoice ? previousPreference : 'auto';
+      hostSelect.value = hostPreference;
+      renderHostOptions();
+      if (removedManualChoice) hostStatus.textContent = '手動選択先が登録解除されたため自動へ切り替えました';
+    }
     var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
     var protocol = 'websocket';
     var healthTimer = null;
@@ -142,9 +188,13 @@ export function getConversationStreamPanel(): string {
         choice.setAttribute('aria-label', option.title);
         choice.setAttribute('aria-selected', String(option.value === hostPreference));
       });
+      if (hostPreference !== 'auto' && availabilityKnown && availableHosts.indexOf(hostPreference) < 0) {
+        hostStatus.textContent = '手動選択先は接続できません: ' + new URL(embedUrls[hostPreference]).host;
+      }
     }
     function applyHealth(data) {
       latestHealth = data;
+      if (data && Array.isArray(data.streams)) installStreamDirectory(data.streams);
       availabilityKnown = !!(data && Array.isArray(data.availableHosts));
       availableHosts = availabilityKnown ? data.availableHosts.filter(function (host) {
         return Object.prototype.hasOwnProperty.call(embedUrls, host);

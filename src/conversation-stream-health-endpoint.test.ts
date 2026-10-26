@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
+import { getConversationStreamDirectory } from './utils/conversationStreamHosts';
 
 afterEach(() => vi.unstubAllGlobals());
 it('未認証のアクセスは上流を呼ばず拒否する', async () => {
@@ -20,5 +21,9 @@ it.each([200, 503])('認証済みの利用者へ利用可能な埋め込み先�
   }, { JWT_SECRET: secret });
   expect(response.status).toBe(200);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
-  expect(await response.json()).toEqual({ healthy: status === 200, availableHosts: status === 200 ? ['mygw', 'mynw', 'testcfc'] : [] });
+  expect(await response.json()).toEqual({
+    healthy: status === 200,
+    availableHosts: status === 200 ? ['redmine', 'mygw', 'mynw', 'testcfc'] : [],
+    streams: getConversationStreamDirectory(),
+  });
 });

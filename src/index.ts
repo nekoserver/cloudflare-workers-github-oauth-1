@@ -18,8 +18,9 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
-import { CONVERSATION_STREAM_FRAME_ORIGINS } from './utils/conversationStreamHosts';
+import { CONVERSATION_STREAM_FRAME_ORIGINS, CONVERSATION_STREAM_URLS } from './utils/conversationStreamHosts';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
+import { getConversationStreamDirectory, normalizeConversationStreamHost, type ConversationStreamHostRecord } from './utils/conversationStreamHosts';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
@@ -662,6 +663,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_build_measurements', migration: '0184', description: 'Dockerビルドログの実測観測記録。再取得・並行収集でも過去観測を保持', syncPolicy: 'auto' },
   { name: 'cf_container_build_steps', migration: '0184', description: 'ビルド観測ごとのBuildKitステップ所要秒・キャッシュ・成否', syncPolicy: 'auto' },
   { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
+  { name: 'conversation_stream_hosts', migration: '0188', description: '会話ストリーム接続先の登録・優先順位・有効状態', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
   { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
@@ -3113,6 +3115,22 @@ BEGIN
   ) THEN RAISE(ABORT,'work interval outside runtime session') END;
 END;
 `,
+  '0188': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  origin TEXT NOT NULL UNIQUE,
+  priority INTEGER NOT NULL DEFAULT 100,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_stream_hosts_enabled_priority
+  ON conversation_stream_hosts(enabled, priority, id);
+INSERT OR IGNORE INTO conversation_stream_hosts (id,label,origin,priority,enabled,created_at,updated_at) VALUES
+  ('redmine','Redmine','https://r9.nekomaneki.work',10,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
+  ('mygw','mygw','https://mygw.nekomaneki.work',20,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
+  ('mynw','mynw','https://mynw.nekomaneki.work',30,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
+  ('testcfc','Test CFC','https://stream.test.cfc.nekomaneki.work',40,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z');`,
   '0185': `CREATE TABLE IF NOT EXISTS cf_container_image_records (
   record_hash TEXT PRIMARY KEY,
   build_uuid TEXT NOT NULL,
@@ -6628,11 +6646,93 @@ app.get('/md-preview', (c) => {
   return c.html(getMarkdownPreviewPage());
 });
 
+async function conversationStreamHostRows(db?: D1Database): Promise<ConversationStreamHostRecord[]> {
+  if (!db) return Object.entries(CONVERSATION_STREAM_URLS).map(([id, url], priority) => ({ id, label: id, origin: new URL(url).origin, priority, enabled: true }));
+  const rows = await db.prepare(`SELECT id,label,origin,priority,enabled FROM conversation_stream_hosts ORDER BY priority,id`)
+    .all<{id:string;label:string;origin:string;priority:number;enabled:number}>();
+  return (rows.results ?? []).map(row => ({ ...row, enabled: row.enabled === 1 }));
+}
+
+function conversationStreamMutationOriginAllowed(c: Context): boolean {
+  const origin = c.req.header('Origin');
+  return !origin || origin === new URL(c.req.url).origin;
+}
+
+/** 接続先の確認・編集（読み出しは認証済み利用者、変更は管理者のみ）。 */
+app.get('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  try {
+    const records = await conversationStreamHostRows(c.env.DB);
+    return c.json({ hosts: records, streams: getConversationStreamDirectory(records) });
+  } catch (error) {
+    logger.warn('Conversation stream host registry unavailable', { error: error instanceof Error ? error.message : String(error) });
+    return c.json({ error: 'ストリーム接続先一覧を読み込めません。DB migration 0188を確認してください。' }, 503);
+  }
+});
+
+app.post('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
+  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
+  const body = await c.req.json().catch(() => null);
+  let host: Omit<ConversationStreamHostRecord, 'enabled'>;
+  try { host = normalizeConversationStreamHost(body); } catch (error) { return c.json({ error: error instanceof Error ? error.message : '接続先データが不正です' }, 400); }
+  const enabled = typeof body.enabled === 'boolean' ? body.enabled : true;
+  const now = new Date().toISOString();
+  try {
+    const count = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM conversation_stream_hosts').first<{count:number}>();
+    if ((count?.count ?? 0) >= 100) return c.json({ error: '接続先は100件まで登録できます' }, 409);
+    await c.env.DB.prepare(`INSERT INTO conversation_stream_hosts (id,label,origin,priority,enabled,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?)`).bind(host.id,host.label,host.origin,host.priority,enabled?1:0,now,now).run();
+    return c.json({ host: { ...host, enabled } }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json({ error: /UNIQUE|constraint/i.test(message) ? '接続先IDまたはURLが既に登録されています' : '接続先を保存できませんでした。DB migration 0188を確認してください。' }, /UNIQUE|constraint/i.test(message) ? 409 : 503);
+  }
+});
+
+app.put('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
+  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') return c.json({ error: 'JSON objectが必要です' }, 400);
+  const id = c.req.param('id');
+  let host: Omit<ConversationStreamHostRecord, 'enabled'>;
+  try { host = normalizeConversationStreamHost({ ...(body as Record<string, unknown>), id }); } catch (error) { return c.json({ error: error instanceof Error ? error.message : '接続先データが不正です' }, 400); }
+  const enabled = typeof (body as Record<string, unknown>).enabled === 'boolean' ? (body as Record<string, unknown>).enabled as boolean : true;
+  try {
+    const result = await c.env.DB.prepare(`UPDATE conversation_stream_hosts SET label=?,origin=?,priority=?,enabled=?,updated_at=? WHERE id=?`)
+      .bind(host.label,host.origin,host.priority,enabled?1:0,new Date().toISOString(),id).run();
+    if (!result.meta.changes) return c.json({ error: '接続先が見つかりません' }, 404);
+    return c.json({ host: { ...host, enabled } }, 200, { 'Cache-Control': 'no-store' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json({ error: /UNIQUE|constraint/i.test(message) ? '接続先URLが既に登録されています' : '接続先を更新できませんでした。DB migration 0188を確認してください。' }, /UNIQUE|constraint/i.test(message) ? 409 : 503);
+  }
+});
+
+app.delete('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
+  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
+  try {
+    const result = await c.env.DB.prepare('DELETE FROM conversation_stream_hosts WHERE id=?').bind(c.req.param('id')).run();
+    return result.meta.changes ? c.json({ deleted: true }, 200, { 'Cache-Control': 'no-store' }) : c.json({ error: '接続先が見つかりません' }, 404);
+  } catch { return c.json({ error: '接続先を削除できません。DB migration 0188を確認してください。' }, 503); }
+});
+
 /** 埋め込み先の死活確認（認証が必要）。 */
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  const availableHosts = await conversationStreamHealthy();
-  return c.json({ healthy: availableHosts.length > 0, availableHosts });
+  try {
+    const records = await conversationStreamHostRows(c.env.DB);
+    const availableHosts = await conversationStreamHealthy(records);
+    return c.json({ healthy: availableHosts.length > 0, availableHosts, streams: getConversationStreamDirectory(records) });
+  } catch (error) {
+    logger.warn('Conversation stream health registry unavailable', { error: error instanceof Error ? error.message : String(error) });
+    return c.json({ healthy: false, availableHosts: [], streams: [], error: 'ストリーム接続先を確認できません。DB migration 0188を確認してください。' }, 503);
+  }
 });
 
 /** AI チャットページ（認証が必要）。 */
@@ -6683,9 +6783,17 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
+  let streamFrameOrigins = CONVERSATION_STREAM_FRAME_ORIGINS;
+  try {
+    const streamHosts = await conversationStreamHostRows(c.env.DB);
+    const origins = streamHosts.filter(host => host.enabled).map(host => host.origin);
+    if (origins.length) streamFrameOrigins = [...new Set(origins)].join(' ');
+  } catch (error) {
+    logger.warn('Conversation stream frame origins unavailable; using compiled defaults', { error: error instanceof Error ? error.message : String(error) });
+  }
   c.header(
     'Content-Security-Policy',
-    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${CONVERSATION_STREAM_FRAME_ORIGINS}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${streamFrameOrigins}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   const containerRunning = await getAichatContainerRunning(c.env, isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS));
   return c.html(getAiChatPage({
