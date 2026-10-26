@@ -1,3 +1,4 @@
+import { MAX_ASKGK_TIMEOUT_SECONDS } from './askgkTimeoutSettings';
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
 import { parseCodexFiveHourReset } from './codexResetCountdown';
@@ -1272,7 +1273,8 @@ export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
  * 呼んで回答を生成している場合、8秒では往復しきれずタイムアウトする報告が
  * あったため専用の待機時間を設け、Codexの応答生成を120秒まで待つ。
  */
-export const ASKGK_TIMEOUT_MS = 120_000;
+// The shared sender applies the persisted 1–300 second budget; this guards a stuck dependency.
+export const ASKGK_TIMEOUT_MS = MAX_ASKGK_TIMEOUT_SECONDS * 1000;
 
 type RaceOutcome<T> =
   | { status: 'ok'; value: T }

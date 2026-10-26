@@ -1,0 +1,7 @@
+{
+  "defaultRouteId": "independent",
+  "routes": [
+    { "id": "independent", "url": "https://r9.nekomaneki.work/lib/api/tunnels", "enabled": true },
+    { "id": "main", "url": "https://mygw.nekomaneki.work/lib/api/tunnels", "enabled": true }
+  ]
+}

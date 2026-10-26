@@ -128,3 +128,46 @@ SecureMine用HMACゲートウェイと接続先マップはr9へ適用済み。�
 ## 2026-10-24 MoonBitサンプルページ
 
 認証後 `/moonbit-sample` を開くと、本体Worker内の生成済みMoonBit BuildKitログ解析へ例を渡し、完了秒数・キャッシュ・エラー・未完了の解析結果を表示する。コンテナ構成プランナーにもリンクを追加。ソース追加のみで、テスト・Workerデプロイ・ブラウザ表示は未確認。
+
+
+## 2026-10-26 15:48 UTC: askgk HTTP530/1033 継続障害
+
+公開mygw `/lib/api/tunnels` はHTTP530・`error code: 1033`。Cloudflare APIの実測ではnekorootはdown・接続0件。本体 `cloudflare-workers-github-oauth-1-democontainer` の既存demoインスタンスはinactive、状態更新日時は2026-10-26T15:15:12Z。現在のRedmineコンテナで動くcfc-tunnelはhealthyであり、nekorootの代替ではない。同日のNETWORK REPORTにある両トンネルhealthy・公開API200は以前の測定結果で、現在の復旧を示さない。
+
+既存の管理API `/api/cf-containers/action` にstartを要求したがHTTP401「認証が必要です」で起動できなかった。現環境のCloudflare管理トークンによる状態参照は成功したが、本体管理画面の管理者セッションはなく、起動の成功は未確認。管理者が本体の `/cf-containers` から既存コンテナを起動し、nekorootの接続・公開API・askgkを再確認する必要がある。DNS、トンネルの転送先・トークン、Worker、イメージは変更していない。
+
+
+## 2026-10-26: askgkの本体停止からの独立と経路台帳
+
+ユーザー指示により、本番本体WorkerのASKGK_TUNNELS_URLをmygwから `https://r9.nekomaneki.work/lib/api/tunnels` へ設定APIで変更し、他50 bindingsの維持を確認。独立Redmine Worker経由APIはHMAC GET200、rust-worker-sqlx-d1の署名付きPOSTでCodex done・`INDEPENDENT_CODEX_OK` を確認。本体停止中の成功。チャット画面自体からの認証付き操作は未実施。
+
+推論処理内の固定ホストを除き、JSON経路台帳、設定による追加・削除・無効化・ID選択、チャット/Slack/cron共通の経路解決を実装。関連5ファイル67テスト成功。台帳実装はソースのみで未デプロイ。本番反映済みなのは既存単一URL設定。一般askgkのPOSTで検出した要求記録ディレクトリ欠落を現環境とRedmine起動ソースで修正。既存のobserver変更は保持。詳細と切替・復元方法は [経路仕様](SPEC.cloudflare-workers-github-oauth-1.askgk-routes.20261026.md)。Dockerビルド・イメージ更新は未実施。
+
+
+## 2026-10-26: 独立側askgkのCGI 504修正
+
+16:02:15 UTCのApacheログに `Script timed out before returning headers: tunnels.cgi`。独立Redmine側CGIの既定60秒が、tunnels.rbの90秒同期待機より短かった。直近のCodex要求2件は62.1秒・70.3秒でdoneになっており、CGIが切れた後もジョブ自体は完了していた。
+
+`redmine/config/lib-httpd.conf` と稼働 `/opt/httpd/conf/lib-httpd.conf` のCGI専用Directoryに `CGIDScriptTimeout 105` を追加。API待機90秒＋内部ソケット待機5秒を確保し、呼出元120秒以内とした。Apache構文確認後graceful reload済み。既存ジョブを再送せず、署名Worker経由のask_id照会でHTTP200・done・保存済み回答の存在を確認。ソースと現コンテナへ適用済み、Dockerビルド・イメージ更新・再作成後確認は未実施。
+
+
+## 2026-10-26: 設定ページの待ち時間保存と経路台帳を本番配備
+
+Workerバージョン `c4886118-6819-42be-96a0-b718349b0c7f` を配備。D1に0189の新規テーブルと既定120秒のrevision=1を適用し、上限300秒の管理者設定API・設定ページ・共通送信処理を実装した。チャット/Slack/cronは各要求の開始時に保存値を参照。POSTは一度だけ送信し、同一ask_idを短い通信で照会する。経路台帳も同時に配備し、ASKGK_ROUTE_ID=independentを確認。設定API未認証401、配備済みソースに設定APIと非同期待機があること、本番DBの保存値、共通送信処理から本番署名Worker・独立コンテナへのCodex実回答 `TIMEOUT_SETTINGS_OK` を確認した。実利用者のログインセッションによる設定画面操作は未実施。
+
+既存50 bindingsは配備前後で一致、新規ASKGK_ROUTE_IDのみ追加。Dockerfileを参照しない一時配備設定から、APIで確認した既存レジストリイメージb225cc9aを再利用し、Dockerビルドは行っていない。Wranglerはコンテナアプリケーションの宣言イメージ62758c7d→b225cc9aの更新も適用したため、再配置がなかったとは報告しない。復旧用の配備前Worker本体・settings・deploymentsはroot専用 `/root/.local/state/neko-independent/` に保存。
+
+関連10ファイル122テスト、Ruby17件70 assertions、実Apacheの65秒遅延テストを含む2件、Apache構成4件が成功。追加の300秒設定で120秒を超えて待つテストも実装。リポジトリ全体typecheckは既存の無関係な型エラーで失敗しており、全体成功とは扱わない。独立側tunnels_lib.rbのwait_seconds対応とApache105秒設定は現環境・ソースに適用済みだが、Redmineイメージの更新・再作成後検証は未実施。詳細は経路仕様の「保存する待ち時間」。
+
+
+## 2026-10-26: API/WASMを選べるコンテナ監視を本番配備
+
+本体 `/container-monitor` と管理者専用 `/api/container-monitor/providers`・`/snapshot` を配備。最終Workerバージョン `ed80b713-ea19-4eb0-8df2-86db630a926f`。APIトークンがなければTailscale WASM、設定済みなら対応APIも選択できる。取得方式・資格情報判定・正規化を共通台帳へ分離。対象ホスト一覧のハードコードはなく、Cloudflare全アプリケーション/インスタンスのページ送りと部分失敗を処理する。監視取得ではコンテナを起動しない。
+
+公式Tailscale Connectの配布済みJS/WASMをintegrity・SHA256照合して再利用。Docker/Goのソースビルドは行わず、同じ既存コンテナイメージを指定してWorkerを配備。Wranglerはコンテナアプリケーション変更なしを確認。既存52 bindingsの一致、未ログインAPI401、本番配信UIとローカルの一致を確認した。
+
+ローカルでは11件の機能/APIテスト、実Cloudflare一覧取得1件、UIの注入・切替・トークン削除・古い接続表示を含む3件、Chromiumの公式WASM初期化が成功。追加モジュールの型チェックとdiff whitespaceも成功。実配信でgzipファイルとHTTP圧縮の二重扱いによるWASMヘッダ異常を検出し、読み込み側でファイルgzipを明示展開してBlobへ渡す処理に修正した。本番URLからChromiumでrun/login/fetchの初期化成功を再確認済み。
+
+Tailscale APIの実トークンによる照会、実利用者のTailnetログイン後の端末到達性は未検証。WASMはブラウザ実行で、参照範囲はログインユーザーの権限に従う。tree-viewの既存全コンテナ検出との接続は未実施。確認したdynamicneko main/配備版は利用者別Sandboxの経路であり、別の検出経路は特定できていない。共通APIは他画面から再利用できる形としたが、tree-view側で利用済みとは報告しない。
+
+復旧用Worker本体・settings・deploymentsはroot専用 `/root/.local/state/tailscale-wasm/` に保存し、Gitへ含めない。再取得可能なSDKキャッシュと、配布に必要なpublicアセット・ライセンス・出典/チェックサム・復元スクリプトは区別する。仕様は [コンテナ監視SPEC](SPEC.cloudflare-workers-github-oauth-1.container-monitor.md)。

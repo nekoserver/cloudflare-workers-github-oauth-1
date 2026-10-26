@@ -23,6 +23,8 @@ import { conversationStreamHealthy } from './utils/conversationStreamHealth';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
+import { collectContainerMonitor, getContainerMonitorProviders } from './utils/containerMonitor';
+import { getContainerMonitorPage } from './views/containerMonitor';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
 import { getPublicKeysPage } from './views/publicKeys';
@@ -466,6 +468,7 @@ import { verifyTailscaleWebhookSignature } from './utils/tailscaleWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
+import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
  * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
@@ -495,7 +498,7 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
 function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
-  return (message: string) => askTunnelSigner(fetcher, message, env.ASKGK_TUNNELS_URL);
+  return (message: string) => askTunnelSigner(fetcher, message, env);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
@@ -674,6 +677,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_session_notes', migration: '0186', description: '起動・再起動を起点とするセッション別の作業内容。追記型の改訂履歴', syncPolicy: 'auto' },
   { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
+  { name: 'askgk_timeout_settings', migration: '0189', description: 'askgkの全利用者共通待ち時間と変更履歴（最大300秒）', syncPolicy: 'auto' },
   { name: 'cf_container_package_release_status', migration: '0188', description: '/cf-containers表示時に取得したパッケージ別最新版・リリース日時・導入状況', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
@@ -3142,6 +3146,15 @@ CREATE TABLE IF NOT EXISTS cf_container_session_notes (
   created_at TEXT NOT NULL,
   UNIQUE(start_operation_id, revision)
 );
+`,
+  '0189': `CREATE TABLE IF NOT EXISTS askgk_timeout_settings (
+  revision INTEGER PRIMARY KEY CHECK (revision >= 1),
+  timeout_seconds INTEGER NOT NULL CHECK (timeout_seconds BETWEEN 1 AND 300),
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO askgk_timeout_settings (revision, timeout_seconds, changed_by, changed_at)
+VALUES (1, 120, 'migration:0189', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 `,
   '0188': `-- Current release and installation status for each package shown by /cf-containers.
 CREATE TABLE IF NOT EXISTS cf_container_package_release_status (
@@ -19501,6 +19514,7 @@ app.get('/settings', authMiddleware, async (c) => {
       heritageTourCountryFilterCookieVal
     ) ? 'on' : 'off',
     emailConfirmLoginEnabled,
+    askgkTimeoutSetting: isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS) ? await readAskgkTimeoutSetting(c.env.DB) : undefined,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -19909,6 +19923,23 @@ app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) 
  * cf_container_operation_logから累計起動回数・直近起動からの経過時間も
  * 返す(取得失敗してもstatus本体の応答は妨げない)。
  */
+app.get('/container-monitor', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: https://*.tailscale.com wss://*.tailscale.com https://*.tailscale.io wss://*.tailscale.io; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  return c.html(getContainerMonitorPage());
+});
+app.get('/api/container-monitor/providers', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(getContainerMonitorProviders(c.env));
+});
+app.get('/api/container-monitor/snapshot', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const provider = c.req.query('provider') ?? getContainerMonitorProviders(c.env).defaultProvider;
+  if (!getContainerMonitorProviders(c.env).providers.some(item => item.id === provider && item.execution === 'worker')) return c.json({ error: '選択した取得方式は利用できません' }, 400);
+  try { return c.json(await collectContainerMonitor(c.env, provider)); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : '状態を取得できません' }, 502); }
+});
+
 app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   const statusResponse = await buildContainerStatusResponse(stub);
@@ -26743,6 +26774,24 @@ app.post('/api/settings/aichat-auto-vectorize-enabled', authMiddleware, async (c
     return c.json({ message: 'キーワードの自動ベクタ化設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'キーワードの自動ベクタ化設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.get('/api/settings/askgk-timeout', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(await readAskgkTimeoutSetting(c.env.DB));
+});
+app.post('/api/settings/askgk-timeout', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json().catch(() => null);
+  try { validateAskgkTimeoutSeconds(body?.timeoutSeconds); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : '設定値が不正です' }, 400); }
+  if (!Number.isSafeInteger(body?.revision) || body.revision < 1) return c.json({ error: 'リビジョンが不正です' }, 400);
+  try {
+    const setting = await saveAskgkTimeoutSetting(c.env.DB, body.timeoutSeconds, body.revision, c.get('user').sub);
+    return c.json(setting);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '設定の保存に失敗しました';
+    return c.json({ error: message }, message.includes('別の操作') ? 409 : 503);
   }
 });
 

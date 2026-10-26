@@ -37,9 +37,9 @@ export async function registerCodexResetCountdown(db: D1Database, reply: string,
   return { ...reset, processedBy: CRON_ACTOR, retired: Number(retired.meta?.changes ?? 0), registered: Number(inserted.meta?.changes ?? 0) };
 }
 
-export async function runCodexResetCountdownCron(env: Pick<Bindings, 'DB' | 'RUST_WORKER' | 'ASKGK_TUNNELS_URL'>) {
+export async function runCodexResetCountdownCron(env: Pick<Bindings, 'DB' | 'RUST_WORKER' | 'ASKGK_TUNNELS_URL' | 'ASKGK_ROUTES' | 'ASKGK_ROUTE_ID'>) {
   if (!env.DB) throw new Error('Codexリセット予定: DBが未設定です');
   if (!env.RUST_WORKER) throw new Error('Codexリセット予定: RUST_WORKERが未設定です');
-  const status = await askTunnelSigner(env.RUST_WORKER, 'codex_prompt="/status"', env.ASKGK_TUNNELS_URL);
+  const status = await askTunnelSigner(env.RUST_WORKER, 'codex_prompt="/status"', env);
   return registerCodexResetCountdown(env.DB, status.reply);
 }
