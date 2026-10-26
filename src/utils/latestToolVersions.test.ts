@@ -96,7 +96,7 @@ describe('fetchLatestToolVersions: Ruby', () => {
   it('ruby-lang.orgのリリース一覧から、プレビューを除いた最も新しい版とその日付を取る', async () => {
     const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response(page) });
     const result = await fetchLatestToolVersions({ nodeMajor: 26, current: { ...current, ruby: '4.0.8' } }, fetcher as unknown as typeof fetch);
-    expect(result.ruby).toEqual({ latest: '4.0.9', latestDate: '2026-10-23', currentDate: '2026-09-30', source: 'ruby-lang.org' });
+    expect(result.ruby).toEqual({ latest: '4.0.9', latestDate: '2026-10-23', latestReleasedAt: '2026-10-23', currentDate: '2026-09-30', currentReleasedAt: '2026-09-30', source: 'ruby-lang.org' });
   });
   it('一覧から版が読めなければerrorに理由を残す', async () => {
     const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response('<html></html>') });
