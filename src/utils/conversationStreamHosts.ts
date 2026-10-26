@@ -53,7 +53,7 @@ export function normalizeConversationStreamHost(input: unknown): Omit<Conversati
   let url: URL;
   try { url = new URL(value.origin); } catch { throw new Error('接続先URLを解釈できません'); }
   const hostname = url.hostname.toLowerCase();
-  if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash
+  if (url.protocol !== 'https:' || (url.port && url.port !== '443') || url.username || url.password || url.pathname !== '/' || url.search || url.hash
     || !ALLOWED_HOST_SUFFIXES.some(suffix => hostname === suffix || hostname.endsWith(`.${suffix}`))) {
     throw new Error('接続先は許可済みドメイン配下のHTTPSオリジンで指定してください');
   }

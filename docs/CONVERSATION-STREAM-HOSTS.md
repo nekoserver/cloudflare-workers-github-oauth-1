@@ -19,7 +19,8 @@ The authenticated API is:
 All endpoints require a signed-in account. Mutations require a configured
 Cloudflare dashboard administrator. Origins must be HTTPS origins under
 `nekomaneki.work` or `nekoflare.workers.dev`; paths, credentials, query strings,
-and fragments are rejected. The embed and stream paths are fixed by the Worker.
+fragments, and nonstandard ports are rejected. Up to 50 destinations may be
+registered. The embed and stream paths are fixed by the Worker.
 This keeps health checks from becoming arbitrary URL fetches.
 
 Example request body for adding a destination:

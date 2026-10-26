@@ -6681,7 +6681,7 @@ app.post('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
   const now = new Date().toISOString();
   try {
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM conversation_stream_hosts').first<{count:number}>();
-    if ((count?.count ?? 0) >= 100) return c.json({ error: '接続先は100件まで登録できます' }, 409);
+    if ((count?.count ?? 0) >= 50) return c.json({ error: '接続先は50件まで登録できます' }, 409);
     await c.env.DB.prepare(`INSERT INTO conversation_stream_hosts (id,label,origin,priority,enabled,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?)`).bind(host.id,host.label,host.origin,host.priority,enabled?1:0,now,now).run();
     return c.json({ host: { ...host, enabled } }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
