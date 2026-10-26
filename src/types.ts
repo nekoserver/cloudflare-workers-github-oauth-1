@@ -66,6 +66,9 @@ export type Bindings = {
    * entrypoint.sh側でtailscaled起動自体をスキップする。
    */
   TAILSCALE_AUTHKEY?: string;
+  /** Optional server-side inventory API token; never sent to the browser. */
+  TAILSCALE_API_TOKEN?: string;
+  TAILSCALE_TAILNET?: string;
   /**
    * デモコンテナ内のcfコマンド(Cloudflare API簡易CLI)が使うAPI Token。
    * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
@@ -89,6 +92,8 @@ export type Bindings = {
   RUST_WORKER?: Fetcher;
   /** /neko askgk の転送先。未指定時は会話配信用トンネルの tunnels API。 */
   ASKGK_TUNNELS_URL?: string;
+  ASKGK_ROUTES?: string;
+  ASKGK_ROUTE_ID?: string;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   /**

@@ -135,6 +135,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </details>
 </aside>
 <main>
+<p><a href="/container-monitor">全コンテナ・Tailscale監視</a></p>
 <h1>Cloudflare Containers（デモ）</h1>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
 <div class="notice">

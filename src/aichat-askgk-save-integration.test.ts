@@ -21,6 +21,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
     const DB = {
       prepare(sql: string) {
         return {
+          first: async () => ({ revision: 1, timeoutSeconds: 120 }),
           all: async () => ({ results: [] }),
           bind(...args: unknown[]) {
             return {
@@ -96,7 +97,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
   });
   it.each(['invalid'])('形式が無効なスレッドには保存しない: %s', async (threadId) => {
     const run = vi.fn();
-    const DB = { prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({
+    const DB = { prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }), bind: (...args: unknown[]) => ({
       first: async () => {
         if (sql.includes('user_sessions')) return { revoked_at: null };
         expect(args).toEqual(['test-user', threadId]);

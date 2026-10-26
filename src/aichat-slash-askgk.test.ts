@@ -129,7 +129,7 @@ describe('/neko askgk', () => {
     expect(formatAskgkResult('codex_prompt="質問"', reply)).toBe(reply);
     expect(formatAskgkResult('', reply)).toBe(reply);
   });
-  it('120秒までは待機し、120秒でタイムアウトを返す', async () => {
+  it('最大300秒までは待機し、300秒でタイムアウトを返す', async () => {
     vi.useFakeTimers();
     try {
       let settled = false;
@@ -137,11 +137,11 @@ describe('/neko askgk', () => {
         fetchLatestCommitAgentLog: async () => null,
         askTunnelSigner: () => new Promise(() => {}),
       }).then((result) => { settled = true; return result; });
-      await vi.advanceTimersByTimeAsync(119_999);
+      await vi.advanceTimersByTimeAsync(299_999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       const result = await promise;
-      expect(result).toMatchObject({ handled: true, response: '❌ /neko askgk がタイムアウトしました(120秒以内に応答がありませんでした)' });
+      expect(result).toMatchObject({ handled: true, response: '❌ /neko askgk がタイムアウトしました(300秒以内に応答がありませんでした)' });
     } finally { vi.useRealTimers(); }
   });
   it.each(['codex_status', 'codex_resume="session-1"', 'CODEX_HELP'])('codex_*はCodex応答として扱う: %s', async (argument) => {
