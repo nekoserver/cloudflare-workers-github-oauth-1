@@ -53,8 +53,9 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
-import { fetchLatestToolVersions } from './utils/latestToolVersions';
+import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
+import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
@@ -673,6 +674,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_session_notes', migration: '0186', description: '起動・再起動を起点とするセッション別の作業内容。追記型の改訂履歴', syncPolicy: 'auto' },
   { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
+  { name: 'cf_container_package_release_status', migration: '0188', description: '/cf-containers表示時に取得したパッケージ別最新版・リリース日時・導入状況', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -3141,6 +3143,26 @@ CREATE TABLE IF NOT EXISTS cf_container_session_notes (
   UNIQUE(start_operation_id, revision)
 );
 `,
+  '0188': `-- Current release and installation status for each package shown by /cf-containers.
+CREATE TABLE IF NOT EXISTS cf_container_package_release_status (
+  container_key TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  installed_version TEXT,
+  installed_status TEXT NOT NULL CHECK(installed_status IN ('installed','not_detected','not_recorded','no_snapshot')),
+  latest_version TEXT,
+  latest_release_at TEXT,
+  current_release_at TEXT,
+  release_status TEXT NOT NULL CHECK(release_status IN ('available','failed','unsupported')),
+  update_status TEXT NOT NULL CHECK(update_status IN ('update_available','current_or_ahead','latest_unavailable','unsupported','not_detected','unknown')),
+  source TEXT,
+  error TEXT,
+  installed_snapshot_id INTEGER REFERENCES cf_container_snapshots(id),
+  installed_snapshot_at TEXT,
+  checked_at TEXT NOT NULL,
+  PRIMARY KEY(container_key, package_name)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_status_checked
+  ON cf_container_package_release_status(checked_at);`,
   '0184': `-- Immutable observations: concurrent/partial fetches cannot overwrite a completed measurement.
 CREATE TABLE IF NOT EXISTS cf_container_build_measurements (
   snapshot_key TEXT PRIMARY KEY,
@@ -3360,6 +3382,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cf_container_operation_log: { id: 'pk', created_at: 'idx' },
   cf_container_snapshots: { id: 'pk', user_id: 'fk', prev_snapshot_id: 'fk', created_at: 'idx' },
   cf_container_snapshot_diffs: { id: 'pk', snapshot_id: 'fk' },
+  cf_container_package_release_status: { container_key: 'pk', package_name: 'pk', installed_snapshot_id: 'fk', checked_at: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3532,6 +3555,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cf_container_operation_log: 'system',
   cf_container_snapshots: 'system',
   cf_container_snapshot_diffs: 'system',
+  cf_container_package_release_status: 'system',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -3789,6 +3813,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   tree_view_keyword_search_results: { search_log_id: 'tree_view_keyword_search_log' },
   cf_container_snapshots: { user_id: 'user_sessions', prev_snapshot_id: 'cf_container_snapshots' },
   cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },
+  cf_container_package_release_status: { installed_snapshot_id: 'cf_container_snapshots' },
   commit_summary_topic_links: { topic_id: 'commit_summary_topics', summary_log_id: 'ai_summary_log' },
   ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
@@ -20142,6 +20167,57 @@ app.post('/api/cf-containers/snapshot', authMiddleware, cfDashboardAdminMiddlewa
   }
 });
 
+async function getCachedLatestToolVersions(
+  nodeMajor: number,
+  current: Record<string, string | null>,
+  githubToken: string | undefined,
+  executionCtx: Pick<ExecutionContext, 'waitUntil'>,
+): Promise<LatestToolVersions> {
+  const currentKey = Object.keys(current).sort().map((name) => `${name}:${current[name] ?? ''}`).join(',');
+  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}&current=${encodeURIComponent(currentKey)}`);
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const hit = cache ? await cache.match(cacheKey) : undefined;
+  if (hit) {
+    try { return await hit.json() as LatestToolVersions; } catch { /* 壊れたキャッシュは配布元から取り直す */ }
+  }
+  const latest = await fetchLatestToolVersions({ nodeMajor, current: current as Partial<Record<ToolName, string | null>>, githubToken });
+  if (cache) {
+    const response = Response.json(latest);
+    response.headers.set('Cache-Control', 'max-age=21600');
+    try { executionCtx.waitUntil(cache.put(cacheKey, response)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
+  }
+  return latest;
+}
+
+// /cf-containersページ表示時、直近のヘルスチェック版と配布元の最新版を照合し、D1へ保存する。
+app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  try {
+    const installedSnapshot = await getLatestVersionSnapshot(c.env.DB);
+    const current = installedSnapshot?.versions ?? {};
+    const nodeMajor = Number(String(current.node ?? '26').split('.')[0]) || 26;
+    const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
+    const checkedAt = new Date().toISOString();
+    const records = buildPackageReleaseStatuses('demo', installedSnapshot, latest, checkedAt);
+    await savePackageReleaseStatuses(c.env.DB, records);
+    return jsonUtf8({
+      saved: true,
+      containerKey: 'demo',
+      packageCount: records.length,
+      checkedAt,
+      installedSnapshotAt: installedSnapshot?.createdAt ?? null,
+      updatesAvailable: records.filter((row) => row.updateStatus === 'update_available').length,
+      latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] D1記録に失敗', { error: message });
+    return jsonUtf8({ error: `パッケージ新版状況の記録に失敗しました: ${message}(migration 0188を適用してください)` }, 503);
+  }
+});
+
 // 各ツールの配布元の最新版(/cf-containersのバージョン表の「新版あり」バッジ用)。配布元への問い合わせを減らすため6時間キャッシュする。
 app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const nodeMajor = Number(c.req.query('nodeMajor') || '26') || 26;
@@ -20151,19 +20227,8 @@ app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMi
     const [name, ver] = pair.split(':');
     if (name && ver && /^[a-z0-9_-]{1,32}$/.test(name) && /^[0-9A-Za-z.+-]{1,40}$/.test(ver)) current[name] = ver;
   }
-  const currentKey = Object.keys(current).sort().map((k) => `${k}:${current[k]}`).join(',');
-  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}&current=${encodeURIComponent(currentKey)}`);
-  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
-  const hit = cache ? await cache.match(cacheKey) : undefined;
-  if (hit) return hit;
-  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN, current });
-  const res = jsonUtf8({ latest, checkedAt: new Date().toISOString() });
-  if (cache) {
-    const toCache = res.clone();
-    toCache.headers.set('Cache-Control', 'max-age=21600');
-    try { c.executionCtx.waitUntil(cache.put(cacheKey, toCache)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
-  }
-  return res;
+  const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
+  return jsonUtf8({ latest, checkedAt: new Date().toISOString() });
 });
 
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
