@@ -235,12 +235,16 @@ if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     --socket=/var/run/tailscale/tailscaled.sock \
     --tun=userspace-networking \
     >/tmp/tailscaled.log 2>&1 &
-  log "tailscaled started (pid $!, userspace-networking)"
+  TAILSCALED_PID=$!
+  log "tailscaled started (pid ${TAILSCALED_PID}, userspace-networking)"
   sleep 1
-  tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname=cf-demo-container --accept-dns=false \
-    >/tmp/tailscale-up.log 2>&1 \
-    && log "tailscale up succeeded" \
-    || log "WARN: tailscale up failed, see /tmp/tailscale-up.log"
+  # tailscale up はバックグラウンドでリトライする(1分間隔で3回、駄目なら tailscaled を停止)。
+  # 起動処理は待たせない。管理サーバーは TAILSCALE_LOGIN_SERVER で指定する(未設定は既定)。
+  (
+    . /usr/local/bin/tailscale-up.sh
+    tailscale_up_with_retry
+  ) >>/tmp/tailscale-up.log 2>&1 &
+  log "tailscale up supervisor started (pid $!)"
 else
   log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
 fi

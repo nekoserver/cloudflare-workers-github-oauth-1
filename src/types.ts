@@ -70,6 +70,12 @@ export type Bindings = {
   TAILSCALE_API_TOKEN?: string;
   TAILSCALE_TAILNET?: string;
   /**
+   * デモコンテナ内のtailscale upが使う管理サーバーのURL(例: Headscale)。
+   * 未設定なら既定のcontrolplane.tailscale.comを使う。秘密情報ではないため
+   * wrangler.tomlの[vars]でも設定できる。
+   */
+  TAILSCALE_LOGIN_SERVER?: string;
+  /**
    * デモコンテナ内のcfコマンド(Cloudflare API簡易CLI)が使うAPI Token。
    * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
    */
