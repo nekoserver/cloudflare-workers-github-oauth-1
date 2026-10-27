@@ -161,7 +161,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </details>
 <details class="card" id="section-authorized-keys" tabindex="-1" data-section="authorized-keys">
   <summary>SSH公開鍵の追加（authorized_keys）</summary>
-  <p class="subtitle" style="margin:0 0 6px;">稼働中のコンテナの /root/.ssh/authorized_keys に公開鍵を1行追加します。HMACが一致しない場合は中断します。鍵は保存しないため、コンテナを作り直すと消えます。</p>
   <textarea id="authorized-key-input" rows="2" placeholder="ssh-ed25519 AAAA... comment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:12px;"></textarea>
   <input id="authorized-key-hmac" type="password" autocomplete="off" placeholder="HMACシークレット" style="width:100%;padding:8px;margin-top:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);">
   <button id="btn-add-authorized-key" type="button" style="margin-top:6px;">追加</button>
