@@ -157,6 +157,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
+<details class="card" id="section-ssh-keys" tabindex="-1" data-section="ssh-keys">
+  <summary>SSH公開鍵の登録（sshd用）</summary>
+  <p class="subtitle" style="margin:0 0 6px;">1行の公開鍵(ssh-ed25519 などで始まる行)を貼り付けて登録します。秘密鍵は受け付けません。登録後にコンテナが再起動します。</p>
+  <textarea id="ssh-key-input" rows="2" placeholder="ssh-ed25519 AAAA... comment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:12px;"></textarea>
+  <button id="btn-register-ssh-key" type="button">登録して再起動</button>
+  <div id="ssh-key-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+  <div style="margin-top:8px;font-size:12px;"><strong>登録済みの公開鍵</strong></div>
+  <ul id="ssh-key-list" style="font-size:12px;word-break:break-all;margin:4px 0 0 0;padding-left:18px;"></ul>
+</details>
 <details class="card" id="section-control" tabindex="-1" data-section="control" open>
   <summary>コンテナの操作（起動・停止・状態）</summary>
   <div class="status-row">
@@ -897,6 +906,60 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   var secretName = document.getElementById('secret-name');
   var secretValue = document.getElementById('secret-value');
+  var sshKeyInput = document.getElementById('ssh-key-input');
+  var sshKeyLog = document.getElementById('ssh-key-log');
+  var sshKeyList = document.getElementById('ssh-key-list');
+  var btnRegisterSshKey = document.getElementById('btn-register-ssh-key');
+  function renderSshKeys(keys) {
+    sshKeyList.innerHTML = '';
+    if (!keys || keys.length === 0) {
+      var empty = document.createElement('li');
+      empty.textContent = '登録済みの公開鍵はありません';
+      sshKeyList.appendChild(empty);
+      return;
+    }
+    keys.forEach(function (row) {
+      var item = document.createElement('li');
+      item.textContent = row.public_key;
+      sshKeyList.appendChild(item);
+    });
+  }
+  function loadSshKeys() {
+    fetch('/api/cf-containers/ssh-keys', { headers: { 'Accept': 'application/json' } })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data && data.keys) renderSshKeys(data.keys);
+        else sshKeyLog.textContent = (data && data.error) || '公開鍵の一覧を取得できません';
+      })
+      .catch(function (err) { sshKeyLog.textContent = '公開鍵の一覧を取得できません: ' + err.message; });
+  }
+  btnRegisterSshKey.addEventListener('click', function () {
+    var publicKey = sshKeyInput.value.trim();
+    if (!publicKey) {
+      sshKeyLog.textContent = '公開鍵を入力してください';
+      return;
+    }
+    btnRegisterSshKey.disabled = true;
+    sshKeyLog.textContent = '登録中…(反映のためコンテナを再起動します)';
+    fetch('/api/cf-containers/ssh-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: publicKey })
+    })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data && data.error) {
+          sshKeyLog.textContent = data.error;
+          return;
+        }
+        sshKeyLog.textContent = data.added === false ? 'この公開鍵は登録済みです' : '登録しました' + (data.warning ? '(' + data.warning + ')' : '');
+        if (data.added !== false) sshKeyInput.value = '';
+        loadSshKeys();
+      })
+      .catch(function (err) { sshKeyLog.textContent = '登録に失敗しました: ' + err.message; })
+      .finally(function () { btnRegisterSshKey.disabled = false; });
+  });
+  loadSshKeys();
   var btnSetSecret = document.getElementById('btn-set-secret');
   var secretLog = document.getElementById('secret-log');
   btnSetSecret.addEventListener('click', function () {

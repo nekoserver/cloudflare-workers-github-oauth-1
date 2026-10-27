@@ -58,6 +58,7 @@ import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronH
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
+import { validateSshPublicKey, addSshPublicKey, buildExtraAuthorizedKeys, isSameOrigin } from './utils/sshPublicKey';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -20252,6 +20253,101 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
     return jsonUtf8({ ok: true, warning: 'secretは保存しましたが、コンテナへの反映に失敗しました。再起動してください: ' + message });
   }
   return jsonUtf8({ ok: true });
+});
+
+/**
+ * /cf-containersの管理画面から登録したSSH公開鍵の一覧(GET)と追加(POST)。
+ * 管理者認証に加え、同一Originからのリクエストのみ受け付ける。
+ * 登録済みの鍵はD1の container_ssh_public_keys を正とし、全鍵を
+ * SSH_EXTRA_AUTHORIZED_KEYS のWorker Secretへ書き出してコンテナを再起動する。
+ */
+app.get('/api/cf-containers/ssh-keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'D1が未設定です' }, 503);
+  try {
+    const rows = await db.prepare('SELECT public_key, created_at FROM container_ssh_public_keys ORDER BY created_at, key_identity')
+      .all<{ public_key: string; created_at: string }>();
+    return jsonUtf8({ keys: rows.results ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-ssh-keys] 一覧の取得に失敗', { error: message });
+    return jsonUtf8({ error: '公開鍵の一覧を取得できません。D1のmigration 0188を確認してください: ' + message }, 503);
+  }
+});
+
+app.post('/api/cf-containers/ssh-keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  if (!isSameOrigin(c.req.header('Origin'), c.req.url)) {
+    return jsonUtf8({ error: '同一Originからの操作のみ受け付けます' }, 403);
+  }
+  const body = await c.req.json<{ publicKey?: unknown }>().catch(() => null);
+  const input = typeof body?.publicKey === 'string' ? body.publicKey : '';
+  const checked = validateSshPublicKey(input);
+  if (!checked.ok) return jsonUtf8({ error: checked.error }, 400);
+
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'D1が未設定です' }, 503);
+  const identity = checked.keyType + ' ' + checked.body;
+  let existing: string[];
+  try {
+    const rows = await db.prepare('SELECT public_key FROM container_ssh_public_keys ORDER BY created_at, key_identity')
+      .all<{ public_key: string }>();
+    existing = (rows.results ?? []).map((row) => row.public_key);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-ssh-keys] 既存の鍵の取得に失敗', { error: message });
+    return jsonUtf8({ error: '既存の公開鍵を読めません。D1のmigration 0188を確認してください: ' + message }, 503);
+  }
+  const merged = addSshPublicKey(existing, checked.value);
+  if (!merged.added) return jsonUtf8({ ok: true, added: false });
+
+  const apiKey = cfApiKey(c.env);
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: 'Cloudflare APIの設定(CF_CONTAINER_API_TOKEN・CLOUDFLARE_ACCOUNT_ID)が未設定のため、公開鍵を反映できません' }, 503);
+  }
+  const user = c.get('user');
+  const performedBy = user?.sub ?? 'unknown';
+  const value = buildExtraAuthorizedKeys(merged.keys);
+
+  try {
+    await db.prepare('INSERT INTO container_ssh_public_keys (key_identity, public_key, created_by) VALUES (?, ?, ?)')
+      .bind(identity, checked.value, performedBy).run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-ssh-keys] 公開鍵の保存に失敗', { error: message });
+    return jsonUtf8({ error: '公開鍵を保存できません。D1のmigration 0188を確認してください: ' + message }, 503);
+  }
+
+  // 反映に失敗したら保存を取り消す。保存だけ残ると、次の反映で保存されていない鍵が入るため。
+  const rollback = async () => {
+    await db.prepare('DELETE FROM container_ssh_public_keys WHERE key_identity = ?').bind(identity).run();
+  };
+  try {
+    await setWorkerSecret(
+      { accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey },
+      'cloudflare-workers-github-oauth-1',
+      'SSH_EXTRA_AUTHORIZED_KEYS',
+      value
+    );
+  } catch (err) {
+    await rollback();
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-ssh-keys] Secretの更新に失敗', { error: message });
+    return jsonUtf8({ error: '公開鍵をコンテナへ反映できませんでした(保存は取り消しました): ' + message }, 502);
+  }
+
+  try {
+    const stub = await getDemoContainerStub(c.env);
+    if (!stub) return jsonUtf8({ ok: true, added: true, warning: 'DEMO_CONTAINERが未設定のため、コンテナは再起動していません' });
+    await stub.restart({ name: 'SSH_EXTRA_AUTHORIZED_KEYS', value });
+    await recordContainerOperation(db, { ...demoContainerOperationContext(c.env), action: 'restart', performedBy, result: 'success', detail: 'SSH公開鍵の登録' }, (message) =>
+      logger.error('[cf-containers-ssh-keys] 操作ログの記録に失敗', { error: message })
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-ssh-keys] 登録後の再起動に失敗', { error: message });
+    return jsonUtf8({ ok: true, added: true, warning: '公開鍵は保存しましたが、コンテナへの反映に失敗しました。再起動してください: ' + message });
+  }
+  return jsonUtf8({ ok: true, added: true });
 });
 
 /** デモコンテナの起動/停止/再起動（管理者認証が必要）。 */

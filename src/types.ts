@@ -73,6 +73,11 @@ export type Bindings = {
    */
   TAILSCALE_LOGIN_SERVER?: string;
   /**
+   * /cf-containersの管理画面から登録したSSH公開鍵(1行1鍵)。Worker Secretとして保存し、
+   * entrypoint.shがauthorized_keysへ追記する。直接編集しない(登録APIからのみ更新する)。
+   */
+  SSH_EXTRA_AUTHORIZED_KEYS?: string;
+  /**
    * デモコンテナ内のcfコマンド(Cloudflare API簡易CLI)が使うAPI Token。
    * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
    */

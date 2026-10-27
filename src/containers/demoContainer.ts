@@ -10,7 +10,7 @@
  */
 import { Container } from '@cloudflare/containers';
 import type { Bindings } from '../types';
-import { ALLOWED_SECRET_NAMES, type AllowedSecretName } from '../utils/cfWorkerSecretApi';
+import { WRITABLE_SECRET_NAMES, type WritableSecretName } from '../utils/cfWorkerSecretApi';
 import { recordContainerOperation } from '../utils/cfContainerOperationLog';
 
 // 無操作でこの時間が経過すると自動停止する(課金を抑えるため)。/cf-containers
@@ -38,6 +38,7 @@ export class DemoContainer extends Container<Bindings> {
       NEKOROOT_TUNNEL_TOKEN: env.NEKOROOT_TUNNEL_TOKEN ?? '',
       TAILSCALE_AUTHKEY: env.TAILSCALE_AUTHKEY ?? '',
       TAILSCALE_LOGIN_SERVER: env.TAILSCALE_LOGIN_SERVER ?? '',
+      SSH_EXTRA_AUTHORIZED_KEYS: env.SSH_EXTRA_AUTHORIZED_KEYS ?? '',
       // コンテナ内のcfコマンド(containers/demo/cf)用。Worker本体の
       // CLOUDFLARE_API_KEYは流用せず、コンテナ専用のトークンを渡す。
       CF_CONTAINER_API_TOKEN: env.CF_CONTAINER_API_TOKEN ?? '',
@@ -82,9 +83,9 @@ export class DemoContainer extends Container<Bindings> {
    * stop→startを1回のロック取得で実行する(index.ts側でstop()とstart()を
    * 別々に呼ぶと、その間に別リクエストが割り込める隙間が生まれるため)。
    */
-  async restart(secret?: { name: AllowedSecretName; value: string }): Promise<void> {
+  async restart(secret?: { name: WritableSecretName; value: string }): Promise<void> {
     return this.withLock(async () => {
-      if (secret && (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(secret.name) || !secret.value.trim())) {
+      if (secret && (!(WRITABLE_SECRET_NAMES as readonly string[]).includes(secret.name) || !secret.value.trim())) {
         throw new Error('更新するsecretが不正です');
       }
       await super.stop();

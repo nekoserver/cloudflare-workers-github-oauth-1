@@ -14,6 +14,13 @@
 export const ALLOWED_SECRET_NAMES = ['NEKOROOT_TUNNEL_TOKEN', 'TAILSCALE_AUTHKEY', 'TAILSCALE_LOGIN_SERVER', 'CF_CONTAINER_API_TOKEN', 'CONTAINER_GH_TOKEN'] as const;
 export type AllowedSecretName = (typeof ALLOWED_SECRET_NAMES)[number];
 
+/**
+ * Worker Secretとして書き込みを許すname。汎用のsecret API(ALLOWED_SECRET_NAMES)には
+ * 出さず、登録API専用に限る。汎用APIで全体を上書きすると、登録済みの鍵が消えるため。
+ */
+export const WRITABLE_SECRET_NAMES = [...ALLOWED_SECRET_NAMES, 'SSH_EXTRA_AUTHORIZED_KEYS'] as const;
+export type WritableSecretName = (typeof WRITABLE_SECRET_NAMES)[number];
+
 export type CfWorkerSecretCredentials = {
   accountId: string;
   apiKey: string;
@@ -44,11 +51,11 @@ function apiHeaders(credentials: CfWorkerSecretCredentials): Record<string, stri
 export async function setWorkerSecret(
   credentials: CfWorkerSecretCredentials,
   scriptName: string,
-  secretName: AllowedSecretName,
+  secretName: WritableSecretName,
   value: string,
   fetcher: typeof fetch = fetch
 ): Promise<void> {
-  if (!(ALLOWED_SECRET_NAMES as readonly string[]).includes(secretName)) {
+  if (!(WRITABLE_SECRET_NAMES as readonly string[]).includes(secretName)) {
     throw new Error(`許可されていないsecret名です: ${secretName}`);
   }
   const response = await fetcher(

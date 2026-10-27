@@ -91,3 +91,8 @@ export function isSameOrigin(originHeader: string | undefined, requestUrl: strin
     return false;
   }
 }
+
+/** 登録済みの鍵を、コンテナの authorized_keys へ追記する形(1行1鍵・末尾改行)にまとめる。 */
+export function buildExtraAuthorizedKeys(keys: string[]): string {
+  return keys.map((key) => key + '\n').join('');
+}

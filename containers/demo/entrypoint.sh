@@ -69,6 +69,10 @@ cat > /root/.ssh/authorized_keys <<'EOF'
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM8/iV+DiD+cTQQgadOhHKkTUR+2ldz9ocGxC45sRbD admin
 EOF
 chmod 600 /root/.ssh/authorized_keys
+# 管理画面から登録した公開鍵(Worker Secret SSH_EXTRA_AUTHORIZED_KEYS)を追記する。
+if [ -n "${SSH_EXTRA_AUTHORIZED_KEYS:-}" ]; then
+  printf '%s' "${SSH_EXTRA_AUTHORIZED_KEYS}" >> /root/.ssh/authorized_keys
+fi
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 # -D keeps sshd attached to its stderr stream; -e sends events there instead
