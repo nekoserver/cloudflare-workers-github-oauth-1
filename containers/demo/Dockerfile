@@ -55,6 +55,7 @@ ARG NODE_VERSION=26.12.1
 ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.164.0
+ARG T3_VERSION=0.1.3
 ARG CLAUDE_VERSION=2.1.309
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
@@ -118,6 +119,12 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && codex --version \
     && npm cache clean --force
+# T3 Code。npmのパッケージは起動用の小さなプログラムで、初回の実行時にGitHub Releasesから本体(約122MB)を
+# ~/.t3/runtime へ取り込む。起動のたびにダウンロードしないよう、ビルド時に t3 --version を実行して
+# イメージへ取り込む(専用のRUNにして、キャッシュは同じRUNで消す)。
+RUN npm install -g t3@${T3_VERSION} \
+    && t3 --version \
+    && npm cache clean --force
 # Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
 ARG INSTALL_VITEST=true
 RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
@@ -175,6 +182,7 @@ COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
 COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
