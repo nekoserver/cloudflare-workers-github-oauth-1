@@ -57,6 +57,7 @@ import { fetchLatestToolVersions } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
+import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -20200,6 +20201,10 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   }
   if (!value.trim()) {
     return jsonUtf8({ error: 'valueが空です' }, 400);
+  }
+  if (name === 'TAILSCALE_LOGIN_SERVER') {
+    const checked = validateTailscaleLoginServer(value);
+    if (!checked.ok) return jsonUtf8({ error: checked.error }, 400);
   }
 
   // 自身のトークン更新は入力値で認証する。保存済みトークンが期限切れでも更新可能。

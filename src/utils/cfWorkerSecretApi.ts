@@ -11,7 +11,7 @@
  * ある名前だけを許可する(JWT_SECRET等の重要なsecretを誤って上書きできない
  * ようにする)。
  */
-export const ALLOWED_SECRET_NAMES = ['NEKOROOT_TUNNEL_TOKEN', 'TAILSCALE_AUTHKEY', 'CF_CONTAINER_API_TOKEN', 'CONTAINER_GH_TOKEN'] as const;
+export const ALLOWED_SECRET_NAMES = ['NEKOROOT_TUNNEL_TOKEN', 'TAILSCALE_AUTHKEY', 'TAILSCALE_LOGIN_SERVER', 'CF_CONTAINER_API_TOKEN', 'CONTAINER_GH_TOKEN'] as const;
 export type AllowedSecretName = (typeof ALLOWED_SECRET_NAMES)[number];
 
 export type CfWorkerSecretCredentials = {
