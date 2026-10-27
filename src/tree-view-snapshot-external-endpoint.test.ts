@@ -156,6 +156,23 @@ describe('POST /api/tree-view-repos-external', () => {
   });
 });
 
+describe('Redmineの保存済みツリー公開', () => {
+  it('保存済みRedmineを一覧とスナップショットに返し、未知のリポジトリは公開しない', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    const tree = { name: 'nekoserver/redmine', type: 'dir', children: [{ name: 'README.md', type: 'file' }] };
+    insertSnapshot(db, 'nekoserver/redmine', tree);
+    insertSnapshot(db, 'nekoserver/private-other', tree);
+    const userToken = await makeUserToken('ok@example.com');
+    const list = await postExternal('/api/tree-view-repos-external', db, { userToken });
+    const data = await list.json() as {repos: Array<{repoName: string}>};
+    expect(data.repos.map(repo => repo.repoName)).toContain('nekoserver/redmine');
+    expect(data.repos.map(repo => repo.repoName)).not.toContain('nekoserver/private-other');
+    const response = await postExternal('/api/tree-view-snapshot-external', db, {userToken, repoName:'nekoserver/redmine'});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({repoName:'nekoserver/redmine', tree});
+  });
+});
+
 describe('POST /api/tree-view-snapshot-external', () => {
   it('対象外のrepoNameは400', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
