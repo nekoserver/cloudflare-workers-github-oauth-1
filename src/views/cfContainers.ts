@@ -246,6 +246,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-net" type="button">ip addr / ip route を取得</button>
   </div>
   <pre id="net-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+  <button id="btn-tailscale-peers" type="button" style="margin-top:8px;">Tailscaleの接続経路を取得</button>
+  <pre id="tailscale-peers-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
 </details>
 <details class="card" id="section-buildlog" tabindex="-1" data-section="buildlog">
   <summary>本番ビルド(Workers Builds)のログ</summary>
@@ -875,6 +877,30 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .finally(function () {
         btnNet.disabled = false;
       });
+  });
+
+  var btnTailscalePeers = document.getElementById('btn-tailscale-peers');
+  var tailscalePeersLog = document.getElementById('tailscale-peers-log');
+  btnTailscalePeers.addEventListener('click', function () {
+    btnTailscalePeers.disabled = true;
+    tailscalePeersLog.textContent = '取得中…';
+    fetch('/cf-containers/proxy/debug/tailscale-peers')
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (!data || data.error) { tailscalePeersLog.textContent = 'エラー: ' + ((data && data.error) || '応答を読めません'); return; }
+        var lines = ['状態: ' + data.backendState + ' / このコンテナ: ' + data.self.dnsName + ' (' + data.self.ip + ')', ''];
+        data.peers.forEach(function (peer) {
+          var route = peer.connection === 'direct' ? '直接(P2P) ' + peer.curAddr
+            : peer.connection === 'relay' ? 'DERP中継 ' + peer.relay
+            : '経路なし';
+          lines.push((peer.active ? '[通信中] ' : '') + (peer.online ? '' : '[オフライン] ') + peer.hostName + ' ' + peer.ip + ' ' + peer.os + ' : ' + route);
+        });
+        if (data.peers.length === 0) lines.push('相手がいません');
+        lines.push('', '確認時刻: ' + data.checkedAt);
+        tailscalePeersLog.textContent = lines.join('\n');
+      })
+      .catch(function (err) { tailscalePeersLog.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnTailscalePeers.disabled = false; });
   });
 
   var btnBuildLog = document.getElementById('btn-buildlog');
