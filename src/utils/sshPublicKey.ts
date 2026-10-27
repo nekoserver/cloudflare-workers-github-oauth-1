@@ -1,6 +1,5 @@
 /**
- * 対象: /cf-containersの管理画面から登録するSSH公開鍵の検証と、登録済み鍵への
- * 追加(重複排除)。秘密鍵は受け付けない。
+ * 対象: /cf-containersの管理画面から登録するSSH公開鍵の検証。秘密鍵は受け付けない。
  *
  * 失敗は文字列prefixではなくerrorCodeで表現する。鍵の種別と本体の先頭に
  * 書かれた種別名が一致するかも確認し、貼り間違いを早く弾く。
@@ -68,18 +67,6 @@ export function validateSshPublicKey(input: string): SshPublicKeyResult {
     return fail('TYPE_MISMATCH', '鍵種別と公開鍵の本体が一致しません');
   }
   return { ok: true, value: trimmed, keyType, body };
-}
-
-/**
- * 既存の鍵一覧へ追加する。種別と本体が同じ鍵は、コメントが違っても重複扱いにする。
- */
-export function addSshPublicKey(existing: string[], value: string): { added: boolean; keys: string[] } {
-  const identity = (key: string) => key.trim().split(/\s+/).slice(0, 2).join(' ');
-  const target = identity(value);
-  if (existing.some((key) => identity(key) === target)) {
-    return { added: false, keys: existing };
-  }
-  return { added: true, keys: [...existing, value] };
 }
 
 /** Originヘッダが要求URLと同じオリジンか(ポートを含めて比較する)。Originが無ければfalse。 */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateSshPublicKey, addSshPublicKey, isSameOrigin } from './sshPublicKey';
+import { validateSshPublicKey, isSameOrigin } from './sshPublicKey';
 
 // 実在の形式に合わせたテスト用の公開鍵(秘密鍵ではない)。
 const ED25519 = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@example';
@@ -44,18 +44,6 @@ describe('validateSshPublicKey', () => {
     // 本体は ed25519 の鍵だが、種別を ssh-rsa と書いている
     const r = validateSshPublicKey(ED25519.replace('ssh-ed25519', 'ssh-rsa'));
     expect(r).toMatchObject({ ok: false, errorCode: 'TYPE_MISMATCH' });
-  });
-});
-
-describe('addSshPublicKey', () => {
-  it('新しい鍵は追加される', () => {
-    const r = addSshPublicKey([], ED25519);
-    expect(r).toEqual({ added: true, keys: [ED25519] });
-  });
-
-  it('同じ鍵(コメントが違っても)は重複して追加されない', () => {
-    const r = addSshPublicKey([ED25519], ED25519_NO_COMMENT);
-    expect(r).toEqual({ added: false, keys: [ED25519] });
   });
 });
 
