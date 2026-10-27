@@ -49,6 +49,30 @@ async function probeTailscaleRunning() {
   }
 }
 
+// tailscale status --json から、相手ごとの接続経路(直接/DERP中継)をまとめる。
+// CurAddrが空でなければP2Pの直接接続、空でRelayがあればDERP中継(Relayは中継先の地域)。
+function summarizeTailscalePeers(status) {
+  const self = status.Self || {};
+  const peers = Object.values(status.Peer || {}).map((peer) => ({
+    hostName: peer.HostName || '',
+    dnsName: peer.DNSName || '',
+    ip: (peer.TailscaleIPs || [])[0] || '',
+    os: peer.OS || '',
+    online: Boolean(peer.Online),
+    active: Boolean(peer.Active),
+    connection: peer.CurAddr ? 'direct' : peer.Relay ? 'relay' : 'none',
+    curAddr: peer.CurAddr || '',
+    relay: peer.Relay || '',
+    lastHandshake: peer.LastHandshake || '',
+  }));
+  peers.sort((x, y) => Number(y.active) - Number(x.active) || Number(y.online) - Number(x.online) || x.hostName.localeCompare(y.hostName));
+  return {
+    backendState: status.BackendState || '',
+    self: { hostName: self.HostName || '', dnsName: self.DNSName || '', ip: (self.TailscaleIPs || [])[0] || '' },
+    peers,
+  };
+}
+
 // dockerdに接続できるかどうか(docker infoが成功すればtrue)。
 async function probeDockerRunning() {
   const out = await runCmd('docker', ['info', '--format', '{{.ServerVersion}}']);
@@ -389,6 +413,19 @@ const server = http
       appendAuthorizedKey(req, res);
       return;
     }
+    if (req.url === '/debug/tailscale-peers') {
+      runCmd('tailscale', ['--socket=/var/run/tailscale/tailscaled.sock', 'status', '--json']).then((out) => {
+        let body;
+        try {
+          body = { ...summarizeTailscalePeers(JSON.parse(out)), checkedAt: new Date().toISOString() };
+        } catch {
+          body = { error: 'tailscale status --json を読めません(tailscaledが起動していない可能性)', raw: out.slice(0, 2000) };
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(body));
+      });
+      return;
+    }
     if (req.url === '/debug/logs') {
       const logs = {};
       for (const f of DEBUG_LOG_FILES) logs[f] = tailFile(f, 4000);
@@ -452,7 +489,7 @@ const server = http
   })
   ;
 
-module.exports = { extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
