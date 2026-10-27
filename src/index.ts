@@ -20420,7 +20420,12 @@ app.post('/api/cf-containers/authorized-keys', authMiddleware, cfDashboardAdminM
       body: JSON.stringify({ publicKey: checked.value }),
     }));
     const text = await res.text();
-    return new Response(text, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+    const result = parseAuthorizedKeyResponse(res.status, text);
+    if (!result.ok) {
+      logger.error('[cf-containers-authorized-keys] コンテナが追記を確認できない応答を返した', { status: res.status, body: text.slice(0, 300) });
+      return jsonUtf8({ error: result.error }, 502);
+    }
+    return jsonUtf8({ ok: true, added: result.added, message: result.message });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-authorized-keys] コンテナへの追記に失敗', { error: message });

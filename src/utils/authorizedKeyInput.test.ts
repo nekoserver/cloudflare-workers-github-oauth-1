@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { validatePublicKeyLine, hmacInputMatches, hmacInputMatchesAny, resolveOriginHmacSecrets } from './authorizedKeyInput';
+import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './authorizedKeyInput';
 
 const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2kQ2c3dcds19h599IEkj45GWerMrzC0AELnKqaOMZc';
 
@@ -54,6 +54,25 @@ describe('resolveOriginHmacSecrets / hmacInputMatchesAny', () => {
     expect(hmacInputMatchesAny('origin-secret', secrets)).toBe(true);
     expect(hmacInputMatchesAny('other', secrets)).toBe(false);
     expect(hmacInputMatchesAny('x', [])).toBe(false);
+  });
+});
+
+describe('parseAuthorizedKeyResponse', () => {
+  it('ok: true の応答だけを成功とする', () => {
+    expect(parseAuthorizedKeyResponse(200, '{"ok":true,"added":true}')).toEqual({ ok: true, added: true, message: undefined });
+    expect(parseAuthorizedKeyResponse(200, '{"ok":true,"added":false,"message":"既に登録"}')).toEqual({ ok: true, added: false, message: '既に登録' });
+  });
+
+  it('古いイメージのコンテナが返す200の汎用JSONを、成功とみなさない', () => {
+    const body = JSON.stringify({ message: 'cloudflare-workers-github-oauth-1 demo container', path: '/admin/authorized-keys', method: 'POST' });
+    const r = parseAuthorizedKeyResponse(200, body);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/コンテナの更新/);
+  });
+
+  it('コンテナのエラーはそのまま伝える。JSONでなければ失敗とする', () => {
+    expect(parseAuthorizedKeyResponse(400, '{"error":"公開鍵の形式が正しくありません"}')).toEqual({ ok: false, error: '公開鍵の形式が正しくありません' });
+    expect(parseAuthorizedKeyResponse(200, '<html>').ok).toBe(false);
   });
 });
 

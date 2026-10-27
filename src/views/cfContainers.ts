@@ -968,7 +968,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     })
       .then(readJsonOrText)
       .then(function (data) {
-        if (data && data.error) { authorizedKeyLog.textContent = data.error; return; }
+        if (!data || data.ok !== true) { authorizedKeyLog.textContent = (data && data.error) || '追加を確認できませんでした'; return; }
         authorizedKeyLog.textContent = data && data.added === false ? data.message : '追加しました';
         authorizedKeyInput.value = '';
       })
