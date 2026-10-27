@@ -40,18 +40,33 @@ export function hmacInputMatches(input: string, secret: string | undefined): boo
   return mismatch === 0;
 }
 
-/** 共有のHMACシークレットの候補(設定されているものすべて。値が別々に設定されていてもどれかと一致すればよい)。 */
-export function resolveOriginHmacSecrets(env: { ORIGIN_HMAC_SECRET?: string; HMAC_SECRET?: string; REDMINE_HMAC_SECRET?: string }): string[] {
-  return [env.ORIGIN_HMAC_SECRET, env.HMAC_SECRET, env.REDMINE_HMAC_SECRET]
-    .map((value) => value?.trim() ?? '')
-    .filter((value) => value.length > 0);
+/** 照合に使うシークレット。ORIGIN_HMAC_SECRETだけを使う。 */
+export function resolveOriginHmacSecret(env: { ORIGIN_HMAC_SECRET?: string }): string | undefined {
+  return env.ORIGIN_HMAC_SECRET?.trim() || undefined;
 }
 
-/** 入力がいずれかの候補と一致するか。候補が無ければ不一致。 */
-export function hmacInputMatchesAny(input: string, secrets: string[]): boolean {
-  let matched = false;
-  for (const secret of secrets) {
-    if (hmacInputMatches(input, secret)) matched = true;
+export type AuthorizedKeyResponse =
+  | { ok: true; added: boolean; message?: string }
+  | { ok: false; error: string };
+
+/**
+ * コンテナ(server.js /admin/authorized-keys)の応答を解釈する。
+ * 応答に ok: true が無ければ、追記できたとはみなさない。古いイメージのコンテナは
+ * どのパスにも200のJSONを返すため、ステータスだけで成功と判断すると誤表示になる。
+ */
+export function parseAuthorizedKeyResponse(status: number, text: string): AuthorizedKeyResponse {
+  let data: { ok?: unknown; added?: unknown; message?: unknown; error?: unknown } | null = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = null;
   }
-  return matched;
+  if (status >= 200 && status < 300 && data?.ok === true) {
+    return { ok: true, added: data.added !== false, message: typeof data.message === 'string' ? data.message : undefined };
+  }
+  if (typeof data?.error === 'string') return { ok: false, error: data.error };
+  return {
+    ok: false,
+    error: `コンテナが公開鍵の追記に対応していません(HTTP ${status})。コンテナが古いイメージのまま動いている可能性があります。コンテナの更新(デプロイ)が必要です`,
+  };
 }
