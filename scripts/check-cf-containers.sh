@@ -97,6 +97,7 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   for c in netstat top whois dig ping; do command -v $c >/dev/null || { echo "NG: $c が入っていない"; exit 1; }; done
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
   codex --version
+  t3 --version
   claude --version
   node -e "if (parseInt(process.versions.node) < 22) process.exit(1)"
   test -x /opt/node22/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host

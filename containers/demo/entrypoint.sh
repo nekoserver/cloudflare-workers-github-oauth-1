@@ -250,6 +250,33 @@ else
   log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
 fi
 
+# --- T3 Code ---
+# T3 Codeは127.0.0.1:3773、埋め込み用の中継は127.0.0.1:3774のloopbackだけで待ち受ける。
+# 外へ出す入口は、nekorootトンネルのPublic Hostname(接続先 http://127.0.0.1:3774)だけ。
+# 起動に失敗しても他のサービスは止めない。落ちたら3秒待って起動し直す(終了のたびにログへ記録する)。
+# ペアリングは、コンテナ内で `t3 pair` を実行して作る(コードはログやリポジトリに残さない)。
+if command -v t3 >/dev/null 2>&1; then
+  mkdir -p /root/t3-workspace
+  (
+    while true; do
+      t3 serve --host 127.0.0.1 --port 3773 --no-browser /root/t3-workspace
+      echo "[entrypoint] t3 serve exited (code $?) at $(date -u +%FT%TZ), restarting in 3s"
+      sleep 3
+    done
+  ) >>/tmp/t3.log 2>&1 &
+  log "t3 serve supervisor started (pid $!)"
+  (
+    while true; do
+      node /usr/local/libexec/t3-embed-proxy.cjs
+      echo "[entrypoint] t3-embed-proxy exited (code $?) at $(date -u +%FT%TZ), restarting in 3s"
+      sleep 3
+    done
+  ) >>/tmp/t3-proxy.log 2>&1 &
+  log "t3-embed-proxy supervisor started (pid $!)"
+else
+  log "WARN: t3コマンドが無いため、T3 Codeは起動しない"
+fi
+
 # --- dockerd ---
 # 起動できない環境でも他のサービスは止めない(状態は/healthのdockerで見る)。
 if command -v dockerd >/dev/null 2>&1; then
