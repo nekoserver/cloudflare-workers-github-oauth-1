@@ -897,7 +897,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         });
         if (data.peers.length === 0) lines.push('相手がいません');
         lines.push('', '確認時刻: ' + data.checkedAt);
-        tailscalePeersLog.textContent = lines.join('\n');
+        tailscalePeersLog.textContent = lines.join('\\n');
       })
       .catch(function (err) { tailscalePeersLog.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnTailscalePeers.disabled = false; });
