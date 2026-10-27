@@ -17925,10 +17925,10 @@ app.post('/api/jev-test-score-trend-external', async (c) => {
   }
 });
 
-// dynamicnekoの/tree-viewで公開する対象は、初期JSONを用意したこの2件だけ。
+// dynamicnekoの/tree-viewでは組み込み対象と、保存済みRedmineを公開する。
 // installation_permissionsやGitHub tokenに別リポジトリへの権限が増えても、
 // tree-view用データに勝手に取り込まない。
-const TREE_VIEW_SNAPSHOT_REPOS = Object.freeze(Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS));
+const TREE_VIEW_SNAPSHOT_REPOS = Object.freeze([...Object.keys(EMBEDDED_TREE_VIEW_SNAPSHOTS), 'nekoserver/redmine']);
 const TREE_VIEW_SNAPSHOT_REPO_SET = new Set(TREE_VIEW_SNAPSHOT_REPOS);
 const TREE_VIEW_SNAPSHOT_REPO_RE = /^nekoserver\/[A-Za-z0-9._-]+$/;
 

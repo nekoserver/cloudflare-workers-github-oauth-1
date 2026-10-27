@@ -1,0 +1,11 @@
+# tree-viewのRedmine表示対象修正（2026-10-27）
+
+本番D1のtree_view_snapshotsにnekoserver/redmineが1件存在する一方、本体APIのTREE_VIEW_SNAPSHOT_REPOSとdynamicnekoのTREE_VIEW_ALLOWED_REPOSから除外されていた。ビルド監視だけがRedmineを許可しており、ツリー一覧とファイル表示には反映されていなかった。
+
+本体の許可リストへRedmineを明示追加し、保存済み行をリポジトリ一覧・スナップショットAPIへ返す。未知のリポジトリは従来どおり対象外。Redmineの静的ツリーを新規生成せず、既存D1データを利用する。dynamicnekoは既存の動的タブ・スナップショット取得経路を利用し、ファイル取得許可へRedmineを追加した。ビルド許可の重複も解消。DBの書換えと自動同期再開は行っていない。
+
+本体のAPI・cron関連38テスト成功。追加テストでは保存済みRedmineの一覧・ツリー取得と未知リポジトリの除外を確認。変更前はRedmineのテストが失敗した。dynamicnekoのChromium追加1件でRedmineタブ選択、保存済みツリー、READMEプレビューとRedmine指定のファイル要求を確認。変更前の許可判定は失敗した。型チェックと配備用JavaScriptのnode --check成功。
+
+本体version 1acad203-46e2-41bf-93da-245f1e75b73e、dynamicneko version 97f49253-b382-4f15-a33a-95c35bce8f98を各100%配備。現在の本番モジュールへ許可配列の差分だけを反映し、再取得で一致を確認。両Workerの既存bindings・他モジュール・静的資産を保持。前回のウィンドウ/一覧機能も保持。Dockerビルド・コンテナ操作なし。
+
+配備前後のモジュール・settings・deploymentsはroot専用/root/.local/state/redmine-tree-cloudflare-workers-github-oauth-1/と/root/.local/state/redmine-tree-dynamicneko/に保存。実ログインユーザーの本番画面操作、配備先GITHUB_CONTENT_TOKENを使う実ファイル取得は未確認。ブラウザ試験はAPIをモックしているため、実資格情報の検証とは区別する。

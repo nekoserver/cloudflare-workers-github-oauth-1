@@ -171,3 +171,8 @@ Workerバージョン `c4886118-6819-42be-96a0-b718349b0c7f` を配備。D1に01
 Tailscale APIの実トークンによる照会、実利用者のTailnetログイン後の端末到達性は未検証。WASMはブラウザ実行で、参照範囲はログインユーザーの権限に従う。tree-viewの既存全コンテナ検出との接続は未実施。確認したdynamicneko main/配備版は利用者別Sandboxの経路であり、別の検出経路は特定できていない。共通APIは他画面から再利用できる形としたが、tree-view側で利用済みとは報告しない。
 
 復旧用Worker本体・settings・deploymentsはroot専用 `/root/.local/state/tailscale-wasm/` に保存し、Gitへ含めない。再取得可能なSDKキャッシュと、配布に必要なpublicアセット・ライセンス・出典/チェックサム・復元スクリプトは区別する。仕様は [コンテナ監視SPEC](SPEC.cloudflare-workers-github-oauth-1.container-monitor.md)。
+
+
+## 2026-10-27: tree-viewのRedmine表示許可
+
+保存済みRedmineのツリーが固定許可リストに遮られていたため本体APIとdynamicnekoのファイル取得許可へ明示追加。本体1acad203-46e2-41bf-93da-245f1e75b73e、dynamicneko97f49253-b382-4f15-a33a-95c35bce8f98を100%配備。既存bindingsと静的資産を維持。API/cron38件・ブラウザ1件成功、自動同期は停止維持。実ログインユーザーの本番操作は未確認。詳細は当日TREE-VIEW-REDMINE REPORT。
