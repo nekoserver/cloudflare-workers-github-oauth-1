@@ -222,6 +222,7 @@ COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
 COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY apache-redmine.conf /etc/apache2/sites-available/010-redmine.conf
