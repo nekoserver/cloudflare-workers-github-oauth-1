@@ -40,20 +40,9 @@ export function hmacInputMatches(input: string, secret: string | undefined): boo
   return mismatch === 0;
 }
 
-/** 共有のHMACシークレットの候補(設定されているものすべて。値が別々に設定されていてもどれかと一致すればよい)。 */
-export function resolveOriginHmacSecrets(env: { ORIGIN_HMAC_SECRET?: string; HMAC_SECRET?: string; REDMINE_HMAC_SECRET?: string }): string[] {
-  return [env.ORIGIN_HMAC_SECRET, env.HMAC_SECRET, env.REDMINE_HMAC_SECRET]
-    .map((value) => value?.trim() ?? '')
-    .filter((value) => value.length > 0);
-}
-
-/** 入力がいずれかの候補と一致するか。候補が無ければ不一致。 */
-export function hmacInputMatchesAny(input: string, secrets: string[]): boolean {
-  let matched = false;
-  for (const secret of secrets) {
-    if (hmacInputMatches(input, secret)) matched = true;
-  }
-  return matched;
+/** 照合に使うシークレット。ORIGIN_HMAC_SECRETだけを使う。 */
+export function resolveOriginHmacSecret(env: { ORIGIN_HMAC_SECRET?: string }): string | undefined {
+  return env.ORIGIN_HMAC_SECRET?.trim() || undefined;
 }
 
 export type AuthorizedKeyResponse =

@@ -60,7 +60,7 @@ import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronH
 import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
-import { validatePublicKeyLine, hmacInputMatchesAny, resolveOriginHmacSecrets } from './utils/authorizedKeyInput';
+import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './utils/authorizedKeyInput';
 import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
@@ -20402,9 +20402,9 @@ app.all('/cf-containers/api/docker/*', authMiddleware, cfDashboardAdminMiddlewar
  */
 app.post('/api/cf-containers/authorized-keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const body = await c.req.json<{ publicKey?: unknown; hmac?: unknown }>().catch(() => null);
-  const secrets = resolveOriginHmacSecrets(c.env);
-  if (secrets.length === 0) return jsonUtf8({ error: 'HMACシークレット(ORIGIN_HMAC_SECRET・HMAC_SECRET・REDMINE_HMAC_SECRET)がどれも未設定のため中断しました' }, 503);
-  if (!hmacInputMatchesAny(typeof body?.hmac === 'string' ? body.hmac : '', secrets)) {
+  const secret = resolveOriginHmacSecret(c.env);
+  if (!secret) return jsonUtf8({ error: 'ORIGIN_HMAC_SECRETが未設定のため中断しました' }, 503);
+  if (!hmacInputMatches(typeof body?.hmac === 'string' ? body.hmac : '', secret)) {
     return jsonUtf8({ error: 'HMACが一致しないため中断しました' }, 403);
   }
   const checked = validatePublicKeyLine(typeof body?.publicKey === 'string' ? body.publicKey : '');
