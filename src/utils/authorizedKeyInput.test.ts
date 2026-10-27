@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret } from './authorizedKeyInput';
+import { validatePublicKeyLine, hmacInputMatches, hmacInputMatchesAny, resolveOriginHmacSecrets } from './authorizedKeyInput';
 
 const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2kQ2c3dcds19h599IEkj45GWerMrzC0AELnKqaOMZc';
 
@@ -35,12 +35,25 @@ describe('hmacInputMatches', () => {
   });
 });
 
-describe('resolveOriginHmacSecret', () => {
-  it('ORIGIN_HMAC_SECRET → HMAC_SECRET → REDMINE_HMAC_SECRET の順で使う', () => {
-    expect(resolveOriginHmacSecret({ ORIGIN_HMAC_SECRET: 'a', HMAC_SECRET: 'b' })).toBe('a');
-    expect(resolveOriginHmacSecret({ HMAC_SECRET: 'b', REDMINE_HMAC_SECRET: 'c' })).toBe('b');
-    expect(resolveOriginHmacSecret({ REDMINE_HMAC_SECRET: 'c' })).toBe('c');
-    expect(resolveOriginHmacSecret({})).toBeUndefined();
+describe('貼り付けの空白', () => {
+  it('入力の前後の空白・改行は無視して一致とする', () => {
+    expect(hmacInputMatches('  secret-value\n', 'secret-value')).toBe(true);
+    expect(hmacInputMatches('secret-value', ' secret-value \n')).toBe(true);
+  });
+});
+
+describe('resolveOriginHmacSecrets / hmacInputMatchesAny', () => {
+  it('設定されているシークレットをすべて候補にする', () => {
+    expect(resolveOriginHmacSecrets({ ORIGIN_HMAC_SECRET: 'a', HMAC_SECRET: 'b', REDMINE_HMAC_SECRET: ' ' })).toEqual(['a', 'b']);
+    expect(resolveOriginHmacSecrets({})).toEqual([]);
+  });
+
+  it('ORIGIN_HMAC_SECRET と HMAC_SECRET が別の値でも、どちらかと一致すれば通す', () => {
+    const secrets = resolveOriginHmacSecrets({ ORIGIN_HMAC_SECRET: 'origin-secret', HMAC_SECRET: 'hmac-secret' });
+    expect(hmacInputMatchesAny('hmac-secret', secrets)).toBe(true);
+    expect(hmacInputMatchesAny('origin-secret', secrets)).toBe(true);
+    expect(hmacInputMatchesAny('other', secrets)).toBe(false);
+    expect(hmacInputMatchesAny('x', [])).toBe(false);
   });
 });
 
@@ -50,8 +63,8 @@ describe('配線', () => {
     const start = s.indexOf("app.post('/api/cf-containers/authorized-keys', authMiddleware, cfDashboardAdminMiddleware");
     expect(start).toBeGreaterThan(-1);
     const block = s.slice(start, s.indexOf('\n});\n', start));
-    expect(block.indexOf('hmacInputMatches(')).toBeGreaterThan(-1);
-    expect(block.indexOf('hmacInputMatches(')).toBeLessThan(block.indexOf('/admin/authorized-keys'));
+    expect(block.indexOf('hmacInputMatchesAny(')).toBeGreaterThan(-1);
+    expect(block.indexOf('hmacInputMatchesAny(')).toBeLessThan(block.indexOf('/admin/authorized-keys'));
   });
 
   it('汎用プロキシは /admin/ を転送しない(HMAC 照合を迂回させない)', () => {
