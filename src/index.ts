@@ -60,6 +60,7 @@ import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronH
 import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
+import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret } from './utils/authorizedKeyInput';
 import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
@@ -20394,12 +20395,47 @@ app.get('/cf-containers/docker-dashboard.css', authMiddleware, cfDashboardAdminM
 app.get('/cf-containers/docker-dashboard.mjs', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
 app.all('/cf-containers/api/docker/*', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
 
+/**
+ * /cf-containersの画面から受け付けたSSH公開鍵を、稼働中コンテナの/root/.ssh/authorized_keysへ追記する。
+ * 管理者認証に加えてHMACシークレットの入力を求め、一致しなければ何もせずに中断する。
+ * 鍵はどこにも保存しない(コンテナを作り直すと消える)。
+ */
+app.post('/api/cf-containers/authorized-keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json<{ publicKey?: unknown; hmac?: unknown }>().catch(() => null);
+  const secret = resolveOriginHmacSecret(c.env);
+  if (!secret) return jsonUtf8({ error: 'HMACシークレット(ORIGIN_HMAC_SECRET)が未設定のため中断しました' }, 503);
+  if (!hmacInputMatches(typeof body?.hmac === 'string' ? body.hmac : '', secret)) {
+    return jsonUtf8({ error: 'HMACが一致しないため中断しました' }, 403);
+  }
+  const checked = validatePublicKeyLine(typeof body?.publicKey === 'string' ? body.publicKey : '');
+  if (!checked.ok) return jsonUtf8({ error: checked.error }, 400);
+
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+  try {
+    const url = new URL(c.req.url);
+    const res = await stub.fetch(new Request(`${url.origin}/admin/authorized-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: checked.value }),
+    }));
+    const text = await res.text();
+    return new Response(text, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-authorized-keys] コンテナへの追記に失敗', { error: message });
+    return jsonUtf8({ error: 'コンテナへの追記に失敗しました(コンテナが起動しているか確認してください): ' + message }, 502);
+  }
+});
+
 app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
   const prefix = '/cf-containers/proxy';
   const url = new URL(c.req.url);
   const forwardPath = url.pathname.slice(prefix.length) || '/';
+  // 公開鍵の追記はHMAC照合付きの /api/cf-containers/authorized-keys からのみ受け付ける。
+  if (forwardPath === '/admin' || forwardPath.startsWith('/admin/')) return jsonUtf8({ error: 'このパスはプロキシできません' }, 403);
   const forwardUrl = `${url.origin}${forwardPath}${url.search}`;
   const diagAction = diagActionForProxyPath(forwardPath);
   const user = c.get('user');
