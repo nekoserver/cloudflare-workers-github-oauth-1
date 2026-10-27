@@ -257,11 +257,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <pre id="buildlog-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
 </details>
 <details class="card" id="section-container-list" tabindex="-1" data-section="container-list">
-  <summary>Container一覧（wrangler containers list）</summary>
+  <summary>作成日ごとのContainer一覧（wrangler containers list）</summary>
   <p class="subtitle">デモコンテナ内で読み取り専用の一覧コマンドを実行します。Cloudflare APIトークンにはContainers Read権限が必要です。</p>
   <div class="status-row">
-    <button id="btn-container-list" type="button">wrangler containers list を実行</button>
+    <button id="btn-container-list" type="button">一覧を更新</button>
   </div>
+  <div id="container-list-groups" aria-live="polite"></div>
   <pre id="container-list-output" style="margin-top:6px;font-size:12px;white-space:pre;max-height:480px;overflow:auto;" aria-live="polite">未実行</pre>
 </details>
 <details class="card" id="section-tunnels" tabindex="-1" data-section="tunnels">
@@ -921,18 +922,49 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   var btnContainerList = document.getElementById('btn-container-list');
   var containerListOutput = document.getElementById('container-list-output');
+  var containerListGroups = document.getElementById('container-list-groups');
   btnContainerList.addEventListener('click', function () {
     btnContainerList.disabled = true;
     containerListOutput.textContent = '実行中…';
+    containerListGroups.textContent = '';
     fetch('/cf-containers/proxy/debug/wrangler/containers-list', { cache: 'no-store' })
       .then(readJsonOrText)
       .then(function (data) {
-        var lines = ['$ ' + (data.command || 'wrangler containers list')];
+        var lines = ['$ ' + (data.command || 'wrangler containers list --json')];
         if (data.stdout) lines.push(data.stdout.replace(/\\s+$/, ''));
         if (data.stderr) lines.push('[stderr]\\n' + data.stderr.replace(/\\s+$/, ''));
         if (data.error) lines.push('[error] ' + data.error);
         if (data.checkedAt) lines.push('[取得時刻] ' + data.checkedAt);
         containerListOutput.textContent = lines.join('\\n\\n');
+        if (data.exitCode !== 0 || !data.stdout) return;
+        var rows;
+        try { rows = JSON.parse(data.stdout); } catch (_) { return; }
+        if (!Array.isArray(rows)) rows = rows && (rows.containers || rows.items || rows.results);
+        if (!Array.isArray(rows)) return;
+        if (rows.length === 0) {
+          containerListGroups.textContent = 'コンテナはありません。';
+          return;
+        }
+        var groups = Object.create(null);
+        rows.forEach(function (row) {
+          var created = row && (row.created_at || row.createdAt || row.created);
+          var date = typeof created === 'string' && !isNaN(Date.parse(created)) ? new Date(created).toISOString().slice(0, 10) : '作成日不明';
+          (groups[date] || (groups[date] = [])).push(row);
+        });
+        Object.keys(groups).sort(function (a, b) { return b.localeCompare(a); }).forEach(function (date) {
+          var section = document.createElement('section');
+          var heading = document.createElement('h3');
+          heading.textContent = date + '（' + groups[date].length + '）';
+          section.appendChild(heading);
+          var list = document.createElement('ul');
+          groups[date].forEach(function (row) {
+            var item = document.createElement('li');
+            item.textContent = [row.name || row.id || row.application_id || '名前不明', row.version ? 'version ' + row.version : '', row.status || ''].filter(Boolean).join(' — ');
+            list.appendChild(item);
+          });
+          section.appendChild(list);
+          containerListGroups.appendChild(section);
+        });
       })
       .catch(function (err) { containerListOutput.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnContainerList.disabled = false; });

@@ -16775,6 +16775,29 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   return !!expected && auth === expected;
 }
 
+/** dynamicneko tree-view用。既存の固定wrangler containers list診断をJSONで中継する。 */
+app.post('/api/tree-view/container-inventory-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+  try {
+    const response = await stub.fetch(new Request('https://container.internal/debug/wrangler/containers-list'));
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result || typeof result !== 'object') {
+      return jsonUtf8({ error: 'wrangler containers list の取得に失敗しました' }, 502);
+    }
+    return jsonUtf8(result, response.status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-container-inventory] wrangler list relay failed', { error: message });
+    return jsonUtf8({ error: 'コンテナ一覧を取得できませんでした' }, 502);
+  }
+});
+
 /** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/rowsのexternal版。 */
 app.post('/api/aichat/jev-score-board-rows-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);

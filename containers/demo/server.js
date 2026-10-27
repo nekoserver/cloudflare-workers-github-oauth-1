@@ -279,10 +279,10 @@ function runWranglerContainersList(res) {
     return;
   }
   const childEnv = { ...process.env, CLOUDFLARE_API_TOKEN: token, NO_COLOR: '1' };
-  execFile('wrangler', ['containers', 'list'], { env: childEnv, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+  execFile('wrangler', ['containers', 'list', '--json'], { env: childEnv, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
     const redact = (value) => String(value || '').split(token).join('[REDACTED]').slice(0, 2 * 1024 * 1024);
     const result = {
-      command: 'wrangler containers list',
+      command: 'wrangler containers list --json',
       stdout: redact(stdout),
       stderr: redact(stderr),
       exitCode: err ? (typeof err.code === 'number' ? err.code : null) : 0,
