@@ -27,15 +27,31 @@ export function validatePublicKeyLine(input: string): PublicKeyLineResult {
   return { ok: true, value: value.split(/\s+/).join(' ') };
 }
 
-/** 入力されたシークレットとサーバー側の値をタイミングセーフに比較する。サーバー側が未設定なら常に不一致。 */
+/**
+ * 入力されたシークレットとサーバー側の値をタイミングセーフに比較する。
+ * 前後の空白・改行は無視する(貼り付けで混入するため)。サーバー側が未設定なら常に不一致。
+ */
 export function hmacInputMatches(input: string, secret: string | undefined): boolean {
-  if (!secret || !input || input.length !== secret.length) return false;
+  const a = input.trim();
+  const b = secret?.trim() ?? '';
+  if (!a || !b || a.length !== b.length) return false;
   let mismatch = 0;
-  for (let i = 0; i < secret.length; i++) mismatch |= input.charCodeAt(i) ^ secret.charCodeAt(i);
+  for (let i = 0; i < b.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return mismatch === 0;
 }
 
-/** 共有のHMACシークレット(src/utils/redmineProxy.tsと同じ優先順)。 */
-export function resolveOriginHmacSecret(env: { ORIGIN_HMAC_SECRET?: string; HMAC_SECRET?: string; REDMINE_HMAC_SECRET?: string }): string | undefined {
-  return env.ORIGIN_HMAC_SECRET?.trim() || env.HMAC_SECRET?.trim() || env.REDMINE_HMAC_SECRET?.trim() || undefined;
+/** 共有のHMACシークレットの候補(設定されているものすべて。値が別々に設定されていてもどれかと一致すればよい)。 */
+export function resolveOriginHmacSecrets(env: { ORIGIN_HMAC_SECRET?: string; HMAC_SECRET?: string; REDMINE_HMAC_SECRET?: string }): string[] {
+  return [env.ORIGIN_HMAC_SECRET, env.HMAC_SECRET, env.REDMINE_HMAC_SECRET]
+    .map((value) => value?.trim() ?? '')
+    .filter((value) => value.length > 0);
+}
+
+/** 入力がいずれかの候補と一致するか。候補が無ければ不一致。 */
+export function hmacInputMatchesAny(input: string, secrets: string[]): boolean {
+  let matched = false;
+  for (const secret of secrets) {
+    if (hmacInputMatches(input, secret)) matched = true;
+  }
+  return matched;
 }
