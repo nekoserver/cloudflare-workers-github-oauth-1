@@ -159,6 +159,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
+<details class="card" id="section-authorized-keys" tabindex="-1" data-section="authorized-keys">
+  <summary>SSH公開鍵の追加（authorized_keys）</summary>
+  <p class="subtitle" style="margin:0 0 6px;">稼働中のコンテナの /root/.ssh/authorized_keys に公開鍵を1行追加します。HMACが一致しない場合は中断します。鍵は保存しないため、コンテナを作り直すと消えます。</p>
+  <textarea id="authorized-key-input" rows="2" placeholder="ssh-ed25519 AAAA... comment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:12px;"></textarea>
+  <input id="authorized-key-hmac" type="password" autocomplete="off" placeholder="HMACシークレット" style="width:100%;padding:8px;margin-top:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);">
+  <button id="btn-add-authorized-key" type="button" style="margin-top:6px;">追加</button>
+  <div id="authorized-key-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
 <details class="card" id="section-control" tabindex="-1" data-section="control" open>
   <summary>コンテナの操作（起動・停止・状態）</summary>
   <div class="status-row">
@@ -942,6 +950,31 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   var secretName = document.getElementById('secret-name');
   var secretValue = document.getElementById('secret-value');
+  var authorizedKeyInput = document.getElementById('authorized-key-input');
+  var authorizedKeyHmac = document.getElementById('authorized-key-hmac');
+  var authorizedKeyLog = document.getElementById('authorized-key-log');
+  var btnAddAuthorizedKey = document.getElementById('btn-add-authorized-key');
+  btnAddAuthorizedKey.addEventListener('click', function () {
+    var publicKey = authorizedKeyInput.value.trim();
+    var hmac = authorizedKeyHmac.value;
+    if (!publicKey) { authorizedKeyLog.textContent = '公開鍵を入力してください'; return; }
+    if (!hmac) { authorizedKeyLog.textContent = 'HMACシークレットを入力してください'; return; }
+    btnAddAuthorizedKey.disabled = true;
+    authorizedKeyLog.textContent = '追加中…';
+    fetch('/api/cf-containers/authorized-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: publicKey, hmac: hmac })
+    })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data && data.error) { authorizedKeyLog.textContent = data.error; return; }
+        authorizedKeyLog.textContent = data && data.added === false ? data.message : '追加しました';
+        authorizedKeyInput.value = '';
+      })
+      .catch(function (err) { authorizedKeyLog.textContent = '追加に失敗しました: ' + err.message; })
+      .finally(function () { authorizedKeyHmac.value = ''; btnAddAuthorizedKey.disabled = false; });
+  });
   var btnSetSecret = document.getElementById('btn-set-secret');
   var secretLog = document.getElementById('secret-log');
   btnSetSecret.addEventListener('click', function () {

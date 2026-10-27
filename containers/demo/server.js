@@ -317,6 +317,47 @@ function tailFile(path, maxBytes) {
   }
 }
 
+// /admin/authorized-keys: Workerの /api/cf-containers/authorized-keys(管理者認証+HMAC照合済み)から
+// 渡された公開鍵1行を/root/.ssh/authorized_keysへ追記する。Apache(トンネル側)は/adminを拒否し、
+// Workerの汎用プロキシも/adminを転送しないため、ここへはそのAPI経由でしか届かない。
+const AUTHORIZED_KEYS_PATH = '/root/.ssh/authorized_keys';
+const PUBLIC_KEY_LINE = /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+\/]+={0,2}( [^\r\n]*)?$/;
+function appendAuthorizedKey(req, res) {
+  let raw = '';
+  req.on('data', (chunk) => {
+    raw += chunk;
+    if (raw.length > 20000) req.destroy();
+  });
+  req.on('end', () => {
+    const send = (status, payload) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(payload));
+    };
+    let key;
+    try {
+      key = String(JSON.parse(raw).publicKey || '').trim();
+    } catch {
+      return send(400, { error: 'JSONを読めません' });
+    }
+    if (!PUBLIC_KEY_LINE.test(key)) return send(400, { error: '公開鍵の形式が正しくありません' });
+    try {
+      fs.mkdirSync('/root/.ssh', { recursive: true, mode: 0o700 });
+      let current = '';
+      try { current = fs.readFileSync(AUTHORIZED_KEYS_PATH, 'utf8'); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+      const identity = key.split(' ').slice(0, 2).join(' ');
+      if (current.split('\n').some((line) => line.trim().split(/\s+/).slice(0, 2).join(' ') === identity)) {
+        return send(200, { ok: true, added: false, message: 'この公開鍵は既に登録されています' });
+      }
+      const prefix = current && !current.endsWith('\n') ? '\n' : '';
+      fs.appendFileSync(AUTHORIZED_KEYS_PATH, prefix + key + '\n', { mode: 0o600 });
+      fs.chmodSync(AUTHORIZED_KEYS_PATH, 0o600);
+      return send(200, { ok: true, added: true });
+    } catch (err) {
+      return send(500, { error: 'authorized_keysへ書き込めません: ' + (err.code || err.message) });
+    }
+  });
+}
+
 // Redmine(Passenger配下、127.0.0.1:8444のみで待ち受け)への内部プロキシ。
 // /redmine prefixを剥いで転送する(Apache側のVirtualHostはRedmineをルート直下に
 // マウントしている)。外部からの到達は/cf-containers/proxy/*の認証経由のみ
@@ -342,6 +383,10 @@ const server = http
   .createServer((req, res) => {
     if (req.url === REDMINE_PREFIX || req.url.startsWith(REDMINE_PREFIX + '/') || req.url.startsWith(REDMINE_PREFIX + '?')) {
       proxyToRedmine(req, res);
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/admin/authorized-keys') {
+      appendAuthorizedKey(req, res);
       return;
     }
     if (req.url === '/debug/logs') {
