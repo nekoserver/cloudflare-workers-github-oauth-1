@@ -833,6 +833,9 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
       runScripts: 'dangerously',
       url: 'https://example.com/airline-network',
       beforeParse(window) {
+        // This checks stored selections, not stacking/paint. Computing every
+        // route row's CSS in jsdom made opening the modal exceed 20 seconds.
+        Object.defineProperty(window, 'getComputedStyle', { value: () => ({ zIndex: 'auto' }) });
         const values: Record<string, string> = {
           airline_network_country_hubs_v2: JSON.stringify(selectedKeys),
         };
@@ -842,9 +845,13 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
         }});
       },
     });
-    dom.window.document.getElementById('country-filter-btn')!.click();
-    const checkedKeys = Array.from(dom.window.document.querySelectorAll<HTMLInputElement>('.country-hub-check:checked')).map((cb) => cb.value);
-    expect(checkedKeys).toEqual(selectedKeys);
+    try {
+      dom.window.document.getElementById('country-filter-btn')!.click();
+      const checkedKeys = Array.from(dom.window.document.querySelectorAll<HTMLInputElement>('.country-hub-check:checked')).map((cb) => cb.value);
+      expect(checkedKeys).toEqual(selectedKeys);
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('国別モーダルと左パネルを有効な拠点空港数の多い国順に並べる', () => {

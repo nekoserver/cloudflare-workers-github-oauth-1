@@ -26,10 +26,10 @@ export class DemoContainer extends Container<Bindings> {
 
   // SSH・Tailscale・トンネル経由の通信はこのDurable Objectを通らないため、
   // 使用中でも「無操作」と判定されて止められていた。自動停止はせず、
-  // 停止は/cf-containersの停止ボタンだけで行う(タイマーは基底クラスが延長する)。
+  // 停止は/cf-containersまたはtree-viewの明示操作で行う(タイマーは基底クラスが延長する)。
   override async onActivityExpired(): Promise<void> {}
 
-  constructor(ctx: DurableObject['ctx'], env: Bindings) {
+  constructor(ctx: ConstructorParameters<typeof Container<Bindings>>[0], env: Bindings) {
     super(ctx, env);
     // nekorootトンネル(cloudflared)・SSH用の設定をコンテナのenvVars経由で
     // 渡す。未設定時は空文字列(entrypoint.sh側でトンネル起動をスキップする)。
@@ -76,6 +76,25 @@ export class DemoContainer extends Container<Bindings> {
 
   async stop(...args: Parameters<Container['stop']>): Promise<void> {
     return this.withLock(() => super.stop(...args));
+  }
+
+  /** Check and set desired power under the same lock as all management actions. */
+  async setRunning(running: boolean) {
+    if (typeof running !== 'boolean') throw new Error('不正な稼働状態です');
+    return this.withLock(async () => {
+      const state = await this.getState();
+      if (!['running', 'healthy', 'stopping', 'stopped', 'stopped_with_code'].includes(state.status)) {
+        throw new Error('本体demoコンテナの状態を確認できません');
+      }
+      if (state.status === 'stopping') {
+        if (running) throw new Error('停止処理中です。停止完了後に起動してください');
+        return { changed: false, state };
+      }
+      const current = state.status === 'running' || state.status === 'healthy';
+      if (current === running) return { changed: false, state };
+      if (running) await super.start(); else await super.stop();
+      return { changed: true, state: await this.getState() };
+    });
   }
 
   /**
