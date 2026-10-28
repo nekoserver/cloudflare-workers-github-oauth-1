@@ -3360,6 +3360,7 @@ export function getAiChatPage(user: {
         var wasDbApplied = historyModalDBKeywordsApplied;
         historyModalDBKeywordsApplied = false;
         historyModalChipsPinned = false;
+        historyModalKwPanelOn = false;
         historyModalActiveChipKeyword = '';
         historyModalKeywordsFromDB = [];
         fetchShareKeywords(data.id, function() { if (wasDbApplied && historyModalHighlightActive) applyAllDbKeywordHighlights(); });
@@ -3535,6 +3536,7 @@ export function getAiChatPage(user: {
 
     function applyAllDbKeywordHighlights() {
       historyModalHighlightActive = true;
+      historyModalKwPanelOn = false;
       historyModalChat.classList.remove('highlights-hidden');
       clearKeywordHighlights(historyModalChat);
       var allKws = buildAllKeywords();
@@ -3590,6 +3592,7 @@ export function getAiChatPage(user: {
             return;
           }
           historyModalChipsPinned = true;
+          historyModalKwPanelOn = false;
           historyModalActiveChipKeyword = kw;
           clearKeywordHighlights(historyModalChat);
           applyKeywordHighlight(historyModalChat, kw);
@@ -3607,9 +3610,9 @@ export function getAiChatPage(user: {
 
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
-      var highlightsVisible = marks && marks.length > 0 && historyModalHighlightActive;
-      renderKeywordChips(!highlightsVisible || historyModalChipsPinned);
-      if (!marks || marks.length === 0) {
+      var hasMarks = !!marks && marks.length > 0;
+      renderKeywordChips(!hasMarks || historyModalChipsPinned || historyModalKwPanelOn);
+      if (!hasMarks) {
         if (historyModalKeywordsFromDB.length > 0) {
           historyModalHighlightToggleBtn.style.opacity = '1';
           historyModalHighlightToggleBtn.title = '🔑 クリックでキーワードをハイライト表示';
@@ -3619,12 +3622,16 @@ export function getAiChatPage(user: {
         }
         return;
       }
-      if (historyModalHighlightActive) {
+      var mode = currentKeywordToggleMode(historyModalHighlightActive, historyModalKwPanelOn);
+      if (mode === 'highlight') {
         historyModalHighlightToggleBtn.style.opacity = '1';
-        historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
-      } else {
+        historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックでハイライトもパネルも非表示）';
+      } else if (mode === 'off') {
         historyModalHighlightToggleBtn.style.opacity = '0.35';
-        historyModalHighlightToggleBtn.title = '🔑 ハイライト非表示（クリックで表示）';
+        historyModalHighlightToggleBtn.title = '🔑 ハイライトもパネルも非表示（クリックでキーワードパネルを表示）';
+      } else {
+        historyModalHighlightToggleBtn.style.opacity = '0.65';
+        historyModalHighlightToggleBtn.title = '🔑 キーワードパネル表示中（クリックでハイライト表示）';
       }
     }
 
@@ -3667,6 +3674,24 @@ export function getAiChatPage(user: {
     var historyModalKeywordsFromDB = [];
     var historyModalDBKeywordsApplied = false;
     var historyModalChipsPinned = false;
+    var historyModalKwPanelOn = false;
+
+    function nextKeywordToggleMode(mode) {
+      if (mode === 'highlight') return 'off';
+      if (mode === 'off') return 'panel';
+      return 'highlight';
+    }
+
+    function keywordToggleView(mode) {
+      if (mode === 'off') return { highlightActive: false, panelOn: false };
+      if (mode === 'panel') return { highlightActive: false, panelOn: true };
+      return { highlightActive: true, panelOn: false };
+    }
+
+    function currentKeywordToggleMode(highlightActive, panelOn) {
+      if (highlightActive) return 'highlight';
+      return panelOn ? 'panel' : 'off';
+    }
     var historyModalActiveChipKeyword = '';
     var historyModalKwEditMode = false;
 
@@ -3752,6 +3777,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
       historyModalChipsPinned = true;
+      historyModalKwPanelOn = false;
       historyModalActiveChipKeyword = '';
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
@@ -4874,6 +4900,7 @@ export function getAiChatPage(user: {
     historyModalHighlightToggleBtn.addEventListener('click', function() {
       if (historyModalKeywordsFromDB.length > 0 && !historyModalDBKeywordsApplied) {
         historyModalChipsPinned = false;
+        historyModalKwPanelOn = false;
         historyModalHighlightActive = true;
         historyModalChat.classList.remove('highlights-hidden');
         clearKeywordHighlights(historyModalChat);
@@ -4885,9 +4912,11 @@ export function getAiChatPage(user: {
       if (!historyModalDBKeywordsApplied && historyModalCurrentId) { fetchShareKeywords(historyModalCurrentId, applyAllDbKeywordHighlights); return; }
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) return;
-      historyModalHighlightActive = !historyModalHighlightActive;
+      var nextView = keywordToggleView(nextKeywordToggleMode(currentKeywordToggleMode(historyModalHighlightActive, historyModalKwPanelOn)));
+      historyModalHighlightActive = nextView.highlightActive;
+      historyModalKwPanelOn = nextView.panelOn;
+      historyModalChipsPinned = false;
       if (historyModalHighlightActive) {
-        historyModalChipsPinned = false;
         historyModalChat.classList.remove('highlights-hidden');
       } else {
         historyModalChat.classList.add('highlights-hidden');
