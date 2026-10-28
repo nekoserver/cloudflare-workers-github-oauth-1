@@ -1,3 +1,4 @@
+import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
  * Cloudflare Workers GitHub OAuth
@@ -16774,6 +16775,19 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
   return !!expected && auth === expected;
 }
+
+// T3 Code controls the same demo container as /cf-containers.
+app.route('/', createTreeViewT3PowerRoutes({
+  getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+  audit: (env, entry) => recordContainerOperation(env.DB, { ...demoContainerOperationContext(env), ...entry },
+    message => logger.error('[tree-view-t3-power] 操作履歴の保存に失敗', { error: message })),
+}));
 
 /** dynamicneko tree-view用。既存の固定wrangler containers list診断をJSONで中継する。 */
 app.post('/api/tree-view/container-inventory-external', async (c) => {

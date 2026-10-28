@@ -171,3 +171,12 @@ Workerバージョン `c4886118-6819-42be-96a0-b718349b0c7f` を配備。D1に01
 Tailscale APIの実トークンによる照会、実利用者のTailnetログイン後の端末到達性は未検証。WASMはブラウザ実行で、参照範囲はログインユーザーの権限に従う。tree-viewの既存全コンテナ検出との接続は未実施。確認したdynamicneko main/配備版は利用者別Sandboxの経路であり、別の検出経路は特定できていない。共通APIは他画面から再利用できる形としたが、tree-view側で利用済みとは報告しない。
 
 復旧用Worker本体・settings・deploymentsはroot専用 `/root/.local/state/tailscale-wasm/` に保存し、Gitへ含めない。再取得可能なSDKキャッシュと、配布に必要なpublicアセット・ライセンス・出典/チェックサム・復元スクリプトは区別する。仕様は [コンテナ監視SPEC](SPEC.cloudflare-workers-github-oauth-1.container-monitor.md)。
+
+
+## 2026-10-28: tree-view T3 Codeの本体demo起動・停止（実装済み・本番未反映）
+
+T3 Codeタブの再接続の直前に起動/停止ボタンを追加する変更。本体のdemo DO状態を正として読み取り、CF-Worker/HMACと短寿命userTokenで新APIへ中継する。start/stopを明示し既存管理操作と同じDOロックで状態判定・実行をまとめる。状態不明・停止中はiframeを読み込まない。操作履歴を既存テーブルに保存し、no-opと停止処理中は完了と区別する。
+
+Cloudflare settingsのメタデータで、mainのDYNAMICNEKO_WORKER_HMAC_SECRET、dynamicnekoのCF_WORKER_SECRET_MAINとTREE_VIEW_CONTAINER_ORIGINは未設定と確認。AICHAT_USER_TOKEN_SECRET、MAIN_WORKER、DEMO_CONTAINER、DBの設定名は存在する。秘密値の照合・設定変更は行っていない。main API/DOとdynamicnekoの両反映、および共有鍵とT3 HTTPS originの設定が必要。Dockerビルド・Worker配備・本番コンテナ操作は未実施。仕様はSPEC.cloudflare-workers-github-oauth-1.tree-view-t3-power.mdを参照。
+
+対象API/DOの11件、既存管理等43件、dynamicnekoブラウザ9件・中継等Node検証は成功。全体テストは1178件成功後に既存heritageJourneyの国旗付与テストが20秒タイムアウト。単独実行は18.18秒で成功したが全件成功ではない。ユーザーから失敗を明記したドラフトPR作成の例外承認を得た。詳細はREPORT.cloudflare-workers-github-oauth-1.T3-POWER.20261028.md。

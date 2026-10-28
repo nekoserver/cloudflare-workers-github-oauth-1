@@ -1462,11 +1462,12 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 5000);
-    const guardIdx = fn.indexOf('if (!isLocalCommand) {');
-    const shareBtnIdx = fn.indexOf('appendShareBtn(currentMsg,');
-    expect(guardIdx).toBeGreaterThan(-1);
-    expect(shareBtnIdx).toBeGreaterThan(guardIdx);
+    // Bound by the listener end, not an obsolete character count: the handler
+    // grew beyond 5,000 characters when response rendering was extended.
+    const end = html.indexOf('\n    chatInput.focus();', idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = html.slice(idx, end);
+    expect(fn).toMatch(/if \(!isLocalCommand\) \{\s*appendShareBtn\(currentMsg,/);
   });
 
   it('index.ts の /api/aichat が fetchLatestCommitAgentLog で commit_agent_log の最新行を取得する（/neko clog用）', () => {
@@ -1547,7 +1548,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderAiResultInModal(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 700);
+    const fn = namedFunctionSource(html, 'function renderAiResultInModal(');
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const appendRowIdx = fn.indexOf('appendAiResponseRow(box,');
@@ -2190,7 +2191,9 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 5000);
-    expect(fn).toContain('data.userHash');
+    const end = html.indexOf('\n    chatInput.focus();', idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = html.slice(idx, end);
+    expect(fn).toContain('appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash)');
   });
 });
