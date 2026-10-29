@@ -61,6 +61,17 @@ export async function compileRubyWasmFromResponse(res: Response): Promise<WebAss
 }
 
 /**
+ * HTML パース直後からバイナリとグルーの取得を始める link タグ。
+ * preload の CORS は anonymous。後段の fetch も credentials:'omit' に揃える。
+ */
+export function getRubyWasmPreloadTags(jsUrl: string, binaryUrl: string): string {
+  return (
+    '<link rel="preload" as="fetch" href="' + binaryUrl + '" crossorigin="anonymous">' +
+    '<link rel="modulepreload" href="' + jsUrl + '">'
+  );
+}
+
+/**
  * <script type="module"> に埋め込むブラウザ側ローダー。
  * TypeScript の template literal 内へ入れるため、JS 文字列に \' \" 単独 \\n、
  * バックスラッシュ付き regex を書かない。
@@ -138,7 +149,7 @@ export function getRubyWasmLoaderScript(): string {
             if (onProgress) onProgress(-1, -1);
             return hit.arrayBuffer();
           }
-          return fetch(binaryUrl).then(function(res) {
+          return fetch(binaryUrl, { mode: 'cors', credentials: 'omit' }).then(function(res) {
             if (!res.ok) throw new Error('Rubyバイナリの取得に失敗しました: HTTP ' + res.status);
             return readResponseBodyWithProgress(res, onProgress).then(function(buf) {
               if (cache) {
@@ -157,22 +168,23 @@ export function getRubyWasmLoaderScript(): string {
 
     function loadRubyWasmVm(jsUrl, binaryUrl, cacheName, hooks) {
       hooks = hooks || {};
-      if (hooks.onStatus) hooks.onStatus('グルーコードを読み込み中…');
-      return import(jsUrl).then(function(mod) {
-        if (hooks.onStatus) hooks.onStatus('WASMバイナリを読み込み中…');
-        return fetchRubyWasmBytes(binaryUrl, cacheName, function(received, total) {
-          if (!hooks.onStatus) return;
-          if (received < 0) {
-            hooks.onStatus('キャッシュからWASMバイナリを読み込みました');
-            return;
-          }
-          hooks.onStatus(formatRubyWasmDownloadStatus(received, total));
-        }).then(function(bytes) {
-          if (hooks.onStatus) hooks.onStatus('WASMモジュールをコンパイル中…');
-          return WebAssembly.compile(bytes).then(function(compiled) {
-            if (hooks.onStatus) hooks.onStatus('Ruby VM を初期化中…');
-            return mod.DefaultRubyVM(compiled, { consolePrint: false });
-          });
+      if (hooks.onStatus) hooks.onStatus('WASMバイナリとグルーコードを並行して読み込み中…');
+      var jsP = import(jsUrl);
+      var bytesP = fetchRubyWasmBytes(binaryUrl, cacheName, function(received, total) {
+        if (!hooks.onStatus) return;
+        if (received < 0) {
+          hooks.onStatus('キャッシュからWASMバイナリを読み込みました');
+          return;
+        }
+        hooks.onStatus(formatRubyWasmDownloadStatus(received, total));
+      });
+      return Promise.all([jsP, bytesP]).then(function(parts) {
+        var mod = parts[0];
+        var bytes = parts[1];
+        if (hooks.onStatus) hooks.onStatus('WASMモジュールをコンパイル中…');
+        return WebAssembly.compile(bytes).then(function(compiled) {
+          if (hooks.onStatus) hooks.onStatus('Ruby VM を初期化中…');
+          return mod.DefaultRubyVM(compiled, { consolePrint: false });
         });
       }).then(function(result) {
         var ver = '';

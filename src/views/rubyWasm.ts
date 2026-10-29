@@ -1,5 +1,5 @@
 import { escapeHtml } from '../utils/html';
-import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmLoaderScript, getRubyWasmPreloadTags, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 // 公式ビルド済みWASMパッケージ(CRuby WASI版)を使う。C言語のコード生成を
@@ -318,6 +318,7 @@ export function getRubyWasmPage(username: string): string {
   <meta name="apple-mobile-web-app-title" content="Ruby WASM">
   <link rel="manifest" href="/manifest-ruby-wasm.json">
   <title>Ruby (WASM) - Cloudflare Workers GitHub OAuth</title>
+  ${getRubyWasmPreloadTags(RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL)}
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
@@ -677,7 +678,7 @@ export function getRubyWasmPage(username: string): string {
         <button type="button" class="btn-secondary" id="openListBtn">📚 保存済みスニペット一覧</button>
         <button type="button" class="btn-secondary" id="openSamplesBtn">💎 サンプルから選ぶ</button>
       </div>
-      <textarea id="inputCode" placeholder="puts 'hello world'">puts 'hello world'</textarea>
+      <textarea id="inputCode" placeholder="puts RUBY_VERSION">puts RUBY_VERSION</textarea>
       <div class="toolbar">
         <button class="run-btn" id="runBtn" disabled>Rubyコードを実行</button>
         <button type="button" class="btn-secondary" id="clearBtn">🧹 クリア</button>

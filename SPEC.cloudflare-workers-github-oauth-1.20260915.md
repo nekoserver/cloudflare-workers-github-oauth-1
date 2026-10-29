@@ -257,11 +257,100 @@ gzip 展開とストリーミングコンパイルの組み合わせでモバイ
 
 ### 関連コミット
 
-(コミット後に追記)
+- [`1ba7163`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1ba7163) Ruby/WASM 4.0の読み込みをcompileStreamingから外し進捗とバージョン検証を入れる
 
 ### 関連
 
 対応するIssueは無い。4.0 切り替え後の読み込み失敗への対処。
+
+---
+
+## 6. Ruby/WASM 初回読み込みを preload と並行取得で短くする
+
+**対象**: `/ruby-wasm` と `/kimi-code/markdown/:id` の WASM 取得開始タイミング
+(`getRubyWasmPreloadTags`、`loadRubyWasmVm`) —
+4.0 バイナリは約32MBあり、グルーの `import()` が終わってから fetch を始めると、
+esm.sh の往復のあいだ巨大ダウンロードが動かない。HTML パース直後から preload し、
+グルーとバイナリを `Promise.all` で同時に取る。
+
+### 背景
+
+読み込み自体は直ったが初回が遅い。バイナリサイズは公式 stdlib 付き WASM の制約で
+落とせない（`StringIO` や `require` が必要）。待てる部分は「開始が遅い」こと。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | グルー import 完了まで 32MB の fetch が始まらない | `Promise.all([import(js), fetch(wasm)])` |
+| 2 | スクリプト実行前にダウンロードが始まらない | `<link rel="preload" as="fetch" crossorigin="anonymous">` と `modulepreload` |
+| 3 | preload と fetch の CORS モードが違って二重取得になる | fetch は `mode:'cors', credentials:'omit'` |
+| 4 | Ruby の無い Markdown 詳細でも 32MB を preload する | `runnableCount > 0` のときだけタグを出す |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/utils/rubyWasmLoader.ts` | preload タグ生成、並行読み込み、CORS を anonymous に揃える |
+| `src/views/rubyWasm.ts` | head に preload |
+| `src/views/kimiCodeMarkdown.ts` | Ruby ブロックがあるときだけ preload |
+
+### 注意事項
+
+- 初回の転送量自体は約32MBのまま。2回目は Cache API
+- preload は connect-src/script-src に jsDelivr と esm.sh があるページで効く
+
+### テスト
+
+- `src/ruby-wasm-loader.test.ts`: preload タグ、`Promise.all`、直列 import→fetch が無いこと、Ruby 無しページは preload しない
+
+### 関連コミット
+
+- [`106f27f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/106f27f) Ruby/WASMの初回取得をpreloadと並行読み込みで早くする
+
+### 関連
+
+対応するIssueは無い。4.0 読み込みが直ったあとの初回待ち時間への対処。
+
+---
+
+## 7. puts RUBY_VERSION が 3.4.1 のままにならないようにする
+
+**対象**: `GET /ruby-wasm` の HTML キャッシュと初期サンプルコード、起動後の
+`RUBY_VERSION` 照合 — 4.0 バイナリ URL に差し替えても、キャッシュされた古い HTML が
+3.4 の `ruby+stdlib.wasm` を読み続けると `puts RUBY_VERSION` が `3.4.1` のままになる。
+
+### 背景
+
+jsDelivr 上の `@ruby/4.0-wasm-wasi@2.10.1/dist/ruby+stdlib.wasm` を取得して確認すると、
+`RUBY_DESCRIPTION` は `ruby 4.0.0` で `ruby 3.4.1` ではない。ブラウザが 3.4.1 を出すのは
+3.4 バイナリを実行しているときだけ。
+
+### 故障シナリオ
+
+| # | 故障 | 対処 |
+|---|---|---|
+| 1 | 古い HTML がキャッシュされ 3.4 URL のまま | `Cache-Control: private, no-store, no-cache, must-revalidate` |
+| 2 | 4.0 URL なのに 3.4.1 で成功扱い | 起動後に `RUBY_VERSION` が `4.0` で始まらなければエラー |
+| 3 | 初期サンプルが hello world のままでバージョンに気づかない | 初期コードを `puts RUBY_VERSION` にする |
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/index.ts` | `/ruby-wasm` に Cache-Control no-store |
+| `src/views/rubyWasm.ts` | 初期コードを `puts RUBY_VERSION` |
+| `src/ruby-wasm-csp-20260831.test.ts` | no-store と 4.0 URL、初期コードを検証 |
+
+### 関連コミット
+
+(コミット後に追記)
+
+### 関連
+
+対応するIssueは無い。4.0 切り替え後も `RUBY_VERSION` が 3.4.1 のままという報告への対処。
+
+
 
 
 

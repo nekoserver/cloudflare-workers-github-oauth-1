@@ -1,7 +1,7 @@
 import { escapeHtml } from '../utils/html';
 import { splitMarkdownCodeBlocks, isRunnableRubyCodeBlock, type MarkdownCodeBlockSegment } from '../utils/markdownCodeBlocks';
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
-import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
+import { getRubyWasmLoaderScript, getRubyWasmPreloadTags, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL } from './rubyWasm';
 
 const SHARED_STYLE = `
@@ -159,6 +159,7 @@ export function getKimiCodeMarkdownDetailPage(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)} - Kimi K2.7 Code</title>
+${runnableCount > 0 ? getRubyWasmPreloadTags(RUBY_WASM_JS_URL, RUBY_WASM_BINARY_URL) : ''}
 <style>${SHARED_STYLE}</style>
 </head>
 <body>
