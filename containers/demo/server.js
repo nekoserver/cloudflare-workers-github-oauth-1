@@ -251,6 +251,140 @@ async function buildHealth() {
   };
 }
 
+// --- T3 Code ---
+// 本体(3773)と埋め込み用の中継(3774)の待ち受け・応答、Codexの版とサインイン状態を調べる。
+// /healthとは別に /health/t3 で返す(codexコマンドの待ち時間で、起動確認に使う/healthを遅くしないため)。
+// サインイン情報(auth.json)の中身は読まない。有無と権限だけを返す。
+const T3_SERVER_PORT = 3773;
+const T3_PROXY_PORT = 3774;
+const T3_LOOPBACK = ['127.0.0.1', '[::1]'];
+const CODEX_AUTH_FILE = () => `${process.env.CODEX_HOME || `${process.env.HOME || '/root'}/.codex`}/auth.json`;
+
+// codex login status の結果。終了コード0=サインイン済み、1=未サインイン、それ以外・実行不可は決めない(null)。
+function parseCodexLoginStatus(code, output) {
+  const summary = String(output || '').split('\n')[0].trim().slice(0, 120);
+  if (code === 0) return { loggedIn: true, summary };
+  if (code === 1) return { loggedIn: false, summary };
+  return { loggedIn: null, summary };
+}
+
+// ss -ltn の出力から、ポートごとの待ち受けアドレスを取り出す。
+function parseListenAddresses(text) {
+  const result = {};
+  for (const line of String(text || '').split('\n')) {
+    const cols = line.trim().split(/\s+/);
+    if (cols[0] !== 'LISTEN' || !cols[3]) continue;
+    const i = cols[3].lastIndexOf(':');
+    if (i < 0) continue;
+    result[cols[3].slice(i + 1)] = cols[3].slice(0, i);
+  }
+  return result;
+}
+
+// 集めた結果から総合の状態を決める。足りない項目があるときは ready にしない。
+function judgeT3Health(h) {
+  const server = (h && h.server) || {};
+  const proxy = (h && h.proxy) || {};
+  const codex = (h && h.codex) || {};
+  const reasons = [];
+  const ok2xx = (n) => typeof n === 'number' && n >= 200 && n < 300;
+  const exposed = [server, proxy].filter((x) => x.listenAddress && !T3_LOOPBACK.includes(x.listenAddress));
+  const authFile = codex.authFile || {};
+  if (authFile.exists && authFile.mode && authFile.mode !== '600') reasons.push(`auth.json の権限が ${authFile.mode} です(600 が望ましい)`);
+  if (proxy.listening && !proxy.frameAncestors) reasons.push('中継の応答に frame-ancestors が付いていません');
+  const unknownAddress = [server, proxy].filter((x) => x.listening && !x.listenAddress);
+  if (unknownAddress.length > 0) reasons.push(`${unknownAddress.map((x) => x.port).join('・')} の待ち受けアドレスを確認できませんでした(外に公開されていないか未確認)`);
+  const done = (state, why) => ({ state, reasons: why ? [why, ...reasons] : reasons });
+  if (exposed.length > 0) return done('exposed', `${exposed.map((x) => x.port).join('・')} が ${exposed.map((x) => x.listenAddress).join('・')} で待ち受けています(127.0.0.1 だけにしてください)`);
+  if (!server.listening) return done('server-down', `T3本体(${T3_SERVER_PORT})が待ち受けていません`);
+  if (!ok2xx(server.httpStatus)) return done('server-error', `T3本体(${T3_SERVER_PORT})のHTTP応答が正常ではありません(${server.httpStatus ?? '応答なし'})`);
+  if (!proxy.listening) return done('proxy-down', `埋め込み用の中継(${T3_PROXY_PORT})が待ち受けていません`);
+  if (!ok2xx(proxy.httpStatus)) return done('proxy-error', `埋め込み用の中継(${T3_PROXY_PORT})のHTTP応答が正常ではありません(${proxy.httpStatus ?? '応答なし'})`);
+  if (!codex.installed) return done('codex-missing', 'codex コマンドが見つかりません');
+  if (codex.loggedIn === false) return done('login-required', 'Codex が未サインインです(codex login を実行してください)');
+  if (codex.loggedIn !== true) return done('login-unknown', 'Codex のサインイン状態を確認できませんでした');
+  return done('ready', null);
+}
+
+function httpGetProbe(port, path) {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ host: '127.0.0.1', port, path, timeout: PROBE_TIMEOUT_MS }, (res) => {
+      const chunks = [];
+      let size = 0;
+      res.on('data', (c) => { if (size < 4096) { chunks.push(c); size += c.length; } });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8').slice(0, 4096) }));
+    });
+    req.once('timeout', () => req.destroy(new Error('timeout')));
+    req.once('error', reject);
+  });
+}
+
+function runCmdWithCode(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 5000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = `${stdout || ''}${stderr || ''}`.trim();
+      if (!err) return resolve({ code: 0, out });
+      resolve({ code: typeof err.code === 'number' ? err.code : null, out: out || String(err.message || err) });
+    });
+  });
+}
+
+async function statAuthFile() {
+  try {
+    const st = await require('node:fs/promises').stat(CODEX_AUTH_FILE());
+    return { exists: true, mode: (st.mode & 0o777).toString(8) };
+  } catch {
+    return { exists: false, mode: null };
+  }
+}
+
+const REAL_T3_DEPS = { probeTcp, httpGet: httpGetProbe, runCmd: runCmdWithCode, statFile: statAuthFile };
+
+async function collectT3Health(deps = REAL_T3_DEPS) {
+  const errors = [];
+  const attempt = async (label, fn, fallback) => {
+    try { return await fn(); } catch (err) { errors.push(`${label}: ${err && err.message ? err.message : err}`); return fallback; }
+  };
+  const [serverTcp, proxyTcp, serverHttp, proxyHttp, ss, codexVersion, codexLogin, authFile] = await Promise.all([
+    attempt('probeTcp(3773)', () => deps.probeTcp(T3_SERVER_PORT), false),
+    attempt('probeTcp(3774)', () => deps.probeTcp(T3_PROXY_PORT), false),
+    attempt('GET 3773', () => deps.httpGet(T3_SERVER_PORT, '/.well-known/t3/environment'), null),
+    attempt('GET 3774', () => deps.httpGet(T3_PROXY_PORT, '/'), null),
+    attempt('ss', () => deps.runCmd('ss', ['-ltn']), { code: null, out: '' }),
+    attempt('codex --version', () => deps.runCmd('codex', ['--version']), { code: null, out: '' }),
+    attempt('codex login status', () => deps.runCmd('codex', ['login', 'status']), { code: null, out: '' }),
+    attempt('stat auth.json', () => deps.statFile(), { exists: false, mode: null }),
+  ]);
+  const listen = parseListenAddresses(ss.out);
+  let environmentKeys = [];
+  if (serverHttp && serverHttp.body) {
+    try {
+      const parsed = JSON.parse(serverHttp.body);
+      if (parsed && typeof parsed === 'object') environmentKeys = Object.keys(parsed).slice(0, 20);
+    } catch { /* JSONでない応答は、キーを出さないだけ */ }
+  }
+  const installed = codexVersion.code === 0;
+  const login = installed ? parseCodexLoginStatus(codexLogin.code, codexLogin.out) : { loggedIn: null, summary: '' };
+  const csp = proxyHttp && proxyHttp.headers ? proxyHttp.headers['content-security-policy'] : '';
+  const result = {
+    server: { port: T3_SERVER_PORT, listening: Boolean(serverTcp), listenAddress: listen[String(T3_SERVER_PORT)] || null, httpStatus: serverHttp ? serverHttp.status : null, environmentKeys },
+    proxy: { port: T3_PROXY_PORT, listening: Boolean(proxyTcp), listenAddress: listen[String(T3_PROXY_PORT)] || null, httpStatus: proxyHttp ? proxyHttp.status : null, frameAncestors: typeof csp === 'string' ? csp : '' },
+    codex: {
+      installed,
+      version: installed ? extractVersion(codexVersion.out) : null,
+      loggedIn: login.loggedIn,
+      loginSummary: login.summary,
+      authFile: { exists: Boolean(authFile && authFile.exists), mode: authFile && authFile.mode ? authFile.mode : null },
+      home: process.env.HOME || null,
+      codexHome: process.env.CODEX_HOME || null,
+    },
+    errors,
+    checkedAt: new Date().toISOString(),
+  };
+  const verdict = judgeT3Health(result);
+  return { ...result, state: verdict.state, reasons: verdict.reasons };
+}
+
 // /debug/net: コンテナ自身のIPアドレス・ルーティング情報を返す。
 // /cf-containers/proxy/* はauthMiddleware+cfDashboardAdminMiddleware経由
 // (認証済み管理者のみ)でしかこのコンテナに到達できないため、ここでは
@@ -470,6 +604,13 @@ const server = http
       runWranglerContainersList(res);
       return;
     }
+    if (req.url === '/health/t3') {
+      collectT3Health().then((t3) => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(t3));
+      });
+      return;
+    }
     if (req.url === '/health') {
       buildHealth().then((health) => {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -489,7 +630,7 @@ const server = http
   })
   ;
 
-module.exports = { summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
