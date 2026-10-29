@@ -1,0 +1,247 @@
+'use strict';
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { DatabaseSync } = require('node:sqlite');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const execute = promisify(execFile);
+const PREFIX = '/_t3/pwa';
+const ORIGIN = 'https://t3.nekomaneki.work';
+const SCOPES = ['orchestration:read', 'orchestration:operate', 'settings:write', 'providers:manage', 'diagnostics:read', 'terminal:read', 'terminal:operate', 'source-control:write', 'filesystem:read', 'filesystem:write', 'preview:operate'];
+const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const nativeBinary = '/root/.t3/runtime/versions/0.1.3/t3';
+class InvalidBody extends Error {}
+async function nativeCommand(args) {
+  const { stdout } = await execute(nativeBinary, ['auth', 'session', ...args], { timeout: 20000, maxBuffer: 1024 * 1024 });
+  return stdout;
+}
+async function nativeSession(headers) {
+  return new Promise((resolve, reject) => {
+    const request = http.get({ hostname: '127.0.0.1', port: 3773, path: '/api/auth/session', headers }, response => {
+      let body = '';
+      response.on('data', chunk => { body += chunk; if (body.length > 65536) request.destroy(new Error('Oversized native response')); });
+      response.on('end', () => { try { resolve(response.statusCode === 200 ? JSON.parse(body) : null); } catch (error) { reject(error); } });
+      response.on('error', reject);
+    });
+    request.setTimeout(10000, () => request.destroy(new Error('Native session timeout')));
+    request.on('error', reject);
+  });
+}
+function respond(res, status, data, type = 'application/json; charset=utf-8') {
+  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'" });
+  res.end(type.startsWith('application/json') ? JSON.stringify(data) : data);
+}
+async function body(req) {
+  if (Number(req.headers['content-length']) > 4096) throw new InvalidBody('Invalid body');
+  let size = 0, chunks = [];
+  for await (const chunk of req) { size += chunk.length; if (size > 4096) throw new InvalidBody('Invalid body'); chunks.push(chunk); }
+  let result;
+  try { result = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new InvalidBody('Invalid body'); }
+  if (!result || typeof result !== 'object' || Array.isArray(result)) throw new InvalidBody('Invalid body');
+  return result;
+}
+function injectBootstrap(html) {
+  return html.replace(/<script\b([^>]*?)type="module"([^>]*?)src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"([^>]*)><\/script>/,
+    (_all, before, middle, entry, after) => `<script${before}type="module"${middle}src="${PREFIX}/bootstrap/${path.basename(entry)}"${after}></script>`);
+}
+function createPwaAuth(options = {}) {
+  const dbPath = options.dbPath || '/root/.t3/userdata/pwa-handoff/state.sqlite';
+  if (dbPath !== ':memory:') { fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 }); }
+  const db = new DatabaseSync(dbPath);
+  if (dbPath !== ':memory:') fs.chmodSync(dbPath, 0o600);
+  db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
+    CREATE TABLE IF NOT EXISTS handoffs(id TEXT PRIMARY KEY, challenge TEXT NOT NULL, code TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','redeeming','consumed','expired','failed')), created INTEGER NOT NULL, expires INTEGER NOT NULL, ip_hash TEXT NOT NULL, approved_scopes TEXT, approved_by TEXT, approved_at INTEGER, attempt TEXT, changed INTEGER NOT NULL, actor TEXT NOT NULL, generation TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, handoff_id TEXT NOT NULL UNIQUE REFERENCES handoffs(id), token_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, issued INTEGER NOT NULL, expires INTEGER NOT NULL, first_verified INTEGER, last_verified INTEGER, revoked INTEGER, CHECK(expires>issued AND expires<=issued+86405));
+    CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, handoff_id TEXT NOT NULL REFERENCES handoffs(id), event TEXT NOT NULL, actor TEXT NOT NULL, occurred INTEGER NOT NULL);
+    CREATE TRIGGER IF NOT EXISTS handoff_insert AFTER INSERT ON handoffs BEGIN INSERT INTO events(handoff_id,event,actor,occurred) VALUES(NEW.id,'created',NEW.actor,NEW.changed); END;
+    CREATE TRIGGER IF NOT EXISTS handoff_guard BEFORE UPDATE OF state ON handoffs WHEN NEW.state<>OLD.state BEGIN
+      SELECT CASE WHEN NOT ((OLD.state='pending' AND NEW.state IN ('approved','rejected','expired')) OR (OLD.state='approved' AND NEW.state IN ('redeeming','expired')) OR (OLD.state='redeeming' AND NEW.state IN ('consumed','failed'))) THEN RAISE(ABORT,'Invalid handoff transition') END;
+    END;
+    CREATE TRIGGER IF NOT EXISTS handoff_update AFTER UPDATE OF state ON handoffs WHEN NEW.state<>OLD.state BEGIN INSERT INTO events(handoff_id,event,actor,occurred) VALUES(NEW.id,NEW.state,NEW.actor,NEW.changed); END;
+    CREATE TRIGGER IF NOT EXISTS session_guard BEFORE INSERT ON sessions BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM handoffs WHERE id=NEW.handoff_id AND state='redeeming' AND approved_scopes=NEW.scopes) THEN RAISE(ABORT,'Session/handoff mismatch') END; END;
+    CREATE TRIGGER IF NOT EXISTS session_verified AFTER UPDATE OF first_verified ON sessions WHEN OLD.first_verified IS NULL AND NEW.first_verified IS NOT NULL BEGIN INSERT INTO events(handoff_id,event,actor,occurred) VALUES(NEW.handoff_id,'native_verified','pwa',NEW.first_verified); END;
+    CREATE TRIGGER IF NOT EXISTS session_revoked AFTER UPDATE OF revoked ON sessions WHEN OLD.revoked IS NULL AND NEW.revoked IS NOT NULL BEGIN INSERT INTO events(handoff_id,event,actor,occurred) VALUES(NEW.handoff_id,'revoked','recovery',NEW.revoked); END;
+    CREATE INDEX IF NOT EXISTS handoff_rate ON handoffs(ip_hash,created);`);
+  const origin = options.origin || ORIGIN;
+  const now = options.now || (() => Math.floor(Date.now() / 1000));
+  const config = options.readConfig || (() => {
+    const file = '/root/.t3/userdata/pwa-handoff/config.json';
+    const value = JSON.parse(fs.readFileSync(file, 'utf8')), stamp = fs.statSync(file);
+    return { ...value, generation: typeof value.generation === 'string' && value.generation ? `${value.generation}:${stamp.ino}:${stamp.mtimeMs}:${stamp.ctimeMs}` : null };
+  });
+  function currentConfig() {
+    try {
+      const value = config();
+      return value?.enabled === true && value.developmentOnly === true && typeof value.generation === 'string' && value.generation.length > 0 ? value : null;
+    } catch { return null; }
+  }
+  const generation = options.generation || (() => {
+    const id = fs.readFileSync('/root/.t3/userdata/environment-id', 'utf8').trim();
+    const key = fs.statSync('/root/.t3/userdata/secrets/server-signing-key.bin');
+    return sha(`${id}:${key.dev}:${key.ino}:${key.mtimeMs}:${key.ctimeMs}`);
+  });
+  const currentGeneration = () => generation() + ':' + (currentConfig()?.generation || 'disabled');
+  const verify = options.verifySession || nativeSession;
+  const issue = options.issueSession || (async (id, scopes) => {
+    const args = ['issue', '--ttl', '24h', '--label', 'tree-view-pwa:' + id, '--subject', 'tree-view-pwa', '--json'];
+    for (const scope of scopes) args.push('--scope', scope);
+    return JSON.parse(await nativeCommand(args));
+  });
+  const revoke = options.revokeSession || (async id => { await nativeCommand(['revoke', id]); });
+  const list = options.listSessions || (async () => JSON.parse(await nativeCommand(['list', '--json'])));
+  const keyPath = dbPath + '.csrf-key';
+  let key = options.key;
+  if (!key) {
+    try { key = fs.readFileSync(keyPath); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; key = crypto.randomBytes(32); fs.writeFileSync(keyPath, key, { flag: 'wx', mode: 0o600 }); }
+  }
+  const sign = value => crypto.createHmac('sha256', key).update(value).digest('hex');
+  const csrf = (id, cookie, expiry) => sign(`${id}:${sha(cookie)}:${expiry}`);
+  const query = id => db.prepare('SELECT * FROM handoffs WHERE id=?').get(id);
+  function expire(row) {
+    if (row && (row.expires <= now() || row.generation !== currentGeneration()) && ['pending', 'approved'].includes(row.state)) {
+      db.prepare("UPDATE handoffs SET state='expired',changed=?,actor='expiry' WHERE id=? AND state IN ('pending','approved')").run(now(), row.id);
+      return query(row.id);
+    }
+    return row;
+  }
+  function device(data) {
+    if (typeof data.id !== 'string' || !/^[a-f0-9]{32}$/.test(data.id) || typeof data.secret !== 'string' || !/^[a-f0-9]{64}$/.test(data.secret)) return null;
+    const row = expire(query(data.id));
+    return row && equal(row.challenge, sha(data.secret)) ? row : null;
+  }
+  async function owner(req) {
+    const cookie = req.headers.cookie || '';
+    if (!cookie) return null;
+    const session = await verify({ cookie });
+    if (!session?.authenticated || session.sessionMethod !== 'browser-session-cookie' || !Array.isArray(session.scopes)) return null;
+    // Read-only credentials must not acquire a new, independently-lived session.
+    // Native T3 documents terminal/agent operation as administrative-equivalent:
+    // either can already issue native sessions through the local CLI.
+    if (!['access:write', 'terminal:operate', 'orchestration:operate'].some(scope => session.scopes.includes(scope))) return null;
+    const scopes = SCOPES.filter(scope => session.scopes.includes(scope));
+    if (!scopes.includes('orchestration:read')) return null;
+    const name = session.auth?.sessionCookieName;
+    if (typeof name !== 'string' || !/^[A-Za-z0-9_]+$/.test(name)) return null;
+    const nativeCookie = cookie.split(';').map(value => value.trim()).find(value => value.startsWith(name + '='));
+    if (!nativeCookie) return null;
+    return { cookie: nativeCookie, scopes, actor: sign(nativeCookie) };
+  }
+  let recovering = false;
+  async function recover() {
+    if (recovering) return;
+    recovering = true;
+    try {
+      const abandoned = db.prepare("SELECT id FROM handoffs WHERE state='redeeming' AND changed<=?").all(now() - 60);
+      if (abandoned.length) {
+        const native = await list();
+        for (const row of abandoned) {
+          for (const session of native.filter(item => item.client?.label === 'tree-view-pwa:' + row.id)) await revoke(session.sessionId);
+          db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='recovery' WHERE id=? AND state='redeeming'").run(now(), row.id);
+        }
+      }
+      for (const session of db.prepare('SELECT id FROM sessions WHERE first_verified IS NULL AND revoked IS NULL AND issued<=?').all(now() - 300)) {
+        await revoke(session.id);
+        db.prepare('UPDATE sessions SET revoked=? WHERE id=? AND revoked IS NULL').run(now(), session.id);
+      }
+    } finally { recovering = false; }
+  }
+  async function handle(req, res) {
+    const url = new URL(req.url, origin);
+    if (!url.pathname.startsWith(PREFIX + '/')) return false;
+    try {
+      if (req.method === 'GET' && url.pathname === PREFIX + '/client.js') {
+        respond(res, 200, fs.readFileSync(path.join(__dirname, 't3-pwa-client.js'), 'utf8'), 'text/javascript; charset=utf-8'); return true;
+      }
+      if (req.method === 'GET' && url.pathname === PREFIX + '/client.css') {
+        respond(res, 200, fs.readFileSync(path.join(__dirname, 't3-pwa-client.css'), 'utf8'), 'text/css; charset=utf-8'); return true;
+      }
+      const bootstrapFile = url.pathname.match(/^\/_t3\/pwa\/bootstrap\/(index-[A-Za-z0-9_-]+\.js)$/)?.[1];
+      if (req.method === 'GET' && (bootstrapFile || url.pathname === PREFIX + '/bootstrap.js')) {
+        // Some ingress paths omit the HTTP query string. New HTML uses a
+        // versioned path; retain the first release's URL until clients reload.
+        const entry = bootstrapFile ? '/assets/' + bootstrapFile : url.searchParams.get('entry') || fs.readFileSync(path.join(path.dirname(nativeBinary), 'client/index.html'), 'utf8').match(/src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"/)?.[1];
+        if (!entry || !/^\/assets\/index-[A-Za-z0-9_-]+\.js$/.test(entry)) { respond(res, 400, { error: 'Invalid entry' }); return true; }
+        respond(res, 200, `import {start} from '${PREFIX}/client.js'; await start(${JSON.stringify(entry)});`, 'text/javascript; charset=utf-8'); return true;
+      }
+      if (req.method === 'GET' && /^\/_t3\/pwa\/approve\/[a-f0-9]{32}$/.test(url.pathname)) {
+        respond(res, 200, '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>T3 PWAの承認</title><body><main id="pwa-connect"><p>ログインを確認しています…</p></main><script type="module" src="/_t3/pwa/client.js"></script></body></html>', 'text/html; charset=utf-8'); return true;
+      }
+      const approvalId = url.pathname.match(/^\/_t3\/pwa\/approval\/([a-f0-9]{32})$/)?.[1];
+      if (approvalId && req.method === 'GET') {
+        const account = await owner(req); if (!account) { respond(res, 401, { error: '通常のブラウザーでT3にログインしてください。' }); return true; }
+        const row = expire(query(approvalId)); if (!row) { respond(res, 404, { error: '申請がありません。' }); return true; }
+        respond(res, 200, { code: row.code, state: row.state, expires: row.expires, scopes: account.scopes, csrf: csrf(row.id, account.cookie, row.expires) }); return true;
+      }
+      if (req.method !== 'POST') { respond(res, 405, { error: 'Method not allowed' }); return true; }
+      if (req.headers.origin !== origin) { respond(res, 403, { error: 'Origin not allowed' }); return true; }
+      if (!currentConfig() && (approvalId || [PREFIX + '/create', PREFIX + '/claim'].includes(url.pathname))) {
+        db.prepare("UPDATE handoffs SET state='expired',changed=?,actor='disabled' WHERE state IN ('pending','approved')").run(now());
+        respond(res, 503, { error: 'PWA connection requests are disabled' }); return true;
+      }
+      if (approvalId) {
+        const account = await owner(req); if (!account) { respond(res, 401, { error: 'Login required' }); return true; }
+        const data = await body(req); const row = expire(query(approvalId));
+        if (!row || !equal(req.headers['x-csrf-token'], csrf(row.id, account.cookie, row.expires)) || !['approve', 'reject'].includes(data.decision)) { respond(res, 403, { error: 'Invalid approval' }); return true; }
+        const count = db.prepare("SELECT count(*) AS n FROM events WHERE actor=? AND event IN ('approved','rejected') AND occurred>?").get(account.actor, now() - 60).n;
+        if (count >= 10) { respond(res, 429, { error: 'Try later' }); return true; }
+        const next = data.decision === 'approve' ? 'approved' : 'rejected';
+        const changed = db.prepare("UPDATE handoffs SET state=?,approved_scopes=?,approved_by=?,approved_at=?,changed=?,actor=? WHERE id=? AND state='pending' AND expires>?").run(next, JSON.stringify(account.scopes), account.actor, now(), now(), account.actor, row.id, now()).changes;
+        respond(res, changed === 1 ? 200 : 409, changed === 1 ? { state: next } : { error: 'Request expired or already decided' }); return true;
+      }
+      const data = await body(req);
+      if (url.pathname === PREFIX + '/create') {
+        if (typeof data.secret !== 'string' || !/^[a-f0-9]{64}$/.test(data.secret)) { respond(res, 400, { error: 'Invalid request' }); return true; }
+        const ip = sign(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || 'unknown');
+        if (db.prepare('SELECT count(*) AS n FROM handoffs WHERE ip_hash=? AND created>?').get(ip, now() - 60).n >= 5) { respond(res, 429, { error: 'Try later' }); return true; }
+        const id = crypto.randomBytes(16).toString('hex'), code = crypto.randomBytes(4).toString('hex').toUpperCase();
+        db.prepare("INSERT INTO handoffs(id,challenge,code,state,created,expires,ip_hash,changed,actor,generation) VALUES(?,?,?,'pending',?,?,?,?,'pwa',?)").run(id, sha(data.secret), code, now(), now() + 300, ip, now(), currentGeneration());
+        respond(res, 201, { id, code, expires: now() + 300 }); return true;
+      }
+      if (url.pathname === PREFIX + '/verified') {
+        const authorization = req.headers.authorization;
+        if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) { respond(res, 401, { error: 'Unauthorized' }); return true; }
+        const session = await verify({ authorization });
+        if (!session?.authenticated || session.sessionMethod !== 'bearer-access-token') { respond(res, 401, { error: 'Unauthorized' }); return true; }
+        const updated = db.prepare('UPDATE sessions SET first_verified=coalesce(first_verified,?),last_verified=? WHERE token_hash=? AND expires>? AND revoked IS NULL').run(now(), now(), sha(authorization.slice(7)), now()).changes;
+        respond(res, updated === 1 ? 200 : 401, { verified: updated === 1 }); return true;
+      }
+      const row = device(data);
+      if (!row) { respond(res, 404, { error: 'Request not found' }); return true; }
+      if (url.pathname === PREFIX + '/status') { respond(res, 200, { state: row.state, code: row.code, expires: row.expires }); return true; }
+      if (url.pathname !== PREFIX + '/claim') { respond(res, 404, { error: 'Not found' }); return true; }
+      const attempt = crypto.randomUUID();
+      if (db.prepare("UPDATE handoffs SET state='redeeming',attempt=?,changed=?,actor='pwa' WHERE id=? AND state='approved' AND expires>?").run(attempt, now(), row.id, now()).changes !== 1) { respond(res, 409, { error: 'Request expired or already used' }); return true; }
+      let issued;
+      try {
+        const scopes = JSON.parse(row.approved_scopes);
+        issued = await issue(row.id, scopes);
+        const expiry = Math.floor(Date.parse(issued.expiresAt) / 1000);
+        if (issued.method !== 'bearer-access-token' || typeof issued.sessionId !== 'string' || typeof issued.token !== 'string' || JSON.stringify([...issued.scopes].sort()) !== JSON.stringify([...scopes].sort()) || !Number.isFinite(expiry) || expiry <= now() || expiry > now() + 86405) throw new Error('Invalid native session');
+        const authenticated = await verify({ authorization: 'Bearer ' + issued.token });
+        if (authenticated?.authenticated !== true || authenticated.sessionMethod !== 'bearer-access-token') throw new Error('Native session not authenticated');
+        if (!currentConfig() || row.generation !== currentGeneration()) throw new Error('Environment changed');
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare('INSERT INTO sessions(id,handoff_id,token_hash,scopes,issued,expires) VALUES(?,?,?,?,?,?)').run(issued.sessionId, row.id, sha(issued.token), row.approved_scopes, now(), expiry);
+          if (db.prepare("UPDATE handoffs SET state='consumed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt).changes !== 1) throw new Error('Claim changed');
+          db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
+        respond(res, 200, { token: issued.token, expires: expiry, scopes });
+      } catch {
+        // A CLI timeout can occur after native issuance. Leave ambiguous
+        // attempts redeeming so recovery can find and revoke by client label.
+        let cleaned = Boolean(issued?.sessionId);
+        if (issued?.sessionId) { try { await revoke(issued.sessionId); } catch { cleaned = false; } }
+        if (cleaned) db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
+        respond(res, 503, { error: 'Native session issue failed; start a new request' });
+      }
+      return true;
+    } catch (error) { if (!res.headersSent) respond(res, error instanceof InvalidBody ? 400 : 503, { error: 'Request failed' }); return true; }
+  }
+  return { handle, recover, close: () => db.close(), db };
+}
+module.exports = { createPwaAuth, injectBootstrap, nativeSession, SCOPES };
