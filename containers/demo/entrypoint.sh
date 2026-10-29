@@ -293,6 +293,14 @@ if ! grep -q '^\[sandbox_workspace_write\]' /root/.codex/config.toml 2>/dev/null
   log "codex: network_access = true を追記"
 fi
 
+# --- 初期セットアップ(Codexのサインイン復元) ---
+# 外から置かれた状態ファイルがあるときだけ復元する。起動は止めない(失敗はログに残す)。
+(
+  . /usr/local/bin/agent-bootstrap.sh
+  agent_bootstrap
+) >>/tmp/agent-bootstrap.log 2>&1 &
+log "agent bootstrap started (pid $!)"
+
 # --- SSHログインシェルからもcfコマンドの認証情報を読めるようにする ---
 # sshdのセッションはこのプロセスの環境変数を引き継がないため書き出す。
 umask 077

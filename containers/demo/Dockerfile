@@ -184,6 +184,7 @@ COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
+COPY agent-bootstrap.sh /usr/local/bin/agent-bootstrap.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
