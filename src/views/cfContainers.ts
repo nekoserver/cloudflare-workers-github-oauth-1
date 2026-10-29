@@ -126,6 +126,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-t3">T3・Codex・Tailscale</a><button type="button" class="menu-toggle" data-section="t3" aria-expanded="false" aria-label="T3・Codex・Tailscale の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div>
@@ -249,6 +250,28 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <button id="btn-tailscale-peers" type="button" style="margin-top:8px;">Tailscaleの接続経路を取得</button>
   <pre id="tailscale-peers-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
 </details>
+<details class="card" id="section-t3" tabindex="-1" data-section="t3" open>
+  <summary>T3 Code・Codex・Tailscale の状態</summary>
+  <p class="subtitle" style="margin:0 0 4px;">好ましい状態(総合判定が「準備完了」になる条件):</p>
+  <ul class="subtitle" style="margin:0 0 8px;padding-left:20px;">
+    <li>T3本体が 127.0.0.1:3773 だけで待ち受け、HTTPが正常に返る(<code>/.well-known/t3/environment</code>)</li>
+    <li>埋め込み用の中継が 127.0.0.1:3774 だけで待ち受け、frame-ancestors 付きでHTTPが正常に返る</li>
+    <li>codex コマンドが入っていて、<code>codex login status</code> がサインイン済みを返す(T3はこの結果を見ている。手でサインインしても、T3が見る HOME と同じでなければ反映されない)</li>
+    <li><code>~/.codex/auth.json</code> がある(権限は 600)</li>
+    <li>Tailscale が Running で、このコンテナのノードと相手が見える</li>
+  </ul>
+  <div class="status-row">
+    <button id="btn-t3-health" type="button">T3・Codex・Tailscale の状態を確認</button>
+  </div>
+  <div id="t3-verdict" style="margin:8px 0;font-size:13px;" hidden></div>
+  <div class="pricing-scroll">
+  <table class="health-table" id="t3-table" hidden>
+    <thead><tr><th>項目</th><th>結果</th><th>詳細</th></tr></thead>
+    <tbody id="t3-tbody"></tbody>
+  </table>
+  </div>
+  <pre id="t3-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+</details>
 <details class="card" id="section-buildlog" tabindex="-1" data-section="buildlog">
   <summary>本番ビルド(Workers Builds)のログ</summary>
   <div class="status-row">
@@ -360,6 +383,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     if (name === 'pricing') lines.push(sectionText('cost-summary') || '未取得');
     if (name === 'health') lines.push(document.getElementById('health-table').hidden ? '未確認' : '確認済み: ' + document.getElementById('health-time').textContent);
     if (name === 'report') lines.push('Slack通知: ' + (document.getElementById('report-slack-toggle').checked ? 'ON' : 'OFF'));
+    if (name === 't3') lines.push(document.getElementById('t3-table').hidden ? '未確認' : '総合判定: ' + document.getElementById('t3-verdict').textContent);
     if (name === 'net') lines.push(document.getElementById('net-log').textContent ? '取得済み' : '未取得');
     if (name === 'buildlog') lines.push(document.getElementById('buildlog-log').textContent ? '取得済み' : '未取得');
     if (name === 'tunnels') lines.push(document.getElementById('tunnel-table').hidden ? '未取得' : '一覧: ' + document.getElementById('tunnel-tbody').rows.length + '件');
@@ -878,6 +902,110 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .finally(function () {
         btnNet.disabled = false;
       });
+  });
+
+  // T3・Codex・Tailscaleの状態。総合判定の文言(コンテナ側のstateと対応)。
+  var T3_STATE_LABELS = {
+    ready: '準備完了',
+    'server-down': 'T3本体が停止中',
+    'server-error': 'T3本体の応答が異常',
+    'proxy-down': '埋め込み用の中継が停止中',
+    'proxy-error': '埋め込み用の中継の応答が異常',
+    exposed: '外に公開されている(要対処)',
+    'codex-missing': 'codexが無い',
+    'login-required': 'Codexが未サインイン',
+    'login-unknown': 'Codexのサインイン状態が不明'
+  };
+
+  // tailscale-peersの応答を、表示用の{ok,label,detail}にまとめる。ok: true=正常、false=異常、null=不明。
+  function summarizeTailscaleSession(data) {
+    if (!data) return { ok: null, label: '不明', detail: 'Tailscaleの状態を取得できませんでした' };
+    if (data.error) return { ok: false, label: '取得失敗', detail: String(data.error) };
+    var peers = data.peers || [];
+    var online = 0;
+    var direct = 0;
+    var relay = 0;
+    peers.forEach(function (peer) {
+      if (peer.online) online += 1;
+      if (peer.connection === 'direct') direct += 1;
+      if (peer.connection === 'relay') relay += 1;
+    });
+    var self = data.self || {};
+    var detail = 'このコンテナ: ' + (self.dnsName || '不明') + ' (' + (self.ip || 'IPなし') + ') / 相手 ' + peers.length + ' 件(オンライン ' + online + ') / 直接 ' + direct + '・中継 ' + relay;
+    return { ok: data.backendState === 'Running', label: String(data.backendState || '不明'), detail: detail };
+  }
+
+  function t3Cell(ok, text) {
+    var span = document.createElement('span');
+    span.className = 'badge';
+    span.setAttribute('data-ok', ok === true ? 'true' : 'false');
+    span.textContent = text || (ok === true ? 'OK' : ok === false ? 'NG' : '不明');
+    return span;
+  }
+
+  function addT3Row(tbody, name, ok, text, detail) {
+    var tr = document.createElement('tr');
+    var th = document.createElement('td');
+    th.textContent = name;
+    var result = document.createElement('td');
+    result.appendChild(t3Cell(ok, text));
+    var d = document.createElement('td');
+    d.textContent = detail;
+    tr.appendChild(th);
+    tr.appendChild(result);
+    tr.appendChild(d);
+    tbody.appendChild(tr);
+  }
+
+  function renderT3(t3, tailscale) {
+    var tbody = document.getElementById('t3-tbody');
+    tbody.textContent = '';
+    var s = t3.server || {};
+    var p = t3.proxy || {};
+    var c = t3.codex || {};
+    var auth = c.authFile || {};
+    var serverOk = Boolean(s.listening) && s.httpStatus >= 200 && s.httpStatus < 300;
+    var proxyOk = Boolean(p.listening) && p.httpStatus >= 200 && p.httpStatus < 300;
+    addT3Row(tbody, 'T3本体(ポート ' + (s.port || 3773) + ')', serverOk, null,
+      '待ち受け: ' + (s.listening ? (s.listenAddress || 'アドレス不明') : 'なし') + ' / HTTP: ' + (s.httpStatus == null ? '応答なし' : s.httpStatus)
+      + (s.environmentKeys && s.environmentKeys.length ? ' / environmentのキー: ' + s.environmentKeys.join(', ') : ''));
+    addT3Row(tbody, '埋め込み用の中継(ポート ' + (p.port || 3774) + ')', proxyOk, null,
+      '待ち受け: ' + (p.listening ? (p.listenAddress || 'アドレス不明') : 'なし') + ' / HTTP: ' + (p.httpStatus == null ? '応答なし' : p.httpStatus)
+      + ' / frame-ancestors: ' + (p.frameAncestors ? 'あり' : 'なし'));
+    addT3Row(tbody, 'Codex', Boolean(c.installed), null, c.installed ? '版 ' + (c.version || '不明') : 'codex コマンドが見つかりません');
+    addT3Row(tbody, 'Codexのサインイン', c.loggedIn === true ? true : c.loggedIn === false ? false : null, null,
+      (c.loginSummary ? c.loginSummary + ' / ' : '') + 'auth.json: ' + (auth.exists ? '有(権限 ' + (auth.mode || '不明') + ')' : '無') + ' / HOME: ' + (c.codexHome || c.home || '不明'));
+    var ts = summarizeTailscaleSession(tailscale);
+    addT3Row(tbody, 'Tailscaleのセッション', ts.ok, ts.label, ts.detail);
+    var verdict = document.getElementById('t3-verdict');
+    var label = T3_STATE_LABELS[t3.state] || String(t3.state || '不明');
+    verdict.textContent = '';
+    verdict.appendChild(t3Cell(t3.state === 'ready', label));
+    var why = (t3.reasons || []).concat(t3.errors || []);
+    if (why.length > 0) verdict.appendChild(document.createTextNode(' ' + why.join(' / ')));
+    verdict.hidden = false;
+    document.getElementById('t3-table').hidden = false;
+  }
+
+  var btnT3Health = document.getElementById('btn-t3-health');
+  var t3Log = document.getElementById('t3-log');
+  btnT3Health.addEventListener('click', function () {
+    btnT3Health.disabled = true;
+    t3Log.textContent = '確認中…(コンテナが停止中の場合は起動を待ちます)';
+    var tailscaleRequest = fetch('/cf-containers/proxy/debug/tailscale-peers')
+      .then(readJsonOrText)
+      .catch(function (err) { return { error: String(err) }; });
+    fetch('/cf-containers/proxy/health/t3')
+      .then(readJsonOrText)
+      .then(function (t3) {
+        if (!t3 || t3.error || !t3.state) throw new Error((t3 && t3.error) || 'T3の状態を読めません');
+        return tailscaleRequest.then(function (tailscale) {
+          renderT3(t3, tailscale);
+          t3Log.textContent = '確認時刻: ' + (t3.checkedAt || '');
+        });
+      })
+      .catch(function (err) { t3Log.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnT3Health.disabled = false; });
   });
 
   var btnTailscalePeers = document.getElementById('btn-tailscale-peers');
