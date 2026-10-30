@@ -92,6 +92,45 @@ describe('fetchBuildActivity', () => {
   });
 });
 
+describe('buildBannerState: 本番のビルドの失敗を表示する(2026-10-30、失敗しても「待機中」と出ていた)', () => {
+  const failed = (over: Partial<BannerBuild> = {}) => build({ uuid: 'f1', status: 'stopped', outcome: 'fail', createdAt: '2026-10-30T15:37:57Z', ...over });
+  const success = (over: Partial<BannerBuild> = {}) => build({ uuid: 's1', status: 'stopped', outcome: 'success', createdAt: '2026-10-29T12:35:27Z', ...over });
+  it('最新の本番のビルドが失敗なら、コンテナが起動中でも build_failed', () => {
+    const state = buildBannerState({ builds: [success(), failed()], container: running });
+    expect(state.kind).toBe('build_failed');
+    expect(state.build.failed).toBe(true);
+    expect(state.build.uuid).toBe('f1');
+    expect(state.build.startedAt).toBe('2026-10-30T15:37:57Z');
+  });
+  it('失敗のあとに成功したビルドがあれば、コンテナの状態に戻る', () => {
+    const state = buildBannerState({ builds: [failed(), success({ uuid: 's2', createdAt: '2026-10-30T18:18:00Z' })], container: running });
+    expect(state.kind).toBe('standby');
+    expect(state.build.failed).toBe(false);
+  });
+  it('ビルド中は、前のビルドの失敗より優先する', () => {
+    const state = buildBannerState({ builds: [failed(), build({ uuid: 'r1', createdAt: '2026-10-30T18:18:00Z' })], container: running });
+    expect(state.kind).toBe('building');
+  });
+  it('取り消された(cancelled)ビルドは、成否の判断に使わない', () => {
+    const state = buildBannerState({ builds: [failed(), success({ uuid: 'c1', outcome: 'cancelled', createdAt: '2026-10-30T18:18:00Z' })], container: running });
+    expect(state.kind).toBe('build_failed');
+    expect(state.build.uuid).toBe('f1');
+  });
+  it('プレビュー(main以外)のビルドの失敗は、対象にしない', () => {
+    const state = buildBannerState({ builds: [success(), failed({ branch: 'fix/x' })], container: running });
+    expect(state.kind).toBe('standby');
+  });
+  it('結果が無くても、ステータスが失敗系(failure)なら失敗として扱う', () => {
+    const state = buildBannerState({ builds: [failed({ outcome: null, status: 'failure' })], container: stopped });
+    expect(state.kind).toBe('build_failed');
+  });
+  it('ビルドの状態を取得できないときは、失敗と決めない', () => {
+    const state = buildBannerState({ builds: [], buildError: '403', container: running });
+    expect(state.kind).toBe('standby');
+    expect(state.build.failed).toBe(false);
+  });
+});
+
 describe('/cf-containers ページの状態の帯', () => {
   const html = getCfContainersPage();
 
@@ -108,8 +147,8 @@ describe('/cf-containers ページの状態の帯', () => {
     expect(sidebar).toBeLessThan(aside.indexOf('<details'));
   });
 
-  it('状態の名前(ビルド中・待機中・停止中)と、APIを呼ぶ処理がある', () => {
-    for (const label of ['ビルド中', '待機中', '停止中']) expect(html).toContain(label);
+  it('状態の名前(ビルド中・ビルド失敗・待機中・停止中)と、APIを呼ぶ処理がある', () => {
+    for (const label of ['ビルド中', 'ビルド失敗', '待機中', '停止中']) expect(html).toContain(label);
     expect(html).toContain('/api/cf-containers/banner');
   });
 
@@ -118,6 +157,7 @@ describe('/cf-containers ページの状態の帯', () => {
     expect(html).toContain('@keyframes status-blink');
     expect(html).toMatch(/\[data-kind="standby"\][^{]*\{[^}]*var\(--ok\)/);
     expect(html).toMatch(/\[data-kind="stopped"\][^{]*\{[^}]*var\(--muted\)/);
+    expect(html).toMatch(/\[data-kind="build_failed"\][^{]*\{[^}]*color:\s*var\(--err\)/);
     expect(html).toMatch(/prefers-reduced-motion[^{]*\{[\s\S]*?animation:\s*none/);
   });
 
