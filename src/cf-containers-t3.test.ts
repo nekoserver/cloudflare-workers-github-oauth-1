@@ -53,7 +53,8 @@ describe('entrypoint.sh: T3 Codeと中継の起動', () => {
 describe('t3-embed-proxy.cjs', () => {
   it('127.0.0.1の3774だけで待ち受け、3773へ中継する', () => {
     expect(proxy).toMatch(/server\.listen\(3774, '127\.0\.0\.1'\)/);
-    expect(proxy).toMatch(/port: 3773/);
+    expect(proxy).toMatch(/options\.upstreamPort \|\| 3773/);
+    expect(proxy).toMatch(/port: upstreamPort/);
   });
 
   it('埋め込み元(frame-ancestors)を絞る。任意のoriginを許可しない', () => {

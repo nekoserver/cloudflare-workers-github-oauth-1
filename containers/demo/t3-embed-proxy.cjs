@@ -1,16 +1,38 @@
 const http = require('node:http');
 const net = require('node:net');
-const { createPwaAuth, injectBootstrap } = require('./t3-pwa-auth.cjs');
+const { createPwaAuth, injectBootstrap, nativeSession } = require('./t3-pwa-auth.cjs');
+const { staleSessionClears } = require('./t3-stale-session.cjs');
 // Loopback-only HTTPS tunnel backend. Keep T3 authentication; partition its
 // HttpOnly session cookie by the embedding site for third-party-cookie browsers.
-function createServer(pwa) {
+// T3のセッション用クッキーの名前。認証していない状態でも /api/auth/session が返す。取得できなければnull(何も削除しない)。
+async function defaultCookieName() {
+  try {
+    const name = (await nativeSession({}))?.auth?.sessionCookieName;
+    return typeof name === 'string' && /^[A-Za-z0-9_.-]+$/.test(name) ? name : null;
+  } catch { return null; }
+}
+function createServer(pwa, options = {}) {
+const upstreamPort = options.upstreamPort || 3773;
+const resolveCookieName = options.resolveCookieName || defaultCookieName;
 const server = http.createServer(async (req, res) => {
   if (await pwa.handle(req, res)) return;
-  const headers = { ...req.headers, host: '127.0.0.1:3773', 'accept-encoding': 'identity' };
-  const upstream = http.request({ hostname: '127.0.0.1', port: 3773, method: req.method, path: req.url, headers }, response => {
+  const headers = { ...req.headers, host: '127.0.0.1:' + upstreamPort, 'accept-encoding': 'identity' };
+  const upstream = http.request({ hostname: '127.0.0.1', port: upstreamPort, method: req.method, path: req.url, headers }, response => {
     const next = { ...response.headers };
     if (next['set-cookie']) next['set-cookie'] = next['set-cookie'].map(cookie => cookie.replace(/;\s*SameSite=[^;]+/ig, '').replace(/;\s*Secure\b/ig, '').replace(/;\s*Partitioned\b/ig, '') + '; SameSite=None; Secure; Partitioned');
     next['content-security-policy'] = "frame-ancestors https://dynamicneko.nekoflare.workers.dev http://127.0.0.1:4173";
+    // T3が拒否した古いセッションのクッキーを削除して、ペアリング画面へ戻れるようにする(t3-stale-session.cjs)。
+    if (response.statusCode === 401 && req.headers.cookie) {
+      response.pause();
+      resolveCookieName().then(cookieName => {
+        const clears = staleSessionClears({ status: 401, cookieHeader: req.headers.cookie, cookieName });
+        if (clears.length) {
+          next['set-cookie'] = [...(next['set-cookie'] || []), ...clears];
+          console.error('T3 stale session cleared: cookie=' + cookieName);
+        }
+      }).catch(() => {}).then(() => { res.writeHead(response.statusCode, next); response.pipe(res); response.resume(); });
+      return;
+    }
     if (req.method === 'GET' && response.headers['content-type']?.includes('text/html')) {
       delete next['content-length']; delete next.etag;
       next['cache-control'] = 'no-store';

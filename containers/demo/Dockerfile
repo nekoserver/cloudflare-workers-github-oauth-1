@@ -183,7 +183,7 @@ COPY server.js build-info*.json ./
 COPY firewall-stats.py firewall-log.py ./
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
-COPY t3-pwa-auth.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/
+COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
