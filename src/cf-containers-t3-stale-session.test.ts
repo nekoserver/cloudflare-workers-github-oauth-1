@@ -99,12 +99,13 @@ describe('T3は認証に失敗すると、401ではなく200で authenticated:fa
   it('認証済み(authenticated:true)なら削除しない', () => {
     expect(staleSessionClears({ status: 200, unauthenticated: false, cookieHeader: cookie, cookieName: 't3_session_3773_abc123' })).toEqual([]);
   });
-  it('同じ名前のクッキーが複数あるときは、プロキシが発行していない側(Partitionedなし)だけを削除する', () => {
-    const both = 't3_session_3773_abc123=stale; t3_session_3773_abc123=fresh';
+  it('同じ名前のクッキーが複数あっても(Partitioned付きと無しの2つを発行するため)、拒否されたら両方の形を削除する', () => {
+    const both = 't3_session_3773_abc123=stale; t3_session_3773_abc123=stale';
     expect(countCookie(both, 't3_session_3773_abc123')).toBe(2);
     const clears = staleSessionClears({ status: 200, unauthenticated: true, cookieHeader: both, cookieName: 't3_session_3773_abc123' });
-    expect(clears.length).toBe(1);
-    expect(clears[0]).not.toContain('Partitioned');
+    expect(clears.length).toBe(2);
+    expect(clears.some(value => value.includes('Partitioned'))).toBe(true);
+    expect(clears.some(value => !value.includes('Partitioned'))).toBe(true);
   });
   it('クッキーを送っていなければ、認証されていなくても何もしない', () => {
     expect(staleSessionClears({ status: 200, unauthenticated: true, cookieHeader: 'other=1', cookieName: 't3_session_3773_abc123' })).toEqual([]);
@@ -141,11 +142,10 @@ describe('中継: /api/auth/session の200 authenticated:false でも、古い�
     expect(response.body).toBe(unauth);
     expect((response.headers['set-cookie'] ?? []).length).toBe(2);
   });
-  it('重複したクッキー: Partitionedなしの1つだけを削除する', async () => {
-    const response = await (await setup('/api/auth/session', 200, unauth))({ cookie: 't3_session_3773_abc123=old; t3_session_3773_abc123=new' });
+  it('重複したクッキー: 両方の形を削除する', async () => {
+    const response = await (await setup('/api/auth/session', 200, unauth))({ cookie: 't3_session_3773_abc123=old; t3_session_3773_abc123=old' });
     const set = response.headers['set-cookie'] ?? [];
-    expect(set.length).toBe(1);
-    expect(set[0]).not.toContain('Partitioned');
+    expect(set.length).toBe(2);
     expect(response.body).toBe(unauth);
   });
   it('200 authenticated:true: 何も付けない', async () => {
