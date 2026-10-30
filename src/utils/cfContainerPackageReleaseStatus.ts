@@ -151,3 +151,128 @@ export async function recordPackageReleaseCheck(
     latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
   };
 }
+
+export type PackageReleaseOverviewPackage = {
+  packageName: string;
+  installedVersion: string | null;
+  installedStatus: string;
+  latestVersion: string | null;
+  latestReleaseAt: string | null;
+  currentReleaseAt: string | null;
+  releaseStatus: string;
+  updateStatus: string;
+  source: string | null;
+  error: string | null;
+  checkedAt: string;
+};
+
+export type PackageReleaseOverviewContainer = {
+  containerKey: string;
+  packageCount: number;
+  updatesAvailable: number;
+  latestUnavailable: number;
+  lastCheckedAt: string | null;
+  packages: PackageReleaseOverviewPackage[];
+};
+
+// 記録されている全コンテナの、現在の対応状況(最後の確認の値)。新版ありのパッケージを先頭にする。
+// 版を記録していないコンテナは、行が無いので含まれない。
+export async function getPackageReleaseOverview(db: D1Database): Promise<{ containers: PackageReleaseOverviewContainer[] }> {
+  const { results } = await db.prepare(`
+    SELECT container_key, package_name, installed_version, installed_status, latest_version,
+           latest_release_at, current_release_at, release_status, update_status, source, error, checked_at
+    FROM cf_container_package_release_status
+    ORDER BY container_key, package_name
+  `).all<Record<string, string | null>>();
+  const byContainer = new Map<string, PackageReleaseOverviewContainer>();
+  for (const row of results ?? []) {
+    const key = String(row.container_key);
+    let container = byContainer.get(key);
+    if (!container) {
+      container = { containerKey: key, packageCount: 0, updatesAvailable: 0, latestUnavailable: 0, lastCheckedAt: null, packages: [] };
+      byContainer.set(key, container);
+    }
+    container.packages.push({
+      packageName: String(row.package_name),
+      installedVersion: row.installed_version ?? null,
+      installedStatus: String(row.installed_status),
+      latestVersion: row.latest_version ?? null,
+      latestReleaseAt: row.latest_release_at ?? null,
+      currentReleaseAt: row.current_release_at ?? null,
+      releaseStatus: String(row.release_status),
+      updateStatus: String(row.update_status),
+      source: row.source ?? null,
+      error: row.error ?? null,
+      checkedAt: String(row.checked_at),
+    });
+    container.packageCount += 1;
+    if (row.update_status === 'update_available') container.updatesAvailable += 1;
+    if (row.release_status === 'failed') container.latestUnavailable += 1;
+    if (!container.lastCheckedAt || String(row.checked_at) > container.lastCheckedAt) container.lastCheckedAt = String(row.checked_at);
+  }
+  const containers = [...byContainer.values()];
+  for (const container of containers) {
+    container.packages.sort((a, b) =>
+      Number(b.updateStatus === 'update_available') - Number(a.updateStatus === 'update_available') || a.packageName.localeCompare(b.packageName));
+  }
+  return { containers };
+}
+
+export type PackageReleaseHistoryRow = {
+  id: number;
+  containerKey: string;
+  packageName: string;
+  installedVersion: string | null;
+  installedStatus: string;
+  latestVersion: string | null;
+  latestReleaseAt: string | null;
+  releaseStatus: string;
+  updateStatus: string;
+  source: string | null;
+  error: string | null;
+  trigger: string;
+  checkedAt: string;
+};
+
+export type PackageHistoryQuery = { containerKey: string; packageName: string; limit: number };
+
+const HISTORY_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+
+// 履歴のAPIの検索条件。コンテナ名・パッケージ名は英数字と _ . - のみ。件数は既定50、1〜200に収める。
+export function parsePackageHistoryQuery(params: URLSearchParams): { ok: true; value: PackageHistoryQuery } | { ok: false; error: string } {
+  const containerKey = params.get('containerKey') ?? '';
+  const packageName = params.get('packageName') ?? '';
+  if (!HISTORY_NAME.test(containerKey)) return { ok: false, error: 'containerKey は英数字と _ . - の1〜64文字で指定してください' };
+  if (!HISTORY_NAME.test(packageName)) return { ok: false, error: 'packageName は英数字と _ . - の1〜64文字で指定してください' };
+  const rawLimit = params.get('limit');
+  if (rawLimit !== null && !/^\d+$/.test(rawLimit)) return { ok: false, error: 'limit は整数で指定してください' };
+  const limit = rawLimit === null ? 50 : Math.min(200, Math.max(1, Number(rawLimit)));
+  return { ok: true, value: { containerKey, packageName, limit } };
+}
+
+// パッケージの履歴(確認日時の新しい順)。
+export async function getPackageReleaseHistory(db: D1Database, query: PackageHistoryQuery): Promise<PackageReleaseHistoryRow[]> {
+  const { results } = await db.prepare(`
+    SELECT id, container_key, package_name, installed_version, installed_status, latest_version, latest_release_at,
+           release_status, update_status, source, error, trigger_kind, checked_at
+    FROM cf_container_package_release_history
+    WHERE container_key = ? AND package_name = ?
+    ORDER BY checked_at DESC, id DESC
+    LIMIT ?
+  `).bind(query.containerKey, query.packageName, query.limit).all<Record<string, string | number | null>>();
+  return (results ?? []).map((row) => ({
+    id: Number(row.id),
+    containerKey: String(row.container_key),
+    packageName: String(row.package_name),
+    installedVersion: (row.installed_version as string | null) ?? null,
+    installedStatus: String(row.installed_status),
+    latestVersion: (row.latest_version as string | null) ?? null,
+    latestReleaseAt: (row.latest_release_at as string | null) ?? null,
+    releaseStatus: String(row.release_status),
+    updateStatus: String(row.update_status),
+    source: (row.source as string | null) ?? null,
+    error: (row.error as string | null) ?? null,
+    trigger: String(row.trigger_kind),
+    checkedAt: String(row.checked_at),
+  }));
+}

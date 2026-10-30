@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   buildPackageReleaseStatuses,
+  getPackageReleaseHistory,
+  getPackageReleaseOverview,
+  parsePackageHistoryQuery,
   parseReleaseCheckTrigger,
   recordPackageReleaseCheck,
   savePackageReleaseStatuses,
@@ -18,9 +21,13 @@ const MIGRATIONS = [
   'migrations/0191_create_cf_container_package_release_history.sql',
 ];
 
-type Stmt = { sql: string; args: unknown[]; bind: (...a: unknown[]) => Stmt };
+type Stmt = { sql: string; args: unknown[]; bind: (...a: unknown[]) => Stmt; all: () => Promise<{ results: unknown[] }> };
 function d1(db: DatabaseSync): D1Database {
-  const stmt = (sql: string, args: unknown[] = []): Stmt => ({ sql, args, bind: (...a: unknown[]) => stmt(sql, a) });
+  const stmt = (sql: string, args: unknown[] = []): Stmt => ({
+    sql, args,
+    bind: (...a: unknown[]) => stmt(sql, a),
+    all: async () => ({ results: db.prepare(sql).all(...(args as never[])) as unknown[] }),
+  });
   return {
     prepare: (sql: string) => stmt(sql),
     batch: async (stmts: Stmt[]) => {
@@ -160,5 +167,115 @@ describe('履歴テーブルの登録', () => {
     expect(html).toContain('/api/cf-containers/package-release-status/check');
     const i = html.indexOf('btnHealth.addEventListener');
     expect(html.slice(i, i + 2500)).toContain("syncPackageRelease('health_check')");
+  });
+});
+
+describe('全コンテナの更新情報の一覧(overview)', () => {
+  const at = (n: number) => `2026-10-30T10:0${n}:00Z`;
+  const seed = async () => {
+    await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest, trigger: 'health_check', checkedAt: at(5) });
+    await recordPackageReleaseCheck(db, { containerKey: 'other', snapshot: null, latest, trigger: 'page_load', checkedAt: at(7) });
+  };
+
+  it('記録されているコンテナを、すべて返す(コンテナごとに、パッケージの一覧と件数を持つ)', async () => {
+    await seed();
+    const { containers } = await getPackageReleaseOverview(db);
+    expect(containers.map((c) => c.containerKey).sort()).toEqual(['demo', 'other']);
+    const demo = containers.find((c) => c.containerKey === 'demo')!;
+    expect(demo.packageCount).toBe(buildPackageReleaseStatuses('demo', snapshot, latest, 'x').length);
+    expect(demo.updatesAvailable).toBe(2);
+    expect(demo.latestUnavailable).toBe(1);
+    expect(demo.lastCheckedAt).toBe(at(5));
+    expect(containers.find((c) => c.containerKey === 'other')!.updatesAvailable).toBe(0);
+  });
+
+  it('各パッケージに、パッケージ名・導入版・最新版・対応状況・確認日時を持つ。新版ありを先頭にする', async () => {
+    await seed();
+    const demo = (await getPackageReleaseOverview(db)).containers.find((c) => c.containerKey === 'demo')!;
+    expect(demo.packages[0].updateStatus).toBe('update_available');
+    const node = demo.packages.find((p) => p.packageName === 'node')!;
+    expect(node).toMatchObject({ installedVersion: '26.12.1', latestVersion: '26.13.0', updateStatus: 'update_available', checkedAt: at(5) });
+  });
+
+  it('記録が1件も無いときは、空の一覧を返す(エラーにしない)', async () => {
+    expect((await getPackageReleaseOverview(db)).containers).toEqual([]);
+  });
+
+  it('現在の状態(上書き)の値を返す。履歴ではなく、最後の確認の値', async () => {
+    await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest, trigger: 'health_check', checkedAt: at(5) });
+    const newer = { ...latest, node: { latest: '26.14.0', source: 'nodejs.org' } } as unknown as LatestToolVersions;
+    await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest: newer, trigger: 'health_check', checkedAt: at(9) });
+    const demo = (await getPackageReleaseOverview(db)).containers[0];
+    expect(demo.packages.find((p) => p.packageName === 'node')!.latestVersion).toBe('26.14.0');
+    expect(demo.lastCheckedAt).toBe(at(9));
+  });
+});
+
+describe('パッケージの履歴の取得(history)', () => {
+  const at = (n: number) => `2026-10-30T10:${String(n).padStart(2, '0')}:00Z`;
+
+  it('確認日時の新しい順に返し、コンテナとパッケージで絞り込む', async () => {
+    for (const n of [5, 15, 25]) {
+      await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest, trigger: 'health_check', checkedAt: at(n) });
+    }
+    await recordPackageReleaseCheck(db, { containerKey: 'other', snapshot, latest, trigger: 'health_check', checkedAt: at(30) });
+    const rows = await getPackageReleaseHistory(db, { containerKey: 'demo', packageName: 'node', limit: 50 });
+    expect(rows.map((r) => r.checkedAt)).toEqual([at(25), at(15), at(5)]);
+    expect(rows.every((r) => r.packageName === 'node')).toBe(true);
+  });
+
+  it('件数の上限を守る', async () => {
+    for (const n of [5, 15, 25]) {
+      await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest, trigger: 'health_check', checkedAt: at(n) });
+    }
+    expect(await getPackageReleaseHistory(db, { containerKey: 'demo', packageName: 'node', limit: 2 })).toHaveLength(2);
+  });
+
+  it('各行に、最新版・導入版・対応状況・確認日時・契機・取得失敗の理由を持つ', async () => {
+    await recordPackageReleaseCheck(db, { containerKey: 'demo', snapshot, latest, trigger: 'health_check', checkedAt: at(5) });
+    const [row] = await getPackageReleaseHistory(db, { containerKey: 'demo', packageName: 'gh', limit: 5 });
+    expect(row).toMatchObject({ latestVersion: null, updateStatus: 'unknown', trigger: 'health_check', checkedAt: at(5) });
+    expect(row.error).toContain('403');
+  });
+});
+
+describe('parsePackageHistoryQuery', () => {
+  const q = (query: string) => parsePackageHistoryQuery(new URLSearchParams(query));
+  it('コンテナ名とパッケージ名が必要。件数は既定50、1〜200に収める', () => {
+    expect(q('containerKey=demo&packageName=node')).toEqual({ ok: true, value: { containerKey: 'demo', packageName: 'node', limit: 50 } });
+    expect(q('containerKey=demo&packageName=node&limit=9999')).toMatchObject({ ok: true, value: { limit: 200 } });
+    expect(q('containerKey=demo&packageName=node&limit=0')).toMatchObject({ ok: true, value: { limit: 1 } });
+  });
+  it('足りない・使えない文字を含むときは、理由つきで拒否する', () => {
+    expect(q('packageName=node')).toMatchObject({ ok: false });
+    expect(q('containerKey=demo')).toMatchObject({ ok: false });
+    expect(q("containerKey=de'mo&packageName=node")).toMatchObject({ ok: false });
+    expect(q('containerKey=demo&packageName=a b')).toMatchObject({ ok: false });
+    expect(q('containerKey=demo&packageName=node&limit=abc')).toMatchObject({ ok: false });
+  });
+});
+
+describe('/cf-containers ページの「全コンテナの更新情報」', () => {
+  it('セクションと、読み込みボタンがあり、左パネルからも移動できる', async () => {
+    const { getCfContainersPage } = await import('../views/cfContainers');
+    const html = getCfContainersPage();
+    expect(html).toContain('id="section-package-updates"');
+    expect(html).toContain('id="btn-package-updates"');
+    const nav = html.match(/<aside[\s\S]*?<\/aside>/)?.[0] ?? '';
+    expect(nav).toContain('href="#section-package-updates"');
+  });
+
+  it('全コンテナの一覧と、パッケージの履歴の、両方のAPIを呼ぶ', async () => {
+    const { getCfContainersPage } = await import('../views/cfContainers');
+    const html = getCfContainersPage();
+    expect(html).toContain('/api/cf-containers/package-release-status/overview');
+    expect(html).toContain('/api/cf-containers/package-release-status/history?');
+  });
+
+  it('記録の無いコンテナは表示されないことを、画面に書いている', async () => {
+    const { getCfContainersPage } = await import('../views/cfContainers');
+    const html = getCfContainersPage();
+    const i = html.indexOf('id="section-package-updates"');
+    expect(html.slice(i, i + 1800)).toContain('記録が無いコンテナ');
   });
 });

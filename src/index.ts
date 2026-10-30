@@ -58,7 +58,7 @@ import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, 
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
-import { parseReleaseCheckTrigger, recordPackageReleaseCheck } from './utils/cfContainerPackageReleaseStatus';
+import { getPackageReleaseHistory, getPackageReleaseOverview, parsePackageHistoryQuery, parseReleaseCheckTrigger, recordPackageReleaseCheck } from './utils/cfContainerPackageReleaseStatus';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './utils/authorizedKeyInput';
@@ -20508,6 +20508,34 @@ app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDa
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-package-release-status] D1記録に失敗', { error: message });
     return jsonUtf8({ error: `パッケージ新版状況の記録に失敗しました: ${message}(migration 0188・0191を適用してください)` }, 503);
+  }
+});
+
+// 記録されている全コンテナの、現在のパッケージ更新情報(最新版・導入版・対応状況・確認日時)。読み取りだけ。
+app.get('/api/cf-containers/package-release-status/overview', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  try {
+    return jsonUtf8({ ...(await getPackageReleaseOverview(c.env.DB)), checkedAt: new Date().toISOString() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] 一覧の取得に失敗', { error: message });
+    return jsonUtf8({ error: 'パッケージ更新情報の取得に失敗しました: ' + message + '(migration 0188を適用してください)' }, 503);
+  }
+});
+
+// パッケージの履歴(確認日時の新しい順)。コンテナ名・パッケージ名・件数(1〜200)を指定する。読み取りだけ。
+app.get('/api/cf-containers/package-release-status/history', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  const query = parsePackageHistoryQuery(new URL(c.req.url).searchParams);
+  if (!query.ok) return jsonUtf8({ error: query.error }, 400);
+  try {
+    return jsonUtf8({ ...query.value, rows: await getPackageReleaseHistory(c.env.DB, query.value) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] 履歴の取得に失敗', { error: message });
+    return jsonUtf8({ error: '履歴の取得に失敗しました: ' + message + '(migration 0191を適用してください)' }, 503);
   }
 });
 

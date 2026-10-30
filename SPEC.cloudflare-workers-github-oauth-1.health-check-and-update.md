@@ -194,6 +194,19 @@ CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_history_checked
   ON cf_container_package_release_history(checked_at);
 ```
 
+### 4.8 全コンテナの更新情報の確認(`/cf-containers`)
+
+**対象**: `/cf-containers` の「全コンテナのパッケージ更新情報」セクション、`GET /api/cf-containers/package-release-status/overview`、`GET /api/cf-containers/package-release-status/history` — 記録されている全コンテナについて、現在の対応状況と、パッケージごとの履歴を、一つの画面で確認する。
+
+| 項目 | 内容 |
+|---|---|
+| 一覧(overview) | `cf_container_package_release_status` から、`container_key` ごとに、パッケージ数・新版ありの件数・最新版取得失敗の件数・最終確認日時と、パッケージの一覧(導入版・最新版・対応状況・確認日時・最新版の取得元)を返す。新版ありのパッケージを先頭にする |
+| 履歴(history) | `cf_container_package_release_history` から、コンテナ名・パッケージ名で絞り、確認日時の新しい順に返す。`containerKey`・`packageName` は英数字と `_ . -` の 1〜64 文字、`limit` は既定 50、1〜200 に収める。不正な値は 400 |
+| 画面 | コンテナごとに、新版あり件数・全件数・最終確認を見出しにした表を出す。パッケージの「履歴」を押すと、その行の下に、確認のたびの推移(確認日時・導入版・最新版・対応状況・契機・取得失敗の理由)を展開する。ページを開いたとき、ヘルスチェックのあとの記録のたび、「読み込む」ボタンで更新する |
+| 認証 | `/cf-containers` の他の API と同じ(ログインと管理者の確認)。読み取りだけで、記録は行わない |
+
+**注意(範囲)**: 表示できるのは、**版を記録しているコンテナだけ**。現在、このワーカーが版を記録しているのは `demo` コンテナだけで、他のコンテナは、一覧に出ない。他のコンテナを加えるには、そのコンテナの導入版を、このワーカーへ記録する仕組み(版の報告の API と、`container_key` の割り当て)が別に必要で、現在は作っていない。
+
 ## 5. 履歴の対象にならないもの
 
 - apt で入れたツール(rg・ag・dig など)の最新版(`apt-cache policy` の候補版)は、ヘルスチェックのバージョン表に別に表示されるが、この履歴には記録しない。記録するのは、`latestToolVersions.ts` が調べる配布元の最新版と、スナップショットに記録された導入版が、名前で対応するもの。
@@ -206,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_history_checked
 | 履歴の記録(追記・重複なし・一緒に確定・取得失敗の記録・コンテナ別) | 実際のマイグレーション SQL を、Node の SQLite に適用して検証した(外部キーも有効) |
 | ページのヘルスチェックが、履歴の記録を呼ぶこと | ページの出力に、呼び出しが含まれることを検証した。ページのスクリプトは `node --check` で構文を確認した |
 | `/status` への登録(定義・マイグレーション SQL・列のキー・グループ・外部キー) | 文字列で検証した |
+| 全コンテナの確認(4.8)の画面 | 偽の API の応答を返して、実際のブラウザ(Chromium)で、コンテナ2つの表示・新版あり件数・履歴の展開・取得の順序・ページのエラーが無いことを確認した。実際の D1 の値での表示は、未確認 |
 | 実際の D1 での動作、`/cf-containers` を開いてのヘルスチェックから履歴が追記されること | **未確認**。マイグレーション 0191 の適用後に、確認が必要 |
 | 更新の手順(第3章) | 2026-10-30 の更新(PR #2491。作成時点ではマージ前)で、Node・Codex・gh・cloudflared・Tailscale を、この手順で上げた。イメージのビルドは、未確認 |
 
@@ -213,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_history_checked
 
 - 6 時間 cron の確認を、履歴に含めるか。
 - 履歴の保持期間と、古い行の削除。
+- 他のコンテナの導入版を、このワーカーへ記録する仕組み(4.8 の注意)。
 - 更新の頻度と、自動で更新を提案する仕組み。
 - apt のツールの最新版を、履歴に含めるか。
 - ビルドのキャッシュが効いて、apt のツールが古いままになる場合の扱い。
