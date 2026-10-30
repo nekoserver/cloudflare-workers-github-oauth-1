@@ -1,16 +1,45 @@
 const http = require('node:http');
 const net = require('node:net');
-const { createPwaAuth, injectBootstrap } = require('./t3-pwa-auth.cjs');
+const { createPwaAuth, injectBootstrap, nativeSession } = require('./t3-pwa-auth.cjs');
+const { MAX_BODY, isUnauthenticatedSessionBody, staleSessionClears } = require('./t3-stale-session.cjs');
 // Loopback-only HTTPS tunnel backend. Keep T3 authentication; partition its
 // HttpOnly session cookie by the embedding site for third-party-cookie browsers.
-function createServer(pwa) {
+// T3のセッション用クッキーの名前。認証していない状態でも /api/auth/session が返す。取得できなければnull(何も削除しない)。
+async function defaultCookieName() {
+  try {
+    const name = (await nativeSession({}))?.auth?.sessionCookieName;
+    return typeof name === 'string' && /^[A-Za-z0-9_.-]+$/.test(name) ? name : null;
+  } catch { return null; }
+}
+function createServer(pwa, options = {}) {
+const upstreamPort = options.upstreamPort || 3773;
+const resolveCookieName = options.resolveCookieName || defaultCookieName;
 const server = http.createServer(async (req, res) => {
   if (await pwa.handle(req, res)) return;
-  const headers = { ...req.headers, host: '127.0.0.1:3773', 'accept-encoding': 'identity' };
-  const upstream = http.request({ hostname: '127.0.0.1', port: 3773, method: req.method, path: req.url, headers }, response => {
+  const headers = { ...req.headers, host: '127.0.0.1:' + upstreamPort, 'accept-encoding': 'identity' };
+  const upstream = http.request({ hostname: '127.0.0.1', port: upstreamPort, method: req.method, path: req.url, headers }, response => {
     const next = { ...response.headers };
     if (next['set-cookie']) next['set-cookie'] = next['set-cookie'].map(cookie => cookie.replace(/;\s*SameSite=[^;]+/ig, '').replace(/;\s*Secure\b/ig, '').replace(/;\s*Partitioned\b/ig, '') + '; SameSite=None; Secure; Partitioned');
     next['content-security-policy'] = "frame-ancestors https://dynamicneko.nekoflare.workers.dev http://127.0.0.1:4173";
+    // T3が拒否した古いセッションのクッキーを削除して、ペアリング画面へ戻れるようにする(t3-stale-session.cjs)。
+    // 401(通常のAPI)と、200の authenticated:false(/api/auth/session)の両方を対象にする。
+    const isSessionCheck = req.method === 'GET' && req.url.split('?')[0] === '/api/auth/session' && response.statusCode === 200;
+    if (req.headers.cookie && (response.statusCode === 401 || isSessionCheck)) {
+      const chunks = []; let size = 0;
+      response.on('data', chunk => { chunks.push(chunk); size += chunk.length; });
+      response.on('error', () => res.destroy());
+      response.on('end', () => {
+        const body = Buffer.concat(chunks);
+        const unauthenticated = isSessionCheck && size <= MAX_BODY && isUnauthenticatedSessionBody(body.toString('utf8'));
+        const send = clears => {
+          if (clears.length) { next['set-cookie'] = [...(next['set-cookie'] || []), ...clears]; console.error('T3 stale session cleared: variants=' + clears.length); }
+          res.writeHead(response.statusCode, next); res.end(body);
+        };
+        if (response.statusCode !== 401 && !unauthenticated) return send([]);
+        resolveCookieName().then(cookieName => send(staleSessionClears({ status: response.statusCode, unauthenticated, cookieHeader: req.headers.cookie, cookieName }))).catch(() => send([]));
+      });
+      return;
+    }
     if (req.method === 'GET' && response.headers['content-type']?.includes('text/html')) {
       delete next['content-length']; delete next.etag;
       next['cache-control'] = 'no-store';
