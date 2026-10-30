@@ -6,7 +6,7 @@ ARG RUBY_VERSION=4.0.9
 
 # Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
 # pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
-FROM golang:1.27.1-trixie AS tailscale-build
+FROM golang:1.27.3-trixie AS tailscale-build
 ARG TAILSCALE_VERSION
 RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
     && /go/bin/tailscale version \
@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
 # ghはGoのソース(proxy.golang.org)からビルドする。リリースのdebは使わない。
-FROM golang:1.27.1-trixie AS gh-build
+FROM golang:1.27.3-trixie AS gh-build
 ARG GH_VERSION
 RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
     && /go/bin/gh --version
