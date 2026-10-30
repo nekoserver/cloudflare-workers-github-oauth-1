@@ -1,6 +1,6 @@
 # ソースからビルドする版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
-ARG TAILSCALE_VERSION=1.104.1
-ARG GH_VERSION=2.103.0
+ARG TAILSCALE_VERSION=1.104.4
+ARG GH_VERSION=2.103.3
 ARG JJ_VERSION=0.46.0
 ARG RUBY_VERSION=4.0.9
 
@@ -51,15 +51,15 @@ FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
 # digest is pinned independently of the download, so corruption fails the build.
-ARG NODE_VERSION=26.12.1
-ARG NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
+ARG NODE_VERSION=26.13.0
+ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 ARG NPM_VERSION=12.2.0
-ARG CODEX_VERSION=0.164.0
+ARG CODEX_VERSION=0.166.0
 ARG T3_VERSION=0.1.3
 ARG CLAUDE_VERSION=2.1.309
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
-ARG CLOUDFLARED_VERSION=2026.10.1
+ARG CLOUDFLARED_VERSION=2026.10.6
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
@@ -92,7 +92,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-websock
     && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
 COPY --from=gh-build /go/bin/gh /usr/bin/gh
 COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj
-ARG CLOUDFLARED_SHA256=200573c872174ab449965655febadef8edfbb144ebcaa391b700b2dedbadb3cd
+ARG CLOUDFLARED_SHA256=13d9a724a4d4271958a3728982ee983870a100959a159d2fa263b3450d0be72a
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
     && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
