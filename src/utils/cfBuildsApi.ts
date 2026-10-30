@@ -121,3 +121,43 @@ export function describeShape(page: number, result: unknown): string {
   }
   return `page${page}: ${typeof result}`;
 }
+
+export type BuildActivity = {
+  uuid: string;
+  status: string | null;
+  outcome: string | null;
+  branch: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+};
+
+// 直近のビルド(新しい順に最大8件)の、状態・結果・ブランチ・時刻。ログは取得しない(状態の帯用の軽い取得)。
+export async function fetchBuildActivity(
+  credentials: CfBuildsCredentials,
+  scriptName: string,
+  fetcher: typeof fetch = fetch
+): Promise<BuildActivity[]> {
+  const account = `${API}/accounts/${encodeURIComponent(credentials.accountId)}`;
+  const scripts = await call<Array<{ id: string; tag: string }>>(`${account}/workers/scripts`, credentials, fetcher);
+  const tag = scripts.find((s) => s.id === scriptName)?.tag;
+  if (!tag) throw new Error(`Worker ${scriptName} が一覧に見つかりません`);
+  const builds = await call<Array<{
+    build_uuid: string;
+    status?: string | null;
+    build_outcome?: string | null;
+    created_on?: string | null;
+    started_on?: string | null;
+    build_trigger_metadata?: { branch?: string | null } | null;
+  }>>(`${account}/builds/workers/${encodeURIComponent(tag)}/builds`, credentials, fetcher);
+  return [...builds]
+    .sort((a, b) => String(b.created_on ?? '').localeCompare(String(a.created_on ?? '')))
+    .slice(0, 8)
+    .map((b) => ({
+      uuid: b.build_uuid,
+      status: b.status ?? null,
+      outcome: b.build_outcome ?? null,
+      branch: b.build_trigger_metadata?.branch ?? null,
+      createdAt: b.created_on ?? null,
+      startedAt: b.started_on ?? null,
+    }));
+}

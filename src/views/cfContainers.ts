@@ -60,6 +60,24 @@ main details[data-section]:focus-visible { outline: 2px solid var(--accent); out
   .page-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .section-sidebar { position: static; max-height: none; }
 }
+/* コンテナの状態の帯(ページ最上部と左サイドパネルの最上位)。色はCSS変数だけを使う。 */
+.status-banner, .sidebar-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  min-height: 44px; padding: 8px 12px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.status-label { font-weight: 700; font-size: 16px; }
+.status-detail { color: var(--muted); font-size: 13px; }
+[data-kind="loading"] .status-label, [data-kind="unknown"] .status-label { color: var(--muted); }
+[data-kind="building"] .status-label { color: var(--err); animation: status-blink 1s steps(2, start) infinite; }
+[data-kind="building"] .status-detail { color: var(--err); }
+[data-kind="standby"] .status-label { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 999px; padding: 2px 12px; }
+[data-kind="stopped"] .status-label { color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; }
+@keyframes status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-kind="building"] .status-label { animation: none; }
+}
+.sidebar-status { margin-bottom: 8px; }
 h1 { font-size: 20px; margin-bottom: 4px; }
 .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .notice {
@@ -117,6 +135,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <body>
 <div class="page-layout">
 <aside class="section-sidebar" aria-label="セクション移動">
+  <div id="sidebar-status" class="sidebar-status" data-kind="loading" role="status" aria-live="polite">
+    <span class="status-label">確認中…</span><span class="status-detail"></span>
+  </div>
   <details open>
     <summary>ページ内メニュー</summary>
     <a href="/cf-containers/planner">コンテナ構成プランナー</a>
@@ -136,6 +157,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </details>
 </aside>
 <main>
+<div id="status-banner" class="status-banner" data-kind="loading" role="status" aria-live="polite">
+  <span class="status-label">確認中…</span><span class="status-detail">コンテナの状態を確認しています</span>
+</div>
 <p><a href="/container-monitor">全コンテナ・Tailscale監視</a></p>
 <h1>Cloudflare Containers（デモ）</h1>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
@@ -826,6 +850,73 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .catch(function (err) { reportLog.textContent = 'エラー: ' + String(err); reportToggle.checked = !reportToggle.checked; })
       .finally(function () { reportToggle.disabled = false; });
   });
+
+  // コンテナの状態の帯(ページ最上部と左サイドパネル)。状態はAPIから取り、ビルド中は開始時刻と経過時間を1秒ごとに更新する。
+  var BANNER_LABELS = { building: 'ビルド中', standby: '待機中', stopped: '停止中', unknown: '状態不明' };
+  var bannerTargets = [document.getElementById('status-banner'), document.getElementById('sidebar-status')];
+  var bannerState = null;
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function formatElapsed(ms) {
+    var total = Math.max(0, Math.floor(ms / 1000));
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var sec = total % 60;
+    return (h > 0 ? h + ':' + pad2(m) : String(m)) + ':' + pad2(sec);
+  }
+  function formatStart(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+  function bannerDetail(state) {
+    if (state.kind === 'building') {
+      var start = state.build && state.build.startedAt;
+      var parts = [];
+      if (start) {
+        parts.push('ビルド開始 ' + formatStart(start));
+        parts.push('経過 ' + formatElapsed(Date.now() - new Date(start).getTime()));
+      } else {
+        parts.push('ビルド開始時刻を取得できません');
+      }
+      if (state.build && state.build.status) parts.push('(status: ' + state.build.status + ')');
+      return parts.join(' ');
+    }
+    var notes = [];
+    if (state.container && state.container.label) notes.push(state.container.label);
+    if (state.container && state.container.error) notes.push('取得エラー: ' + state.container.error);
+    if (state.build && state.build.checked === false && state.build.error) notes.push('ビルドの状態: ' + state.build.error);
+    return notes.join(' / ');
+  }
+  function renderBanner() {
+    if (!bannerState) return;
+    var label = BANNER_LABELS[bannerState.kind] || BANNER_LABELS.unknown;
+    var detail = bannerDetail(bannerState);
+    bannerTargets.forEach(function (target) {
+      if (!target) return;
+      target.setAttribute('data-kind', bannerState.kind);
+      target.querySelector('.status-label').textContent = label;
+      target.querySelector('.status-detail').textContent = detail;
+    });
+  }
+  function loadBanner() {
+    fetch('/api/cf-containers/banner', { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error || !data.kind) throw new Error(data.error || '状態を読めません');
+        bannerState = data;
+        renderBanner();
+      })
+      .catch(function (err) {
+        bannerState = { kind: 'unknown', container: { label: '', error: String(err) }, build: { checked: false } };
+        renderBanner();
+      })
+      .finally(function () {
+        // ビルド中は短い間隔、それ以外はゆっくり確認する。
+        setTimeout(loadBanner, bannerState && bannerState.kind === 'building' ? 15000 : 30000);
+      });
+  }
+  setInterval(function () { if (bannerState && bannerState.kind === 'building') renderBanner(); }, 1000);
+  loadBanner();
 
   var btnHealth = document.getElementById('btn-health');
   var healthTable = document.getElementById('health-table');

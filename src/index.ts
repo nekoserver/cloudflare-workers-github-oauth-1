@@ -59,7 +59,8 @@ import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
 import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
-import { fetchLatestBuildLog } from './utils/cfBuildsApi';
+import { fetchBuildActivity, fetchLatestBuildLog } from './utils/cfBuildsApi';
+import { buildBannerState } from './utils/cfContainerBanner';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './utils/authorizedKeyInput';
 import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
@@ -20271,6 +20272,25 @@ app.post('/api/cf-containers/sessions/:id/note', authMiddleware, cfDashboardAdmi
     logger.error('[container-sessions] note save failed',{error:String(error)});
     return jsonUtf8({error:'作業メモを保存できませんでした'},503);
   }
+});
+
+// ページの最上部と左サイドパネルに出す、コンテナの状態(ビルド中・待機中・停止中)。読み取りだけで、コンテナは起動しない。
+app.get('/api/cf-containers/banner', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const container = await buildContainerStatusResponse(await getDemoContainerStub(c.env));
+  let builds: Awaited<ReturnType<typeof fetchBuildActivity>> = [];
+  let buildError: string | undefined;
+  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    buildError = 'CF_CONTAINER_API_TOKEN/CLOUDFLARE_ACCOUNT_IDが未設定のため、ビルドの状態は確認できません';
+  } else {
+    try {
+      builds = await fetchBuildActivity({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! }, 'cloudflare-workers-github-oauth-1');
+    } catch (err) {
+      buildError = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-banner] ビルドの状態の取得に失敗', { error: buildError });
+    }
+  }
+  return jsonUtf8({ ...buildBannerState({ builds, buildError, container }), checkedAt: new Date().toISOString() });
 });
 
 app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
