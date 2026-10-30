@@ -73,6 +73,8 @@ main details[data-section]:focus-visible { outline: 2px solid var(--accent); out
 [data-kind="building"] .status-detail { color: var(--err); }
 [data-kind="standby"] .status-label { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 999px; padding: 2px 12px; }
 [data-kind="stopped"] .status-label { color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; }
+[data-kind="build_failed"] .status-label { color: var(--err); background: var(--err-bg); border: 1px solid var(--err); border-radius: 999px; padding: 2px 12px; }
+[data-kind="build_failed"] .status-detail { color: var(--err); }
 @keyframes status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) {
   [data-kind="building"] .status-label { animation: none; }
@@ -852,7 +854,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   });
 
   // コンテナの状態の帯(ページ最上部と左サイドパネル)。状態はAPIから取り、ビルド中は開始時刻と経過時間を1秒ごとに更新する。
-  var BANNER_LABELS = { building: 'ビルド中', standby: '待機中', stopped: '停止中', unknown: '状態不明' };
+  var BANNER_LABELS = { building: 'ビルド中', build_failed: 'ビルド失敗', standby: '待機中', stopped: '停止中', unknown: '状態不明' };
   var bannerTargets = [document.getElementById('status-banner'), document.getElementById('sidebar-status')];
   var bannerState = null;
   function pad2(n) { return n < 10 ? '0' + n : String(n); }
@@ -882,6 +884,10 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       return parts.join(' ');
     }
     var notes = [];
+    if (state.kind === 'build_failed') {
+      var failedAt = state.build && state.build.startedAt;
+      notes.push((failedAt ? formatStart(failedAt) + ' 開始の' : '') + '本番のビルドが失敗しました。コンテナは前のイメージのまま動いています。「最新ビルドのログを取得」で原因を確かめてください');
+    }
     if (state.container && state.container.label) notes.push(state.container.label);
     if (state.container && state.container.error) notes.push('取得エラー: ' + state.container.error);
     if (state.build && state.build.checked === false && state.build.error) notes.push('ビルドの状態: ' + state.build.error);
