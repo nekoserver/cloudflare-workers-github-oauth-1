@@ -69,9 +69,20 @@ export function buildPackageReleaseStatuses(
   });
 }
 
-export async function savePackageReleaseStatuses(db: D1Database, records: PackageReleaseStatus[]): Promise<void> {
+// 確認の契機。health_check=/cf-containersのヘルスチェックを実行したとき、page_load=ページを開いたとき。
+export type ReleaseCheckTrigger = 'health_check' | 'page_load';
+
+// 未指定はpage_load(ページ表示時の既存の呼び出しは本文なし)。それ以外の値はnull(呼び出し元が400にする)。
+export function parseReleaseCheckTrigger(value: unknown): ReleaseCheckTrigger | null {
+  if (value === undefined) return 'page_load';
+  return value === 'health_check' || value === 'page_load' ? value : null;
+}
+
+// 現在の状態(パッケージごとに1行・上書き)と、履歴(確認のたびに追記)を、同じバッチで確定する。
+// 片方だけ反映されることがないよう、どちらかが失敗すれば両方とも反映しない。
+export async function savePackageReleaseStatuses(db: D1Database, records: PackageReleaseStatus[], trigger: ReleaseCheckTrigger): Promise<void> {
   if (!records.length) return;
-  await db.batch(records.map((row) => db.prepare(`
+  const upserts = records.map((row) => db.prepare(`
     INSERT INTO cf_container_package_release_status (
       container_key, package_name, installed_version, installed_status,
       latest_version, latest_release_at, current_release_at,
@@ -96,5 +107,47 @@ export async function savePackageReleaseStatuses(db: D1Database, records: Packag
     row.latestVersion, row.latestReleaseAt, row.currentReleaseAt,
     row.releaseStatus, row.updateStatus, row.source, row.error,
     row.installedSnapshotId, row.installedSnapshotAt, row.checkedAt,
-  )));
+  ));
+  const history = records.map((row) => db.prepare(`
+    INSERT OR IGNORE INTO cf_container_package_release_history (
+      container_key, package_name, installed_version, installed_status,
+      latest_version, latest_release_at, current_release_at,
+      release_status, update_status, source, error,
+      installed_snapshot_id, installed_snapshot_at, trigger_kind, checked_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    row.containerKey, row.packageName, row.installedVersion, row.installedStatus,
+    row.latestVersion, row.latestReleaseAt, row.currentReleaseAt,
+    row.releaseStatus, row.updateStatus, row.source, row.error,
+    row.installedSnapshotId, row.installedSnapshotAt, trigger, row.checkedAt,
+  ));
+  await db.batch([...upserts, ...history]);
+}
+
+export type PackageReleaseCheckResult = {
+  containerKey: string;
+  trigger: ReleaseCheckTrigger;
+  checkedAt: string;
+  packageCount: number;
+  historyRecorded: number;
+  updatesAvailable: number;
+  latestUnavailable: number;
+};
+
+// 最新版と導入版を照合して、現在の状態と履歴に記録する。エンドポイントから切り出した本体(テストしやすくするため)。
+export async function recordPackageReleaseCheck(
+  db: D1Database,
+  input: { containerKey: string; snapshot: SnapshotRecord | null; latest: LatestToolVersions; trigger: ReleaseCheckTrigger; checkedAt: string },
+): Promise<PackageReleaseCheckResult> {
+  const records = buildPackageReleaseStatuses(input.containerKey, input.snapshot, input.latest, input.checkedAt);
+  await savePackageReleaseStatuses(db, records, input.trigger);
+  return {
+    containerKey: input.containerKey,
+    trigger: input.trigger,
+    checkedAt: input.checkedAt,
+    packageCount: records.length,
+    historyRecorded: records.length,
+    updatesAvailable: records.filter((row) => row.updateStatus === 'update_available').length,
+    latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
+  };
 }

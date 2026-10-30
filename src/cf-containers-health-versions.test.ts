@@ -73,7 +73,7 @@ describe('前回表示時との差分', () => {
   it('開いた時点でD1の前回の記録を読み、ヘルスチェックのたびにD1へ記録する', () => {
     expect(view).toContain("fetch('/api/cf-containers/snapshot/latest')");
     expect(view).toContain("fetch('/api/cf-containers/snapshot', {");
-    expect(view).toContain('recordSnapshotToServer();');
+    expect(view).toContain("recordSnapshotToServer().then(function () { return syncPackageRelease('health_check'); });");
   });
   it('接続時間・支出・版・コミットの差分を色分けする', () => {
     expect(view).toContain("el.className = dSec > 0 || dUsd > 0 ? 'diff-up' : 'diff-same';");

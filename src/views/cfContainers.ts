@@ -230,7 +230,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   </div>
   <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
-  <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時に最新版・導入状況をD1へ記録します。</div>
+  <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時とヘルスチェックのたびに、最新版・導入状況をD1へ記録し、履歴へ追記します。</div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-report" tabindex="-1" data-section="report">
@@ -340,7 +340,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   // ヘルスチェックの結果がそろったら、今回の値をD1へ記録する
   function recordSnapshotToServer() {
     var c = currentSnapshot.cost || {};
-    fetch('/api/cf-containers/snapshot', {
+    return fetch('/api/cf-containers/snapshot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -852,7 +852,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
-        recordSnapshotToServer();
+        recordSnapshotToServer().then(function () { return syncPackageRelease('health_check'); });
         healthLog.textContent = '';
       })
       .catch(function (err) {
@@ -863,20 +863,29 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       });
   });
 
-  // ページ表示時に上流リリース情報と最後に記録した導入版をD1へ同期する。
+  // 上流リリース情報(パッケージ名・最新版)と、最後に記録した導入版との対応状況を、確認日時つきでD1へ記録する。
+  // 現在の状態(パッケージごとに1行)を更新し、確認のたびに履歴へも追記する。trigger: 'health_check'(ヘルスチェックのたび)か 'page_load'(ページ表示時)。
   // コンテナのhealth endpointは呼ばないため、ページ表示を契機にコンテナを起動しない。
   var versionStatusLog = document.getElementById('version-status-log');
-  fetch('/api/cf-containers/package-release-status/check', { method: 'POST' })
-    .then(readJsonOrText)
-    .then(function (data) {
-      if (data.error) { versionStatusLog.textContent = 'D1記録エラー: ' + data.error; return; }
-      var basis = data.installedSnapshotAt
-        ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
-        : '導入版の記録なし / ';
-      versionStatusLog.textContent = 'D1へ' + data.packageCount + 'パッケージを記録しました。' + basis
-        + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
+  function syncPackageRelease(trigger) {
+    return fetch('/api/cf-containers/package-release-status/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trigger: trigger })
     })
-    .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) { versionStatusLog.textContent = 'D1記録エラー: ' + data.error; return; }
+        var basis = data.installedSnapshotAt
+          ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
+          : '導入版の記録なし / ';
+        versionStatusLog.textContent = (trigger === 'health_check' ? 'ヘルスチェックの結果として、' : 'ページ表示時に、')
+          + 'D1へ' + data.packageCount + 'パッケージを記録し、履歴へ' + data.historyRecorded + '行を追記しました。' + basis
+          + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
+      })
+      .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
+  }
+  syncPackageRelease('page_load');
 
   var btnNet = document.getElementById('btn-net');
   var netLog = document.getElementById('net-log');
