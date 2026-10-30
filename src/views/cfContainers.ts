@@ -126,6 +126,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-package-updates">全コンテナの更新情報</a><button type="button" class="menu-toggle" data-section="package-updates" aria-expanded="false" aria-label="全コンテナの更新情報 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-t3">T3・Codex・Tailscale</a><button type="button" class="menu-toggle" data-section="t3" aria-expanded="false" aria-label="T3・Codex・Tailscale の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
@@ -230,7 +231,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   </div>
   <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
-  <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時に最新版・導入状況をD1へ記録します。</div>
+  <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時とヘルスチェックのたびに、最新版・導入状況をD1へ記録し、履歴へ追記します。</div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-report" tabindex="-1" data-section="report">
@@ -271,6 +272,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   </div>
   <pre id="t3-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+</details>
+<details class="card" id="section-package-updates" tabindex="-1" data-section="package-updates" open>
+  <summary>全コンテナのパッケージ更新情報(最新版・対応状況・履歴)</summary>
+  <p class="subtitle" style="margin:0 0 6px;">ヘルスチェックのたびにD1へ記録した、コンテナごとのパッケージの最新版・導入版・対応状況・確認日時です。パッケージの「履歴」を押すと、確認のたびの推移を見られます。版の記録が無いコンテナは、ここには出ません。</p>
+  <div class="status-row">
+    <button id="btn-package-updates" type="button">全コンテナの更新情報を読み込む</button>
+  </div>
+  <div id="package-updates-body" style="margin-top:8px;"></div>
+  <pre id="package-updates-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
 </details>
 <details class="card" id="section-buildlog" tabindex="-1" data-section="buildlog">
   <summary>本番ビルド(Workers Builds)のログ</summary>
@@ -340,7 +350,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   // ヘルスチェックの結果がそろったら、今回の値をD1へ記録する
   function recordSnapshotToServer() {
     var c = currentSnapshot.cost || {};
-    fetch('/api/cf-containers/snapshot', {
+    return fetch('/api/cf-containers/snapshot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -384,6 +394,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     if (name === 'health') lines.push(document.getElementById('health-table').hidden ? '未確認' : '確認済み: ' + document.getElementById('health-time').textContent);
     if (name === 'report') lines.push('Slack通知: ' + (document.getElementById('report-slack-toggle').checked ? 'ON' : 'OFF'));
     if (name === 't3') lines.push(document.getElementById('t3-table').hidden ? '未確認' : '総合判定: ' + document.getElementById('t3-verdict').textContent);
+    if (name === 'package-updates') lines.push(document.getElementById('package-updates-body').children.length ? '読み込み済み: ' + document.getElementById('package-updates-log').textContent : '未読み込み');
     if (name === 'net') lines.push(document.getElementById('net-log').textContent ? '取得済み' : '未取得');
     if (name === 'buildlog') lines.push(document.getElementById('buildlog-log').textContent ? '取得済み' : '未取得');
     if (name === 'tunnels') lines.push(document.getElementById('tunnel-table').hidden ? '未取得' : '一覧: ' + document.getElementById('tunnel-tbody').rows.length + '件');
@@ -852,7 +863,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
-        recordSnapshotToServer();
+        recordSnapshotToServer().then(function () { return syncPackageRelease('health_check'); });
         healthLog.textContent = '';
       })
       .catch(function (err) {
@@ -863,20 +874,147 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       });
   });
 
-  // ページ表示時に上流リリース情報と最後に記録した導入版をD1へ同期する。
+  // 上流リリース情報(パッケージ名・最新版)と、最後に記録した導入版との対応状況を、確認日時つきでD1へ記録する。
+  // 現在の状態(パッケージごとに1行)を更新し、確認のたびに履歴へも追記する。trigger: 'health_check'(ヘルスチェックのたび)か 'page_load'(ページ表示時)。
   // コンテナのhealth endpointは呼ばないため、ページ表示を契機にコンテナを起動しない。
   var versionStatusLog = document.getElementById('version-status-log');
-  fetch('/api/cf-containers/package-release-status/check', { method: 'POST' })
-    .then(readJsonOrText)
-    .then(function (data) {
-      if (data.error) { versionStatusLog.textContent = 'D1記録エラー: ' + data.error; return; }
-      var basis = data.installedSnapshotAt
-        ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
-        : '導入版の記録なし / ';
-      versionStatusLog.textContent = 'D1へ' + data.packageCount + 'パッケージを記録しました。' + basis
-        + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
+  function syncPackageRelease(trigger) {
+    return fetch('/api/cf-containers/package-release-status/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trigger: trigger })
     })
-    .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) { versionStatusLog.textContent = 'D1記録エラー: ' + data.error; return; }
+        var basis = data.installedSnapshotAt
+          ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
+          : '導入版の記録なし / ';
+        versionStatusLog.textContent = (trigger === 'health_check' ? 'ヘルスチェックの結果として、' : 'ページ表示時に、')
+          + 'D1へ' + data.packageCount + 'パッケージを記録し、履歴へ' + data.historyRecorded + '行を追記しました。' + basis
+          + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
+        loadPackageUpdates();
+      })
+      .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
+  }
+
+  // 全コンテナのパッケージ更新情報(D1の現在の対応状況と、確認のたびの履歴)。表示はtextContentだけで組み立てる。
+  var PACKAGE_UPDATE_LABELS = {
+    update_available: '新版あり', current_or_ahead: '最新', latest_unavailable: '最新版を取得できず',
+    unsupported: '対象外', not_detected: '導入版を検出できず', unknown: '導入版の記録なし'
+  };
+  var packageUpdatesBody = document.getElementById('package-updates-body');
+  var packageUpdatesLog = document.getElementById('package-updates-log');
+  function makeEl(tag, text) {
+    var node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  function shortTime(iso) { return iso ? String(iso).replace('T', ' ').slice(0, 16) + ' UTC' : ''; }
+  function updateBadge(status) {
+    var span = makeEl('span', PACKAGE_UPDATE_LABELS[status] || String(status));
+    span.className = 'badge';
+    span.setAttribute('data-ok', status === 'current_or_ahead' ? 'true' : 'false');
+    return span;
+  }
+  function appendRow(table, cells) {
+    var tr = document.createElement('tr');
+    cells.forEach(function (cell) {
+      var td = document.createElement('td');
+      if (cell && cell.nodeType) td.appendChild(cell); else td.textContent = cell == null ? '' : String(cell);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+    return tr;
+  }
+  function makeHeader(labels) {
+    var thead = document.createElement('thead');
+    var tr = document.createElement('tr');
+    labels.forEach(function (label) { tr.appendChild(makeEl('th', label)); });
+    thead.appendChild(tr);
+    return thead;
+  }
+  function renderHistory(holder, data) {
+    holder.textContent = '';
+    var rows = data.rows || [];
+    if (rows.length === 0) { holder.appendChild(makeEl('p', '履歴はまだありません。')); return; }
+    var table = document.createElement('table');
+    table.className = 'health-table';
+    table.appendChild(makeHeader(['確認日時', '導入版', '最新版', '対応状況', '契機', '取得失敗の理由']));
+    var tbody = document.createElement('tbody');
+    rows.forEach(function (row) {
+      appendRow(tbody, [shortTime(row.checkedAt), row.installedVersion || '', row.latestVersion || '', updateBadge(row.updateStatus),
+        row.trigger === 'health_check' ? 'ヘルスチェック' : 'ページ表示', row.error || '']);
+    });
+    table.appendChild(tbody);
+    holder.appendChild(table);
+  }
+  function toggleHistory(containerKey, packageName, afterRow, button) {
+    if (afterRow.nextSibling && afterRow.nextSibling.getAttribute && afterRow.nextSibling.getAttribute('data-history-for') === containerKey + '/' + packageName) {
+      afterRow.parentNode.removeChild(afterRow.nextSibling);
+      return;
+    }
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-history-for', containerKey + '/' + packageName);
+    var td = document.createElement('td');
+    td.colSpan = 7;
+    td.textContent = '履歴を読み込んでいます…';
+    tr.appendChild(td);
+    afterRow.parentNode.insertBefore(tr, afterRow.nextSibling);
+    button.disabled = true;
+    fetch('/api/cf-containers/package-release-status/history?containerKey=' + encodeURIComponent(containerKey) + '&packageName=' + encodeURIComponent(packageName) + '&limit=50')
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) { td.textContent = '履歴の取得に失敗: ' + data.error; return; }
+        renderHistory(td, data);
+      })
+      .catch(function (err) { td.textContent = '履歴の取得に失敗: ' + String(err); })
+      .finally(function () { button.disabled = false; });
+  }
+  function renderPackageUpdates(data) {
+    packageUpdatesBody.textContent = '';
+    var containers = data.containers || [];
+    if (containers.length === 0) {
+      packageUpdatesBody.appendChild(makeEl('p', 'パッケージの記録があるコンテナはありません。ヘルスチェックを行うと記録されます。'));
+      return;
+    }
+    containers.forEach(function (container) {
+      var details = document.createElement('details');
+      details.open = true;
+      details.setAttribute('data-container-key', container.containerKey);
+      details.appendChild(makeEl('summary', container.containerKey + ' — 新版あり ' + container.updatesAvailable + '件 / 全 ' + container.packageCount + '件 / 最終確認 ' + shortTime(container.lastCheckedAt)));
+      var table = document.createElement('table');
+      table.className = 'health-table';
+      table.appendChild(makeHeader(['パッケージ', '導入版', '最新版', '対応状況', '確認日時', '最新版の取得元', '履歴']));
+      var tbody = document.createElement('tbody');
+      container.packages.forEach(function (pkg) {
+        var button = makeEl('button', '履歴');
+        button.type = 'button';
+        var row = appendRow(tbody, [pkg.packageName, pkg.installedVersion || '', pkg.latestVersion || '', updateBadge(pkg.updateStatus),
+          shortTime(pkg.checkedAt), pkg.source || '', button]);
+        button.addEventListener('click', function () { toggleHistory(container.containerKey, pkg.packageName, row, button); });
+      });
+      table.appendChild(tbody);
+      var scroll = document.createElement('div');
+      scroll.className = 'pricing-scroll';
+      scroll.appendChild(table);
+      details.appendChild(scroll);
+      packageUpdatesBody.appendChild(details);
+    });
+  }
+  function loadPackageUpdates() {
+    packageUpdatesLog.textContent = '読み込み中…';
+    return fetch('/api/cf-containers/package-release-status/overview')
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) { packageUpdatesLog.textContent = '読み込みに失敗: ' + data.error; return; }
+        renderPackageUpdates(data);
+        packageUpdatesLog.textContent = 'コンテナ ' + (data.containers || []).length + '件 / 取得 ' + data.checkedAt;
+      })
+      .catch(function (err) { packageUpdatesLog.textContent = '読み込みに失敗: ' + String(err); });
+  }
+  document.getElementById('btn-package-updates').addEventListener('click', loadPackageUpdates);
+  syncPackageRelease('page_load');
 
   var btnNet = document.getElementById('btn-net');
   var netLog = document.getElementById('net-log');

@@ -58,7 +58,7 @@ import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, 
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
-import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
+import { getPackageReleaseHistory, getPackageReleaseOverview, parsePackageHistoryQuery, parseReleaseCheckTrigger, recordPackageReleaseCheck } from './utils/cfContainerPackageReleaseStatus';
 import { fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
 import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './utils/authorizedKeyInput';
@@ -685,6 +685,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 't3_pwa_handoff_events', migration: '0190', description: 'T3 PWA承認・認証・失効の追記型監査履歴', syncPolicy: 'manual' },
   { name: 'askgk_timeout_settings', migration: '0189', description: 'askgkの全利用者共通待ち時間と変更履歴（最大300秒）', syncPolicy: 'auto' },
   { name: 'cf_container_package_release_status', migration: '0188', description: '/cf-containers表示時に取得したパッケージ別最新版・リリース日時・導入状況', syncPolicy: 'auto' },
+  { name: 'cf_container_package_release_history', migration: '0191', description: '/cf-containersのヘルスチェックのたびに追記する、コンテナ別・パッケージ別の最新版・導入版・対応状況・確認日時の履歴', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -3365,6 +3366,29 @@ CREATE TABLE IF NOT EXISTS cf_container_package_release_status (
 );
 CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_status_checked
   ON cf_container_package_release_status(checked_at);`,
+  '0191': `CREATE TABLE IF NOT EXISTS cf_container_package_release_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  container_key TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  installed_version TEXT,
+  installed_status TEXT NOT NULL CHECK(installed_status IN ('installed','not_detected','not_recorded','no_snapshot')),
+  latest_version TEXT,
+  latest_release_at TEXT,
+  current_release_at TEXT,
+  release_status TEXT NOT NULL CHECK(release_status IN ('available','failed','unsupported')),
+  update_status TEXT NOT NULL CHECK(update_status IN ('update_available','current_or_ahead','latest_unavailable','unsupported','not_detected','unknown')),
+  source TEXT,
+  error TEXT,
+  installed_snapshot_id INTEGER REFERENCES cf_container_snapshots(id),
+  installed_snapshot_at TEXT,
+  trigger_kind TEXT NOT NULL CHECK(trigger_kind IN ('health_check','page_load')),
+  checked_at TEXT NOT NULL,
+  UNIQUE(container_key, package_name, checked_at, trigger_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_history_package
+  ON cf_container_package_release_history(container_key, package_name, checked_at);
+CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_history_checked
+  ON cf_container_package_release_history(checked_at);`,
   '0184': `-- Immutable observations: concurrent/partial fetches cannot overwrite a completed measurement.
 CREATE TABLE IF NOT EXISTS cf_container_build_measurements (
   snapshot_key TEXT PRIMARY KEY,
@@ -3588,6 +3612,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   t3_pwa_sessions: { id: 'pk', handoff_id: 'uk+fk', attempt_id: 'uk', native_session_id: 'uk', principal_id: 'idx', issued_at: 'idx', expires_at: 'idx', last_authenticated_at: 'idx' },
   t3_pwa_handoff_events: { id: 'pk', handoff_id: 'fk+idx', session_id: 'fk+idx', recorded_at: 'idx' },
   cf_container_package_release_status: { container_key: 'pk', package_name: 'pk', installed_snapshot_id: 'fk', checked_at: 'idx' },
+  cf_container_package_release_history: { id: 'pk', container_key: 'idx', package_name: 'idx', installed_snapshot_id: 'fk', checked_at: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3761,6 +3786,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cf_container_snapshots: 'system',
   cf_container_snapshot_diffs: 'system',
   cf_container_package_release_status: 'system',
+  cf_container_package_release_history: 'system',
   t3_pwa_handoffs: 'auth', t3_pwa_sessions: 'auth', t3_pwa_handoff_events: 'auth',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
@@ -4020,6 +4046,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   cf_container_snapshots: { user_id: 'user_sessions', prev_snapshot_id: 'cf_container_snapshots' },
   cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },
   cf_container_package_release_status: { installed_snapshot_id: 'cf_container_snapshots' },
+  cf_container_package_release_history: { installed_snapshot_id: 'cf_container_snapshots' },
   t3_pwa_handoffs: {},
   t3_pwa_sessions: { handoff_id: 't3_pwa_handoffs' },
   t3_pwa_handoff_events: { handoff_id: 't3_pwa_handoffs', session_id: 't3_pwa_sessions' },
@@ -20457,27 +20484,58 @@ app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDa
   c.header('Cache-Control', 'no-store');
   if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
   if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  const body = await c.req.json<{ trigger?: unknown }>().catch(() => ({} as { trigger?: unknown }));
+  const trigger = parseReleaseCheckTrigger(body?.trigger);
+  if (!trigger) return jsonUtf8({ error: "triggerは 'health_check' または 'page_load' で指定してください" }, 400);
   try {
     const installedSnapshot = await getLatestVersionSnapshot(c.env.DB);
     const current = installedSnapshot?.versions ?? {};
     const nodeMajor = Number(String(current.node ?? '26').split('.')[0]) || 26;
     const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
-    const checkedAt = new Date().toISOString();
-    const records = buildPackageReleaseStatuses('demo', installedSnapshot, latest, checkedAt);
-    await savePackageReleaseStatuses(c.env.DB, records);
+    const result = await recordPackageReleaseCheck(c.env.DB, { containerKey: 'demo', snapshot: installedSnapshot, latest, trigger, checkedAt: new Date().toISOString() });
     return jsonUtf8({
       saved: true,
-      containerKey: 'demo',
-      packageCount: records.length,
-      checkedAt,
+      containerKey: result.containerKey,
+      trigger: result.trigger,
+      packageCount: result.packageCount,
+      historyRecorded: result.historyRecorded,
+      checkedAt: result.checkedAt,
       installedSnapshotAt: installedSnapshot?.createdAt ?? null,
-      updatesAvailable: records.filter((row) => row.updateStatus === 'update_available').length,
-      latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
+      updatesAvailable: result.updatesAvailable,
+      latestUnavailable: result.latestUnavailable,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-package-release-status] D1記録に失敗', { error: message });
-    return jsonUtf8({ error: `パッケージ新版状況の記録に失敗しました: ${message}(migration 0188を適用してください)` }, 503);
+    return jsonUtf8({ error: `パッケージ新版状況の記録に失敗しました: ${message}(migration 0188・0191を適用してください)` }, 503);
+  }
+});
+
+// 記録されている全コンテナの、現在のパッケージ更新情報(最新版・導入版・対応状況・確認日時)。読み取りだけ。
+app.get('/api/cf-containers/package-release-status/overview', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  try {
+    return jsonUtf8({ ...(await getPackageReleaseOverview(c.env.DB)), checkedAt: new Date().toISOString() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] 一覧の取得に失敗', { error: message });
+    return jsonUtf8({ error: 'パッケージ更新情報の取得に失敗しました: ' + message + '(migration 0188を適用してください)' }, 503);
+  }
+});
+
+// パッケージの履歴(確認日時の新しい順)。コンテナ名・パッケージ名・件数(1〜200)を指定する。読み取りだけ。
+app.get('/api/cf-containers/package-release-status/history', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  const query = parsePackageHistoryQuery(new URL(c.req.url).searchParams);
+  if (!query.ok) return jsonUtf8({ error: query.error }, 400);
+  try {
+    return jsonUtf8({ ...query.value, rows: await getPackageReleaseHistory(c.env.DB, query.value) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] 履歴の取得に失敗', { error: message });
+    return jsonUtf8({ error: '履歴の取得に失敗しました: ' + message + '(migration 0191を適用してください)' }, 503);
   }
 });
 
