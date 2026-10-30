@@ -232,6 +232,27 @@
     - **成功表示は、処理の結果を確かめてから出す。** HTTPステータスだけで成功と判断しない。応答の中身(例: `ok: true`)を確かめ、確かめられなければ失敗として表示する。
     - **pushの前に、そのブランチのPRがマージ済みでないかを毎回確認する**(ルール34)。
 
+
+42. **作業の最初にAGENTS.mdを読め。重い検証・ビルドの前に、その差分に必要かを判断せよ。ソースからのビルドが3回失敗したら、ソースビルドしているパッケージ「すべて」にコンパイル済みの手段がないか確かめろ** — 2026-10-30、#2494(T3プロキシの修正)の検証で、次の失敗をした。
+    - AGENTS.md「Dockerビルドの実行条件」(ユーザー指定、2026-10-18)は、Opus 5.5以上のモデルを使うとき以外はDockerビルドをしないと定めている。それを読まないまま、Sonnet 5.5のセッションでDockerデーモンを起動し、`scripts/check-cf-containers.sh`(内部でDockerビルドを行う)と小さなビルドを実行した。ルール39(ビルド必須)とAGENTS.md(ビルドの条件)が食い違う場面で、AGENTS.mdを確認しなかった。
+    - 差分は`.cjs`2つと`COPY`1行だけなのに、Rubyのソースビルドを含むイメージ全体の検証に進み、Docker Hubの429とサンドボックスの403(`cache.ruby-lang.org`)で何度も止まった。触っていないステージのために時間を使った。
+    - ソースからコンパイルしているパッケージに、コンパイル済みの手段があるか確かめなかった。ユーザーに指摘されて、はじめてRubyだけを調べた。指摘は、Rubyに限らず、パッケージのあるものすべてを確かめることだった。このときソースからのビルドは3回以上失敗しており、のちにユーザーが「3回失敗したら適用する」に緩めた。
+
+    守ること:
+    - **同じ作業で修正や検証が3回失敗したら、Sonnetでの作業を止め、ユーザーにOpus(5.5以上)へ戻すよう伝える(ユーザー指定、2026-10-30)。** 失敗に数えるのは、テストの失敗、ビルドや検証スクリプトの失敗(環境の制約による失敗も含む)、直っていないというユーザーの報告。モデルの切り替えはユーザーが行う。詳細はAGENTS.md「Sonnetで3回失敗したらOpusに戻す」。
+    - **コンテナのビルドは、実行する前に、必ずユーザーに許可を求める。許可が出るまで実行しない(ユーザー指定、2026-10-30)。** Dockerビルドの条件を満たす場合も同じ。許可を求めるときは、何のためにビルドするか、差分がビルド工程に触れるか、所要時間の見込みを書く。
+    - **作業の最初にAGENTS.mdを読む。** Dockerビルドの条件を満たさないモデルでは、Dockerデーモンの起動、`docker build`、内部でビルドを行うスクリプト(`scripts/check-cf-containers.sh`など)を実行しない。ルール39と食い違うときは、AGENTS.mdを優先し、フルビルドが未実施であることを報告に書く。
+    - **検証の前に、この差分が何を変えるかを判断する。** 触っていないステージ(例: Rubyのコンパイル)のために、重い検証を走らせない。まず、ビルドを伴わない検証(単体テスト、実際のHTTPサーバーを立てたテスト、`node --check`、`wrangler deploy --dry-run`)で確かめられる範囲を確かめる。フルビルドが要る変更は、条件を満たす環境でやってもらうよう、ユーザーに頼む。
+    - **ソースからビルドする前に、必ず次の調査をして、総合判断を報告に書く。省略しない(ユーザー指定、2026-10-30)。それでもビルドが必要なときだけ、最新のソースをビルドする。** (1) **版の差**: 本番D1の最新スナップショット(`SELECT id, created_at, image_commit, versions_json FROM cf_container_snapshots ORDER BY id DESC LIMIT 1;`)の版と、最新版を比べる。最新版の記録は`cf_container_package_release_status`にある。本番にこのテーブルが無いときは、そのSQLを利用者に示して作ってもらい、無い間は配布元で最新版を調べる。(2) **キャッシュの状況**: `SELECT m.build_created_on, m.build_status, (SELECT COUNT(*) FROM cf_container_build_steps s WHERE s.snapshot_key=m.snapshot_key AND s.state='cached') AS cached_steps FROM cf_container_build_measurements m ORDER BY m.build_created_on DESC LIMIT 8;`と、直近のビルドで時間のかかったステップ(`SELECT label, seconds FROM cf_container_build_steps WHERE snapshot_key=? ORDER BY seconds DESC LIMIT 8;`)。(3) **総合判断**: 版に差があるパッケージだけが、ソースビルドの対象になる。差の無いパッケージのために、ソースビルドを走らせない。判断の根拠(差・キャッシュ・所要時間)を報告に書く。
+    - **2026-10-30の調査結果**: 最新スナップショット154番の版は、Tailscale 1.104.1、gh 2.103.0、Node 26.12.1、cloudflared 2026.10.1、Codex 0.164.0、jj 0.46.0、Ruby 4.0.9。最新版との差があるのは、Tailscale・gh・Node・cloudflared・Codexの5つで、jjとRubyは最新だった。本番ビルドの記録1,318ステップのうち`cached`は0件で、直近8回のビルドもすべて0件。2026-10-29のビルドでは、ソースビルドだけで約2,356秒(jj 875秒、Ruby 780秒、Tailscale 433秒、gh 267秒)かかっていた。「キャッシュが効いていない」のか「記録側が`cached`を拾えていない」のかは、確認できていない。本番D1に`cf_container_package_release_status`(マイグレーション0188)が無かった。
+    - **ソースからのビルドが3回失敗したら、そこで初めて、ソースからビルドしているパッケージのすべてについて、コンパイル済みの手段の有無を確かめて報告に書く。**(ユーザー指定、2026-10-30。3回に達するまでは、事前の確認を必須にしない。)「3回」は、同じ作業の中で、ソースからのビルドが失敗した回数を数える。失敗の原因がサンドボックスの制約(429・403)でも、数える。対象は、Dockerfileで`configure`/`make`/`cargo install`/`go install`などを実行しているものすべてで、現在はRuby・Tailscale・gh・jjである。Rubyだけに限らない。確かめる手段は、公式のDockerイメージのタグ、配布元のバイナリ、aptの版である。変えるかどうかは、依頼されていなければ、提案にとどめる。
+    - **3回失敗したときの調べ方は、公式の配布元より先に、このリポジトリの中を調べる。** 過去にビルドした成果物や、ビルドの記録が残っていることがある。(1) `git ls-files`で`.tar`/`.tgz`/`.deb`/`.zip`/`.gz`/`.xz`/`.whl`/`.wasm`/`.so`の成果物と、パッケージ名を含むファイル名を探す。(2) GitHubのリリースを一覧する。(3) `NOTICE.*`・`SPEC.*`・`EVAL.*`・`REPORT.*`をパッケージ名で検索する。(4) Dockerfileの履歴を`git log -S"<取得元のURL>" -- containers/demo/Dockerfile`でたどり、以前の入れ方を確かめる。見つけたものは、そのまま使えるか(ネイティブか、WASMか。版は同じか。コンテナで動くか)を確かめて、報告に書く。
+    - **2026-10-30のリポジトリ内の調査結果**(調べた範囲だけ。「存在しない」とは言えない): (a) GitHubのリリースは0件だった。(b) `public/wasm/*.wasm`は、ブラウザ用にビルドしたWASMで、コンテナのネイティブなパッケージではない。(c) `public/tailscale-connect/1.102.3-3/`は、公式の`@tailscale/connect`(ブラウザ用のWASM)をnpmから取得して配置したもの。SPECに「独自のTailscaleソースビルドやDockerビルドは行っていない」とあり、コンテナの`tailscaled`としては使えない。(d) `NOTICE.cloudflare-workers-github-oauth-1.ruby-4.20260917.md`のRubyは、公式のWASMバイナリ(`@ruby/4.0-wasm-wasi`)をCDNから読み込むもので、コンテナのネイティブなRubyではない。(e) `SPEC.cloudflare-workers-github-oauth-1.Cursor-VM-Ruby.md`のRuby 4.0.7は、別のVM(`/home/box/.rbenv`)に`ruby-build`で入れたもので、リポジトリには成果物がなく、版も4.0.9と違う。(f) Dockerfileの履歴では、Rubyのソースビルドは[`f9bcdf70`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f9bcdf70)(2026-10-23)で入った。Tailscaleの`pkgs.tailscale.com`からの取得は[`970fa36f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/970fa36f)(2026-10-18)の時点にあり、のちにGoのソースビルドに変わった。**調べていない範囲**: 他のリポジトリ(`nekoserver/cf-container`など)、R2やレジストリ、削除済みの成果物の履歴、`gh`と`jj`。
+    - **2026-10-30の実測**: Ruby 4.0.9の公式イメージ(`ruby:4.0.9-slim-trixie`など)は存在した。Ubuntu 26.04のaptのrubyは3.3で、4.0.9より古い。Tailscale・gh・jjは確かめていない。
+    - **落とし穴ごとに、それを捕まえるテストを書く。** Dockerfileの`COPY`の入れ忘れのように、実行時にしか分からない失敗は、テストでソースの対応関係を検査する。
+    - **サンドボックスの制約(Dockerビルドの条件を満たす環境で作業するときの参考)**: Docker Hubが429のときは`mirror.gcr.io/library/<名前>`から取得して`docker.io/library/<名前>`のタグを付ける。Dockerデーモンが無ければ、古い`/var/run/docker.sock`を消して`dockerd`を起動する。拒否されたホストは`curl "$HTTPS_PROXY/__agentproxy/status"`で分かる。許可ドメインの設定は、動いているセッションには反映されないことがあった(理由は未確認)。
+    - **思い出せないことを前提に、実行前にこの項目とAGENTS.mdを読む。**
+
 ---
 
 ## 自動アップロード対象の区別
