@@ -187,11 +187,11 @@ export async function start(entry) {
       await nativeApp(entry); return;
     }
   } catch {
-    const { main, message } = panel('T3の接続を確認できません');
-    message.textContent = '通信を確認してから再試行してください。保存済みの接続情報は維持しています。';
-    main.append(button('再試行', () => location.reload())); return;
+    // 通信を確認できないときも、ボタンや案内の画面は出さない。保存済みの接続情報は維持したまま、T3の標準画面へ進む。
+    await nativeApp(entry); return;
   }
-  bearer = null; forget(tokenKey); await connect(entry);
+  // セッションが無いときの「接続ページ」(connect)は、承認しても先へ進まなかったため出さない。T3の標準のログイン画面へ進む。
+  bearer = null; forget(tokenKey); await nativeApp(entry);
 }
 const approvalId = location.pathname.match(/^\/_t3\/pwa\/approve\/([a-f0-9]{32})$/)?.[1];
 if (approvalId) void approve(approvalId);
