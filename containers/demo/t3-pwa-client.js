@@ -24,9 +24,15 @@ const button = (text, callback) => { const node = document.createElement('button
 async function post(path, data, headers = {}) {
   return window.fetch(prefix + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(data), credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(path === '/claim' ? 45000 : 15000) });
 }
-async function session() {
-  const response = await window.fetch('/api/auth/session', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
-  return response.ok && (await response.json()).authenticated === true;
+// T3のセッション確認。true=有効、false=無効(未認証・401/403)、null=確認できない(サーバーエラー・通信失敗は例外)。
+// fetchの差し替え(installTransport)より前に呼べるよう、元のfetchで、保存した接続情報があればそれを付けて確認する。
+async function session(token = null) {
+  const init = { cache: 'no-store', signal: AbortSignal.timeout(15000) };
+  if (token) init.headers = { Authorization: 'Bearer ' + token.token };
+  const response = await originalFetch('/api/auth/session', init);
+  if (response.status === 401 || response.status === 403) return false;
+  if (!response.ok) return null;
+  return (await response.json()).authenticated === true;
 }
 function installTransport() {
   window.fetch = (input, init) => {
@@ -125,7 +131,7 @@ async function connect(entry) {
   main.append(code, link, restart); link.hidden = true;
   function schedule() { if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), 2000); }
   async function ready() {
-    if (!bearer || !(await session())) return false;
+    if (!bearer || (await session(bearer)) !== true) return false;
     const response = await post('/verified', {});
     if (!response.ok || (await response.json()).verified !== true) throw new Error('セッションの検証を完了できませんでした。');
     forget(pendingKey); stopped = true; cleanup(); await nativeApp(entry); return true;
@@ -177,21 +183,21 @@ export async function start(entry) {
   if (window.top === window && !standalone) { await nativeApp(entry); return; }
   bearer = stored(tokenKey);
   if (bearer && (!Number.isFinite(bearer.expires) || bearer.expires * 1000 <= Date.now())) { bearer = null; forget(tokenKey); }
-  installTransport();
-  try {
-    if (await session()) {
-      if (bearer) {
-        const response = await post('/verified', {});
-        if (!response.ok || (await response.json()).verified !== true) throw new Error('保存した接続情報の確認を完了できませんでした。');
-      }
-      await nativeApp(entry); return;
-    }
-  } catch {
-    // 通信を確認できないときも、ボタンや案内の画面は出さない。保存済みの接続情報は維持したまま、T3の標準画面へ進む。
-    await nativeApp(entry); return;
+  // ログインの確認を、fetch・WebSocketの差し替えより前に行う。
+  let authenticated = null;
+  try { authenticated = await session(bearer); } catch { authenticated = null; }
+  // 無効と分かった接続情報は捨てる。確認できなかった(通信失敗・サーバーエラー)ときは、無効とは決めず維持する。
+  if (authenticated === false && bearer) { bearer = null; forget(tokenKey); }
+  // 差し替えは、接続情報が残っているときだけ行う。
+  if (bearer) installTransport();
+  if (authenticated === true && bearer) {
+    try {
+      const response = await post('/verified', {});
+      if (!response.ok || (await response.json()).verified !== true) throw new Error('保存した接続情報の確認を完了できませんでした。');
+    } catch { /* 検証を完了できなくても、ボタンや案内の画面は出さず、T3の標準画面へ進む */ }
   }
-  // セッションが無いときの「接続ページ」(connect)は、承認しても先へ進まなかったため出さない。T3の標準のログイン画面へ進む。
-  bearer = null; forget(tokenKey); await nativeApp(entry);
+  // セッションが無いとき・確認できないときも、接続ページやボタンは出さず、T3の標準のログイン画面へ進む。
+  await nativeApp(entry);
 }
 const approvalId = location.pathname.match(/^\/_t3\/pwa\/approve\/([a-f0-9]{32})$/)?.[1];
 if (approvalId) void approve(approvalId);
