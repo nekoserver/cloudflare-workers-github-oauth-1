@@ -239,6 +239,7 @@
     - ソースからコンパイルしているパッケージに、コンパイル済みの手段があるか確かめなかった。ユーザーに指摘されて、はじめてRubyだけを調べた。指摘は、Rubyに限らず、パッケージのあるものすべてを確かめることだった。このときソースからのビルドは3回以上失敗しており、のちにユーザーが「3回失敗したら適用する」に緩めた。
 
     守ること:
+    - **コンテナのビルドは、実行する前に、必ずユーザーに許可を求める。許可が出るまで実行しない(ユーザー指定、2026-10-30)。** Dockerビルドの条件を満たす場合も同じ。許可を求めるときは、何のためにビルドするか、差分がビルド工程に触れるか、所要時間の見込みを書く。
     - **作業の最初にAGENTS.mdを読む。** Dockerビルドの条件を満たさないモデルでは、Dockerデーモンの起動、`docker build`、内部でビルドを行うスクリプト(`scripts/check-cf-containers.sh`など)を実行しない。ルール39と食い違うときは、AGENTS.mdを優先し、フルビルドが未実施であることを報告に書く。
     - **検証の前に、この差分が何を変えるかを判断する。** 触っていないステージ(例: Rubyのコンパイル)のために、重い検証を走らせない。まず、ビルドを伴わない検証(単体テスト、実際のHTTPサーバーを立てたテスト、`node --check`、`wrangler deploy --dry-run`)で確かめられる範囲を確かめる。フルビルドが要る変更は、条件を満たす環境でやってもらうよう、ユーザーに頼む。
     - **ソースからビルドする前に、必ず次の調査をして、総合判断を報告に書く。省略しない(ユーザー指定、2026-10-30)。それでもビルドが必要なときだけ、最新のソースをビルドする。** (1) **版の差**: 本番D1の最新スナップショット(`SELECT id, created_at, image_commit, versions_json FROM cf_container_snapshots ORDER BY id DESC LIMIT 1;`)の版と、最新版を比べる。最新版の記録は`cf_container_package_release_status`にある。本番にこのテーブルが無いときは、そのSQLを利用者に示して作ってもらい、無い間は配布元で最新版を調べる。(2) **キャッシュの状況**: `SELECT m.build_created_on, m.build_status, (SELECT COUNT(*) FROM cf_container_build_steps s WHERE s.snapshot_key=m.snapshot_key AND s.state='cached') AS cached_steps FROM cf_container_build_measurements m ORDER BY m.build_created_on DESC LIMIT 8;`と、直近のビルドで時間のかかったステップ(`SELECT label, seconds FROM cf_container_build_steps WHERE snapshot_key=? ORDER BY seconds DESC LIMIT 8;`)。(3) **総合判断**: 版に差があるパッケージだけが、ソースビルドの対象になる。差の無いパッケージのために、ソースビルドを走らせない。判断の根拠(差・キャッシュ・所要時間)を報告に書く。
