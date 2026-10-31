@@ -1,4 +1,4 @@
-# ソースからビルドする版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
+# 固定する版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
 ARG TAILSCALE_VERSION=1.104.4
 ARG GH_VERSION=2.103.3
 ARG JJ_VERSION=0.46.0
@@ -14,17 +14,6 @@ RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_
 
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
-# ghはGoのソース(proxy.golang.org)からビルドする。リリースのdebは使わない。
-FROM golang:1.27.3-trixie AS gh-build
-ARG GH_VERSION
-RUN CGO_ENABLED=0 go install -trimpath github.com/cli/cli/v2/cmd/gh@v${GH_VERSION} \
-    && /go/bin/gh --version
-
-# jj(Jujutsu)はaptに無いため、crates.ioのソースからビルドする。
-FROM rust:1-trixie AS jj-build
-ARG JJ_VERSION
-RUN cargo install --locked jj-cli@${JJ_VERSION} \
-    && /usr/local/cargo/bin/jj --version
 
 # Rubyは公式のソース(cache.ruby-lang.org)からビルドする。aptのrubyは古いため使わない。
 # sha256はhttps://www.ruby-lang.org/en/downloads/ に載っている値で固定し、取得物の改ざん・破損で失敗させる。
@@ -90,8 +79,26 @@ RUN case "$INSTALL_DOCKER" in true|false) ;; *) echo "INSTALL_DOCKER must be tru
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
-COPY --from=gh-build /go/bin/gh /usr/bin/gh
-COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj
+# ghとjjは、公式のリリースにあるコンパイル済みのバイナリを使う(ソースからのビルドに毎回約20分かかっていた)。
+# sha256は配布元の値で固定する(gh: gh_<版>_checksums.txt。jj: 配布物から計算した値。jjは公式のチェックサムのファイルが無い)。
+ARG GH_VERSION
+ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.tar.gz \
+        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+    && echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/gh && tar -xzf /tmp/gh.tar.gz -C /tmp/gh --strip-components=1 \
+    && install -m 755 /tmp/gh/bin/gh /usr/bin/gh \
+    && gh --version \
+    && rm -rf /tmp/gh /tmp/gh.tar.gz
+ARG JJ_VERSION
+ARG JJ_SHA256=fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/jj.tar.gz \
+        "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    && echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/jj && tar -xzf /tmp/jj.tar.gz -C /tmp/jj \
+    && install -m 755 /tmp/jj/jj /usr/bin/jj \
+    && jj --version \
+    && rm -rf /tmp/jj /tmp/jj.tar.gz
 ARG CLOUDFLARED_SHA256=13d9a724a4d4271958a3728982ee983870a100959a159d2fa263b3450d0be72a
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
