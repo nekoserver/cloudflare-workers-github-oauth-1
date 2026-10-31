@@ -94,19 +94,19 @@ async function approve(id) {
     const info = await response.json();
     if (!response.ok) throw new Error(info.error || '申請を確認できませんでした。');
     const code = document.createElement('p'); code.textContent = '確認コード: ' + info.code; code.className = 'comparison-code'; main.append(code);
-    const explanation = document.createElement('p'); explanation.textContent = 'PWAとコードが一致することを確認してください。開発用の独自接続経路です。承認すると、このPWA専用のT3セッションを最大24時間発行します。別タブのログインは維持されます。'; main.append(explanation);
+    const explanation = document.createElement('p'); explanation.textContent = 'PWAに出ている確認コードと同じコードです。開発用の独自接続経路です。承認すると、このPWA専用のT3セッションを最大24時間発行します。別タブのログインは維持されます。'; main.append(explanation);
     if (info.scopes.some(scope => ['terminal:operate', 'orchestration:operate'].includes(scope))) {
       const authority = document.createElement('p'); authority.textContent = 'ターミナルやエージェントの操作権限は、コンテナ内で強い権限を持ちます。自分のPWAからの申請だけを承認してください。'; main.append(authority);
     }
     const scopes = document.createElement('details'), summary = document.createElement('summary'), list = document.createElement('p'); summary.textContent = '付与する権限'; list.textContent = info.scopes.join(', '); scopes.append(summary, list); main.append(scopes);
-    if (info.state !== 'pending') { message.textContent = '申請の状態: ' + info.state + '。PWAへ戻って確認してください。'; return; }
+    if (info.state !== 'pending') { message.textContent = '申請の状態: ' + info.state + '。'; return; }
     const decide = async decision => {
       accept.disabled = reject.disabled = true;
       try {
         const result = await post('/approval/' + id, { decision }, { 'X-CSRF-Token': info.csrf });
         const outcome = await result.json();
-        if (!result.ok || outcome.state !== (decision === 'approve' ? 'approved' : 'rejected')) throw new Error('承認を送信できませんでした。期限や状態を確認してください。');
-        message.textContent = decision === 'approve' ? '承認しました。PWAへ戻ってください。' : '申請を拒否しました。';
+        if (!result.ok || outcome.state !== (decision === 'approve' ? 'approved' : 'rejected')) throw new Error('承認を送信できませんでした(期限切れか、すでに処理済みの申請です)。');
+        message.textContent = decision === 'approve' ? '承認しました。PWAは自動で引き継ぎます。' : '申請を拒否しました。';
       } catch (error) { message.textContent = error.message; accept.disabled = reject.disabled = false; }
     };
     const accept = button('このPWAを承認', () => void decide('approve')), reject = button('拒否', () => void decide('reject')); main.append(accept, reject);
@@ -124,7 +124,7 @@ async function connect(entry) {
   let pending = null, busy = false, stopped = false, timer;
   const code = document.createElement('p'); code.className = 'comparison-code';
   const note = document.createElement('p');
-  note.textContent = 'ログイン済みのブラウザ(Safariなど)で下のリンクを開き、確認コードが同じことを確かめて承認してください。承認されると、このPWAに自動で引き継ぎます。';
+  note.textContent = 'ログイン済みのブラウザ(Safariなど)で下のリンクから承認すると、このPWAに自動で引き継ぎます。';
   const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'ログイン済みのブラウザで承認する'; link.hidden = true;
   const resume = () => { if (document.visibilityState !== 'hidden') void poll(); };
   const cleanup = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); window.removeEventListener('online', resume); window.removeEventListener('pageshow', resume); };
@@ -135,12 +135,12 @@ async function connect(entry) {
     await nativeApp(entry);
   }
   const manual = button('トークンで入る', () => finish(null));
-  // 「状態を確認する」: 診断の各項目を、OKか、だめなら理由と対処で並べる(ログを見なくても原因と直し方が分かるように)。
+  // 失敗したら、利用者に操作させず自動で診断し、各項目をOKか、だめなら理由と対処で並べる(ログを見なくても原因と直し方が分かるように)。
   const report = document.createElement('div');
   const line = text => { const node = document.createElement('p'); node.textContent = text; report.append(node); };
   async function diagnose() {
     // 押したことが分かるように、すぐ「確認中」を出し、結果の位置まで画面を動かす(スマホでは結果が画面の外に出るため)。
-    report.replaceChildren(); check.disabled = true; line('確認中…');
+    report.replaceChildren(); line('原因を自動で確認しています…');
     report.scrollIntoView?.({ block: 'nearest' });
     try {
       const response = await window.fetch(prefix + '/diagnose', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
@@ -151,10 +151,9 @@ async function connect(entry) {
       }
       if (!(data.checks || []).length) line('診断の結果が空でした(HTTP ' + response.status + ')');
     } catch (error) { line('状態を確認できませんでした: ' + (error && error.message ? error.message : String(error))); }
-    finally { report.firstChild?.remove(); check.disabled = false; report.scrollIntoView?.({ block: 'nearest' }); }
+    finally { report.firstChild?.remove(); report.scrollIntoView?.({ block: 'nearest' }); }
   }
-  const check = button('状態を確認する', diagnose);
-  main.append(code, note, link, manual, check, report);
+  main.append(code, note, link, manual, report);
   function schedule() { if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), 2000); }
   async function poll() {
     if (stopped || busy || !pending) return;
@@ -164,7 +163,7 @@ async function connect(entry) {
       if (!response.ok) {
         if (response.status >= 500 || response.status === 429) throw new Error('申請の確認を再試行しています…');
         const failure = await response.json().catch(() => ({}));
-        stopped = true; forget(pendingKey); message.textContent = failure.remedy || '申請を確認できません。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+        stopped = true; forget(pendingKey); message.textContent = failure.remedy || '申請を確認できません。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; await diagnose(); return;
       }
       const status = await response.json(); code.textContent = '確認コード: ' + status.code;
       if (status.state === 'approved') {
@@ -172,12 +171,12 @@ async function connect(entry) {
         const result = await claim.json().catch(() => ({}));
         forget(pendingKey);
         if (!claim.ok || typeof result.credential !== 'string' || !result.credential) {
-          stopped = true; message.textContent = result.remedy || '引き継ぎの受け取りに失敗しました。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+          stopped = true; message.textContent = result.remedy || '引き継ぎの受け取りに失敗しました。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; await diagnose(); return;
         }
         await finish(result.credential); return;
       }
       if (['expired', 'rejected', 'failed', 'consumed'].includes(status.state)) {
-        stopped = true; forget(pendingKey); message.textContent = '申請の状態: ' + status.state + '。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+        stopped = true; forget(pendingKey); message.textContent = '申請の状態: ' + status.state + '。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; await diagnose(); return;
       }
       message.textContent = '承認を待っています…';
     } catch (error) { message.textContent = error.message || '通信を再試行しています…'; }
@@ -191,8 +190,8 @@ async function connect(entry) {
       const response = await post('/create', { secret });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || typeof result.id !== 'string') {
-        // 黙ってT3の標準画面へ進まず、理由と対処を出す(「トークンで入る」「状態を確認する」で先へ進める)。
-        stopped = true; cleanup(); message.textContent = result.remedy || '引き継ぎの申請を作れませんでした。「状態を確認する」で原因を確かめるか、「トークンで入る」で進んでください。'; return;
+        // 黙ってT3の標準画面へ進まず、理由と対処を出し、原因を自動で診断する(「トークンで入る」で先へ進める)。
+        stopped = true; cleanup(); message.textContent = result.remedy || '引き継ぎの申請を作れませんでした。下の診断の対処を行うか、「トークンで入る」で進んでください。'; await diagnose(); return;
       }
       pending = { id: result.id, secret, expires: result.expires }; save(pendingKey, pending, false); code.textContent = '確認コード: ' + result.code;
     }
@@ -200,7 +199,8 @@ async function connect(entry) {
     message.textContent = '承認を待っています…';
     await poll();
   } catch (error) {
-    stopped = true; cleanup(); message.textContent = '引き継ぎの申請を作れませんでした(' + (error && error.message ? error.message : String(error)) + ')。「状態を確認する」で原因を確かめるか、「トークンで入る」で進んでください。';
+    stopped = true; cleanup(); message.textContent = '引き継ぎの申請を作れませんでした(' + (error && error.message ? error.message : String(error)) + ')。下の診断の対処を行うか、「トークンで入る」で進んでください。';
+    await diagnose();
   }
 }
 export async function start(entry) {
