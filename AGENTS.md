@@ -19,7 +19,8 @@ Dockerビルドの前に、次の前提処理を必ず通す。詳細は [`SPEC.
 2. 公式のコンパイル済みのバイナリがあるパッケージは、それを使う。ソースからのビルドは、`src/cf-containers-source-build-allowlist.test.ts` の許可の表に、理由を書いたものだけに限る。
 3. 取得したバイナリは sha256 で照合する。
 4. 外部ツールの版と、契約テストを確かめた版が一致する。
-5. 2〜4 は `npx vitest run src/cf-containers` で検査する。エージェントの `git push` の前には、`scripts/claude-push-guard.js`(`.claude/settings.json` の PreToolUse フック)が自動で走らせ、失敗したら push を止める。
+5. ソースからビルドしたら、パッケージ(インストール先)まで作り、ビルド済みのものが動くことを確かめた時点で、ソースツリーとビルドのキャッシュを捨てる。Dockerfileでは同じ`RUN`の中で行い、手順は`src/cf-containers-source-build-allowlist.test.ts`の`CLEANUP`に書く。エージェントの手元で展開したソースツリーも、確認が済んだら消す。
+6. 2〜5 は `npx vitest run src/cf-containers` で検査する。エージェントの `git push` の前には、`scripts/claude-push-guard.js`(`.claude/settings.json` の PreToolUse フック)が自動で走らせ、失敗したら push を止める。
 
 ## 機能拡張の前提となる整合性と復元可能性
 
