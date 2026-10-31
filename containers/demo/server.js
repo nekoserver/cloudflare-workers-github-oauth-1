@@ -338,6 +338,32 @@ async function statAuthFile() {
   }
 }
 
+// tree-view・PWAで、トークンを手で入れずにT3へ入るためのペアリングを作る。
+// /cf-containers/proxy/* (GitHubログイン済みの管理者だけ)からしか届かない。
+// 契約(T3 0.1.3): `t3 auth pairing create --json --base-url` は {credential, expiresAt, pairUrl} を出す。
+const T3_ORIGIN = 'https://t3.nekomaneki.work';
+const T3_BINARY = '/root/.t3/runtime/versions/0.1.3/t3';
+const T3_PAIRING_ARGS = ['auth', 'pairing', 'create', '--json', '--label', 'one-click', '--base-url', T3_ORIGIN];
+function runT3(args) {
+  return new Promise((resolve, reject) => {
+    execFile(T3_BINARY, args, { timeout: 20000, maxBuffer: 1024 * 1024, env: { ...process.env, HOME: '/root' } }, (error, stdout, stderr) => {
+      if (error) reject(new Error((String(stderr || '').trim().split('\n')[0] || error.message).slice(0, 300)));
+      else resolve(String(stdout));
+    });
+  });
+}
+async function issueT3Pairing(run = runT3) {
+  let out;
+  try { out = await run(T3_PAIRING_ARGS); } catch (error) {
+    return { ok: false, errorCode: 'cli_failed', detail: String(error && error.message || error), remedy: 'T3が起動していないか、T3のデータ(/root/.t3)がありません。コンテナのターミナルで tail -30 /tmp/t3.log を確認してください。' };
+  }
+  try {
+    const data = JSON.parse(out);
+    if (typeof data.pairUrl === 'string' && data.pairUrl.startsWith(T3_ORIGIN + '/pair#token=') && typeof data.expiresAt === 'string') return { ok: true, pairUrl: data.pairUrl, expiresAt: data.expiresAt };
+  } catch {}
+  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.3と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
+}
+
 const REAL_T3_DEPS = { probeTcp, httpGet: httpGetProbe, runCmd: runCmdWithCode, statFile: statAuthFile };
 
 async function collectT3Health(deps = REAL_T3_DEPS) {
@@ -604,6 +630,13 @@ const server = http
       runWranglerContainersList(res);
       return;
     }
+    if (req.method === 'POST' && req.url === '/t3/pairing') {
+      issueT3Pairing().then((result) => {
+        res.writeHead(result.ok ? 200 : 502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(result));
+      });
+      return;
+    }
     if (req.url === '/health/t3') {
       collectT3Health().then((t3) => {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -630,7 +663,7 @@ const server = http
   })
   ;
 
-module.exports = { judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { issueT3Pairing, T3_PAIRING_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
