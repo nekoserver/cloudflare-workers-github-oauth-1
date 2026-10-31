@@ -1,6 +1,6 @@
 const http = require('node:http');
 const net = require('node:net');
-const { createPwaAuth, injectBootstrap, nativeSession } = require('./t3-pwa-auth.cjs');
+const { createPwaAuth, ensureHandoffConfig, injectBootstrap, nativeSession } = require('./t3-pwa-auth.cjs');
 const { MAX_BODY, isUnauthenticatedSessionBody, rewriteSetCookies, staleSessionClears } = require('./t3-stale-session.cjs');
 // Loopback-only HTTPS tunnel backend. Keep T3 authentication. Its HttpOnly session cookie is
 // returned both partitioned and unpartitioned (t3-stale-session.cjs rewriteSetCookies).
@@ -67,6 +67,8 @@ server.on('upgrade', (req, socket, head) => {
 return server;
 }
 function start() {
+  // PWAへの引き継ぎを有効にする設定。結果はログに残す(壊れていれば、引き継ぎは無効のまま)。
+  try { console.error('T3 PWA handoff config: ' + ensureHandoffConfig()); } catch (error) { console.error('T3 PWA handoff config failed: ' + error.message); }
   const pwa = createPwaAuth(), server = createServer(pwa);
   void pwa.recover().then(() => {
     server.listen(3774, '127.0.0.1');
