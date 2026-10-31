@@ -52,3 +52,28 @@ it('does not call an unconfirmed start successful',async()=>{
  expect((await request('start')).status).toBe(502);
  expect(dependencies.audit).toHaveBeenCalledWith(expect.anything(),expect.objectContaining({action:'start',result:'failure'}));
 });
+
+// tree-viewはログイン済みでしか動かないので、そのログインでT3にも自動で入る(トークン入力・承認なし)。
+it('pairing: 管理者なら、コンテナでT3のペアリングを作り、開くだけでログインできるURLを返す',async()=>{
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:true,pairUrl:'https://t3.nekomaneki.work/pair#token=ABCDEF123456',expiresAt:'2026-10-31T10:05:00.000Z'}),{status:200}));
+ const response=await request('pairing');
+ expect(response.status).toBe(200);
+ expect(await response.json()).toEqual({pairUrl:'https://t3.nekomaneki.work/pair#token=ABCDEF123456',expiresAt:'2026-10-31T10:05:00.000Z'});
+ const sent=stub.fetch.mock.calls[0][0] as Request;
+ expect(new URL(sent.url).pathname).toBe('/t3/pairing');expect(sent.method).toBe('POST');
+ expect(stub.setRunning).not.toHaveBeenCalled();
+});
+it('pairing: 管理者以外・署名なしには作らない',async()=>{
+ dependencies.authenticate.mockResolvedValueOnce({ok:true,login:'other'});
+ expect((await request('pairing')).status).toBe(403);
+ expect((await request('pairing',{headers:{'CF-Worker-Signature':''}})).status).toBe(401);
+ expect(stub.fetch).not.toHaveBeenCalled();
+});
+it('pairing: コンテナが失敗したら、原因と対処をそのまま返す',async()=>{
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:false,errorCode:'cli_failed',detail:'spawn ENOENT',remedy:'T3が起動していません'}),{status:502}));
+ const response=await request('pairing');
+ expect(response.status).toBe(502);
+ expect(await response.json()).toMatchObject({error:'cli_failed',detail:'spawn ENOENT',remedy:'T3が起動していません'});
+ stub.fetch.mockRejectedValueOnce(new Error('container down'));
+ expect(await (await request('pairing')).json()).toMatchObject({error:'container_unreachable',detail:'container down'});
+});
