@@ -61,3 +61,23 @@ describe('/cf-containers のワンクリックログイン', () => {
     scripts.forEach((s, i) => { const f = join(dir, `s${i}.js`); writeFileSync(f, s); execFileSync(process.execPath, ['--check', f]); });
   });
 });
+
+// tree-viewのiframe用。クッキーを使わないBearerトークン(T3 0.1.3: `t3 auth session issue --json` は {sessionId, token, expiresAt, ...})。
+const { issueT3Session, T3_SESSION_ARGS } = require('../containers/demo/server.js');
+describe('issueT3Session', () => {
+  it('T3のCLIに、tree-view用のBearerセッションの発行をJSONで頼む', async () => {
+    let seen: string[] = [];
+    await issueT3Session(async (args: string[]) => { seen = args; return JSON.stringify({ sessionId: 's1', token: 'BEARER-TOKEN-1', expiresAt: '2026-11-01T10:00:00.000Z' }); });
+    expect(seen).toEqual(T3_SESSION_ARGS);
+    expect(seen.slice(0, 4)).toEqual(['auth', 'session', 'issue', '--json']);
+    expect(seen[seen.indexOf('--ttl') + 1]).toBe('24h');
+  });
+  it('成功したら、トークンと期限(UNIX秒)を返す', async () => {
+    const r = await issueT3Session(async () => JSON.stringify({ sessionId: 's1', token: 'BEARER-TOKEN-1', expiresAt: '2026-11-01T10:00:00.000Z' }));
+    expect(r).toEqual({ ok: true, token: 'BEARER-TOKEN-1', expires: Date.parse('2026-11-01T10:00:00.000Z') / 1000 });
+  });
+  it('失敗や想定外の出力では、原因と対処を返す', async () => {
+    expect((await issueT3Session(async () => { throw new Error('spawn ENOENT'); })).errorCode).toBe('cli_failed');
+    expect((await issueT3Session(async () => '{}')).errorCode).toBe('unexpected_output');
+  });
+});
