@@ -89,21 +89,20 @@ describe('セッションが無いPWA: 引き継ぎ', () => {
     expect(loaded()).toBe(1);
     expect(b.history).toEqual([]);
   });
-  it('申請を作れないとき(引き継ぎが無効など)は、黙って進まず、サーバーが返した対処を出し、「トークンで入る」と「状態を確認する」を出す', async () => {
+  it('申請を作れないとき(引き継ぎが無効など)は、黙って進まず、サーバーが返した対処を出し、「トークンで入る」を出す。確認のボタンは出さない', async () => {
     const b = installBrowser({ session: false, create: 'fail' });
     const { start } = await import(CLIENT);
     await start(entry());
     expect(loaded()).toBe(0);
     expect(b.text()).toContain('引き継ぎが無効です。設定ファイルを確かめてください。');
     expect(b.button('トークンで入る')).toBeDefined();
-    expect(b.button('状態を確認する')).toBeDefined();
+    expect(b.button('状態を確認する')).toBeUndefined();
     expect(b.posted('/_t3/pwa/claim')).toBe(false);
   });
-  it('「状態を確認する」を押すと、診断の各項目を、OKか、だめなら理由と対処で表示する', async () => {
+  it('失敗したら、ボタンを押させずに自動で診断し、各項目をOKか、だめなら理由と対処で表示する', async () => {
     const b = installBrowser({ session: false, create: 'fail' });
     const { start } = await import(CLIENT);
     await start(entry());
-    await b.button('状態を確認する')!.click!();
     expect(b.text()).toContain('✕ 引き継ぎの設定: ENOENT');
     expect(b.text()).toContain('対処: 引き継ぎが無効です。設定ファイルを確かめてください。');
     expect(b.text()).toContain('✓ T3本体');
