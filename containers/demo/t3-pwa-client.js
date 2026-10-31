@@ -135,7 +135,22 @@ async function connect(entry) {
     await nativeApp(entry);
   }
   const manual = button('トークンで入る', () => finish(null));
-  main.append(code, note, link, manual);
+  // 「状態を確認する」: 診断の各項目を、OKか、だめなら理由と対処で並べる(ログを見なくても原因と直し方が分かるように)。
+  const report = document.createElement('div');
+  const line = text => { const node = document.createElement('p'); node.textContent = text; report.append(node); };
+  async function diagnose() {
+    report.replaceChildren();
+    try {
+      const response = await window.fetch(prefix + '/diagnose', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+      const data = await response.json();
+      for (const check of data.checks || []) {
+        line((check.ok ? '✓ ' : '✕ ') + check.name + (check.detail ? ': ' + check.detail : ''));
+        if (!check.ok && check.remedy) line('対処: ' + check.remedy);
+      }
+    } catch (error) { line('状態を確認できませんでした: ' + (error && error.message ? error.message : String(error))); }
+  }
+  const check = button('状態を確認する', diagnose);
+  main.append(code, note, link, manual, check, report);
   function schedule() { if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), 2000); }
   async function poll() {
     if (stopped || busy || !pending) return;
@@ -144,7 +159,8 @@ async function connect(entry) {
       const response = await post('/status', pending);
       if (!response.ok) {
         if (response.status >= 500 || response.status === 429) throw new Error('申請の確認を再試行しています…');
-        stopped = true; forget(pendingKey); message.textContent = '申請を確認できません。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+        const failure = await response.json().catch(() => ({}));
+        stopped = true; forget(pendingKey); message.textContent = failure.remedy || '申請を確認できません。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
       }
       const status = await response.json(); code.textContent = '確認コード: ' + status.code;
       if (status.state === 'approved') {
@@ -152,7 +168,7 @@ async function connect(entry) {
         const result = await claim.json().catch(() => ({}));
         forget(pendingKey);
         if (!claim.ok || typeof result.credential !== 'string' || !result.credential) {
-          stopped = true; message.textContent = '引き継ぎの受け取りに失敗しました。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+          stopped = true; message.textContent = result.remedy || '引き継ぎの受け取りに失敗しました。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
         }
         await finish(result.credential); return;
       }
@@ -170,13 +186,18 @@ async function connect(entry) {
       const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
       const response = await post('/create', { secret });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || typeof result.id !== 'string') { await finish(null); return; }
+      if (!response.ok || typeof result.id !== 'string') {
+        // 黙ってT3の標準画面へ進まず、理由と対処を出す(「トークンで入る」「状態を確認する」で先へ進める)。
+        stopped = true; cleanup(); message.textContent = result.remedy || '引き継ぎの申請を作れませんでした。「状態を確認する」で原因を確かめるか、「トークンで入る」で進んでください。'; return;
+      }
       pending = { id: result.id, secret, expires: result.expires }; save(pendingKey, pending, false); code.textContent = '確認コード: ' + result.code;
     }
     link.href = prefix + '/approve/' + pending.id; link.hidden = false;
     message.textContent = '承認を待っています…';
     await poll();
-  } catch { await finish(null); }
+  } catch (error) {
+    stopped = true; cleanup(); message.textContent = '引き継ぎの申請を作れませんでした(' + (error && error.message ? error.message : String(error)) + ')。「状態を確認する」で原因を確かめるか、「トークンで入る」で進んでください。';
+  }
 }
 export async function start(entry) {
   const standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches;

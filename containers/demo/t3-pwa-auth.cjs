@@ -54,6 +54,32 @@ function respond(res, status, data, type = 'application/json; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'" });
   res.end(type.startsWith('application/json') ? JSON.stringify(data) : data);
 }
+// 失敗の理由と、日本語の対処。失敗のたびに、この理由のコードと対処を返し、画面にそのまま出す。
+// 新しい失敗を足すときは、ここに理由と対処を足す(対処の無い理由は、テストが失敗する)。
+const HANDOFF_REASONS = {
+  handoff_disabled: '引き継ぎが無効です。コンテナの端末で cat /root/.t3/userdata/pwa-handoff/config.json を確かめてください。無ければ、T3の中継を再起動すると作られます(結果は /tmp/t3-proxy.log の「T3 PWA handoff config:」の行に出ます)。',
+  login_required: 'このブラウザではT3にログインしていません。このブラウザでT3を開いてログイン(ペアリング)してから、承認のリンクをもう一度開いてください。',
+  pairing_mint_failed: 'T3がペアリングの資格情報を発行できませんでした。承認したブラウザでT3を開き直してログインを確かめ、PWAで再読み込みして新しい申請を作ってください。続く場合は /tmp/t3.log を確かめてください。',
+  not_approved_yet: 'まだ承認されていません。ログイン済みのブラウザで承認のリンクを開き、確認コードが同じことを確かめて承認してください。',
+  expired: '申請の期限(5分)が切れました。PWAで再読み込みして、新しい申請を作ってください。',
+  already_used: 'この申請はすでに使われたか、失敗しています。PWAで再読み込みして、新しい申請を作ってください。',
+  rejected: '承認が拒否されました。PWAで再読み込みして、新しい申請を作ってください。',
+  request_not_found: '申請が見つかりません(別の端末の申請か、T3の中継の再起動で消えました)。PWAで再読み込みして、新しい申請を作ってください。',
+  t3_unreachable: 'T3本体(127.0.0.1:3773)に繋がりません。コンテナの端末で ss -ltnp | grep 3773 と tail -n 20 /tmp/t3.log を確かめてください。',
+  too_many_requests: '短い間に申請や承認が多すぎます。1分待ってから、もう一度試してください。',
+  invalid_request: '要求の形が正しくありません。PWAとブラウザの両方で再読み込みしてから、もう一度試してください。',
+  internal_error: '中継の中で予期しない失敗が起きました。/tmp/t3-proxy.log を確かめ、PWAで再読み込みして新しい申請を作ってください。',
+};
+function fail(res, status, reason, detail) {
+  respond(res, status, { error: HANDOFF_REASONS[reason], reason, remedy: HANDOFF_REASONS[reason], ...(detail ? { detail: String(detail).slice(0, 300) } : {}) });
+}
+// 申請の状態から、受け取れない理由を決める。
+function claimReason(state) {
+  if (state === 'pending') return 'not_approved_yet';
+  if (state === 'expired') return 'expired';
+  if (state === 'rejected') return 'rejected';
+  return 'already_used';
+}
 async function body(req) {
   if (Number(req.headers['content-length']) > 4096) throw new InvalidBody('Invalid body');
   let size = 0, chunks = [];
@@ -104,12 +130,14 @@ function createPwaAuth(options = {}) {
     const value = JSON.parse(fs.readFileSync(file, 'utf8')), stamp = fs.statSync(file);
     return { ...value, generation: typeof value.generation === 'string' && value.generation ? `${value.generation}:${stamp.ino}:${stamp.mtimeMs}:${stamp.ctimeMs}` : null };
   });
-  function currentConfig() {
+  function configStatus() {
     try {
       const value = config();
-      return value?.enabled === true && value.developmentOnly === true && typeof value.generation === 'string' && value.generation.length > 0 ? value : null;
-    } catch { return null; }
+      if (value?.enabled === true && value.developmentOnly === true && typeof value.generation === 'string' && value.generation.length > 0) return { value };
+      return { value: null, detail: 'enabled=' + String(value?.enabled) + ', developmentOnly=' + String(value?.developmentOnly) };
+    } catch (error) { return { value: null, detail: error instanceof Error ? error.message : String(error) }; }
   }
+  function currentConfig() { return configStatus().value; }
   const generation = options.generation || (() => {
     const id = fs.readFileSync('/root/.t3/userdata/environment-id', 'utf8').trim();
     const key = fs.statSync('/root/.t3/userdata/secrets/server-signing-key.bin');
@@ -205,47 +233,66 @@ function createPwaAuth(options = {}) {
       if (req.method === 'GET' && /^\/_t3\/pwa\/approve\/[a-f0-9]{32}$/.test(url.pathname)) {
         respond(res, 200, '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>T3 PWAの承認</title><body><main id="pwa-connect"><p>ログインを確認しています…</p></main><script type="module" src="/_t3/pwa/client.js"></script></body></html>', 'text/html; charset=utf-8'); return true;
       }
+      // 診断: 項目ごとに ok と、だめなら理由と対処を返す。クッキーや資格情報などの秘密は返さない。
+      if (req.method === 'GET' && url.pathname === PREFIX + '/diagnose') {
+        const checks = [];
+        const cfg = configStatus();
+        checks.push(cfg.value ? { name: '引き継ぎの設定', ok: true } : { name: '引き継ぎの設定', ok: false, reason: 'handoff_disabled', remedy: HANDOFF_REASONS.handoff_disabled, detail: cfg.detail });
+        let reachable = false;
+        try {
+          const state = await verify({});
+          reachable = !!state;
+          checks.push(state ? { name: 'T3本体', ok: true } : { name: 'T3本体', ok: false, reason: 't3_unreachable', remedy: HANDOFF_REASONS.t3_unreachable, detail: 'T3が /api/auth/session に200以外を返しました' });
+        } catch (error) {
+          checks.push({ name: 'T3本体', ok: false, reason: 't3_unreachable', remedy: HANDOFF_REASONS.t3_unreachable, detail: error instanceof Error ? error.message : String(error) });
+        }
+        const account = reachable ? await owner(req).catch(() => null) : null;
+        checks.push(account ? { name: 'このブラウザのT3のログイン', ok: true } : { name: 'このブラウザのT3のログイン', ok: false, reason: 'login_required', remedy: HANDOFF_REASONS.login_required });
+        const counts = db.prepare('SELECT state, count(*) AS n FROM handoffs WHERE created>? GROUP BY state').all(now() - 3600);
+        checks.push({ name: '最近の申請', ok: true, detail: counts.length ? counts.map(row => row.state + ' ' + row.n + '件').join('、') : '直近1時間の申請はありません' });
+        respond(res, 200, { checks }); return true;
+      }
       const approvalId = url.pathname.match(/^\/_t3\/pwa\/approval\/([a-f0-9]{32})$/)?.[1];
       if (approvalId && req.method === 'GET') {
-        const account = await owner(req); if (!account) { respond(res, 401, { error: '通常のブラウザーでT3にログインしてください。' }); return true; }
-        const row = expire(query(approvalId)); if (!row) { respond(res, 404, { error: '申請がありません。' }); return true; }
+        const account = await owner(req); if (!account) { fail(res, 401, 'login_required'); return true; }
+        const row = expire(query(approvalId)); if (!row) { fail(res, 404, 'request_not_found'); return true; }
         respond(res, 200, { code: row.code, state: row.state, expires: row.expires, scopes: account.scopes, csrf: csrf(row.id, account.cookie, row.expires) }); return true;
       }
-      if (req.method !== 'POST') { respond(res, 405, { error: 'Method not allowed' }); return true; }
-      if (req.headers.origin !== origin) { respond(res, 403, { error: 'Origin not allowed' }); return true; }
+      if (req.method !== 'POST') { fail(res, 405, 'invalid_request'); return true; }
+      if (req.headers.origin !== origin) { fail(res, 403, 'invalid_request', 'Origin not allowed'); return true; }
       if (!currentConfig() && (approvalId || [PREFIX + '/create', PREFIX + '/claim'].includes(url.pathname))) {
         db.prepare("UPDATE handoffs SET state='expired',changed=?,actor='disabled' WHERE state IN ('pending','approved')").run(now());
-        respond(res, 503, { error: 'PWA connection requests are disabled' }); return true;
+        fail(res, 503, 'handoff_disabled', configStatus().detail); return true;
       }
       if (approvalId) {
-        const account = await owner(req); if (!account) { respond(res, 401, { error: 'Login required' }); return true; }
+        const account = await owner(req); if (!account) { fail(res, 401, 'login_required'); return true; }
         const data = await body(req); const row = expire(query(approvalId));
-        if (!row || !equal(req.headers['x-csrf-token'], csrf(row.id, account.cookie, row.expires)) || !['approve', 'reject'].includes(data.decision)) { respond(res, 403, { error: 'Invalid approval' }); return true; }
+        if (!row || !equal(req.headers['x-csrf-token'], csrf(row.id, account.cookie, row.expires)) || !['approve', 'reject'].includes(data.decision)) { fail(res, row ? 403 : 404, row ? 'invalid_request' : 'request_not_found'); return true; }
         const count = db.prepare("SELECT count(*) AS n FROM events WHERE actor=? AND event IN ('approved','rejected') AND occurred>?").get(account.actor, now() - 60).n;
-        if (count >= 10) { respond(res, 429, { error: 'Try later' }); return true; }
+        if (count >= 10) { fail(res, 429, 'too_many_requests'); return true; }
         const next = data.decision === 'approve' ? 'approved' : 'rejected';
         const changed = db.prepare("UPDATE handoffs SET state=?,approved_scopes=?,approved_by=?,approved_at=?,changed=?,actor=? WHERE id=? AND state='pending' AND expires>?").run(next, JSON.stringify(account.scopes), account.actor, now(), now(), account.actor, row.id, now()).changes;
-        if (changed !== 1) { respond(res, 409, { error: 'Request expired or already decided' }); return true; }
+        if (changed !== 1) { fail(res, 409, claimReason(expire(query(row.id))?.state)); return true; }
         if (next === 'approved') {
           try {
             const issued = await mintPairing(account.cookie, 'tree-view-pwa:' + row.id);
             const expires = Math.min(row.expires, Math.floor(Date.parse(issued?.expiresAt) / 1000));
             if (typeof issued?.credential !== 'string' || !/^[A-Za-z0-9_-]{6,128}$/.test(issued.credential) || !Number.isFinite(expires) || expires <= now()) throw new Error('Invalid pairing credential');
             pairings.set(row.id, { credential: issued.credential, expires });
-          } catch {
+          } catch (error) {
             // 状態の遷移の規則(approved -> redeeming -> failed)に従って、失敗として残す。
             db.prepare("UPDATE handoffs SET state='redeeming',changed=?,actor='approval' WHERE id=? AND state='approved'").run(now(), row.id);
             db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='approval' WHERE id=? AND state='redeeming'").run(now(), row.id);
-            respond(res, 503, { error: 'T3のペアリングの資格情報を発行できませんでした。新しい申請を作ってください。' }); return true;
+            fail(res, 503, 'pairing_mint_failed', error instanceof Error ? error.message : error); return true;
           }
         }
         respond(res, 200, { state: next }); return true;
       }
       const data = await body(req);
       if (url.pathname === PREFIX + '/create') {
-        if (typeof data.secret !== 'string' || !/^[a-f0-9]{64}$/.test(data.secret)) { respond(res, 400, { error: 'Invalid request' }); return true; }
+        if (typeof data.secret !== 'string' || !/^[a-f0-9]{64}$/.test(data.secret)) { fail(res, 400, 'invalid_request'); return true; }
         const ip = sign(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || 'unknown');
-        if (db.prepare('SELECT count(*) AS n FROM handoffs WHERE ip_hash=? AND created>?').get(ip, now() - 60).n >= 5) { respond(res, 429, { error: 'Try later' }); return true; }
+        if (db.prepare('SELECT count(*) AS n FROM handoffs WHERE ip_hash=? AND created>?').get(ip, now() - 60).n >= 5) { fail(res, 429, 'too_many_requests'); return true; }
         const id = crypto.randomBytes(16).toString('hex'), code = crypto.randomBytes(4).toString('hex').toUpperCase();
         db.prepare("INSERT INTO handoffs(id,challenge,code,state,created,expires,ip_hash,changed,actor,generation) VALUES(?,?,?,'pending',?,?,?,?,'pwa',?)").run(id, sha(data.secret), code, now(), now() + 300, ip, now(), currentGeneration());
         respond(res, 201, { id, code, expires: now() + 300 }); return true;
@@ -259,22 +306,22 @@ function createPwaAuth(options = {}) {
         respond(res, updated === 1 ? 200 : 401, { verified: updated === 1 }); return true;
       }
       const row = device(data);
-      if (!row) { respond(res, 404, { error: 'Request not found' }); return true; }
+      if (!row) { fail(res, 404, 'request_not_found'); return true; }
       if (url.pathname === PREFIX + '/status') { respond(res, 200, { state: row.state, code: row.code, expires: row.expires }); return true; }
-      if (url.pathname !== PREFIX + '/claim') { respond(res, 404, { error: 'Not found' }); return true; }
+      if (url.pathname !== PREFIX + '/claim') { fail(res, 404, 'invalid_request'); return true; }
       const attempt = crypto.randomUUID();
-      if (db.prepare("UPDATE handoffs SET state='redeeming',attempt=?,changed=?,actor='pwa' WHERE id=? AND state='approved' AND expires>?").run(attempt, now(), row.id, now()).changes !== 1) { respond(res, 409, { error: 'Request expired or already used' }); return true; }
+      if (db.prepare("UPDATE handoffs SET state='redeeming',attempt=?,changed=?,actor='pwa' WHERE id=? AND state='approved' AND expires>?").run(attempt, now(), row.id, now()).changes !== 1) { fail(res, 409, claimReason(expire(query(row.id))?.state)); return true; }
       const pairing = pairings.get(row.id);
       pairings.delete(row.id);
       if (!pairing || pairing.expires <= now()) {
         db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
-        respond(res, 409, { error: 'Request expired or already used' }); return true;
+        fail(res, 409, 'expired'); return true;
       }
       db.prepare("UPDATE handoffs SET state='consumed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
       respond(res, 200, { credential: pairing.credential });
       return true;
-    } catch (error) { if (!res.headersSent) respond(res, error instanceof InvalidBody ? 400 : 503, { error: 'Request failed' }); return true; }
+    } catch (error) { if (!res.headersSent) fail(res, error instanceof InvalidBody ? 400 : 503, error instanceof InvalidBody ? 'invalid_request' : 'internal_error', error instanceof Error ? error.message : error); return true; }
   }
   return { handle, recover, close: () => db.close(), db };
 }
-module.exports = { createPwaAuth, ensureHandoffConfig, injectBootstrap, nativeSession, SCOPES };
+module.exports = { createPwaAuth, ensureHandoffConfig, HANDOFF_REASONS, injectBootstrap, nativeSession, SCOPES };
