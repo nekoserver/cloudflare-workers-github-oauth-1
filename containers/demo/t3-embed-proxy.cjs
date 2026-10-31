@@ -16,7 +16,9 @@ const upstreamPort = options.upstreamPort || 3773;
 const resolveCookieName = options.resolveCookieName || defaultCookieName;
 const server = http.createServer(async (req, res) => {
   if (await pwa.handle(req, res)) return;
-  const headers = { ...req.headers, host: '127.0.0.1:' + upstreamPort, 'accept-encoding': 'identity' };
+  // T3はクッキーのセッションを、Originのホストが Host か X-Forwarded-Host と一致するときだけ受け付ける。
+  // Hostを書き換えるので、元のホストを X-Forwarded-Host で渡す(渡さないと、発行直後のクッキーが拒否される)。
+  const headers = { ...req.headers, host: '127.0.0.1:' + upstreamPort, 'x-forwarded-host': req.headers.host || '', 'accept-encoding': 'identity' };
   const upstream = http.request({ hostname: '127.0.0.1', port: upstreamPort, method: req.method, path: req.url, headers }, response => {
     const next = { ...response.headers };
     if (next['set-cookie']) next['set-cookie'] = rewriteSetCookies(next['set-cookie']);
