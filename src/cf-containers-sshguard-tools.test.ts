@@ -13,9 +13,8 @@ describe('demoコンテナのsshguardと検索ツール', () => {
     expect(entrypoint).toContain('LOGREADER="LANG=C tail -F -n 0 /tmp/sshd.log"');
     expect(readFileSync('containers/demo/server.js', 'utf8')).toContain("'/tmp/sshguard.log'");
   });
-  it('jjをcrates.ioのソースからビルドしてPATHに置く', () => {
-    expect(dockerfile).toContain('cargo install --locked jj-cli@${JJ_VERSION}');
-    expect(dockerfile).toContain('COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj');
+  it('jjは公式のリリースのバイナリ(musl)を取得してPATHに置く', () => {
+    expect(dockerfile).toContain('install -m 755 /tmp/jj/jj /usr/bin/jj');
   });
 });
 

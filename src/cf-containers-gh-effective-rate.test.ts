@@ -10,7 +10,7 @@ describe('/cf-containers 実質時間単価とgh', () => {
   });
   it('イメージにgitとghを入れる', () => {
     expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('procps xz-utils git locales sshguard silversearcher-ag ripgrep \\');
-    expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('COPY --from=gh-build /go/bin/gh /usr/bin/gh');
+    expect(readFileSync('containers/demo/Dockerfile', 'utf8')).toContain('install -m 755 /tmp/gh/bin/gh /usr/bin/gh');
   });
 });
 

@@ -8,7 +8,6 @@ import { readFileSync } from 'node:fs';
 // 下の表と、Dockerfileのgolangイメージを、あわせて直すこと。
 const REQUIRED_GO: Record<string, Record<string, string>> = {
   TAILSCALE_VERSION: { '1.104.4': '1.27.3' },
-  GH_VERSION: { '2.103.3': '1.27.0' },
 };
 
 const dockerfile = readFileSync(new URL('../containers/demo/Dockerfile', import.meta.url), 'utf8');
@@ -17,8 +16,8 @@ const goImages = [...dockerfile.matchAll(/^FROM golang:(\d+\.\d+\.\d+)-\S+ AS (\
 const cmp = (a: string, b: string) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 
 describe('ビルド用のGoの版が、ソースビルドするパッケージの要求を満たす', () => {
-  it('TailscaleとghのビルドのステージがGoのイメージを使っている', () => {
-    expect(goImages.map(image => image.stage).sort()).toEqual(['gh-build', 'tailscale-build']);
+  it('Goのイメージでソースビルドするのは、Tailscaleだけ(ghは公式のリリースのバイナリを使う)', () => {
+    expect(goImages.map(image => image.stage).sort()).toEqual(['tailscale-build']);
   });
   it('2つのステージのGoの版は同じ', () => {
     expect(new Set(goImages.map(image => image.version)).size).toBe(1);
