@@ -88,3 +88,20 @@ it('session: 管理者なら、コンテナでtree-view用のBearerトークン�
  stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:false,errorCode:'cli_failed',detail:'x',remedy:'y'}),{status:502}));
  expect(await (await request('session')).json()).toMatchObject({error:'cli_failed',detail:'x',remedy:'y'});
 });
+// tree-viewのターミナルから本体コンテナのcodexを呼ぶため、ターミナルの公開鍵を本体のauthorized_keysに登録する。
+it('authorize-key: 管理者なら、公開鍵を検査してコンテナの /admin/authorized-keys に渡す',async()=>{
+ const key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBn0T0zSRy7nA6aQ5Hf1h9u9xyz0123456789abcdefghij tree-view-terminal';
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:true,added:true,message:'added'}),{status:200}));
+ const response=await request('authorize-key',{body:JSON.stringify({action:'authorize-key',userToken:'verified-token',publicKey:key})});
+ expect(response.status).toBe(200);
+ expect(await response.json()).toMatchObject({ok:true,added:true});
+ const sent=stub.fetch.mock.calls[0][0] as Request;
+ expect(new URL(sent.url).pathname).toBe('/admin/authorized-keys');
+ expect(JSON.parse(await sent.text())).toEqual({publicKey:key});
+});
+it('authorize-key: 形の正しくない鍵・管理者以外は、コンテナに渡さない',async()=>{
+ expect((await request('authorize-key',{body:JSON.stringify({action:'authorize-key',userToken:'verified-token',publicKey:'not a key'})})).status).toBe(400);
+ dependencies.authenticate.mockResolvedValueOnce({ok:true,login:'other'});
+ expect((await request('authorize-key',{body:JSON.stringify({action:'authorize-key',userToken:'verified-token',publicKey:'ssh-ed25519 AAAA x'})})).status).toBe(403);
+ expect(stub.fetch).not.toHaveBeenCalled();
+});
