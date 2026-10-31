@@ -11,6 +11,16 @@
 
 ユーザー指定（2026-10-18）により、**DockerビルドはClaude Code Web上でOpus 5.5以上のモデルを使用する場合にのみ行う。** 実行環境とモデルの条件を満たすことを確認できない場合は実行しない。このコンテナ上ではDockerビルドを行わない。Dockerビルドを内部で起動する検証スクリプトやWranglerの操作も対象。既存のビルド必須手順よりこの制約を優先し、ビルドを伴わない軽量な検証だけを実行する。詳細は [AGENT.md](AGENT.md) を参照。
 
+### Dockerビルドの前提処理(ユーザー指定、2026-10-31)
+
+Dockerビルドの前に、次の前提処理を必ず通す。詳細は [`SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md`](SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md)、CLAUDE.md のルール44。
+
+1. ドキュメントだけの変更(`*.md`)では、本番のビルドを走らせない(Workers Builds の「Build watch paths」で除外する)。
+2. 公式のコンパイル済みのバイナリがあるパッケージは、それを使う。ソースからのビルドは、`src/cf-containers-source-build-allowlist.test.ts` の許可の表に、理由を書いたものだけに限る。
+3. 取得したバイナリは sha256 で照合する。
+4. 外部ツールの版と、契約テストを確かめた版が一致する。
+5. 2〜4 は `npx vitest run src/cf-containers` で検査する。エージェントの `git push` の前には、`scripts/claude-push-guard.js`(`.claude/settings.json` の PreToolUse フック)が自動で走らせ、失敗したら push を止める。
+
 ## 機能拡張の前提となる整合性と復元可能性
 
 ユーザー指定（2026-10-22）。以下は追加機能ではなく、既存機能を拡張する際に維持すべき最低品質とする。今回の作業で変更・利用する設定と状態、その参照経路を対象に、実装・検証できる範囲で具体的に守る。未確認の範囲まで保証したと報告しない。

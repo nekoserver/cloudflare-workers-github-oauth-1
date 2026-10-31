@@ -208,6 +208,7 @@
     - rust-worker-sqlx-d1が自ら署名してtunnels.rbへ送る`ORIGIN_HMAC_SECRET`(本Workerはシークレットを扱わない中継のみ、`src/utils/tunnelSignerAsk.ts`)はこの方針の対象外(他リポジトリの実装に委ねる)
 
 39. **`containers/**`・`src/containers/**`・`src/views/cfContainers.ts`・`wrangler.toml`の`[[containers]]`を変更したら、push前に`bash scripts/check-cf-containers.sh`を必ず実行して`ALL OK`を確認しろ** — Workers BuildsのPRビルド(`wrangler versions upload`)はコンテナイメージをビルドしないため、検証せずにmainへマージすると本番ビルドが一発勝負になる(実例: 2026-10-16〜17、#2389以降の本番ビルド失敗、Apacheが8443で待ち受けていない不具合、ページscriptの構文エラーがいずれもマージ後に発覚した)。このスクリプトは関連テスト・Workerのバンドル(`wrangler deploy --dry-run`)・Dockerfileのビルド・コンテナ起動後の`/health`と8443確認を行う。Claude Codeのクラウドサンドボックスでも、スクリプトがプロキシのCAを注入して本番と同じダウンロード込みでビルドする。`--offline`(ダウンロードを除外)は検証不足なので、使った場合はその旨を報告に明記すること。GitHub Actionsはこのリポジトリでは使っていないので、CIに頼らないこと
+    - **Dockerビルドの前提処理(ユーザー指定、2026-10-31)**: ビルドの前に、ルール44の前提処理を必ず通す。(1) ドキュメントだけの変更では、本番のビルドを走らせない。(2) 公式のコンパイル済みのバイナリを使い、ソースビルドは許可の表(`src/cf-containers-source-build-allowlist.test.ts`)にあるものだけにする。(3) 取得物をsha256で照合する。(4) 外部ツールの版と、契約テストの版を一致させる。(2)〜(4)は`npx vitest run src/cf-containers`で検査され、エージェントの`git push`の前に`scripts/claude-push-guard.js`が自動で走らせる。詳細は[`SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md`](SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md)
 
 40. **コンテナイメージは「1レイヤー800MB以下」「イメージ全体がinstance_typeのディスク上限以下」を必ず守り、`scripts/check-cf-containers.sh`のサイズ検査でOKを確認してからpushしろ** — 本番ビルドは**イメージのビルド自体は成功しているのに**、`registry.cloudflare.com`へのレイヤーのアップロードが`net/http: timeout awaiting response headers`で失敗し続けていた(2026-10-16〜17、#2389〜#2398)。原因は、apt・cloudflared・tailscale・npm(Codex/Claude CLI)を`RUN`1つにまとめた**1.9GBの単一レイヤー**で、送り切れるかどうかは毎回変わるため成功と失敗が混在した(#2402でレイヤーを分割して解消。詳細は[`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md))。
     - Dockerfileでは、大きなインストール(apt・外部バイナリ・`npm install -g`のパッケージごと)を**別々の`RUN`に分ける**。1つの`RUN`に`&&`で全部つなげない
@@ -263,6 +264,7 @@
     - **推測で直さない。** 外部のツールの挙動は、ソースか、実際の応答か、ログで確かめてから、テストに書く。確かめられないものは、テストにも報告にも「未確認」と書く。
 
 44. **公式のコンパイル済みのバイナリがあるものは、それを使うのが既定。ソースからのビルドは、理由を書いて許可を得たものだけに限る。ドキュメントだけの変更で、コンテナを作り直さない** — 2026-10-31、gh・jjを毎回ソースからコンパイルし、本番のビルドで約19分(jj 875秒・gh 267秒)を使い続けていた。公式のGitHubリリースにコンパイル済みのバイナリがあったのに、2026-10-21に「エージェントのサンドボックスから配布元に届かない」という、本番には関係のない理由でソースビルドへ変えていた(#2508で戻した)。また、ドキュメントだけのPRをマージしても、毎回コンテナのイメージを作り直していた。ユーザー指定(2026-10-31): 指示されなくても毎回適用すること。
+    この方針は、Dockerビルドの前提処理として[`SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md`](SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md)にまとめてある。テスト(`src/cf-containers-source-build-allowlist.test.ts`)と、push前の自動検査(`scripts/claude-push-guard.js`)で強制する。
 
     守ること(指示されなくても、毎回適用する):
     - **新しいパッケージを入れるとき、版を上げるとき、Dockerfileを変えるときは、まず公式のコンパイル済みの手段を探す。** 探す順は、配布元のリリース(GitHub Releasesなど)、公式のパッケージ配布(例: pkgs.tailscale.com)、aptの版、公式のDockerイメージ。見つかれば、それを使う。取得物は配布元の値か、取得物から計算した値のsha256で照合する。
