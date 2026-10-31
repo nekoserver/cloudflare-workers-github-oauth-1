@@ -25,3 +25,24 @@ describe('ソースからのビルドは、理由を書いたものだけ', () =
     expect(Object.keys(ALLOWED_SOURCE_BUILDS).filter(name => !building.has(name))).toEqual([]);
   });
 });
+
+// 方針(CLAUDE.md ルール44、ユーザー指定 2026-10-31): ソースからビルドしたら、パッケージ(インストール先)まで作り、
+// ビルド済みのものが読み込めることを確かめた時点で、ソースツリーとビルドのキャッシュを捨てる。
+// Dockerでは、同じRUNの中で「インストール → 動作の確認 → ソースの削除」まで行う。
+const CLEANUP: Record<string, { verify: string; remove: string }> = {
+  'tailscale-build': { verify: '/go/bin/tailscaled --version', remove: 'go clean -modcache -cache' },
+  'ruby-build': { verify: "/opt/ruby/bin/ruby -ropenssl", remove: 'rm -rf /tmp/ruby-src /tmp/ruby.tar.gz' },
+};
+describe('ソースからビルドしたら、確認の後にソースツリーを捨てる', () => {
+  it('許可したソースビルドには、すべて削除の決まりがある', () => {
+    expect(Object.keys(CLEANUP).sort()).toEqual(Object.keys(ALLOWED_SOURCE_BUILDS).sort());
+  });
+  for (const [name, rule] of Object.entries(CLEANUP)) {
+    it(`${name}: ビルドと同じRUNの中で、動作を確かめてから、ソースとキャッシュを消す`, () => {
+      const stage = stages.find(item => item.name === name)!.text;
+      const run = stage.split(/^RUN /m).find(text => SOURCE_BUILD.test(text))!;
+      expect(run).toContain(rule.verify);
+      expect(run).toContain(rule.remove);
+    });
+  }
+});

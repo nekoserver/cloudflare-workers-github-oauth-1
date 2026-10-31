@@ -10,7 +10,8 @@ FROM golang:1.27.3-trixie AS tailscale-build
 ARG TAILSCALE_VERSION
 RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
     && /go/bin/tailscale version \
-    && /go/bin/tailscaled --version
+    && /go/bin/tailscaled --version \
+    && go clean -modcache -cache
 
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
