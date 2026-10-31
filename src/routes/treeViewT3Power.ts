@@ -2,6 +2,7 @@ import {Hono} from 'hono';
 import type {Bindings} from '../types';
 import type {ContainerOperationLogEntry} from '../utils/cfContainerOperationLog';
 import {buildWorkerSignatureMessage} from '../utils/workerRequestSignature';
+import {parseAuthorizedKeyResponse, validatePublicKeyLine} from '../utils/authorizedKeyInput';
 
 export type T3ContainerState = {status: string; lastChange?: number};
 export type T3PowerStub = {
@@ -38,10 +39,10 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
     c.header('Cache-Control','no-store');
     const raw = await c.req.text();
     if (raw.length > 8192 || !(await authenticated(c.req.raw,raw,c.env.DYNAMICNEKO_WORKER_HMAC_SECRET))) return c.json({error:'Unauthorized'},401);
-    let body: {action?:unknown;userToken?:unknown};
+    let body: {action?:unknown;userToken?:unknown;publicKey?:unknown};
     try {body=JSON.parse(raw);} catch {return c.json({error:'不正なリクエストです'},400);}
-    if (!body || (typeof body.action !== 'string' || !['status','start','stop','pairing','session'].includes(body.action)) || typeof body.userToken !== 'string') return c.json({error:'actionはstatus/start/stop/pairing/sessionで指定してください'},400);
-    const action = body.action as 'status'|'start'|'stop'|'pairing'|'session';
+    if (!body || (typeof body.action !== 'string' || !['status','start','stop','pairing','session','authorize-key'].includes(body.action)) || typeof body.userToken !== 'string') return c.json({error:'actionはstatus/start/stop/pairing/session/authorize-keyで指定してください'},400);
+    const action = body.action as 'status'|'start'|'stop'|'pairing'|'session'|'authorize-key';
     const auth = await dependencies.authenticate(c.env,body.userToken);
     if (!auth.ok) return c.json({error:auth.error},auth.status as 400|401|403|500|503);
     if (auth.login.toLowerCase() !== 'nekoserver') return c.json({error:'この操作は管理者に限定されています'},403);
@@ -54,6 +55,19 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
         const data = await response.json() as {ok?:boolean;pairUrl?:unknown;expiresAt?:unknown;errorCode?:string;detail?:string;remedy?:string};
         if (response.ok && data?.ok === true && typeof data.pairUrl === 'string' && typeof data.expiresAt === 'string') return c.json({pairUrl:data.pairUrl,expiresAt:data.expiresAt});
         return c.json({error:data?.errorCode ?? 'pairing_failed',detail:data?.detail ?? 'HTTP '+response.status,remedy:data?.remedy ?? ''},502);
+      } catch (error) {
+        return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
+      }
+    }
+    // tree-viewのターミナルから本体コンテナのcodexを呼ぶため、ターミナルの公開鍵を本体のauthorized_keysに登録する。
+    if (action === 'authorize-key') {
+      const checked = validatePublicKeyLine(typeof body.publicKey === 'string' ? body.publicKey : '');
+      if (!checked.ok) return c.json({error:checked.errorCode,detail:checked.error},400);
+      try {
+        const response = await stub.fetch(new Request('http://container/admin/authorized-keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({publicKey:checked.value})}));
+        const result = parseAuthorizedKeyResponse(response.status, await response.text());
+        if (!result.ok) return c.json({error:'authorize_failed',detail:result.error},502);
+        return c.json({ok:true,added:result.added,message:result.message});
       } catch (error) {
         return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
       }
