@@ -288,7 +288,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </ul>
   <div class="status-row">
     <button id="btn-t3-health" type="button">T3・Codex・Tailscale の状態を確認</button>
+    <button id="btn-t3-login" type="button">T3にログイン(トークン入力なし)</button>
   </div>
+  <p style="font-size:12px;margin:4px 0;">新しいタブでT3が開き、このブラウザがログイン済みになります。その後はtree-viewのT3もそのまま使えます。PWAには、PWAに出る承認リンクをこのブラウザで開いて承認すると引き継がれます。</p>
   <div id="t3-verdict" style="margin:8px 0;font-size:13px;" hidden></div>
   <div class="pricing-scroll">
   <table class="health-table" id="t3-table" hidden>
@@ -1103,6 +1105,23 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       })
       .catch(function (err) { t3Log.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnT3Health.disabled = false; });
+  });
+
+  var btnT3Login = document.getElementById('btn-t3-login');
+  btnT3Login.addEventListener('click', function () {
+    btnT3Login.disabled = true;
+    // 非同期の後のwindow.openはSafariがブロックするため、先にタブを開いておく。
+    var tab = window.open('about:blank', '_blank');
+    t3Log.textContent = 'ログイン用のペアリングを作成中…';
+    fetch('/cf-containers/proxy/t3/pairing', { method: 'POST' })
+      .then(readJsonOrText)
+      .then(function (r) {
+        if (!r || !r.ok) throw new Error(((r && r.detail) || '応答を読めません') + ((r && r.remedy) ? ' / 対処: ' + r.remedy : ''));
+        if (tab) tab.location.href = r.pairUrl; else window.location.href = r.pairUrl;
+        t3Log.textContent = 'T3を開きました(このリンクは1回限り、期限 ' + r.expiresAt + ')';
+      })
+      .catch(function (err) { if (tab) tab.close(); t3Log.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnT3Login.disabled = false; });
   });
 
   var btnTailscalePeers = document.getElementById('btn-tailscale-peers');
