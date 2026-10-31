@@ -105,3 +105,9 @@ it('authorize-key: 形の正しくない鍵・管理者以外は、コンテナ�
  expect((await request('authorize-key',{body:JSON.stringify({action:'authorize-key',userToken:'verified-token',publicKey:'ssh-ed25519 AAAA x'})})).status).toBe(403);
  expect(stub.fetch).not.toHaveBeenCalled();
 });
+it('authorize-key: コンテナが返したホスト鍵を、検査してから返す(ターミナルが厳密に照合するため)',async()=>{
+ const key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBn0T0zSRy7nA6aQ5Hf1h9u9xyz0123456789abcdefghij tree-view-terminal';
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:true,added:false,hostKeys:['ssh-ed25519 AAAAHost','not a key','ssh-rsa AAAAB3Rsa']}),{status:200}));
+ const response=await request('authorize-key',{body:JSON.stringify({action:'authorize-key',userToken:'verified-token',publicKey:key})});
+ expect(await response.json()).toMatchObject({ok:true,hostKeys:['ssh-ed25519 AAAAHost','ssh-rsa AAAAB3Rsa']});
+});

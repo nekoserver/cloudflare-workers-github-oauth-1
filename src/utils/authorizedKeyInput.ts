@@ -46,7 +46,7 @@ export function resolveOriginHmacSecret(env: { ORIGIN_HMAC_SECRET?: string }): s
 }
 
 export type AuthorizedKeyResponse =
-  | { ok: true; added: boolean; message?: string }
+  | { ok: true; added: boolean; message?: string; hostKeys: string[] }
   | { ok: false; error: string };
 
 /**
@@ -55,14 +55,16 @@ export type AuthorizedKeyResponse =
  * どのパスにも200のJSONを返すため、ステータスだけで成功と判断すると誤表示になる。
  */
 export function parseAuthorizedKeyResponse(status: number, text: string): AuthorizedKeyResponse {
-  let data: { ok?: unknown; added?: unknown; message?: unknown; error?: unknown } | null = null;
+  let data: { ok?: unknown; added?: unknown; message?: unknown; error?: unknown; hostKeys?: unknown } | null = null;
   try {
     data = JSON.parse(text);
   } catch {
     data = null;
   }
   if (status >= 200 && status < 300 && data?.ok === true) {
-    return { ok: true, added: data.added !== false, message: typeof data.message === 'string' ? data.message : undefined };
+    // ホスト鍵は、公開鍵として正しい形のものだけを残す(古いコンテナは返さないので空になる)。
+    const hostKeys = Array.isArray(data.hostKeys) ? data.hostKeys.filter((key): key is string => typeof key === 'string' && validatePublicKeyLine(key).ok) : [];
+    return { ok: true, added: data.added !== false, message: typeof data.message === 'string' ? data.message : undefined, hostKeys };
   }
   if (typeof data?.error === 'string') return { ok: false, error: data.error };
   return {

@@ -67,7 +67,7 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
         const response = await stub.fetch(new Request('http://container/admin/authorized-keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({publicKey:checked.value})}));
         const result = parseAuthorizedKeyResponse(response.status, await response.text());
         if (!result.ok) return c.json({error:'authorize_failed',detail:result.error},502);
-        return c.json({ok:true,added:result.added,message:result.message});
+        return c.json({ok:true,added:result.added,message:result.message,hostKeys:result.hostKeys});
       } catch (error) {
         return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
       }
