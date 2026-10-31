@@ -446,7 +446,11 @@ function runCmd(cmd, args) {
 // operation through the Worker proxy. Never accept a command or arguments from
 // the request; pass the container-scoped token only through the child process
 // environment and redact it from any captured output.
-function runWranglerContainersList(res) {
+// wrangler containers instances <アプリ> の引数。アプリのIDか名前だけを受け付ける(記号・オプションのような値は拒否)。
+function wranglerInstancesArgs(app) {
+  return typeof app === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]{0,99}$/.test(app) ? ['containers', 'instances', app, '--json'] : null;
+}
+function runWranglerContainersList(res, args = ['containers', 'list', '--json']) {
   const token = process.env.CF_CONTAINER_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN;
   if (!token) {
     res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -454,10 +458,10 @@ function runWranglerContainersList(res) {
     return;
   }
   const childEnv = { ...process.env, CLOUDFLARE_API_TOKEN: token, NO_COLOR: '1' };
-  execFile('wrangler', ['containers', 'list', '--json'], { env: childEnv, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+  execFile('wrangler', args, { env: childEnv, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
     const redact = (value) => String(value || '').split(token).join('[REDACTED]').slice(0, 2 * 1024 * 1024);
     const result = {
-      command: 'wrangler containers list --json',
+      command: 'wrangler ' + args.join(' '),
       stdout: redact(stdout),
       stderr: redact(stderr),
       exitCode: err ? (typeof err.code === 'number' ? err.code : null) : 0,
@@ -655,6 +659,12 @@ const server = http
       });
       return;
     }
+    if (req.method === 'GET' && req.url.startsWith('/debug/wrangler/containers-instances?')) {
+      const args = wranglerInstancesArgs(new URL(req.url, 'http://localhost').searchParams.get('app'));
+      if (!args) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'appはアプリのIDか名前で指定してください' })); return; }
+      runWranglerContainersList(res, args);
+      return;
+    }
     if (req.method === 'GET' && req.url === '/debug/wrangler/containers-list') {
       runWranglerContainersList(res);
       return;
@@ -699,7 +709,7 @@ const server = http
   })
   ;
 
-module.exports = { readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { wranglerInstancesArgs, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
