@@ -57,18 +57,18 @@ function respond(res, status, data, type = 'application/json; charset=utf-8') {
 // 失敗の理由と、日本語の対処。失敗のたびに、この理由のコードと対処を返し、画面にそのまま出す。
 // 新しい失敗を足すときは、ここに理由と対処を足す(対処の無い理由は、テストが失敗する)。
 const HANDOFF_REASONS = {
-  handoff_disabled: '引き継ぎが無効です。コンテナの端末で cat /root/.t3/userdata/pwa-handoff/config.json を確かめてください。無ければ、T3の中継を再起動すると作られます(結果は /tmp/t3-proxy.log の「T3 PWA handoff config:」の行に出ます)。',
+  handoff_disabled: '引き継ぎが無効です(設定ファイル /root/.t3/userdata/pwa-handoff/config.json が無いか、無効)。T3の中継を再起動すると作られます(結果は /tmp/t3-proxy.log の「T3 PWA handoff config:」の行)。',
   login_required: 'このブラウザではT3にログインしていません。このブラウザでT3を開いてログイン(ペアリング)してから、承認のリンクをもう一度開いてください。',
-  pairing_mint_failed: 'T3がペアリングの資格情報を発行できませんでした。承認したブラウザでT3を開き直してログインを確かめ、PWAで再読み込みして新しい申請を作ってください。続く場合は /tmp/t3.log を確かめてください。',
-  not_approved_yet: 'まだ承認されていません。ログイン済みのブラウザで承認のリンクを開き、確認コードが同じことを確かめて承認してください。',
+  pairing_mint_failed: 'T3がペアリングの資格情報を発行できませんでした。承認したブラウザのT3のログインが切れている可能性があります。PWAで再読み込みすると新しい申請を作ります(詳細は /tmp/t3.log)。',
+  not_approved_yet: 'まだ承認されていません。ログイン済みのブラウザで承認のリンクを開くと承認できます。',
   expired: '申請の期限(5分)が切れました。PWAで再読み込みして、新しい申請を作ってください。',
   already_used: 'この申請はすでに使われたか、失敗しています。PWAで再読み込みして、新しい申請を作ってください。',
   rejected: '承認が拒否されました。PWAで再読み込みして、新しい申請を作ってください。',
   request_not_found: '申請が見つかりません(別の端末の申請か、T3の中継の再起動で消えました)。PWAで再読み込みして、新しい申請を作ってください。',
-  t3_unreachable: 'T3本体(127.0.0.1:3773)に繋がりません。コンテナの端末で ss -ltnp | grep 3773 と tail -n 20 /tmp/t3.log を確かめてください。',
+  t3_unreachable: 'T3本体(127.0.0.1:3773)に繋がりません(T3が起動していません。詳細は /tmp/t3.log)。',
   too_many_requests: '短い間に申請や承認が多すぎます。1分待ってから、もう一度試してください。',
   invalid_request: '要求の形が正しくありません。PWAとブラウザの両方で再読み込みしてから、もう一度試してください。',
-  internal_error: '中継の中で予期しない失敗が起きました。/tmp/t3-proxy.log を確かめ、PWAで再読み込みして新しい申請を作ってください。',
+  internal_error: '中継の中で予期しない失敗が起きました(詳細は /tmp/t3-proxy.log)。PWAで再読み込みすると新しい申請を作ります。',
 };
 function fail(res, status, reason, detail) {
   respond(res, status, { error: HANDOFF_REASONS[reason], reason, remedy: HANDOFF_REASONS[reason], ...(detail ? { detail: String(detail).slice(0, 300) } : {}) });

@@ -94,19 +94,19 @@ async function approve(id) {
     const info = await response.json();
     if (!response.ok) throw new Error(info.error || '申請を確認できませんでした。');
     const code = document.createElement('p'); code.textContent = '確認コード: ' + info.code; code.className = 'comparison-code'; main.append(code);
-    const explanation = document.createElement('p'); explanation.textContent = 'PWAとコードが一致することを確認してください。開発用の独自接続経路です。承認すると、このPWA専用のT3セッションを最大24時間発行します。別タブのログインは維持されます。'; main.append(explanation);
+    const explanation = document.createElement('p'); explanation.textContent = 'PWAに出ている確認コードと同じコードです。開発用の独自接続経路です。承認すると、このPWA専用のT3セッションを最大24時間発行します。別タブのログインは維持されます。'; main.append(explanation);
     if (info.scopes.some(scope => ['terminal:operate', 'orchestration:operate'].includes(scope))) {
       const authority = document.createElement('p'); authority.textContent = 'ターミナルやエージェントの操作権限は、コンテナ内で強い権限を持ちます。自分のPWAからの申請だけを承認してください。'; main.append(authority);
     }
     const scopes = document.createElement('details'), summary = document.createElement('summary'), list = document.createElement('p'); summary.textContent = '付与する権限'; list.textContent = info.scopes.join(', '); scopes.append(summary, list); main.append(scopes);
-    if (info.state !== 'pending') { message.textContent = '申請の状態: ' + info.state + '。PWAへ戻って確認してください。'; return; }
+    if (info.state !== 'pending') { message.textContent = '申請の状態: ' + info.state + '。'; return; }
     const decide = async decision => {
       accept.disabled = reject.disabled = true;
       try {
         const result = await post('/approval/' + id, { decision }, { 'X-CSRF-Token': info.csrf });
         const outcome = await result.json();
-        if (!result.ok || outcome.state !== (decision === 'approve' ? 'approved' : 'rejected')) throw new Error('承認を送信できませんでした。期限や状態を確認してください。');
-        message.textContent = decision === 'approve' ? '承認しました。PWAへ戻ってください。' : '申請を拒否しました。';
+        if (!result.ok || outcome.state !== (decision === 'approve' ? 'approved' : 'rejected')) throw new Error('承認を送信できませんでした(期限切れか、すでに処理済みの申請です)。');
+        message.textContent = decision === 'approve' ? '承認しました。PWAは自動で引き継ぎます。' : '申請を拒否しました。';
       } catch (error) { message.textContent = error.message; accept.disabled = reject.disabled = false; }
     };
     const accept = button('このPWAを承認', () => void decide('approve')), reject = button('拒否', () => void decide('reject')); main.append(accept, reject);
@@ -124,7 +124,7 @@ async function connect(entry) {
   let pending = null, busy = false, stopped = false, timer;
   const code = document.createElement('p'); code.className = 'comparison-code';
   const note = document.createElement('p');
-  note.textContent = 'ログイン済みのブラウザ(Safariなど)で下のリンクを開き、確認コードが同じことを確かめて承認してください。承認されると、このPWAに自動で引き継ぎます。';
+  note.textContent = 'ログイン済みのブラウザ(Safariなど)で下のリンクから承認すると、このPWAに自動で引き継ぎます。';
   const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'ログイン済みのブラウザで承認する'; link.hidden = true;
   const resume = () => { if (document.visibilityState !== 'hidden') void poll(); };
   const cleanup = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); window.removeEventListener('online', resume); window.removeEventListener('pageshow', resume); };

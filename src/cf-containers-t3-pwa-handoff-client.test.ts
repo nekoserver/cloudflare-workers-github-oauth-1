@@ -34,8 +34,8 @@ function installBrowser(options: Options) {
       if (session === 'network-error') throw new TypeError('Failed to fetch');
       return json({ authenticated: session });
     }
-    if (url.endsWith('/_t3/pwa/create')) return create === 'ok' ? json({ id: 'a'.repeat(32), code: 'AB12CD34', expires: Math.floor(Date.now() / 1000) + 300 }, 201) : json({ reason: 'handoff_disabled', remedy: '引き継ぎが無効です。設定ファイルを確かめてください。' }, 503);
-    if (url.endsWith('/_t3/pwa/diagnose')) return json({ checks: [{ name: '引き継ぎの設定', ok: false, reason: 'handoff_disabled', remedy: '引き継ぎが無効です。設定ファイルを確かめてください。', detail: 'ENOENT' }, { name: 'T3本体', ok: true }] });
+    if (url.endsWith('/_t3/pwa/create')) return create === 'ok' ? json({ id: 'a'.repeat(32), code: 'AB12CD34', expires: Math.floor(Date.now() / 1000) + 300 }, 201) : json({ reason: 'handoff_disabled', remedy: '引き継ぎが無効です(設定ファイルがありません)。' }, 503);
+    if (url.endsWith('/_t3/pwa/diagnose')) return json({ checks: [{ name: '引き継ぎの設定', ok: false, reason: 'handoff_disabled', remedy: '引き継ぎが無効です(設定ファイルがありません)。', detail: 'ENOENT' }, { name: 'T3本体', ok: true }] });
     if (url.endsWith('/_t3/pwa/status')) return json({ state: status, code: 'AB12CD34' });
     if (url.endsWith('/_t3/pwa/claim')) return claim === 'ok' ? json({ credential: 'ABCD2345EFGH' }) : json({ reason: 'expired', remedy: '申請の期限(5分)が切れました。再読み込みしてください。' }, 409);
     return json({ error: 'unexpected' }, 500);
@@ -94,7 +94,7 @@ describe('セッションが無いPWA: 引き継ぎ', () => {
     const { start } = await import(CLIENT);
     await start(entry());
     expect(loaded()).toBe(0);
-    expect(b.text()).toContain('引き継ぎが無効です。設定ファイルを確かめてください。');
+    expect(b.text()).toContain('引き継ぎが無効です(設定ファイルがありません)。');
     expect(b.button('トークンで入る')).toBeDefined();
     expect(b.button('状態を確認する')).toBeUndefined();
     expect(b.posted('/_t3/pwa/claim')).toBe(false);
@@ -104,7 +104,7 @@ describe('セッションが無いPWA: 引き継ぎ', () => {
     const { start } = await import(CLIENT);
     await start(entry());
     expect(b.text()).toContain('✕ 引き継ぎの設定: ENOENT');
-    expect(b.text()).toContain('対処: 引き継ぎが無効です。設定ファイルを確かめてください。');
+    expect(b.text()).toContain('対処: 引き継ぎが無効です(設定ファイルがありません)。');
     expect(b.text()).toContain('✓ T3本体');
   });
   it('受け取りに失敗したときは、サーバーが返した対処を出し、「トークンで入る」で先へ進める(資格情報は入れない)', async () => {
