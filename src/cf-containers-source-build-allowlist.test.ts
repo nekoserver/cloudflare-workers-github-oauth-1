@@ -31,7 +31,7 @@ describe('ソースからのビルドは、理由を書いたものだけ', () =
 // Dockerでは、同じRUNの中で「インストール → 動作の確認 → ソースの削除」まで行う。
 const CLEANUP: Record<string, { verify: string; remove: string }> = {
   'tailscale-build': { verify: '/go/bin/tailscaled --version', remove: 'go clean -modcache -cache' },
-  'ruby-build': { verify: "/opt/ruby/bin/ruby -ropenssl", remove: 'rm -rf /tmp/ruby-src /tmp/ruby.tar.gz' },
+  'ruby-build': { verify: "/opt/ruby/bin/ruby -ropenssl", remove: 'rm -rf /tmp/ruby-src /tmp/ruby.tar.gz /tmp/ruby-pkg.tgz /tmp/ruby-cache-check' },
 };
 describe('ソースからビルドしたら、確認の後にソースツリーを捨てる', () => {
   it('許可したソースビルドには、すべて削除の決まりがある', () => {
@@ -43,6 +43,29 @@ describe('ソースからビルドしたら、確認の後にソースツリー�
       const run = stage.split(/^RUN /m).find(text => SOURCE_BUILD.test(text))!;
       expect(run).toContain(rule.verify);
       expect(run).toContain(rule.remove);
+    });
+  }
+});
+
+// ソースを捨てる前に、ソースからのコンパイル時間と、パッケージ(キャッシュ)からのインストール時間を測り、
+// CACHE_EFFECT の行をビルドログへ出す。ビルドの記録の取り込み(storeBuildTimings)が、D1の cf_container_build_cache_effects に保存する。
+const EFFECT_PACKAGE: Record<string, string> = { 'tailscale-build': 'tailscale', 'ruby-build': 'ruby' };
+describe('ソースを捨てる前に、キャッシュの効果を測ってログに出す', () => {
+  it('許可したソースビルドには、すべてパッケージ名の対応がある', () => {
+    expect(Object.keys(EFFECT_PACKAGE).sort()).toEqual(Object.keys(ALLOWED_SOURCE_BUILDS).sort());
+  });
+  for (const [name, packageName] of Object.entries(EFFECT_PACKAGE)) {
+    it(`${name}: パッケージを作り、そこから入れ直して時間を測り、ソースを消す前に CACHE_EFFECT を出す`, () => {
+      const run = stages.find(item => item.name === name)!.text.split(/^RUN /m).find(text => SOURCE_BUILD.test(text))!;
+      const effect = run.indexOf('CACHE_EFFECT package=' + packageName + ' ');
+      expect(effect, 'CACHE_EFFECT の行が無い').toBeGreaterThan(0);
+      expect(run).toContain('compile_ms=');
+      expect(run).toContain('install_ms=');
+      expect(run).toContain('source_bytes=');
+      expect(run).toContain('package_bytes=');
+      expect(run).toMatch(/tar -czf \/tmp\/\S+-pkg\.tgz/);
+      expect(run).toMatch(/tar -xzf \/tmp\/\S+-pkg\.tgz/);
+      expect(effect).toBeLessThan(run.indexOf(CLEANUP[name].remove));
     });
   }
 });

@@ -50,6 +50,22 @@
 - ビルド済みのパッケージのキャッシュ(保存先は未決定)を導入したときは、キャッシュから読み込めることを確かめてから、ソースツリーを消す。
 - エージェントの手元で取得・展開したソースツリーや配布物の展開先も、成果物の確認が済んだら消す。
 
+### キャッシュの効果の記録(ユーザー指定 2026-10-31)
+
+ソースを捨てる前に、次を測り、ビルドのたびに D1 の `cf_container_build_cache_effects`(マイグレーション 0191)に記録する。
+
+| 項目 | 測り方 | 列 |
+|---|---|---|
+| ソースからのコンパイル時間 | `configure`〜`make install`(Ruby)、`go install`(Tailscale)の前後の時刻の差 | `compile_seconds` |
+| パッケージ(キャッシュ)からのインストール時間 | インストール先を `tar -czf /tmp/<名前>-pkg.tgz` にまとめ、別の場所へ `tar -xzf` で展開して `--version` が動くまでの時間 | `install_seconds` |
+| 差(キャッシュで省ける時間) | コンパイル時間 − インストール時間 | `saved_seconds` |
+| ソースアーカイブのサイズ | Ruby: `/tmp/ruby.tar.gz`。Tailscale: Go が取得したモジュールの zip の合計(`/go/pkg/mod/cache/download`) | `source_bytes` |
+| コンパイル済みパッケージのサイズ | `/tmp/<名前>-pkg.tgz` | `package_bytes` |
+
+- 流れ: Dockerfile が `CACHE_EFFECT package=<名前> version=<版> compile_ms=<ミリ秒> install_ms=<ミリ秒> source_bytes=<バイト> package_bytes=<バイト>` の1行をビルドログに出す。`/cf-containers` のビルドログの取り込み(`storeBuildTimings`)が、ビルドの記録と同じ batch で保存する(`src/utils/containerBuildCacheEffects.ts`)。
+- 形の崩れた行は記録しない。サイズの無い古い形の行は、サイズを null にする(0で埋めない)。
+- 現時点では、キャッシュの保存先がまだ無い。そのため、インストール時間は「パッケージから入れ直したら、どれだけかかるか」をビルドの中で実測した値である。保存先(R2 など)を導入したら、そこからの取得時間も加える。
+
 ## 4. 公式のバイナリの取得元
 
 **対象**: Dockerfile の実行ステージ — 公式のリリースから取得するパッケージと、照合の方法。

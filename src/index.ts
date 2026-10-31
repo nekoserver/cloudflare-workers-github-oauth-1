@@ -669,6 +669,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_image_records', migration: '0185', description: 'イメージ・稼働分析・ビルド実測のJSON原本', syncPolicy: 'auto' },
   { name: 'cf_container_build_measurements', migration: '0184', description: 'Dockerビルドログの実測観測記録。再取得・並行収集でも過去観測を保持', syncPolicy: 'auto' },
   { name: 'cf_container_build_steps', migration: '0184', description: 'ビルド観測ごとのBuildKitステップ所要秒・キャッシュ・成否', syncPolicy: 'auto' },
+  { name: 'cf_container_build_cache_effects', migration: '0191', description: 'ソースビルドしたパッケージの、コンパイル秒とキャッシュからのインストール秒、ソースアーカイブとパッケージのバイト数(ビルドごと)', syncPolicy: 'auto' },
   { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
@@ -3153,6 +3154,21 @@ CREATE TABLE IF NOT EXISTS cf_container_session_notes (
   created_at TEXT NOT NULL,
   UNIQUE(start_operation_id, revision)
 );
+`,
+  '0191': `CREATE TABLE IF NOT EXISTS cf_container_build_cache_effects (
+  snapshot_key TEXT NOT NULL REFERENCES cf_container_build_measurements(snapshot_key),
+  build_uuid TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  compile_seconds REAL NOT NULL CHECK(compile_seconds >= 0),
+  install_seconds REAL NOT NULL CHECK(install_seconds >= 0),
+  saved_seconds REAL NOT NULL,
+  source_bytes INTEGER CHECK(source_bytes IS NULL OR source_bytes >= 0),
+  package_bytes INTEGER CHECK(package_bytes IS NULL OR package_bytes >= 0),
+  recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY(snapshot_key, package_name)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_build_cache_effects_package ON cf_container_build_cache_effects(package_name, recorded_at DESC);
 `,
   '0190': `CREATE TABLE IF NOT EXISTS t3_pwa_handoffs (
   id TEXT PRIMARY KEY NOT NULL CHECK(length(id) BETWEEN 32 AND 128),

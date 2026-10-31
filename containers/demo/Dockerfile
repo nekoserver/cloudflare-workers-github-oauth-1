@@ -8,9 +8,22 @@ ARG RUBY_VERSION=4.0.9
 # pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
 FROM golang:1.27.3-trixie AS tailscale-build
 ARG TAILSCALE_VERSION
-RUN CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
+# ソースを捨てる前に、ソースからのコンパイル時間と、パッケージ(キャッシュ)からのインストール時間を測って
+# CACHE_EFFECT の行を出す。ビルドの記録の取り込みが、D1の cf_container_build_cache_effects に保存する(CLAUDE.md ルール44)。
+RUN start_ms=$(date +%s%3N) \
+    && CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
+    && compile_ms=$(( $(date +%s%3N) - start_ms )) \
     && /go/bin/tailscale version \
     && /go/bin/tailscaled --version \
+    && tar -czf /tmp/tailscale-pkg.tgz -C /go/bin tailscale tailscaled \
+    && mkdir -p /tmp/tailscale-cache-check && start_ms=$(date +%s%3N) \
+    && tar -xzf /tmp/tailscale-pkg.tgz -C /tmp/tailscale-cache-check \
+    && /tmp/tailscale-cache-check/tailscaled --version \
+    && install_ms=$(( $(date +%s%3N) - start_ms )) \
+    && source_bytes=$(find /go/pkg/mod/cache/download -name "*.zip" -printf "%s\n" | awk '{n+=$1} END {print n+0}') \
+    && package_bytes=$(stat -c %s /tmp/tailscale-pkg.tgz) \
+    && echo "CACHE_EFFECT package=tailscale version=${TAILSCALE_VERSION} compile_ms=${compile_ms} install_ms=${install_ms} source_bytes=${source_bytes} package_bytes=${package_bytes}" \
+    && rm -rf /tmp/tailscale-pkg.tgz /tmp/tailscale-cache-check \
     && go clean -modcache -cache
 
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
@@ -30,10 +43,18 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/ruby.tar.gz 
     && echo "${RUBY_SHA256}  /tmp/ruby.tar.gz" | sha256sum -c - \
     && mkdir -p /tmp/ruby-src && tar -xzf /tmp/ruby.tar.gz -C /tmp/ruby-src --strip-components=1 \
     && cd /tmp/ruby-src \
+    && start_ms=$(date +%s%3N) \
     && ./configure --prefix=/opt/ruby --disable-install-doc \
     && make -j"$(nproc)" \
     && make install \
-    && rm -rf /tmp/ruby-src /tmp/ruby.tar.gz \
+    && compile_ms=$(( $(date +%s%3N) - start_ms )) \
+    && tar -czf /tmp/ruby-pkg.tgz -C /opt ruby \
+    && mkdir -p /tmp/ruby-cache-check && start_ms=$(date +%s%3N) \
+    && tar -xzf /tmp/ruby-pkg.tgz -C /tmp/ruby-cache-check \
+    && /tmp/ruby-cache-check/ruby/bin/ruby --version \
+    && install_ms=$(( $(date +%s%3N) - start_ms )) \
+    && echo "CACHE_EFFECT package=ruby version=${RUBY_VERSION} compile_ms=${compile_ms} install_ms=${install_ms} source_bytes=$(stat -c %s /tmp/ruby.tar.gz) package_bytes=$(stat -c %s /tmp/ruby-pkg.tgz)" \
+    && cd / && rm -rf /tmp/ruby-src /tmp/ruby.tar.gz /tmp/ruby-pkg.tgz /tmp/ruby-cache-check \
     && /opt/ruby/bin/ruby --version \
     && /opt/ruby/bin/ruby -ropenssl -ryaml -rzlib -rfiddle -e 'puts OpenSSL::OPENSSL_LIBRARY_VERSION'
 
