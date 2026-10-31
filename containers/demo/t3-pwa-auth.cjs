@@ -38,6 +38,12 @@ async function mintPairingCredential(cookie, label) {
     request.end(payload);
   });
 }
+// 自動承認用: ブラウザのクッキーを使わず、コンテナ内のCLIでT3本来のペアリングの資格情報(1回限り、5分)を発行する。
+// 契約(T3 0.1.3): `t3 auth pairing create --json` は {credential, expiresAt, ...} を出す。
+async function mintAutoPairingCredential(label) {
+  const { stdout } = await execute(nativeBinary, ['auth', 'pairing', 'create', '--json', '--label', label], { timeout: 20000, maxBuffer: 1024 * 1024, env: { ...process.env, HOME: '/root' } });
+  return JSON.parse(stdout);
+}
 async function nativeSession(headers) {
   return new Promise((resolve, reject) => {
     const request = http.get({ hostname: '127.0.0.1', port: 3773, path: '/api/auth/session', headers }, response => {
@@ -146,6 +152,15 @@ function createPwaAuth(options = {}) {
   const currentGeneration = () => generation() + ':' + (currentConfig()?.generation || 'disabled');
   const verify = options.verifySession || nativeSession;
   const mintPairing = options.mintPairing || mintPairingCredential;
+  const mintAutoPairing = options.mintAutoPairing || mintAutoPairingCredential;
+  // ログイン済みのブラウザを最後に見た時刻(接続元IPの署名ごと)。メモリにだけ置く。
+  const AUTO_WINDOW = 300;
+  const ownersSeen = new Map();
+  const ipOf = req => sign(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || 'unknown');
+  function noteOwner(req) {
+    const t = now(); ownersSeen.set(ipOf(req), t);
+    for (const [key, seen] of ownersSeen) if (seen <= t - AUTO_WINDOW) ownersSeen.delete(key);
+  }
   // 発行したペアリングの資格情報は、データベースに保存せず、このプロセスのメモリにだけ置く(受け取りで消す)。
   const pairings = new Map();
   const issue = options.issueSession || (async (id, scopes) => {
@@ -291,11 +306,24 @@ function createPwaAuth(options = {}) {
       const data = await body(req);
       if (url.pathname === PREFIX + '/create') {
         if (typeof data.secret !== 'string' || !/^[a-f0-9]{64}$/.test(data.secret)) { fail(res, 400, 'invalid_request'); return true; }
-        const ip = sign(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || 'unknown');
+        const ip = ipOf(req);
         if (db.prepare('SELECT count(*) AS n FROM handoffs WHERE ip_hash=? AND created>?').get(ip, now() - 60).n >= 5) { fail(res, 429, 'too_many_requests'); return true; }
         const id = crypto.randomBytes(16).toString('hex'), code = crypto.randomBytes(4).toString('hex').toUpperCase();
         db.prepare("INSERT INTO handoffs(id,challenge,code,state,created,expires,ip_hash,changed,actor,generation) VALUES(?,?,?,'pending',?,?,?,?,'pwa',?)").run(id, sha(data.secret), code, now(), now() + 300, ip, now(), currentGeneration());
-        respond(res, 201, { id, code, expires: now() + 300 }); return true;
+        // 同じ接続元で5分以内にログイン済みのブラウザを見ていれば、承認ボタンを待たずに自動で承認する。
+        let autoApproval;
+        const seen = ownersSeen.get(ip);
+        if (seen !== undefined && seen > now() - AUTO_WINDOW) {
+          try {
+            const issued = await mintAutoPairing('tree-view-pwa:' + id);
+            const expires = Math.min(now() + 300, Math.floor(Date.parse(issued?.expiresAt) / 1000));
+            if (typeof issued?.credential !== 'string' || !/^[A-Za-z0-9_-]{6,128}$/.test(issued.credential) || !Number.isFinite(expires) || expires <= now()) throw new Error('Invalid pairing credential');
+            pairings.set(id, { credential: issued.credential, expires });
+            db.prepare("UPDATE handoffs SET state='approved',approved_scopes=?,approved_by='auto-same-ip',approved_at=?,changed=?,actor='auto-same-ip' WHERE id=? AND state='pending'").run(JSON.stringify(SCOPES), now(), now(), id);
+            autoApproval = { ok: true };
+          } catch (error) { autoApproval = { ok: false, detail: error instanceof Error ? error.message : String(error) }; }
+        }
+        respond(res, 201, { id, code, expires: now() + 300, ...(autoApproval ? { autoApproval } : {}) }); return true;
       }
       if (url.pathname === PREFIX + '/verified') {
         const authorization = req.headers.authorization;
@@ -322,6 +350,6 @@ function createPwaAuth(options = {}) {
       return true;
     } catch (error) { if (!res.headersSent) fail(res, error instanceof InvalidBody ? 400 : 503, error instanceof InvalidBody ? 'invalid_request' : 'internal_error', error instanceof Error ? error.message : error); return true; }
   }
-  return { handle, recover, close: () => db.close(), db };
+  return { handle, recover, noteOwner, close: () => db.close(), db };
 }
 module.exports = { createPwaAuth, ensureHandoffConfig, HANDOFF_REASONS, injectBootstrap, nativeSession, SCOPES };

@@ -31,6 +31,8 @@ const server = http.createServer(async (req, res) => {
       response.on('end', () => {
         const body = Buffer.concat(chunks);
         const unauthenticated = isSessionCheck && size <= MAX_BODY && isUnauthenticatedSessionBody(body.toString('utf8'));
+        // ログイン済みのブラウザを見たら記録する(同じ接続元のPWAの申請を自動で承認するため)。
+        if (isSessionCheck && size <= MAX_BODY && !unauthenticated && pwa.noteOwner) { try { if (JSON.parse(body.toString('utf8')).authenticated === true) pwa.noteOwner(req); } catch {} }
         const send = clears => {
           if (clears.length) { next['set-cookie'] = [...(next['set-cookie'] || []), ...clears]; console.error('T3 stale session cleared: variants=' + clears.length); }
           res.writeHead(response.statusCode, next); res.end(body);
