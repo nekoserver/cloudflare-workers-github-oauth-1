@@ -521,6 +521,20 @@ function tailFile(path, maxBytes) {
 // Workerの汎用プロキシも/adminを転送しないため、ここへはそのAPI経由でしか届かない。
 const AUTHORIZED_KEYS_PATH = '/root/.ssh/authorized_keys';
 const PUBLIC_KEY_LINE = /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+\/]+={0,2}( [^\r\n]*)?$/;
+// SSHのホスト鍵(公開鍵)。起動のたびに ssh-keygen -A で作られ、作り直すと変わるため、登録の応答で返す。
+// tree-viewのターミナルは、受け取った鍵で known_hosts を書き直して厳密に照合する。返すのは種類とbase64だけ。
+function readHostKeys(dir = '/etc/ssh') {
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((name) => /^ssh_host_[a-z0-9]+_key\.pub$/.test(name)); } catch { return []; }
+  const keys = [];
+  for (const name of names) {
+    try {
+      const line = fs.readFileSync(dir + '/' + name, 'utf8').trim();
+      if (PUBLIC_KEY_LINE.test(line)) keys.push(line.split(' ').slice(0, 2).join(' '));
+    } catch {}
+  }
+  return keys;
+}
 function appendAuthorizedKey(req, res) {
   let raw = '';
   req.on('data', (chunk) => {
@@ -545,12 +559,12 @@ function appendAuthorizedKey(req, res) {
       try { current = fs.readFileSync(AUTHORIZED_KEYS_PATH, 'utf8'); } catch (err) { if (err.code !== 'ENOENT') throw err; }
       const identity = key.split(' ').slice(0, 2).join(' ');
       if (current.split('\n').some((line) => line.trim().split(/\s+/).slice(0, 2).join(' ') === identity)) {
-        return send(200, { ok: true, added: false, message: 'この公開鍵は既に登録されています' });
+        return send(200, { ok: true, added: false, message: 'この公開鍵は既に登録されています', hostKeys: readHostKeys() });
       }
       const prefix = current && !current.endsWith('\n') ? '\n' : '';
       fs.appendFileSync(AUTHORIZED_KEYS_PATH, prefix + key + '\n', { mode: 0o600 });
       fs.chmodSync(AUTHORIZED_KEYS_PATH, 0o600);
-      return send(200, { ok: true, added: true });
+      return send(200, { ok: true, added: true, hostKeys: readHostKeys() });
     } catch (err) {
       return send(500, { error: 'authorized_keysへ書き込めません: ' + (err.code || err.message) });
     }
@@ -685,7 +699,7 @@ const server = http
   })
   ;
 
-module.exports = { issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
