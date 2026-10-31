@@ -115,21 +115,28 @@ async function approve(id) {
     const link = document.createElement('a'); link.href = '/'; link.textContent = 'T3のログイン画面を開く'; main.append(link);
   }
 }
+// ログイン済みのブラウザで承認してもらい、T3本来のペアリングの資格情報を受け取って、このPWAの中でペアリングする。
+// 受け取った資格情報は /#token=<資格情報> に入れてからT3の画面を起動する(T3の画面が起動時に読み取り、自動でペアリングする)。
+// 「トークンで入る」で、いつでもT3の標準のペアリング画面へ進める。申請を作れないときも標準画面へ進む(行き止まりにしない)。
 async function connect(entry) {
-  const { main, message } = panel('開発用PWAのT3に接続');
-  message.textContent = '接続申請を準備しています…';
-  let pending = stored(pendingKey), busy = false, stopped = false, timer;
+  const { main, message } = panel('PWAにログインを引き継ぐ');
+  message.textContent = '引き継ぎの申請を作っています…';
+  let pending = null, busy = false, stopped = false, timer;
   const code = document.createElement('p'); code.className = 'comparison-code';
-  const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'ログイン済みの別タブで承認する';
-  const restart = button('新しい接続申請を作る', () => { forget(pendingKey); location.reload(); }); restart.hidden = true;
-  main.append(code, link, restart); link.hidden = true;
-  function schedule() { if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), 2000); }
-  async function ready() {
-    if (!bearer || !(await session())) return false;
-    const response = await post('/verified', {});
-    if (!response.ok || (await response.json()).verified !== true) throw new Error('セッションの検証を完了できませんでした。');
-    forget(pendingKey); stopped = true; cleanup(); await nativeApp(entry); return true;
+  const note = document.createElement('p');
+  note.textContent = 'ログイン済みのブラウザ(Safariなど)で下のリンクを開き、確認コードが同じことを確かめて承認してください。承認されると、このPWAに自動で引き継ぎます。';
+  const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'ログイン済みのブラウザで承認する'; link.hidden = true;
+  const resume = () => { if (document.visibilityState !== 'hidden') void poll(); };
+  const cleanup = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); window.removeEventListener('online', resume); window.removeEventListener('pageshow', resume); };
+  async function finish(credential) {
+    if (stopped && credential === undefined) return;
+    stopped = true; cleanup();
+    if (credential) history.replaceState(null, '', '/#token=' + encodeURIComponent(credential));
+    await nativeApp(entry);
   }
+  const manual = button('トークンで入る', () => finish(null));
+  main.append(code, note, link, manual);
+  function schedule() { if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), 2000); }
   async function poll() {
     if (stopped || busy || !pending) return;
     clearTimeout(timer); busy = true;
@@ -137,40 +144,39 @@ async function connect(entry) {
       const response = await post('/status', pending);
       if (!response.ok) {
         if (response.status >= 500 || response.status === 429) throw new Error('申請の確認を再試行しています…');
-        stopped = true; message.textContent = '申請を確認できません。新しい申請を作ってください。'; restart.hidden = false; return;
+        stopped = true; forget(pendingKey); message.textContent = '申請を確認できません。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
       }
       const status = await response.json(); code.textContent = '確認コード: ' + status.code;
       if (status.state === 'approved') {
-        const claim = await post('/claim', pending), result = await claim.json();
-        if (!claim.ok) throw new Error('接続の受け取りを再確認しています…');
-        if (typeof result.token !== 'string' || !Number.isFinite(result.expires) || result.expires * 1000 <= Date.now()) throw new Error('接続情報が無効です。');
-        bearer = { token: result.token, expires: result.expires }; save(tokenKey, bearer);
-        if (await ready()) return;
+        const claim = await post('/claim', pending);
+        const result = await claim.json().catch(() => ({}));
+        forget(pendingKey);
+        if (!claim.ok || typeof result.credential !== 'string' || !result.credential) {
+          stopped = true; message.textContent = '引き継ぎの受け取りに失敗しました。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
+        }
+        await finish(result.credential); return;
       }
-      if (status.state === 'consumed') {
-        if (await ready()) return;
-        stopped = true; message.textContent = '接続情報を受け取れませんでした。新しい申請を作ってください。'; restart.hidden = false; return;
+      if (['expired', 'rejected', 'failed', 'consumed'].includes(status.state)) {
+        stopped = true; forget(pendingKey); message.textContent = '申請の状態: ' + status.state + '。再読み込みで新しい申請を作るか、「トークンで入る」で進んでください。'; return;
       }
-      if (['expired', 'rejected', 'failed'].includes(status.state)) {
-        stopped = true; message.textContent = '申請の状態: ' + status.state + '。新しい申請を作ってください。'; restart.hidden = false; return;
-      }
-      message.textContent = status.state === 'redeeming' ? 'T3の接続を確認しています…' : '別タブでコードを確認して承認し、このPWAへ戻ってください。トークン入力は不要です。';
+      message.textContent = '承認を待っています…';
     } catch (error) { message.textContent = error.message || '通信を再試行しています…'; }
     finally { busy = false; schedule(); }
   }
-  const resume = () => { if (document.visibilityState !== 'hidden') void poll(); };
-  const cleanup = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', resume); window.removeEventListener('focus', resume); window.removeEventListener('online', resume); window.removeEventListener('pageshow', resume); };
   document.addEventListener('visibilitychange', resume); window.addEventListener('focus', resume); window.addEventListener('online', resume); window.addEventListener('pageshow', resume);
-  window.addEventListener('pagehide', () => { clearTimeout(timer); }, { once: true });
   try {
-    if (!pending || pending.expires * 1000 <= Date.now()) {
+    pending = stored(pendingKey);
+    if (!pending || !Number.isFinite(pending.expires) || pending.expires * 1000 <= Date.now()) {
       const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
-      const response = await post('/create', { secret }), result = await response.json();
-      if (!response.ok) throw new Error('申請を作成できませんでした。少し待って再読み込みしてください。');
+      const response = await post('/create', { secret });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || typeof result.id !== 'string') { await finish(null); return; }
       pending = { id: result.id, secret, expires: result.expires }; save(pendingKey, pending, false); code.textContent = '確認コード: ' + result.code;
     }
-    link.href = prefix + '/approve/' + pending.id; link.hidden = false; await poll();
-  } catch (error) { message.textContent = error.message; restart.hidden = false; }
+    link.href = prefix + '/approve/' + pending.id; link.hidden = false;
+    message.textContent = '承認を待っています…';
+    await poll();
+  } catch { await finish(null); }
 }
 export async function start(entry) {
   const standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches;
@@ -190,8 +196,8 @@ export async function start(entry) {
     // 通信を確認できないときも、ボタンや案内の画面は出さない。保存済みの接続情報は維持したまま、T3の標準画面へ進む。
     await nativeApp(entry); return;
   }
-  // セッションが無いときの「接続ページ」(connect)は、承認しても先へ進まなかったため出さない。T3の標準のログイン画面へ進む。
-  bearer = null; forget(tokenKey); await nativeApp(entry);
+  // セッションが無いときは、ログイン済みのブラウザからの引き継ぎを申請する(行き止まりにせず、「トークンで入る」も出す)。
+  bearer = null; forget(tokenKey); await connect(entry);
 }
 const approvalId = location.pathname.match(/^\/_t3\/pwa\/approve\/([a-f0-9]{32})$/)?.[1];
 if (approvalId) void approve(approvalId);

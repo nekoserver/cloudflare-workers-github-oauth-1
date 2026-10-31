@@ -18,6 +18,26 @@ async function nativeCommand(args) {
   const { stdout } = await execute(nativeBinary, ['auth', 'session', ...args], { timeout: 20000, maxBuffer: 1024 * 1024 });
   return stdout;
 }
+// ログイン済みのブラウザのセッション(クッキー)で、T3本来のペアリングの資格情報(1回限り、5分)を発行する。
+async function mintPairingCredential(cookie, label) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({ label });
+    const request = http.request({ hostname: '127.0.0.1', port: 3773, method: 'POST', path: '/api/auth/pairing-token', headers: { cookie, 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } }, response => {
+      let text = '';
+      response.on('data', chunk => { text += chunk; if (text.length > 65536) request.destroy(new Error('Oversized native response')); });
+      response.on('end', () => {
+        try {
+          if (response.statusCode !== 200) throw new Error('Pairing credential request failed: HTTP ' + response.statusCode);
+          resolve(JSON.parse(text));
+        } catch (error) { reject(error); }
+      });
+      response.on('error', reject);
+    });
+    request.setTimeout(10000, () => request.destroy(new Error('Pairing credential timeout')));
+    request.on('error', reject);
+    request.end(payload);
+  });
+}
 async function nativeSession(headers) {
   return new Promise((resolve, reject) => {
     const request = http.get({ hostname: '127.0.0.1', port: 3773, path: '/api/auth/session', headers }, response => {
@@ -46,6 +66,18 @@ async function body(req) {
 function injectBootstrap(html) {
   return html.replace(/<script\b([^>]*?)type="module"([^>]*?)src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"([^>]*)><\/script>/,
     (_all, before, middle, entry, after) => `<script${before}type="module"${middle}src="${PREFIX}/bootstrap/${path.basename(entry)}"${after}></script>`);
+}
+// 引き継ぎを有効にする設定ファイル。コンテナを作り直すと ~/.t3 ごと消えるため、プロキシの起動時に、無ければ作る。
+// 既にあれば(無効にした設定や壊れたファイルも)書き換えない。戻り値: 'created' | 'kept' | 'invalid'
+const HANDOFF_CONFIG = '/root/.t3/userdata/pwa-handoff/config.json';
+function ensureHandoffConfig(file = HANDOFF_CONFIG) {
+  if (fs.existsSync(file)) {
+    try { JSON.parse(fs.readFileSync(file, 'utf8')); return 'kept'; } catch { return 'invalid'; }
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const value = { enabled: true, developmentOnly: true, generation: crypto.randomBytes(16).toString('hex') };
+  fs.writeFileSync(file, JSON.stringify(value) + '\n', { flag: 'wx', mode: 0o600 });
+  return 'created';
 }
 function createPwaAuth(options = {}) {
   const dbPath = options.dbPath || '/root/.t3/userdata/pwa-handoff/state.sqlite';
@@ -85,6 +117,9 @@ function createPwaAuth(options = {}) {
   });
   const currentGeneration = () => generation() + ':' + (currentConfig()?.generation || 'disabled');
   const verify = options.verifySession || nativeSession;
+  const mintPairing = options.mintPairing || mintPairingCredential;
+  // 発行したペアリングの資格情報は、データベースに保存せず、このプロセスのメモリにだけ置く(受け取りで消す)。
+  const pairings = new Map();
   const issue = options.issueSession || (async (id, scopes) => {
     const args = ['issue', '--ttl', '24h', '--label', 'tree-view-pwa:' + id, '--subject', 'tree-view-pwa', '--json'];
     for (const scope of scopes) args.push('--scope', scope);
@@ -190,7 +225,21 @@ function createPwaAuth(options = {}) {
         if (count >= 10) { respond(res, 429, { error: 'Try later' }); return true; }
         const next = data.decision === 'approve' ? 'approved' : 'rejected';
         const changed = db.prepare("UPDATE handoffs SET state=?,approved_scopes=?,approved_by=?,approved_at=?,changed=?,actor=? WHERE id=? AND state='pending' AND expires>?").run(next, JSON.stringify(account.scopes), account.actor, now(), now(), account.actor, row.id, now()).changes;
-        respond(res, changed === 1 ? 200 : 409, changed === 1 ? { state: next } : { error: 'Request expired or already decided' }); return true;
+        if (changed !== 1) { respond(res, 409, { error: 'Request expired or already decided' }); return true; }
+        if (next === 'approved') {
+          try {
+            const issued = await mintPairing(account.cookie, 'tree-view-pwa:' + row.id);
+            const expires = Math.min(row.expires, Math.floor(Date.parse(issued?.expiresAt) / 1000));
+            if (typeof issued?.credential !== 'string' || !/^[A-Za-z0-9_-]{6,128}$/.test(issued.credential) || !Number.isFinite(expires) || expires <= now()) throw new Error('Invalid pairing credential');
+            pairings.set(row.id, { credential: issued.credential, expires });
+          } catch {
+            // 状態の遷移の規則(approved -> redeeming -> failed)に従って、失敗として残す。
+            db.prepare("UPDATE handoffs SET state='redeeming',changed=?,actor='approval' WHERE id=? AND state='approved'").run(now(), row.id);
+            db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='approval' WHERE id=? AND state='redeeming'").run(now(), row.id);
+            respond(res, 503, { error: 'T3のペアリングの資格情報を発行できませんでした。新しい申請を作ってください。' }); return true;
+          }
+        }
+        respond(res, 200, { state: next }); return true;
       }
       const data = await body(req);
       if (url.pathname === PREFIX + '/create') {
@@ -215,33 +264,17 @@ function createPwaAuth(options = {}) {
       if (url.pathname !== PREFIX + '/claim') { respond(res, 404, { error: 'Not found' }); return true; }
       const attempt = crypto.randomUUID();
       if (db.prepare("UPDATE handoffs SET state='redeeming',attempt=?,changed=?,actor='pwa' WHERE id=? AND state='approved' AND expires>?").run(attempt, now(), row.id, now()).changes !== 1) { respond(res, 409, { error: 'Request expired or already used' }); return true; }
-      let issued;
-      try {
-        const scopes = JSON.parse(row.approved_scopes);
-        issued = await issue(row.id, scopes);
-        const expiry = Math.floor(Date.parse(issued.expiresAt) / 1000);
-        if (issued.method !== 'bearer-access-token' || typeof issued.sessionId !== 'string' || typeof issued.token !== 'string' || JSON.stringify([...issued.scopes].sort()) !== JSON.stringify([...scopes].sort()) || !Number.isFinite(expiry) || expiry <= now() || expiry > now() + 86405) throw new Error('Invalid native session');
-        const authenticated = await verify({ authorization: 'Bearer ' + issued.token });
-        if (authenticated?.authenticated !== true || authenticated.sessionMethod !== 'bearer-access-token') throw new Error('Native session not authenticated');
-        if (!currentConfig() || row.generation !== currentGeneration()) throw new Error('Environment changed');
-        db.exec('BEGIN IMMEDIATE');
-        try {
-          db.prepare('INSERT INTO sessions(id,handoff_id,token_hash,scopes,issued,expires) VALUES(?,?,?,?,?,?)').run(issued.sessionId, row.id, sha(issued.token), row.approved_scopes, now(), expiry);
-          if (db.prepare("UPDATE handoffs SET state='consumed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt).changes !== 1) throw new Error('Claim changed');
-          db.exec('COMMIT');
-        } catch (error) { db.exec('ROLLBACK'); throw error; }
-        respond(res, 200, { token: issued.token, expires: expiry, scopes });
-      } catch {
-        // A CLI timeout can occur after native issuance. Leave ambiguous
-        // attempts redeeming so recovery can find and revoke by client label.
-        let cleaned = Boolean(issued?.sessionId);
-        if (issued?.sessionId) { try { await revoke(issued.sessionId); } catch { cleaned = false; } }
-        if (cleaned) db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
-        respond(res, 503, { error: 'Native session issue failed; start a new request' });
+      const pairing = pairings.get(row.id);
+      pairings.delete(row.id);
+      if (!pairing || pairing.expires <= now()) {
+        db.prepare("UPDATE handoffs SET state='failed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
+        respond(res, 409, { error: 'Request expired or already used' }); return true;
       }
+      db.prepare("UPDATE handoffs SET state='consumed',changed=?,actor='claim' WHERE id=? AND state='redeeming' AND attempt=?").run(now(), row.id, attempt);
+      respond(res, 200, { credential: pairing.credential });
       return true;
     } catch (error) { if (!res.headersSent) respond(res, error instanceof InvalidBody ? 400 : 503, { error: 'Request failed' }); return true; }
   }
   return { handle, recover, close: () => db.close(), db };
 }
-module.exports = { createPwaAuth, injectBootstrap, nativeSession, SCOPES };
+module.exports = { createPwaAuth, ensureHandoffConfig, injectBootstrap, nativeSession, SCOPES };
