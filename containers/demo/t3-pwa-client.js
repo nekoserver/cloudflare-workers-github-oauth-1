@@ -139,7 +139,9 @@ async function connect(entry) {
   const report = document.createElement('div');
   const line = text => { const node = document.createElement('p'); node.textContent = text; report.append(node); };
   async function diagnose() {
-    report.replaceChildren();
+    // 押したことが分かるように、すぐ「確認中」を出し、結果の位置まで画面を動かす(スマホでは結果が画面の外に出るため)。
+    report.replaceChildren(); check.disabled = true; line('確認中…');
+    report.scrollIntoView?.({ block: 'nearest' });
     try {
       const response = await window.fetch(prefix + '/diagnose', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
       const data = await response.json();
@@ -147,7 +149,9 @@ async function connect(entry) {
         line((check.ok ? '✓ ' : '✕ ') + check.name + (check.detail ? ': ' + check.detail : ''));
         if (!check.ok && check.remedy) line('対処: ' + check.remedy);
       }
+      if (!(data.checks || []).length) line('診断の結果が空でした(HTTP ' + response.status + ')');
     } catch (error) { line('状態を確認できませんでした: ' + (error && error.message ? error.message : String(error))); }
+    finally { report.firstChild?.remove(); check.disabled = false; report.scrollIntoView?.({ block: 'nearest' }); }
   }
   const check = button('状態を確認する', diagnose);
   main.append(code, note, link, manual, check, report);
