@@ -40,8 +40,8 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
     if (raw.length > 8192 || !(await authenticated(c.req.raw,raw,c.env.DYNAMICNEKO_WORKER_HMAC_SECRET))) return c.json({error:'Unauthorized'},401);
     let body: {action?:unknown;userToken?:unknown};
     try {body=JSON.parse(raw);} catch {return c.json({error:'不正なリクエストです'},400);}
-    if (!body || (typeof body.action !== 'string' || !['status','start','stop','pairing'].includes(body.action)) || typeof body.userToken !== 'string') return c.json({error:'actionはstatus/start/stop/pairingで指定してください'},400);
-    const action = body.action as 'status'|'start'|'stop'|'pairing';
+    if (!body || (typeof body.action !== 'string' || !['status','start','stop','pairing','session'].includes(body.action)) || typeof body.userToken !== 'string') return c.json({error:'actionはstatus/start/stop/pairing/sessionで指定してください'},400);
+    const action = body.action as 'status'|'start'|'stop'|'pairing'|'session';
     const auth = await dependencies.authenticate(c.env,body.userToken);
     if (!auth.ok) return c.json({error:auth.error},auth.status as 400|401|403|500|503);
     if (auth.login.toLowerCase() !== 'nekoserver') return c.json({error:'この操作は管理者に限定されています'},403);
@@ -54,6 +54,17 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
         const data = await response.json() as {ok?:boolean;pairUrl?:unknown;expiresAt?:unknown;errorCode?:string;detail?:string;remedy?:string};
         if (response.ok && data?.ok === true && typeof data.pairUrl === 'string' && typeof data.expiresAt === 'string') return c.json({pairUrl:data.pairUrl,expiresAt:data.expiresAt});
         return c.json({error:data?.errorCode ?? 'pairing_failed',detail:data?.detail ?? 'HTTP '+response.status,remedy:data?.remedy ?? ''},502);
+      } catch (error) {
+        return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
+      }
+    }
+    // tree-viewのiframe用。iOSのSafariはiframeの中でクッキーを保存・送信しないため、Bearerトークンを発行する。
+    if (action === 'session') {
+      try {
+        const response = await stub.fetch(new Request('http://container/t3/session',{method:'POST'}));
+        const data = await response.json() as {ok?:boolean;token?:unknown;expires?:unknown;errorCode?:string;detail?:string;remedy?:string};
+        if (response.ok && data?.ok === true && typeof data.token === 'string' && typeof data.expires === 'number') return c.json({token:data.token,expires:data.expires});
+        return c.json({error:data?.errorCode ?? 'session_failed',detail:data?.detail ?? 'HTTP '+response.status,remedy:data?.remedy ?? ''},502);
       } catch (error) {
         return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
       }

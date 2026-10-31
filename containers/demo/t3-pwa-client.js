@@ -203,15 +203,29 @@ async function connect(entry) {
     await diagnose();
   }
 }
+// tree-viewのiframeの中では、iOSのSafariがクッキーを保存・送信しないため、クッキーに頼らない。
+// tree-viewは /#t3-bearer=<トークン>&expires=<UNIX秒> を付けて開く。トークンを保存してURLから消し、Authorizationで送る。
+function takeBearerFromUrl() {
+  const params = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+  const token = params.get('t3-bearer'), expires = Number(params.get('expires'));
+  if (!token) return null;
+  history.replaceState(null, '', '/');
+  if (!/^[A-Za-z0-9._~+/=-]{8,4096}$/.test(token) || !Number.isFinite(expires) || expires * 1000 <= Date.now()) return null;
+  const value = { token, expires, source: 'tree-view' };
+  save(tokenKey, value);
+  return value;
+}
 export async function start(entry) {
+  const fromUrl = takeBearerFromUrl();
   const standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches;
-  if (window.top === window && !standalone) { await nativeApp(entry); return; }
-  bearer = stored(tokenKey);
+  if (window.top === window && !standalone && !fromUrl) { await nativeApp(entry); return; }
+  bearer = fromUrl || stored(tokenKey);
   if (bearer && (!Number.isFinite(bearer.expires) || bearer.expires * 1000 <= Date.now())) { bearer = null; forget(tokenKey); }
   installTransport();
   try {
     if (await session()) {
-      if (bearer) {
+      // tree-viewが発行したトークンは引き継ぎの記録に無いので、引き継ぎの確認(/verified)はしない。
+      if (bearer && bearer.source !== 'tree-view') {
         const response = await post('/verified', {});
         if (!response.ok || (await response.json()).verified !== true) throw new Error('保存した接続情報の確認を完了できませんでした。');
       }

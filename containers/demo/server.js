@@ -364,6 +364,21 @@ async function issueT3Pairing(run = runT3) {
   return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.3と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
 }
 
+// tree-viewのiframe用。iOSのSafariはiframeの中でクッキーを保存・送信しないため、Bearerトークンを発行する。
+// 契約(T3 0.1.3): `t3 auth session issue --json` は {sessionId, token, expiresAt, ...} を出す。
+const T3_SESSION_ARGS = ['auth', 'session', 'issue', '--json', '--ttl', '24h', '--label', 'tree-view', '--subject', 'tree-view'];
+async function issueT3Session(run = runT3) {
+  let out;
+  try { out = await run(T3_SESSION_ARGS); } catch (error) {
+    return { ok: false, errorCode: 'cli_failed', detail: String(error && error.message || error), remedy: 'T3が起動していないか、T3のデータ(/root/.t3)がありません(詳細は /tmp/t3.log)。' };
+  }
+  try {
+    const data = JSON.parse(out);
+    const expires = Date.parse(data.expiresAt) / 1000;
+    if (typeof data.token === 'string' && data.token.length >= 8 && Number.isFinite(expires)) return { ok: true, token: data.token, expires };
+  } catch {}
+  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.3と違う可能性があります(契約テスト: src/cf-containers-t3-one-click-pairing.test.ts)。' };
+}
 const REAL_T3_DEPS = { probeTcp, httpGet: httpGetProbe, runCmd: runCmdWithCode, statFile: statAuthFile };
 
 async function collectT3Health(deps = REAL_T3_DEPS) {
@@ -630,6 +645,13 @@ const server = http
       runWranglerContainersList(res);
       return;
     }
+    if (req.method === 'POST' && req.url === '/t3/session') {
+      issueT3Session().then((result) => {
+        res.writeHead(result.ok ? 200 : 502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(result));
+      });
+      return;
+    }
     if (req.method === 'POST' && req.url === '/t3/pairing') {
       issueT3Pairing().then((result) => {
         res.writeHead(result.ok ? 200 : 502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -663,7 +685,7 @@ const server = http
   })
   ;
 
-module.exports = { issueT3Pairing, T3_PAIRING_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {

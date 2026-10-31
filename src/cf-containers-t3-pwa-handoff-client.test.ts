@@ -10,10 +10,11 @@ const entry = () => `data:text/javascript,globalThis.__t3NativeLoaded=(globalThi
 const loaded = () => (globalThis as { __t3NativeLoaded?: number }).__t3NativeLoaded ?? 0;
 
 type Node = { tag: string; textContent: string; href?: string; hidden: boolean; children: Node[]; click?: () => unknown };
-type Options = { session: boolean | 'network-error'; standalone?: boolean; create?: 'ok' | 'fail'; status?: string; claim?: 'ok' | 'fail' };
+type Options = { session: boolean | 'network-error' | 'bearer'; hash?: string; embedded?: boolean; standalone?: boolean; create?: 'ok' | 'fail'; status?: string; claim?: 'ok' | 'fail' };
 
 function installBrowser(options: Options) {
-  const { session, standalone = true, create = 'ok', status = 'approved', claim = 'ok' } = options;
+  const { session, standalone = true, create = 'ok', status = 'approved', claim = 'ok', hash = '', embedded = false } = options;
+  const authorizations: (string | null)[] = [];
   const fetched: { url: string; method: string }[] = [];
   const nodes: Node[] = [];
   const history: string[] = [];
@@ -32,6 +33,9 @@ function installBrowser(options: Options) {
     fetched.push({ url, method: init?.method ?? (input as { method?: string }).method ?? 'GET' });
     if (url.includes('/api/auth/session')) {
       if (session === 'network-error') throw new TypeError('Failed to fetch');
+      const authorization = typeof input === 'string' ? null : (input as { headers?: Headers }).headers?.get('Authorization') ?? null;
+      authorizations.push(authorization);
+      if (session === 'bearer') return json({ authenticated: authorization === 'Bearer BEARER-TOKEN-1', sessionMethod: 'bearer-access-token' });
       return json({ authenticated: session });
     }
     if (url.endsWith('/_t3/pwa/create')) return create === 'ok' ? json({ id: 'a'.repeat(32), code: 'AB12CD34', expires: Math.floor(Date.now() / 1000) + 300 }, 201) : json({ reason: 'handoff_disabled', remedy: '引き継ぎが無効です(設定ファイルがありません)。' }, 503);
@@ -41,14 +45,14 @@ function installBrowser(options: Options) {
     return json({ error: 'unexpected' }, 500);
   });
   const win: Record<string, unknown> = { fetch: fetchStub, matchMedia: () => ({ matches: standalone }), addEventListener() {}, removeEventListener() {}, WebSocket: class {} };
-  win.top = win;
+  win.top = embedded ? {} : win;
   const store = () => { const data = new Map<string, string>(); return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } }; };
   // 本物のRequestと同じく、相対URLの解決と、メソッド・本文の引き継ぎをする。
   vi.stubGlobal('Request', class { url: string; headers: Headers; method: string; body: unknown; constructor(input: unknown, init?: { headers?: HeadersInit; method?: string; body?: unknown }) { const from = typeof input === 'string' ? null : (input as { url: string; method?: string; body?: unknown }); this.url = new URL(from ? from.url : (input as string), 'https://t3.example.test/').href; this.headers = new Headers(init?.headers); this.method = init?.method ?? from?.method ?? 'GET'; this.body = init?.body ?? from?.body; } });
   vi.stubGlobal('window', win);
   vi.stubGlobal('document', { getElementById: () => null, createElement: element, head: { append() {} }, body: { append() {} }, addEventListener() {}, removeEventListener() {}, visibilityState: 'visible' });
   vi.stubGlobal('navigator', { standalone });
-  vi.stubGlobal('location', { pathname: '/', href: 'https://t3.example.test/', origin: 'https://t3.example.test', protocol: 'https:', host: 't3.example.test', reload() {} });
+  vi.stubGlobal('location', { pathname: '/', hash, href: 'https://t3.example.test/' + hash, origin: 'https://t3.example.test', protocol: 'https:', host: 't3.example.test', reload() {} });
   vi.stubGlobal('history', { replaceState: (_s: unknown, _t: string, url: string) => { history.push(url); } });
   vi.stubGlobal('localStorage', store());
   vi.stubGlobal('sessionStorage', store());
@@ -56,7 +60,7 @@ function installBrowser(options: Options) {
   const button = (label: string) => nodes.find(node => node.tag === 'button' && node.textContent === label);
   const link = () => nodes.find(node => node.tag === 'a' && node.href?.includes('/_t3/pwa/approve/'));
   const posted = (path: string) => fetched.some(f => f.url.endsWith(path) && f.method === 'POST');
-  return { fetched, history, text, button, link, posted };
+  return { fetched, history, text, button, link, posted, authorizations };
 }
 
 beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.resetModules(); (globalThis as { __t3NativeLoaded?: number }).__t3NativeLoaded = 0; });
@@ -139,5 +143,28 @@ describe('引き継ぎの申請を作らない場合', () => {
     await start(entry());
     expect(loaded()).toBe(1);
     expect(b.posted('/_t3/pwa/create')).toBe(false);
+  });
+});
+
+// tree-viewのiframeの中では、iOSのSafariがクッキーを保存・送信しないため、クッキーに頼らない。
+// tree-viewが /#t3-bearer=<トークン>&expires=<UNIX秒> を付けて開くので、そのトークンをAuthorizationで送る。
+describe('tree-viewのiframe: Bearerトークンで入る(クッキーを使わない)', () => {
+  const future = () => Math.floor(Date.now() / 1000) + 3600;
+  it('URLのトークンを保存し、URLから消し、Authorizationで送ってT3の画面を起動する(申請の画面は出さない)', async () => {
+    const b = installBrowser({ session: 'bearer', embedded: true, standalone: false, hash: '#t3-bearer=BEARER-TOKEN-1&expires=' + future() });
+    const { start } = await import(CLIENT);
+    await start(entry());
+    expect(b.history).toEqual(['/']);
+    expect(b.authorizations).toContain('Bearer BEARER-TOKEN-1');
+    expect(loaded()).toBe(1);
+    expect(b.posted('/_t3/pwa/create')).toBe(false);
+    expect(b.button('トークンで入る')).toBeUndefined();
+    expect(JSON.parse(localStorage.getItem('t3:pwa-native-session:v1')!).token).toBe('BEARER-TOKEN-1');
+  });
+  it('期限切れのトークンは使わない', async () => {
+    const b = installBrowser({ session: 'bearer', embedded: true, standalone: false, hash: '#t3-bearer=BEARER-TOKEN-1&expires=1' });
+    const { start } = await import(CLIENT);
+    await start(entry());
+    expect(b.authorizations).not.toContain('Bearer BEARER-TOKEN-1');
   });
 });

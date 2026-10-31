@@ -77,3 +77,14 @@ it('pairing: コンテナが失敗したら、原因と対処をそのまま返�
  stub.fetch.mockRejectedValueOnce(new Error('container down'));
  expect(await (await request('pairing')).json()).toMatchObject({error:'container_unreachable',detail:'container down'});
 });
+it('session: 管理者なら、コンテナでtree-view用のBearerトークンを発行して返す',async()=>{
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:true,token:'BEARER-TOKEN-1',expires:1800000000}),{status:200}));
+ const response=await request('session');
+ expect(response.status).toBe(200);
+ expect(await response.json()).toEqual({token:'BEARER-TOKEN-1',expires:1800000000});
+ expect(new URL((stub.fetch.mock.calls[0][0] as Request).url).pathname).toBe('/t3/session');
+ dependencies.authenticate.mockResolvedValueOnce({ok:true,login:'other'});
+ expect((await request('session')).status).toBe(403);
+ stub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ok:false,errorCode:'cli_failed',detail:'x',remedy:'y'}),{status:502}));
+ expect(await (await request('session')).json()).toMatchObject({error:'cli_failed',detail:'x',remedy:'y'});
+});
