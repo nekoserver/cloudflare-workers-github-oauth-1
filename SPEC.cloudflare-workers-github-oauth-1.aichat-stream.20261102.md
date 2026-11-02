@@ -138,6 +138,40 @@
 - 手順1〜3の自動化（コンテナの`entrypoint.sh`での実行、台帳の更新とデプロイ）は未実装。`entrypoint.sh`はcf-containerの管理で、デプロイにはCloudflareのAPIトークンが必要。
 - lib側の仕様・テストは`lib/claude/SPEC.claude.20261102.md`と`lib/claude/FEATURES.claude.20261102.md`（機能8・9）。
 
+## 3. tree-view（dynamicneko）も同じ台帳を使う（2026-11-02）
+
+**対象**: 本Workerの`GET /api/tree-view/conversation-stream-routes-external`（新規）、dynamicnekoの`src/tree-view-stream-hosts.ts`・`src/server.ts`・`src/components/tree-view-conversation-stream.tsx` — tree-viewのAIチャットのタブの接続先を、本Workerの台帳1か所で切り替えられるようにする。
+
+### 背景
+
+tree-viewの接続先は、dynamicnekoの`src/tree-view-stream-hosts.ts`に`stream.test.cfc.nekomaneki.work`の1つだけが固定で書かれていた（2026-10-21「会話配信先とCSPをCFCに統一」）。本Workerの台帳とは別に管理していたため、コンテナを切り替えるたびに2つのリポジトリを書き換える必要があった。2026-11-02には、その固定の接続先の埋め込みページが`frame-ancestors`でtree-viewのoriginを許可しておらず、タブが真っ白になった。
+
+### 仕様
+
+| 箇所 | 動作 |
+|---|---|
+| 本Worker `GET /api/tree-view/conversation-stream-routes-external` | サービスバインディング経由でdynamicnekoから呼ぶ。`AICHAT_EXTERNAL_SECRET`のBearerで認証し、違えば401。台帳の有効な経路の`id`・`origin`・`label`と`autoPriority`を返す。台帳が不正なら500と`{ error }` |
+| dynamicneko `loadTreeViewStreamRoutes` | `MAIN_WORKER`で上記を読み、isolate内で60秒キャッシュする（失敗はキャッシュしない）。originは、パス・ポート・認証情報なしのHTTPSで、ホスト名が`.nekomaneki.work`で終わるものだけを受け付ける（埋め込み先はキーを扱うため） |
+| dynamicneko `/tree-view`のCSP | `frame-src`に台帳のorigin（`autoPriority`の順、次に残り）を並べる。台帳を読めない・不正なら、会話ストリームのoriginは1つも入れない |
+| dynamicneko `GET /api/tree-view/conversation-stream/routes` | 所有者のセッションに、CSPと同じ一覧を返す。読めなければ502と理由 |
+| tree-viewのタブ | 上記のAPIで一覧を取得し、`autoPriority`の先頭を既定の接続先にする。選択肢の表示名は`label`。取得できない・不正なら、iframeを作らず「AIチャットの接続先を取得できませんでした（理由）」を表示する |
+
+台帳を読めないときに固定の接続先へ戻すことはしない（本Workerの「不正な台帳なら止める」と同じ）。
+
+### 未決（補助的な方針）
+
+台帳形式への統一を先に行い、次は後で決める（2026-11-02、利用者の判断）。
+
+- 埋め込まれる側（lib）の`frame-ancestors`の既定値。今は配信ホストごとの`LIB_CHAT_FRAME_ORIGINS`で決まり、設定が抜けると親ページが真っ白になる。lib の`chat/app.mjs`が持つ親のorigin一覧を既定にする案がある。
+- コンテナが起動時に自分の公開ホストを登録する方式（台帳を書き換えずに済む）。今回は予備の案として残す。
+- 台帳を読めないときの代わりの動作。
+
+### 確認
+
+- 本Worker: `src/conversation-stream-routes-external.test.ts`（認証、返す内容）。エンドポイントを外すと失敗することを確認。
+- dynamicneko: `test/tree-view-stream-hosts.test.ts`（originの検証、キャッシュ、失敗の理由）、`test/tree-view-conversation-stream-csp.test.ts`（台帳のoriginが`/tree-view`だけに入る、不正・取得失敗では入らない）、ブラウザのテスト（台帳から選ぶ、既定は`autoPriority`の先頭、取得失敗では埋め込まない、SPEC評価の連携）。
+- 未確認: デプロイ後の実際の表示。台帳の各接続先が`frame-ancestors`でdynamicnekoを許可しているか（`mygw`は許可済み。`stream.test.cfc`は許可していない、2026-11-02確認）。
+
 ## 今後
 
 一覧の `mygw` は、2026-11-02の時点では `server.js` の仮の応答を返す（本体コンテナのApacheが lib を出していない。今回の変更より前からの状態）。接続先の一覧を手で書く今の形をやめ、コンテナが自分のできることを返す形へ寄せる最終案は、本体リポジトリの `SPEC.cloudflare-workers-github-oauth-1.cross-container.20261102.md`（askgkのPRで追加）にまとめた。

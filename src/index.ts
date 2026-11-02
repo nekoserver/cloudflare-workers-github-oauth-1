@@ -6895,6 +6895,22 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   return c.json({ healthy: availableHosts.length > 0, availableHosts });
 });
 
+/**
+ * 会話ストリームの接続先の台帳をdynamicneko(tree-view)へ渡す(サービスバインディング経由、AICHAT_EXTERNAL_SECRETで認証)。
+ * 接続先を台帳1か所で切り替えられるよう、tree-viewのiframeの接続先とCSPのframe-srcはこの応答から作る。
+ */
+app.get('/api/tree-view/conversation-stream-routes-external', (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  try {
+    const { routes, autoPriority } = resolveConversationStreamRoutes();
+    return jsonUtf8({ routes: routes.map(({ id, origin, label }) => ({ id, origin, label })), autoPriority });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: message });
+    return jsonUtf8({ error: message }, 500);
+  }
+});
+
 /** AI チャットページ（認証が必要）。 */
 // AIチャットのタブのタイトル用。コンテナの状態を読むだけ(getState)で、停止中のコンテナは起こさない。
 // 応答が遅い・失敗したときは停止中(false)として扱い、ページ表示を待たせない。
