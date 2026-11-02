@@ -1,14 +1,14 @@
 import * as logger from './logger';
 
-import { CONVERSATION_STREAM_URLS, type ConversationStreamHost } from './conversationStreamHosts';
+import { resolveConversationStreamRoutes, type ConversationStreamRoutes } from './conversationStreamRoutes';
 export type { ConversationStreamHost } from './conversationStreamHosts';
 
-/** Returns reachable trusted embeds, preferring the container host. */
-export async function conversationStreamHealthy(): Promise<ConversationStreamHost[]> {
-  const hosts = Object.keys(CONVERSATION_STREAM_URLS) as ConversationStreamHost[];
-  const results = await Promise.all(hosts.map(async host => {
+/** Returns reachable trusted embeds in auto-selection order. */
+export async function conversationStreamHealthy(config: ConversationStreamRoutes = resolveConversationStreamRoutes()): Promise<string[]> {
+  const embeds = new Map(config.routes.map(route => [route.id, route.endpoints.embed]));
+  const results = await Promise.all(config.autoPriority.map(async host => {
     try {
-      const response = await fetch(CONVERSATION_STREAM_URLS[host], {
+      const response = await fetch(embeds.get(host)!, {
         method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000),
         headers: { 'Cache-Control': 'no-cache', Accept: 'text/html' },
       });
@@ -30,5 +30,5 @@ export async function conversationStreamHealthy(): Promise<ConversationStreamHos
       return null;
     }
   }));
-  return results.filter((host): host is ConversationStreamHost => host !== null);
+  return results.filter((host): host is string => host !== null);
 }

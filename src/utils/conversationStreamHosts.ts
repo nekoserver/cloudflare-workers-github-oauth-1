@@ -1,16 +1,15 @@
-import { CFC_CONTAINER_ORIGIN, CONTAINER_ENDPOINTS } from './containerEndpoints';
+import { conversationStreamFrameOrigins, resolveConversationStreamRoutes } from './conversationStreamRoutes';
 
-/** Trusted stream destinations; each host keeps its own authentication. */
-export const CONVERSATION_STREAM_URLS = {
-  // Prefer the Redmine Container observer when auto-selecting; the other
-  // trusted destinations remain available as fallback/manual choices.
-  redmine: 'https://r9.nekomaneki.work/lib/conversation-embed.html',
-  mygw: CONTAINER_ENDPOINTS.conversation,
-  mynw: 'https://mynw.nekomaneki.work/lib/conversation-embed.html',
-  testcfc: new URL('/lib/conversation-embed.html', CFC_CONTAINER_ORIGIN).href,
-} as const;
+/**
+ * 同梱の台帳(src/data/conversation-stream-routes.json)から作る既定の接続先。
+ * リクエストを扱う処理は resolveConversationStreamRoutes() を使う。ここは参照用。
+ */
+const defaults = resolveConversationStreamRoutes();
 
-export type ConversationStreamHost = keyof typeof CONVERSATION_STREAM_URLS;
-export const CONVERSATION_STREAM_FRAME_ORIGINS = [...new Set(
-  Object.values(CONVERSATION_STREAM_URLS).map(url => new URL(url).origin),
-)].join(' ');
+/** Trusted stream destinations in auto-selection order; each host keeps its own authentication. */
+export const CONVERSATION_STREAM_URLS: Readonly<Record<string, string>> = Object.fromEntries(
+  defaults.autoPriority.map(id => [id, defaults.routes.find(route => route.id === id)!.endpoints.embed]),
+);
+
+export type ConversationStreamHost = string;
+export const CONVERSATION_STREAM_FRAME_ORIGINS = conversationStreamFrameOrigins(defaults);

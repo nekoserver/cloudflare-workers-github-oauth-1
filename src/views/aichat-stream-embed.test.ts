@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { getConversationStreamPanel, getConversationStreamToggle } from './conversationStreamPanel';
 import { getAiChatPage } from './aichat';
+import { resolveConversationStreamRoutes } from '../utils/conversationStreamRoutes';
 
 function makeDom(availableHosts: string[] = ['testcfc']) {
   const dom = new JSDOM(getConversationStreamToggle() + getConversationStreamPanel(), {
@@ -210,6 +211,37 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     expect((doc.getElementById('conversationStreamPanel') as HTMLElement).hidden).toBe(true);
     expect(frame.getAttribute('src')).toBeNull();
     dom.window.close();
+  });
+  it('渡された接続先の表から選択肢と埋め込みURLを組み立て、表示名をエスケープする', async () => {
+    const routes = resolveConversationStreamRoutes({
+      autoPriority: ['next'],
+      routes: [{ id: 'mygw', origin: 'https://mygw.nekomaneki.work' }, { id: 'next', origin: 'https://stream.next.example', label: '<b>次</b>' }],
+    });
+    const dom = new JSDOM(getConversationStreamToggle() + getConversationStreamPanel(routes), {
+      runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://example.com/aichat',
+      beforeParse(window) {
+        window.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ healthy: true, availableHosts: ['next'] }) });
+        window.AbortSignal = AbortSignal as unknown as typeof window.AbortSignal;
+      },
+    });
+    try {
+      const doc = dom.window.document;
+      const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
+      expect(Array.from(host.options).map(option => [option.value, option.textContent])).toEqual([['auto', '自動'], ['mygw', 'mygw.nekomaneki.work'], ['next', '<b>次</b>']]);
+      expect(doc.querySelector('#conversationStreamHost b')).toBeNull();
+      doc.getElementById('conversationStreamToggle')!.click();
+      const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
+      await vi.waitFor(() => expect(frame.src).toContain('https://stream.next.example/lib/conversation-embed.html'));
+    } finally { dom.window.close(); }
+  });
+  it('接続先の設定エラーを表示し、開始できないようにする', () => {
+    const dom = new JSDOM(getConversationStreamToggle() + getConversationStreamPanel(null, '会話ストリームの接続先の設定が不正です'), { runScripts: 'dangerously', url: 'https://example.com/aichat' });
+    try {
+      const doc = dom.window.document;
+      expect(doc.getElementById('conversationStreamConfigError')?.textContent).toContain('会話ストリームの接続先の設定が不正です');
+      expect(Array.from((doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement).options).map(option => option.value)).toEqual(['auto']);
+      expect((doc.getElementById('conversationStreamToggle') as HTMLButtonElement).disabled).toBe(true);
+    } finally { dom.window.close(); }
   });
   it('トンネル専用ホストを自動選択し、正確なパスとOriginを使う', async () => {
     const dom = makeDom(['testcfc']);

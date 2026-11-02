@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { conversationStreamHealthy } from './conversationStreamHealth';
 import { CONTAINER_ENDPOINTS } from './containerEndpoints';
+import { resolveConversationStreamRoutes } from './conversationStreamRoutes';
 import * as logger from './logger';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -36,6 +37,15 @@ describe('conversation stream upstream health', () => {
   it('does not recognize an incomplete authentication marker', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response('<html data-auth-gate="conversation"></html>')));
     expect(await conversationStreamHealthy()).toEqual([]);
+  });
+  it('probes the configured container tunnel routes in auto-selection order', async () => {
+    const probe = vi.fn(async (url: string) => url.includes('a.example') ? response('down', 'text/html', 530) : response());
+    vi.stubGlobal('fetch', probe);
+    const routes = resolveConversationStreamRoutes({
+      autoPriority: ['b', 'a'], routes: [{ id: 'a', origin: 'https://a.example' }, { id: 'b', origin: 'https://b.example' }],
+    });
+    expect(await conversationStreamHealthy(routes)).toEqual(['b']);
+    expect(probe.mock.calls.map(call => call[0])).toEqual(['https://b.example/lib/conversation-embed.html', 'https://a.example/lib/conversation-embed.html']);
   });
   it('logs connection failures for each trusted host', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));

@@ -1,0 +1,9 @@
+{
+  "autoPriority": ["redmine", "mygw", "mynw", "testcfc"],
+  "routes": [
+    { "id": "mygw", "origin": "https://mygw.nekomaneki.work", "enabled": true },
+    { "id": "mynw", "origin": "https://mynw.nekomaneki.work", "enabled": true },
+    { "id": "testcfc", "origin": "https://stream.test.cfc.nekomaneki.work", "enabled": true },
+    { "id": "redmine", "origin": "https://r9.nekomaneki.work", "enabled": true }
+  ]
+}

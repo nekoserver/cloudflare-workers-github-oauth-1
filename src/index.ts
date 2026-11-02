@@ -19,7 +19,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
-import { CONVERSATION_STREAM_FRAME_ORIGINS } from './utils/conversationStreamHosts';
+import { conversationStreamFrameOrigins, resolveConversationStreamRoutes, type ConversationStreamRoutes } from './utils/conversationStreamRoutes';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
@@ -6882,7 +6882,16 @@ app.get('/md-preview', (c) => {
 /** 埋め込み先の死活確認（認証が必要）。 */
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  const availableHosts = await conversationStreamHealthy();
+  let routes: ConversationStreamRoutes;
+  try {
+    routes = resolveConversationStreamRoutes();
+  } catch (error) {
+    // 台帳(src/data/conversation-stream-routes.json)が不正なら、理由を返す。
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: message });
+    return c.json({ healthy: false, availableHosts: [], error: message }, 500);
+  }
+  const availableHosts = await conversationStreamHealthy(routes);
   return c.json({ healthy: availableHosts.length > 0, availableHosts });
 });
 
@@ -6934,14 +6943,26 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
+  // 会話ストリームの接続先は台帳(src/data/conversation-stream-routes.json)で決まる。
+  // 台帳が不正なら、埋め込みを許可しない(frame-src 'none')うえで画面に理由を出す。
+  let streamRoutes: ConversationStreamRoutes | null = null;
+  let streamRoutesError: string | undefined;
+  try {
+    streamRoutes = resolveConversationStreamRoutes();
+  } catch (error) {
+    streamRoutesError = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: streamRoutesError });
+  }
   c.header(
     'Content-Security-Policy',
-    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${CONVERSATION_STREAM_FRAME_ORIGINS}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${streamRoutes ? conversationStreamFrameOrigins(streamRoutes) : "'none'"}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   const containerRunning = await getAichatContainerRunning(c.env, isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS));
   return c.html(getAiChatPage({
     name: user.name,
     containerRunning,
+    conversationStreamRoutes: streamRoutes,
+    conversationStreamRoutesError: streamRoutesError,
     username: user.sub,
     aiChatModel,
     aiChatModelConfigured: !!configuredModel,
