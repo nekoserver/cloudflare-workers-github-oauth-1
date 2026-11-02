@@ -1,11 +1,26 @@
-import { CONVERSATION_STREAM_URLS } from '../utils/conversationStreamHosts';
+import { resolveConversationStreamRoutes, type ConversationStreamRoutes } from '../utils/conversationStreamRoutes';
+import { escapeHtml } from '../utils/html';
+
+/** <script>内に埋め込むJSON。`</script>`等で文脈を抜けないよう<をエスケープする。 */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
 
 /** 通常のチャット入力から独立した、認証付き会話ストリームの埋め込み。 */
 export function getConversationStreamToggle(): string {
   return '<button type="button" class="search-hist-btn conversation-stream-toggle" id="conversationStreamToggle" aria-controls="conversationStreamPanel" aria-expanded="false" aria-pressed="false" title="ストリーム">ストリーム</button>';
 }
 
-export function getConversationStreamPanel(): string {
+/**
+ * 接続先は resolveConversationStreamRoutes() の結果を渡す(既定は同梱の台帳)。
+ * 設定が不正なときは config に null、configError に理由を渡すと、接続先なしで理由を表示する。
+ */
+export function getConversationStreamPanel(config: ConversationStreamRoutes | null = resolveConversationStreamRoutes(), configError?: string): string {
+  const routes = config?.routes ?? [];
+  const options = routes.map(route => `<option value="${escapeHtml(route.id)}">${escapeHtml(route.label)}</option>`).join('\n        ');
+  const embedUrls = Object.fromEntries(routes.map(route => [route.id, route.endpoints.embed]));
+  const labels = Object.fromEntries(routes.map(route => [route.id, route.label]));
+  const errorNotice = configError ? `<p id="conversationStreamConfigError" class="conversation-stream-config-error" role="alert">${escapeHtml(configError)}</p>` : '';
   return `<style>
     .conversation-stream-panel { position: fixed; top: var(--aichat-navbar-height, 44px); right: 0; bottom: 0; z-index: 190; width: min(420px, 100%); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-left: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); overflow: hidden; }
     .conversation-stream-panel[hidden] { display: none; }
@@ -26,6 +41,7 @@ export function getConversationStreamPanel(): string {
     .conversation-stream-host-option:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
     .conversation-stream-controls button[aria-pressed="true"] { border-color: var(--accent-color); }
     @media (max-width: 360px) { .conversation-stream-controls button, .conversation-stream-controls select { font-size: 6px; padding: 2px; } }
+    .conversation-stream-config-error { margin: 0; padding: 6px 8px; border: 1px solid #dc2626; border-radius: 4px; color: #dc2626; font-size: 11px; }
     .conversation-stream-frame { display: block; width: 100%; flex: 1; height: 100%; min-height: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); }
   </style>
   <aside id="conversationStreamPanel" class="conversation-stream-panel" aria-label="ストリーム" hidden>
@@ -40,10 +56,7 @@ export function getConversationStreamPanel(): string {
       <span id="conversationStreamHostOptions" class="conversation-stream-host-options" role="listbox" aria-label="ストリーム接続先の候補" hidden></span>
       <select id="conversationStreamHost" aria-label="ストリーム接続先の値" hidden tabindex="-1">
         <option value="auto" selected>自動</option>
-        <option value="mygw">mygw.nekomaneki.work</option>
-        <option value="mynw">mynw.nekomaneki.work</option>
-        <option value="testcfc">stream.test.cfc.nekomaneki.work</option>
-        <option value="redmine">r9.nekomaneki.work (Redmine)</option>
+        ${options}
       </select>
       </span>
       <span id="conversationStreamHostStatus" role="status" aria-live="polite">自動</span>
@@ -51,6 +64,7 @@ export function getConversationStreamPanel(): string {
       <button type="button" id="conversationStreamStop" disabled>受信を停止</button>
       <button type="button" id="conversationStreamClose" class="conversation-stream-close" aria-label="ストリームを閉じる">✕</button>
     </div>
+    ${errorNotice}
     <iframe id="conversationStreamFrame" class="conversation-stream-frame" title="この会話の閲覧専用ストリーム" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
   </aside>
   <script>
@@ -115,20 +129,22 @@ export function getConversationStreamPanel(): string {
     var healthGeneration = 0;
     var latestHealth = null;
     var loadGeneration = 0;
-    var embedUrls = ${JSON.stringify(CONVERSATION_STREAM_URLS)};
+    var embedUrls = ${scriptJson(embedUrls)};
+    var hostLabels = ${scriptJson(labels)};
+    if (${configError ? 'true' : 'false'}) toggle.disabled = true;
     var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
     var protocol = 'websocket';
     var healthTimer = null;
     var checkingHealth = false;
     function renderHostOptions() {
       hostChoices.auto.setAttribute('aria-selected', String(hostPreference === 'auto'));
-      hostPicker.textContent = (hostPreference === 'auto' ? '自動' : new URL(embedUrls[hostPreference]).host) + ' ▾';
+      hostPicker.textContent = (hostPreference === 'auto' ? '自動' : hostLabels[hostPreference]) + ' ▾';
       Array.from(hostSelect.options).forEach(function (option) {
         if (!Object.prototype.hasOwnProperty.call(embedUrls, option.value)) return;
         var automatic = hostPreference === 'auto';
         var available = availableHosts.indexOf(option.value) >= 0;
         var connected = automatic && available && connectedHost === option.value && !panel.hidden;
-        var label = new URL(embedUrls[option.value]).host;
+        var label = hostLabels[option.value];
         var state = connected ? 'connected' : available ? 'available' : availabilityKnown ? 'unavailable' : 'unknown';
         option.textContent = (connected ? '🟢 ' : '') + label;
         option.style.color = automatic ? (available ? '#16a34a' : '#9ca3af') : '';
@@ -222,7 +238,7 @@ export function getConversationStreamPanel(): string {
       }
       activeHost = host;
       renderHostOptions();
-      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + new URL(embedUrls[host]).host;
+      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + hostLabels[host];
       var url = new URL(embedUrls[host]);
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());

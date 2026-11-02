@@ -1,5 +1,6 @@
 import { getKeywordClassificationModalScript } from '../utils/keywordClassificationModal';
 import { getConversationStreamPanel, getConversationStreamToggle } from './conversationStreamPanel';
+import type { ConversationStreamRoutes } from '../utils/conversationStreamRoutes';
 /**
  * AI チャットページのHTML
  */
@@ -51,6 +52,9 @@ export function getAiChatPage(user: {
   availableModels?: Array<{value: string; label: string}>;
   modelColors?: Record<string, string>;
   aichatPreferMoondream?: boolean;
+  /** 会話ストリームの接続先(resolveConversationStreamRoutes()の結果)。null は設定エラー。 */
+  conversationStreamRoutes?: ConversationStreamRoutes | null;
+  conversationStreamRoutesError?: string;
 }): string {
   const rubyVersion = getRubyWasmVersionInfo();
   const rubyCacheName = rubyWasmBinaryCacheName(rubyVersion.rubyBuildLine, rubyVersion.wasmWasiPackageVersion);
@@ -1209,7 +1213,7 @@ export function getAiChatPage(user: {
     </div>
 
     <!-- チャット本体 -->
-    ${getConversationStreamPanel()}
+    ${getConversationStreamPanel(user.conversationStreamRoutes === undefined ? undefined : user.conversationStreamRoutes, user.conversationStreamRoutesError)}
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
       <!-- 「探索の境界線」パネル: ベクタ化済みキーワードのうちまだどの

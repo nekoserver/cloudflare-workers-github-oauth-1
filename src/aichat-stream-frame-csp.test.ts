@@ -2,16 +2,17 @@ import { expect, it } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
 
-it('AIチャットだけが会話ストリームの埋め込み先を読み込めるCSPを返す', async () => {
+async function aichat() {
   const secret = 'aichat-stream-csp-test-secret';
   const token = await createJWT({ sub: 'test-user', name: 'Test' }, secret);
-  const response = await app.request('/aichat', {
+  return app.request('/aichat', {
     headers: { Authorization: `Bearer ${token}` },
   }, { JWT_SECRET: secret });
+}
 
+it('AIチャットだけが会話ストリームの埋め込み先を読み込めるCSPを返す', async () => {
+  const response = await aichat();
   expect(response.status).toBe(200);
   const csp = response.headers.get('Content-Security-Policy') ?? '';
-  expect(csp).toContain('mygw.nekomaneki.work');
-  expect(csp).toContain('mynw.nekomaneki.work');
-  expect(csp).toContain('frame-src https://mygw.nekomaneki.work https://mynw.nekomaneki.work https://stream.test.cfc.nekomaneki.work');
+  expect(csp).toContain('frame-src https://r9.nekomaneki.work https://mygw.nekomaneki.work https://mynw.nekomaneki.work https://stream.test.cfc.nekomaneki.work;');
 });
