@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveAskgkRoute } from './askgkRoutes';
+import { askgkEngine, resolveAskgkRoute } from './askgkRoutes';
 import { askTunnelSigner } from './tunnelSignerAsk';
 
 const registry = () => ({ defaultRouteId: 'standalone', routes: [
@@ -46,5 +46,44 @@ describe('askgk route registry', () => {
     await expect(askTunnelSigner({ fetch }, 'codex_prompt="test"', { ASKGK_ROUTES: JSON.stringify(registry()) })).rejects.toThrow('530');
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).url).toBe('https://standalone.example/api');
+  });
+
+  it('sends an engine to its own route ahead of ASKGK_ROUTE_ID, and others to the selected route', () => {
+    const settings = { ASKGK_ROUTES: JSON.stringify({ ...registry(), engineRoutes: { claude: 'main' } }), ASKGK_ROUTE_ID: 'standalone' };
+    expect(resolveAskgkRoute(settings, 'claude')).toBe('https://main.example/api');
+    expect(resolveAskgkRoute(settings, 'codex')).toBe('https://standalone.example/api');
+    expect(resolveAskgkRoute(settings)).toBe('https://standalone.example/api');
+  });
+  it('does not fall back to another route when the engine route is disabled', () => {
+    const config = { ...registry(), engineRoutes: { claude: 'main' } };
+    config.routes[1].enabled = false;
+    expect(() => resolveAskgkRoute({ ASKGK_ROUTES: JSON.stringify(config) }, 'claude')).toThrow('claudeの送り先');
+  });
+  it.each([{ claude: 'missing' }, { claude: 1 }, ['main']])('rejects engineRoutes that do not name a registered route: %j', engineRoutes => {
+    expect(() => resolveAskgkRoute({ ASKGK_ROUTES: JSON.stringify({ ...registry(), engineRoutes }) }, 'codex')).toThrow('engineRoutes');
+  });
+  it('keeps the legacy single endpoint for every engine', () => {
+    expect(resolveAskgkRoute({ ASKGK_TUNNELS_URL: 'https://legacy.example/api' }, 'claude')).toBe('https://legacy.example/api');
+  });
+  it.each([
+    ['claude_prompt="hello"', 'claude'],
+    ['  Codex_prompt = "x"', 'codex'],
+    ['claude_prompt', undefined],
+    ['what is claude_prompt="x"', undefined],
+    ['models-list', undefined],
+  ])('reads the engine from the prompt prefix: %s', (message, engine) => {
+    expect(askgkEngine(message)).toBe(engine);
+  });
+  it('routes the bundled claude requests to the main container and others to the Redmine container', async () => {
+    const urls: string[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      urls.push(JSON.parse(String(init?.body)).url);
+      return new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'ok' }) }));
+    });
+    await askTunnelSigner({ fetch }, 'claude_prompt="hello"', { ASKGK_ROUTE_ID: 'independent' });
+    await askTunnelSigner({ fetch }, 'codex_prompt="hello"', { ASKGK_ROUTE_ID: 'independent' });
+    expect(urls).toEqual(['https://mygw.nekomaneki.work/lib/api/tunnels', 'https://r9.nekomaneki.work/lib/api/tunnels']);
+    const sent = JSON.parse(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).body);
+    expect(sent.message).toBe('claude_prompt="hello"');
   });
 });

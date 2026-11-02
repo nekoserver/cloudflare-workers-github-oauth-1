@@ -32,3 +32,19 @@
 Codex要求は `wait_seconds: 0` を付けて一度だけ送信。その後は同じask_idだけを署名付きで照会し、保存した待ち時間まで待つ。通信エラー・タイムアウト後に元のプロンプトを再送しない。タイムアウト時は処理が継続し得ることと既知のask_idを返す。300秒の長いCGI接続は作らず、独立側のtunnels APIは短い応答で状態を返す。
 
 独立Redmineのtunnels_lib.rbにwait_seconds指定を追加し、既存呼出しの90秒待機は維持。互換経路のApache CGIタイムアウト105秒も稼働環境へ反映済み。これらのコンテナ内変更はソースにも保存したが、Redmineイメージは未更新で、再作成後の維持は未検証。新しいWorkerと古いコンテナイメージの組合せまで保証したものではない。
+
+## エンジンごとの送り先（試験運用、2026-11-02）
+
+独立Redmineコンテナのイメージには Claude CLI がない（redmine の `e2e1242`）。そのため `/neko askgk claude_prompt="..."` は、独立経路では必ず `tunnels実行失敗: engine_unavailable` になっていた。
+
+台帳に任意の `engineRoutes`（エンジン名 → 経路ID）を追加した。同梱の台帳は `{"claude": "main"}` で、claude の依頼だけを本体コンテナ（mygw）へ送る。codex など他の依頼は、従来どおり `ASKGK_ROUTE_ID`・`defaultRouteId` の経路へ送る。
+
+- エンジン名は、送る文字列の先頭の `◯◯_prompt=` から読む（`askgkEngine`）。経路を選ぶためだけに読み、送る文字列からは剥がさない。
+- `engineRoutes` に書いたエンジンは、`ASKGK_ROUTE_ID` より優先する。本番は `ASKGK_ROUTE_ID=independent` を明示しているため、こうしないと claude の依頼が独立経路へ行く。
+- 送り先の経路が無効・未登録なら送信を止める。別の経路へは送り直さない。
+- 従来の単一URL `ASKGK_TUNNELS_URL` の配備では、エンジンにかかわらずそのURLへ送る。
+- 新しい環境変数は追加していない。やめるときは台帳から `engineRoutes` を消す。
+
+**未確定のこと**: コンテナをまたぐ処理の分け方（エンジン単位か、処理の種類単位か、死活確認を見た自動の切り替えか）は、まだ決めていない。これは手探りの第一歩で、本体コンテナが止まっている間は claude の依頼は失敗する（独立経路の目的「本体の停止中も使える」は、claude には当てはまらない）。
+
+本体コンテナ（mygw）の Apache は、すべてのリクエストを `server.js` へ中継していた。そのため、`/lib/api/tunnels` だけを lib の `tunnels.claude.rb` へ向ける設定を、稼働中のコンテナに手で入れた（イメージには未反映）。この応急の対応を本体側に寄せて共通にする最終案は [`SPEC.cloudflare-workers-github-oauth-1.cross-container.20261102.md`](SPEC.cloudflare-workers-github-oauth-1.cross-container.20261102.md)。
