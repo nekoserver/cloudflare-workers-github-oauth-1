@@ -1,4 +1,4 @@
-import { resolveAskgkRoute, type AskgkRouteSettings } from './askgkRoutes';
+import { askgkEngine, resolveAskgkRoute, type AskgkRouteSettings } from './askgkRoutes';
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 type AskSettings = AskgkRouteSettings & { DB?: D1Database };
 
@@ -69,7 +69,7 @@ export function resolveAskgkCommand(input: string): string {
  */
 export async function askTunnelSigner(fetcher: AskFetcher, message: string, routeSettings?: string | AskSettings): Promise<AskTunnelSignerResult> {
   const settings: AskSettings | undefined = typeof routeSettings === 'string' ? { ASKGK_TUNNELS_URL: routeSettings } : routeSettings;
-  const url = resolveAskgkRoute(settings);
+  const url = resolveAskgkRoute(settings, askgkEngine(message));
   const timeoutSeconds = settings?.DB ? (await readAskgkTimeoutSetting(settings.DB)).timeoutSeconds : DEFAULT_ASKGK_TIMEOUT_SECONDS;
   const controller = new AbortController();
   let askId: string | undefined;
