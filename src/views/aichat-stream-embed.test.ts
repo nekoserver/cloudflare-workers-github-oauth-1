@@ -24,12 +24,12 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     try {
       const doc = dom.window.document;
       const choice = (name: string) => doc.querySelector('[role="option"][data-value="' + name + '"]') as HTMLElement;
+      doc.getElementById('conversationStreamToggle')!.click();
       await vi.waitFor(() => expect(choice('mygw').dataset.streamState).toBe('available'));
       expect(choice('mygw').style.color).toBe('rgb(22, 163, 74)');
       expect(choice('testcfc').style.color).toBe('rgb(22, 163, 74)');
       expect(choice('mynw').style.color).toBe('rgb(156, 163, 175)');
       expect(choice('mynw').title).toContain('接続不可');
-      doc.getElementById('conversationStreamToggle')!.click();
       const frame = doc.getElementById('conversationStreamFrame') as HTMLIFrameElement;
       await vi.waitFor(() => expect(frame.src).toContain('mygw.nekomaneki.work'));
       expect(choice('mygw').textContent).not.toContain('🟢');
@@ -45,7 +45,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(choice('testcfc').textContent).not.toContain('🟢');
       doc.getElementById('conversationStreamClose')!.click();
       expect(choice('mygw').textContent).not.toContain('🟢');
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
 
   it('接続先が落ちたとき古い丸を消し、切替先の応答を待って表示を更新する', async () => {
@@ -72,7 +72,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(choice('mynw').textContent).not.toContain('🟢');
       notify('mynw');
       expect(choice('mynw').textContent).toContain('🟢');
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
 
   it('色付きメニューをキーボードで操作でき、手動選択時は自動の表示装飾を外す', async () => {
@@ -82,6 +82,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       const picker = doc.getElementById('conversationStreamHostPicker')!;
       const options = doc.getElementById('conversationStreamHostOptions')!;
       const host = doc.getElementById('conversationStreamHost') as HTMLSelectElement;
+      doc.getElementById('conversationStreamToggle')!.click();
       await vi.waitFor(() => expect(doc.querySelector('[data-value="testcfc"]')?.getAttribute('data-stream-state')).toBe('available'));
       picker.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
       expect(options.hidden).toBe(false);
@@ -102,7 +103,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       doc.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(options.hidden).toBe(true);
       expect(doc.activeElement).toBe(picker);
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
 
   it('遅れて戻った古い生存確認で接続先や色を巻き戻さない', async () => {
@@ -117,13 +118,15 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       const doc = dom.window.document;
       doc.getElementById('conversationStreamToggle')!.click();
       const frame = doc.getElementById('conversationStreamFrame') as HTMLIFrameElement;
+      doc.getElementById('conversationStreamClose')!.click();
+      doc.getElementById('conversationStreamToggle')!.click();
       await vi.waitFor(() => expect(frame.src).toContain('stream.test.cfc.nekomaneki.work'));
       finishOld({ ok: true, status: 200, json: async () => ({ healthy: true, availableHosts: ['mygw'] }) });
       await new Promise(resolve => setTimeout(resolve, 0));
       expect(frame.src).toContain('stream.test.cfc.nekomaneki.work');
       expect(doc.querySelector('[data-value="mygw"]')?.getAttribute('data-stream-state')).toBe('unavailable');
       expect(doc.querySelector('[data-value="testcfc"]')?.getAttribute('data-stream-state')).toBe('available');
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
 
   it('認証エラーで確認不能になった場合は緑表示と接続済みの丸を残さない', async () => {
@@ -145,7 +148,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(choice.style.color).toBe('rgb(156, 163, 175)');
       expect(choice.title).toContain('確認できません');
       await vi.waitFor(() => expect(frame.getAttribute('src')).toBeNull());
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('サーバー障害を赤枠にし、復旧後は緑枠へ戻す', async () => {
     let availableHosts: string[] = [];
@@ -161,6 +164,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     });
     try {
       const toggle = dom.window.document.getElementById('conversationStreamToggle')!;
+      toggle.click();
       await vi.waitFor(() => expect(toggle.getAttribute('data-server-state')).toBe('error'));
       expect(dom.window.getComputedStyle(toggle).borderTopColor).toBe('rgb(220, 38, 38)');
       expect(dom.window.getComputedStyle(toggle).backgroundColor).toBe('rgba(0, 0, 0, 0)');
@@ -169,14 +173,13 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       await vi.waitFor(() => expect(toggle.getAttribute('data-server-state')).toBe('healthy'));
       expect(dom.window.getComputedStyle(toggle).borderTopColor).toBe('rgb(22, 163, 74)');
       expect(dom.window.getComputedStyle(toggle).backgroundColor).toBe('rgba(0, 0, 0, 0)');
-      toggle.click();
       const frame = dom.window.document.getElementById('conversationStreamFrame')!;
       await vi.waitFor(() => expect(new URL((frame as HTMLIFrameElement).src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
       dom.window.dispatchEvent(new dom.window.Event('pagehide'));
       expect(frame.getAttribute('src')).toBeNull();
       dom.window.dispatchEvent(new dom.window.Event('pageshow'));
       await vi.waitFor(() => expect(frame.getAttribute('src')).toContain('/lib/conversation-embed.html'));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('自動選択・mygw/mynw/CFCの手動選択と4方式の切替に対応する', async () => {
     const dom = makeDom();
@@ -210,7 +213,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape' }));
     expect((doc.getElementById('conversationStreamPanel') as HTMLElement).hidden).toBe(true);
     expect(frame.getAttribute('src')).toBeNull();
-    dom.window.close();
+    dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close();
   });
   it('渡された接続先の表から選択肢と埋め込みURLを組み立て、表示名をエスケープする', async () => {
     const routes = resolveConversationStreamRoutes({
@@ -232,7 +235,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       doc.getElementById('conversationStreamToggle')!.click();
       const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
       await vi.waitFor(() => expect(frame.src).toContain('https://stream.next.example/lib/conversation-embed.html'));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('接続先の設定エラーを表示し、開始できないようにする', () => {
     const dom = new JSDOM(getConversationStreamToggle() + getConversationStreamPanel(null, '会話ストリームの接続先の設定が不正です'), { runScripts: 'dangerously', url: 'https://example.com/aichat' });
@@ -241,7 +244,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(doc.getElementById('conversationStreamConfigError')?.textContent).toContain('会話ストリームの接続先の設定が不正です');
       expect(Array.from((doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement).options).map(option => option.value)).toEqual(['auto']);
       expect((doc.getElementById('conversationStreamToggle') as HTMLButtonElement).disabled).toBe(true);
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('トンネル専用ホストを自動選択し、正確なパスとOriginを使う', async () => {
     const dom = makeDom(['testcfc']);
@@ -256,7 +259,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       const select = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
       select.value = 'testcfc'; select.dispatchEvent(new dom.window.Event('change'));
       await vi.waitFor(() => expect(new URL(frame.src).pathname).toBe('/lib/conversation-embed.html'));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('死活確認に未知の接続先が混入しても許可済み候補だけを使う', async () => {
     const dom = makeDom(['https://evil.example', '__proto__', 'testcfc']);
@@ -264,7 +267,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       dom.window.document.getElementById('conversationStreamToggle')!.click();
       const frame = dom.window.document.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
       await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('選択中ホストだけへ操作を送り、そのホストからの通知だけを受信する', async () => {
     const dom = makeDom();
@@ -297,7 +300,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(post).toHaveBeenCalledWith({ type: 'conversation-stop' }, 'https://stream.test.cfc.nekomaneki.work');
       doc.documentElement.setAttribute('data-theme', 'dark');
       await vi.waitFor(() => expect(post).toHaveBeenCalledWith({ type: 'conversation-theme', theme: 'dark' }, 'https://stream.test.cfc.nekomaneki.work'));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('キー入力フォームの送信を許可し、無関係なsandbox権限を追加しない', () => {
     const dom = makeDom();
@@ -306,7 +309,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
       expect(new Set(frame.getAttribute('sandbox')!.split(/\s+/))).toEqual(new Set([
         'allow-scripts', 'allow-same-origin', 'allow-forms', 'allow-popups', 'allow-popups-to-escape-sandbox',
       ]));
-    } finally { dom.window.close(); }
+    } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });
   it('本体ページに接続先選択欄があり、生成された全スクリプトを解析できる', () => {
     const html = getAiChatPage({ username: 'testuser', aiChatModel: 'test-model' });

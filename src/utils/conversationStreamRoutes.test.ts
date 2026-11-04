@@ -29,7 +29,7 @@ describe('resolveConversationStreamRoutes', () => {
     const { routes, autoPriority } = resolveConversationStreamRoutes();
     expect(routes.map(route => route.id)).toEqual(['mygw', 'mynw', 'testcfc', 'redmine']);
     expect(routes.map(route => route.label)).toEqual(['mygw.nekomaneki.work', 'mynw.nekomaneki.work', 'stream.test.cfc.nekomaneki.work', 'r9.nekomaneki.work']);
-    expect(autoPriority).toEqual(['redmine', 'mygw', 'mynw', 'testcfc']);
+    expect(autoPriority).toEqual(['mygw']);
     expect(routes.find(route => route.id === 'mygw')?.origin).toBe(MAIN_CONTAINER_ORIGIN);
     expect(routes.find(route => route.id === 'testcfc')?.origin).toBe(CFC_CONTAINER_ORIGIN);
     expect(routes.find(route => route.id === 'redmine')?.endpoints.embed).toBe('https://r9.nekomaneki.work/lib/conversation-embed.html');

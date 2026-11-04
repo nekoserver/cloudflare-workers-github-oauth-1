@@ -14,5 +14,5 @@ it('AIチャットだけが会話ストリームの埋め込み先を読み込�
   const response = await aichat();
   expect(response.status).toBe(200);
   const csp = response.headers.get('Content-Security-Policy') ?? '';
-  expect(csp).toContain('frame-src https://r9.nekomaneki.work https://mygw.nekomaneki.work https://mynw.nekomaneki.work https://stream.test.cfc.nekomaneki.work;');
+  expect(csp).toContain('frame-src https://mygw.nekomaneki.work https://mynw.nekomaneki.work https://stream.test.cfc.nekomaneki.work https://r9.nekomaneki.work;');
 });

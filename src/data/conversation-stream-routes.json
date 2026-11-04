@@ -1,5 +1,5 @@
 {
-  "autoPriority": ["redmine", "mygw", "mynw", "testcfc"],
+  "autoPriority": ["mygw"],
   "routes": [
     { "id": "mygw", "origin": "https://mygw.nekomaneki.work", "enabled": true },
     { "id": "mynw", "origin": "https://mynw.nekomaneki.work", "enabled": true },
