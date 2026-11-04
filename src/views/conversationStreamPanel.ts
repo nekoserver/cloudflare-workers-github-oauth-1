@@ -188,11 +188,13 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       }
     }
     async function checkHealth() {
-      if (checkingHealth || document.hidden) return null;
+      if (!document || checkingHealth || document.hidden || panel.hidden || hostPreference !== 'auto') return null;
       checkingHealth = true;
+      var generation = healthGeneration + 1;
       try {
         var data = await requestHealth();
-        if (hostPreference === 'auto' && !panel.hidden) {
+        if (!document || generation !== healthGeneration) return null;
+        if (hostPreference === 'auto' && !panel.hidden && !document.hidden) {
           var candidates = data && Array.isArray(data.availableHosts) ? data.availableHosts : [];
           var next = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
           if (next !== activeHost) load(data);
@@ -208,9 +210,24 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       } finally { checkingHealth = false; }
     }
     function startHealthChecks() {
-      if (healthTimer !== null) return;
+      if (healthTimer !== null || panel.hidden || document.hidden || hostPreference !== 'auto') return;
       checkHealth();
       healthTimer = setInterval(checkHealth, 30000);
+    }
+    function stopHealthChecks() {
+      clearInterval(healthTimer);
+      healthTimer = null;
+      healthGeneration++;
+      checkingHealth = false;
+    }
+    function suspendStream() {
+      stopHealthChecks();
+      loadGeneration++;
+      activeHost = null;
+      connectedHost = null;
+      frame.removeAttribute('src');
+      start.disabled = true; stop.disabled = true;
+      renderHostOptions();
     }
     var buttons = panel.querySelectorAll('[data-conversation-protocol]');
     function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
@@ -225,7 +242,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       var host = hostPreference;
       if (host === 'auto') {
         var health = preloadedHealth || await requestHealth();
-        if (generation !== loadGeneration || panel.hidden) return;
+        if (generation !== loadGeneration || panel.hidden || document.hidden) return;
         var candidates = health && Array.isArray(health.availableHosts) ? health.availableHosts : [];
         host = candidates.indexOf(previousHost) >= 0 ? previousHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
       }
@@ -256,7 +273,8 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       activeHost = null;
       connectedHost = null;
       renderHostOptions();
-      if (!panel.hidden) load();
+      stopHealthChecks();
+      if (!panel.hidden && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else load(); }
       else hostStatus.textContent = hostPreference === 'auto' ? '自動' : hostPreference;
     });
     function setOpen(open) {
@@ -265,8 +283,8 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       toggle.setAttribute('aria-expanded', String(open));
       toggle.setAttribute('aria-pressed', String(open));
       document.body.classList.toggle('conversation-stream-open', open);
-      if (open) { if (!frame.getAttribute('src')) load(); }
-      else { loadGeneration++; activeHost = null; connectedHost = null; frame.removeAttribute('src'); }
+      if (open && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else load(); }
+      else suspendStream();
       renderHostOptions();
     }
     frame.addEventListener('load', function () {
@@ -295,16 +313,16 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       if (!panel.hidden && frame.contentWindow && activeHost) frame.contentWindow.postMessage({ type: 'conversation-theme', theme: theme() }, origins[activeHost]);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     window.addEventListener('pagehide', function () {
-      frame.removeAttribute('src'); clearInterval(healthTimer); healthTimer = null; activeHost = null; connectedHost = null; loadGeneration++;
-      renderHostOptions();
+      suspendStream();
     });
     window.addEventListener('pageshow', function () {
-      startHealthChecks();
-      if (!panel.hidden && !frame.getAttribute('src')) load();
+      if (!panel.hidden && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else if (!frame.getAttribute('src')) load(); }
     });
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkHealth(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) suspendStream();
+      else if (!panel.hidden) { if (hostPreference === 'auto') { if (healthTimer === null) startHealthChecks(); else checkHealth(); } else if (!frame.getAttribute('src')) load(); }
+    });
     renderHostOptions();
-    startHealthChecks();
   })();
   </script>`;
 }

@@ -180,3 +180,32 @@ T3 Codeタブの再接続の直前に起動/停止ボタンを追加する変更
 Cloudflare settingsのメタデータで、mainのDYNAMICNEKO_WORKER_HMAC_SECRET、dynamicnekoのCF_WORKER_SECRET_MAINとTREE_VIEW_CONTAINER_ORIGINは未設定と確認。AICHAT_USER_TOKEN_SECRET、MAIN_WORKER、DEMO_CONTAINER、DBの設定名は存在する。秘密値の照合・設定変更は行っていない。main API/DOとdynamicnekoの両反映、および共有鍵とT3 HTTPS originの設定が必要。Dockerビルド・Worker配備・本番コンテナ操作は未実施。仕様はSPEC.cloudflare-workers-github-oauth-1.tree-view-t3-power.mdを参照。
 
 対象API/DOの11件、既存管理等43件、dynamicnekoブラウザ9件・中継等Node検証は成功。全体テストは1178件成功後に既存heritageJourneyの国旗付与テストが20秒タイムアウト。単独実行は18.18秒で成功したが全件成功ではない。ユーザーから失敗を明記したドラフトPR作成の例外承認を得た。詳細はREPORT.cloudflare-workers-github-oauth-1.T3-POWER.20261028.md。
+
+## 2026-11-04 ネットワーク再配置
+
+現コンテナへlib API・WebSocket/SSE/NDJSON/JSON-seq・固定会話observer・SSIを適用し、公開mygwから実会話とCodex実生成を確認。既存ENV優先。Tunnel一覧は現在トークンの権限不足、stream/r9は初回530/502、最終APIは200だがSSIはRedmineの404となり、stream配信経路に外部条件が残る。Workerデプロイ・イメージ再ビルド・パッケージ更新は未実施。詳細と復元境界は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261104.md)。
+
+
+## 2026-11-04: askgkを本体コンテナへ一時切替
+
+ユーザー指示で本番ASKGK_ROUTE_IDをindependentからmainへ変更。他53 bindingsは変更前後で一致。署名付きCodex実要求でdone・ASKGK_MAIN_READYを確認。wrangler設定もmainへ変更。独立側の認証エラーは未解決。Slack画面からの実行と自動フェイルオーバーは未検証・未実装。詳細は [切替REPORT](REPORT.cloudflare-workers-github-oauth-1.ASKGK-MAIN.20261104.md)。Dockerビルド・イメージ更新なし。
+
+
+## 2026-11-04: 閉じたストリームの自動アクセスを停止
+
+Worker `267061d1-7b3a-454b-b7c3-c697141e9167` を本番反映。閉じたパネル・非表示タブでpoll/iframeを停止し、自動候補をmygw限定、他候補は手動選択へ変更。関連39テスト・出力script構文確認成功。APIで54 bindings・既存コンテナ構成とversion 93の維持、配備済みソースを確認。Dockerビルドなし。既存画面は再読み込みが必要。実利用者のログイン済み画面の通信観察は未実施。詳細は [REPORT](REPORT.cloudflare-workers-github-oauth-1.STREAM-IDLE.20261104.md)。
+
+
+## 2026-11-04: mygwストリーム投稿はSSH会話のwriter競合で未復旧
+
+投稿許可200・console POST503を再現。履歴閲覧用App ServerでnotLoadedのため投稿時のみresumeする修正後、SSH Codexが同一会話を使用中でactive writer拒否を確認。ロックは保持し、HTTP409 console_in_useとして理由を返す改善を現コンテナへ反映。投稿先の専用会話化またはSSH会話維持をユーザーへ確認中。Python48テスト成功、Nodeは38/40（未変更sessionテスト2件location未定義）、生成script構文成功。Worker・イメージ更新なし。詳細は /root/lib/REPORT.console-post.20261104.md。
+
+
+## 2026-11-04: mygw投稿専用会話によるアドホック復旧
+
+ユーザー承認で元SSH会話の履歴をthread/forkし、mygw observerを投稿用会話へ原子的に切替。公開console POST200 accepted=trueとobserverでCONSOLE_POST_OKの回答を確認。元SSH会話のロックは維持、分岐後の履歴同期なし。別会話であることを表示名に明示しブラウザで表示。ユーザー指示により /root/lib/SPEC.lib.20261104.console-stream-adhoc.md にアドホック対応・恒久設計・移行条件を記録。イメージ更新・再作成後確認・利用者ブラウザの手動投稿確認は未実施。
+
+
+## 2026-11-04: ストリーム投稿復旧・初期設定検証をmain workerとcontainer docsへ記録
+
+mygw投稿用のfork threadへ切替後、公開POST200 accepted=trueとobserver上のCONSOLE_POST_OKを確認したため一旦解決。元SSH会話とは同期しない。初期設定確認をこのリポジトリの`NETWORK-STREAM-SETUP.md`とコンテナ内`/root/lib/ops/CHAT_WEBSOCKET.md`に記録。セットアップごとにtunnels.rb、WebSocket/SSE、observer、投稿後の実応答を確認し、REPORTへ残す。詳細は [CONSOLE STREAM REPORT](REPORT.cloudflare-workers-github-oauth-1.CONSOLE-STREAM.20261104.md) と [lib SPEC](../../lib/SPEC.lib.20261104.console-stream-adhoc.md)。Dockerイメージ更新・コンテナ再作成後検証は未実施。

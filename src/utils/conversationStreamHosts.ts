@@ -8,7 +8,7 @@ const defaults = resolveConversationStreamRoutes();
 
 /** Trusted stream destinations in auto-selection order; each host keeps its own authentication. */
 export const CONVERSATION_STREAM_URLS: Readonly<Record<string, string>> = Object.fromEntries(
-  defaults.autoPriority.map(id => [id, defaults.routes.find(route => route.id === id)!.endpoints.embed]),
+  defaults.routes.map(route => [route.id, route.endpoints.embed]),
 );
 
 export type ConversationStreamHost = string;

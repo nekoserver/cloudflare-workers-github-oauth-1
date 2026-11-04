@@ -13,16 +13,16 @@ describe('conversation stream upstream health', () => {
   it('probes the trusted selectable hosts and requests its HTML entry', async () => {
     const probe = vi.fn().mockImplementation(async () => response());
     vi.stubGlobal('fetch', probe);
-    expect(await conversationStreamHealthy()).toEqual(['redmine', 'mygw', 'mynw', 'testcfc']);
-    expect(probe).toHaveBeenCalledTimes(4);
+    expect(await conversationStreamHealthy()).toEqual(['mygw']);
+    expect(probe).toHaveBeenCalledTimes(1);
     expect(probe).toHaveBeenCalledWith(CONTAINER_ENDPOINTS.conversation, expect.objectContaining({
       method: 'GET', redirect: 'manual', signal: expect.any(AbortSignal),
       headers: expect.objectContaining({ Accept: 'text/html' }),
     }));
   });
-  it('keeps mynw selectable when mygw and CFC are down', async () => {
+  it('does not probe unselected containers when the main host is down', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('mynw.') ? response() : response('down', 'text/html', 530)));
-    expect(await conversationStreamHealthy()).toEqual(['mynw']);
+    expect(await conversationStreamHealthy()).toEqual([]);
   });
   it('does not treat unrelated login pages, JSON or failure statuses as healthy', async () => {
     for (const upstream of [response('{}', 'application/json'), response('<html><title>login</title></html>'), response('down', 'text/html', 503)]) {
@@ -32,7 +32,7 @@ describe('conversation stream upstream health', () => {
   });
   it('recognizes the protected conversation key-entry shell without credentials', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response('<html data-auth-gate="conversation"><form id="login"></form></html>')));
-    expect(await conversationStreamHealthy()).toEqual(['redmine', 'mygw', 'mynw', 'testcfc']);
+    expect(await conversationStreamHealthy()).toEqual(['mygw']);
   });
   it('does not recognize an incomplete authentication marker', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response('<html data-auth-gate="conversation"></html>')));
@@ -51,7 +51,7 @@ describe('conversation stream upstream health', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
     const warning = vi.spyOn(logger, 'warn');
     expect(await conversationStreamHealthy()).toEqual([]);
-    expect(warning).toHaveBeenCalledTimes(4);
-    expect(warning).toHaveBeenCalledWith('Conversation stream embed host probe failed', expect.objectContaining({ host: 'testcfc', error: 'fetch failed' }));
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith('Conversation stream embed host probe failed', expect.objectContaining({ host: 'mygw', error: 'fetch failed' }));
   });
 });

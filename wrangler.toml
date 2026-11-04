@@ -33,9 +33,9 @@ NOTIFY_TARGET = "worker"
 # 本体nekorootはmygwを維持。CFC用Tunnel・Secretとは分離する。
 # src/utils/containerEndpoints.tsと同じ接続先を使用する。
 NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
-# askgkは独立RedmineコンテナのWorker経由APIへ送る。本体nekoroot停止中も利用可能。
+# askgkは独立側のCodex認証復旧まで、本体コンテナ(mygw)へ一時的に送る。
 # 経路一覧はsrc/data/askgk-routes.json。ASKGK_ROUTESのJSON設定で上書きできる。
-ASKGK_ROUTE_ID = "independent"
+ASKGK_ROUTE_ID = "main"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
