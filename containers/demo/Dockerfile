@@ -228,22 +228,9 @@ WORKDIR /app
 COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
 COPY firewall-stats.py firewall-log.py ./
-# lib is an independent application dependency. Supply a published immutable
-# commit at build time; never clone a moving branch or fetch code during boot.
-ARG LIB_NETWORK_REVISION
-RUN test -n "$LIB_NETWORK_REVISION" \
-    && test "${#LIB_NETWORK_REVISION}" -eq 40 \
-    && case "$LIB_NETWORK_REVISION" in *[!0-9a-f]*) exit 1 ;; esac \
-    && git init /opt/lib-network-src \
-    && git -C /opt/lib-network-src fetch --depth=1 https://github.com/nekoserver/lib.git "$LIB_NETWORK_REVISION" \
-    && git -C /opt/lib-network-src checkout --detach FETCH_HEAD \
-    && test "$(git -C /opt/lib-network-src rev-parse HEAD)" = "$LIB_NETWORK_REVISION"
-COPY lib-network/ /usr/local/share/lib-network/
-# Tools are already installed above; this step copies reviewed local runtime files.
-# No credentials or conversation history are included in the build context.
-RUN useradd --system --create-home --home-dir /var/lib/codex-web --shell /usr/sbin/nologin codex-web \
-    && python3 /usr/local/share/lib-network/post_install.py --install-image \
-    && a2enconf lib-private
+COPY container_setup.py /usr/local/libexec/container_setup.py
+# SSI setup is self-contained and can be reused by other container images.
+RUN python3 /usr/local/libexec/container_setup.py
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/

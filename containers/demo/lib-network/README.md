@@ -1,4 +1,6 @@
-# コンテナ専用のインストール後設定
+# コンテナ専用のSSI設定
+
+libは任意であり、コンテナはlibをclone、保持、コピーしない。`../container_setup.py` の `configure_container()` だけが共有設定関数で、任意に配置された `/var/www/html/lib` 以下のSSIを有効にする。Dockerfileとentrypointから呼び出す。他のコンテナでも同じ関数をコピーして利用できる。
 
 Workerのコード・bindingsには依存しない。外部のlibリポジトリを依存先とし、lib本体とlib固有テストはこのディレクトリへコピーしない。
 
