@@ -1,0 +1,29 @@
+✔ actual stream form handles HTTP 200 accepted=true error=undefined (3.282087ms)
+✔ actual stream form handles HTTP 409 accepted=undefined error=console_in_use (0.723376ms)
+✖ actual stream form handles HTTP 200 accepted=false error=undefined (1.304258ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 126.823666
+
+✖ failing tests:
+
+test at lib/test/chat_console_form_test.mjs:12:2
+✖ actual stream form handles HTTP 200 accepted=false error=undefined (1.304258ms)
+  AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to:
+
+  '送信しました。この会話に応答が届きます。'
+      at TestContext.<anonymous> (file:///root/lib/test/chat_console_form_test.mjs:23:15)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '送信しました。この会話に応答が届きます。',
+    expected: '送信しました。この会話に応答が届きます。',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }

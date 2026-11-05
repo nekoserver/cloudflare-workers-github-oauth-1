@@ -1,0 +1,1 @@
+PASS actual external lib installation into temporary root; Ruby/Node syntax; no .git/tests/auth copied. No services or Docker started.

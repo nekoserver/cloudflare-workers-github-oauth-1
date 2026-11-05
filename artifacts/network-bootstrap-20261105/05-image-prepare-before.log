@@ -1,0 +1,48 @@
+test_boot_hook_precedes_apache_and_docker_installs_code (__main__.PostInstallTest.test_boot_hook_precedes_apache_and_docker_installs_code) ... ok
+test_changed_settings_restart_existing_streams_but_identical_settings_do_not (__main__.PostInstallTest.test_changed_settings_restart_existing_streams_but_identical_settings_do_not) ... ok
+test_concurrent_configurations_use_process_lock (__main__.PostInstallTest.test_concurrent_configurations_use_process_lock) ... ok
+test_credentials_are_copied_privately_and_never_into_webroot (__main__.PostInstallTest.test_credentials_are_copied_privately_and_never_into_webroot) ... ok
+test_current_env_wins_and_management_values_are_not_chat_settings (__main__.PostInstallTest.test_current_env_wins_and_management_values_are_not_chat_settings) ... ok
+test_explicit_current_thread_beats_saved_target (__main__.PostInstallTest.test_explicit_current_thread_beats_saved_target) ... ok
+test_failed_verification_keeps_previous_source_and_reports_not_ready (__main__.PostInstallTest.test_failed_verification_keeps_previous_source_and_reports_not_ready) ... ok
+test_image_install_uses_external_source_and_excludes_state_and_tests (__main__.PostInstallTest.test_image_install_uses_external_source_and_excludes_state_and_tests) ... FAIL
+test_image_preparation_can_be_repeated (__main__.PostInstallTest.test_image_preparation_can_be_repeated) ... ERROR
+test_invalid_fixed_thread_and_origin_are_rejected (__main__.PostInstallTest.test_invalid_fixed_thread_and_origin_are_rejected) ... ok
+test_legacy_current_key_wins_over_saved_primary (__main__.PostInstallTest.test_legacy_current_key_wins_over_saved_primary) ... ok
+test_lib_is_an_external_dependency_not_a_vendored_snapshot (__main__.PostInstallTest.test_lib_is_an_external_dependency_not_a_vendored_snapshot) ... ok
+test_missing_dependency_is_detected_before_installation (__main__.PostInstallTest.test_missing_dependency_is_detected_before_installation) ... ok
+test_missing_secret_does_not_generate_one_or_start_services (__main__.PostInstallTest.test_missing_secret_does_not_generate_one_or_start_services) ... ok
+test_no_new_worker_or_binding_dependency (__main__.PostInstallTest.test_no_new_worker_or_binding_dependency) ... ok
+test_private_configuration_and_repeatability (__main__.PostInstallTest.test_private_configuration_and_repeatability) ... ok
+test_source_failure_does_not_start_observer_with_old_target (__main__.PostInstallTest.test_source_failure_does_not_start_observer_with_old_target) ... ok
+test_startup_without_history_does_not_fork_or_submit (__main__.PostInstallTest.test_startup_without_history_does_not_fork_or_submit) ... ok
+test_symlink_configuration_is_not_followed (__main__.PostInstallTest.test_symlink_configuration_is_not_followed) ... ok
+test_verifier_only_reads_the_fixed_thread (__main__.PostInstallTest.test_verifier_only_reads_the_fixed_thread) ... ok
+
+======================================================================
+ERROR: test_image_preparation_can_be_repeated (__main__.PostInstallTest.test_image_preparation_can_be_repeated)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cloudflare-workers-github-oauth-1/containers/demo/tests/post_install_test.py", line 126, in test_image_preparation_can_be_repeated
+    for _ in range(2):config.install_image(self.root,lib_source=source)
+                      ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cloudflare-workers-github-oauth-1/containers/demo/lib-network/post_install.py", line 254, in install_image
+    helper=safe_path(root,'/opt/lib-chat/bin/python');helper.parent.mkdir(parents=True,exist_ok=True)
+  File "/root/cloudflare-workers-github-oauth-1/containers/demo/lib-network/post_install.py", line 34, in safe_path
+    if part.is_symlink():raise ValueError('Symlink configuration path refused')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Symlink configuration path refused
+
+======================================================================
+FAIL: test_image_install_uses_external_source_and_excludes_state_and_tests (__main__.PostInstallTest.test_image_install_uses_external_source_and_excludes_state_and_tests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cloudflare-workers-github-oauth-1/containers/demo/tests/post_install_test.py", line 123, in test_image_install_uses_external_source_and_excludes_state_and_tests
+    self.assertFalse((self.root/'var/www/html/lib'/name).exists())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.201s
+
+FAILED (failures=1, errors=1)

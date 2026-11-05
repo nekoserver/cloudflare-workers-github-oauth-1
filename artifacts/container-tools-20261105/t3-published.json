@@ -1,0 +1,9 @@
+{
+  "latest": "0.1.7",
+  "published_at": "2026-11-04T06:41:30.507Z",
+  "repository": {
+    "url": "git+https://github.com/pingdotgg/t3code.git",
+    "type": "git",
+    "directory": "apps/server"
+  }
+}

@@ -214,3 +214,19 @@ mygw投稿用のfork threadへ切替後、公開POST200 accepted=trueとobserver
 ## 2026-11-05: fx公式WASMのサンプルページ（本番未反映）
 
 本体Workerに認証付き `/fx-wasm` を追加し、WASM一覧からリンク。公式libfx 0.0.16の配布済みWASMをSHA256照合して同梱し、模擬モデルの仮想ファイル読み書きを実Chromiumで確認。利用者のAI Gatewayキーによる実モデル接続も用意したが実通信は未検証。対象テスト7件とNode4件成功。Dockerビルド・CLI導入・Workerデプロイなし。詳細は [FX-WASM REPORT](REPORT.cloudflare-workers-github-oauth-1.FX-WASM.20261105.md)。
+
+## 2026-11-05: 現コンテナのネットワーク再配置と会話一本化
+
+現在ENVの会話と依頼本文を照合してobserverを設定。新しいforkは作らず、writer競合時は同じ会話のnative queueへ投稿する経路を現libへ反映。公開POST accepted=true/queued=trueと同じ会話に入力1件の保存を確認したが、writer取り込み・実応答は未確認。mygwの各配信/SSIとCodex/Claude実応答を確認。自動テスト138件成功。Cloudflare一覧権限不足、stream530/r9 502は残る。更新候補ca-certificates 1件を記録し、最終検証後にfirewall/nftログを取得。イメージ更新・Workerデプロイ・再作成後検証は未実施。詳細は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261105.md)。
+
+### 同一会話投稿の後続検証で確認済み
+
+2026-11-05、キューへ投入したテスト投稿を同じ会話で実受信し、assistantがSTREAM_POST_OK_20261105を返答。公開mygwの認証済みストリームでも投稿と応答を確認し、native queueの該当件数0を確認。前項の「writer取り込み・実応答は未確認」は解消。fork・追加投稿・対象会話切替なし。実ブラウザ操作と外部トンネル障害の境界は変わらない。41-single-thread-delivery.logを参照。
+
+## 2026-11-05: コンテナ専用のインストール後設定関数（イメージ未反映）
+
+containers/demo/lib-network/post_install.pyへ設定関数を分割し、Dockerfileの配置処理とentrypoint/cronからの再適用を接続。libは独立checkoutのまま、ビルド時に公開済みLIB_NETWORK_REVISIONを必須指定する。Workerコード・bindings・wranglerの設定変更なし。コンテナ再作成後の同一会話は履歴・認証の復元が前提で、不在なら待機する。集約窓口による157件と既存コンテナ32件の計189件成功。Dockerビルド・配備は未実施。lib側の未公開修正の公開と、ビルド呼出側の固定リビジョン指定が必要。詳細は [CONTAINER POST-INSTALL REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-POST-INSTALL.20261105.md)。
+
+## 2026-11-05: 次回イメージのpreprint追加・4ツール更新（未ビルド/未配備）
+
+preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.104.5、Claude Code 2.1.318、jj 0.47.1をDockerfileへ反映。jj配布物はpackages配下へ退避しCOPY再利用。preprint/T3 Codeの最新版チェックとapt自身の候補版の行を追加。T3の導入版0.1.3は変更なし。関連272件成功・1件スキップ、実CLI13チェック成功。Dockerビルド・Worker配備・実ブラウザ操作は未実施。自動Dockerfile反映はSPEC/PLANのみ作成し、他コンテナとの対応確認まで実装保留。詳細は [CONTAINER TOOLS REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-TOOLS.20261105.md)。

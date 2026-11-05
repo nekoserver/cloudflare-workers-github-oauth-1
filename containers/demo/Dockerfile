@@ -1,30 +1,23 @@
 # 固定する版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
-ARG TAILSCALE_VERSION=1.104.4
+ARG TAILSCALE_VERSION=1.104.5
 ARG GH_VERSION=2.103.3
-ARG JJ_VERSION=0.46.0
+ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
 
-# Tailscaleはビルド専用ステージでGoのソース(proxy.golang.org)から作る。
-# pkgs.tailscale.comからのtgz取得は、この環境では到達できないため使わない。
-FROM golang:1.27.3-trixie AS tailscale-build
+# Official precompiled Tailscale package; no Go source build.
+FROM ubuntu:26.04 AS tailscale-binaries
 ARG TAILSCALE_VERSION
-# ソースを捨てる前に、ソースからのコンパイル時間と、パッケージ(キャッシュ)からのインストール時間を測って
-# CACHE_EFFECT の行を出す。ビルドの記録の取り込みが、D1の cf_container_build_cache_effects に保存する(CLAUDE.md ルール44)。
-RUN start_ms=$(date +%s%3N) \
-    && CGO_ENABLED=0 go install -trimpath tailscale.com/cmd/tailscale@v${TAILSCALE_VERSION} tailscale.com/cmd/tailscaled@v${TAILSCALE_VERSION} \
-    && compile_ms=$(( $(date +%s%3N) - start_ms )) \
-    && /go/bin/tailscale version \
-    && /go/bin/tailscaled --version \
-    && tar -czf /tmp/tailscale-pkg.tgz -C /go/bin tailscale tailscaled \
-    && mkdir -p /tmp/tailscale-cache-check && start_ms=$(date +%s%3N) \
-    && tar -xzf /tmp/tailscale-pkg.tgz -C /tmp/tailscale-cache-check \
-    && /tmp/tailscale-cache-check/tailscaled --version \
-    && install_ms=$(( $(date +%s%3N) - start_ms )) \
-    && source_bytes=$(find /go/pkg/mod/cache/download -name "*.zip" -printf "%s\n" | awk '{n+=$1} END {print n+0}') \
-    && package_bytes=$(stat -c %s /tmp/tailscale-pkg.tgz) \
-    && echo "CACHE_EFFECT package=tailscale version=${TAILSCALE_VERSION} compile_ms=${compile_ms} install_ms=${install_ms} source_bytes=${source_bytes} package_bytes=${package_bytes}" \
-    && rm -rf /tmp/tailscale-pkg.tgz /tmp/tailscale-cache-check \
-    && go clean -modcache -cache
+ARG TAILSCALE_SHA256=720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/tailscale.tgz \
+        "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz" \
+    && echo "${TAILSCALE_SHA256}  /tmp/tailscale.tgz" | sha256sum -c - \
+    && mkdir -p /tmp/tailscale /usr/local/bin /usr/local/sbin \
+    && tar -xzf /tmp/tailscale.tgz -C /tmp/tailscale --strip-components=1 \
+    && install -m 755 /tmp/tailscale/tailscale /usr/local/bin/tailscale \
+    && install -m 755 /tmp/tailscale/tailscaled /usr/local/sbin/tailscaled \
+    && tailscale version && tailscaled --version \
+    && rm -rf /tmp/tailscale /tmp/tailscale.tgz /var/lib/apt/lists/*
 
 # Ubuntu-based container for /cf-containers. Runtime credentials are supplied
 # at startup; do not COPY login state or secrets into this image.
@@ -67,10 +60,10 @@ ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.166.0
 ARG T3_VERSION=0.1.3
-ARG CLAUDE_VERSION=2.1.309
+ARG CLAUDE_VERSION=2.1.318
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
-ARG CLOUDFLARED_VERSION=2026.10.6
+ARG CLOUDFLARED_VERSION=2026.10.7
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
@@ -101,8 +94,8 @@ RUN case "$INSTALL_DOCKER" in true|false) ;; *) echo "INSTALL_DOCKER must be tru
 RUN apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-aiohttp \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -c "import websockets, aiohttp; print('websockets', websockets.__version__, 'aiohttp', aiohttp.__version__)"
-# ghとjjは、公式のリリースにあるコンパイル済みのバイナリを使う(ソースからのビルドに毎回約20分かかっていた)。
-# sha256は配布元の値で固定する(gh: gh_<版>_checksums.txt。jj: 配布物から計算した値。jjは公式のチェックサムのファイルが無い)。
+# ghとjjは公式のコンパイル済みバイナリを使う。jjは退避パッケージから再利用。
+# sha256はghの公式チェックサム、jjのGitHub release asset digestと照合して固定。
 ARG GH_VERSION
 ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.tar.gz \
@@ -113,22 +106,22 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.tar.gz \
     && gh --version \
     && rm -rf /tmp/gh /tmp/gh.tar.gz
 ARG JJ_VERSION
-ARG JJ_SHA256=fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08
-RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/jj.tar.gz \
-        "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-    && echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c - \
+ARG JJ_SHA256=d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
+# Retained official release: reuse the exact package without downloading again.
+COPY packages/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz /tmp/jj.tar.gz
+RUN echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c - \
     && mkdir -p /tmp/jj && tar -xzf /tmp/jj.tar.gz -C /tmp/jj \
     && install -m 755 /tmp/jj/jj /usr/bin/jj \
     && jj --version \
     && rm -rf /tmp/jj /tmp/jj.tar.gz
-ARG CLOUDFLARED_SHA256=13d9a724a4d4271958a3728982ee983870a100959a159d2fa263b3450d0be72a
+ARG CLOUDFLARED_SHA256=70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
     && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
     && dpkg -i /tmp/cloudflared.deb \
     && rm -f /tmp/cloudflared.deb
-COPY --from=tailscale-build /go/bin/tailscale /usr/bin/tailscale
-COPY --from=tailscale-build /go/bin/tailscaled /usr/sbin/tailscaled
+COPY --from=tailscale-binaries /usr/local/bin/tailscale /usr/bin/tailscale
+COPY --from=tailscale-binaries /usr/local/sbin/tailscaled /usr/sbin/tailscaled
 # ソースからビルドしたRuby。SSHのセッションでも見えるよう/usr/local/binにリンクする。
 COPY --from=ruby-build /opt/ruby /opt/ruby
 RUN for b in ruby gem irb erb rake bundle bundler rdoc ri; do if [ -x /opt/ruby/bin/$b ]; then ln -sf /opt/ruby/bin/$b /usr/local/bin/$b; fi; done \
@@ -175,10 +168,35 @@ RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
+ARG CLAUDE_NATIVE_SHA256=708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
+    && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \
     && claude --version \
     && /opt/node22/bin/npm cache clean --force
+# Real browser for preprint; use Google's published Debian package checksum.
+ARG CHROME_VERSION=157.0.8103.38-1
+ARG CHROME_SHA256=a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/chrome.deb \
+        "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb" \
+    && echo "${CHROME_SHA256}  /tmp/chrome.deb" | sha256sum -c - \
+    && apt-get update && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+    && google-chrome --version \
+    && google-chrome --headless --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome-image-smoke --dump-dom about:blank >/tmp/chrome-smoke.html \
+    && test -s /tmp/chrome-smoke.html \
+    && rm -rf /tmp/chrome.deb /tmp/chrome-smoke.html /tmp/chrome-image-smoke /var/lib/apt/lists/*
+ARG PREPRINT_VERSION=0.1.2
+ARG PREPRINT_SHA256=451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f
+COPY preprint-cli /usr/local/libexec/preprint-cli
+RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/preprint.tgz \
+        "https://registry.npmjs.org/@supermemory/preprint/-/preprint-${PREPRINT_VERSION}.tgz" \
+    && echo "${PREPRINT_SHA256}  /tmp/preprint.tgz" | sha256sum -c - \
+    && npm install -g /tmp/preprint.tgz --ignore-scripts \
+    && mv /opt/node22/bin/preprint /opt/node22/bin/preprint-native \
+    && install -m 755 /usr/local/libexec/preprint-cli /opt/node22/bin/preprint \
+    && ln -sf /opt/node22/bin/preprint /usr/local/bin/preprint \
+    && preprint --help && preprint --version \
+    && npm cache clean --force && rm -f /tmp/preprint.tgz
 # wrangler: Node 20以上が必要なためClaude CLIと同じ/opt/node22のnpmで入れる。
 # npmも起動スクリプトも`env node`でPATH上のnode 18を拾うため、PATHの先頭に/opt/node22/binを置く。
 ARG INSTALL_WRANGLER=true
@@ -200,8 +218,8 @@ ARG TAILSCALE_VERSION
 ARG GH_VERSION
 ARG JJ_VERSION
 ARG RUBY_VERSION
-RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s"}\n' \
-        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" \
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" \
         > /etc/image-versions.json \
     && cat /etc/image-versions.json
 
@@ -210,6 +228,22 @@ WORKDIR /app
 COPY server.js build-info*.json ./
 # Read-only IPv4/IPv6 firewall counters, PTR/WHOIS and CIDR aggregation.
 COPY firewall-stats.py firewall-log.py ./
+# lib is an independent application dependency. Supply a published immutable
+# commit at build time; never clone a moving branch or fetch code during boot.
+ARG LIB_NETWORK_REVISION
+RUN test -n "$LIB_NETWORK_REVISION" \
+    && test "${#LIB_NETWORK_REVISION}" -eq 40 \
+    && case "$LIB_NETWORK_REVISION" in *[!0-9a-f]*) exit 1 ;; esac \
+    && git init /opt/lib-network-src \
+    && git -C /opt/lib-network-src fetch --depth=1 https://github.com/nekoserver/lib.git "$LIB_NETWORK_REVISION" \
+    && git -C /opt/lib-network-src checkout --detach FETCH_HEAD \
+    && test "$(git -C /opt/lib-network-src rev-parse HEAD)" = "$LIB_NETWORK_REVISION"
+COPY lib-network/ /usr/local/share/lib-network/
+# Tools are already installed above; this step copies reviewed local runtime files.
+# No credentials or conversation history are included in the build context.
+RUN useradd --system --create-home --home-dir /var/lib/codex-web --shell /usr/sbin/nologin codex-web \
+    && python3 /usr/local/share/lib-network/post_install.py --install-image \
+    && a2enconf lib-private
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/

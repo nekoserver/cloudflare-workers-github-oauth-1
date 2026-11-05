@@ -1,0 +1,28 @@
+#!/usr/bin/python3
+import json
+import os
+import fcntl
+lock = open("/run/start-lib-chat-observer.lock", "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
+from pathlib import Path
+import socket
+import subprocess
+sock = Path('/run/lib-chat-observer/observer.sock')
+if sock.exists():
+    probe = socket.socket(socket.AF_UNIX)
+    try:
+        probe.connect(str(sock))
+    except ConnectionRefusedError:
+        pass
+    else:
+        raise SystemExit(0)
+    finally:
+        probe.close()
+source = json.loads(Path('/var/lib/lib-chat-observer/source.json').read_text())
+if not Path(source['appSocket']).is_socket():
+    raise SystemExit('Configured app-server socket is unavailable')
+env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'LIB_CHAT_APP_SOCKET': source['appSocket'], 'LIB_CHAT_THREAD_ID': source['threadId']}
+fd = os.open('/var/log/lib-chat-observer.log', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+with os.fdopen(fd, 'ab') as log:
+    proc = subprocess.Popen(['/opt/lib-chat/bin/python', '/var/www/html/lib/ops/chat_observer.py'], stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, env=env)
+Path('/run/lib-chat-observer.pid').write_text(str(proc.pid))

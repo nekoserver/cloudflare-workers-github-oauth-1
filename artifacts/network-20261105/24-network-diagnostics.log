@@ -1,0 +1,10 @@
+cloudflared tunnel --config /etc/cloudflared/ingress.yml ingress validate exit=0
+Validating rules from  /etc/cloudflared/ingress.yml
+OK
+/usr/sbin/sshd -t exit=0
+apache2ctl configtest exit=0
+Syntax OK
+Tailscale state=Running peers=2
+cloudflared_tunnel_ha_connections 3
+Public streaming process: management credentials absent; current HMAC matches
+Public streaming process: management credentials absent; current HMAC matches

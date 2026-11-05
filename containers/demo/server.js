@@ -119,11 +119,14 @@ const VERSION_SOURCES = [
   { name: 'gh', cmd: 'gh', args: ['--version'], key: 'gh' },
   { name: 'git', cmd: 'git', args: ['--version'] },
   { name: 'jj', cmd: 'jj', args: ['--version'], key: 'jj' },
+  { name: 't3', cmd: 't3', args: ['--version'], key: 't3' },
+  { name: 'preprint', cmd: 'preprint', args: ['--version'], key: 'preprint' },
   { name: 'ruby', cmd: 'ruby', args: ['--version'], key: 'ruby' },
 ];
 
 // aptで入れたネットワーク・CLIツール。実際の版(dpkg-query)と、Ubuntuアーカイブの最新(apt-cache policyのCandidate)を比べる。
 const APT_TOOLS = [
+  { name: 'apt', pkg: 'apt' },
   { name: 'rg', pkg: 'ripgrep' },
   { name: 'ag', pkg: 'silversearcher-ag' },
   { name: 'sshguard', pkg: 'sshguard' },

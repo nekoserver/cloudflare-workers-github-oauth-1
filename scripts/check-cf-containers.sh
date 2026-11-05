@@ -12,6 +12,11 @@ if [ "${1:-}" = "--offline" ]; then
   echo "ERROR: --offline removes required Node/CLI runtimes and cannot validate this image. Run the full build with network access." >&2
   exit 2
 fi
+# A published immutable lib release is an explicit container build input.
+if ! [[ "${LIB_NETWORK_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "ERROR: set LIB_NETWORK_REVISION to the published 40-character lib commit before building." >&2
+  exit 2
+fi
 IMAGE=cf-demo:check
 NAME=cf-demo-check
 
@@ -33,7 +38,7 @@ echo "OK"
 
 step "3/4 コンテナイメージのビルド"
 CTX=containers/demo
-BUILD_ARGS=()
+BUILD_ARGS=(--build-arg "LIB_NETWORK_REVISION=$LIB_NETWORK_REVISION")
 if [ -n "${HTTPS_PROXY:-}" ] && [ -f /root/.ccr/ca-bundle.crt ]; then
   # Claude Codeのクラウドサンドボックス: HTTPSはMITMプロキシ経由でしか外に出られない。
   # ビルド用コピーにプロキシのCAとhttps_proxyだけを足し(aptのhttpは直接出られる)、
@@ -59,7 +64,7 @@ for l in lines:
 lines = out
 open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 EOF2
-  BUILD_ARGS=(--network host)
+  BUILD_ARGS+=(--network host)
   echo "INFO: サンドボックスのプロキシ経由で本番と同じダウンロード込みのビルドを行う"
 fi
 docker build -q "${BUILD_ARGS[@]}" -t "$IMAGE" "$CTX" >/dev/null

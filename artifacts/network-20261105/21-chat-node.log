@@ -1,0 +1,43 @@
+✔ actual stream form handles HTTP 200 accepted=true error=undefined (3.054896ms)
+✔ actual stream form handles HTTP 409 accepted=undefined error=console_in_use (0.747021ms)
+✔ actual stream form handles HTTP 200 accepted=false error=undefined (0.890357ms)
+✔ retry status preserves the observer failure instead of reporting a generic disconnect (0.651779ms)
+✔ read-only observation reconnects with bounded backoff and resets after data (0.292629ms)
+✔ stopping, missing auth and permanent errors never restart observation (0.621442ms)
+✔ browser timers are called with their global receiver (1.123958ms)
+✔ authenticates before submitting and delivers final answer (10.712322ms)
+✔ disconnect does not resend a prompt (0.619339ms)
+✔ resume request never sends a submit (2.130728ms)
+✔ bad authentication closes and frees the connection (0.284167ms)
+✔ observation session reconnects with an empty key without invoking WebCrypto (0.9258ms)
+✔ observer outage preserves authentication (error frame: true) (1.394473ms)
+✔ observer outage preserves authentication (error frame: false) (0.418448ms)
+✔ pasted key whitespace matches the server normalization (3.741767ms)
+✔ observer failure reports its cause without clearing the authenticated session (0.663697ms)
+✔ sse: fragmented UTF-8 and multiple records are preserved (11.281115ms)
+✔ sse: signs the exact POST path and body, submits once (91.050674ms)
+✔ ndjson: fragmented UTF-8 and multiple records are preserved (2.001394ms)
+✔ ndjson: signs the exact POST path and body, submits once (2.704449ms)
+✔ jsonseq: fragmented UTF-8 and multiple records are preserved (1.263607ms)
+✔ jsonseq: signs the exact POST path and body, submits once (2.804911ms)
+✔ SSE parses CRLF, comments, IDs and multiline data (1.682175ms)
+✔ JSON-seq supports formatted multiline JSON (0.418248ms)
+✔ truncated HTTP streams do not silently succeed (1.536507ms)
+✔ stopping an HTTP stream aborts without another request (0.587211ms)
+✔ sse: observation session reconnects without importing an empty HMAC key (0.494773ms)
+✔ ndjson: observation session reconnects without importing an empty HMAC key (0.196105ms)
+✔ jsonseq: observation session reconnects without importing an empty HMAC key (0.265749ms)
+✔ sse: observer failure preserves the cause and the session (0.63259ms)
+✔ ndjson: observer failure preserves the cause and the session (0.22647ms)
+✔ jsonseq: observer failure preserves the cause and the session (0.148814ms)
+✔ valid parent colors are applied without changing authentication or connection state (0.841353ms)
+✔ invalid colors, missing values and image URLs are rejected without partial updates (0.196395ms)
+✔ unrelated control messages cannot apply a palette (0.192209ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 786.583939

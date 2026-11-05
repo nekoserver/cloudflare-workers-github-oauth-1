@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 // 新しくソースビルドを足す(または、公式のバイナリからソースビルドへ戻す)には、ユーザーの許可を得て、この表に理由を書く。
 // 理由が解消したら、公式のバイナリへ切り替えて、表から消す。
 const ALLOWED_SOURCE_BUILDS: Record<string, string> = {
-  'tailscale-build': 'GitHubのリリースにバイナリが無い。pkgs.tailscale.com はエージェントのサンドボックスから届かず、1.104.4 の sha256 を確かめられていない(2026-10-31)',
   'ruby-build': '公式のコンパイル済みはDebian向けのDockerイメージだけで、UbuntuのイメージへそのままCOPYして動くかを確かめていない(2026-10-31)',
 };
 const dockerfile = readFileSync(new URL('../containers/demo/Dockerfile', import.meta.url), 'utf8');
@@ -30,7 +29,6 @@ describe('ソースからのビルドは、理由を書いたものだけ', () =
 // ビルド済みのものが読み込めることを確かめた時点で、ソースツリーとビルドのキャッシュを捨てる。
 // Dockerでは、同じRUNの中で「インストール → 動作の確認 → ソースの削除」まで行う。
 const CLEANUP: Record<string, { verify: string; remove: string }> = {
-  'tailscale-build': { verify: '/go/bin/tailscaled --version', remove: 'go clean -modcache -cache' },
   'ruby-build': { verify: "/opt/ruby/bin/ruby -ropenssl", remove: 'rm -rf /tmp/ruby-src /tmp/ruby.tar.gz /tmp/ruby-pkg.tgz /tmp/ruby-cache-check' },
 };
 describe('ソースからビルドしたら、確認の後にソースツリーを捨てる', () => {
@@ -49,7 +47,7 @@ describe('ソースからビルドしたら、確認の後にソースツリー�
 
 // ソースを捨てる前に、ソースからのコンパイル時間と、パッケージ(キャッシュ)からのインストール時間を測り、
 // CACHE_EFFECT の行をビルドログへ出す。ビルドの記録の取り込み(storeBuildTimings)が、D1の cf_container_build_cache_effects に保存する。
-const EFFECT_PACKAGE: Record<string, string> = { 'tailscale-build': 'tailscale', 'ruby-build': 'ruby' };
+const EFFECT_PACKAGE: Record<string, string> = { 'ruby-build': 'ruby' };
 describe('ソースを捨てる前に、キャッシュの効果を測ってログに出す', () => {
   it('許可したソースビルドには、すべてパッケージ名の対応がある', () => {
     expect(Object.keys(EFFECT_PACKAGE).sort()).toEqual(Object.keys(ALLOWED_SOURCE_BUILDS).sort());

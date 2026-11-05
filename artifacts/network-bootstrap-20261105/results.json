@@ -1,0 +1,55 @@
+{
+  "docker_build": false,
+  "model_input": false,
+  "suites": [
+    {
+      "suite": "container-post-install",
+      "exit_code": 0,
+      "log": "container-post-install.log",
+      "tests": 23
+    },
+    {
+      "suite": "network-env-cache",
+      "exit_code": 0,
+      "log": "network-env-cache.log",
+      "tests": 8
+    },
+    {
+      "suite": "apache-ssi",
+      "exit_code": 0,
+      "log": "apache-ssi.log",
+      "tests": 1
+    },
+    {
+      "suite": "lib-chat-python",
+      "exit_code": 0,
+      "log": "lib-chat-python.log",
+      "tests": 52
+    },
+    {
+      "suite": "lib-llm-worker",
+      "exit_code": 0,
+      "log": "lib-llm-worker.log",
+      "tests": 21
+    },
+    {
+      "suite": "lib-prompt-ruby",
+      "exit_code": 0,
+      "log": "lib-prompt-ruby.log",
+      "tests": 16
+    },
+    {
+      "suite": "lib-stream-node",
+      "exit_code": 0,
+      "log": "lib-stream-node.log",
+      "tests": 36
+    }
+  ],
+  "tests": 157,
+  "additional_container_regressions": {
+    "files": 5,
+    "tests": 32,
+    "passed": true,
+    "log": "10-container-regressions.log"
+  }
+}

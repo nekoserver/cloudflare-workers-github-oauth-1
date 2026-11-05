@@ -1,0 +1,13 @@
+PASS cloudflared --version exit=0
+PASS cloudflared tunnel --help exit=0
+PASS tailscale version exit=0
+PASS tailscale up --help exit=0
+PASS tailscaled --help exit=0
+PASS jj --version exit=0
+PASS claude --version exit=0
+PASS claude --help exit=0
+PASS preprint --help exit=0
+PASS preprint open --help exit=0
+PASS agent-browser --help exit=0
+PASS jj isolated git init .
+PASS jj isolated status
