@@ -132,6 +132,10 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 .badge[data-level="ok"] { background: var(--ok-bg); color: var(--ok); }
 .badge[data-level="warn"] { background: var(--warn-bg); color: var(--warn); }
 .badge[data-level="ng"] { background: var(--err-bg); color: var(--err); }
+.badge[data-level="info"] { border: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+.container-row { margin: 6px 0; }
+.container-row .badge { margin: 2px 4px 2px 0; }
+.container-instances { margin: 4px 0 8px 16px; }
 </style>
 </head>
 <body>
@@ -1164,6 +1168,70 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .finally(function () { btnBuildLog.disabled = false; });
   });
 
+  /* container-badges:start */
+  // コンテナ一覧の各行に出すバッジ。状態の意味が分かるものは色を付け、それ以外の値も灰色(info)で全部出す。
+  function instanceStateLevel(state) {
+    var s = String(state || '').toLowerCase();
+    if (['running', 'active', 'healthy', 'ready'].indexOf(s) >= 0) return 'ok';
+    if (['starting', 'scheduling', 'stopping', 'provisioning', 'pending', 'placed'].indexOf(s) >= 0) return 'warn';
+    if (['failed', 'stopped', 'error', 'crashed', 'unhealthy'].indexOf(s) >= 0) return 'ng';
+    return 'info';
+  }
+  function containerRowBadges(row) {
+    var badges = [];
+    var skip = { id: 1, name: 1, created_at: 1, createdAt: 1, health: 1 };
+    var health = row && row.health && row.health.instances;
+    if (health && typeof health === 'object') Object.keys(health).forEach(function (key) {
+      var value = health[key];
+      if (typeof value === 'number' && value > 0) badges.push({ label: key + ' ' + value, level: instanceStateLevel(key) });
+    });
+    function walk(obj, prefix) {
+      Object.keys(obj).forEach(function (key) {
+        if (!prefix && skip[key]) return;
+        var value = obj[key];
+        var label = prefix ? prefix + '.' + key : key;
+        if (value === null || value === undefined || value === '') return;
+        if (Array.isArray(value)) { badges.push({ label: label + ' ' + value.length + '件', level: 'info' }); return; }
+        if (typeof value === 'object') { walk(value, label); return; }
+        badges.push({ label: label + ' ' + String(value).slice(0, 60), level: key === 'state' || key === 'status' ? instanceStateLevel(value) : 'info' });
+      });
+    }
+    walk(row || {}, '');
+    return badges;
+  }
+  /* container-badges:end */
+  function appendBadges(parent, badges) {
+    badges.forEach(function (b) {
+      var span = document.createElement('span');
+      span.className = 'badge'; span.setAttribute('data-level', b.level); span.textContent = b.label;
+      parent.appendChild(span);
+    });
+  }
+  function showInstances(app, box, button) {
+    button.disabled = true; box.textContent = '取得中…';
+    fetch('/cf-containers/proxy/debug/wrangler/containers-instances?app=' + encodeURIComponent(app), { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        box.textContent = '';
+        if (data.error || data.exitCode !== 0) { box.textContent = 'エラー: ' + (data.error || data.stderr || ('終了コード ' + data.exitCode)); return; }
+        var rows;
+        try { rows = JSON.parse(data.stdout); } catch (_) { box.textContent = data.stdout || '(出力なし)'; return; }
+        if (!Array.isArray(rows)) rows = rows && (rows.instances || rows.items || rows.results);
+        if (!Array.isArray(rows) || rows.length === 0) { box.textContent = 'インスタンスはありません。'; return; }
+        rows.forEach(function (inst) {
+          var line = document.createElement('div');
+          line.className = 'container-row';
+          var name = document.createElement('code');
+          name.textContent = (inst && (inst.name || inst.id)) || '名前不明';
+          line.appendChild(name); line.appendChild(document.createTextNode(' '));
+          appendBadges(line, containerRowBadges(inst));
+          box.appendChild(line);
+        });
+      })
+      .catch(function (err) { box.textContent = 'エラー: ' + String(err); })
+      .finally(function () { button.disabled = false; });
+  }
+
   var btnContainerList = document.getElementById('btn-container-list');
   var containerListOutput = document.getElementById('container-list-output');
   var containerListGroups = document.getElementById('container-list-groups');
@@ -1203,7 +1271,19 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
           var list = document.createElement('ul');
           groups[date].forEach(function (row) {
             var item = document.createElement('li');
-            item.textContent = [row.name || row.id || row.application_id || '名前不明', row.version ? 'version ' + row.version : '', row.status || ''].filter(Boolean).join(' — ');
+            item.className = 'container-row';
+            var title = document.createElement('strong');
+            title.textContent = row.name || row.id || row.application_id || '名前不明';
+            item.appendChild(title); item.appendChild(document.createTextNode(' '));
+            appendBadges(item, containerRowBadges(row));
+            var app = row.id || row.application_id || row.name;
+            if (app) {
+              var more = document.createElement('button');
+              more.type = 'button'; more.textContent = 'インスタンス';
+              var box = document.createElement('div'); box.className = 'container-instances';
+              more.addEventListener('click', function () { showInstances(String(app), box, more); });
+              item.appendChild(more); item.appendChild(box);
+            }
             list.appendChild(item);
           });
           section.appendChild(list);

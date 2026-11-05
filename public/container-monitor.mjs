@@ -2,6 +2,13 @@ const WASM_ROOT = '/tailscale-connect/1.102.3-3';
 const STORAGE_PREFIX = 'container-monitor.tailscale.';
 const labels = { running: '稼働中', provisioning: '起動準備中', starting: '起動中', stopping: '停止処理中', stopped: '停止', inactive: '非稼働', failed: '失敗', unhealthy: '異常', unknown: '不明', online: 'オンライン', offline: 'オフライン', 'no-instances': '記録なし' };
 
+// 状態の色分け(ok=緑・warn=黄・ng=赤・info=灰)。止めたもの(stopped・inactive)は失敗ではないので灰にする。
+export function statusLevel(status) {
+  if (['running', 'online'].includes(status)) return 'ok';
+  if (['provisioning', 'starting', 'stopping'].includes(status)) return 'warn';
+  if (['failed', 'unhealthy', 'offline'].includes(status)) return 'ng';
+  return 'info';
+}
 export function normalizeNetMap(value) {
   const map = typeof value === 'string' ? JSON.parse(value) : value;
   if (!map || !Array.isArray(map.peers)) throw new Error('Tailscaleの端末一覧を読み取れません');
@@ -42,8 +49,13 @@ export function setupContainerMonitor(doc = document, dependencies = {}) {
     const filter = byId('monitor-filter').value.toLocaleLowerCase();
     for (const target of targets.filter(target => [target.name, target.group, ...target.addresses].join(' ').toLocaleLowerCase().includes(filter))) {
       const row = doc.createElement('tr');
-      for (const value of [target.name, target.group, labels[target.status] ?? target.status, target.addresses.join(', '), target.observedAt ? new Date(target.observedAt).toLocaleString() : '—', target.detail]) {
-        const cell = doc.createElement('td'); cell.textContent = String(value ?? ''); row.append(cell);
+      for (const value of [target.name, target.group, null, target.addresses.join(', '), target.observedAt ? new Date(target.observedAt).toLocaleString() : '—', target.detail]) {
+        const cell = doc.createElement('td');
+        if (value === null) {
+          const badge = doc.createElement('span'); badge.className = 'badge'; badge.dataset.level = statusLevel(target.status);
+          badge.textContent = labels[target.status] ?? target.status; cell.append(badge);
+        } else cell.textContent = String(value ?? '');
+        row.append(cell);
       }
       body.append(row);
     }
