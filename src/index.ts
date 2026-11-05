@@ -423,6 +423,7 @@ import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
 import { TREE_VIEW_REPOSITORY_CRON_ENABLED } from './utils/treeViewCronPolicy';
 import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, replaceCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { getFxWasmPage } from './views/fxWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -20202,6 +20203,13 @@ app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) 
     return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getCfContainersPage());
+});
+
+app.get('/fx-wasm', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://ai-gateway.vercel.sh; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  return c.html(getFxWasmPage());
 });
 
 /**

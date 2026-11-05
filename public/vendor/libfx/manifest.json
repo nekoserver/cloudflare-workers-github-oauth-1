@@ -1,0 +1,23 @@
+{
+  "package": "libfx",
+  "version": "0.0.16",
+  "source": "https://registry.npmjs.org/libfx/-/libfx-0.0.16.tgz",
+  "archiveSha256": "3b9f0c1dca43c756be452ea6b47360c568b368d36fe23d806dbfade609efc8b1",
+  "license": "Apache-2.0",
+  "files": {
+    "LICENSE": "f1932dabb4856eb6f6cba683be864338e654012492642aeb59e5e48483f836c4",
+    "browser-agent.js": "44ddf867ea7c1422addf72804ceeb983bac6cf00b72d0b9467bd60e6dd7be5d6",
+    "chatgpt.js": "1c8d0287b3b5c52f8dfb4d28a92e687502b0032f803e6304427f2056c4766be0",
+    "core-output.js": "82c52a52a3d66ec4a456250e05bf240487e14c3cb81035db50b1c974e1d5f9fa",
+    "custom-provider.js": "dd89df20455c982cddff5b46845db0dcd368829f821ad321296c19855c3a6f58",
+    "durable.js": "01c70f214d3254da16b80add153da8a4bc9ceaea40999441be25e5c78269df5e",
+    "engine.js": "48ff3ea051dca7924c204cdd6677ed4165d89f55932baaa97bfeacd67fae7bbf",
+    "fx-core.wasm": "c2b17c90d1c4ce76f72d322bb7bd210e3d066eb1db05aaae053a4e4371cabb69",
+    "fx-harness.js": "77e053720178e49ff6b231069ced8b1ff2764c39dbaf5e6d43b50c09cd4622b9",
+    "grok.js": "83af61e3daa0c91c483c2b550c63c948a61f783b549f00635886f87a96a9ec7b",
+    "subscription.js": "1e1a791cb51bf2df053b94d7604b263a6734b67f1d8191fb643104e694916b6d",
+    "tool-observation.js": "6388a291008f9fd3ee598c5a4deec7186237c00ce14b22444d139fc75e0efdac",
+    "wasm-module.js": "f4ccea6ae3fac858ba3a11b50b1379afa6b1360d4cb65fb5430a38c482dfe89d",
+    "wasm-runtime.js": "9d2db07ad59f902acf7578f0c49f181f49ac57d4f9d5c733d677b471a56edc13"
+  }
+}

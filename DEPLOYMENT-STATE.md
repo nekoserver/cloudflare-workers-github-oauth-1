@@ -209,3 +209,8 @@ Worker `267061d1-7b3a-454b-b7c3-c697141e9167` を本番反映。閉じたパネ�
 ## 2026-11-04: ストリーム投稿復旧・初期設定検証をmain workerとcontainer docsへ記録
 
 mygw投稿用のfork threadへ切替後、公開POST200 accepted=trueとobserver上のCONSOLE_POST_OKを確認したため一旦解決。元SSH会話とは同期しない。初期設定確認をこのリポジトリの`NETWORK-STREAM-SETUP.md`とコンテナ内`/root/lib/ops/CHAT_WEBSOCKET.md`に記録。セットアップごとにtunnels.rb、WebSocket/SSE、observer、投稿後の実応答を確認し、REPORTへ残す。詳細は [CONSOLE STREAM REPORT](REPORT.cloudflare-workers-github-oauth-1.CONSOLE-STREAM.20261104.md) と [lib SPEC](../../lib/SPEC.lib.20261104.console-stream-adhoc.md)。Dockerイメージ更新・コンテナ再作成後検証は未実施。
+
+
+## 2026-11-05: fx公式WASMのサンプルページ（本番未反映）
+
+本体Workerに認証付き `/fx-wasm` を追加し、WASM一覧からリンク。公式libfx 0.0.16の配布済みWASMをSHA256照合して同梱し、模擬モデルの仮想ファイル読み書きを実Chromiumで確認。利用者のAI Gatewayキーによる実モデル接続も用意したが実通信は未検証。対象テスト7件とNode4件成功。Dockerビルド・CLI導入・Workerデプロイなし。詳細は [FX-WASM REPORT](REPORT.cloudflare-workers-github-oauth-1.FX-WASM.20261105.md)。
