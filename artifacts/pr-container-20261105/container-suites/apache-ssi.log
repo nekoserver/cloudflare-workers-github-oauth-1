@@ -1,0 +1,6 @@
+test_vhost_serves_ssi_before_catchall_proxy (__main__.SSITemplateTest.test_vhost_serves_ssi_before_catchall_proxy) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.005s
+
+OK

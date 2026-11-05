@@ -1,0 +1,70 @@
+test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) ...
+  test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/ops/chat_observer.py') ... FAIL
+  test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/.git/config') ... FAIL
+/usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+  test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/test/chat_observer_test.py') ... FAIL
+test_private_sockets (__main__.RuntimeTest.test_private_sockets) ...
+  test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-chat-app/app-server.sock') ... FAIL
+  test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-chat-observer/observer.sock') ... FAIL
+  test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-codex/worker.sock') ... FAIL
+test_ssi_expands (__main__.RuntimeTest.test_ssi_expands) ... ok
+
+======================================================================
+FAIL: test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/ops/chat_observer.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 34, in test_private_paths_denied
+    with self.assertRaises(urllib.error.HTTPError) as err: self.request(path)
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/.git/config')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 34, in test_private_paths_denied
+    with self.assertRaises(urllib.error.HTTPError) as err: self.request(path)
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) (path='/lib/test/chat_observer_test.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 34, in test_private_paths_denied
+    with self.assertRaises(urllib.error.HTTPError) as err: self.request(path)
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-chat-app/app-server.sock')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 14, in test_private_sockets
+    self.assertTrue(p.is_socket(), name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : lib-chat-app/app-server.sock
+
+======================================================================
+FAIL: test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-chat-observer/observer.sock')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 14, in test_private_sockets
+    self.assertTrue(p.is_socket(), name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : lib-chat-observer/observer.sock
+
+======================================================================
+FAIL: test_private_sockets (__main__.RuntimeTest.test_private_sockets) (socket='lib-codex/worker.sock')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 14, in test_private_sockets
+    self.assertTrue(p.is_socket(), name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : lib-codex/worker.sock
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.184s
+
+FAILED (failures=6)

@@ -1,0 +1,78 @@
+{
+  "bin": {
+    "preprint": "bin/preprint.js"
+  },
+  "bugs": {
+    "url": "https://github.com/supermemoryai/preprint/issues"
+  },
+  "dist": {
+    "shasum": "2d4cd1bf7cccd10646c4831448a82a3c66f4d6d7",
+    "tarball": "https://registry.npmjs.org/@supermemory/preprint/-/preprint-0.1.2.tgz",
+    "fileCount": 21,
+    "integrity": "sha512-kn2qLPyvoYKcUReKcWipc3p4nBpDdEXiIyP87JE4Do6agYzmgtVAQUvWEu3gIj2qKrXcAcg0fN0p1Zds8AawxQ==",
+    "signatures": [
+      {
+        "sig": "MEQCIDOiuSFqUx9BaW9aboiZ4CC9H4ItzpXCFirxIYbRrREaAiALB6FbCZjxe5KHwmUuqO98++aN+oPhIHH+i14RFJH97A==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "unpackedSize": 83259973
+  },
+  "name": "@supermemory/preprint",
+  "type": "module",
+  "author": {
+    "name": "Prasanna A P",
+    "email": "praveenap0217@gmail.com"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "gitHead": "b2e06f1a36d365deab81c5611f87da0fa4f60c19",
+  "license": "Apache-2.0",
+  "scripts": {
+    "version": "npm run version:sync && git add Cargo.toml Cargo.lock",
+    "postinstall": "node scripts/postinstall.js",
+    "build:native": "npm run version:sync && cargo build --release --no-default-features",
+    "version:sync": "node scripts/sync-version.js",
+    "version:check": "node scripts/check-version-sync.js"
+  },
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:9573e2a6-dfd3-42a7-ab15-762e69cd9ee4"
+    }
+  },
+  "homepage": "https://github.com/supermemoryai/preprint",
+  "keywords": [
+    "browser",
+    "automation",
+    "cli",
+    "agent",
+    "ai",
+    "chromium",
+    "markdown"
+  ],
+  "repository": {
+    "url": "git+https://github.com/supermemoryai/preprint.git",
+    "type": "git"
+  },
+  "_npmVersion": "11.12.1",
+  "description": "Live markdown projection of a real Chromium browser for AI agents",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "dhravya",
+      "email": "dhravyashah@gmail.com"
+    }
+  ],
+  "_nodeVersion": "24.15.0",
+  "_hasShrinkwrap": false,
+  "_npmOperationalInternal": {
+    "tmp": "tmp/preprint_0.1.2_1779760880405_0.8488342002473777",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "@supermemory/preprint@0.1.2",
+  "version": "0.1.2"
+}

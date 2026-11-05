@@ -1,0 +1,61 @@
+#!/bin/bash
+set -eu
+exec 9>/run/lib-chat-streams.lock
+flock -x 9
+# Persist supplied environment for CGI and stream processes without exposing it.
+python3 - <<'PY'
+import os,shlex,grp
+from pathlib import Path
+secret=os.environ.get('ORIGIN_HMAC_SECRET','').strip() or os.environ.get('HMAC_SECRET','').strip()
+if secret:
+ p=Path('/etc/lib-hmac.env')
+ tmp=p.with_suffix('.env.tmp')
+ fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o640)
+ with os.fdopen(fd,'w') as f: f.write('ORIGIN_HMAC_SECRET='+shlex.quote(secret)+'\n')
+ os.chown(tmp,0,grp.getgrnam('www-data').gr_gid)
+ os.chmod(tmp,0o640)
+ tmp.replace(p)
+PY
+# Current exported settings take precedence over saved defaults.
+eval "$(python3 - <<'PYENV'
+import os, shlex
+from pathlib import Path
+values = {}
+for name in ('/etc/lib-chat.env', '/etc/lib-hmac.env'):
+    if Path(name).exists():
+        for line in Path(name).read_text().splitlines():
+            if not line.strip() or line.lstrip().startswith('#'): continue
+            key, raw = line.split('=', 1)
+            values[key] = ' '.join(shlex.split(raw))
+values.update(os.environ)
+secret = (os.environ.get('ORIGIN_HMAC_SECRET', '').strip() or os.environ.get('HMAC_SECRET', '').strip()
+          or values.get('ORIGIN_HMAC_SECRET', '').strip() or values.get('HMAC_SECRET', '').strip())
+values['ORIGIN_HMAC_SECRET'] = secret
+for key, value in values.items():
+    if key.startswith('LIB_CHAT_') or key in ('ORIGIN_HMAC_SECRET', 'HMAC_SECRET'):
+        print('export ' + key + '=' + shlex.quote(value))
+PYENV
+)"
+if [ -z "${ORIGIN_HMAC_SECRET:-}${HMAC_SECRET:-}" ]; then
+    echo 'HMAC environment missing: set ORIGIN_HMAC_SECRET and rerun start-lib-chat-streams' >&2
+    exit 1
+fi
+for stream in chat_websocket chat_http_stream; do
+    pidfile=/run/lib-${stream}.pid
+    if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then continue; fi
+    # The public-facing process needs the signing key, never management tokens.
+    python3 - "$stream" <<'PYSTART'
+import os, subprocess, sys
+from pathlib import Path
+stream = sys.argv[1]
+env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8'}
+env.update({key: value for key, value in os.environ.items()
+            if key.startswith('LIB_CHAT_') or key in ('ORIGIN_HMAC_SECRET', 'HMAC_SECRET', 'LIB_CODEX_SOCKET')})
+with open('/var/log/lib-' + stream + '.log', 'ab') as log:
+    proc = subprocess.Popen(['/usr/sbin/runuser', '-u', 'www-data', '--', '/opt/lib-chat/bin/python',
+                             '/var/www/html/lib/ops/' + stream + '.py'],
+                            env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                            start_new_session=True, close_fds=True)
+Path('/run/lib-' + stream + '.pid').write_text(str(proc.pid))
+PYSTART
+done

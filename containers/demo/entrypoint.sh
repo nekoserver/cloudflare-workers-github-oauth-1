@@ -192,6 +192,14 @@ if [ -d /opt/redmine ] && [ ! -f "$REDMINE_DB" ]; then
   chown www-data:www-data "$REDMINE_DB" 2>/dev/null || true
 fi
 
+# --- Container-only configuration after installation (also reapplied on boot) ---
+# Missing ENV/history is logged as degraded; do not create a replacement thread.
+(umask 077; touch /var/log/lib-network-start.log)
+chmod 600 /var/log/lib-network-start.log
+python3 /usr/local/share/lib-network/post_install.py >>/var/log/lib-network-start.log 2>&1 \
+  && log "lib-network configured" \
+  || log "WARN: lib-network configuration incomplete; see /var/log/lib-network-start.log"
+
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
 apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
   && (apache2ctl start >/tmp/apache.log 2>&1 && log "apache2 started") \

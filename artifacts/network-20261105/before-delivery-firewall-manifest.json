@@ -1,0 +1,15 @@
+{
+  "captured_at": "2026-11-05T20:34:57.551770+00:00",
+  "nft_exit_code": 0,
+  "firewall_log_mode": "existing counters-only collector; collection timestamps, not per-packet kernel logs",
+  "files": {
+    "firewall.log": {
+      "bytes": 44366,
+      "sha256": "9b32e74b5eabd03ff69efb1beb44e15f74a14f41dad7c339e48b07f5212981b0"
+    },
+    "nft-ruleset.txt": {
+      "bytes": 1227,
+      "sha256": "f87f056c59c4fe5bb06690d7c8bb686b61cc09c48ed1e541acdbff0600af2823"
+    }
+  }
+}

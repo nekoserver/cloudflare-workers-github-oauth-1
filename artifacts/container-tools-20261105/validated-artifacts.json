@@ -1,0 +1,32 @@
+[
+  {
+    "name": "cloudflared",
+    "sha256": "70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393",
+    "bytes": 19925068,
+    "verified": true
+  },
+  {
+    "name": "tailscale",
+    "sha256": "720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7",
+    "bytes": 41369843,
+    "verified": true
+  },
+  {
+    "name": "jj",
+    "sha256": "d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7",
+    "bytes": 11743512,
+    "verified": true
+  },
+  {
+    "name": "preprint",
+    "sha256": "451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f",
+    "bytes": 39349515,
+    "verified": true
+  },
+  {
+    "name": "chrome",
+    "sha256": "a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d",
+    "bytes": 147633324,
+    "verified": true
+  }
+]

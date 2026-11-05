@@ -1,0 +1,10 @@
+{
+  "vitest_passed": 272,
+  "vitest_skipped": 1,
+  "native_checks_passed": 13,
+  "docker_build": false,
+  "deployment": false,
+  "automatic_reflection_implemented": false,
+  "automatic_reflection_state": "deferred_pending_cross_container_plan",
+  "jj_archive_retained": true
+}

@@ -1,0 +1,27 @@
+#!/usr/bin/python3
+import os
+import fcntl
+lock = open("/run/start-lib-llm-worker.lock", "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
+from pathlib import Path
+import socket
+import subprocess
+sock = Path('/run/lib-codex/worker.sock')
+if sock.exists():
+    probe = socket.socket(socket.AF_UNIX)
+    try:
+        probe.connect(str(sock))
+    except ConnectionRefusedError:
+        pass
+    else:
+        raise SystemExit(0)
+    finally:
+        probe.close()
+import grp
+sock.parent.mkdir(parents=True, exist_ok=True)
+os.chown(sock.parent, 0, grp.getgrnam('www-data').gr_gid)
+os.chmod(sock.parent, 0o750)
+fd = os.open('/var/log/lib-llm-worker.log', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+with os.fdopen(fd, 'ab') as log:
+    proc = subprocess.Popen(['/usr/local/libexec/start-lib-llm-worker'], stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+Path('/run/lib-codex/worker.pid').write_text(str(proc.pid))

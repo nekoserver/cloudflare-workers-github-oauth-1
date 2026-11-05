@@ -1,0 +1,27 @@
+#!/usr/bin/python3
+"""Root-only app-server transport for reading the existing local thread store."""
+import fcntl
+import os
+from pathlib import Path
+import socket
+import subprocess
+
+lock = open('/run/lib-chat-app-start.lock', 'w')
+fcntl.flock(lock, fcntl.LOCK_EX)
+path = Path('/run/lib-chat-app/app-server.sock')
+path.parent.mkdir(mode=0o700, exist_ok=True)
+path.parent.chmod(0o700)
+if path.exists():
+    with socket.socket(socket.AF_UNIX) as probe:
+        try:
+            probe.connect(str(path))
+        except ConnectionRefusedError:
+            pass
+        else:
+            raise SystemExit(0)
+fd = os.open('/var/log/lib-chat-app-server.log', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+with os.fdopen(fd, 'ab') as log:
+    proc = subprocess.Popen(['/opt/codex-web/bin/codex', 'app-server', '--listen', 'unix://' + str(path)],
+        stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, umask=0o077,
+        env={'PATH':'/usr/local/bin:/usr/bin:/bin', 'HOME':'/root', 'CODEX_HOME':'/root/.codex', 'LANG':'C.UTF-8'})
+Path('/run/lib-chat-app/app-server.pid').write_text(str(proc.pid))

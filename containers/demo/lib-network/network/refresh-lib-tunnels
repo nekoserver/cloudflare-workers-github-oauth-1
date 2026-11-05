@@ -1,0 +1,20 @@
+#!/bin/bash
+set -eu
+# Preserve exported credentials; use the root-only snapshot for cron defaults.
+eval "$(python3 - <<'PYENV'
+import os, shlex
+from pathlib import Path
+values = {}
+p = Path('/etc/lib-tunnels.env')
+if p.exists():
+    for line in p.read_text().splitlines():
+        if line.strip() and not line.lstrip().startswith('#'):
+            key, raw = line.split('=', 1)
+            values[key] = ' '.join(shlex.split(raw))
+values.update({key: value for key, value in os.environ.items() if key in
+              ('CLOUDFLARE_ACCOUNT_ID', 'CF_CONTAINER_API_TOKEN', 'CLOUDFLARE_API_TOKEN')})
+for key, value in values.items():
+    print('export ' + key + '=' + shlex.quote(value))
+PYENV
+)"
+exec /usr/bin/python3 /usr/local/libexec/lib-api/refresh-tunnels.py

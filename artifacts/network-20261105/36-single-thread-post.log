@@ -1,0 +1,3 @@
+Single-thread console HTTP= 200 accepted= True queued= True error= None
+PASS: one matching native queue item in current ENV thread; observer target unchanged; no fork.
+PENDING: existing writer consumption and assistant response, not proven by acceptance.

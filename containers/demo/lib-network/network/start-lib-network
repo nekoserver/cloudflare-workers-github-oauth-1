@@ -1,0 +1,3 @@
+#!/bin/sh
+# All callers share the container-only post-install configuration.
+exec /usr/bin/python3 /usr/local/share/lib-network/post_install.py

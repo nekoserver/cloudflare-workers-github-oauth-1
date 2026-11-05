@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+# 0.1.2 has no native --version option. Report the installed npm package,
+# rather than the expected image version, for /cf-containers health checks.
+if [ "$#" -eq 1 ] && [ "$1" = '--version' ]; then
+    exec /opt/node22/bin/node -p 'require("/opt/node22/lib/node_modules/@supermemory/preprint/package.json").version'
+fi
+export AGENT_BROWSER_EXECUTABLE_PATH="${AGENT_BROWSER_EXECUTABLE_PATH:-/usr/bin/google-chrome}"
+export AGENT_BROWSER_ARGS="${AGENT_BROWSER_ARGS:---disable-dev-shm-usage}"
+# Chrome cannot use its root sandbox in this container. Non-root retains it.
+if [ "$(id -u)" = 0 ]; then
+    export AGENT_BROWSER_ARGS="${AGENT_BROWSER_ARGS},--no-sandbox"
+fi
+exec /opt/node22/bin/preprint-native "$@"

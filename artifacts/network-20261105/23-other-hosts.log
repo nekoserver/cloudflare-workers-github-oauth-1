@@ -1,0 +1,5 @@
+r8.nekomaneki.work API HTTP 200 auth= error error= no_api_token
+r8.nekomaneki.work SSI HTTP 200 expanded= True
+stream.test.cfc.nekomaneki.work API HTTP 530 auth= None error= None
+stream.test.cfc.nekomaneki.work SSI HTTP 530 expanded= False
+r9.nekomaneki.work API HTTP 502 auth= None error= None

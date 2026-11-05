@@ -1,0 +1,31 @@
+npm notice run cloudflare-workers-github-oauth@1.0.0 npx
+npm notice run 'vitest' run --maxWorkers=1 src/heritageJourney-tour-test-modal-20260820.test.ts -t 巡回ルートモーダルを開くと
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/heritageJourney-tour-test-modal-20260820.test.ts (32 tests | 1 failed | 31 skipped) 21614ms
+     × 巡回ルートモーダルを開くと(宿泊地モードの有無によらず)#tour-play-btnは有効な「▶ 再生」表示になり、押すとアニメーションが始まる 21611ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/heritageJourney-tour-test-modal-20260820.test.ts > heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM実動作) > 巡回ルートモーダルを開くと(宿泊地モードの有無によらず)#tour-play-btnは有効な「▶ 再生」表示になり、押すとアニメーションが始まる
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/heritageJourney-tour-test-modal-20260820.test.ts:299:3
+    297|   // フォーカスが移ったあとは、宿泊地モードの有無にかかわらず#tour-play-btnは
+    298|   // 通常の再生モード(有効・「▶ 再生」表示)へ戻り、実際に連続再生が始まる必要がある。
+    299|   it('巡回ルートモーダルを開くと(宿泊地モードの有無によらず)#tour-play-btnは有効な「▶ 再生」表示になり、押すとアニメ…
+       |   ^
+    300|     vi.useFakeTimers();
+    301|     try {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 31 skipped (32)
+   Start at  22:48:58
+   Duration  28.33s (transform 1.65s, setup 104ms, import 1.79s, tests 21.61s, environment 4.00s)

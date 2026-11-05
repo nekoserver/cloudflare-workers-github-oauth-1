@@ -1,0 +1,15 @@
+{
+  "captured_at": "2026-11-05T21:00:19.685711+00:00",
+  "mode": "existing counters-only collector",
+  "nft_exit_code": 0,
+  "files": {
+    "firewall.log": {
+      "bytes": 84930,
+      "sha256": "c4cd3e8245de9dd791bd72d7af2d9f36d8026c176baa7cdfbd921b408cf37935"
+    },
+    "nft-ruleset.txt": {
+      "bytes": 1230,
+      "sha256": "a438c23aec2be24e36dc4181934f5d223c8ffc75f437e6462b5571fe35340604"
+    }
+  }
+}

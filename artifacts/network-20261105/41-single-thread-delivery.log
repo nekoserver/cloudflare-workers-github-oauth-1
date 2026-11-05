@@ -1,0 +1,2 @@
+PASS: submitted user message and actual assistant acknowledgement observed through public stream in same ENV thread.
+PASS: matching native queue item consumed; remaining matching items=0. No new post or fork performed.

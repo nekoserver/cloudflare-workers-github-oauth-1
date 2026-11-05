@@ -19,7 +19,7 @@ describe('公式のリリースのバイナリを使う', () => {
     expect(dockerfile).toContain('echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c -');
   });
   it('jjはGitHubのリリース(musl)から取得し、sha256で照合する', () => {
-    expect(dockerfile).toContain('https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz');
+    expect(dockerfile).toContain('COPY packages/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz /tmp/jj.tar.gz');
     expect(arg('JJ_SHA256')).toMatch(/^[a-f0-9]{64}$/);
     expect(dockerfile).toContain('echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c -');
   });
@@ -27,7 +27,7 @@ describe('公式のリリースのバイナリを使う', () => {
     // 版を上げるときは、配布元の値でsha256も上げる(下の表もあわせて直す)
     expect({ gh: [arg('GH_VERSION'), arg('GH_SHA256')], jj: [arg('JJ_VERSION'), arg('JJ_SHA256')] }).toEqual({
       gh: ['2.103.3', '4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d'],
-      jj: ['0.46.0', 'fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08'],
+      jj: ['0.47.1', 'd4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7'],
     });
   });
 });

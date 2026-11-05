@@ -1,0 +1,26 @@
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/cf-containers-page.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/cf-containers-page.test.ts [ src/cf-containers-page.test.ts ]
+Error: Cannot find package 'http-message-sig' imported from /tmp/container-tools-20261105/test-deps/web-bot-auth/package/dist/index.mjs
+ ❯ ../../tmp/container-tools-20261105/test-deps/web-bot-auth/package/dist/index.mjs:1:1
+      1| import { SignatureError, SignatureErrorCode, component, createSignatur…
+       | ^
+      2| import { jwkThumbprint as jwkToKeyID } from "jsonwebkey-thumbprint";
+      3| import { parseDictionary, parseItem } from "structured-headers";
+ ❯ src/utils/webBotAuthVerify.ts:12:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 36 passed | 1 skipped (38)
+      Tests  242 passed | 1 skipped (243)
+   Start at  22:25:57
+   Duration  23.38s (tests 69%, import 18%, worker 12%, transform 1%)
+
+    Isolate  38 workers spawned · ~228ms startup each (spawn + environment, per file)
+             at least ~8.45s faster with isolate: false — reuses workers across files instead of one per file

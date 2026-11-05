@@ -1,0 +1,3 @@
+#!/bin/sh
+export LIB_LLM_WORKSPACE=/var/www/html/lib
+exec /usr/bin/python3 /var/www/html/lib/ops/llm_worker.py

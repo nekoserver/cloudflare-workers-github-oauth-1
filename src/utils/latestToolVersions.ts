@@ -18,7 +18,7 @@ export type LatestToolVersion = {
   source: string;
   error?: string;
 };
-export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj' | 'openssl' | 'openssh' | 'ruby';
+export type ToolName = 'node' | 'codex' | 'claude' | 'gh' | 'cloudflared' | 'tailscale' | 'jj' | 'openssl' | 'openssh' | 'ruby' | 'preprint' | 't3';
 export type LatestToolVersions = Record<ToolName, LatestToolVersion>;
 
 const UA = 'cloudflare-workers-github-oauth-1 (cf-containers version check)';
@@ -86,6 +86,8 @@ export async function fetchLatestToolVersions(
         return { latest: hit ? stripV(hit.version) : '', latestDate: day(hit?.date), latestReleasedAt: hit?.date ?? null, currentDate: day(curHit?.date), currentReleasedAt: curHit?.date ?? null };
       },
     },
+    t3: { source: 'npm', get: npmPackage('t3', 't3') },
+    preprint: { source: 'npm', get: npmPackage('@supermemory/preprint', 'preprint') },
     codex: { source: 'npm', get: npmPackage('@openai/codex', 'codex') },
     claude: { source: 'npm', get: npmPackage('@anthropic-ai/claude-code', 'claude') },
     gh: { source: 'GitHub', get: githubRelease('cli/cli', 'v', 'gh') },

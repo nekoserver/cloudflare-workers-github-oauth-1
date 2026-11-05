@@ -1,0 +1,54 @@
+table ip sshguard {
+	set attackers {
+		type ipv4_addr
+		flags interval
+	}
+
+	chain blacklist {
+		type filter hook input priority filter - 10; policy accept;
+		ip saddr @attackers drop
+	}
+}
+table ip6 sshguard {
+	set attackers {
+		type ipv6_addr
+		flags interval
+	}
+
+	chain blacklist {
+		type filter hook input priority filter - 10; policy accept;
+		ip6 saddr @attackers drop
+	}
+}
+table inet filter {
+	set drop_src4 {
+		type ipv4_addr
+		size 65536
+		flags dynamic,timeout
+		timeout 1d
+	}
+
+	set drop_src6 {
+		type ipv6_addr
+		size 65536	# count 1
+		flags dynamic,timeout
+		timeout 1d
+		elements = { fd00::22 counter packets 1771 bytes 127512 expires 23h59m57s48ms }
+	}
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		update @drop_src6 { ip6 saddr counter } counter packets 1771 bytes 127512
+		meta nfproto ipv6 drop
+		ct state invalid update @drop_src4 { ip saddr counter } counter packets 0 bytes 0
+		ct state invalid drop
+		ct state established,related,new accept
+		update @drop_src4 { ip saddr counter } counter packets 0 bytes 0
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		update @drop_src6 { ip6 saddr counter } counter packets 0 bytes 0 drop
+	}
+}

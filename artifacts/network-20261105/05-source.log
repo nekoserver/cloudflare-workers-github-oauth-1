@@ -1,0 +1,1 @@
+PASS: ENV thread and current request verified via read-only API; private source created.
