@@ -2,7 +2,8 @@ import { MAX_ASKGK_TIMEOUT_SECONDS } from './askgkTimeoutSettings';
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
 import { parseCodexFiveHourReset } from './codexResetCountdown';
-import { isAskgkSlashPrompt } from './codexAskgkQuestion';
+import { isAskgkSlashPrompt, parseAskMusePrompt } from './codexAskgkQuestion';
+import type { MuseDirectError, MuseDirectResult } from './museDirectAsk';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
 import type { TreeFormatOptions } from './treeWasmServer';
@@ -190,6 +191,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" / /neko askgk muse_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /askmuse prompt="<質問文>" | 本体コンテナを経由してtailnet上のMuseへ直接問い合わせ、Museの回答として保存します。tunnelsを通りません。本体コンテナの起動中だけ使えます |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko secureminelog | "secureminelog"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
@@ -1020,6 +1022,8 @@ export type AichatSlashCommandDeps = {
   /** `/neko askgk <質問文>` 用。rust-worker-sqlx-d1の/tunnel-signer経由でtunnels.rbへ質問を送り、
    * reply本文と(tunnels.rbが応答に含めた場合のみ)llm_model/llm_effortを返す */
   askTunnelSigner?: (message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>;
+  /** `/askmuse prompt="..."` 用。本体コンテナを経由してtailnet上のmuse-vmへ直接問い合わせる。 */
+  askMuseDirect?: (prompt: string) => Promise<MuseDirectResult>;
   /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */
   loadMentionEditorRuby?: (filename: string) => Promise<string | null>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
@@ -1324,12 +1328,33 @@ export type AichatSlashCommandResult =
  * 該当すればAIモデルを呼ばずにローカルで完結する応答を返す。
  * `/neko` で始まらないメッセージは通常のAI問い合わせに委ねる（handled: false）。
  */
+const ASKMUSE_USAGE = '使い方: /askmuse prompt="<質問文>"';
+
+const ASKMUSE_ERROR_MESSAGES: Partial<Record<MuseDirectError, string>> = {
+  container_not_running: '本体コンテナが停止しています。/cf-containersから起動してください',
+  muse_not_authenticated: 'WorkerのsecretにMUSE_API_KEYが設定されていません',
+  prompt_too_large: '質問文が長すぎます(16KiBまで)',
+};
+
+/** lib経由の経路へは切り替えない。失敗した経路をそのまま伝える。 */
+async function interpretAskMuseCommand(message: string, deps: AichatSlashCommandDeps): Promise<AichatSlashCommandResult> {
+  const prompt = parseAskMusePrompt(message);
+  if (!prompt?.trim()) return { handled: true, response: ASKMUSE_USAGE };
+  if (!deps.askMuseDirect) return { handled: true, response: '❌ /askmuse は現在利用できません(DEMO_CONTAINER未設定)' };
+  const outcome = await raceWithTimeout(deps.askMuseDirect(prompt), ASKGK_TIMEOUT_MS);
+  if (outcome.status === 'timeout') return { handled: true, response: `❌ /askmuse がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+  if (outcome.status === 'error') return { handled: true, response: `❌ /askmuse でエラーが発生しました: ${outcome.message}` };
+  if (!outcome.value.ok) return { handled: true, response: `❌ /askmuse でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
+  return { handled: true, response: appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel), saveAsAiResponse: true, museAskgk: true };
+}
+
 export async function interpretAichatSlashCommand(
   message: string,
   now: Date,
   deps: AichatSlashCommandDeps
 ): Promise<AichatSlashCommandResult> {
   const trimmed = message.trim();
+  if (/^\/askmuse(?:\s|$)/i.test(trimmed)) return interpretAskMuseCommand(trimmed, deps);
   if (!trimmed.toLowerCase().startsWith('/neko')) {
     return { handled: false };
   }

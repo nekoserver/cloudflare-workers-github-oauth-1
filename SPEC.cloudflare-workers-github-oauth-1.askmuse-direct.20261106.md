@@ -1,0 +1,110 @@
+# SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md
+
+## /askmuseによるMuseへの直接の問い合わせ
+
+**対象**: `/aichat`のスラッシュコマンド`/askmuse prompt="◯"` — tunnels.rbとLLM workerを通らず、本体デモコンテナからtailnet上の`muse-vm`へ問い合わせる。
+
+関連: 既存の経路は[SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md](SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md)の`/neko askgk muse_prompt="◯"`。こちらは変更しない。
+
+---
+
+## 背景
+
+`/neko askgk muse_prompt="◯"`は5段を経由し、ジョブの登録と照会を行う。WorkerはTailscaleのノードになれないため、tailnetへ届くには必ずノードを1つ経由する。本体デモコンテナはWorkerのDurable Object（`DEMO_CONTAINER`）から直接呼べるノードなので、これを唯一の中継にする。
+
+---
+
+## 経路
+
+| 項目 | `/neko askgk muse_prompt` | `/askmuse prompt` |
+|---|---|---|
+| 経路 | Worker → rust-worker-sqlx-d1 → 公開URL → tunnels.rb → LLM worker → `tailscale nc` → muse-vm | Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vm |
+| 認証 | HMAC署名 | `/api/aichat`の認証。Durable Objectの呼び出しは公開URLを通らない |
+| 実行 | ジョブ登録と`ask_id`の照会 | 1回の要求で待つ |
+| キーの場所 | LLM workerの環境 | Workerのsecret`MUSE_API_KEY` |
+| 独立経路（Redmine側） | 設定で選べる | なし。本体コンテナだけ |
+
+---
+
+## 仕様
+
+| 項目 | 動作 |
+|---|---|
+| 入力 | `/askmuse prompt="◯"`。`"`と`“ ”`のどちらでもよい。大文字小文字は区別しない |
+| 形式が違う、本文が空 | 使い方を返す。送らない |
+| Museへ送る文字列 | `◯`だけ |
+| 吹き出し・`ai_chat_shares.question` | `◯`だけ |
+| `ai_chat_shares.model`、`usedModel` | `muse` |
+| 回答末尾 | `Engine: Muse / Model: <応答のmodel>`。不正な値なら`muse` |
+| スレッド | `muse_prompt`と同じ |
+| 色丸の選択 | `/askmuse`はどのモデルを選んでいても変換しない |
+| 待ち時間 | `/neko askgk`と同じ保存値（`askgk_timeout_settings`） |
+| 上限 | 質問16KiB、回答32KiB（lib/ops/llm_worker.pyと同じ）。中継の本文と応答は1MiB |
+| コンテナの停止中 | 起動せず、`/cf-containers`からの起動を案内する |
+| 失敗時 | ❌で返す。Museの回答としては保存しない。lib経由へ切り替えない |
+
+### コンテナを起動しない理由
+
+`stub.fetch`は`Container.containerFetch`を通り、停止中のコンテナを起動する。`/api/aichat`の問い合わせが課金の開始になるのを避けるため、先に`getState`で確かめる。確認と送信の間にコンテナが止まった場合は起動が走りうる。
+
+### キーをコンテナへ置かない理由
+
+`DemoContainer.envVars`に入れると、コンテナ内のT3とエージェントの子プロセスから読める。libの`llm_worker_claude.py`も同じ理由で環境から取り除いている。`server.js`は`Authorization`を中継するだけで保存しない。
+
+### 中継の入口
+
+`POST /muse/v1/chat/completions`（`containers/demo/server.js`）。送り先は`muse-vm:8080/v1/chat/completions`に固定し、`Authorization`と本文だけを渡す。8080番はtailnetの端末からも届くので、Bearerキーが無い要求は上流へつながない。
+
+| 状態 | 応答 |
+|---|---|
+| 上流の応答 | 状態コードと本文をそのまま返す |
+| Bearerキーが無い | 401 `muse_not_authenticated` |
+| POST以外 | 405 |
+| 本文が1MiB超 | 413 |
+| 応答が1MiB超 | 502 `muse_response_too_large` |
+| 接続できない | 502 `muse_connection_failed` |
+| 300秒で応答がない | 504 `llm_timeout` |
+
+---
+
+## 修正内容
+
+| ファイル | 変更 |
+|---|---|
+| `src/utils/museDirectAsk.ts` | 新規。状態確認、送信、応答の解釈、エラーの分類 |
+| `src/utils/aichatSlashCommand.ts` | `/askmuse`の解釈、ヘルプ |
+| `src/utils/codexAskgkQuestion.ts` | `parseAskMusePrompt`を追加。`formatAskgkPromptQuestion`の対象に追加 |
+| `src/index.ts` | 依存の注入。色丸の変換から`/askmuse`を除外 |
+| `src/types.ts` | `MUSE_API_KEY` |
+| `containers/demo/server.js` | 中継の入口 |
+
+---
+
+## テスト
+
+| 対象 | テスト |
+|---|---|
+| 送信、エラーの分類、上限、待ち時間 | `src/utils/museDirectAsk.test.ts` |
+| 中継、切断、`tailscale nc`の契約 | `src/cf-containers-muse-proxy.test.ts` |
+| コマンドの解釈 | `src/utils/aichatSlashCommand.test.ts` |
+| 本文の抽出 | `src/utils/codexAskgkQuestion.test.ts`、`src/aichat-codex-question-display.test.ts` |
+| `/api/aichat`全体 | `src/aichat-askmuse-integration.test.ts` |
+
+---
+
+## 反映
+
+1. `wrangler secret put MUSE_API_KEY`（`muse-vm`のAPIキー）
+2. Workerをデプロイする。`containers/demo/server.js`を変えたのでコンテナイメージの更新が要る
+3. 本体コンテナを新しいイメージで起動し直す
+4. `/aichat`で`/askmuse prompt="今日は何日？"`を送り、`Engine: Muse`の行を確かめる
+
+---
+
+## 注意事項
+
+**対象**: 2026-11-06時点の未確認の項目 — 反映後に実環境で確かめる。
+
+- 有効なキーでの回答。無効なキーを`tailscale nc`経由で送り、muse-vmが401を返すところまでは確認した。
+- Durable Object越しの長時間の応答と、`signal`による打ち切りがコンテナまで届くこと。
+- イメージのビルド。`scripts/check-cf-containers.sh`は実行していない。

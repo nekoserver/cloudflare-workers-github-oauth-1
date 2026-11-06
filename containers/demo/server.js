@@ -7,7 +7,8 @@
 // 1つの確認が失敗しても他の結果に影響しない(Promise.allSettled)。
 const http = require('node:http');
 const net = require('node:net');
-const { execFile } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
+const { Duplex } = require('node:stream');
 
 const PORT = process.env.PORT || 8080;
 const PROBE_TIMEOUT_MS = 1500;
@@ -600,6 +601,101 @@ function proxyToRedmine(req, res) {
   req.pipe(upstream);
 }
 
+// /askmuse用の中継。Workerはtailnetに参加できないので、ここからmuse-vmへ1本だけ通す。
+// 送り先は固定し、キーは持たず呼び出し側のAuthorizationを渡すだけにする(環境変数に
+// 置くとT3やエージェントの子プロセスから読める)。8080はtailnetの端末からも届くが、
+// キーが無ければ上流へつながない。解釈と制限はWorker側(src/utils/museDirectAsk.ts)で行う。
+const MUSE_PROXY_PATH = '/muse/v1/chat/completions';
+const MUSE_NC_ARGS = ['--socket=/var/run/tailscale/tailscaled.sock', 'nc', 'muse-vm', '8080'];
+const MUSE_MAX_BODY = 1024 * 1024;
+const MUSE_TIMEOUT_MS = 300 * 1000;
+
+// tailscaledはuserspace-networkingなので、`tailscale nc`の標準入出力をソケットとして使う。
+function connectMuse(spawnNc = spawn) {
+  const nc = spawnNc('tailscale', MUSE_NC_ARGS, { stdio: ['pipe', 'pipe', 'ignore'] });
+  const socket = Duplex.from({ readable: nc.stdout, writable: nc.stdin });
+  nc.once('error', (err) => socket.destroy(err));
+  // 接続の失敗はhttp.requestのerrorで返す。応答後にdestroyするとDuplex.fromはABORT_ERRを
+  // 出し、httpのリスナーは外れているので、ここで受けないとプロセスごと落ちる。
+  socket.on('error', () => {});
+  socket.once('close', () => nc.kill());
+  return socket;
+}
+
+function sendMuseProxyError(res, status, errorCode) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ errorCode }));
+}
+
+function readLimited(stream, onDone, onTooLarge) {
+  const chunks = [];
+  let size = 0;
+  let tooLarge = false;
+  stream.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > MUSE_MAX_BODY) {
+      if (!tooLarge) onTooLarge();
+      tooLarge = true;
+      return;
+    }
+    chunks.push(chunk);
+  });
+  stream.on('end', () => {
+    if (!tooLarge) onDone(Buffer.concat(chunks));
+  });
+}
+
+function forwardToMuse(req, res, connect = connectMuse) {
+  if (req.method !== 'POST') {
+    req.resume();
+    sendMuseProxyError(res, 405, 'method_not_allowed');
+    return;
+  }
+  const authorization = req.headers.authorization;
+  if (!/^Bearer \S+$/.test(authorization || '')) {
+    req.resume();
+    sendMuseProxyError(res, 401, 'muse_not_authenticated');
+    return;
+  }
+  readLimited(req, (body) => {
+    const upstream = http.request(
+      {
+        host: 'muse-vm',
+        port: 8080,
+        method: 'POST',
+        path: '/v1/chat/completions',
+        headers: { Authorization: authorization, 'Content-Type': 'application/json', 'Content-Length': body.length },
+        // agentは指定しない。指定するとcreateConnectionが無視され、muse-vmをDNSで引いて失敗する(Node 26で確認)。
+        // 省略時はagentなしのConnection: closeになり、応答ごとにncが終わる。
+        createConnection: () => connect(),
+        timeout: MUSE_TIMEOUT_MS,
+      },
+      (response) => {
+        readLimited(
+          response,
+          (payload) => {
+            res.writeHead(response.statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+            res.end(payload);
+          },
+          () => {
+            sendMuseProxyError(res, 502, 'muse_response_too_large');
+            upstream.destroy();
+          }
+        );
+      }
+    );
+    upstream.once('timeout', () => {
+      sendMuseProxyError(res, 504, 'llm_timeout');
+      upstream.destroy();
+    });
+    upstream.once('error', () => {
+      if (!res.headersSent) sendMuseProxyError(res, 502, 'muse_connection_failed');
+    });
+    res.once('close', () => upstream.destroy());
+    upstream.end(body);
+  }, () => sendMuseProxyError(res, 413, 'prompt_too_large'));
+}
+
 const server = http
   .createServer((req, res) => {
     if (req.url === REDMINE_PREFIX || req.url.startsWith(REDMINE_PREFIX + '/') || req.url.startsWith(REDMINE_PREFIX + '?')) {
@@ -608,6 +704,10 @@ const server = http
     }
     if (req.method === 'POST' && req.url === '/admin/authorized-keys') {
       appendAuthorizedKey(req, res);
+      return;
+    }
+    if (req.url === MUSE_PROXY_PATH) {
+      forwardToMuse(req, res);
       return;
     }
     if (req.url === '/debug/tailscale-peers') {
@@ -707,7 +807,7 @@ const server = http
   })
   ;
 
-module.exports = { readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { forwardToMuse, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {

@@ -230,3 +230,7 @@ containers/demo/lib-network/post_install.pyへ設定関数を分割し、Dockerf
 ## 2026-11-05: 次回イメージのpreprint追加・4ツール更新（未ビルド/未配備）
 
 preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.104.5、Claude Code 2.1.318、jj 0.47.1をDockerfileへ反映。jj配布物はpackages配下へ退避しCOPY再利用。preprint/T3 Codeの最新版チェックとapt自身の候補版の行を追加。T3の導入版0.1.3は変更なし。関連272件成功・1件スキップ、実CLI13チェック成功。Dockerビルド・Worker配備・実ブラウザ操作は未実施。自動Dockerfile反映はSPEC/PLANのみ作成し、他コンテナとの対応確認まで実装保留。詳細は [CONTAINER TOOLS REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-TOOLS.20261105.md)。
+
+## 2026-11-06: /askmuseの直接経路（未反映）
+
+`/askmuse prompt="◯"`を実装した。経路は本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vm。ブランチ`feat/askmuse-direct-20261106`のソースのみで、未デプロイ。反映にはWorkerのsecret`MUSE_API_KEY`の設定とコンテナイメージの更新が要る。手順と未確認の項目は[仕様](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)。Dockerビルドは未実施。
