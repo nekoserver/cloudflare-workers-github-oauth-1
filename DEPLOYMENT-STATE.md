@@ -238,3 +238,7 @@ preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.1
 ## 2026-11-06: Museの死活確認と入力窓の枠色（未反映）
 
 `/aichat`でスイッチが`muse`かつシグナル送信がONのとき、`GET /api/aichat/muse-health`で送信間隔（既定600秒）ごとに確認し、稼働中なら入力窓の枠をMuseの色にする。設定はMuseの行の⚙から開くモーダルで変え、Cookie`aichat_muse_signal`に保存する。ソースのみで、未デプロイ。`containers/demo/server.js`に`GET /muse/health`を追加したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。イメージが古い間は確認が失敗し、枠は既定の色のままになる。詳細は[SPEC](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)の「死活確認と入力窓の枠色」。
+
+## 2026-11-06: /muse-status（未反映）
+
+tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグナル送信のページ`/muse-status`を実装した。ソースのみで、未デプロイ。`containers/demo/server.js`を変更したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。Nixの一覧の表示には、ノード側の`GET /nix/packages`の追加が要る。`server.js`の中継がオフラインのノードで落ちる不具合の修正を含む。詳細は[仕様](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。

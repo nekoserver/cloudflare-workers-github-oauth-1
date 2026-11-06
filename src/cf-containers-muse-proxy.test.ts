@@ -1,12 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { Duplex, PassThrough } from 'node:stream';
 
 const require = createRequire(import.meta.url);
-const { forwardToMuse, checkMuseHealth, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY } = require('../containers/demo/server.js');
+const { forwardToMuse, checkMuseHealth, connectMuse, relayMuseNode, MUSE_NODE_ROUTE, MUSE_NC_ARGS, MUSE_MAX_BODY } = require('../containers/demo/server.js');
 
 // 契約(Tailscale): userspace-networkingでは`tailscale nc <host> <port>`の標準入出力が
 // tailnetへのTCP接続になる。lib/claude/ops/llm_worker_claude.pyのTailnetConnectionと同じ使い方。
@@ -192,5 +193,103 @@ describe('GET /muse/health', () => {
     const response = await fetch(`http://127.0.0.1:${port}/muse/health`, { headers: { Authorization: 'Bearer k' } });
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ errorCode: 'muse_connection_failed' });
+  });
+});
+
+describe('/admin/muse/<ノード>/<health|nix>', () => {
+  const servers: http.Server[] = [];
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => { s.closeAllConnections(); s.close(resolve); })));
+  });
+
+  async function listen(handler: http.RequestListener) {
+    const server = http.createServer(handler);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    return (server.address() as AddressInfo).port;
+  }
+
+  it('ノードとパスは固定の組み合わせだけを受け付ける', () => {
+    for (const url of ['/admin/muse/muse/health', '/admin/muse/muse-vm/health', '/admin/muse/muse/nix', '/admin/muse/muse-vm/nix']) {
+      expect(MUSE_NODE_ROUTE.test(url)).toBe(true);
+    }
+    for (const url of ['/admin/muse/ipad/health', '/admin/muse/muse/v1/chat/completions', '/admin/muse/muse/nix?x=1', '/muse/muse/nix']) {
+      expect(MUSE_NODE_ROUTE.test(url)).toBe(false);
+    }
+  });
+
+  it('ncの接続先はノードごとに変わる', () => {
+    let args: string[] = [];
+    const nc = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), kill() {} });
+    connectMuse((_: string, given: string[]) => { args = given; return nc; }, 'muse').destroy();
+    expect(args).toEqual(['--socket=/var/run/tailscale/tailscaled.sock', 'nc', 'muse', '8080']);
+  });
+
+  it('nixは/nix/packagesへキーを付けて、healthはキーなしで問い合わせる', async () => {
+    const seen: { url?: string; auth?: string }[] = [];
+    const nodes: string[] = [];
+    const upstream = await listen((req, res) => {
+      seen.push({ url: req.url, auth: req.headers.authorization });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"packages": []}');
+    });
+    const port = await listen((req, res) => relayMuseNode(req, res, (node: string) => { nodes.push(node); return net.connect(upstream, '127.0.0.1'); }));
+    const headers = { Authorization: 'Bearer k' };
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse/nix`, { headers })).status).toBe(200);
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/health`, { headers })).status).toBe(200);
+    expect(seen).toEqual([{ url: '/nix/packages', auth: 'Bearer k' }, { url: '/health', auth: undefined }]);
+    expect(nodes).toEqual(['muse', 'muse-vm']);
+  });
+
+  it('キーが無ければ上流へつながない', async () => {
+    let connected = false;
+    const port = await listen((req, res) => relayMuseNode(req, res, () => { connected = true; return new net.Socket(); }));
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse/nix`)).status).toBe(401);
+    expect(connected).toBe(false);
+  });
+
+  it('接続できなければ502、応答が無ければ504を返す', async () => {
+    const refused = await listen((req, res) => relayMuseNode(req, res, () => net.connect(1, '127.0.0.1')));
+    expect((await fetch(`http://127.0.0.1:${refused}/admin/muse/muse/nix`, { headers: { Authorization: 'Bearer k' } })).status).toBe(502);
+    const silent = await listen(() => {});
+    const port = await listen((req, res) => relayMuseNode(req, res, () => net.connect(silent, '127.0.0.1'), 50));
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/nix`, { headers: { Authorization: 'Bearer k' } })).status).toBe(504);
+  });
+});
+
+// 2026-11-06: オフラインのノードへの`tailscale nc`は何も返さずに終わる。httpは「socket hang up」の後に
+// DuplexのABORT_ERRをもう一度errorとして出すので、onceのリスナーではプロセスごと落ちる。
+describe('ノードが何も返さず接続を閉じたとき', () => {
+  const servers: http.Server[] = [];
+  const uncaught: unknown[] = [];
+  const record = (error: unknown) => { uncaught.push(error); };
+  beforeEach(() => { uncaught.length = 0; process.on('uncaughtException', record); });
+  afterEach(async () => {
+    process.off('uncaughtException', record);
+    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => { s.closeAllConnections(); s.close(resolve); })));
+  });
+
+  async function listen(handler: http.RequestListener) {
+    const server = http.createServer(handler);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    return (server.address() as AddressInfo).port;
+  }
+
+  // PassThroughでは再現しない。実際の子プロセスのstdioで、何も出さずに終わるncを作る。
+  const connect = () => connectMuse((_: string, __: string[], options: object) => spawn('true', [], options));
+  const headers = { Authorization: 'Bearer k' };
+
+  it.each([
+    ['/muse/health', 'GET', (req: http.IncomingMessage, res: http.ServerResponse) => checkMuseHealth(req, res, connect)],
+    ['/muse/v1/chat/completions', 'POST', (req: http.IncomingMessage, res: http.ServerResponse) => forwardToMuse(req, res, connect)],
+    ['/admin/muse/muse-vm/health', 'GET', (req: http.IncomingMessage, res: http.ServerResponse) => relayMuseNode(req, res, connect)],
+    ['/admin/muse/muse-vm/nix', 'GET', (req: http.IncomingMessage, res: http.ServerResponse) => relayMuseNode(req, res, connect)],
+  ])('%sは502を返し、プロセスは落ちない', async (path, method, handler) => {
+    const port = await listen(handler);
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers, body: method === 'POST' ? '{}' : undefined });
+    expect(response.status).toBe(502);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(uncaught).toEqual([]);
   });
 });
