@@ -49,6 +49,7 @@ Museへの送信はCodex・Claudeと違いCLIを実行せず、sandboxの外でH
 | 回答末尾の情報行 | `Engine: Muse / Model: muse` |
 | 色丸のモデル一覧 | `muse`を`commandOnly`で追加する。色は`assignModelColors`で割り当てる |
 | 色丸で`muse`を選んだ通常の質問 | `/neko askgk muse_prompt="…"`に変換して送る |
+| 色丸とプレフィックスの関係 | 互いに影響しない。プレフィックス付きの質問は、色丸で選択中のモデルの影響を受けない（[AGENTS.md](AGENTS.md#aiチャットの言語モデルスイッチとプレフィックス)） |
 | 回答の表示 | Claude・Codexと同じく、リンクの脚注化とコードの色付けを行う |
 | 質問ツリー（`/api/mcp-sample/codex-questions`） | `model`に`muse`を含める。表示名は`Muse` |
 
