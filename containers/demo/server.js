@@ -65,6 +65,7 @@ function summarizeTailscalePeers(status) {
     curAddr: peer.CurAddr || '',
     relay: peer.Relay || '',
     lastHandshake: peer.LastHandshake || '',
+    lastSeen: peer.LastSeen || '',
   }));
   peers.sort((x, y) => Number(y.active) - Number(x.active) || Number(y.online) - Number(x.online) || x.hostName.localeCompare(y.hostName));
   return {
@@ -612,10 +613,20 @@ const MUSE_TIMEOUT_MS = 300 * 1000;
 // 死活確認の入口。muse-vmの/healthは推論を走らせない。
 const MUSE_HEALTH_PATH = '/muse/health';
 const MUSE_HEALTH_TIMEOUT_MS = 5 * 1000;
+// /muse-status用。ノードごとのシグナル送信とNixのパッケージ一覧の入口。送り先のノードとパスは
+// ここに固定し、呼び出し側からは選ばせない。/adminはApache(トンネル側)が拒否し、Workerの
+// 汎用プロキシも転送しないので、ここへはWorkerのDurable Object経由でしか届かない。
+const MUSE_NODE_ROUTE = /^\/admin\/muse\/(muse|muse-vm)\/(health|nix)$/;
+const MUSE_NIX_PATH = '/nix/packages';
+const MUSE_NIX_TIMEOUT_MS = 15 * 1000;
+
+function museNcArgs(node) {
+  return [...MUSE_NC_ARGS.slice(0, 2), node, MUSE_NC_ARGS[3]];
+}
 
 // tailscaledはuserspace-networkingなので、`tailscale nc`の標準入出力をソケットとして使う。
-function connectMuse(spawnNc = spawn) {
-  const nc = spawnNc('tailscale', MUSE_NC_ARGS, { stdio: ['pipe', 'pipe', 'ignore'] });
+function connectMuse(spawnNc = spawn, node = 'muse-vm') {
+  const nc = spawnNc('tailscale', museNcArgs(node), { stdio: ['pipe', 'pipe', 'ignore'] });
   const socket = Duplex.from({ readable: nc.stdout, writable: nc.stdin });
   nc.once('error', (err) => socket.destroy(err));
   // 接続の失敗はhttp.requestのerrorで返す。応答後にdestroyするとDuplex.fromはABORT_ERRを
@@ -691,7 +702,7 @@ function forwardToMuse(req, res, connect = connectMuse) {
       sendMuseProxyError(res, 504, 'llm_timeout');
       upstream.destroy();
     });
-    upstream.once('error', () => {
+    upstream.on('error', () => {
       if (!res.headersSent) sendMuseProxyError(res, 502, 'muse_connection_failed');
     });
     res.once('close', () => upstream.destroy());
@@ -699,22 +710,25 @@ function forwardToMuse(req, res, connect = connectMuse) {
   }, () => sendMuseProxyError(res, 413, 'prompt_too_large'));
 }
 
-function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALTH_TIMEOUT_MS) {
+// 上流へのGETを1回だけ中継する。キーを渡すのは本文にキーが要るパスだけ(/healthには渡さない)。
+function relayMuseGet(req, res, { node, path, connect, timeoutMs, passAuthorization }) {
   if (req.method !== 'GET') {
     req.resume();
     sendMuseProxyError(res, 405, 'method_not_allowed');
     return;
   }
-  if (!/^Bearer \S+$/.test(req.headers.authorization || '')) {
+  const authorization = req.headers.authorization;
+  if (!/^Bearer \S+$/.test(authorization || '')) {
     sendMuseProxyError(res, 401, 'muse_not_authenticated');
     return;
   }
   const upstream = http.request(
     {
-      host: 'muse-vm',
+      host: node,
       port: 8080,
       method: 'GET',
-      path: '/health',
+      path,
+      headers: passAuthorization ? { Authorization: authorization } : {},
       // forwardToMuseと同じく、agentは指定しない。
       createConnection: () => connect(),
     },
@@ -733,12 +747,12 @@ function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALT
     }
   );
   // http.requestのtimeoutは使えない。connectMuseのDuplexにはsetTimeoutが無く発火しない。
-  // muse-vmがオフラインだと`tailscale nc`は応答しないまま待ち続けるので、ここで打ち切る。
+  // ノードがオフラインだと`tailscale nc`は応答しないまま待ち続けることがあるので、ここで打ち切る。
   const timer = setTimeout(() => {
     sendMuseProxyError(res, 504, 'llm_timeout');
     upstream.destroy();
   }, timeoutMs);
-  upstream.once('error', () => {
+  upstream.on('error', () => {
     if (!res.headersSent) sendMuseProxyError(res, 502, 'muse_connection_failed');
   });
   res.once('close', () => {
@@ -746,6 +760,22 @@ function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALT
     upstream.destroy();
   });
   upstream.end();
+}
+
+function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALTH_TIMEOUT_MS) {
+  relayMuseGet(req, res, { node: 'muse-vm', path: '/health', connect, timeoutMs, passAuthorization: false });
+}
+
+// /admin/muse/<ノード>/<health|nix>。URLはMUSE_NODE_ROUTEに一致したものだけが届く。
+function relayMuseNode(req, res, connect = (node) => connectMuse(spawn, node), nixTimeoutMs = MUSE_NIX_TIMEOUT_MS) {
+  const [, node, target] = req.url.match(MUSE_NODE_ROUTE);
+  relayMuseGet(req, res, {
+    node,
+    path: target === 'nix' ? MUSE_NIX_PATH : '/health',
+    connect: () => connect(node),
+    timeoutMs: target === 'nix' ? nixTimeoutMs : MUSE_HEALTH_TIMEOUT_MS,
+    passAuthorization: target === 'nix',
+  });
 }
 
 const server = http
@@ -764,6 +794,10 @@ const server = http
     }
     if (req.url === MUSE_HEALTH_PATH) {
       checkMuseHealth(req, res);
+      return;
+    }
+    if (MUSE_NODE_ROUTE.test(req.url)) {
+      relayMuseNode(req, res);
       return;
     }
     if (req.url === '/debug/tailscale-peers') {
@@ -863,7 +897,7 @@ const server = http
   })
   ;
 
-module.exports = { forwardToMuse, checkMuseHealth, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { forwardToMuse, checkMuseHealth, connectMuse, relayMuseNode, MUSE_NODE_ROUTE, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {

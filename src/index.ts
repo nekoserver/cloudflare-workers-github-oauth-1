@@ -474,6 +474,8 @@ import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
+import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
+import { getMuseStatusPage } from './views/museStatus';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -20195,6 +20197,32 @@ app.get('/cf-containers/planner', authMiddleware, cfDashboardAdminMiddleware, as
     logger.error('[container-planner] measurements unavailable', {error:String(error)});
     return c.html(getContainerPlannerPage([], '実測記録を読み込めませんでした。D1 migration 0184の適用と接続状態を確認してください。'));
   }
+});
+
+/** tailnet上のmuse・muse-vmの状態、Nixのパッケージ、シグナル送信のページ(管理者のみ)。どの入口も停止中のコンテナは起動しない。 */
+app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.html(getMuseStatusPage());
+});
+
+app.get('/api/muse-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await fetchMuseNodes(await getDemoContainerStub(c.env));
+  return c.json({ ...result, checkedAt: new Date().toISOString() });
+});
+
+app.post('/api/muse-status/signal', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const body = await c.req.json<{ node?: unknown }>().catch(() => null);
+  if (!isMuseNodeName(body?.node)) return c.json({ error: 'invalid_node' }, 400);
+  return c.json(await sendMuseSignal(await getDemoContainerStub(c.env), c.env.MUSE_API_KEY, body.node));
+});
+
+app.get('/api/muse-status/nix', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const node = c.req.query('node');
+  if (!isMuseNodeName(node)) return c.json({ error: 'invalid_node' }, 400);
+  return c.json(await fetchMuseNixPackages(await getDemoContainerStub(c.env), c.env.MUSE_API_KEY, node));
 });
 
 app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
