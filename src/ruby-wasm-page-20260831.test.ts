@@ -52,7 +52,9 @@ describe('Ruby WASMページ', () => {
     const html = getRubyWasmPage('tester');
     expect(html).toContain("new URLSearchParams(window.location.search).get('source') === 'query-builder'");
     expect(html).toContain("sessionStorage.getItem('queryBuilderRubyJson')");
-    expect(html).toContain("rows = JSON.parse(Base64.decode64(\"");
+    // 2026-09-27(ba87416)以降、base64ライブラリに頼らずunpack1("m0")でUTF-8として復元する。
+    expect(html).toContain('rows = JSON.parse("');
+    expect(html).toContain('".unpack1("m0").force_encoding("UTF-8"))');
     expect(html).toContain('var importedResult = runRubyCode(pendingQueryBuilderCode)');
     expect(html).toContain('Query BuilderのJSONをRuby/WASMで解析しました。');
   });

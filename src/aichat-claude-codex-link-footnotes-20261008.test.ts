@@ -19,11 +19,11 @@ describe('AIチャット本体(buildAssistantBubble): claude/codexの回答だ�
     expect(html).toContain('var convertAnswerLinksToFootnotes = function convertAnswerLinksToFootnotes(markdown)');
   });
 
-  it("buildAssistantBubbleがmodelが'claude'または'codex'のときだけconvertAnswerLinksToFootnotesを呼ぶ", () => {
+  it("buildAssistantBubbleがmodelが'claude'・'codex'・'muse'のときだけconvertAnswerLinksToFootnotesを呼ぶ", () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    expect(fn).toContain("var isClaudeOrCodex = model === 'claude' || model === 'codex';");
+    expect(fn).toContain("var isClaudeOrCodex = model === 'claude' || model === 'codex' || model === 'muse';");
     expect(fn).toContain('convertAnswerLinksToFootnotes(text) : text');
     expect(fn).toContain('parseMd(renderText)');
   });

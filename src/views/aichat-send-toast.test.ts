@@ -41,7 +41,7 @@ describe('AIチャット: 送信結果トースト', () => {
 
   it('送信ハンドラがdata.fallbackUsedとdata.usedModelの色でトーストを呼び出す(ローカルコマンドは除く)', () => {
     const html = getAiChatPage(minimalUser);
-    expect(html).toContain('showAichatSendToast(!data.fallbackUsed, MODEL_COLORS[usedModel]);');
+    expect(html).toContain('showAichatSendToast(!data.fallbackUsed, getModelDotColor(usedModel));');
     const idx = html.indexOf('showAichatSendToast(!data.fallbackUsed');
     const before = html.slice(Math.max(0, idx - 120), idx);
     expect(before).toContain('if (!isLocalCommand) {');

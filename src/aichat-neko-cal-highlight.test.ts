@@ -50,7 +50,7 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>, message
   const fetchMock = vi.fn((url: string) => {
     const u = String(url);
     if (u.includes('/api/aichat')) {
-      return Promise.resolve({ json: () => Promise.resolve(apiResponse) });
+      return Promise.resolve({ headers: new Headers({ 'content-type': 'application/json' }), json: () => Promise.resolve(apiResponse) });
     }
     return Promise.resolve({ json: () => Promise.resolve({}) });
   });

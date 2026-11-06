@@ -30,7 +30,7 @@ function buildPage(): string {
 describe('/aichat ページ: 画像添付時のMoondream分析結果表示', () => {
   const html = buildPage();
   const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
-  const block = html.slice(submitIdx, submitIdx + 3600);
+  const block = html.slice(submitIdx, submitIdx + 6000);
 
   it('画像添付時のみ /api/moondream-analyze へPOSTする(if (attachedImage) でガードされている)', () => {
     expect(block).toMatch(/if \(attachedImage\) \{\s*fetch\('\/api\/moondream-analyze'/);

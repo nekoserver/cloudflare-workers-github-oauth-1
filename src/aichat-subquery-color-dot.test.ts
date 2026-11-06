@@ -40,12 +40,12 @@ describe('追加質問リンク: 色丸表示', () => {
     expect(fn).toContain('border-radius:50%');
   });
 
-  it('renderSubqueryLinks が MODEL_COLORS を参照する', () => {
+  it('renderSubqueryLinks が getModelDotColor(MODEL_COLORSを引く共通関数)で色を決める', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueryLinks(items)');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    expect(fn).toContain('MODEL_COLORS');
+    expect(fn).toContain('getModelDotColor(item.model)');
   });
 
   it('renderSubqueryLinks が item.model を参照する', () => {

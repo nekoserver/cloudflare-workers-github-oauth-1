@@ -632,6 +632,8 @@ type StatusQueryExample = {
 };
 
 export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+  { name: 'securemine_sessions', migration: '0168', description: '/securemineのログインセッション(トークンのハッシュ・Redmineの接続先・期限)', syncPolicy: 'manual' },
+  { name: 'securemine_login_history', migration: '0168', description: '/securemineのログイン履歴', syncPolicy: 'manual' },
   { name: 'aichat_keyword_registry', migration: '0167', description: 'キーワード初出台帳・新規切り出し日次統計', syncPolicy: 'manual' },
   { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定', syncPolicy: 'auto' },
   { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ', syncPolicy: 'readonly' },
@@ -682,6 +684,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_filesystem_policies', migration: '0187', description: 'イメージ・コンテナの書き込み先とread-only設計', syncPolicy: 'auto' },
   { name: 'cf_container_filesystem_observations', migration: '0187', description: 'ユーザー別の書き込み可否・マウント・失敗理由の実測履歴', syncPolicy: 'auto' },
   { name: 'cf_container_session_notes', migration: '0186', description: '起動・再起動を起点とするセッション別の作業内容。追記型の改訂履歴', syncPolicy: 'auto' },
+  { name: 'cf_container_firewall_snapshots', migration: '0180', description: 'コンテナのファイアウォール状態の1時間ごとの記録(コンテナ名×時刻で1件)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
   { name: 't3_pwa_handoffs', migration: '0190', description: 'T3 PWA接続要求・端末所持証明ハッシュ・一回限りの承認状態', syncPolicy: 'manual' },
@@ -3157,6 +3160,35 @@ CREATE TABLE IF NOT EXISTS cf_container_session_notes (
   UNIQUE(start_operation_id, revision)
 );
 `,
+  '0168': `CREATE TABLE IF NOT EXISTS securemine_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  redmine_user_json TEXT NOT NULL,
+  logged_in_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_securemine_session_expiry ON securemine_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS securemine_login_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  redmine_user_id INTEGER NOT NULL,
+  logged_in_at TEXT NOT NULL
+);`,
+  '0180': `CREATE TABLE IF NOT EXISTS cf_container_firewall_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  container_name TEXT NOT NULL,
+  hour_utc TEXT NOT NULL,
+  collected_at TEXT NOT NULL,
+  available INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  UNIQUE(container_name, hour_utc)
+);
+CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
+  ON cf_container_firewall_snapshots(collected_at);`,
   '0191': `CREATE TABLE IF NOT EXISTS cf_container_build_cache_effects (
   snapshot_key TEXT NOT NULL REFERENCES cf_container_build_measurements(snapshot_key),
   build_uuid TEXT NOT NULL,
@@ -3549,6 +3581,26 @@ export interface ColumnKeyInfo {
 }
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ(migrations 0167〜0191)。列の種別はmigrationsのPRIMARY KEY・REFERENCES・UNIQUE・INDEXに合わせる。
+  aichat_keyword_registry: { user_id: 'pk+fk', keyword: 'pk', first_share_id: 'fk', first_source: 'idx', first_added_at: 'idx' },
+  securemine_sessions: { token_hash: 'pk', user_id: 'fk', expires_at: 'idx' },
+  securemine_login_history: { id: 'pk', user_id: 'fk' },
+  cf_container_firewall_snapshots: { id: 'pk', container_name: 'uk', hour_utc: 'uk', collected_at: 'idx' },
+  cf_container_build_measurements: { snapshot_key: 'pk', build_uuid: 'idx' },
+  cf_container_build_steps: { snapshot_key: 'pk+fk', step_id: 'pk' },
+  cf_container_build_cache_effects: { snapshot_key: 'pk+fk', package_name: 'pk+idx' },
+  cf_container_image_records: { record_hash: 'pk', build_uuid: 'idx' },
+  cf_container_session_notes: { id: 'pk', start_operation_id: 'uk+fk', revision: 'uk' },
+  cf_container_resources: { container_id: 'pk', parent_container_id: 'fk', provider: 'uk', account_ref: 'uk', application_ref: 'uk', instance_ref: 'uk' },
+  cf_container_runtime_sessions: { session_id: 'pk', container_id: 'fk+idx', image_record_hash: 'fk' },
+  cf_container_runtime_events: { event_id: 'pk', container_id: 'fk+idx', session_id: 'fk', source: 'uk', source_event_id: 'uk' },
+  cf_container_work_targets: { target_id: 'pk', parent_target_id: 'fk' },
+  cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
+  cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
+  cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
+  cf_container_filesystem_policies: { policy_id: 'pk', image_record_hash: 'fk', container_id: 'fk' },
+  cf_container_filesystem_observations: { observation_id: 'pk', session_id: 'fk', policy_id: 'fk', source: 'uk', source_ref: 'uk' },
+  askgk_timeout_settings: { revision: 'pk' },
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
   user_public_keys: { id: 'pk', user_id: 'fk+idx' },
@@ -3598,7 +3650,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   commit_file_changes: { id: 'pk', repo_name: 'idx', commit_hash: 'idx', file_path: 'idx' },
-  tree_view_keyword_search_log: { id: 'pk', user_id: 'idx', repo_name: 'idx', query: 'idx', searched_at: 'idx' },
+  tree_view_keyword_search_log: { id: 'pk', user_id: 'fk+idx', repo_name: 'fk+idx', query: 'idx', searched_at: 'idx' },
   tree_view_keyword_search_results: { id: 'pk', search_log_id: 'fk', keyword: 'idx' },
   cf_container_operation_log: { id: 'pk', created_at: 'idx' },
   cf_container_snapshots: { id: 'pk', user_id: 'fk', prev_snapshot_id: 'fk', created_at: 'idx' },
@@ -3766,6 +3818,26 @@ export function getFilterableColumns(tableName: string): string[] {
  * table_catalog がDBに存在しない場合のフォールバック。
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ
+  aichat_keyword_registry: 'ai',
+  securemine_sessions: 'auth',
+  securemine_login_history: 'auth',
+  askgk_timeout_settings: 'config',
+  cf_container_firewall_snapshots: 'system',
+  cf_container_build_measurements: 'system',
+  cf_container_build_steps: 'system',
+  cf_container_build_cache_effects: 'system',
+  cf_container_image_records: 'system',
+  cf_container_session_notes: 'system',
+  cf_container_resources: 'system',
+  cf_container_runtime_sessions: 'system',
+  cf_container_runtime_events: 'system',
+  cf_container_work_targets: 'system',
+  cf_container_session_targets: 'system',
+  cf_container_runtime_notes: 'system',
+  cf_container_cost_observations: 'system',
+  cf_container_filesystem_policies: 'system',
+  cf_container_filesystem_observations: 'system',
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
   user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth', public_key_security_events: 'auth',
   wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
@@ -3974,6 +4046,22 @@ export interface GroupErData {
  * table_column_keys がDBに存在しない場合のフォールバック。
  */
 export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ(migrationsのREFERENCESに合わせる)
+  aichat_keyword_registry: { user_id: 'user_sessions', first_share_id: 'ai_chat_shares' },
+  securemine_sessions: { user_id: 'user_sessions' },
+  securemine_login_history: { user_id: 'user_sessions' },
+  cf_container_build_steps: { snapshot_key: 'cf_container_build_measurements' },
+  cf_container_build_cache_effects: { snapshot_key: 'cf_container_build_measurements' },
+  cf_container_session_notes: { start_operation_id: 'cf_container_operation_log' },
+  cf_container_resources: { parent_container_id: 'cf_container_resources' },
+  cf_container_runtime_sessions: { container_id: 'cf_container_resources', image_record_hash: 'cf_container_image_records' },
+  cf_container_runtime_events: { container_id: 'cf_container_resources', session_id: 'cf_container_runtime_sessions' },
+  cf_container_work_targets: { parent_target_id: 'cf_container_work_targets' },
+  cf_container_session_targets: { session_id: 'cf_container_runtime_sessions', target_id: 'cf_container_work_targets' },
+  cf_container_runtime_notes: { session_id: 'cf_container_runtime_sessions' },
+  cf_container_cost_observations: { session_id: 'cf_container_runtime_sessions' },
+  cf_container_filesystem_policies: { image_record_hash: 'cf_container_image_records', container_id: 'cf_container_resources' },
+  cf_container_filesystem_observations: { session_id: 'cf_container_runtime_sessions', policy_id: 'cf_container_filesystem_policies' },
   // ========================================================================
   // 認証・ワークスペース系
   //  user_sessions.user_id (UNIQUE) が実質的な users テーブル。
@@ -4035,6 +4123,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
+  tree_view_keyword_search_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
   tree_view_keyword_search_results: { search_log_id: 'tree_view_keyword_search_log' },
   cf_container_snapshots: { user_id: 'user_sessions', prev_snapshot_id: 'cf_container_snapshots' },
   cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },
@@ -4159,6 +4248,20 @@ export const USER_PREFERENCE_KEYS: Record<string, { description: string; values:
  * ここに登録がない場合は fromCol と同名のカラムを参照する（同名FK）。
  */
 export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
+  // 参照先がidのもの(migrationsのREFERENCES ... (id)に合わせる)
+  'tree_view_keyword_search_results.search_log_id': 'id',
+  'cf_container_snapshot_diffs.snapshot_id': 'id',
+  'cf_container_package_release_status.installed_snapshot_id': 'id',
+  't3_pwa_sessions.handoff_id': 'id',
+  't3_pwa_handoff_events.handoff_id': 'id',
+  't3_pwa_handoff_events.session_id': 'id',
+  'aichat_keyword_registry.first_share_id': 'id',
+  'cf_container_session_notes.start_operation_id': 'id',
+  'cf_container_resources.parent_container_id': 'container_id',
+  'cf_container_runtime_sessions.image_record_hash': 'record_hash',
+  'cf_container_filesystem_policies.image_record_hash': 'record_hash',
+  'cf_container_work_targets.parent_target_id': 'target_id',
+
   // key_id 系 → api_keys.id
   'api_key_endpoint_stats.key_id': 'id',
 
