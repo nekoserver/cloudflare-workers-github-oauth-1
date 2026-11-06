@@ -6,7 +6,9 @@ import { readFileSync } from 'node:fs';
 describe('demo container sshd port', () => {
   it('entrypoint.sh starts sshd on 2222', () => {
     const s = readFileSync('containers/demo/entrypoint.sh', 'utf-8');
-    expect(s).toMatch(/\/usr\/sbin\/sshd -D -e -p 2222 /);
+    expect(s).toContain('"$SSHD_BIN" -D -e -p 2222 ');
+    // Dockerfile.redmineも同じentrypointを使い、/usr/local/sbin/sshdが無い。
+    expect(s).toContain('SSHD_BIN=/usr/sbin/sshd\nif [ -x /usr/local/sbin/sshd ]; then SSHD_BIN=/usr/local/sbin/sshd; fi');
   });
 
   it('server.js health probes 2222 for sshd', () => {

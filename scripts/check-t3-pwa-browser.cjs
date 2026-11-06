@@ -9,7 +9,7 @@ const {createPwaAuth}=require('../containers/demo/t3-pwa-auth.cjs');
 const {createServer}=require('../containers/demo/t3-embed-proxy.cjs');
 const net=require('node:net'),originalConnect=net.connect;
 net.connect=function(...args){const socket=originalConnect.apply(this,args);if(args[0]===3773)socket.once('data',chunk=>console.log('Diagnostic upstream upgrade:',chunk.toString().split('\r\n')[0]));return socket;};
-const binary='/root/.t3/runtime/versions/0.1.3/t3';
+const binary='/root/.t3/runtime/versions/0.1.7/t3';
 const usePublic=process.env.T3_PWA_PUBLIC==='1';
 const mode=process.env.T3_PWA_MODE||'iframe';
 const standalone=mode!=='iframe';

@@ -3,7 +3,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 
-// 契約(T3 0.1.3 isBrowserOriginAllowed): クッキーのセッションは、Originのホストが Host か X-Forwarded-Host と
+// 契約(T3 0.1.7 isBrowserOriginAllowed): クッキーのセッションは、Originのホストが Host か X-Forwarded-Host と
 // 一致するときだけ受け付ける(Sec-Fetch-Site: same-origin のときは除く)。中継は Host を 127.0.0.1:<port> に
 // 書き換えるので、元のホストを X-Forwarded-Host で渡さないと、発行直後のクッキーが拒否され、
 // 「Timed out waiting for authenticated session after bootstrap.」になる。

@@ -12,7 +12,7 @@ const ORIGIN = 'https://t3.nekomaneki.work';
 const SCOPES = ['orchestration:read', 'orchestration:operate', 'settings:write', 'providers:manage', 'diagnostics:read', 'terminal:read', 'terminal:operate', 'source-control:write', 'filesystem:read', 'filesystem:write', 'preview:operate'];
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const nativeBinary = '/root/.t3/runtime/versions/0.1.3/t3';
+const nativeBinary = '/root/.t3/runtime/versions/0.1.7/t3';
 class InvalidBody extends Error {}
 async function nativeCommand(args) {
   const { stdout } = await execute(nativeBinary, ['auth', 'session', ...args], { timeout: 20000, maxBuffer: 1024 * 1024 });
@@ -39,7 +39,7 @@ async function mintPairingCredential(cookie, label) {
   });
 }
 // 自動承認用: ブラウザのクッキーを使わず、コンテナ内のCLIでT3本来のペアリングの資格情報(1回限り、5分)を発行する。
-// 契約(T3 0.1.3): `t3 auth pairing create --json` は {credential, expiresAt, ...} を出す。
+// 契約(T3 0.1.7): `t3 auth pairing create --json` は {credential, expiresAt, ...} を出す。
 async function mintAutoPairingCredential(label) {
   const { stdout } = await execute(nativeBinary, ['auth', 'pairing', 'create', '--json', '--label', label], { timeout: 20000, maxBuffer: 1024 * 1024, env: { ...process.env, HOME: '/root' } });
   return JSON.parse(stdout);

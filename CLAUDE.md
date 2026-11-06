@@ -2,6 +2,10 @@
 
 設定・状態を扱う機能拡張では、[AGENTS.md「機能拡張の前提となる整合性と復元可能性」](AGENTS.md#機能拡張の前提となる整合性と復元可能性) を共通の最低品質として適用する。
 
+OpenSSH・sshdの版や設定を変えるとき（`containers/demo`のDockerfile、`entrypoint.sh`、`sshd-hardening.conf`、`packages/openssh-*`）は、先に[NOTICE.openssh-update.20261106.md](NOTICE.openssh-update.20261106.md)を読む。
+
+SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-ssh.20261106.md)と[Tailscaleのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-tailscale.20261106.md)に従う。
+
 ## ワークフロー: cloudflare-workers-github-oauth プロビジョニング
 
 本リポジトリはワークフロー **「cloudflare-workers-github-oauth プロビジョニング」** により

@@ -1,6 +1,6 @@
 'use strict';
 // T3を作り直すと署名鍵が変わり、ブラウザーに残った古いセッションは拒否され続ける。
-// T3は認証に失敗した要求に、/api/auth/session では200の authenticated:false を、ほかでは401を返す(T3 0.1.3のソースで確認)。
+// T3は認証に失敗した要求に、/api/auth/session では200の authenticated:false を、ほかでは401を返す(T3 0.1.7のソースで確認)。
 // 拒否された古いセッションのクッキーだけを削除し、ペアリング画面へ戻れるようにする。
 const NAME = /^[A-Za-z0-9_.-]+$/;
 const MAX_BODY = 65536;

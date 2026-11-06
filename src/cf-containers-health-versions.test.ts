@@ -17,6 +17,9 @@ describe('demoコンテナ: バージョンの取り出しと判定', () => {
     expect(server.extractVersion('cloudflared version 2026.10.1 (built 2026-10-15)')).toBe('2026.10.1');
     expect(server.extractVersion('1.104.1-ERR-BuildInfo')).toBe('1.104.1');
     expect(server.extractVersion('2.1.306 (Claude Code)')).toBe('2.1.306');
+    expect(server.extractVersion('6.18.56-cloudflare-microvm-2026.10.9')).toBe('6.18.56');
+    expect(server.extractVersion('glibc 2.43')).toBe('2.43');
+    expect(server.extractVersion('go version go1.25.3 linux/amd64')).toBe('1.25.3');
     expect(server.extractVersion('[実行失敗: spawn codex ENOENT]')).toBeNull();
   });
   it('版を数値で比べる', () => {
@@ -42,6 +45,17 @@ describe('demoコンテナ: 想定の版の書き出しと画面表示', () => {
     const view = readFileSync('src/views/cfContainers.ts', 'utf8');
     expect(view).toContain('id="version-table"');
     expect(view).toContain('.badge[data-level="warn"]');
+  });
+  it('curlをAPTの最新版の確認に含める', () => {
+    expect(readFileSync('containers/demo/server.js', 'utf8')).toContain("{ name: 'curl', pkg: 'curl' },");
+  });
+  it('カーネル・glibc・Goの版を出し、Goが無くてもNGにしない', () => {
+    const health = readFileSync('containers/demo/server.js', 'utf8');
+    expect(health).toContain("{ name: 'kernel', cmd: 'uname', args: ['-r'] },");
+    expect(health).toContain("{ name: 'glibc', cmd: 'getconf', args: ['GNU_LIBC_VERSION'] },");
+    expect(health).toContain("{ name: 'go', cmd: 'go', args: ['version'], optional: true },");
+    expect(health).toContain("level: s.optional && !actual ? 'none' : judgeVersion(actual, exp, s.minimum)");
+    expect(readFileSync('src/views/cfContainers.ts', 'utf8')).toContain("none: '未導入'");
   });
 });
 

@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 let chromium: { launch: (options?: unknown) => Promise<any> } | null = null;
 try { chromium = require('playwright').chromium; } catch { chromium = null; }
 
-// T3 0.1.3 の client/index.html と同じ形のscriptタグ(injectBootstrapが置き換える対象)。
+// T3 0.1.7 の client/index.html と同じ形のscriptタグ(injectBootstrapが置き換える対象)。
 const T3_HTML = '<!doctype html><html><head><script type="module" crossorigin src="/assets/index-BBHBqBtb.js"></script></head><body><div id="root"></div></body></html>';
 const listen = (server: http.Server) => new Promise<number>(r => server.listen(0, '127.0.0.1', () => r((server.address() as AddressInfo).port)));
 

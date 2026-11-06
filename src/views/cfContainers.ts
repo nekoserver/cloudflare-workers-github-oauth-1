@@ -180,6 +180,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       <option value="TAILSCALE_LOGIN_SERVER">TAILSCALE_LOGIN_SERVER（Tailscale管理サーバーURL・https）</option>
       <option value="CF_CONTAINER_API_TOKEN">CF_CONTAINER_API_TOKEN（コンテナ内cfコマンド）</option>
       <option value="CONTAINER_GH_TOKEN">CONTAINER_GH_TOKEN（コンテナ内gh・git push）</option>
+      <option value="SSH_HOST_ED25519_KEY_B64">SSH_HOST_ED25519_KEY_B64（sshのホスト秘密鍵・base64）</option>
+      <option value="SSH_AUTHORIZED_KEYS">SSH_AUTHORIZED_KEYS（追加の公開鍵・;区切り）</option>
     </select>
   </div>
   <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
@@ -666,7 +668,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   }
 
   // 版の判定: ok=想定どおり(緑)、warn=想定と違う(黄)、ng=無い・最低版より古い(赤)
-  var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG' };
+  var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG', none: '未導入' };
   // 版を数値の並びとして比べる(server.jsのcompareVersionsと同じ考え方)
   function compareVer(a, b) {
     var pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number);
@@ -729,7 +731,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var changed = before !== undefined && before !== v.actual;
       var info = latestVersions && latestVersions[v.name];
       var isLatest = !!(info && info.latest && v.actual && compareVer(v.actual, info.latest) >= 0);
-      var cells = [v.name, v.actual || '(取得できず)', before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
+      var cells = [v.name, v.actual || (v.level === 'none' ? '未導入' : '(取得できず)'), before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
       cells.forEach(function (text, i) {
         var td = document.createElement('td');
         td.textContent = text;

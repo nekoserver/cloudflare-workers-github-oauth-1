@@ -38,6 +38,9 @@ export class DemoContainer extends Container<Bindings> {
       NEKOROOT_TUNNEL_TOKEN: env.NEKOROOT_TUNNEL_TOKEN ?? '',
       TAILSCALE_AUTHKEY: env.TAILSCALE_AUTHKEY ?? '',
       TAILSCALE_LOGIN_SERVER: env.TAILSCALE_LOGIN_SERVER ?? '',
+      // 作り直しても同じsshのホスト鍵と追加の公開鍵を使うための設定。
+      SSH_HOST_ED25519_KEY_B64: env.SSH_HOST_ED25519_KEY_B64 ?? '',
+      SSH_AUTHORIZED_KEYS: env.SSH_AUTHORIZED_KEYS ?? '',
       // コンテナ内のcfコマンド(containers/demo/cf)用。Worker本体の
       // CLOUDFLARE_API_KEYは流用せず、コンテナ専用のトークンを渡す。
       CF_CONTAINER_API_TOKEN: env.CF_CONTAINER_API_TOKEN ?? '',
