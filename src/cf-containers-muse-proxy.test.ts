@@ -3,10 +3,10 @@ import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
-import { PassThrough } from 'node:stream';
+import { Duplex, PassThrough } from 'node:stream';
 
 const require = createRequire(import.meta.url);
-const { forwardToMuse, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY } = require('../containers/demo/server.js');
+const { forwardToMuse, checkMuseHealth, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY } = require('../containers/demo/server.js');
 
 // 契約(Tailscale): userspace-networkingでは`tailscale nc <host> <port>`の標準入出力が
 // tailnetへのTCP接続になる。lib/claude/ops/llm_worker_claude.pyのTailnetConnectionと同じ使い方。
@@ -125,5 +125,72 @@ describe('POST /muse/v1/chat/completions', () => {
     controller.abort();
     await expect(pending).rejects.toThrow();
     await upstreamClosed;
+  });
+});
+
+describe('GET /muse/health', () => {
+  const servers: http.Server[] = [];
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => { s.closeAllConnections(); s.close(resolve); })));
+  });
+
+  async function listen(handler: http.RequestListener) {
+    const server = http.createServer(handler);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    return (server.address() as AddressInfo).port;
+  }
+
+  const relay = (connect: () => net.Socket) => listen((req, res) => checkMuseHealth(req, res, connect));
+
+  it('推論を走らせない固定のパスだけへ問い合わせ、応答をそのまま返す', async () => {
+    let seen: { url?: string; method?: string; auth?: string } = {};
+    const muse = await listen((req, res) => {
+      seen = { url: req.url, method: req.method, auth: req.headers.authorization };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"status": "ok"}');
+    });
+    const port = await relay(() => net.connect(muse, '127.0.0.1'));
+    const response = await fetch(`http://127.0.0.1:${port}/muse/health?x=1`, { headers: { Authorization: 'Bearer k' } });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"status": "ok"}');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(seen).toEqual({ url: '/health', method: 'GET', auth: undefined });
+  });
+
+  // 8080番はtailnetの端末からも届く。キーの無い要求は上流へつながない。
+  it('Bearerキーが無ければ401で、上流へつながない', async () => {
+    let connected = false;
+    const port = await relay(() => { connected = true; return net.connect(1, '127.0.0.1'); });
+    const response = await fetch(`http://127.0.0.1:${port}/muse/health`);
+    expect(response.status).toBe(401);
+    expect(connected).toBe(false);
+  });
+
+  it('GET以外は405で、上流へつながない', async () => {
+    let connected = false;
+    const port = await relay(() => { connected = true; return net.connect(1, '127.0.0.1'); });
+    const response = await fetch(`http://127.0.0.1:${port}/muse/health`, { method: 'POST', headers: { Authorization: 'Bearer k' }, body: 'x' });
+    expect(response.status).toBe(405);
+    expect(connected).toBe(false);
+  });
+
+  // 故障想定: muse-vmがオフラインだと`tailscale nc`は応答しないまま待ち続ける(2026-11-06に実機で確認)。
+  // connectMuseの返すDuplexにはsetTimeoutが無く、http.requestのtimeoutは発火しない。
+  it('setTimeoutの無い接続で上流が応答しなくても、待ち時間で504を返す', async () => {
+    const socket = new Duplex({ read() {}, write(_chunk, _encoding, callback) { callback(); } });
+    const port = await listen((req, res) => checkMuseHealth(req, res, () => socket, 20));
+    const response = await fetch(`http://127.0.0.1:${port}/muse/health`, { headers: { Authorization: 'Bearer k' }, signal: AbortSignal.timeout(2000) });
+    expect(response.status).toBe(504);
+    expect(socket.destroyed).toBe(true);
+  });
+
+  it('接続できなければ502を返す', async () => {
+    const closed = await listen(() => {});
+    await new Promise((resolve) => { const s = servers.pop()!; s.close(resolve); });
+    const port = await relay(() => net.connect(closed, '127.0.0.1'));
+    const response = await fetch(`http://127.0.0.1:${port}/muse/health`, { headers: { Authorization: 'Bearer k' } });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ errorCode: 'muse_connection_failed' });
   });
 });

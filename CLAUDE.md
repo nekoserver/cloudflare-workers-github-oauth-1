@@ -6,6 +6,8 @@ OpenSSH・sshdの版や設定を変えるとき（`containers/demo`のDockerfile
 
 SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-ssh.20261106.md)と[Tailscaleのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-tailscale.20261106.md)に従う。
 
+`/aichat`の言語モデルの選択や、`/askmuse`・`◯_prompt=`の経路を変えるときは、[AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」](AGENTS.md#aiチャットの言語モデルスイッチとプレフィックス)に従う。
+
 ## コンテナビルドのルール
 
 ユーザー指定（2026-11-06）: すべてのDockerfileとコンテナビルドに適用する。musevmで見つかった、取得元の404、失敗の隠蔽、効いていない設定の書き換え、実行ユーザーの権限不足を繰り返さないためのルール。

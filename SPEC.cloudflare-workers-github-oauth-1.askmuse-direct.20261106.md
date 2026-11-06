@@ -37,7 +37,7 @@
 | `ai_chat_shares.model`、`usedModel` | `muse` |
 | 回答末尾 | `Engine: Muse / Model: <応答のmodel>`。不正な値なら`muse` |
 | スレッド | `muse_prompt`と同じ |
-| 色丸の選択 | `/askmuse`はどのモデルを選んでいても変換しない |
+| 色丸の選択 | `/askmuse`はどのモデルを選んでいても変換しない。送信しても色丸の選択は変えない（[AGENTS.md](AGENTS.md#aiチャットの言語モデルスイッチとプレフィックス)） |
 | 待ち時間 | `/neko askgk`と同じ保存値（`askgk_timeout_settings`） |
 | 上限 | 質問16KiB、回答32KiB（lib/ops/llm_worker.pyと同じ）。中継の本文と応答は1MiB |
 | コンテナの停止中 | 起動せず、`/cf-containers`からの起動を案内する |
@@ -65,6 +65,32 @@
 | 接続できない | 502 `muse_connection_failed` |
 | 300秒で応答がない | 504 `llm_timeout` |
 
+### 死活確認と入力窓の枠色
+
+`/aichat`で言語モデルスイッチが`muse`のとき、`/askmuse`の経路が使える間は、入力窓の枠をMuseの色にする。
+
+| 項目 | 動作 |
+|---|---|
+| 枠の色 | 言語モデルの色の設定でMuseに割り当てられた色（`getModelDotColor('muse')`）。固定の色は使わない |
+| 確認する条件 | スイッチが`muse`で、シグナル送信がONのときだけ |
+| 確認の時機 | 送信間隔ごと（既定600秒）。`muse`へ切り替えたとき、設定を保存したときはすぐ確認する |
+| タブが隠れている間 | 確認を送らない。表示に戻ったとき、前回から送信間隔が空いていれば確認する |
+| 設定の入口 | 言語モデルの選択パネルのMuseの行末の⚙。モーダルは`getNextZ()`で最上位に開く |
+| シグナル送信 | チェックボックス。既定は有効。OFFなら信号を送らず、枠は既定の色にする |
+| 送信間隔 | 60〜86400秒の整数。既定は600秒。入力はチェックボックスに連動し、OFFの間は無効。ONで範囲外なら保存しない |
+| 設定の保存先 | Cookie`aichat_muse_signal`（ブラウザごと、1年）。読めない値は既定値として扱う。「デフォルトに戻す」で消す |
+| 稼働中でないとき、確認に失敗したとき | 枠を既定の色へ戻す |
+| `muse`以外へ切り替えたとき | すぐ既定の色へ戻す。切り替え前の確認の応答は捨てる |
+| 入力中 | 枠の色を保つ。インラインのスタイルなので`.chat-input:focus`より優先する |
+| 確認の入口 | `GET /api/aichat/muse-health`（認証が必要）。応答は`{"healthy":true}`か`{"healthy":false}` |
+| 中継の入口 | `GET /muse/health`（`containers/demo/server.js`）。送り先は`muse-vm:8080/health`に固定する。推論は走らない |
+| コンテナの停止中 | 起動しない。定期の確認で課金が始まらないよう、先に`getState`で確かめる |
+| 待ち時間 | 中継は5秒、Workerは8秒で打ち切り、稼働中でないものとして扱う |
+
+確かめるのは`/askmuse`の経路（コンテナ、中継、`muse-vm`）とキーの有無までで、モデルが回答を生成できることは確かめない。`/neko askgk muse_prompt`の経路の状態も表さない。`MUSE_API_KEY`が誤っていても`/health`は認証が要らないので稼働中と表示する。
+
+`muse-vm`がオフラインだと`tailscale nc`は応答しないまま待ち続ける（2026-11-06に実機で確認）。`connectMuse`のDuplexには`setTimeout`が無く`http.request`の`timeout`は発火しないため、中継の打ち切りは自前のタイマーで行う。
+
 ---
 
 ## 修正内容
@@ -76,7 +102,8 @@
 | `src/utils/codexAskgkQuestion.ts` | `parseAskMusePrompt`を追加。`formatAskgkPromptQuestion`の対象に追加 |
 | `src/index.ts` | 依存の注入。色丸の変換から`/askmuse`を除外 |
 | `src/types.ts` | `MUSE_API_KEY` |
-| `containers/demo/server.js` | 中継の入口 |
+| `containers/demo/server.js` | 中継の入口、死活確認の入口 |
+| `src/views/aichatMuseHealth.ts`、`src/views/aichat.ts` | 死活確認の監視、入力窓の枠色、シグナル送信の設定モーダル、Museの行の⚙ |
 
 ---
 
@@ -89,6 +116,7 @@
 | コマンドの解釈 | `src/utils/aichatSlashCommand.test.ts` |
 | 本文の抽出 | `src/utils/codexAskgkQuestion.test.ts`、`src/aichat-codex-question-display.test.ts` |
 | `/api/aichat`全体 | `src/aichat-askmuse-integration.test.ts` |
+| 死活確認の監視と枠色、設定の読み取り、モーダル、Museの行の⚙ | `src/views/aichatMuseHealth.test.ts` |
 
 ---
 
@@ -108,3 +136,5 @@
 - 有効なキーでの回答。無効なキーを`tailscale nc`経由で送り、muse-vmが401を返すところまでは確認した。
 - Durable Object越しの長時間の応答と、`signal`による打ち切りがコンテナまで届くこと。
 - イメージのビルド。`scripts/check-cf-containers.sh`は実行していない。
+- `forwardToMuse`の300秒の`timeout`も同じ理由で発火しない。Worker側の待ち時間で打ち切られるが、未修正。
+- 死活確認の実画面での表示。中継の`checkMuseHealth`は2026-11-06に実際の`tailscale nc`越しで200を確認した。オフライン時の打ち切りは、`setTimeout`の無いストリームを使う単体テストでの確認。

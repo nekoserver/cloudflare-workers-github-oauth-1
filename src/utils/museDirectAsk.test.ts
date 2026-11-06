@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { askMuseDirect, museDirectDep, MUSE_DIRECT_PATH, type MuseContainer } from './museDirectAsk';
+import { askMuseDirect, checkMuseHealth, museDirectDep, MUSE_DIRECT_PATH, MUSE_HEALTH_PATH, type MuseContainer } from './museDirectAsk';
 
 const completion = (content: unknown, model: unknown = 'muse') => JSON.stringify({ model, choices: [{ message: { content } }] });
 
@@ -87,5 +87,50 @@ describe('museDirectDep', () => {
     const started = Date.now();
     expect(await dep('質問')).toEqual({ ok: false, error: 'llm_timeout' });
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+});
+
+describe('checkMuseHealth', () => {
+  it('中継先へBearerキー付きのGETを送り、status: okなら稼働中とする', async () => {
+    const stub = container(new Response('{"status": "ok"}'));
+    expect(await checkMuseHealth(stub, 'key-1')).toBe(true);
+    const request = stub.fetch.mock.calls[0][0] as Request;
+    expect(new URL(request.url).pathname).toBe(MUSE_HEALTH_PATH);
+    expect(request.method).toBe('GET');
+    expect(request.headers.get('Authorization')).toBe('Bearer key-1');
+  });
+
+  // 故障想定: 定期の死活確認がコンテナを起動し、見ているだけで課金が始まる。
+  it.each(['stopped', 'stopped_with_code', 'stopping'])('コンテナが%sなら中継へ送らず、起動もしない', async (status) => {
+    const stub = container(new Response('{"status": "ok"}'), status);
+    expect(await checkMuseHealth(stub, 'key')).toBe(false);
+    expect(stub.fetch).not.toHaveBeenCalled();
+  });
+
+  it('キーが無ければ/askmuseを使えないので、稼働中としない', async () => {
+    const stub = container(new Response('{"status": "ok"}'));
+    expect(await checkMuseHealth(stub, undefined)).toBe(false);
+    expect(stub.fetch).not.toHaveBeenCalled();
+  });
+
+  // 故障想定: 200だけを見て、Museではない応答でも稼働中の色を出す。
+  it.each([
+    ['502', new Response('{"error":"muse_connection_failed"}', { status: 502 })],
+    ['JSONでない', new Response('<html>')],
+    ['statusが違う', new Response('{"status":"starting"}')],
+  ])('%sなら稼働中としない', async (_name, response) => {
+    expect(await checkMuseHealth(container(response), 'key')).toBe(false);
+  });
+
+  it('状態の取得や送信に失敗しても例外にせず、稼働中としない', async () => {
+    const stub = container(new Response('{"status": "ok"}'));
+    stub.getState = vi.fn().mockRejectedValue(new Error('DO down'));
+    expect(await checkMuseHealth(stub, 'key')).toBe(false);
+    expect(await checkMuseHealth(container(async () => { throw new Error('net'); }), 'key')).toBe(false);
+  });
+
+  it('応答が無ければ待ち時間で打ち切る', async () => {
+    const stub = container(() => new Promise<Response>(() => {}));
+    expect(await checkMuseHealth(stub, 'key', 5)).toBe(false);
   });
 });

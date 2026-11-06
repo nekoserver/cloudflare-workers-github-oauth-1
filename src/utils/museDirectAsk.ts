@@ -12,6 +12,8 @@ import { isContainerRunning, type ContainerStateLike } from './cfContainerStatus
  * 入れると、T3やエージェントの子プロセスから読めるようになるため。
  */
 export const MUSE_DIRECT_PATH = '/muse/v1/chat/completions';
+export const MUSE_HEALTH_PATH = '/muse/health';
+const MUSE_HEALTH_TIMEOUT_MS = 8_000;
 const MUSE_MODEL = 'muse';
 // lib/ops/llm_worker.pyのMAX_PROMPT・MAX_OUTPUTと同じ上限。
 const MAX_PROMPT_BYTES = 16_384;
@@ -86,6 +88,38 @@ export async function askMuseDirect(container: MuseContainer, apiKey: string | u
       execute().catch((): MuseDirectResult => ({ ok: false, error: controller.signal.aborted ? 'llm_timeout' : 'muse_connection_failed' })),
       expired,
     ]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+/**
+ * /askmuseの経路が使える状態かを確かめる。定期的に呼ばれるので、askMuseDirectと同じく
+ * 停止中のコンテナは起動しない。推論を走らせないmuse-vmの/healthを見る。
+ * 確認できなかったときはすべて稼働中でないものとして扱う。
+ */
+export async function checkMuseHealth(container: MuseContainer, apiKey: string | undefined, timeoutMs = MUSE_HEALTH_TIMEOUT_MS): Promise<boolean> {
+  if (!apiKey) return false;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const expired = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(false);
+    }, timeoutMs);
+  });
+  const execute = async (): Promise<boolean> => {
+    if (!isContainerRunning(await container.getState())) return false;
+    const response = await container.fetch(new Request(`http://container${MUSE_HEALTH_PATH}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    }));
+    if (response.status !== 200) return false;
+    const body = await response.json() as { status?: unknown } | null;
+    return body?.status === 'ok';
+  };
+  try {
+    return await Promise.race([execute().catch(() => false), expired]);
   } finally {
     clearTimeout(timer!);
   }

@@ -234,3 +234,7 @@ preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.1
 ## 2026-11-06: /askmuseの直接経路（未反映）
 
 `/askmuse prompt="◯"`を実装した。経路は本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vm。ブランチ`feat/askmuse-direct-20261106`のソースのみで、未デプロイ。反映にはWorkerのsecret`MUSE_API_KEY`の設定とコンテナイメージの更新が要る。手順と未確認の項目は[仕様](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)。Dockerビルドは未実施。
+
+## 2026-11-06: Museの死活確認と入力窓の枠色（未反映）
+
+`/aichat`でスイッチが`muse`かつシグナル送信がONのとき、`GET /api/aichat/muse-health`で送信間隔（既定600秒）ごとに確認し、稼働中なら入力窓の枠をMuseの色にする。設定はMuseの行の⚙から開くモーダルで変え、Cookie`aichat_muse_signal`に保存する。ソースのみで、未デプロイ。`containers/demo/server.js`に`GET /muse/health`を追加したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。イメージが古い間は確認が失敗し、枠は既定の色のままになる。詳細は[SPEC](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)の「死活確認と入力窓の枠色」。
