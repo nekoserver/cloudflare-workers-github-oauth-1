@@ -1316,7 +1316,7 @@ export type AichatSlashCommandResult =
   // svg: サーバー側で固定パレット+数値のみから組み立てた自前生成のSVGマークアップ。
   // AI応答等の非信頼入力を一切含まないため、クライアント側はparseMd()のエスケープを
   // 経由させずそのままinnerHTMLしてよい(buildAichatSourceTotalsSvgのコメント参照)。
-  | { handled: true; response: string; responseAlign?: 'center'; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; claudeAskgk?: boolean; saveAsAiResponse?: boolean }
+  | { handled: true; response: string; responseAlign?: 'center'; resultsForModal?: AichatResultItem[]; cursorResultsForModal?: CursorAgentCsearchItem[]; svg?: string; rubyCode?: string; rubyFilename?: string; codexAskgk?: CodexAskgkMeta; claudeAskgk?: boolean; museAskgk?: boolean; saveAsAiResponse?: boolean }
   | { handled: false };
 
 /**
@@ -2063,6 +2063,10 @@ export async function interpretAichatSlashCommand(
     if (/^claude_prompt\s*=\s*["“”]/i.test(question)) {
       const response = appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'claude', outcome.value.llmModel, outcome.value.llmEffort);
       return { handled: true, response, saveAsAiResponse: true, claudeAskgk: true };
+    }
+    if (/^muse_prompt\s*=\s*["“”]/i.test(question)) {
+      const response = appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel, outcome.value.llmEffort);
+      return { handled: true, response, saveAsAiResponse: true, museAskgk: true };
     }
     const promptArgMatch = question.match(/^(\w+)_prompt(?:\s*=\s*["“”]|$)/);
     if (promptArgMatch) {

@@ -1,5 +1,6 @@
 export const CODEX_ASKGK_MODEL = { value: 'codex', label: 'codex' };
 export const CLAUDE_ASKGK_MODEL = { value: 'claude', label: 'claude' };
+export const MUSE_ASKGK_MODEL = { value: 'muse', label: 'muse' };
 
 export const AICHAT_COLOR_PALETTE: readonly string[] = [
   '#4f46e5', // indigo

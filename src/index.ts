@@ -552,7 +552,7 @@ import {
   resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
 import { isInstallationPermissionsUpdateAction } from './utils/installationPermissionsAction';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -6947,7 +6947,7 @@ app.get('/aichat', authMiddleware, async (c) => {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
   modelColors = merged;
   if (c.env.DB) {
     const db = c.env.DB;
@@ -7095,8 +7095,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 色丸で選択したCodex/Claudeへの通常の質問は、Workers AIではなくaskgkへ送る。
-  if ((body.model === 'codex' || body.model === 'claude') && message && !/^\/neko\b/i.test(message)) {
+  // 色丸で選択したCodex/Claude/Museへの通常の質問は、Workers AIではなくaskgkへ送る。
+  if ((body.model === 'codex' || body.model === 'claude' || body.model === 'muse') && message && !/^\/neko\b/i.test(message)) {
     message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
@@ -7437,7 +7437,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
-    const askgkModel = slashCommand.codexAskgk ? 'codex' : slashCommand.claudeAskgk ? 'claude' : null;
+    const askgkModel = slashCommand.codexAskgk ? 'codex' : slashCommand.claudeAskgk ? 'claude' : slashCommand.museAskgk ? 'muse' : null;
     let requestedThreadId = (body.threadId ?? '').trim();
     if (slashCommand.saveAsAiResponse) {
       if (requestedThreadId && !isThreadId(requestedThreadId)) {
@@ -7459,7 +7459,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
     // (ai_chat_sharesへmodel='codex'として保存し、✂️/📔ボタン・左サイドパネル
     // 検索(qsearch)を通常のAI回答と同様に使えるようにする、2026-10-04
-    // ユーザー要望)。claude_promptも同じ保存経路を使う。その他はautoSaveで保存する。
+    // ユーザー要望)。claude_prompt・muse_promptも同じ保存経路を使う。その他はautoSaveで保存する。
     if (askgkModel && c.env.DB) {
       const db = c.env.DB;
       const answer = slashCommand.response;
@@ -7503,7 +7503,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           const colorRows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
           const existingColors: Record<string, string> = {};
           for (const row of colorRows.results ?? []) existingColors[row.model_id] = row.color;
-          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
           modelColor = merged[askgkModel];
           for (const a of newAssignments) {
             await db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
@@ -16672,7 +16672,7 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
     return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
   if (newAssignments.length > 0) {
     const db = c.env.DB;
     for (const a of newAssignments) {

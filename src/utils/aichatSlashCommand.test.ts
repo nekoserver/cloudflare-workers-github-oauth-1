@@ -1003,6 +1003,15 @@ describe('/neko askgk claude_prompt="..."', () => {
   // (ヘッダX-LLM-Engine等は複数ホップのJSON文字列ラッピングを経由するため
   // ここには届かず、JSON本体のllm_model/llm_effortのみ読む)。
   // Engineは`◯◯_prompt=`の接頭語から判定し、回答文の末尾に埋め込む。
+  // 故障想定: Museだけ専用の保存経路へ入らず、model='neko/askgk'として記録される。
+  it('muse_prompt="..."を接頭語ごと渡し、Claudeと同じくAI回答として記録する印を返す', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'muse' });
+    const result = await interpretAichatSlashCommand('/neko askgk muse_prompt="テスト質問"', now, { ...unusedDeps, askTunnelSigner });
+    expect(askTunnelSigner).toHaveBeenCalledWith('muse_prompt="テスト質問"');
+    expect(result).toMatchObject({ handled: true, saveAsAiResponse: true, museAskgk: true });
+    expect(result).not.toHaveProperty('claudeAskgk');
+  });
+
   it('claude_prompt="..."でllm_model/llm_effortが返れば回答文末尾にEngine/Model/Effortを埋め込む', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'claude-sonnet-5-5', llmEffort: 'medium' });
     const result = await interpretAichatSlashCommand(

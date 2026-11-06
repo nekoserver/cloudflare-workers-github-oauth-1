@@ -4,7 +4,7 @@ import { createJWT } from './utils/jwt';
 import { computeQuestionHash, computeConversationHash } from './utils/conversationHash';
 import { getMarkdownParserScript } from './utils/markdownRenderer';
 
-describe('/neko askgk Codex/Claudeの応答ログ', () => {
+describe('/neko askgk Codex/Claude/Museの応答ログ', () => {
   it.each([
     { threadId: '', saveFails: false, openQuote: '"' },
     { threadId: '', saveFails: false, openQuote: '“' },
@@ -13,7 +13,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
     { threadId: 'a'.repeat(32), saveFails: false },
     { threadId: 'a'.repeat(32), saveFails: true },
     { threadId: '', saveFails: true },
-  ].flatMap(testCase => ['codex', 'claude'].map(model => ({ ...testCase, model }))))('replyの保存: model=$model, threadId=$threadId, saveFails=$saveFails', async ({ model, threadId, saveFails, openQuote = '"', missingThread = false }) => {
+  ].flatMap(testCase => ['codex', 'claude', 'muse'].map(model => ({ ...testCase, model }))))('replyの保存: model=$model, threadId=$threadId, saveFails=$saveFails', async ({ model, threadId, saveFails, openQuote = '"', missingThread = false }) => {
     const reply = '## 回答\n\n1行目\n2行目\n\n- 項目';
     const question = '以下は Cursr VM の公式ドキュメントですが日本語に訳してから要約してください https://cursor.com/docs/cloud-agent/security';
     const message = '/neko askgk ' + model + '_prompt=' + openQuote + question + (openQuote === '“' ? '”' : '"');
