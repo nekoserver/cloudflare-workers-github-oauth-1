@@ -473,6 +473,7 @@ import { verifyTailscaleWebhookSignature } from './utils/tailscaleWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
+import { museDirectDep } from './utils/museDirectAsk';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -7096,7 +7097,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   }
   // 色丸で選択したCodex/Claude/Museへの通常の質問は、Workers AIではなくaskgkへ送る。
-  if ((body.model === 'codex' || body.model === 'claude' || body.model === 'muse') && message && !/^\/neko\b/i.test(message)) {
+  if ((body.model === 'codex' || body.model === 'claude' || body.model === 'muse') && message && !/^\/(?:neko\b|askmuse(?:\s|$))/i.test(message)) {
     message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
@@ -7403,6 +7404,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
     askTunnelSigner: askgkDep(c.env),
+    askMuseDirect: museDirectDep(c.env, getDemoContainerStub),
     loadMentionEditorRuby: c.env.DB ? async (filename) => {
       const row = await c.env.DB!.prepare(
         'SELECT config_json FROM mention_editor_documents WHERE user_id = ? AND title = ? COLLATE NOCASE LIMIT 1'

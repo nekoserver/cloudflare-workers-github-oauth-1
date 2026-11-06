@@ -66,6 +66,11 @@ export type Bindings = {
    * entrypoint.sh側でtailscaled起動自体をスキップする。
    */
   TAILSCALE_AUTHKEY?: string;
+  /**
+   * `/askmuse`がmuse-vmへ渡すキー。`wrangler secret put MUSE_API_KEY`で設定する。
+   * コンテナのenvVarsには入れず、要求ごとにAuthorizationで渡す(src/utils/museDirectAsk.ts)。
+   */
+  MUSE_API_KEY?: string;
   /** デモコンテナのsshのed25519ホスト秘密鍵(base64)。未設定時は起動のたびに新しい鍵になる。 */
   SSH_HOST_ED25519_KEY_B64?: string;
   /** デモコンテナのauthorized_keysへ足す公開鍵。改行か;で区切る。 */

@@ -6,8 +6,14 @@ export function formatCodexAskgkQuestion(message: string): string {
 
 /** Codex/Claude/Museコマンドの質問本文。中継する入力は引用符ごと保持する。 */
 export function formatAskgkPromptQuestion(message: string): string {
-  const match = message.match(/^\s*\/neko\s+askgk\s+(?:codex|claude|muse)_prompt\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
+  const match = message.match(/^\s*\/(?:neko\s+askgk\s+(?:codex|claude|muse)_prompt|askmuse\s+prompt)\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
   return match ? match[1] : message;
+}
+
+/** `/askmuse prompt="◯"` の◯を返す。形式が違えばnull。 */
+export function parseAskMusePrompt(message: string): string | null {
+  const match = message.match(/^\s*\/askmuse\s+prompt\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
+  return match ? match[1] : null;
 }
 
 /** 完全一致でのみ認める既存のコマンド別名。 */
