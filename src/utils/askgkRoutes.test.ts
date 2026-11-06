@@ -54,6 +54,9 @@ describe('askgk route registry', () => {
     expect(resolveAskgkRoute(settings, 'codex')).toBe('https://standalone.example/api');
     expect(resolveAskgkRoute(settings)).toBe('https://standalone.example/api');
   });
+  it('sends muse to the main container, where muse-vm is reachable, by default', () => {
+    expect(resolveAskgkRoute({ ASKGK_ROUTE_ID: 'independent' }, askgkEngine('muse_prompt="今日は何日？"'))).toBe('https://mygw.nekomaneki.work/lib/api/tunnels');
+  });
   it('does not fall back to another route when the engine route is disabled', () => {
     const config = { ...registry(), engineRoutes: { claude: 'main' } };
     config.routes[1].enabled = false;
