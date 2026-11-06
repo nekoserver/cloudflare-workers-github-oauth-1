@@ -49,7 +49,8 @@ describe('POST /api/aichat: /neko ls サーバー配線', () => {
     const src = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 11400);
+    // ハンドラが伸びても読み切れるよう、次のルート登録(行頭のapp.)までを対象にする。
+    const fn = src.slice(idx, src.indexOf('\napp.', idx + 1));
     expect(fn).toContain('lsViaWasm:');
     expect(fn).toContain("await import('./utils/lsWasmServer')");
   });

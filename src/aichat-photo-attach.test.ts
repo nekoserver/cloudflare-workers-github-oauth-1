@@ -175,7 +175,7 @@ describe('/aichat ページ: 送信処理(chatForm submit)の写真添付対応'
 
   it('ユーザーの発言バブルにappendBubbleでattachedImageを渡している', () => {
     const block = html.slice(submitIdx, submitIdx + 600);
-    expect(block).toContain("appendBubble(msg, 'user', null, null, null, attachedImage);");
+    expect(block).toContain("appendBubble(displayQuestion, 'user', null, null, null, attachedImage);");
   });
 
   it('画像添付時のみpayload.preferMoondreamにaichatPreferMoondream設定値を含める(画像なしでは含めない)', () => {

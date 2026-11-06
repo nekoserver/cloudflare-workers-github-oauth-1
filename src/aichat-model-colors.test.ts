@@ -30,9 +30,14 @@ describe('モデルカラー: ページへの埋め込み', () => {
     expect(html).toContain('#16a34a');
   });
 
-  it('modelColors を渡さない場合は空オブジェクト {} が埋め込まれる', () => {
+  // 2026-10-07(4dde5c6)以降、保存色が無くても全モデルへ色を割り当てて埋め込む(assignModelColors)。
+  it('modelColors を渡さない場合も、全モデルに色を割り当てたオブジェクトが埋め込まれる', () => {
     const html = buildPage(undefined);
-    expect(html).toContain('var MODEL_COLORS = {}');
+    const m = html.match(/var MODEL_COLORS = (\{[^\n]*\});/);
+    expect(m).not.toBeNull();
+    const colors = JSON.parse(m![1]) as Record<string, string>;
+    expect(Object.keys(colors).length).toBeGreaterThan(0);
+    for (const c of Object.values(colors)) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
   });
 });
 

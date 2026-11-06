@@ -145,6 +145,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <a href="/cf-containers/planner">コンテナ構成プランナー</a>
     <nav aria-label="コンテナ管理の各セクション">
       <div class="menu-row"><a href="#section-secrets">トークン設定</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-authorized-keys">SSH公開鍵の追加</a><button type="button" class="menu-toggle" data-section="authorized-keys" aria-expanded="false" aria-label="SSH公開鍵の追加 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-control">コンテナの操作</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>

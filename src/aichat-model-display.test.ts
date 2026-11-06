@@ -58,9 +58,9 @@ describe('aichat.ts モデル名表示', () => {
     expect(html).toContain('var usedModel = data.usedModel || lastModel');
   });
 
-  it('appendBubble の呼び出しにナビバー選択モデル（lastModel）が渡されている', () => {
+  it('appendBubble の呼び出しに実際に回答したモデル（usedModel）が渡されている', () => {
     const html = buildPage(FULL_MODEL);
-    expect(html).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
+    expect(html).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : usedModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);");
   });
 
   it('appendBubble の呼び出しに usedModel は渡されていない（フォールバック名が表示されないよう）', () => {
@@ -122,6 +122,6 @@ describe('フォールバック発生時の表示', () => {
 
   it('appendBubble 呼び出しに isFallback 引数が渡されている', () => {
     const html = buildPage(FULL_MODEL);
-    expect(html).toContain('appendBubble(responseText, \'assistant\', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);');
+    expect(html).toContain('appendBubble(responseText, \'assistant\', isLocalCommand ? null : usedModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults, data.svg, data.nekoCursorResults, data.shareId);');
   });
 });

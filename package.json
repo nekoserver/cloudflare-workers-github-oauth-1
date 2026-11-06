@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit",
     "test:tvupdate": "vitest run src/aichat-slash-tvupdate.test.ts src/tree-view-snapshot-external-endpoint.test.ts",
     "test:stream-auth:browser": "node --experimental-strip-types scripts/check-conversation-stream-auth.ts",
+    "test:node": "node --test scripts/*.test.mjs",
     "test": "vitest run"
   },
   "dependencies": {

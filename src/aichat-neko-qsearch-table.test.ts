@@ -22,7 +22,7 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
   vi.stubGlobal('fetch', vi.fn((url: string) => {
     if (String(url).includes('/api/aichat')) {
-      return Promise.resolve({ json: () => Promise.resolve(apiResponse) });
+      return Promise.resolve({ headers: new Headers({ 'content-type': 'application/json' }), json: () => Promise.resolve(apiResponse) });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   }));

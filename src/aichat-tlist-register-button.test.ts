@@ -39,7 +39,7 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>, message
   const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
     const u = String(url);
     if (u.includes('/api/aichat')) {
-      return Promise.resolve({ json: () => Promise.resolve(apiResponse) });
+      return Promise.resolve({ headers: new Headers({ 'content-type': 'application/json' }), json: () => Promise.resolve(apiResponse) });
     }
     if (u.includes('/api/countdown')) {
       return Promise.resolve({ json: () => Promise.resolve({ id: 1 }) });
@@ -49,6 +49,10 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>, message
   vi.stubGlobal('fetch', fetchMock);
 
   const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+  // ModalRuntimeはページ読み込みで1回だけ作られ、同じidの再登録には最初のcontrollerを返す。
+  // テストは同じwindowでページのscriptを何度も実行するため、前のテストの(切り離された)
+  // モーダルを開いてしまわないよう、実行のたびに作り直す。
+  delete (window as unknown as { ModalRuntime?: unknown }).ModalRuntime;
   // eslint-disable-next-line no-new-func
   new Function(scriptSrc)();
 
