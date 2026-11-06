@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 // T3の挙動の契約。私たちのコード(プロキシ・PWAのクライアント)は、T3の次の挙動に頼っている。
-// どれも、T3 0.1.3 の公式リリース(t3-0.1.3-linux-x64.tar.gz、SHA256SUMSと照合済み)のソースで確かめた(2026-10-30〜31)。
+// どれも、T3 0.1.7 の公式リリース(t3-0.1.7-linux-x64.tar.gz、SHA256SUMSと照合済み)とタグ v0.1.7(322f6544)のソースで確かめた(2026-11-06)。
+// 画面以外は、別のポートと状態ディレクトリで起動した実物でも確かめた。0.1.7 で GET /api/auth/clients は無くなった(このリポジトリは使っていない)。
 // T3の版を上げるときは、テストを先に直す: 新しい版のソースで下の各項目を確かめ直し、CONTRACT_VERIFIED_VERSION を上げてから、
 // Dockerfile の T3_VERSION を上げる。確かめないまま版だけ上げると、このテストが失敗する。
-const CONTRACT_VERIFIED_VERSION = '0.1.3';
+const CONTRACT_VERIFIED_VERSION = '0.1.7';
 const CONTRACT = [
   { behavior: '/api/auth/session は、認証に失敗した要求に、401ではなく 200 の { authenticated: false } を返す', source: 'サーバー getSessionState の catchIf(isServerAuthCredentialError)' },
   { behavior: 'ほかの認証付きAPIは、認証に失敗すると 401 を返す', source: 'サーバー EnvironmentAuthenticatedAuth' },
@@ -14,8 +15,8 @@ const CONTRACT = [
   { behavior: '認証していない状態でも、/api/auth/session の auth.sessionCookieName でクッキー名が分かる', source: 'サーバー getSessionState(auth: descriptor)' },
   { behavior: 'POST /api/auth/pairing-token は、ログイン済み(access:write)のセッションで、1回だけ使えるペアリングの資格情報を発行する', source: 'サーバー handle("pairingCredential")' },
   { behavior: '1回だけ使えるペアリングの資格情報の有効期限は5分', source: 'サーバー DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = minutes(5)' },
-  { behavior: '画面は起動時に、URLの #token= か ?token= を読み、自動でペアリングする(/pair 以外のパス)', source: '画面 runtime の ic と primary の ue/Z' },
-  { behavior: '画面は、トークン交換のあと /api/auth/session を最大2秒、100msごとに読み直し、認証済みにならないと「Timed out waiting for authenticated session after bootstrap.」で失敗する', source: '画面 primary の G() (I=2e3, L=100)' },
+  { behavior: '画面は起動時に、URLの #token= か ?token= を読み、自動でペアリングする(/pair 以外のパス)', source: '画面 environments/primary/auth.ts の takePairingTokenFromUrl、shared/remote.ts の getPairingTokenFromUrl' },
+  { behavior: '画面は、トークン交換のあと /api/auth/session を最大2秒、100msごとに読み直し、認証済みにならないと「Timed out waiting for authenticated session after bootstrap.」で失敗する', source: '画面 waitForAuthenticatedSessionAfterBootstrap (AUTH_SESSION_ESTABLISH_TIMEOUT_MS=2_000, STEP_MS=100)' },
 ];
 
 const dockerfile = readFileSync(new URL('../containers/demo/Dockerfile', import.meta.url), 'utf8');

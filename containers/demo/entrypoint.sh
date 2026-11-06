@@ -59,6 +59,20 @@ if [ ! -f "$TLS_DIR/nekoroot.crt" ]; then
 fi
 
 # --- sshd: ホスト鍵・authorized_keys ---
+# SSH_HOST_ED25519_KEY_B64(秘密鍵のbase64)があれば、作り直しても同じホスト鍵を使う。
+# 無ければ起動のたびに新しい鍵になる。子プロセスへ秘密鍵を渡さないよう、使ったら消す。
+if [ -n "${SSH_HOST_ED25519_KEY_B64:-}" ]; then
+  host_key=/etc/ssh/ssh_host_ed25519_key
+  (umask 077; printf '%s' "$SSH_HOST_ED25519_KEY_B64" | base64 -d > "$host_key") 2>/dev/null
+  if host_pub=$(ssh-keygen -y -P '' -f "$host_key" 2>/dev/null) && [ "${host_pub%% *}" = ssh-ed25519 ]; then
+    printf '%s\n' "$host_pub" > "$host_key.pub"
+    log "ssh host key restored from SSH_HOST_ED25519_KEY_B64"
+  else
+    rm -f "$host_key" "$host_key.pub"
+    log "WARN: SSH_HOST_ED25519_KEY_B64 is not an ed25519 private key; generating a new host key"
+  fi
+fi
+unset SSH_HOST_ED25519_KEY_B64
 ssh-keygen -A >/tmp/sshkeygen.log 2>&1 || log "WARN: ssh-keygen -A failed"
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
@@ -69,6 +83,11 @@ cat > /root/.ssh/authorized_keys <<'EOF'
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM8/iV+DiD+cTQQgadOhHKkTUR+2ldz9ocGxC45sRbD admin
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2kQ2c3dcds19h599IEkj45GWerMrzC0AELnKqaOMZc
 EOF
+# 追加の公開鍵。改行か;で区切る。鍵の行以外は捨てる。
+if [ -n "${SSH_AUTHORIZED_KEYS:-}" ]; then
+  printf '%s\n' "$SSH_AUTHORIZED_KEYS" | tr ';' '\n' | sed 's/^[[:space:]]*//' \
+    | grep -E '^(ssh-(ed25519|rsa)|ecdsa-sha2-|sk-)' >> /root/.ssh/authorized_keys
+fi
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -78,7 +97,10 @@ sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd
 # Create the log privately before the redirect (which otherwise uses umask).
 (umask 077; touch /tmp/sshd.log)
 chmod 600 /tmp/sshd.log
-/usr/sbin/sshd -D -e -p 2222 2> >(
+# The demo image builds OpenSSH into /usr/local; the shared Redmine image keeps APT's sshd.
+SSHD_BIN=/usr/sbin/sshd
+if [ -x /usr/local/sbin/sshd ]; then SSHD_BIN=/usr/local/sbin/sshd; fi
+"$SSHD_BIN" -D -e -p 2222 2> >(
   export TZ=UTC
   while IFS= read -r sshd_line || [ -n "$sshd_line" ]; do
     printf '%(%Y-%m-%dT%H:%M:%SZ)T %s sshd: %s\n' -1 "${HOSTNAME:-localhost}" "$sshd_line"

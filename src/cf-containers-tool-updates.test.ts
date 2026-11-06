@@ -36,6 +36,30 @@ describe('container tools: verified precompiled releases',()=>{
   if(existsSync(file))expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(arg('JJ_SHA256'));
   expect(df).toContain('COPY packages/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz /tmp/jj.tar.gz');
  });
+ it('reuses the retained git package built from the verified source release',()=>{
+  const name='git-'+arg('GIT_VERSION')+'-linux-x64-ubuntu26.04.tar.xz';
+  const file='containers/demo/packages/'+name;
+  expect(existsSync(file)).toBe(true);
+  if(existsSync(file))expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(arg('GIT_PACKAGE_SHA256'));
+  expect(existsSync('containers/demo/packages/git-'+arg('GIT_VERSION')+'.tar.xz')).toBe(true);
+  expect(df).toContain('COPY packages/git-${GIT_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/git.tar.xz');
+  expect(df).toContain('test "$(git --version)" = "git version ${GIT_VERSION}"');
+  expect(df).toMatch(/^ {8}netcat-openbsd(?!.* git ).*perl libcurl4t64 libpcre2-8-0 libexpat1 zlib1g/m);
+  expect(server.VERSION_SOURCES).toContainEqual({name:'git',cmd:'git',args:['--version'],key:'git'});
+  expect(df).toContain('"git":"%s"');
+ });
+ it('overlays the retained OpenSSH build and keeps the APT configuration',()=>{
+  const name='openssh-'+arg('OPENSSH_VERSION')+'-linux-x64-ubuntu26.04.tar.xz';
+  const file='containers/demo/packages/'+name;
+  expect(existsSync(file)).toBe(true);
+  if(existsSync(file))expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(arg('OPENSSH_PACKAGE_SHA256'));
+  expect(existsSync('containers/demo/packages/openssh-'+arg('OPENSSH_VERSION')+'.tar.gz')).toBe(true);
+  expect(df).toContain('COPY packages/openssh-${OPENSSH_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/openssh.tar.xz');
+  expect(df).toContain('apache2 openssl openssh-server');
+  expect(df).toContain("if ssh -G localhost 2>&1 | grep -q 'Unsupported option'; then exit 1; fi");
+  expect(server.VERSION_SOURCES).toContainEqual({name:'openssh',cmd:'ssh',args:['-V'],key:'openssh'});
+  expect(df).toContain('"openssh":"%s"');
+ });
  it('reports installed preprint metadata through health and apt through the APT candidate table',()=>{
   expect(server.VERSION_SOURCES).toContainEqual({name:'preprint',cmd:'preprint',args:['--version'],key:'preprint'});
   expect(server.APT_TOOLS).toContainEqual({name:'apt',pkg:'apt'});
@@ -46,5 +70,5 @@ describe('container tools: verified precompiled releases',()=>{
 it('checks the actual T3 Code version without changing its verified install pin',()=>{
  expect(server.VERSION_SOURCES).toContainEqual({name:'t3',cmd:'t3',args:['--version'],key:'t3'});
  expect(df).toContain('"t3":"%s"');
- expect(arg('T3_VERSION')).toBe('0.1.3');
+ expect(arg('T3_VERSION')).toBe('0.1.7');
 });

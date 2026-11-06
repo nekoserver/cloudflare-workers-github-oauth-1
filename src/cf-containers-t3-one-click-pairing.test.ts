@@ -9,7 +9,7 @@ import { getCfContainersPage } from './views/cfContainers';
 const require = createRequire(import.meta.url);
 const { issueT3Pairing, T3_PAIRING_ARGS } = require('../containers/demo/server.js');
 
-// 契約(T3 0.1.3): `t3 auth pairing create --json --base-url <URL>` は
+// 契約(T3 0.1.7): `t3 auth pairing create --json --base-url <URL>` は
 // {id, credential, scopes, expiresAt, pairUrl} を出力する(formatIssuedPairingCredential)。
 // pairUrl は <base>/pair#token=<credential>。1回限り・既定5分。
 const T3_OUTPUT = JSON.stringify({ id: 'p1', credential: 'ABCDEF123456', label: 'one-click', scopes: ['orchestration:read'], expiresAt: '2026-10-31T10:05:00.000Z', pairUrl: 'https://t3.nekomaneki.work/pair#token=ABCDEF123456' });
@@ -42,7 +42,7 @@ describe('issueT3Pairing', () => {
       const r = await issueT3Pairing(async () => out);
       expect(r.ok).toBe(false);
       expect(r.errorCode).toBe('unexpected_output');
-      expect(r.remedy).toContain('0.1.3');
+      expect(r.remedy).toContain('0.1.7');
     }
   });
 });
@@ -62,7 +62,7 @@ describe('/cf-containers のワンクリックログイン', () => {
   });
 });
 
-// tree-viewのiframe用。クッキーを使わないBearerトークン(T3 0.1.3: `t3 auth session issue --json` は {sessionId, token, expiresAt, ...})。
+// tree-viewのiframe用。クッキーを使わないBearerトークン(T3 0.1.7: `t3 auth session issue --json` は {sessionId, token, expiresAt, ...})。
 const { issueT3Session, T3_SESSION_ARGS } = require('../containers/demo/server.js');
 describe('issueT3Session', () => {
   it('T3のCLIに、tree-view用のBearerセッションの発行をJSONで頼む', async () => {

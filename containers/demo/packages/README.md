@@ -13,3 +13,66 @@ The Dockerfile copies this package from its build context and checks SHA256
 before extraction. It does not download jj or compile Rust. Keep this file and
 SHA256SUMS when cleaning temporary downloads; they are reusable build inputs.
 Run `sha256sum -c SHA256SUMS` in this directory before manual reuse.
+
+## git 2.56.0
+
+`git-2.56.0-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+release. It unpacks to `/usr/local` and replaces the APT `git` package in the
+image, so the Dockerfile neither downloads nor compiles git.
+
+`git-2.56.0.tar.xz` is the unmodified source it was built from.
+
+- Source: https://www.kernel.org/pub/software/scm/git/git-2.56.0.tar.xz
+- Source SHA256: `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3`
+- Checked: 2026-11-06 against kernel.org `sha256sums.asc`, fetched over HTTPS.
+  The PGP signature on that file was not verified.
+- Built: 2026-11-06 on Ubuntu 26.04 x86_64 with Rust 1.93.1 enabled, which is
+  the upstream default since Git 2.55.
+
+Rebuild on Ubuntu 26.04 from the unpacked source:
+
+```sh
+apt-get install -y --no-install-recommends build-essential cargo rustc \
+  libcurl4-openssl-dev libssl-dev zlib1g-dev libexpat1-dev libpcre2-dev gettext
+F="prefix=/usr/local NO_TCLTK=1 USE_LIBPCRE2=1 CFLAGS=-O2 LDFLAGS=-s INSTALL_STRIP=-s"
+make -j"$(nproc)" $F all
+make $F DESTDIR="$PWD/pkg" install
+tar --owner=0 --group=0 --numeric-owner -cJf git-VERSION-linux-x64-ubuntu26.04.tar.xz -C pkg usr
+```
+
+After a rebuild, update `GIT_VERSION` and `GIT_PACKAGE_SHA256` in the Dockerfile
+and `SHA256SUMS` here. The package targets Ubuntu 26.04 x86_64 only.
+
+## OpenSSH 10.6p2
+
+Before updating, read `NOTICE.openssh-update.20261106.md` in the repository root.
+
+`openssh-10.6p2-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+release. It unpacks to `/usr/local` over the APT `openssh-server` package, which
+stays for `/etc/ssh`, the PAM configuration and the `sshd` user.
+
+`openssh-10.6p2.tar.gz` and `.asc` are the unmodified source and its signature.
+
+- Source: https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p2.tar.gz
+- Source SHA256: `9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b`
+- Checked: 2026-11-06 against the release notes' SHA256 and the PGP signature by
+  `7168B983815A5EEF59A4ADFD2A3F414E736060BA` (Damien Miller, `RELEASE_KEY.asc`).
+- Ubuntu's patches are not included, and it has no GSSAPI support.
+
+Rebuild on Ubuntu 26.04 from the unpacked source:
+
+```sh
+apt-get install -y --no-install-recommends build-essential libpam0g-dev libssl-dev zlib1g-dev
+./configure --prefix=/usr/local --sysconfdir=/etc/ssh --libexecdir=/usr/local/libexec/openssh \
+  --with-pam --with-privsep-path=/run/sshd --with-privsep-user=sshd --with-pid-dir=/run \
+  --with-default-path=/usr/local/bin:/usr/bin:/bin:/usr/games \
+  --with-superuser-path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  --with-xauth=/usr/bin/xauth
+make -j"$(nproc)"
+make DESTDIR="$PWD/pkg" install-nosysconf
+rm -rf pkg/etc pkg/run pkg/var
+tar --owner=0 --group=0 --numeric-owner -cJf openssh-VERSION-linux-x64-ubuntu26.04.tar.xz -C pkg usr
+```
+
+After a rebuild, update `OPENSSH_VERSION` and `OPENSSH_PACKAGE_SHA256` in the
+Dockerfile and `SHA256SUMS` here. The package targets Ubuntu 26.04 x86_64 only.

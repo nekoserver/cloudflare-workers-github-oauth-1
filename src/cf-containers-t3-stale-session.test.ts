@@ -90,7 +90,7 @@ describe('コンテナのイメージ', () => {
   });
 });
 
-describe('T3は認証に失敗すると、401ではなく200で authenticated:false を返す(T3 0.1.3のソースで確認)', () => {
+describe('T3は認証に失敗すると、401ではなく200で authenticated:false を返す(T3 0.1.7のソースで確認)', () => {
   const cookie = 't3_session_3773_abc123=old';
   it('200でも、認証されておらず、そのクッキーを送っていたときは削除する', () => {
     const clears = staleSessionClears({ status: 200, unauthenticated: true, cookieHeader: cookie, cookieName: 't3_session_3773_abc123' });

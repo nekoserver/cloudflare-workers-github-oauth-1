@@ -66,6 +66,10 @@ export type Bindings = {
    * entrypoint.sh側でtailscaled起動自体をスキップする。
    */
   TAILSCALE_AUTHKEY?: string;
+  /** デモコンテナのsshのed25519ホスト秘密鍵(base64)。未設定時は起動のたびに新しい鍵になる。 */
+  SSH_HOST_ED25519_KEY_B64?: string;
+  /** デモコンテナのauthorized_keysへ足す公開鍵。改行か;で区切る。 */
+  SSH_AUTHORIZED_KEYS?: string;
   /** Optional server-side inventory API token; never sent to the browser. */
   TAILSCALE_API_TOKEN?: string;
   TAILSCALE_TAILNET?: string;

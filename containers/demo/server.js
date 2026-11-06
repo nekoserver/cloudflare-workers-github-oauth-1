@@ -106,10 +106,11 @@ function judgeVersion(actual, expected, minimum) {
 
 // key: /etc/image-versions.json(Dockerfileで固定した版)の項目名。minimum: 既知の脆弱性を避ける最低版
 // (Node 26.12.1は2026-10-21のセキュリティリリース。CVE-2026-111497等)。
+// optional: 入っていなくても異常ではないもの。無ければNGではなく「未導入」と出す。
 const VERSION_SOURCES = [
   { name: 'node', cmd: process.execPath, args: ['--version'], key: 'node', minimum: '26.12.1' },
   { name: 'apache', cmd: 'apache2ctl', args: ['-v'] },
-  { name: 'openssh', cmd: 'ssh', args: ['-V'] },
+  { name: 'openssh', cmd: 'ssh', args: ['-V'], key: 'openssh' },
   { name: 'openssl', cmd: 'openssl', args: ['version'] },
   { name: 'cloudflared', cmd: 'cloudflared', args: ['--version'], key: 'cloudflared' },
   { name: 'tailscale', cmd: 'tailscale', args: ['version'], key: 'tailscale' },
@@ -117,11 +118,14 @@ const VERSION_SOURCES = [
   { name: 'codex', cmd: 'codex', args: ['--version'], key: 'codex' },
   { name: 'claude', cmd: 'claude', args: ['--version'], key: 'claude' },
   { name: 'gh', cmd: 'gh', args: ['--version'], key: 'gh' },
-  { name: 'git', cmd: 'git', args: ['--version'] },
+  { name: 'git', cmd: 'git', args: ['--version'], key: 'git' },
   { name: 'jj', cmd: 'jj', args: ['--version'], key: 'jj' },
   { name: 't3', cmd: 't3', args: ['--version'], key: 't3' },
   { name: 'preprint', cmd: 'preprint', args: ['--version'], key: 'preprint' },
   { name: 'ruby', cmd: 'ruby', args: ['--version'], key: 'ruby' },
+  { name: 'kernel', cmd: 'uname', args: ['-r'] },
+  { name: 'glibc', cmd: 'getconf', args: ['GNU_LIBC_VERSION'] },
+  { name: 'go', cmd: 'go', args: ['version'], optional: true },
 ];
 
 // aptで入れたネットワーク・CLIツール。実際の版(dpkg-query)と、Ubuntuアーカイブの最新(apt-cache policyのCandidate)を比べる。
@@ -130,6 +134,7 @@ const APT_TOOLS = [
   { name: 'rg', pkg: 'ripgrep' },
   { name: 'ag', pkg: 'silversearcher-ag' },
   { name: 'sshguard', pkg: 'sshguard' },
+  { name: 'curl', pkg: 'curl' },
   { name: 'dig', pkg: 'bind9-dnsutils' },
   { name: 'ping', pkg: 'iputils-ping' },
   { name: 'ip', pkg: 'iproute2' },
@@ -218,7 +223,7 @@ async function collectVersions() {
       const raw = await runVersionCmd(s.cmd, s.args);
       const actual = extractVersion(raw.split('\n')[0]);
       const exp = s.key ? expected[s.key] || null : null;
-      return { name: s.name, actual, expected: exp, minimum: s.minimum || null, level: judgeVersion(actual, exp, s.minimum), raw: raw.split('\n')[0].slice(0, 120) };
+      return { name: s.name, actual, expected: exp, minimum: s.minimum || null, level: s.optional && !actual ? 'none' : judgeVersion(actual, exp, s.minimum), raw: raw.split('\n')[0].slice(0, 120) };
     })
   );
   versionsCache = { items, expectedError, checkedAt: new Date().toISOString() };
@@ -343,9 +348,9 @@ async function statAuthFile() {
 
 // tree-view・PWAで、トークンを手で入れずにT3へ入るためのペアリングを作る。
 // /cf-containers/proxy/* (GitHubログイン済みの管理者だけ)からしか届かない。
-// 契約(T3 0.1.3): `t3 auth pairing create --json --base-url` は {credential, expiresAt, pairUrl} を出す。
+// 契約(T3 0.1.7): `t3 auth pairing create --json --base-url` は {credential, expiresAt, pairUrl} を出す。
 const T3_ORIGIN = 'https://t3.nekomaneki.work';
-const T3_BINARY = '/root/.t3/runtime/versions/0.1.3/t3';
+const T3_BINARY = '/root/.t3/runtime/versions/0.1.7/t3';
 const T3_PAIRING_ARGS = ['auth', 'pairing', 'create', '--json', '--label', 'one-click', '--base-url', T3_ORIGIN];
 function runT3(args) {
   return new Promise((resolve, reject) => {
@@ -364,11 +369,11 @@ async function issueT3Pairing(run = runT3) {
     const data = JSON.parse(out);
     if (typeof data.pairUrl === 'string' && data.pairUrl.startsWith(T3_ORIGIN + '/pair#token=') && typeof data.expiresAt === 'string') return { ok: true, pairUrl: data.pairUrl, expiresAt: data.expiresAt };
   } catch {}
-  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.3と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
+  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.7と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
 }
 
 // tree-viewのiframe用。iOSのSafariはiframeの中でクッキーを保存・送信しないため、Bearerトークンを発行する。
-// 契約(T3 0.1.3): `t3 auth session issue --json` は {sessionId, token, expiresAt, ...} を出す。
+// 契約(T3 0.1.7): `t3 auth session issue --json` は {sessionId, token, expiresAt, ...} を出す。
 const T3_SESSION_ARGS = ['auth', 'session', 'issue', '--json', '--ttl', '24h', '--label', 'tree-view', '--subject', 'tree-view'];
 async function issueT3Session(run = runT3) {
   let out;
@@ -380,7 +385,7 @@ async function issueT3Session(run = runT3) {
     const expires = Date.parse(data.expiresAt) / 1000;
     if (typeof data.token === 'string' && data.token.length >= 8 && Number.isFinite(expires)) return { ok: true, token: data.token, expires };
   } catch {}
-  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.3と違う可能性があります(契約テスト: src/cf-containers-t3-one-click-pairing.test.ts)。' };
+  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.7と違う可能性があります(契約テスト: src/cf-containers-t3-one-click-pairing.test.ts)。' };
 }
 const REAL_T3_DEPS = { probeTcp, httpGet: httpGetProbe, runCmd: runCmdWithCode, statFile: statAuthFile };
 

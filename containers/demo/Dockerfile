@@ -3,6 +3,8 @@ ARG TAILSCALE_VERSION=1.104.5
 ARG GH_VERSION=2.103.3
 ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
+ARG GIT_VERSION=2.56.0
+ARG OPENSSH_VERSION=10.6p2
 
 # Official precompiled Tailscale package; no Go source build.
 FROM ubuntu:26.04 AS tailscale-binaries
@@ -59,7 +61,7 @@ ARG NODE_VERSION=26.13.0
 ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.166.0
-ARG T3_VERSION=0.1.3
+ARG T3_VERSION=0.1.7
 ARG CLAUDE_VERSION=2.1.318
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
@@ -75,7 +77,7 @@ RUN apt-get update && apt-get upgrade -y \
         apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv cron sudo bubblewrap libyaml-0-2 libffi8 libgmp10 \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils git locales sshguard silversearcher-ag ripgrep \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils perl libcurl4t64 libpcre2-8-0 libexpat1 zlib1g locales sshguard silversearcher-ag ripgrep \
     && rm -rf /var/lib/apt/lists/*
 # 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
 # ログインシェル(/etc/profile.d)とsshd経由のセッション(/etc/default/locale)の両方で既定にする。
@@ -114,6 +116,39 @@ RUN echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c - \
     && install -m 755 /tmp/jj/jj /usr/bin/jj \
     && jj --version \
     && rm -rf /tmp/jj /tmp/jj.tar.gz
+# gitはaptの版(2.53)ではなく、kernel.orgの公式ソースからビルドして退避したパッケージを使う。
+# 手順と元のソースはpackages/README.md。イメージのビルドではコンパイルも取得もしない。
+# 実行時の共有ライブラリとperlは上のapt-getで入れている。
+ARG GIT_VERSION
+ARG GIT_PACKAGE_SHA256=28ac5557705ad3e374b5d63b4f90eed6ecd5814e1e9d7b86807eae598aeae4ab
+COPY packages/git-${GIT_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/git.tar.xz
+RUN echo "${GIT_PACKAGE_SHA256}  /tmp/git.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/git.tar.xz -C / \
+    && test "$(git --version)" = "git version ${GIT_VERSION}" \
+    && git --version --build-options | grep -q '^rust: enabled$' \
+    && test -x "$(git --exec-path)/git-remote-https" \
+    && rm -f /tmp/git.tar.xz
+# 更新するときは先にNOTICE.openssh-update.20261106.mdを読む。
+# OpenSSHはaptの版(10.2p1)が上流より古いため、OpenBSDの公式ソースからビルドして退避したパッケージを/usr/localへ入れる。
+# aptのopenssh-serverは残す(/etc/ssh、PAMの設定、sshdユーザー、実行時の共有ライブラリのため)。起動は/usr/local/sbin/sshd。
+# このビルドはGSSAPIなしのため、Ubuntuのssh_configのGSSAPIの行を消す(残すと実行のたびに警告が出る)。
+ARG OPENSSH_VERSION
+ARG OPENSSH_PACKAGE_SHA256=dda764b1cb74264fc16ac780e8bcfa004e844e147660ac42dad138d601954caa
+COPY packages/openssh-${OPENSSH_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/openssh.tar.xz
+RUN echo "${OPENSSH_PACKAGE_SHA256}  /tmp/openssh.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/openssh.tar.xz -C / \
+    && sed -i '/^[[:space:]]*GSSAPIAuthentication/d' /etc/ssh/ssh_config \
+    && sed -i 's#^Subsystem[[:space:]]\+sftp[[:space:]].*#Subsystem\tsftp\t/usr/local/libexec/openssh/sftp-server#' /etc/ssh/sshd_config \
+    && test "$(ssh -V 2>&1 | cut -d, -f1)" = "OpenSSH_${OPENSSH_VERSION}" \
+    && test "$(/usr/local/sbin/sshd -V 2>&1 | head -1 | cut -d, -f1)" = "OpenSSH_${OPENSSH_VERSION}" \
+    && if ssh -G localhost 2>&1 | grep -q 'Unsupported option'; then exit 1; fi \
+    && test -x /usr/local/libexec/openssh/sshd-session \
+    && test -x /usr/local/libexec/openssh/sftp-server \
+    && grep -q '^Subsystem.*/usr/local/libexec/openssh/sftp-server' /etc/ssh/sshd_config \
+    && rm -f /tmp/openssh.tar.xz
+# aptのopenssh-serverはビルド時にホスト鍵を作る。秘密鍵をイメージに残さない(entrypoint.shが起動時に用意する)。
+COPY sshd-hardening.conf /etc/ssh/sshd_config.d/10-hardening.conf
+RUN rm -f /etc/ssh/ssh_host_*
 ARG CLOUDFLARED_SHA256=70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
@@ -218,8 +253,10 @@ ARG TAILSCALE_VERSION
 ARG GH_VERSION
 ARG JJ_VERSION
 ARG RUBY_VERSION
-RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s"}\n' \
-        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" \
+ARG GIT_VERSION
+ARG OPENSSH_VERSION
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s","git":"%s","openssh":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" "$GIT_VERSION" "$OPENSSH_VERSION" \
         > /etc/image-versions.json \
     && cat /etc/image-versions.json
 
