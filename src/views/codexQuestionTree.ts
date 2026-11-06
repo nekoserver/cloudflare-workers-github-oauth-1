@@ -150,7 +150,7 @@ export function getCodexQuestionTreeClientScript(): string {
         const threadName = thread === '単独の質問' ? thread : (firstQuestion.slice(0, 60) + (firstQuestion.length > 60 ? '…' : '') || '質問文なし');
         const group = folder(day, threadName + '（' + questions.length + '件）');
         for (const row of questions) {
-          const modelLabel = row.model === 'claude' ? 'Claude' : 'Codex';
+          const modelLabel = row.model === 'claude' ? 'Claude' : row.model === 'muse' ? 'Muse' : 'Codex';
           const question = folder(group, '[' + modelLabel + '] ' + (row.question.replace(/\s+/g, ' ').slice(0, 100) || '質問文なし'));
           let answerReady = null;
           let content = null;

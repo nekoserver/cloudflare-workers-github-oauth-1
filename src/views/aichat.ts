@@ -16,7 +16,7 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
-import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
+import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -61,19 +61,20 @@ export function getAiChatPage(user: {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => !['codex', 'claude'].includes(m.value)), CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL];
+  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => !['codex', 'claude', 'muse'].includes(m.value)), CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL];
   const modelList = models.some(m => m.value === user.aiChatModel)
     ? models
     : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
   const modelOptionsHtml = modelList
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
-  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]).merged);
+  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]).merged);
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
   const modelListJson = JSON.stringify([
-    ...modelList.filter(m => !['codex', 'claude'].includes(m.value)).map(m => ({ value: m.value, label: m.label })),
+    ...modelList.filter(m => !['codex', 'claude', 'muse'].includes(m.value)).map(m => ({ value: m.value, label: m.label })),
     { ...CODEX_ASKGK_MODEL, commandOnly: true },
     { ...CLAUDE_ASKGK_MODEL, commandOnly: true },
+    { ...MUSE_ASKGK_MODEL, commandOnly: true },
   ]);
   // 色丸ドロップダウンの「⚙」からパラメータ調整モーダルを開けるのは
   // AICHAT_TUNABLE_MODELS(よく使うGemma-4・Qwenのみ、ユーザー要望2026-10-03)に
@@ -7717,7 +7718,7 @@ export function getAiChatPage(user: {
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
-      var isClaudeOrCodex = model === 'claude' || model === 'codex';
+      var isClaudeOrCodex = model === 'claude' || model === 'codex' || model === 'muse';
       var renderText = isClaudeOrCodex ? convertAnswerLinksToFootnotes(text) : text;
       el.innerHTML = parseMd(renderText);
       if (isClaudeOrCodex) highlightCodeBlocksIn(el);

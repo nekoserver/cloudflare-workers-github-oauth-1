@@ -54,7 +54,7 @@ describe('Codex question tree', () => {
     const row: any = await (await request('/api/mcp-sample/codex-questions/' + logId(103))).json();
     expect(row.answer).toBe('回答103'); expect(row.question).toBe('質問103'); sql.close();
   });
-  it.each(['codex', 'claude'])('%s: flags contained registered keywords and counts occurrences across owned live answers', async (model) => {
+  it.each(['codex', 'claude', 'muse'])('%s: flags contained registered keywords and counts occurrences across owned live answers', async (model) => {
     const { sql, request } = fixture();
     sql.exec(`INSERT INTO ai_chat_shares VALUES
       ('keyword-answer','alice','${model}',NULL,'キーワード質問','MCP MCP SQLite','thread-2','2026-10-08'),

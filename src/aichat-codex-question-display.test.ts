@@ -13,8 +13,11 @@ describe('Codex質問のチャット表示と送信', () => {
     expect(colors.claude).not.toBe(colors.codex);
     expect(html).toContain('<option value="claude"');
     expect(html).toContain('<option value="codex"');
+    expect(list).toContainEqual({ value: 'muse', label: 'muse', commandOnly: true });
+    expect(colors.muse).not.toBe(colors.claude);
+    expect(html).toContain('<option value="muse"');
   });
-  it.each(['codex', 'claude'].flatMap(model => ['"', '“'].map(quote => ({ model, quote }))))('$model: 開始引用符$quoteの質問は本文だけを表示・共有し、送信コマンドは保持する', async ({ model, quote }) => {
+  it.each(['codex', 'claude', 'muse'].flatMap(model => ['"', '“'].map(quote => ({ model, quote }))))('$model: 開始引用符$quoteの質問は本文だけを表示・共有し、送信コマンドは保持する', async ({ model, quote }) => {
     const question = '◯  詳しく\n"引用"を説明してください';
     const message = '/neko askgk ' + model + '_prompt=' + quote + question + '"';
     const html = getAiChatPage({ username: 'test', aiChatModel: 'test-model' });

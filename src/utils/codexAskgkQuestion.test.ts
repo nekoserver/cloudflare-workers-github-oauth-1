@@ -16,7 +16,7 @@ describe('formatCodexAskgkQuestion', () => {
 
 
 describe('formatAskgkPromptQuestion', () => {
-  it.each(['codex', 'claude'])('%sの質問本文を保持し、表示用関数も単独で動く', (model) => {
+  it.each(['codex', 'claude', 'muse'])('%sの質問本文を保持し、表示用関数も単独で動く', (model) => {
     const question = '◯  空白\n"引用"を説明';
     const formatInBrowser = new Function('return (' + formatAskgkPromptQuestion.toString() + ')')();
     for (const [open, close] of [['"', '"'], ['“', '”']]) {
