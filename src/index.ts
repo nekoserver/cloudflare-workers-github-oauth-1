@@ -473,7 +473,7 @@ import { verifyTailscaleWebhookSignature } from './utils/tailscaleWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
-import { museDirectDep } from './utils/museDirectAsk';
+import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -6895,6 +6895,13 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   }
   const availableHosts = await conversationStreamHealthy(routes);
   return c.json({ healthy: availableHosts.length > 0, availableHosts });
+});
+
+/** /aichatの入力窓の枠色に使うMuseの死活確認（認証が必要）。停止中のコンテナは起動しない。 */
+app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
+  return c.json({ healthy: stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false });
 });
 
 /**

@@ -16,7 +16,7 @@ describe('Codexのモデル色丸選択', () => {
       document, MODEL_COLORS: colors, MODEL_LIST: list, AICHAT_TUNABLE_MODEL_CONFIG: {},
       getModelDotColor: (modelId: string) => fixedModelDotColors[modelId] || colors[modelId] || '',
       modelColorDot: document.getElementById('modelColorDot'), modelSelect: document.getElementById('modelSelect'),
-      modelDotDropdown: document.getElementById('modelDotDropdown'), closeModelDotDropdown() {},
+      modelDotDropdown: document.getElementById('modelDotDropdown'), closeModelDotDropdown() {}, museHealthWatch: { setModel() {} },
     };
     const state = new Function(...Object.keys(bindings), 'var lastModel = "other";\n' + apply + build + '\nbuildModelDotDropdown(); return { model: function() { return lastModel; }, rebuild: buildModelDotDropdown };')(...Object.values(bindings));
     const find = (label: string) => [...document.querySelectorAll<HTMLElement>('.model-dot-dropdown-item')].find(item => item.querySelector('.model-dot-dropdown-item-label')?.textContent === label)!;

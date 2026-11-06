@@ -76,3 +76,49 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(stub.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /api/aichat/muse-health', () => {
+  const JWT_SECRET = 'askmuse-test-secret';
+  const DB = {
+    prepare(sql: string) {
+      return {
+        first: async () => null,
+        all: async () => ({ results: [] }),
+        bind() { return { first: async () => sql.includes('user_sessions') ? { revoked_at: null } : null, run: async () => ({ success: true }) }; },
+      };
+    },
+  };
+
+  async function get(env: Record<string, unknown> = { MUSE_API_KEY: 'key', DEMO_CONTAINER: {} }, authorized = true) {
+    const token = await createJWT({ sub: 'test-user', name: 'Test' }, JWT_SECRET);
+    return app.request('/api/aichat/muse-health', { headers: authorized ? { Authorization: `Bearer ${token}` } : {} }, { JWT_SECRET, DB, ...env });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stub.getState.mockResolvedValue({ status: 'healthy' });
+    stub.fetch.mockImplementation(async () => new Response('{"status": "ok"}'));
+  });
+
+  it('稼働中ならhealthy: trueを返し、応答を保存させない', async () => {
+    const response = await get();
+    expect(await response.json()).toEqual({ healthy: true });
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('コンテナの停止中は起動せず、healthy: falseを返す', async () => {
+    stub.getState.mockResolvedValue({ status: 'stopped' });
+    expect(await (await get()).json()).toEqual({ healthy: false });
+    expect(stub.fetch).not.toHaveBeenCalled();
+  });
+
+  it('DEMO_CONTAINERが無ければhealthy: falseを返す', async () => {
+    expect(await (await get({ MUSE_API_KEY: 'key' })).json()).toEqual({ healthy: false });
+  });
+
+  it('未認証では確認しない', async () => {
+    const response = await get(undefined, false);
+    expect(response.status).toBeGreaterThanOrEqual(300);
+    expect(stub.getState).not.toHaveBeenCalled();
+  });
+});

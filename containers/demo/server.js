@@ -609,6 +609,9 @@ const MUSE_PROXY_PATH = '/muse/v1/chat/completions';
 const MUSE_NC_ARGS = ['--socket=/var/run/tailscale/tailscaled.sock', 'nc', 'muse-vm', '8080'];
 const MUSE_MAX_BODY = 1024 * 1024;
 const MUSE_TIMEOUT_MS = 300 * 1000;
+// 死活確認の入口。muse-vmの/healthは推論を走らせない。
+const MUSE_HEALTH_PATH = '/muse/health';
+const MUSE_HEALTH_TIMEOUT_MS = 5 * 1000;
 
 // tailscaledはuserspace-networkingなので、`tailscale nc`の標準入出力をソケットとして使う。
 function connectMuse(spawnNc = spawn) {
@@ -696,6 +699,55 @@ function forwardToMuse(req, res, connect = connectMuse) {
   }, () => sendMuseProxyError(res, 413, 'prompt_too_large'));
 }
 
+function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALTH_TIMEOUT_MS) {
+  if (req.method !== 'GET') {
+    req.resume();
+    sendMuseProxyError(res, 405, 'method_not_allowed');
+    return;
+  }
+  if (!/^Bearer \S+$/.test(req.headers.authorization || '')) {
+    sendMuseProxyError(res, 401, 'muse_not_authenticated');
+    return;
+  }
+  const upstream = http.request(
+    {
+      host: 'muse-vm',
+      port: 8080,
+      method: 'GET',
+      path: '/health',
+      // forwardToMuseと同じく、agentは指定しない。
+      createConnection: () => connect(),
+    },
+    (response) => {
+      readLimited(
+        response,
+        (payload) => {
+          res.writeHead(response.statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(payload);
+        },
+        () => {
+          sendMuseProxyError(res, 502, 'muse_response_too_large');
+          upstream.destroy();
+        }
+      );
+    }
+  );
+  // http.requestのtimeoutは使えない。connectMuseのDuplexにはsetTimeoutが無く発火しない。
+  // muse-vmがオフラインだと`tailscale nc`は応答しないまま待ち続けるので、ここで打ち切る。
+  const timer = setTimeout(() => {
+    sendMuseProxyError(res, 504, 'llm_timeout');
+    upstream.destroy();
+  }, timeoutMs);
+  upstream.once('error', () => {
+    if (!res.headersSent) sendMuseProxyError(res, 502, 'muse_connection_failed');
+  });
+  res.once('close', () => {
+    clearTimeout(timer);
+    upstream.destroy();
+  });
+  upstream.end();
+}
+
 const server = http
   .createServer((req, res) => {
     if (req.url === REDMINE_PREFIX || req.url.startsWith(REDMINE_PREFIX + '/') || req.url.startsWith(REDMINE_PREFIX + '?')) {
@@ -708,6 +760,10 @@ const server = http
     }
     if (req.url === MUSE_PROXY_PATH) {
       forwardToMuse(req, res);
+      return;
+    }
+    if (req.url === MUSE_HEALTH_PATH) {
+      checkMuseHealth(req, res);
       return;
     }
     if (req.url === '/debug/tailscale-peers') {
@@ -807,7 +863,7 @@ const server = http
   })
   ;
 
-module.exports = { forwardToMuse, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { forwardToMuse, checkMuseHealth, connectMuse, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {

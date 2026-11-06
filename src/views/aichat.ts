@@ -16,6 +16,7 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
+import { AICHAT_MUSE_HEALTH_SCRIPT } from './aichatMuseHealth';
 import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
@@ -8072,9 +8073,39 @@ export function getAiChatPage(user: {
     var aichatPreferMoondream = ${aichatPreferMoondreamInit};
     var modelColorDot = document.getElementById('modelColorDot');
 
+${AICHAT_MUSE_HEALTH_SCRIPT}
+    var museHealthWatch = createMuseHealthWatch({
+      fetchHealth: function() {
+        return fetch('/api/aichat/muse-health', { credentials: 'same-origin' })
+          .then(function(res) { return res.ok ? res.json() : { healthy: false }; })
+          .then(function(data) { return data.healthy === true; });
+      },
+      getColor: function() { return getModelDotColor('muse'); },
+      setBorderColor: function(color) { chatInput.style.borderColor = color; },
+      isHidden: function() { return document.hidden; },
+      getSettings: function() { return readMuseSignalSettings(document.cookie); }
+    });
+    document.addEventListener('visibilitychange', function() { museHealthWatch.checkIfDue(); });
+
+    function openMuseSignalSettings() {
+      openMuseSignalModal({
+        getSettings: function() { return readMuseSignalSettings(document.cookie); },
+        saveSettings: function(settings) {
+          writeMuseSignalSettings(settings);
+          museHealthWatch.applySettings();
+        },
+        resetSettings: function() {
+          clearMuseSignalSettings();
+          museHealthWatch.applySettings();
+        },
+        getNextZ: getNextZ
+      });
+    }
+
     function applyModelColor(model) {
       var color = getModelDotColor(model) || '';
       modelColorDot.style.background = color || 'var(--border-color)';
+      museHealthWatch.setModel(model);
     }
 
     var modelSelect = document.getElementById('modelSelect');
@@ -8115,6 +8146,21 @@ export function getAiChatPage(user: {
             openAichatTuneModal(m.value, m.label);
           });
           item.appendChild(tuneBtn);
+        }
+        // Museの行の⚙はパラメータ調整ではなく、シグナル送信(死活確認)の設定を開く。
+        if (m.value === 'muse') {
+          var signalBtn = document.createElement('button');
+          signalBtn.type = 'button';
+          signalBtn.className = 'model-dot-dropdown-tune-btn';
+          signalBtn.textContent = '⚙';
+          signalBtn.title = 'muse のシグナル送信を設定';
+          signalBtn.setAttribute('aria-label', 'muse のシグナル送信を設定');
+          signalBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeModelDotDropdown();
+            openMuseSignalSettings();
+          });
+          item.appendChild(signalBtn);
         }
         item.addEventListener('click', function() {
           lastModel = m.value;
