@@ -91,7 +91,7 @@ export const EMBEDDED_TREE_VIEW_SNAPSHOTS: Readonly<Record<string, TreeViewSnaps
   'nekoserver/rust-worker-sqlx-d1': rustWorkerSqlxD1TreeJson as TreeViewSnapshotNode,
 };
 
-export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-10-14T13:57:00Z';
+export const EMBEDDED_TREE_VIEW_SNAPSHOT_UPDATED_AT = '2026-11-06T19:43:31Z';
 
 const TREE_VIEW_SNAPSHOT_MAX_DEPTH = 7;
 
