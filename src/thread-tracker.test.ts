@@ -319,6 +319,7 @@ describe('thread tracker page', () => {
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 300);
     expect(snippet).toContain("claude:'#f97316'");
+    expect(snippet).toContain("muse:'#2563eb'");
     expect(snippet).toContain('function getModelDotColor(');
   });
 

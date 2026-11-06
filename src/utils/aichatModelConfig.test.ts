@@ -5,6 +5,7 @@ import {
   getModelRunParams,
   AICHAT_COLOR_PALETTE,
   assignModelColors,
+  MUSE_ASKGK_MODEL,
   AICHAT_TUNABLE_MODELS,
   isAichatTunableModel,
   resolveAichatRunOverrides,
@@ -28,6 +29,18 @@ describe('AICHAT_COLOR_PALETTE', () => {
 });
 
 describe('assignModelColors', () => {
+  it('museは既存の割り当てがあっても青に固定される', () => {
+    const { merged, newAssignments } = assignModelColors({ muse: '#ec4899' }, [MUSE_ASKGK_MODEL]);
+    expect(merged.muse).toBe('#2563eb');
+    expect(newAssignments).toEqual([{ model_id: 'muse', color: '#2563eb', label: 'muse' }]);
+  });
+
+  it('museの青は他モデルの自動割り当てに使われない', () => {
+    const models = Array.from({ length: 40 }, (_, i) => ({ value: `m${i}`, label: `m${i}` }));
+    const { merged } = assignModelColors({}, [MUSE_ASKGK_MODEL, ...models]);
+    expect(Object.entries(merged).filter(([, color]) => color === '#2563eb').map(([id]) => id)).toEqual(['muse']);
+  });
+
   const MODELS = [
     { value: 'model-a', label: 'Model A' },
     { value: 'model-b', label: 'Model B' },
