@@ -84,7 +84,7 @@ export async function askTunnelSigner(fetcher: AskFetcher, message: string, rout
     // Submit exactly once. Subsequent POSTs only look up the same job ID.
     let upstream = await sendTunnelRequest(fetcher, url, { status: 'healthy', format: 'json', message: resolveAskgkCommand(message), wait_seconds: 0 }, controller.signal);
     while (upstream.ask_status === 'pending' || upstream.ask_status === 'running') {
-      if (typeof upstream.ask_id !== 'string' || !/^(?:codex|claude|nemotron)-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(upstream.ask_id)) {
+      if (typeof upstream.ask_id !== 'string' || !/^(?:codex|claude|nemotron|muse)-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(upstream.ask_id)) {
         throw new Error('tunnelsの処理中応答に有効なask_idがありません');
       }
       if (askId && askId !== upstream.ask_id) throw new Error('tunnelsの状態照会でask_idが変わりました');
