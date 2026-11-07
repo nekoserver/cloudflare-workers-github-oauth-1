@@ -12,6 +12,18 @@ type Script = {
   sendMuseWasmSignal(client: { fetch(url: string): Promise<unknown> }, node: string, url: string | null, timeoutMs?: number): Promise<{ code: string; detail: string | null }>;
 };
 const script = new Function(`${MUSE_STATUS_SCRIPT}\nreturn { initMuseStatusPage, createMuseSignalSchedule, readMuseStatusSettings, museNodesFromNetMap, museWasmHealthURL, sendMuseWasmSignal };`)() as Script;
+// Node 26の実験的なグローバルlocalStorageがjsdomのものを隠し、このテスト環境ではlocalStorageがundefinedになる。
+// ブラウザのStorageと同じ形(length・key・getItem・setItem・removeItem・clear)のメモリ実装を差し込む。
+class MemoryStorage {
+  private items = new Map<string, string>();
+  get length() { return this.items.size; }
+  key(index: number) { return [...this.items.keys()][index] ?? null; }
+  getItem(key: string) { return this.items.has(key) ? this.items.get(key)! : null; }
+  setItem(key: string, value: string) { this.items.set(key, String(value)); }
+  removeItem(key: string) { this.items.delete(key); }
+  clear() { this.items.clear(); }
+}
+if (typeof (globalThis as { localStorage?: unknown }).localStorage === 'undefined') vi.stubGlobal('localStorage', new MemoryStorage());
 const NODES = ['muse', 'muse-vm'];
 const COOKIE = 'muse_status_signal';
 
@@ -256,11 +268,11 @@ describe('/muse-statusのTailscale WASM経由の取得', () => {
 
   beforeEach(() => {
     clearCookie();
-    sessionStorage.clear();
+    localStorage.clear();
     loadBody();
     document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify({ enabled: false, intervalSeconds: 120 }))}; path=/`;
   });
-  afterEach(() => { clearCookie(); sessionStorage.clear(); vi.useRealTimers(); });
+  afterEach(() => { clearCookie(); localStorage.clear(); vi.useRealTimers(); });
 
   it('netmapからmuse・muse-vmだけを名前の先頭ラベルで取り出し、鍵は持ち出さない', () => {
     const nodes = script.museNodesFromNetMap(JSON.stringify(NETMAP));
@@ -364,7 +376,7 @@ describe('/muse-statusのTailscale WASM経由の取得', () => {
     await connectWasm(tailscale);
     await vi.waitFor(() => expect(field('muse-vm', 'online').textContent).toBe('オンライン'));
     (tailscale.state.configs[0].stateStorage as { setState(k: string, v: string): void }).setState('profiles', 'x');
-    expect(sessionStorage.getItem('muse-status.tailscale.profiles')).toBe('x');
+    expect(localStorage.getItem('muse-status.tailscale.profiles')).toBe('x');
 
     tailscale.state.callbacks!.notifyState('NeedsLogin');
     await vi.waitFor(() => expect(field('muse-vm', 'online').textContent).toBe('確認できません'));
@@ -372,7 +384,7 @@ describe('/muse-statusのTailscale WASM経由の取得', () => {
 
     button('muse-wasm-logout').click();
     expect(tailscale.state.logouts).toBe(1);
-    expect(sessionStorage.getItem('muse-status.tailscale.profiles')).toBeNull();
+    expect(localStorage.getItem('muse-status.tailscale.profiles')).toBeNull();
   });
 
   it('TailscaleのHTTPSのログインURLだけをリンクにする', async () => {
@@ -390,8 +402,9 @@ describe('/muse-statusのTailscale WASM経由の取得', () => {
     expect(link.rel).toBe('noopener noreferrer');
   });
 
-  it('このタブで参加済みなら、停止中のときだけ読み込み時に自動で再接続する', async () => {
-    sessionStorage.setItem('muse-status.tailscale.profiles', 'saved');
+  it('参加済みならタブを開き直してもログインし直さず、停止中のときだけ読み込み時に自動で再接続する', async () => {
+    localStorage.setItem('muse-status.tailscale.profiles', 'saved');
+    localStorage.setItem('muse-status.tailscale-saved-at', String(Date.now()));
     const running = fakeTailscale();
     await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: api(), createTailscaleClient: running.create });
     expect(running.create).not.toHaveBeenCalled();
@@ -399,6 +412,69 @@ describe('/muse-statusのTailscale WASM経由の取得', () => {
     const stopped = fakeTailscale();
     await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: stoppedApi(), createTailscaleClient: stopped.create });
     await vi.waitFor(() => expect(stopped.create).toHaveBeenCalledTimes(1));
+  });
+
+  // ユーザー指定(2026-11-07): ログイン状態は一定期間(30日)保ち、ページを読み込むたびにログインし直さない。
+  it('参加状態は保存した日時と一緒にlocalStorageへ残し、30日を過ぎたら消して自動では接続しない', async () => {
+    const tailscale = fakeTailscale();
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: stoppedApi(), createTailscaleClient: tailscale.create });
+    await connectWasm(tailscale);
+    (tailscale.state.configs[0].stateStorage as { setState(k: string, v: string): void }).setState('profiles', 'x');
+    const savedAt = Number(localStorage.getItem('muse-status.tailscale-saved-at'));
+    expect(Date.now() - savedAt).toBeLessThan(60_000);
+    // 書き込みのたびに期限を延ばさない(ログインから30日)
+    localStorage.setItem('muse-status.tailscale-saved-at', String(savedAt - 1000));
+    (tailscale.state.configs[0].stateStorage as { setState(k: string, v: string): void }).setState('profiles', 'y');
+    expect(localStorage.getItem('muse-status.tailscale-saved-at')).toBe(String(savedAt - 1000));
+
+    localStorage.setItem('muse-status.tailscale-saved-at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    loadBody();
+    const expired = fakeTailscale();
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: stoppedApi(), createTailscaleClient: expired.create });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(expired.create).not.toHaveBeenCalled();
+    expect(localStorage.getItem('muse-status.tailscale.profiles')).toBeNull();
+    expect(localStorage.getItem('muse-status.tailscale-saved-at')).toBeNull();
+  });
+
+  // ユーザー指定(2026-11-07): faviconはAIチャットと同じ四角。本体コンテナが稼働中なら緑、WASMで接続中なら黄、それ以外は灰。
+  it('faviconを本体コンテナの稼働中は緑、Tailscale WASMで接続中は黄、どちらでもなければ灰にする', async () => {
+    const page = new DOMParser().parseFromString(getMuseStatusPage(), 'text/html');
+    const link = page.getElementById('muse-favicon')!;
+    expect(link.getAttribute('rel')).toBe('icon');
+    expect(link.getAttribute('href')).toContain('%239ca3af');
+    document.head.innerHTML = link.outerHTML;
+    const icon = () => document.getElementById('muse-favicon')!.getAttribute('href') ?? '';
+
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: api(), createTailscaleClient: fakeTailscale().create });
+    expect(icon()).toContain('%2322c55e');
+    expect(icon()).toContain("rect width='16' height='16' rx='3'");
+
+    loadBody();
+    const tailscale = fakeTailscale();
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: stoppedApi(), createTailscaleClient: tailscale.create });
+    expect(icon()).toContain('%239ca3af');
+    await connectWasm(tailscale);
+    await vi.waitFor(() => expect(icon()).toContain('%23eab308'));
+    tailscale.state.callbacks!.notifyState('NeedsLogin');
+    await vi.waitFor(() => expect(icon()).toContain('%239ca3af'));
+    document.head.innerHTML = '';
+  });
+
+  // ユーザー指定(2026-11-07): 「Tailscale: Running」のRunningは緑の文字で点滅し続ける。
+  it('Tailscale: RunningのRunningだけを緑の文字で点滅させ、ほかの状態は点滅させない', async () => {
+    const tailscale = fakeTailscale();
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson: stoppedApi(), createTailscaleClient: tailscale.create });
+    await connectWasm(tailscale);
+    const state = document.getElementById('muse-wasm-state')!;
+    expect(state.textContent).toBe('Tailscale: Running');
+    expect(state.querySelector('.muse-wasm-running')?.textContent).toBe('Running');
+    tailscale.state.callbacks!.notifyState('NeedsLogin');
+    expect(state.textContent).toBe('Tailscale: NeedsLogin');
+    expect(state.querySelector('.muse-wasm-running')).toBeNull();
+    const css = getMuseStatusPage();
+    expect(css).toMatch(/\.muse-wasm-running \{[^}]*color: var\(--success-color\);[^}]*animation: muse-blink [^;]*infinite;/);
+    expect(css).toContain('@keyframes muse-blink');
   });
 
   it('WASMの読み込みに失敗したら理由を表示し、もう一度押せる', async () => {
