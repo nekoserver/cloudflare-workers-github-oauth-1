@@ -53,6 +53,20 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       document.cookie = AICHAT_MUSE_SIGNAL_COOKIE + '=; path=/; max-age=0; SameSite=Lax';
     }
 
+    function readMuseTunnelsFallback(cookieText) {
+      return String(cookieText || '').split(';').some(function(part) {
+        return part.trim() === 'aichat_muse_tunnels=on';
+      });
+    }
+
+    function writeMuseTunnelsFallback(enabled) {
+      document.cookie = 'aichat_muse_tunnels=' + (enabled === true ? 'on' : 'off') + '; path=/; max-age=' + (60 * 60 * 24 * 365) + '; SameSite=Lax';
+    }
+
+    function clearMuseTunnelsFallback() {
+      document.cookie = 'aichat_muse_tunnels=; path=/; max-age=0; SameSite=Lax';
+    }
+
     function createMuseHealthWatch(options) {
       var selected = null;
       var timer = null;
@@ -136,7 +150,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
       var title = document.createElement('div');
       title.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:14px;';
-      title.textContent = 'muse のシグナル送信';
+      title.textContent = 'Muse の接続・シグナル設定';
       box.appendChild(title);
 
       var enabledField = document.createElement('div');
@@ -152,6 +166,19 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       enabledLabel.appendChild(document.createTextNode('シグナル送信'));
       enabledField.appendChild(enabledLabel);
       box.appendChild(enabledField);
+
+      var tunnelsField = document.createElement('div');
+      tunnelsField.className = 'aichat-tune-field';
+      var tunnelsLabel = document.createElement('label');
+      tunnelsLabel.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;';
+      var tunnelsInput = document.createElement('input');
+      tunnelsInput.type = 'checkbox';
+      tunnelsInput.setAttribute('data-muse-tunnels-fallback', '');
+      tunnelsInput.checked = readMuseTunnelsFallback(document.cookie);
+      tunnelsLabel.appendChild(tunnelsInput);
+      tunnelsLabel.appendChild(document.createTextNode('Tailscale未接続時に tunnels を使う（初期OFF）'));
+      tunnelsField.appendChild(tunnelsLabel);
+      box.appendChild(tunnelsField);
 
       var intervalField = document.createElement('div');
       intervalField.className = 'aichat-tune-field';
@@ -182,6 +209,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       resetBtn.textContent = 'デフォルトに戻す';
       resetBtn.style.cssText = 'flex:1;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;';
       resetBtn.addEventListener('click', function() {
+        clearMuseTunnelsFallback();
         options.resetSettings();
         close();
       });
@@ -199,6 +227,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
           // OFFのときは入力が無効で直せないので、元の間隔を残す。
           seconds = current.intervalSeconds;
         }
+        writeMuseTunnelsFallback(tunnelsInput.checked);
         options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds });
         close();
       });

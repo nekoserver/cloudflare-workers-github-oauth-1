@@ -138,3 +138,19 @@
 - イメージのビルド。`scripts/check-cf-containers.sh`は実行していない。
 - `forwardToMuse`の300秒の`timeout`も同じ理由で発火しない。Worker側の待ち時間で打ち切られるが、未修正。
 - 死活確認の実画面での表示。中継の`checkMuseHealth`は2026-11-06に実際の`tailscale nc`越しで200を確認した。オフライン時の打ち切りは、`setTimeout`の無いストリームを使う単体テストでの確認。
+
+## 2026-11-07: Museの通常入力と任意のtunnelsフォールバック
+
+初期（要求時）のモデルがMuseで、明示プレフィックスのない入力は、本文をコマンドへ変換せず本体コンテナ→Tailscale→muse-vmへ直接送る。Tailscale確認は送信の直前に行い、Runningかつ宛先muse-vm onlineを必要とする。
+
+| Tailscale確認 | tunnelsフォールバック | 処理 |
+|---|---|---|
+| 接続可能 | OFF/ON | 本文のまま直接Museへ送る |
+| 接続不可/確認不可 | OFF（初期状態） | 送信せず接続エラーを表示 |
+| 接続不可/確認不可 | ON | この場合だけ/neko askgk muse_prompt="本文"へ変換し、既存tunnels経路へ1回送る |
+
+Museの⚙の「接続・シグナル設定」に「Tailscale未接続時に tunnels を使う（初期OFF）」を追加。設定はブラウザごとのCookie aichat_muse_tunnels=on/offに保存し、リセットでOFFに戻す。シグナル送信のON/OFFとは独立している。サーバーの/api/aichatはCookieを読むため、通常送信と再質問など同じブラウザの経路に共通して効く。APIのmuseTunnelsFallbackを明示した場合はboolean trueだけをONとし、false/不正値はOFFとしてCookieより優先する。
+
+直接Museへ送信後のHTTP/認証/実行失敗・タイムアウトはtunnelsへの再送条件にしない。接続確認の失敗時だけ経路を決めてから1回送る。フォールバック使用時もmodel=museで質問本文と回答を保存し、fallbackUsed=trueを返す。X-Muse-Tailscaleはフォールバック成功時もunavailableのままにして、Tailscaleで接続したと誤表示しない。
+
+明示/neko askgk muse_promptと/askmuse、Codex/Claude通常入力の経路は維持し、選択中のスイッチを変更しない。tunnelsのONは現LLM workerのMuse対応を保証するものではなく、非対応ならその経路のエラーを返す。

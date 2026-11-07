@@ -247,3 +247,7 @@ tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグ�
 ## 2026-11-07: Museの投稿前Tailscale確認と枠色・警告（未反映）
 
 通常のMuse投稿と`/neko askgk muse_prompt`に、Runningかつmuse-vm onlineを必要とする接続ゲートを追加。確認不可なら中継以降を呼ばない。枠色healthも同じ判定を使用し、投稿時に古い結果を無効化、未接続では色を解除して「Tailscaleの接続状況を確認してください」を一度表示。HTTP失敗とunsupported_engine等の表示を区別。ソースのみで、Dockerビルド・Workerデプロイ未実施。検証と境界は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-CONNECTIVITY.20261107.md)。
+
+## 2026-11-07: Museのtunnelsフォールバックは初期OFF（本番未反映）
+
+通常Muse入力の/askmuse変換を除去。Tailscale接続不可/確認不可かつtunnels明示ONの場合だけaskgkへ変換し、それ以外は直接Museか送信停止。Museの設定モーダルに初期OFFの切替を追加、Cookie保存とAPI明示値の優先を統一。直接送信後の実行失敗では中継へ再送しない。関連6ファイル273テスト成功、生成scriptのnode --check成功。Worker未配備。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-TUNNELS-FALLBACK.20261107.md)。

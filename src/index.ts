@@ -1,4 +1,4 @@
-import { checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
+import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
@@ -542,7 +542,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretMusePrompt, interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { extractTableSchemasFromSql, evaluateTable, JUDGMENT_LABELS as QUERY_PATTERN_JUDGMENT_LABELS, type TableSchema as QueryPatternTableSchema } from './utils/queryPatternAnalysis';
@@ -7059,6 +7059,7 @@ type AichatRequestBody = {
   // resolveAichatRunOverridesがAICHAT_TUNABLE_MODELS(Gemma-4・Qwenのみ)に
   // 限って適用し、それ以外のモデルでは無視する。
   maxTokens?: number; temperature?: number;
+  museTunnelsFallback?: boolean;
 };
 
 async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
@@ -7107,8 +7108,27 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 色丸で選択したCodex/Claude/Museへの通常の質問は、Workers AIではなくaskgkへ送る。
-  if ((body.model === 'codex' || body.model === 'claude' || body.model === 'muse') && message && !/^\/(?:neko\b|askmuse(?:\s|$))/i.test(message)) {
+  // 明示プレフィックスを優先し、Muse選択の通常入力はtailnetへの直接経路を使う。
+  const selectedModelInput = !!message && !/^\/(?:neko\b|askmuse(?:\s|$))/i.test(message);
+  const selectedMuseInput = body.model === 'muse' && selectedModelInput;
+  const tunnelsEnabled = body.museTunnelsFallback === undefined
+    ? /(?:^|;\s*)aichat_muse_tunnels=on(?:;|$)/.test(c.req.header('Cookie') ?? '')
+    : body.museTunnelsFallback === true;
+  let museTunnelsFallback = false;
+  let museConnectionError: string | undefined;
+  if (selectedMuseInput) {
+    try {
+      await requireMuseTailscale(() => getDemoContainerStub(c.env), 4_000,
+        healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'));
+    } catch (error) {
+      if (tunnelsEnabled) {
+        museTunnelsFallback = true;
+        message = '/neko askgk muse_prompt="' + message + '"';
+      } else {
+        museConnectionError = error instanceof Error ? error.message : 'Tailscaleの接続状態を確認できません。';
+      }
+    }
+  } else if ((body.model === 'codex' || body.model === 'claude') && selectedModelInput) {
     message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
@@ -7141,7 +7161,12 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
-  const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
+  const interpretInput: typeof interpretAichatSlashCommand = selectedMuseInput && !museTunnelsFallback
+    ? async (prompt, _now, deps) => museConnectionError
+      ? { handled: true, response: '❌ Muse投稿を停止しました: ' + museConnectionError }
+      : interpretMusePrompt(prompt, deps)
+    : interpretAichatSlashCommand;
+  const slashCommand = await interpretInput(message, new Date(), {
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
       if (!c.env.DB) return null;
@@ -7414,7 +7439,10 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
-    askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
+    // 接続不可を確認済みで、利用者が許可したフォールバックだけは直接署名中継へ送る。
+    askTunnelSigner: museTunnelsFallback && c.env.RUST_WORKER
+      ? message => askTunnelSigner(c.env.RUST_WORKER!, message, c.env)
+      : askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
     askMuseDirect: museDirectDep(c.env, getDemoContainerStub),
     loadMentionEditorRuby: c.env.DB ? async (filename) => {
       const row = await c.env.DB!.prepare(
@@ -7532,6 +7560,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         return jsonUtf8({
           response: answer,
           usedModel: askgkModel,
+          ...(museTunnelsFallback ? { fallbackUsed: true } : {}),
           modelColor,
           modelColorError,
           userHash,
@@ -7549,7 +7578,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         // 握りつぶさずログに残す。CLAUDE.mdルール8)。
         const saveError = saveErr instanceof Error ? saveErr.message : String(saveErr);
         if (requestedThreadId) return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saveError }, 500);
-        return jsonUtf8({ response: answer, usedModel: askgkModel, systemPromptMode, saveError });
+        return jsonUtf8({ response: answer, usedModel: askgkModel, systemPromptMode, saveError, ...(museTunnelsFallback ? { fallbackUsed: true } : {}) });
       }
     }
 
@@ -7565,6 +7594,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({
       ...saved,
       response: slashCommand.response,
+      ...(museTunnelsFallback ? { fallbackUsed: true } : {}),
       responseAlign: slashCommand.responseAlign,
       usedModel: askgkModel ?? (slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko'),
       systemPromptMode,

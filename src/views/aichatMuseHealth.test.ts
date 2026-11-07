@@ -237,6 +237,21 @@ describe('シグナル送信のモーダル', () => {
     expect(interval.disabled).toBe(false);
   });
 
+  it('tunnelsフォールバックは既定OFFで、保存・再表示・初期化できる', () => {
+    document.cookie = 'aichat_muse_tunnels=; path=/; max-age=0';
+    let view = open();
+    const fallback = view.overlay.querySelector<HTMLInputElement>('[data-muse-tunnels-fallback]');
+    expect(fallback).not.toBeNull();
+    expect(fallback!.checked).toBe(false);
+    fallback!.click();
+    view.button('保存').click();
+    expect(document.cookie).toContain('aichat_muse_tunnels=on');
+    view = open();
+    expect(view.overlay.querySelector<HTMLInputElement>('[data-muse-tunnels-fallback]')!.checked).toBe(true);
+    view.button('デフォルトに戻す').click();
+    expect(document.cookie).not.toContain('aichat_muse_tunnels=on');
+  });
+
   it('間隔の入力はチェックボックスに連動する', () => {
     const { checkbox, interval } = open();
     checkbox.click();
