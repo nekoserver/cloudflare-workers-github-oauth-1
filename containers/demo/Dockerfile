@@ -5,6 +5,7 @@ ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
 ARG GIT_VERSION=2.56.0
 ARG OPENSSH_VERSION=10.6p2
+ARG APACHE_VERSION=2.4.70
 
 # Official precompiled Tailscale package; no Go source build.
 FROM ubuntu:26.04 AS tailscale-binaries
@@ -77,7 +78,7 @@ RUN apt-get update && apt-get upgrade -y \
         apache2 openssl openssh-server nftables curl util-linux wtmpdb libpam-wtmpdb \
         python3 python3-venv cron sudo bubblewrap libyaml-0-2 libffi8 libgmp10 \
         iproute2 iputils-ping net-tools bind9-dnsutils traceroute \
-        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils perl libcurl4t64 libpcre2-8-0 libexpat1 zlib1g locales sshguard silversearcher-ag ripgrep \
+        netcat-openbsd tcpdump mtr-tiny whois procps xz-utils perl libcurl4t64 libpcre2-8-0 libexpat1 zlib1g locales sshguard silversearcher-ag ripgrep jq \
     && rm -rf /var/lib/apt/lists/*
 # 日本語: SSHのシェル・tmuxで日本語を入力・表示できるようにja_JP.UTF-8を生成し、
 # ログインシェル(/etc/profile.d)とsshd経由のセッション(/etc/default/locale)の両方で既定にする。
@@ -146,6 +147,24 @@ RUN echo "${OPENSSH_PACKAGE_SHA256}  /tmp/openssh.tar.xz" | sha256sum -c - \
     && test -x /usr/local/libexec/openssh/sftp-server \
     && grep -q '^Subsystem.*/usr/local/libexec/openssh/sftp-server' /etc/ssh/sshd_config \
     && rm -f /tmp/openssh.tar.xz
+# Apache httpdはaptの版(2.4.66)が上流より古いため、Apacheの公式ソースからビルドして退避したパッケージを使う。
+# 手順と元のソースはpackages/README.md。コンテナのCPUではソースビルドが重いため、イメージのビルドではコンパイルも取得もしない。
+# aptのapache2は残す(/etc/apache2の設定、a2enmod・apache2ctl・envvars、実行時の共有ライブラリのため)。
+# 置き換えるのは/usr/sbin/apache2と/usr/lib/apache2/modules/*.soだけで、apt upgradeで戻らないようholdする。
+ARG APACHE_VERSION
+ARG APACHE_PACKAGE_SHA256=41ca9694e095a1318f67b3a7784c0163ec2d338e14d984ac51c040df1a3ab706
+COPY packages/apache-${APACHE_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/apache.tar.xz
+RUN set -eu; \
+    echo "${APACHE_PACKAGE_SHA256}  /tmp/apache.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/apache.tar.xz -C /; \
+    apt-mark hold apache2 apache2-bin apache2-data apache2-utils; \
+    test "$(apache2 -v | sed -n 's#^Server version: Apache/\([0-9.]*\) .*#\1#p')" = "${APACHE_VERSION}"; \
+    apache2 -l | grep -q 'mod_unixd.c'; \
+    for m in ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip mpm_event; do test -f "/usr/lib/apache2/modules/mod_$m.so"; done; \
+    if ldd /usr/sbin/apache2 /usr/lib/apache2/modules/*.so | grep -q 'not found'; then exit 1; fi; \
+    mkdir -p /run/apache2 /run/lock/apache2 /var/log/apache2; \
+    env -i PATH=/usr/sbin:/usr/bin:/bin sh -c '. /etc/apache2/envvars; exec apache2 -t'; \
+    rm -f /tmp/apache.tar.xz
 # aptのopenssh-serverはビルド時にホスト鍵を作る。秘密鍵をイメージに残さない(entrypoint.shが起動時に用意する)。
 COPY sshd-hardening.conf /etc/ssh/sshd_config.d/10-hardening.conf
 RUN rm -f /etc/ssh/ssh_host_*
@@ -255,8 +274,9 @@ ARG JJ_VERSION
 ARG RUBY_VERSION
 ARG GIT_VERSION
 ARG OPENSSH_VERSION
-RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s","git":"%s","openssh":"%s"}\n' \
-        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" "$GIT_VERSION" "$OPENSSH_VERSION" \
+ARG APACHE_VERSION
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s","git":"%s","openssh":"%s","apache":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" "$GIT_VERSION" "$OPENSSH_VERSION" "$APACHE_VERSION" \
         > /etc/image-versions.json \
     && cat /etc/image-versions.json
 
