@@ -1,0 +1,211 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/cf-containers-muse-proxy.test.ts (29 tests | 3 failed) 819ms
+     × ノードとパスは固定の組み合わせだけを受け付ける 22ms
+     × 接続先にmuseを渡されてもncはブリッジmuse-vmに固定する 4ms
+     × muse宛の旧URLでは上流へ接続しない 3ms
+ ❯ src/views/museStatus.test.ts (16 tests | 3 failed) 1604ms
+     × Cookieが無ければ既定値を画面へ反映し、読み込み時にシグナルを送る 101ms
+     × 外向き専用museは表示を保ち、初期・手動・定期処理でHTTP検査しない 183ms
+     × ボタンで指定のノードへだけシグナルを送る 205ms
+ ❯ src/utils/museNodeStatus.test.ts (33 tests | 2 failed) 184ms
+     × シグナルは対象外とし、コンテナの状態取得も接続もしない 12ms
+     × Nix一覧も対象外とし、muse-vmの結果をmuseの結果として返さない 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/cf-containers-muse-proxy.test.ts > /admin/muse/<ノード>/<health|nix> > ノードとパスは固定の組み合わせだけを受け付ける
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/cf-containers-muse-proxy.test.ts:217:41
+    215|     }
+    216|     for (const url of ['/admin/muse/muse/health', '/admin/muse/muse/ni…
+    217|       expect(MUSE_NODE_ROUTE.test(url)).toBe(false);
+       |                                         ^
+    218|     }
+    219|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  src/cf-containers-muse-proxy.test.ts > /admin/muse/<ノード>/<health|nix> > 接続先にmuseを渡されてもncはブリッジmuse-vmに固定する
+AssertionError: expected [ …(4) ] to deeply equal [ …(4) ]
+
+- Expected
++ Received
+
+  [
+    "--socket=/var/run/tailscale/tailscaled.sock",
+    "nc",
+-   "muse-vm",
++   "muse",
+    "8080",
+  ]
+
+ ❯ src/cf-containers-muse-proxy.test.ts:225:18
+    223|     const nc = Object.assign(new EventEmitter(), { stdin: new PassThro…
+    224|     connectMuse((_: string, given: string[]) => { args = given; return…
+    225|     expect(args).toEqual(['--socket=/var/run/tailscale/tailscaled.sock…
+       |                  ^
+    226|   });
+    227|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  src/cf-containers-muse-proxy.test.ts > /admin/muse/<ノード>/<health|nix> > muse宛の旧URLでは上流へ接続しない
+AssertionError: expected 502 to be 404 // Object.is equality
+
+- Expected
++ Received
+
+- 404
++ 502
+
+ ❯ src/cf-containers-muse-proxy.test.ts:248:115
+    246|     const port = await listen((req, res) => relayMuseNode(req, res, ()…
+    247|     for (const path of ['/admin/muse/muse/health', '/admin/muse/muse/n…
+    248|       expect((await fetch(`http://127.0.0.1:${port}${path}`, { headers…
+       |                                                                                                                   ^
+    249|     }
+    250|     expect(connected).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  src/utils/museNodeStatus.test.ts > 外向き専用museへの着信抑止 > シグナルは対象外とし、コンテナの状態取得も接続もしない
+AssertionError: expected { node: 'muse', …(4) } to match object { node: 'muse', …(3) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "not_applicable",
++   "code": "connection_failed",
+    "detail": null,
+    "latencyMs": null,
+    "node": "muse",
+  }
+
+ ❯ src/utils/museNodeStatus.test.ts:157:53
+    155|   it('シグナルは対象外とし、コンテナの状態取得も接続もしない', async () => {
+    156|     const stub = container(() => { throw new Error('must not connect')…
+    157|     expect(await sendMuseSignal(stub, 'k', 'muse')).toMatchObject({ no…
+       |                                                     ^
+    158|     expect(stub.getState).not.toHaveBeenCalled();
+    159|     expect(stub.fetch).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  src/utils/museNodeStatus.test.ts > 外向き専用museへの着信抑止 > Nix一覧も対象外とし、muse-vmの結果をmuseの結果として返さない
+AssertionError: expected { node: 'muse', state: 'ok', …(4) } to match object { node: 'muse', …(2) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "node": "muse",
+    "packages": [],
+-   "state": "not_applicable",
++   "state": "ok",
+  }
+
+ ❯ src/utils/museNodeStatus.test.ts:164:59
+    162|   it('Nix一覧も対象外とし、muse-vmの結果をmuseの結果として返さない', async () => {
+    163|     const stub = container(() => json({ packages: [] }));
+    164|     expect(await fetchMuseNixPackages(stub, 'k', 'muse')).toMatchObjec…
+       |                                                           ^
+    165|     expect(stub.getState).not.toHaveBeenCalled();
+    166|     expect(stub.fetch).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  src/views/museStatus.test.ts > /muse-statusのページ > Cookieが無ければ既定値を画面へ反映し、読み込み時にシグナルを送る
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/views/museStatus.test.ts:65:36
+     63|     expect(input('muse-signal-enabled').checked).toBe(true);
+     64|     expect(input('muse-signal-interval').value).toBe(String(MUSE_STATU…
+     65|     expect(signalCalls(fetchJson)).toBe(1);
+       |                                    ^
+     66|     expect(field('muse-vm', 'signal').textContent).toBe('稼働中');
+     67|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  src/views/museStatus.test.ts > /muse-statusのページ > 外向き専用museは表示を保ち、初期・手動・定期処理でHTTP検査しない
+AssertionError: expected '\n      muse\n      \n        tailnet…' to contain '外向き専用'
+
+- Expected
++ Received
+
+- 外向き専用
++
++       muse
++       
++         tailnetオンライン
++         経路中継 nyc
++         OS—
++         Tailscale IP100.0.0.1
++         最終接続接続中
++         最終ハンドシェイク—
++       
++       シグナル
++       稼働中
++         2026/11/6 9:00:00 / 12ms
++         シグナルを送信
++       
++       Nixのインストールパッケージ
++       このノードは /nix/packages を提供していません
++         再取得
++       
++       パッケージバージョン
++     
+
+ ❯ src/views/museStatus.test.ts:75:38
+     73|     await script.initMuseStatusPage({ document, nodes: NODES, fetchJso…
+     74|     expect(field('muse', 'online').textContent).toBe('オンライン');
+     75|     expect(card('muse').textContent).toContain('外向き専用');
+       |                                      ^
+     76|     expect(field('muse', 'signal').textContent).toContain('対象外');
+     77|     expect(field('muse', 'nixSummary').textContent).toContain('外向き専用');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  src/views/museStatus.test.ts > /muse-statusのページ > ボタンで指定のノードへだけシグナルを送る
+AssertionError: expected '未送信' to contain '対象外'
+
+Expected: "対象外"
+Received: "未送信"
+
+ ❯ src/views/museStatus.test.ts:132:49
+    130|     const sent = fetchJson.mock.calls.filter(([url]) => url === '/api/…
+    131|     expect(sent.map(([, init]) => JSON.parse(init?.body ?? '{}').node)…
+    132|     expect(field('muse', 'signal').textContent).toContain('対象外');
+       |                                                 ^
+    133|   });
+    134|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  8 failed | 70 passed (78)
+   Start at  03:10:05
+   Duration  5.88s (transform 449ms, setup 117ms, import 483ms, tests 2.61s, environment 1.54s)
+

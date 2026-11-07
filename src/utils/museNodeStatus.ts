@@ -10,6 +10,8 @@ import type { MuseContainer } from './museDirectAsk';
  */
 export const MUSE_NODE_NAMES = ['muse', 'muse-vm'] as const;
 export type MuseNodeName = (typeof MUSE_NODE_NAMES)[number];
+// museは組み込み側の外向き専用ノード。HTTPブリッジの着信先はmuse-vmだけ。
+export const MUSE_BRIDGE_NODE: MuseNodeName = 'muse-vm';
 
 const PEERS_PATH = '/debug/tailscale-peers';
 const PEERS_TIMEOUT_MS = 8_000;
@@ -43,7 +45,7 @@ export type MuseNodesResult = {
   error: null | 'container_not_running' | 'tailscale_unavailable' | 'timeout';
 };
 
-export type MuseSignalCode = 'ok' | 'unhealthy' | 'container_not_running' | 'not_authenticated' | 'connection_failed' | 'timeout';
+export type MuseSignalCode = 'ok' | 'unhealthy' | 'not_applicable' | 'container_not_running' | 'not_authenticated' | 'connection_failed' | 'timeout';
 // detailは接続できなかった理由(本体コンテナのtailscale ncのエラー出力)。502のときだけ入る。ページではtextContentで表示する。
 export type MuseSignalResult = { node: MuseNodeName; code: MuseSignalCode; latencyMs: number | null; checkedAt: string; detail: string | null };
 const MAX_SIGNAL_DETAIL = 300;
@@ -60,6 +62,7 @@ function readRelayDetail(body: string): string | null {
 
 export type MuseNixState =
   | 'ok'
+  | 'not_applicable'
   | 'not_provided'
   | 'container_not_running'
   | 'not_authenticated'
@@ -147,9 +150,10 @@ export async function fetchMuseNodes(container: MuseContainer | null): Promise<M
   }
 }
 
-/** ノードの/healthへ死活確認のシグナルを1回送る。推論は走らない。 */
+/** ブリッジmuse-vmの/healthへ1回送る。外向き専用museには接続しない。推論は走らない。 */
 export async function sendMuseSignal(container: MuseContainer | null, apiKey: string | undefined, node: MuseNodeName): Promise<MuseSignalResult> {
   const finish = (code: MuseSignalCode, latencyMs: number | null = null, detail: string | null = null): MuseSignalResult => ({ node, code, latencyMs, checkedAt: new Date().toISOString(), detail });
+  if (node !== MUSE_BRIDGE_NODE) return finish('not_applicable');
   if (!container) return finish('container_not_running');
   if (!apiKey) return finish('not_authenticated');
   const startedAt = Date.now();
@@ -198,6 +202,7 @@ export function parseMuseNixPackages(payload: string): Omit<MuseNixResult, 'node
 
 export async function fetchMuseNixPackages(container: MuseContainer | null, apiKey: string | undefined, node: MuseNodeName): Promise<MuseNixResult> {
   const fail = (state: MuseNixState): MuseNixResult => ({ node, state, packages: [], total: 0, truncated: false, generatedAt: null });
+  if (node !== MUSE_BRIDGE_NODE) return fail('not_applicable');
   if (!container) return fail('container_not_running');
   if (!apiKey) return fail('not_authenticated');
   const result = await readContainer(container, `/admin/muse/${node}/nix`, apiKey, NIX_TIMEOUT_MS);

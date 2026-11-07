@@ -613,16 +613,12 @@ const MUSE_TIMEOUT_MS = 300 * 1000;
 // 死活確認の入口。muse-vmの/healthは推論を走らせない。
 const MUSE_HEALTH_PATH = '/muse/health';
 const MUSE_HEALTH_TIMEOUT_MS = 5 * 1000;
-// /muse-status用。ノードごとのシグナル送信とNixのパッケージ一覧の入口。送り先のノードとパスは
+// /muse-status用。着信可能なmuse-vmのシグナルとNixの一覧だけを扱う。送り先とパスは
 // ここに固定し、呼び出し側からは選ばせない。/adminはApache(トンネル側)が拒否し、Workerの
 // 汎用プロキシも転送しないので、ここへはWorkerのDurable Object経由でしか届かない。
-const MUSE_NODE_ROUTE = /^\/admin\/muse\/(muse|muse-vm)\/(health|nix)$/;
+const MUSE_NODE_ROUTE = /^\/admin\/muse\/(muse-vm)\/(health|nix)$/;
 const MUSE_NIX_PATH = '/nix/packages';
 const MUSE_NIX_TIMEOUT_MS = 15 * 1000;
-
-function museNcArgs(node) {
-  return [...MUSE_NC_ARGS.slice(0, 2), node, MUSE_NC_ARGS[3]];
-}
 
 // tailscaledはuserspace-networkingなので、`tailscale nc`の標準入出力をソケットとして使う。
 // ncのエラー出力は、つながらなかった理由として末尾だけ返す(文言は加工しない。tailscale ncの文言は契約にしない)。
@@ -630,8 +626,9 @@ const MUSE_NC_STDERR_MAX = 300;
 // つながらなかったとき、ncの終了(=エラー出力の書き終わり)をこれだけ待ってから応答する。
 const MUSE_NC_EXIT_WAIT_MS = 500;
 
-function connectMuse(spawnNc = spawn, node = 'muse-vm') {
-  const nc = spawnNc('tailscale', museNcArgs(node), { stdio: ['pipe', 'pipe', 'pipe'] });
+function connectMuse(spawnNc = spawn) {
+  // museは外向き専用。旧呼び出しが第2引数を渡しても接続先は変えない。
+  const nc = spawnNc('tailscale', MUSE_NC_ARGS, { stdio: ['pipe', 'pipe', 'pipe'] });
   const socket = Duplex.from({ readable: nc.stdout, writable: nc.stdin });
   let stderr = '';
   if (nc.stderr) {
@@ -791,9 +788,15 @@ function checkMuseHealth(req, res, connect = connectMuse, timeoutMs = MUSE_HEALT
   relayMuseGet(req, res, { node: 'muse-vm', path: '/health', connect, timeoutMs, passAuthorization: false });
 }
 
-// /admin/muse/<ノード>/<health|nix>。URLはMUSE_NODE_ROUTEに一致したものだけが届く。
-function relayMuseNode(req, res, connect = (node) => connectMuse(spawn, node), nixTimeoutMs = MUSE_NIX_TIMEOUT_MS) {
-  const [, node, target] = req.url.match(MUSE_NODE_ROUTE);
+// /admin/muse/<ノード>/<health|nix>。外向き専用muse宛や未知のパスは接続前に拒否する。
+function relayMuseNode(req, res, connect = () => connectMuse(), nixTimeoutMs = MUSE_NIX_TIMEOUT_MS) {
+  const match = req.url.match(MUSE_NODE_ROUTE);
+  if (!match) {
+    req.resume();
+    sendMuseProxyError(res, 404, 'not_found');
+    return;
+  }
+  const [, node, target] = match;
   relayMuseGet(req, res, {
     node,
     path: target === 'nix' ? MUSE_NIX_PATH : '/health',
@@ -821,7 +824,7 @@ const server = http
       checkMuseHealth(req, res);
       return;
     }
-    if (MUSE_NODE_ROUTE.test(req.url)) {
+    if (req.url.startsWith('/admin/muse/')) {
       relayMuseNode(req, res);
       return;
     }

@@ -1,0 +1,15 @@
+{
+  "collected_at": "2026-11-07T03:13:24.609814+00:00",
+  "nft_exit": 0,
+  "mode": "counters-only",
+  "files": {
+    "firewall.log": {
+      "bytes": 34596,
+      "sha256": "066d020989f973995d4ced0f7b6687117f16ca1f013927803815f0f01ce50409"
+    },
+    "nft-ruleset.txt": {
+      "bytes": 1227,
+      "sha256": "9086c6677244afabda4017a2ce414d81dbd98161a941f04c901e98ec7c45b871"
+    }
+  }
+}

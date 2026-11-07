@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { getMuseStatusPage, MUSE_STATUS_SCRIPT, MUSE_STATUS_SIGNAL_DEFAULT_SECONDS } from './museStatus';
 
 type Script = {
@@ -62,8 +63,30 @@ describe('/muse-statusのページ', () => {
     await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
     expect(input('muse-signal-enabled').checked).toBe(true);
     expect(input('muse-signal-interval').value).toBe(String(MUSE_STATUS_SIGNAL_DEFAULT_SECONDS));
-    expect(signalCalls(fetchJson)).toBe(2);
-    expect(field('muse', 'signal').textContent).toBe('稼働中');
+    expect(signalCalls(fetchJson)).toBe(1);
+    expect(field('muse-vm', 'signal').textContent).toBe('稼働中');
+  });
+
+  it('外向き専用museは表示を保ち、初期・手動・定期処理でHTTP検査しない', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const fetchJson = api();
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
+    expect(field('muse', 'online').textContent).toBe('オンライン');
+    expect(card('muse').textContent).toContain('外向き専用');
+    expect(field('muse', 'signal').textContent).toContain('対象外');
+    expect(field('muse', 'nixSummary').textContent).toContain('外向き専用');
+    const signal = card('muse').querySelector('[data-action="signal"]') as HTMLButtonElement;
+    const nix = card('muse').querySelector('[data-action="nixReload"]') as HTMLButtonElement;
+    expect(signal.disabled).toBe(true);
+    expect(nix.disabled).toBe(true);
+    signal.click(); nix.click();
+    await vi.advanceTimersByTimeAsync(MUSE_STATUS_SIGNAL_DEFAULT_SECONDS * 1000);
+    const sent = fetchJson.mock.calls.filter(([url]) => url === '/api/muse-status/signal');
+    expect(sent).toHaveLength(2);
+    expect(sent.every(([, init]) => JSON.parse(init?.body ?? '{}').node === 'muse-vm')).toBe(true);
+    expect(fetchJson.mock.calls.filter(([url]) => url === '/api/muse-status/nix?node=muse')).toHaveLength(0);
+    vi.restoreAllMocks();
   });
 
   it('Cookieの値をページ読み込み時に画面へ反映する', async () => {
@@ -107,17 +130,17 @@ describe('/muse-statusのページ', () => {
     await vi.waitFor(() => expect(field('muse-vm', 'signal').textContent).toBe('稼働中'));
     const sent = fetchJson.mock.calls.filter(([url]) => url === '/api/muse-status/signal');
     expect(sent.map(([, init]) => JSON.parse(init?.body ?? '{}').node)).toEqual(['muse-vm']);
-    expect(field('muse', 'signal').textContent).toBe('未送信');
+    expect(field('muse', 'signal').textContent).toContain('対象外');
   });
 
   // 2026-11-07: Tailscaleではオンラインなのに「接続できません」になり、理由が分からなかった。
   it('接続できないときは理由(ncのエラー出力)を文字として表示し、オンラインならTailscale以外の原因だと案内する', async () => {
     document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify({ enabled: false, intervalSeconds: 120 }))}; path=/`;
-    const fetchJson = api({ '/api/muse-status/signal': { node: 'muse', code: 'connection_failed', latencyMs: null, checkedAt: '2026-11-06T00:00:00Z', detail: '<img src=x>connection refused' } });
+    const fetchJson = api({ '/api/muse-status': { containerRunning: true, error: null, nodes: [{ name: 'muse-vm', found: true, online: true }] }, '/api/muse-status/signal': { node: 'muse-vm', code: 'connection_failed', latencyMs: null, checkedAt: '2026-11-06T00:00:00Z', detail: '<img src=x>connection refused' } });
     await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
-    (card('muse').querySelector('[data-action="signal"]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(field('muse', 'signal').textContent).toBe('接続できません'));
-    const detail = field('muse', 'signalDetail');
+    (card('muse-vm').querySelector('[data-action="signal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(field('muse-vm', 'signal').textContent).toBe('接続できません'));
+    const detail = field('muse-vm', 'signalDetail');
     expect(detail.textContent).toContain('<img src=x>connection refused');
     expect(detail.querySelector('img')).toBeNull();
     expect(detail.textContent).toContain('Tailscaleではオンライン');
@@ -148,20 +171,20 @@ describe('/muse-statusのページ', () => {
   });
 
   it('Nixの一覧を表示して絞り込む。上流の文字列はHTMLとして解釈しない', async () => {
-    const fetchJson = api({ '/api/muse-status/nix?node=muse': {
-      node: 'muse', state: 'ok', total: 2, truncated: false, generatedAt: null,
+    const fetchJson = api({ '/api/muse-status/nix?node=muse-vm': {
+      node: 'muse-vm', state: 'ok', total: 2, truncated: false, generatedAt: null,
       packages: [{ name: '<img src=x onerror=alert(1)>', version: null }, { name: 'hello', version: '2.12' }],
     } });
     await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
-    const rows = field('muse', 'nixRows');
+    const rows = field('muse-vm', 'nixRows');
     expect(rows.querySelectorAll('tr')).toHaveLength(2);
     expect(rows.querySelector('img')).toBeNull();
-    expect(field('muse', 'nixTable').hidden).toBe(false);
-    const filter = card('muse').querySelector('[data-action="nixFilter"]') as HTMLInputElement;
+    expect(field('muse-vm', 'nixTable').hidden).toBe(false);
+    const filter = card('muse-vm').querySelector('[data-action="nixFilter"]') as HTMLInputElement;
     filter.value = 'HEL';
     filter.dispatchEvent(new Event('input'));
     expect(rows.querySelectorAll('tr')).toHaveLength(1);
-    expect(field('muse', 'nixSummary').textContent).toContain('一致 1件');
+    expect(field('muse-vm', 'nixSummary').textContent).toContain('一致 1件');
   });
 
   it('ノードがNixの一覧を提供していないときはその旨を表示する', async () => {
@@ -181,6 +204,14 @@ describe('/muse-statusのページ', () => {
 });
 
 describe('getMuseStatusPage', () => {
+  it('生成HTMLの全scriptがnode --checkに通る', () => {
+    const page = new DOMParser().parseFromString(getMuseStatusPage(), 'text/html');
+    const scripts = [...page.querySelectorAll('script')];
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      expect(() => execFileSync(process.execPath, ['--check'], { input: script.textContent ?? '' })).not.toThrow();
+    }
+  });
   it('scriptを本文の文字として出さない', () => {
     const page = new DOMParser().parseFromString(getMuseStatusPage(), 'text/html');
     page.querySelectorAll('script, style').forEach((element) => element.remove());
