@@ -59,7 +59,7 @@ Workerはtailnetに参加できないので、`/askmuse`と同じく本体デモ
 
 ### ノードが提供するNixのAPI
 
-2026-11-06時点で、`muse-vm`にこのAPIは無い（404）。`muse`は8080番が接続拒否。確認した範囲では、ノード側のソースはmusevm・musevm-kernel・本体・libのいずれにも無い。ノード側に次のAPIを追加すると、Worker側の変更なしで表示される。
+2026-11-07に`muse-vm`へ追加した（Worker側の変更なし）。ソースはmuse-vmの`/home/hatch/muse-vm-hacks/files/api-bridge/server.py`で、`nekoserver/muse-vm-hacks`（非公開）で管理する。`nix-env`は呼ばず、rootのプロファイルの`manifest.nix`を読む。経緯は[NOTICE.cloudflare-workers-github-oauth-1.20261107.md](NOTICE.cloudflare-workers-github-oauth-1.20261107.md)。`muse`は8080番が接続拒否で、ブリッジは動いていない。応答の形は次のとおり。
 
 ```
 GET http://<ノード>:8080/nix/packages
@@ -88,6 +88,7 @@ Authorization: Bearer <MUSE_API_KEY>
 | 401・403 | ノードがキーを拒否しました |
 | 502 | ノードへ接続できません |
 | 504 | 時間内に応答がありませんでした |
+| それ以外（`muse-vm`が`manifest.nix`を読めない500を含む） | ノードの応答を読み取れませんでした |
 | その他、読めない本文 | ノードの応答を読み取れませんでした |
 
 `muse`は8080番が接続拒否（2026-11-06）で、現状はシグナルも「接続できません」になる。
@@ -130,7 +131,7 @@ Authorization: Bearer <MUSE_API_KEY>
 
 | 項目 | 結果 |
 |---|---|
-| 中継 | 実際のtailnetで確認。`muse-vm`の`/health`は200、`/nix/packages`は404。`muse`は502 |
+| 中継 | 実際のtailnetで確認。`muse-vm`の`/health`は200、`/nix/packages`は2026-11-06に404、2026-11-07の追加後に200。`muse`は502 |
 | ページ | モックのAPIでChromeのライト・ダーク・幅400pxを確認。このホストに日本語フォントが無いので、日本語の字形は未確認 |
 | 本番の経路 | 未確認（未デプロイ）。Worker → Durable Object → `server.js`は通していない |
 | Nixの一覧の表示 | モックのみ。実際のノードのAPIが無いので未確認 |

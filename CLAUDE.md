@@ -443,6 +443,10 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - /cf-containers(Cloudflare Containers)・Workers Builds(PRビルドはイメージをビルドしない・イメージ失敗でもWorkerだけ出る・結果表示の上書き・Builds APIの権限・トークンの使い分け・サンドボックスでのフルビルド):
   [`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md)
+- `/muse-status`のNix一覧、Museとの問い合わせの進め方、本番反映の承認、D1`agent-inquiries`:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.20261107.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)
 - コミットとファイルの関連付け(`commit_file_changes`テーブル。「どのコミットがどのファイルを変更したか」の汎用記録。push webhook経由の自動蓄積が主経路、dynamicneko `/api/tree-view/commit-files`からの"ついで書き込み"による段階的バックフィルが補助経路。関連する既存の`ai_summary_files`はPR/push単位でしかファイルを持たず個別コミットに紐付かない点に注意)。この関係の実装・調査をする際は、必ず先にこのSPECを読むこと:
   [`cloudflare-workers-github-oauth-1` PR #2371](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2371)（`commit_file_changes`新設・push webhook自動蓄積・`POST /api/commit-file-latest-external`）
   [`cloudflare-workers-github-oauth-1` PR #2372](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2372)（書き込み用`POST /api/commit-file-changes-external`）
