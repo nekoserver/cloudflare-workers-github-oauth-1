@@ -76,6 +76,27 @@ describe('sendMuseSignal', () => {
     expect((await sendMuseSignal(stub, 'k', 'muse')).code).toBe('container_not_running');
     expect(stub.fetch).not.toHaveBeenCalled();
   });
+  // 2026-11-07: 「接続できません」の理由(本体コンテナのncのエラー出力)をページへ渡す。
+  it('502の本文のdetailを理由として返す', async () => {
+    const result = await sendMuseSignal(container(() => json({ errorCode: 'muse_connection_failed', detail: 'Dial("muse", 8080): connection refused' }, 502)), 'k', 'muse');
+    expect(result).toMatchObject({ code: 'connection_failed', detail: 'Dial("muse", 8080): connection refused' });
+  });
+  it.each([
+    ['detailが無い', { errorCode: 'muse_connection_failed' }],
+    ['detailが文字列でない', { errorCode: 'muse_connection_failed', detail: 1 }],
+    ['本文がJSONでない', 'oops'],
+  ])('%sときはdetailをnullにする', async (_, body) => {
+    const response = typeof body === 'string' ? new Response(body, { status: 502 }) : json(body, 502);
+    expect((await sendMuseSignal(container(() => response), 'k', 'muse')).detail).toBeNull();
+  });
+  it('detailは300文字までにする', async () => {
+    const result = await sendMuseSignal(container(() => json({ detail: 'y'.repeat(400) }, 502)), 'k', 'muse');
+    expect(result.detail).toHaveLength(300);
+  });
+  it('成功時と502以外のdetailはnull', async () => {
+    expect((await sendMuseSignal(container(() => json({ status: 'ok' })), 'k', 'muse')).detail).toBeNull();
+    expect((await sendMuseSignal(container(() => json({ detail: 'x' }, 504)), 'k', 'muse')).detail).toBeNull();
+  });
   it('fetchの例外は接続失敗にする', async () => {
     expect((await sendMuseSignal(container(() => { throw new Error('x'); }), 'k', 'muse')).code).toBe('connection_failed');
   });
