@@ -1,0 +1,13 @@
+npm notice run cloudflare-workers-github-oauth@1.0.0 npx
+npm notice run 'vitest' run src/aichat-askmuse-integration.test.ts src/views/aichatMuseHealth.test.ts src/utils/museTailscalePreflight.test.ts src/utils/museDirectAsk.test.ts src/utils/aichatSlashCommand.test.ts src/utils/codexAskgkQuestion.test.ts --maxWorkers=1
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/worktrees/muse-direct-tunnels-fallback-20261107
+
+
+ Test Files  6 passed (6)
+      Tests  273 passed (273)
+   Start at  00:43:33
+   Duration  18.21s (transform 8.34s, setup 313ms, import 10.51s, tests 3.36s, environment 1.45s)

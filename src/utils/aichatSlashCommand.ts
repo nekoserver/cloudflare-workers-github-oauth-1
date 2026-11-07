@@ -1340,11 +1340,16 @@ const ASKMUSE_ERROR_MESSAGES: Partial<Record<MuseDirectError, string>> = {
 async function interpretAskMuseCommand(message: string, deps: AichatSlashCommandDeps): Promise<AichatSlashCommandResult> {
   const prompt = parseAskMusePrompt(message);
   if (!prompt?.trim()) return { handled: true, response: ASKMUSE_USAGE };
-  if (!deps.askMuseDirect) return { handled: true, response: '❌ /askmuse は現在利用できません(DEMO_CONTAINER未設定)' };
+  return interpretMusePrompt(prompt, deps, '/askmuse');
+}
+
+/** Muse選択の通常入力はコマンドへ変換せず本文のまま実行する。 */
+export async function interpretMusePrompt(prompt: string, deps: AichatSlashCommandDeps, label = 'Muse'): Promise<AichatSlashCommandResult> {
+  if (!deps.askMuseDirect) return { handled: true, response: `❌ ${label} は現在利用できません(DEMO_CONTAINER未設定)` };
   const outcome = await raceWithTimeout(deps.askMuseDirect(prompt), ASKGK_TIMEOUT_MS);
-  if (outcome.status === 'timeout') return { handled: true, response: `❌ /askmuse がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
-  if (outcome.status === 'error') return { handled: true, response: `❌ /askmuse でエラーが発生しました: ${outcome.message}` };
-  if (!outcome.value.ok) return { handled: true, response: `❌ /askmuse でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
+  if (outcome.status === 'timeout') return { handled: true, response: `❌ ${label} がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+  if (outcome.status === 'error') return { handled: true, response: `❌ ${label} でエラーが発生しました: ${outcome.message}` };
+  if (!outcome.value.ok) return { handled: true, response: `❌ ${label} でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
   return { handled: true, response: appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel), saveAsAiResponse: true, museAskgk: true };
 }
 
