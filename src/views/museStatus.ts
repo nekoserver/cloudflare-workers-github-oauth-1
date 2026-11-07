@@ -1,6 +1,9 @@
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { MUSE_BRIDGE_NODE, MUSE_NODE_NAMES } from '../utils/museNodeStatus';
 
+/** /muse-statusのCSP。Tailscale WASM(公式@tailscale/connect)の実行と、TailscaleのHTTPS・WebSocketへの接続だけを足す。/container-monitorと同じ。 */
+export const MUSE_STATUS_CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: https://*.tailscale.com wss://*.tailscale.com https://*.tailscale.io wss://*.tailscale.io; img-src 'self' data:; font-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
+
 /** シグナル送信の既定の間隔(秒)。範囲は/aichatのシグナル送信と同じ。 */
 export const MUSE_STATUS_SIGNAL_DEFAULT_SECONDS = 600;
 const MUSE_STATUS_SIGNAL_MIN_SECONDS = 60;
@@ -13,6 +16,12 @@ const MUSE_STATUS_SIGNAL_MAX_SECONDS = 86_400;
  */
 export const MUSE_STATUS_SCRIPT = `
     var MUSE_BRIDGE_NODE = ${JSON.stringify(MUSE_BRIDGE_NODE)};
+    var MUSE_ALL_NODES = ${JSON.stringify(MUSE_NODE_NAMES)};
+    var MUSE_BRIDGE_PORT = 8080;
+    var MUSE_WASM_STORAGE_PREFIX = 'muse-status.tailscale.';
+    // 本体コンテナ経由のWorkerの待ち時間(8秒)と同じ。
+    var MUSE_WASM_SIGNAL_TIMEOUT_MS = 8000;
+    var MUSE_SOURCE_LABELS = { container: '本体コンテナ', wasm: 'Tailscale WASM（このブラウザ）', none: 'なし' };
     var MUSE_STATUS_COOKIE = 'muse_status_signal';
     var MUSE_STATUS_DEFAULT_SECONDS = ${MUSE_STATUS_SIGNAL_DEFAULT_SECONDS};
     var MUSE_STATUS_MIN_SECONDS = ${MUSE_STATUS_SIGNAL_MIN_SECONDS};
@@ -28,6 +37,7 @@ export const MUSE_STATUS_SCRIPT = `
     };
     var MUSE_NIX_MESSAGES = {
       not_applicable: 'museは外向き専用のため、HTTPで一覧を取得しません。ブリッジの一覧はmuse-vmで確認してください',
+      wasm_unsupported: 'Tailscale WASM経由ではNixの一覧を取得しません。一覧の取得にはMUSE_API_KEYが要り、キーをブラウザへ渡さないためです。本体コンテナの起動中に取得してください',
       not_provided: 'このノードは /nix/packages を提供していません',
       container_not_running: '本体コンテナが停止中のため取得できません',
       not_authenticated: 'MUSE_API_KEYが未設定です',
@@ -37,7 +47,7 @@ export const MUSE_STATUS_SCRIPT = `
       invalid_response: 'ノードの応答を読み取れませんでした'
     };
     var MUSE_NODES_ERRORS = {
-      container_not_running: '本体コンテナが停止中です。ここからは起動しません。/cf-containers から起動してください',
+      container_not_running: '本体コンテナが停止中です。ここからは起動しません。/cf-containers から起動するか、下の「Tailscaleへ接続」でこのブラウザから状態とシグナルを取得してください',
       tailscale_unavailable: '本体コンテナからtailscaleの状態を読めません',
       timeout: '本体コンテナから時間内に応答がありませんでした'
     };
@@ -118,14 +128,109 @@ export const MUSE_STATUS_SCRIPT = `
     function renderMuseNode(doc, node) {
       var field = function(name) { return doc.querySelector('[data-node="' + node.name + '"] [data-field="' + name + '"]'); };
       var section = doc.querySelector('[data-node="' + node.name + '"]');
-      if (section) section.setAttribute('data-tailnet-online', node.found && node.online ? 'true' : 'false');
+      if (section) section.setAttribute('data-tailnet-online', node.found && node.online === true ? 'true' : 'false');
       if (!node.found) setMuseBadge(field('online'), 'tailnetに見つかりません', 'muted');
+      else if (node.online === null) setMuseBadge(field('online'), '不明', 'muted');
       else setMuseBadge(field('online'), node.online ? 'オンライン' : 'オフライン', node.online ? 'ok' : 'ng');
-      field('connection').textContent = node.found ? (node.connection === 'direct' ? '直接' : node.connection === 'relay' ? '中継 ' + node.relay : 'なし') : '—';
+      if (!node.found || node.connection === null) field('connection').textContent = '—';
+      else field('connection').textContent = node.connection === 'direct' ? '直接' : node.connection === 'relay' ? '中継 ' + node.relay : 'なし';
       field('os').textContent = node.os || '—';
       field('ip').textContent = node.ip || '—';
       field('lastSeen').textContent = node.online ? '接続中' : formatMuseTime(node.lastSeen);
       field('lastHandshake').textContent = formatMuseTime(node.lastHandshake);
+    }
+
+    /** どこからも状態を読めていないとき。「見つからない」「オフライン」とは言わない。 */
+    function renderMuseNodeUnknown(doc, name) {
+      var section = doc.querySelector('[data-node="' + name + '"]');
+      if (!section) return;
+      section.setAttribute('data-tailnet-online', 'false');
+      setMuseBadge(section.querySelector('[data-field="online"]'), '確認できません', 'muted');
+      ['connection', 'os', 'ip', 'lastSeen', 'lastHandshake'].forEach(function(key) {
+        section.querySelector('[data-field="' + key + '"]').textContent = '—';
+      });
+    }
+
+    function museHostLabel(name) {
+      var text = String(name || '').toLowerCase();
+      var dot = text.indexOf('.');
+      return dot === -1 ? text : text.slice(0, dot);
+    }
+
+    /** tailnetのIPv4(100.64.0.0/10)か。末尾の/32は外して判定する。 */
+    function isMuseTailnetIPv4(value) {
+      var parts = String(value || '').split('/')[0].split('.');
+      if (parts.length !== 4) return false;
+      for (var i = 0; i < 4; i++) {
+        if (!/^[0-9]{1,3}$/.test(parts[i]) || Number(parts[i]) > 255) return false;
+      }
+      return Number(parts[0]) === 100 && Number(parts[1]) >= 64 && Number(parts[1]) <= 127;
+    }
+
+    /**
+     * @tailscale/connectのnotifyNetMapの値から、muse・muse-vmだけを取り出す。
+     * peerはname(FQDN)・addresses・online(省略あり)しか持たないので、OS・経路・最終接続は不明のまま。鍵は持ち出さない。
+     */
+    function museNodesFromNetMap(value) {
+      var map = typeof value === 'string' ? JSON.parse(value) : value;
+      if (!map || !Array.isArray(map.peers)) throw new Error('Tailscaleの端末一覧を読み取れません');
+      return MUSE_ALL_NODES.map(function(name) {
+        var peer = map.peers.filter(function(item) { return item && museHostLabel(item.name) === name; })[0];
+        if (!peer) return { name: name, found: false, online: false, connection: null, relay: '', os: '', ip: '', lastSeen: '', lastHandshake: '' };
+        var addresses = Array.isArray(peer.addresses) ? peer.addresses : [];
+        var ip = addresses.filter(isMuseTailnetIPv4)[0] || '';
+        return {
+          name: name, found: true, online: typeof peer.online === 'boolean' ? peer.online : null,
+          connection: null, relay: '', os: '', ip: ip.split('/')[0], lastSeen: '', lastHandshake: ''
+        };
+      });
+    }
+
+    function museWasmHealthURL(node) {
+      if (!node || !node.found || !isMuseTailnetIPv4(node.ip)) return null;
+      return 'http://' + node.ip.split('/')[0] + ':' + MUSE_BRIDGE_PORT + '/health';
+    }
+
+    /**
+     * ブラウザのTailscale WASMからmuse-vmの/healthへ1回送る。@tailscale/connectのfetchはGETだけでヘッダーを付けられない。
+     * /healthはブリッジの認証より前に返るのでキーは要らない(2026-11-07、Museの回答。ソース上で、稼働版は未確認)。
+     * fetchは取り消せないので、時間切れは結果だけ先に返す。
+     */
+    function sendMuseWasmSignal(client, node, url, timeoutMs) {
+      var limit = typeof timeoutMs === 'number' ? timeoutMs : MUSE_WASM_SIGNAL_TIMEOUT_MS;
+      var startedAt = Date.now();
+      function finish(code, latencyMs, detail) {
+        return { node: node, code: code, latencyMs: typeof latencyMs === 'number' ? latencyMs : null, checkedAt: new Date().toISOString(), detail: detail || null, via: 'wasm' };
+      }
+      if (!url) return Promise.resolve(finish('connection_failed', null, 'Tailscaleの端末一覧に' + node + 'のtailnetのIPv4アドレスがありません'));
+      var timer = null;
+      var expired = new Promise(function(resolve) { timer = setTimeout(function() { resolve(finish('timeout')); }, limit); });
+      var attempt = Promise.resolve().then(function() { return client.fetch(url); }).then(function(response) {
+        var latency = Date.now() - startedAt;
+        if (!response || response.status !== 200) return finish('unhealthy', latency);
+        return Promise.resolve(response.text()).then(function(text) {
+          try {
+            var body = JSON.parse(text);
+            return finish(body && body.status === 'ok' ? 'ok' : 'unhealthy', latency);
+          } catch (e) {
+            return finish('unhealthy', latency);
+          }
+        });
+      }, function(error) {
+        var message = error && error.message ? error.message : String(error || '');
+        return finish('connection_failed', null, message.slice(0, 300));
+      });
+      return Promise.race([attempt, expired]).then(function(result) {
+        clearTimeout(timer);
+        return result;
+      });
+    }
+
+    function museIsTailscaleLoginURL(value) {
+      var url;
+      try { url = new URL(value); } catch (e) { return false; }
+      return url.protocol === 'https:' && !url.username && !url.password
+        && (url.hostname === 'login.tailscale.com' || url.hostname.slice(-14) === '.tailscale.com');
     }
 
     function renderMuseSignal(doc, result) {
@@ -134,11 +239,16 @@ export const MUSE_STATUS_SCRIPT = `
       setMuseBadge(root.querySelector('[data-field="signal"]'), label[0], label[1]);
       var detail = formatMuseTime(result.checkedAt);
       if (typeof result.latencyMs === 'number') detail += ' / ' + result.latencyMs + 'ms';
+      // 2026-11-07 Museの提案: WASMの端末からの/healthの成功は到達性だけを示し、認証付きの経路が使えることまでは示さない。
+      if (result.via === 'wasm') detail += ' / Tailscale WASM（到達性の確認のみ）';
       root.querySelector('[data-field="signalAt"]').textContent = detail;
       // 接続できなかった理由(本体コンテナのtailscale ncのエラー出力)。上流の文字列なのでtextContentで表示する。
       var reason = root.querySelector('[data-field="signalDetail"]');
       var lines = [];
-      if (result.code === 'connection_failed') {
+      if (result.code === 'connection_failed' && result.via === 'wasm') {
+        lines.push('このブラウザのTailscale WASMから' + result.node + 'の' + MUSE_BRIDGE_PORT + '番へ届きませんでした。tailnetのACL、ノードの稼働、WASMの接続状態を確認してください。');
+        lines.push(typeof result.detail === 'string' && result.detail ? '理由: ' + result.detail : '理由: 詳細を受け取れませんでした');
+      } else if (result.code === 'connection_failed') {
         if (root.getAttribute('data-tailnet-online') === 'true') {
           lines.push('Tailscaleではオンラインです。ノードの8080番(/health)で待ち受けていないか、途中で切断された可能性があります。');
         }
@@ -186,6 +296,12 @@ export const MUSE_STATUS_SCRIPT = `
       var intervalInput = doc.getElementById('muse-signal-interval');
       var intervalError = doc.getElementById('muse-signal-error');
       var notice = doc.getElementById('muse-notice');
+      var wasmState = doc.getElementById('muse-wasm-state');
+      var wasmLogin = doc.getElementById('muse-wasm-login');
+      var wasmConnect = doc.getElementById('muse-wasm-connect');
+      // 本体コンテナの最後の応答と、ブラウザのTailscale WASMの状態。表示はrender()が両方から決める。
+      var lastStatus = null;
+      var wasm = { client: null, loading: null, state: 'Stopped', nodes: null, receivedAt: null };
       var schedule = createMuseSignalSchedule({
         send: function() { refreshStatus(); sendAll(); },
         isHidden: function() { return doc.hidden; },
@@ -196,25 +312,172 @@ export const MUSE_STATUS_SCRIPT = `
         notice.textContent = text;
         notice.hidden = !text;
       }
+      function setWasmState(text) {
+        wasmState.textContent = text;
+      }
+      function wasmReady() {
+        return wasm.client !== null && wasm.state === 'Running' && wasm.nodes !== null;
+      }
+      function containerUsable() {
+        return lastStatus !== null && lastStatus.containerRunning === true && !lastStatus.error;
+      }
+      /** 本体コンテナが使えればそちら、使えずWASMが接続済みならWASM、どちらも無ければ「確認できません」。 */
+      function render() {
+        var source = containerUsable() ? 'container' : wasmReady() ? 'wasm' : 'none';
+        if (source === 'container') {
+          lastStatus.nodes.forEach(function(node) { renderMuseNode(doc, node); });
+          doc.getElementById('muse-checked-at').textContent = formatMuseTime(lastStatus.checkedAt);
+          setNotice('');
+        } else if (source === 'wasm') {
+          wasm.nodes.forEach(function(node) { renderMuseNode(doc, node); });
+          doc.getElementById('muse-checked-at').textContent = formatMuseTime(wasm.receivedAt);
+          setNotice('');
+        } else {
+          nodes.forEach(function(name) { renderMuseNodeUnknown(doc, name); });
+          doc.getElementById('muse-checked-at').textContent = lastStatus ? formatMuseTime(lastStatus.checkedAt) : '—';
+          setNotice(lastStatus && lastStatus.error ? (MUSE_NODES_ERRORS[lastStatus.error] || '状態を取得できませんでした') : '状態を取得できませんでした');
+        }
+        if (lastStatus) setMuseBadge(doc.getElementById('muse-container'), lastStatus.containerRunning ? '起動中' : '停止中', lastStatus.containerRunning ? 'ok' : 'ng');
+        else setMuseBadge(doc.getElementById('muse-container'), '不明', 'muted');
+        setMuseBadge(doc.getElementById('muse-source'), MUSE_SOURCE_LABELS[source], source === 'none' ? 'muted' : 'ok');
+      }
       function refreshStatus() {
         return deps.fetchJson('/api/muse-status').then(function(data) {
-          data.nodes.forEach(function(node) { renderMuseNode(doc, node); });
-          setMuseBadge(doc.getElementById('muse-container'), data.containerRunning ? '起動中' : '停止中', data.containerRunning ? 'ok' : 'ng');
-          doc.getElementById('muse-checked-at').textContent = formatMuseTime(data.checkedAt);
-          setNotice(data.error ? (MUSE_NODES_ERRORS[data.error] || '状態を取得できませんでした') : '');
-        }).catch(function() {
-          setNotice('状態を取得できませんでした');
+          lastStatus = data;
+        }, function() {
+          lastStatus = null;
+        }).then(function() {
+          render();
+          if (lastStatus && !lastStatus.containerRunning && !wasm.client && hasStoredWasmState()) connectWasm();
         });
+      }
+      function wasmNode(name) {
+        return wasm.nodes ? wasm.nodes.filter(function(node) { return node.name === name; })[0] : null;
+      }
+      function sendWasmSignal(node) {
+        return sendMuseWasmSignal(wasm.client, node, museWasmHealthURL(wasmNode(node)));
       }
       function sendSignal(node) {
         if (node !== MUSE_BRIDGE_NODE) return Promise.resolve();
         var root = doc.querySelector('[data-node="' + node + '"]');
         var button = root.querySelector('[data-action="signal"]');
         button.disabled = true;
+        // 本体コンテナ経由を先に試し、停止中と分かったときだけWASMで送る。WorkerのAPIは停止中のコンテナを起動しない。
         return deps.fetchJson('/api/muse-status/signal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ node: node }) })
+          .then(function(result) {
+            return result && result.code === 'container_not_running' && wasmReady() ? sendWasmSignal(node) : result;
+          }, function() {
+            return wasmReady() ? sendWasmSignal(node) : { node: node, code: 'connection_failed', latencyMs: null, checkedAt: new Date().toISOString() };
+          })
           .then(function(result) { renderMuseSignal(doc, result); })
-          .catch(function() { renderMuseSignal(doc, { node: node, code: 'connection_failed', latencyMs: null, checkedAt: new Date().toISOString() }); })
           .then(function() { button.disabled = false; });
+      }
+      function storage() {
+        try { return typeof sessionStorage === 'undefined' ? null : sessionStorage; } catch (e) { return null; }
+      }
+      function hasStoredWasmState() {
+        var store = storage();
+        if (!store) return false;
+        try {
+          for (var i = 0; i < store.length; i++) {
+            if (String(store.key(i)).indexOf(MUSE_WASM_STORAGE_PREFIX) === 0) return true;
+          }
+        } catch (e) { return false; }
+        return false;
+      }
+      function clearStoredWasmState() {
+        var store = storage();
+        if (!store) return;
+        try {
+          var keys = [];
+          for (var i = 0; i < store.length; i++) keys.push(String(store.key(i)));
+          keys.forEach(function(key) { if (key.indexOf(MUSE_WASM_STORAGE_PREFIX) === 0) store.removeItem(key); });
+        } catch (e) { /* 保存できない環境では、もともと何も残っていない */ }
+      }
+      function dropWasmView() {
+        wasm.nodes = null;
+        wasm.receivedAt = null;
+        render();
+      }
+      function onWasmReady() {
+        render();
+        if (containerUsable()) return;
+        // 停止中で読めなかったNixの欄は、WASMでは取らない理由に差し替える
+        loadNix(MUSE_BRIDGE_NODE);
+        if (settings.enabled) { schedule.markSent(); sendAll(); }
+      }
+      function connectWasm() {
+        if (!deps.createTailscaleClient) { setWasmState('この画面ではTailscale WASMを使えません'); return Promise.resolve(); }
+        if (wasm.client) { wasm.client.login(); return Promise.resolve(); }
+        if (wasm.loading) return wasm.loading;
+        wasmConnect.disabled = true;
+        setWasmState('Tailscale WASMを読み込み中…');
+        var stateStorage = {
+          getState: function(key) { var store = storage(); try { return store ? store.getItem(MUSE_WASM_STORAGE_PREFIX + key) || '' : ''; } catch (e) { return ''; } },
+          setState: function(key, value) { var store = storage(); try { if (store) store.setItem(MUSE_WASM_STORAGE_PREFIX + key, value); } catch (e) { /* メモリ上の参加状態だけで続ける */ } }
+        };
+        function onPanic() {
+          setWasmState('Tailscale接続でエラーが発生しました。ページを再読み込みしてください');
+          wasm.state = 'Stopped';
+          dropWasmView();
+        }
+        wasm.loading = Promise.resolve().then(function() {
+          return deps.createTailscaleClient({ authKey: '', hostname: 'muse-status-browser', stateStorage: stateStorage, panicHandler: onPanic });
+        }).then(function(client) {
+          wasm.client = client;
+          client.run({
+            notifyState: function(state) {
+              var wasReady = wasmReady();
+              wasm.state = state;
+              setWasmState('Tailscale: ' + state);
+              if (state === 'Running') {
+                wasmLogin.textContent = '';
+                if (!wasReady && wasmReady()) onWasmReady();
+              } else if (state !== 'Starting') {
+                dropWasmView();
+              }
+            },
+            notifyNetMap: function(value) {
+              var wasReady = wasmReady();
+              try {
+                wasm.nodes = museNodesFromNetMap(value);
+                wasm.receivedAt = new Date().toISOString();
+              } catch (error) {
+                setWasmState(error.message);
+                return;
+              }
+              if (!wasReady && wasmReady()) onWasmReady();
+              else render();
+            },
+            notifyBrowseToURL: function(value) {
+              if (!museIsTailscaleLoginURL(value)) return;
+              var link = doc.createElement('a');
+              link.href = value;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              link.textContent = 'Tailscaleのログイン画面を開く';
+              wasmLogin.textContent = '';
+              wasmLogin.append(link);
+            },
+            notifyPanicRecover: onPanic
+          });
+          client.login();
+        }).catch(function(error) {
+          wasm.client = null;
+          setWasmState('WASMの読み込みに失敗しました: ' + (error && error.message ? error.message : String(error)));
+        }).then(function() {
+          wasm.loading = null;
+          wasmConnect.disabled = false;
+        });
+        return wasm.loading;
+      }
+      function logoutWasm() {
+        if (wasm.client) wasm.client.logout();
+        clearStoredWasmState();
+        wasm.state = 'Stopped';
+        wasmLogin.textContent = '';
+        setWasmState('Tailscaleからログアウトしました');
+        dropWasmView();
       }
       function sendAll() {
         return Promise.all(nodes.filter(function(node) { return node === MUSE_BRIDGE_NODE; }).map(sendSignal));
@@ -228,6 +491,7 @@ export const MUSE_STATUS_SCRIPT = `
         root.querySelector('[data-field="nixSummary"]').textContent = '取得中…';
         return deps.fetchJson('/api/muse-status/nix?node=' + encodeURIComponent(node))
           .then(function(result) {
+            if (result && result.state === 'container_not_running' && wasmReady()) result = { node: node, state: 'wasm_unsupported' };
             nixResults[node] = result;
             renderMuseNix(doc, result, root.querySelector('[data-action="nixFilter"]').value);
           })
@@ -263,6 +527,8 @@ export const MUSE_STATUS_SCRIPT = `
         });
       });
       doc.getElementById('muse-refresh').addEventListener('click', refreshStatus);
+      wasmConnect.addEventListener('click', connectWasm);
+      doc.getElementById('muse-wasm-logout').addEventListener('click', logoutWasm);
       doc.addEventListener('visibilitychange', schedule.checkIfDue);
 
       var loading = [refreshStatus()].concat(nodes.map(loadNix));
@@ -350,6 +616,7 @@ export function getMuseStatusPage(): string {
     <p id="muse-notice" role="status" hidden></p>
     <section class="muse-panel">
       <p class="muse-row">本体コンテナ <span class="muse-badge muse-badge-muted" id="muse-container">確認中</span>
+        取得経路 <span class="muse-badge muse-badge-muted" id="muse-source">確認中</span>
         <span class="muse-meta">確認 <span id="muse-checked-at">—</span></span>
         <button type="button" id="muse-refresh">状態を更新</button></p>
       <p class="muse-row">
@@ -357,6 +624,14 @@ export function getMuseStatusPage(): string {
         <label>送信間隔(秒) <input type="number" id="muse-signal-interval" min="${MUSE_STATUS_SIGNAL_MIN_SECONDS}" max="${MUSE_STATUS_SIGNAL_MAX_SECONDS}" step="1"></label>
         <span id="muse-signal-error" role="alert"></span></p>
       <p class="muse-meta">シグナルはブリッジmuse-vmの8080番(/health)へ送ります。museは外向き専用のため送信対象外です。推論は走らず、モデルが回答できることまでは確かめません。tailnetの表示はTailscaleの制御サーバーの情報で、オフラインと表示されていてもシグナルに応答することがあります。稼働の判断にはシグナルの結果を使ってください。この設定はこのブラウザのCookieに保存します。タブを隠している間は送信しません。</p>
+    </section>
+    <section class="muse-panel" aria-labelledby="muse-wasm-title">
+      <h2 id="muse-wasm-title">Tailscale WASM（本体コンテナの停止中に使う）</h2>
+      <p class="muse-row"><button type="button" id="muse-wasm-connect">Tailscaleへ接続</button>
+        <button type="button" id="muse-wasm-logout">ログアウト</button>
+        <span class="muse-meta" id="muse-wasm-state" role="status">未接続</span></p>
+      <p id="muse-wasm-login"></p>
+      <p class="muse-meta">本体コンテナが停止中のとき、このブラウザがTailscaleの端末としてtailnetへ参加し、状態とmuse-vmの/healthを直接取得します。本体コンテナが起動中ならそちらを使います。Tailscaleへのログインが必要で、見える端末と届く先はログインしたアカウントとACLに従います。WASMは公式の@tailscale/connectで、接続を押したときだけ読み込みます。Nixの一覧はMUSE_API_KEYが要るため、WASMでは取得しません。参加状態はこのタブのsessionStorageに保存し、ログアウトで消します。</p>
     </section>
     <div class="muse-grid">
       ${MUSE_NODE_NAMES.map(renderNodeCard).join('\n      ')}
@@ -367,6 +642,9 @@ export function getMuseStatusPage(): string {
     initMuseStatusPage({
       document: document,
       nodes: ${JSON.stringify(MUSE_NODE_NAMES)},
+      createTailscaleClient: function(config) {
+        return import('/tailscale-wasm-client.mjs').then(function(module) { return module.loadTailscaleClient(config); });
+      },
       fetchJson: function(url, init) {
         return fetch(url, Object.assign({ credentials: 'same-origin' }, init)).then(function(response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);

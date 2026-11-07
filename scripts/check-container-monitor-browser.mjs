@@ -10,7 +10,7 @@ const server = createServer(async (req, res) => {
   if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); res.end(getContainerMonitorPage()); return; }
   if (req.url === '/api/container-monitor/providers') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ defaultProvider: 'tailscale-wasm', providers: [{ id: 'tailscale-wasm', label: 'Tailscale WASM', execution: 'browser', scope: 'visible peers' }] })); return; }
   if (req.url === '/favicon.ico') { res.statusCode = 204; res.end(); return; }
-  const paths = ['/container-monitor.mjs', '/tailscale-connect/1.102.3-3/pkg.js', '/tailscale-connect/1.102.3-3/main.wasm.gz'];
+  const paths = ['/container-monitor.mjs', '/tailscale-wasm-client.mjs', '/tailscale-connect/1.102.3-3/pkg.js', '/tailscale-connect/1.102.3-3/main.wasm.gz'];
   if (!paths.includes(req.url)) { res.statusCode = 404; res.end(); return; }
   res.setHeader('Content-Type', req.url.endsWith('.gz') ? 'application/gzip' : 'text/javascript');
   res.end(await readFile('public' + req.url));
@@ -19,7 +19,7 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
 try {
- browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+ browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH, args: ['--no-sandbox'] });
  const page = await browser.newPage(); const errors = [];
  page.on('pageerror', error => errors.push(error.message));
  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
