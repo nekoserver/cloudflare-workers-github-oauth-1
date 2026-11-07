@@ -93,7 +93,7 @@ export async function askTunnelSigner(fetcher: AskFetcher, message: string, rout
       if (controller.signal.aborted) throw new Error('askgkの待機を終了しました');
       upstream = await sendTunnelRequest(fetcher, url, { format: 'json', ask_id: askId }, controller.signal);
     }
-    if (upstream.ask_error || upstream.ask_status === 'failed') throw new Error(`tunnels実行失敗: ${upstream.ask_error || 'failed'}`);
+    if (upstream.ask_error || upstream.ask_status === 'failed') throw new Error(describeTunnelExecutionError(upstream.ask_error || 'failed', askgkEngine(message)));
     if (typeof upstream.reply !== 'string' || upstream.reply.length === 0) throw new Error(`tunnelsの応答にreplyが含まれていません`);
     return {
       reply: upstream.reply,
@@ -112,6 +112,8 @@ async function sendTunnelRequest(fetcher: AskFetcher, url: string, payload: Reco
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, contentType: 'application/json', body: JSON.stringify(payload) }),
     signal,
+  }).catch(() => {
+    throw new Error('中継Worker(rust-worker-sqlx-d1)との通信に失敗しました。tunnels.rb以降の接続状態は未確認です。');
   });
 
   if (!res.ok) {
@@ -132,8 +134,8 @@ async function sendTunnelRequest(fetcher: AskFetcher, url: string, payload: Reco
   if (typeof sendResult.body !== 'string') {
     throw new Error('rust-worker-sqlx-d1の応答にbodyが含まれていません');
   }
-  if (!sendResult.ok) {
-    throw new Error(`tunnels応答異常: HTTP ${sendResult.status} ${sendResult.body.slice(0, 200)}`);
+  if (!sendResult.ok || typeof sendResult.status !== 'number' || sendResult.status < 200 || sendResult.status >= 300) {
+    throw new Error(`tunnels.rbへの接続・HTTP応答に異常があります: HTTP ${sendResult.status ?? '不明'}。LLM worker・Tailscale・Museへの到達は未確認です。`);
   }
 
   let upstream: TunnelResponse;
@@ -145,4 +147,18 @@ async function sendTunnelRequest(fetcher: AskFetcher, url: string, payload: Reco
   }
 
   return upstream;
+}
+
+/** An execution error describes only the stage that actually responded. */
+function describeTunnelExecutionError(code: string, engine?: string): string {
+  const name = engine === 'muse' ? 'Muse' : engine || '指定エンジン';
+  const messages: Record<string, string> = {
+    unsupported_engine: `tunnels.rbの実行先が${name}に対応していません (unsupported_engine)。LLM workerの対応版・送り先設定を確認してください。Tailscale・Museへの接続は未確認です。`,
+    codex_worker_unavailable: 'tunnels.rbからLLM workerに接続できません (codex_worker_unavailable)。実行ソケットとworkerの起動状態を確認してください。Tailscale・Museへの接続は未確認です。',
+    muse_connection_failed: 'Tailscale経由のMuse接続に失敗しました (muse_connection_failed)。Tailscaleの接続状態・宛先ノード・Museの待受を確認してください。この応答だけではTailscaleの切断とは断定できません。',
+    muse_not_authenticated: 'LLM workerのMUSE_API_KEYが未設定です (muse_not_authenticated)。Museへの接続は未確認です。',
+    muse_authentication_failed: 'Museの認証に失敗しました (muse_authentication_failed)。LLM workerのMUSE_API_KEYを確認してください。',
+    llm_timeout: 'LLM実行の応答待ちがタイムアウトしました (llm_timeout)。Tailscaleの切断やエンジン非対応とは断定できません。',
+  };
+  return messages[code] ?? `tunnels実行失敗: ${code}。この応答だけでは接続障害の箇所を特定できません。`;
 }

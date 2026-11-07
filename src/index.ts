@@ -1,3 +1,4 @@
+import { checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
@@ -503,10 +504,10 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
  * 「現在利用できません」表示にフォールバックする。dwPingDepと同じ理由で
  * ここに切り出す(index.tsのテストの固定文字数ウィンドウ探索を押し出さないため)。
  */
-function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
+function askgkDep(env: Bindings, onMuseStatus?: (healthy: boolean) => void): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
-  return (message: string) => askTunnelSigner(fetcher, message, env);
+  return withMuseTailscalePreflight((message: string) => askTunnelSigner(fetcher, message, env), () => getDemoContainerStub(env), 4_000, onMuseStatus);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
@@ -6903,7 +6904,8 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
-  return c.json({ healthy: stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false });
+  const connected = await checkMuseTailscale(async () => stub);
+  return c.json({ healthy: connected && stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false });
 });
 
 /**
@@ -7412,7 +7414,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
-    askTunnelSigner: askgkDep(c.env),
+    askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
     askMuseDirect: museDirectDep(c.env, getDemoContainerStub),
     loadMentionEditorRuby: c.env.DB ? async (filename) => {
       const row = await c.env.DB!.prepare(

@@ -58,21 +58,34 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       var timer = null;
       var generation = 0;
       var lastCheckAt = null;
+      var submissionPending = false;
+      var warnedUnavailable = false;
+      function applyHealth(healthy) {
+        if (!isActive()) return;
+        options.setBorderColor(healthy ? options.getColor() : '');
+        if (healthy) warnedUnavailable = false;
+        else if (!warnedUnavailable) {
+          warnedUnavailable = true;
+          if (options.notifyUnavailable) options.notifyUnavailable('Tailscaleの接続状況を確認してください');
+        }
+      }
       function isActive() {
         return selected === 'muse' && options.getSettings().enabled;
       }
       function check() {
-        if (!isActive() || options.isHidden()) return;
+        if (!isActive() || options.isHidden() || submissionPending) return;
         lastCheckAt = Date.now();
-        var current = generation;
+        var current = ++generation;
         options.fetchHealth().then(function(healthy) {
-          if (current === generation) options.setBorderColor(healthy ? options.getColor() : '');
+          if (current === generation) applyHealth(healthy);
         }).catch(function() {
-          if (current === generation) options.setBorderColor('');
+          if (current === generation) applyHealth(false);
         });
       }
       function restart() {
         generation += 1;
+        submissionPending = false;
+        warnedUnavailable = false;
         clearInterval(timer);
         timer = null;
         lastCheckAt = null;
@@ -88,6 +101,19 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
           restart();
         },
         applySettings: restart,
+        beginSubmission: function() {
+          submissionPending = true;
+          generation += 1;
+          options.setBorderColor('');
+        },
+        finishSubmission: function(connected) {
+          submissionPending = false;
+          generation += 1;
+          lastCheckAt = Date.now();
+          options.setBorderColor('');
+          if (connected) check();
+          else applyHealth(false);
+        },
         // タブが表示に戻ったとき用。行き来するたびに送らないよう、間隔が空いたときだけ確認する。
         checkIfDue: function() {
           if (!isActive()) return;

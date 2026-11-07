@@ -70,6 +70,17 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
   });
 
+  it('通常のMuse投稿でTailscale未接続なら中継へ一切送らない', async () => {
+    stub.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'NeedsLogin', peers: [] })));
+    const response = await post({ message: '質問本文', model: 'muse' });
+    const data = await response.json() as { response: string };
+    expect(data.response).toContain('Tailscaleが停止中または未接続');
+    expect(data.response).not.toContain('unsupported_engine');
+    expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
+    expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
+    expect(inserts).toHaveLength(0);
+  });
+
   it('キーが未設定ならその旨を返す', async () => {
     const response = await post({ message: '/askmuse prompt="質問本文"' }, {});
     expect((await response.json() as { response: string }).response).toContain('MUSE_API_KEY');
@@ -97,7 +108,7 @@ describe('GET /api/aichat/muse-health', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stub.getState.mockResolvedValue({ status: 'healthy' });
-    stub.fetch.mockImplementation(async () => new Response('{"status": "ok"}'));
+    stub.fetch.mockImplementation(async (req: Request) => new Response(JSON.stringify(new URL(req.url).pathname === '/debug/tailscale-peers' ? { backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] } : { status: 'ok' })));
   });
 
   it('稼働中ならhealthy: trueを返し、応答を保存させない', async () => {
