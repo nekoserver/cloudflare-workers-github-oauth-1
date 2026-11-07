@@ -27,6 +27,7 @@ export type MuseDirectError =
   | 'muse_connection_failed'
   | 'muse_authentication_failed'
   | 'muse_usage_limit'
+  | 'muse_command_failed'
   | 'muse_execution_failed'
   | 'llm_timeout';
 
@@ -40,6 +41,8 @@ function errorForStatus(status: number): MuseDirectError {
   if (status === 429) return 'muse_usage_limit';
   if (status === 502) return 'muse_connection_failed';
   if (status === 504) return 'llm_timeout';
+  // api-bridgeは/usage等の実行に失敗すると503を返す(server.jsの中継は502・504)。
+  if (status === 503) return 'muse_command_failed';
   return 'muse_execution_failed';
 }
 

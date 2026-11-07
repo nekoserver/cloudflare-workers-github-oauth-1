@@ -67,6 +67,54 @@ describe('POST /api/aichat の /askmuse', () => {
       expect(inserts).toEqual([]);
     });
 
+    const commandReply = (command: string, content: string) => JSON.stringify({ model: 'muse', bridge_command: command, choices: [{ message: { content } }] });
+    const answering = (body: string, status = 200) => async (request: Request) => request.url.endsWith('/debug/tailscale-peers') ? connected(request.url) : new Response(body, { status });
+
+    it.each(['/help', '/usage', '/status', '/ping', '/models', '/nope'])('%s はmuse-vmへ送り、D1へ記録しない', async (command) => {
+      stub.fetch.mockImplementation(answering(commandReply(command, '実行結果')));
+      const response = await post({ message: command, model: 'muse', source: 'textbox' });
+      const body = await response.json() as { response: string; usedModel: string; shareId?: string; usage?: unknown };
+      expect(body.response).toContain('実行結果');
+      expect(body.response).not.toContain('Engine:');
+      expect(body).toMatchObject({ usedModel: 'local/neko' });
+      expect(body.shareId).toBeUndefined();
+      expect(body.usage).toBeUndefined();
+      const [request] = sentPrompts();
+      expect((await request.json() as { messages: { content: string }[] }).messages[0].content).toBe(command);
+      expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
+      expect(inserts).toEqual([]);
+    });
+
+    // 故障想定: 端末の自動大文字化で/Usageになると、ブリッジが未対応として断る。
+    it.each([['/Usage', '/usage'], ['/PING', '/ping'], ['./Usage', '/usage']])('%s は %s として送る', async (message, sent) => {
+      stub.fetch.mockImplementation(answering(commandReply(sent, '実行結果')));
+      await post({ message, model: 'muse', source: 'textbox' });
+      const [request] = sentPrompts();
+      expect((await request.json() as { messages: { content: string }[] }).messages[0].content).toBe(sent);
+    });
+
+    it('未知のコマンドと引数付きは書き換えない', async () => {
+      stub.fetch.mockImplementation(answering(commandReply('/Usage daily', '未対応')));
+      await post({ message: '/Usage daily', model: 'muse', source: 'textbox' });
+      const [request] = sentPrompts();
+      expect((await request.json() as { messages: { content: string }[] }).messages[0].content).toBe('/Usage daily');
+    });
+
+    it('/pingはmuse-vmの応答に本体Workerからの往復時間を添える', async () => {
+      stub.fetch.mockImplementation(answering(commandReply('/ping', 'pong: muse-vm')));
+      const response = await post({ message: '/ping', model: 'muse', source: 'textbox' });
+      expect((await response.json() as { response: string }).response).toMatch(/^pong: muse-vm\n往復: \d+ ms（本体Worker → muse-vm）$/);
+    });
+
+    // 故障想定: コマンドの失敗を推論の失敗と取り違え、保存または別経路への再送をする。
+    it('コマンド実行の失敗(503)は内容を伝え、保存せず別の経路へも送らない', async () => {
+      stub.fetch.mockImplementation(answering(JSON.stringify({ error: { type: 'usage_unavailable' } }), 503));
+      const response = await post({ message: '/usage', model: 'muse', source: 'textbox' });
+      expect((await response.json() as { response: string }).response).toContain('muse-vmでコマンドを実行できませんでした');
+      expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
+      expect(inserts).toEqual([]);
+    });
+
     // 故障想定: 文頭が/でも、ブリッジがコマンドとして実行していなければ回答として保存する。
     it('bridge_commandの無い応答は通常の回答として保存する', async () => {
       stub.fetch.mockImplementation(async (request: Request) => request.url.endsWith('/debug/tailscale-peers') ? connected(request.url) : new Response(reply));
