@@ -19,6 +19,11 @@ export function parseAskMusePrompt(message: string): string | null {
 /** 完全一致でのみ認める既存のコマンド別名。 */
 const ASKGK_SLASH_ALIASES: Record<string, string> = { './usage': '/usage' };
 
+/** 別名を正式なスラッシュコマンドへ置き換える。別名でなければ入力のまま返す。 */
+export function resolveAskgkSlashAlias(prompt: string): string {
+  return ASKGK_SLASH_ALIASES[prompt.trim().toLowerCase()] ?? prompt;
+}
+
 /** エージェント制御入力を通常のAI回答履歴から除外する。 */
 export function isAskgkSlashPrompt(question: string): boolean {
   const match = question.match(/^\w+_(?:prompt|prmpt)\s*=\s*([\s\S]*)$/i);

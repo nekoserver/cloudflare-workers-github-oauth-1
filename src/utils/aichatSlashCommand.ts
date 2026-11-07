@@ -2,7 +2,7 @@ import { MAX_ASKGK_TIMEOUT_SECONDS } from './askgkTimeoutSettings';
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
 import { parseCodexFiveHourReset } from './codexResetCountdown';
-import { isAskgkSlashPrompt, parseAskMusePrompt } from './codexAskgkQuestion';
+import { isAskgkSlashPrompt, parseAskMusePrompt, resolveAskgkSlashAlias } from './codexAskgkQuestion';
 import type { MuseDirectError, MuseDirectResult } from './museDirectAsk';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
@@ -191,6 +191,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko mlb | MLB本日の試合開始時刻・対戦カード・両チーム先発投手をMarkdownテーブルで表示します(引数省略で全試合) |',
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" / /neko askgk muse_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
+    '| /help /usage /status /ping /models | 言語モデルがMuseのとき、本体コンテナを経由してmuse-vmで直接実行します。推論は走らず、結果はD1に記録しません |',
     '| /askmuse prompt="<質問文>" | 本体コンテナを経由してtailnet上のMuseへ直接問い合わせ、Museの回答として保存します。tunnelsを通りません。本体コンテナの起動中だけ使えます |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko secureminelog | "secureminelog"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
@@ -1334,7 +1335,17 @@ const ASKMUSE_ERROR_MESSAGES: Partial<Record<MuseDirectError, string>> = {
   container_not_running: '本体コンテナが停止しています。/cf-containersから起動してください',
   muse_not_authenticated: 'WorkerのsecretにMUSE_API_KEYが設定されていません',
   prompt_too_large: '質問文が長すぎます(16KiBまで)',
+  muse_command_failed: 'muse-vmでコマンドを実行できませんでした',
 };
+
+// muse-vmのapi-bridge(server.py)のNATIVE_COMMANDS。大文字小文字の揺れだけを吸収する。
+const MUSE_NATIVE_COMMANDS = ['/help', '/usage', '/status', '/ping', '/models'];
+
+/** 別名と端末の自動大文字化を正式なコマンドへ置き換える。それ以外は入力のまま返す。 */
+function resolveMuseCommand(prompt: string): string {
+  const command = resolveAskgkSlashAlias(prompt).trim().toLowerCase();
+  return MUSE_NATIVE_COMMANDS.includes(command) ? command : prompt;
+}
 
 /** lib経由の経路へは切り替えない。失敗した経路をそのまま伝える。 */
 async function interpretAskMuseCommand(message: string, deps: AichatSlashCommandDeps): Promise<AichatSlashCommandResult> {
@@ -1346,10 +1357,16 @@ async function interpretAskMuseCommand(message: string, deps: AichatSlashCommand
 /** Muse選択の通常入力はコマンドへ変換せず本文のまま実行する。 */
 export async function interpretMusePrompt(prompt: string, deps: AichatSlashCommandDeps, label = 'Muse'): Promise<AichatSlashCommandResult> {
   if (!deps.askMuseDirect) return { handled: true, response: `❌ ${label} は現在利用できません(DEMO_CONTAINER未設定)` };
-  const outcome = await raceWithTimeout(deps.askMuseDirect(prompt), ASKGK_TIMEOUT_MS);
+  const startedAt = Date.now();
+  const outcome = await raceWithTimeout(deps.askMuseDirect(resolveMuseCommand(prompt)), ASKGK_TIMEOUT_MS);
   if (outcome.status === 'timeout') return { handled: true, response: `❌ ${label} がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
   if (outcome.status === 'error') return { handled: true, response: `❌ ${label} でエラーが発生しました: ${outcome.message}` };
   if (!outcome.value.ok) return { handled: true, response: `❌ ${label} でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
+  // muse-vmが推論せずに実行したコマンドの結果は、Codex・Claudeの制御入力と同じくAI回答履歴に残さない。
+  if (outcome.value.bridgeCommand) {
+    const roundTrip = outcome.value.bridgeCommand === '/ping' ? `\n往復: ${Date.now() - startedAt} ms（本体Worker → muse-vm）` : '';
+    return { handled: true, response: outcome.value.reply.trim() + roundTrip, saveAsAiResponse: false };
+  }
   return { handled: true, response: appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel), saveAsAiResponse: true, museAskgk: true };
 }
 

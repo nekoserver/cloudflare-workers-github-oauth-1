@@ -1098,6 +1098,12 @@ describe('formatAskgkLlmInfoLine / appendAskgkLlmInfoLine', () => {
 });
 
 describe('/askmuse prompt="..."', () => {
+  it('/neko helpにMuse選択時のコマンドを載せる', () => {
+    const help = formatAichatSlashCommandHelp();
+    for (const command of ['/help', '/usage', '/status', '/ping', '/models']) expect(help).toContain(command);
+    expect(help).toContain('言語モデルがMuse');
+  });
+
   const now = new Date('2026-11-06T00:00:00Z');
   const deps = {} as AichatSlashCommandDeps;
 
