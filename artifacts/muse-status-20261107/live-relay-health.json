@@ -1,0 +1,7 @@
+{
+  "target": "muse-vm:8080/health",
+  "http": 200,
+  "health_status": "ok",
+  "error": null,
+  "detail": null
+}

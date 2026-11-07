@@ -251,3 +251,15 @@ tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグ�
 ## 2026-11-07: Museのtunnelsフォールバックは初期OFF（本番未反映）
 
 通常Muse入力の/askmuse変換を除去。Tailscale接続不可/確認不可かつtunnels明示ONの場合だけaskgkへ変換し、それ以外は直接Museか送信停止。Museの設定モーダルに初期OFFの切替を追加、Cookie保存とAPI明示値の優先を統一。直接送信後の実行失敗では中継へ再送しない。関連6ファイル273テスト成功、生成scriptのnode --check成功。Worker未配備。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-TUNNELS-FALLBACK.20261107.md)。
+
+## 2026-11-07: 現コンテナのネットワーク復元
+
+現在 ENV を優先して lib の observer/LLM/WebSocket/SSE/NDJSON/JSON-seq、Apache SSI/CGI と制限ソケットを配置。mygw の実会話配信、Codex/Claude の実応答、Chrome のストリーム画面投稿受付を確認。投稿は現在 ENV の同一会話の native queue に1件待機し、応答は未観測。Tunnel一覧権限、別ホストの配信、Muse/Nemotron未対応等は残る。apt更新候補0。最終検査後にファイアウォールログを採取。ローカル稼働への適用であり、Worker/イメージの更新ではない。詳細は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261107.md)。
+
+### 2026-11-07 後続: ストリーム投稿の配信完了
+
+同じ会話で実ブラウザ投稿を受信し、assistantのマーカー応答と実ユーザー投稿を公開mygwのobserverで確認。native queueの該当待機0件。直前の「応答未観測」は解消した。外部経路・未対応エンジン・本体親画面の検査は未完了。NETWORK REPORTと後続検証JSONを参照。
+
+## 2026-11-07: muse-statusのブリッジ接続先を修正（本番未反映）
+
+museは外向き専用なのでTailscaleの状態表示だけとし、health/Nix取得をmuse-vmへ限定。画面の初回・定期・手動操作、Worker共通処理、コンテナ中継でmuse:8080への接続を抑止。関連5ファイル124テストと生成scriptのnode --check成功。修正した中継を使って現コンテナから実muse-vmの/health HTTP200/status=okを確認。本番Worker・常駐server.js・イメージには未反映。詳細は [MUSE STATUS REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-STATUS-BRIDGE.20261107.md)。

@@ -51,9 +51,9 @@ describe('fetchMuseNodes', () => {
 describe('sendMuseSignal', () => {
   it('ノードごとの固定のパスへキーを付けて送る', async () => {
     const stub = container(() => json({ status: 'ok' }));
-    const result = await sendMuseSignal(stub, 'k', 'muse');
+    const result = await sendMuseSignal(stub, 'k', 'muse-vm');
     const request = stub.fetch.mock.calls[0][0];
-    expect(new URL(request.url).pathname).toBe('/admin/muse/muse/health');
+    expect(new URL(request.url).pathname).toBe('/admin/muse/muse-vm/health');
     expect(request.headers.get('authorization')).toBe('Bearer k');
     expect(result.code).toBe('ok');
     expect(typeof result.latencyMs).toBe('number');
@@ -68,18 +68,18 @@ describe('sendMuseSignal', () => {
   });
   it('キーが無ければ送らない', async () => {
     const stub = container(() => json({ status: 'ok' }));
-    expect((await sendMuseSignal(stub, undefined, 'muse')).code).toBe('not_authenticated');
+    expect((await sendMuseSignal(stub, undefined, 'muse-vm')).code).toBe('not_authenticated');
     expect(stub.fetch).not.toHaveBeenCalled();
   });
   it('停止中のコンテナを起動しない', async () => {
     const stub = container(() => json({ status: 'ok' }), 'stopped');
-    expect((await sendMuseSignal(stub, 'k', 'muse')).code).toBe('container_not_running');
+    expect((await sendMuseSignal(stub, 'k', 'muse-vm')).code).toBe('container_not_running');
     expect(stub.fetch).not.toHaveBeenCalled();
   });
   // 2026-11-07: 「接続できません」の理由(本体コンテナのncのエラー出力)をページへ渡す。
   it('502の本文のdetailを理由として返す', async () => {
-    const result = await sendMuseSignal(container(() => json({ errorCode: 'muse_connection_failed', detail: 'Dial("muse", 8080): connection refused' }, 502)), 'k', 'muse');
-    expect(result).toMatchObject({ code: 'connection_failed', detail: 'Dial("muse", 8080): connection refused' });
+    const result = await sendMuseSignal(container(() => json({ errorCode: 'muse_connection_failed', detail: 'Dial("muse-vm", 8080): connection refused' }, 502)), 'k', 'muse-vm');
+    expect(result).toMatchObject({ code: 'connection_failed', detail: 'Dial("muse-vm", 8080): connection refused' });
   });
   it.each([
     ['detailが無い', { errorCode: 'muse_connection_failed' }],
@@ -87,18 +87,18 @@ describe('sendMuseSignal', () => {
     ['本文がJSONでない', 'oops'],
   ])('%sときはdetailをnullにする', async (_, body) => {
     const response = typeof body === 'string' ? new Response(body, { status: 502 }) : json(body, 502);
-    expect((await sendMuseSignal(container(() => response), 'k', 'muse')).detail).toBeNull();
+    expect((await sendMuseSignal(container(() => response), 'k', 'muse-vm')).detail).toBeNull();
   });
   it('detailは300文字までにする', async () => {
-    const result = await sendMuseSignal(container(() => json({ detail: 'y'.repeat(400) }, 502)), 'k', 'muse');
+    const result = await sendMuseSignal(container(() => json({ detail: 'y'.repeat(400) }, 502)), 'k', 'muse-vm');
     expect(result.detail).toHaveLength(300);
   });
   it('成功時と502以外のdetailはnull', async () => {
-    expect((await sendMuseSignal(container(() => json({ status: 'ok' })), 'k', 'muse')).detail).toBeNull();
-    expect((await sendMuseSignal(container(() => json({ detail: 'x' }, 504)), 'k', 'muse')).detail).toBeNull();
+    expect((await sendMuseSignal(container(() => json({ status: 'ok' })), 'k', 'muse-vm')).detail).toBeNull();
+    expect((await sendMuseSignal(container(() => json({ detail: 'x' }, 504)), 'k', 'muse-vm')).detail).toBeNull();
   });
   it('fetchの例外は接続失敗にする', async () => {
-    expect((await sendMuseSignal(container(() => { throw new Error('x'); }), 'k', 'muse')).code).toBe('connection_failed');
+    expect((await sendMuseSignal(container(() => { throw new Error('x'); }), 'k', 'muse-vm')).code).toBe('connection_failed');
   });
 });
 
@@ -141,11 +141,28 @@ describe('fetchMuseNixPackages', () => {
     [504, 'timeout'],
     [500, 'invalid_response'],
   ])('応答%sは%sになる', async (status, state) => {
-    expect((await fetchMuseNixPackages(container(() => json({}, status)), 'k', 'muse')).state).toBe(state);
+    expect((await fetchMuseNixPackages(container(() => json({}, status)), 'k', 'muse-vm')).state).toBe(state);
   });
   it('停止中のコンテナを起動しない', async () => {
     const stub = container(() => json({ packages: [] }), 'stopped');
-    expect((await fetchMuseNixPackages(stub, 'k', 'muse')).state).toBe('container_not_running');
+    expect((await fetchMuseNixPackages(stub, 'k', 'muse-vm')).state).toBe('container_not_running');
+    expect(stub.fetch).not.toHaveBeenCalled();
+  });
+});
+
+// museは外向き専用。オンラインでも8080番への着信を受けない。
+describe('外向き専用museへの着信抑止', () => {
+  it('シグナルは対象外とし、コンテナの状態取得も接続もしない', async () => {
+    const stub = container(() => { throw new Error('must not connect'); });
+    expect(await sendMuseSignal(stub, 'k', 'muse')).toMatchObject({ node: 'muse', code: 'not_applicable', latencyMs: null, detail: null });
+    expect(stub.getState).not.toHaveBeenCalled();
+    expect(stub.fetch).not.toHaveBeenCalled();
+    expect((await sendMuseSignal(null, undefined, 'muse')).code).toBe('not_applicable');
+  });
+  it('Nix一覧も対象外とし、muse-vmの結果をmuseの結果として返さない', async () => {
+    const stub = container(() => json({ packages: [] }));
+    expect(await fetchMuseNixPackages(stub, 'k', 'muse')).toMatchObject({ node: 'muse', state: 'not_applicable', packages: [] });
+    expect(stub.getState).not.toHaveBeenCalled();
     expect(stub.fetch).not.toHaveBeenCalled();
   });
 });

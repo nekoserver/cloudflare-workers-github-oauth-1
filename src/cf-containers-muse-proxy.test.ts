@@ -210,19 +210,19 @@ describe('/admin/muse/<ノード>/<health|nix>', () => {
   }
 
   it('ノードとパスは固定の組み合わせだけを受け付ける', () => {
-    for (const url of ['/admin/muse/muse/health', '/admin/muse/muse-vm/health', '/admin/muse/muse/nix', '/admin/muse/muse-vm/nix']) {
+    for (const url of ['/admin/muse/muse-vm/health', '/admin/muse/muse-vm/nix']) {
       expect(MUSE_NODE_ROUTE.test(url)).toBe(true);
     }
-    for (const url of ['/admin/muse/ipad/health', '/admin/muse/muse/v1/chat/completions', '/admin/muse/muse/nix?x=1', '/muse/muse/nix']) {
+    for (const url of ['/admin/muse/muse/health', '/admin/muse/muse/nix', '/admin/muse/ipad/health', '/admin/muse/muse/v1/chat/completions', '/admin/muse/muse/nix?x=1', '/muse/muse/nix']) {
       expect(MUSE_NODE_ROUTE.test(url)).toBe(false);
     }
   });
 
-  it('ncの接続先はノードごとに変わる', () => {
+  it('接続先にmuseを渡されてもncはブリッジmuse-vmに固定する', () => {
     let args: string[] = [];
     const nc = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), kill() {} });
     connectMuse((_: string, given: string[]) => { args = given; return nc; }, 'muse').destroy();
-    expect(args).toEqual(['--socket=/var/run/tailscale/tailscaled.sock', 'nc', 'muse', '8080']);
+    expect(args).toEqual(['--socket=/var/run/tailscale/tailscaled.sock', 'nc', 'muse-vm', '8080']);
   });
 
   it('nixは/nix/packagesへキーを付けて、healthはキーなしで問い合わせる', async () => {
@@ -235,22 +235,31 @@ describe('/admin/muse/<ノード>/<health|nix>', () => {
     });
     const port = await listen((req, res) => relayMuseNode(req, res, (node: string) => { nodes.push(node); return net.connect(upstream, '127.0.0.1'); }));
     const headers = { Authorization: 'Bearer k' };
-    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse/nix`, { headers })).status).toBe(200);
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/nix`, { headers })).status).toBe(200);
     expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/health`, { headers })).status).toBe(200);
     expect(seen).toEqual([{ url: '/nix/packages', auth: 'Bearer k' }, { url: '/health', auth: undefined }]);
-    expect(nodes).toEqual(['muse', 'muse-vm']);
+    expect(nodes).toEqual(['muse-vm', 'muse-vm']);
+  });
+
+  it('muse宛の旧URLでは上流へ接続しない', async () => {
+    let connected = false;
+    const port = await listen((req, res) => relayMuseNode(req, res, () => { connected = true; return new net.Socket(); }));
+    for (const path of ['/admin/muse/muse/health', '/admin/muse/muse/nix']) {
+      expect((await fetch(`http://127.0.0.1:${port}${path}`, { headers: { Authorization: 'Bearer k' } })).status).toBe(404);
+    }
+    expect(connected).toBe(false);
   });
 
   it('キーが無ければ上流へつながない', async () => {
     let connected = false;
     const port = await listen((req, res) => relayMuseNode(req, res, () => { connected = true; return new net.Socket(); }));
-    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse/nix`)).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/nix`)).status).toBe(401);
     expect(connected).toBe(false);
   });
 
   it('接続できなければ502、応答が無ければ504を返す', async () => {
     const refused = await listen((req, res) => relayMuseNode(req, res, () => net.connect(1, '127.0.0.1')));
-    expect((await fetch(`http://127.0.0.1:${refused}/admin/muse/muse/nix`, { headers: { Authorization: 'Bearer k' } })).status).toBe(502);
+    expect((await fetch(`http://127.0.0.1:${refused}/admin/muse/muse-vm/nix`, { headers: { Authorization: 'Bearer k' } })).status).toBe(502);
     const silent = await listen(() => {});
     const port = await listen((req, res) => relayMuseNode(req, res, () => net.connect(silent, '127.0.0.1'), 50));
     expect((await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/nix`, { headers: { Authorization: 'Bearer k' } })).status).toBe(504);
@@ -312,10 +321,10 @@ describe('ノードへつながらないとき、ncのエラー出力を理由�
   const headers = { Authorization: 'Bearer k' };
 
   it('stderrの内容をdetailに入れて502を返す', async () => {
-    const port = await listen((req, res) => relayMuseNode(req, res, failingNc('Dial("muse", 8080): connection refused\n')));
-    const response = await fetch(`http://127.0.0.1:${port}/admin/muse/muse/health`, { headers });
+    const port = await listen((req, res) => relayMuseNode(req, res, failingNc('Dial("muse-vm", 8080): connection refused\n')));
+    const response = await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/health`, { headers });
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ errorCode: 'muse_connection_failed', detail: 'Dial("muse", 8080): connection refused' });
+    expect(await response.json()).toEqual({ errorCode: 'muse_connection_failed', detail: 'Dial("muse-vm", 8080): connection refused' });
   });
 
   it('長いstderrは末尾の300文字だけ返す', async () => {

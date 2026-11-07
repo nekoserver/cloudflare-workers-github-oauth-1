@@ -1,5 +1,5 @@
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
-import { MUSE_NODE_NAMES } from '../utils/museNodeStatus';
+import { MUSE_BRIDGE_NODE, MUSE_NODE_NAMES } from '../utils/museNodeStatus';
 
 /** シグナル送信の既定の間隔(秒)。範囲は/aichatのシグナル送信と同じ。 */
 export const MUSE_STATUS_SIGNAL_DEFAULT_SECONDS = 600;
@@ -12,6 +12,7 @@ const MUSE_STATUS_SIGNAL_MAX_SECONDS = 86_400;
  * 上流から来た文字列はtextContentでしか表示しない。
  */
 export const MUSE_STATUS_SCRIPT = `
+    var MUSE_BRIDGE_NODE = ${JSON.stringify(MUSE_BRIDGE_NODE)};
     var MUSE_STATUS_COOKIE = 'muse_status_signal';
     var MUSE_STATUS_DEFAULT_SECONDS = ${MUSE_STATUS_SIGNAL_DEFAULT_SECONDS};
     var MUSE_STATUS_MIN_SECONDS = ${MUSE_STATUS_SIGNAL_MIN_SECONDS};
@@ -19,12 +20,14 @@ export const MUSE_STATUS_SCRIPT = `
     var MUSE_SIGNAL_LABELS = {
       ok: ['稼働中', 'ok'],
       unhealthy: ['異常応答', 'ng'],
+      not_applicable: ['対象外（外向き専用）', 'muted'],
       container_not_running: ['本体コンテナ停止中', 'muted'],
       not_authenticated: ['MUSE_API_KEY未設定', 'ng'],
       connection_failed: ['接続できません', 'ng'],
       timeout: ['応答なし(時間切れ)', 'ng']
     };
     var MUSE_NIX_MESSAGES = {
+      not_applicable: 'museは外向き専用のため、HTTPで一覧を取得しません。ブリッジの一覧はmuse-vmで確認してください',
       not_provided: 'このノードは /nix/packages を提供していません',
       container_not_running: '本体コンテナが停止中のため取得できません',
       not_authenticated: 'MUSE_API_KEYが未設定です',
@@ -204,6 +207,7 @@ export const MUSE_STATUS_SCRIPT = `
         });
       }
       function sendSignal(node) {
+        if (node !== MUSE_BRIDGE_NODE) return Promise.resolve();
         var root = doc.querySelector('[data-node="' + node + '"]');
         var button = root.querySelector('[data-action="signal"]');
         button.disabled = true;
@@ -213,10 +217,14 @@ export const MUSE_STATUS_SCRIPT = `
           .then(function() { button.disabled = false; });
       }
       function sendAll() {
-        return Promise.all(nodes.map(sendSignal));
+        return Promise.all(nodes.filter(function(node) { return node === MUSE_BRIDGE_NODE; }).map(sendSignal));
       }
       function loadNix(node) {
         var root = doc.querySelector('[data-node="' + node + '"]');
+        if (node !== MUSE_BRIDGE_NODE) {
+          renderMuseNix(doc, { node: node, state: 'not_applicable' }, '');
+          return Promise.resolve();
+        }
         root.querySelector('[data-field="nixSummary"]').textContent = '取得中…';
         return deps.fetchJson('/api/muse-status/nix?node=' + encodeURIComponent(node))
           .then(function(result) {
@@ -265,8 +273,10 @@ export const MUSE_STATUS_SCRIPT = `
 `;
 
 function renderNodeCard(node: string): string {
+  const bridge = node === MUSE_BRIDGE_NODE;
   return `<section class="muse-card" data-node="${node}">
       <h2>${node}</h2>
+      <p class="muse-meta">${bridge ? 'HTTPブリッジ。8080番の応答を確認します。' : '組み込み側の外向き専用ノードです。着信を受けないため、Tailscaleの接続状態だけを表示します。'}</p>
       <table class="muse-facts"><tbody>
         <tr><th scope="row">tailnet</th><td><span class="muse-badge muse-badge-muted" data-field="online">確認中</span></td></tr>
         <tr><th scope="row">経路</th><td data-field="connection">—</td></tr>
@@ -276,14 +286,14 @@ function renderNodeCard(node: string): string {
         <tr><th scope="row">最終ハンドシェイク</th><td data-field="lastHandshake">—</td></tr>
       </tbody></table>
       <h3>シグナル</h3>
-      <p class="muse-row"><span class="muse-badge muse-badge-muted" data-field="signal">未送信</span>
+      <p class="muse-row"><span class="muse-badge muse-badge-muted" data-field="signal">${bridge ? '未送信' : '対象外（外向き専用）'}</span>
         <span class="muse-meta" data-field="signalAt"></span>
-        <button type="button" data-action="signal">シグナルを送信</button></p>
+        <button type="button" data-action="signal"${bridge ? '' : ' disabled'}>シグナルを送信</button></p>
       <p class="muse-meta muse-signal-detail" data-field="signalDetail" hidden></p>
       <h3>Nixのインストールパッケージ</h3>
       <p class="muse-row"><span class="muse-meta" data-field="nixSummary">取得中…</span>
-        <button type="button" data-action="nixReload">再取得</button></p>
-      <input type="search" data-action="nixFilter" placeholder="パッケージ名で絞り込み" aria-label="${node}のパッケージ名で絞り込み">
+        <button type="button" data-action="nixReload"${bridge ? '' : ' disabled'}>再取得</button></p>
+      <input type="search" data-action="nixFilter" placeholder="パッケージ名で絞り込み" aria-label="${node}のパッケージ名で絞り込み"${bridge ? '' : ' disabled'}>
       <div class="muse-scroll" data-field="nixTable" hidden><table><thead><tr><th scope="col">パッケージ</th><th scope="col">バージョン</th></tr></thead><tbody data-field="nixRows"></tbody></table></div>
     </section>`;
 }
@@ -346,7 +356,7 @@ export function getMuseStatusPage(): string {
         <label><input type="checkbox" id="muse-signal-enabled"> シグナルを定期送信する</label>
         <label>送信間隔(秒) <input type="number" id="muse-signal-interval" min="${MUSE_STATUS_SIGNAL_MIN_SECONDS}" max="${MUSE_STATUS_SIGNAL_MAX_SECONDS}" step="1"></label>
         <span id="muse-signal-error" role="alert"></span></p>
-      <p class="muse-meta">シグナルは各ノードの/healthへ送ります。推論は走らず、モデルが回答できることまでは確かめません。tailnetの表示はTailscaleの制御サーバーの情報で、オフラインと表示されていてもシグナルに応答することがあります。稼働の判断にはシグナルの結果を使ってください。この設定はこのブラウザのCookieに保存します。タブを隠している間は送信しません。</p>
+      <p class="muse-meta">シグナルはブリッジmuse-vmの8080番(/health)へ送ります。museは外向き専用のため送信対象外です。推論は走らず、モデルが回答できることまでは確かめません。tailnetの表示はTailscaleの制御サーバーの情報で、オフラインと表示されていてもシグナルに応答することがあります。稼働の判断にはシグナルの結果を使ってください。この設定はこのブラウザのCookieに保存します。タブを隠している間は送信しません。</p>
     </section>
     <div class="muse-grid">
       ${MUSE_NODE_NAMES.map(renderNodeCard).join('\n      ')}
