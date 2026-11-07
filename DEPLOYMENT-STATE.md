@@ -241,7 +241,7 @@ preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.1
 
 ## 2026-11-06: /muse-status（未反映）
 
-tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグナル送信のページ`/muse-status`を実装した。ソースのみで、未デプロイ。`containers/demo/server.js`を変更したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。Nixの一覧の表示には、ノード側の`GET /nix/packages`の追加が要る。`server.js`の中継がオフラインのノードで落ちる不具合の修正を含む。詳細は[仕様](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
+tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグナル送信のページ`/muse-status`を実装した。ソースのみで、未デプロイ。`containers/demo/server.js`を変更したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。Nixの一覧の表示に要るノード側の`GET /nix/packages`は、2026-11-07に`muse-vm`へ追加した。`server.js`の中継がオフラインのノードで落ちる不具合の修正を含む。詳細は[仕様](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
 
 
 ## 2026-11-07: Museの投稿前Tailscale確認と枠色・警告（未反映）
