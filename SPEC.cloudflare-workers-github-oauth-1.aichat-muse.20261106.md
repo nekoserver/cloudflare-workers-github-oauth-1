@@ -115,3 +115,23 @@ lib側はworkerの再起動で反映する。本体Worker側はデプロイが�
 
 - 本体Workerの修正を反映した実画面での表示と保存。
 - Slackからの`/neko askgk muse_prompt="◯"`の動作。
+
+---
+
+## Muse選択の接頭語なし投稿は、tunnelsへ切り替えず直接muse-vmへ送る（2026-11-07）
+
+**対象**: `src/index.ts`の`POST /api/aichat`、`src/views/aichatMuseHealth.ts`のMuseの⚙モーダル — 言語モデルスイッチがMuseのときの、プレフィックスの無い投稿の経路。
+
+### 背景
+
+[#2533](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2533)で、Tailscaleを確かめられないときに設定がONなら`/neko askgk muse_prompt="…"`（tunnels経由）へ変換して送るフォールバックを入れた。ユーザー指定（2026-11-07）により、スイッチがMuseのときの接頭語なし投稿は、tunnels方向ではなく直接muse-vmへ送る。AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」の「2つの経路を互いの代替として扱わない」にも合わせる。
+
+### 修正内容
+
+| ファイル | 変更 |
+|---|---|
+| `src/index.ts` | Tailscaleを確かめられないときは、設定やCookieに関係なく止める（tunnelsへ変換しない）。`museTunnelsFallback`と`fallbackUsed`を削除 |
+| `src/views/aichatMuseHealth.ts` | 「Tailscale未接続時に tunnels を使う」の設定と`aichat_muse_tunnels`のCookieの読み書きを削除 |
+| `src/aichat-askmuse-integration.test.ts`・`src/views/aichatMuseHealth.test.ts` | 指定やCookieがONでもtunnelsへ送らないこと、設定を表示しないことを確かめる |
+
+明示の`/neko askgk muse_prompt="…"`（tunnels経由）と`/askmuse prompt="…"`（直接）は変えていない。ブラウザに残った`aichat_muse_tunnels`のCookieは読まなくなるだけで、消してはいない。
