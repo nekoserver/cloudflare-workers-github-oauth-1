@@ -19,6 +19,12 @@ export const MUSE_STATUS_SCRIPT = `
     var MUSE_ALL_NODES = ${JSON.stringify(MUSE_NODE_NAMES)};
     var MUSE_BRIDGE_PORT = 8080;
     var MUSE_WASM_STORAGE_PREFIX = 'muse-status.tailscale.';
+    // ユーザー指定(2026-11-07): ログイン状態はこのブラウザのlocalStorageにログインから30日保ち、読み込みのたびにログインし直さない。
+    // 保存した日時は接頭辞の外のキーに置く(参加状態のキーと混ざらないように)。書き込みのたびには延ばさない。
+    var MUSE_WASM_SAVED_AT_KEY = 'muse-status.tailscale-saved-at';
+    var MUSE_WASM_STATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    // ユーザー指定(2026-11-07): faviconはAIチャットと同じ四角。本体コンテナが稼働中は緑、Tailscale WASMで接続中は黄、それ以外は灰。
+    var MUSE_FAVICON_COLORS = { container: '%2322c55e', wasm: '%23eab308', none: '%239ca3af' };
     // 本体コンテナ経由のWorkerの待ち時間(8秒)と同じ。
     var MUSE_WASM_SIGNAL_TIMEOUT_MS = 8000;
     var MUSE_SOURCE_LABELS = { container: '本体コンテナ', wasm: 'Tailscale WASM（このブラウザ）', none: 'なし' };
@@ -120,6 +126,9 @@ export const MUSE_STATUS_SCRIPT = `
       return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
     }
 
+    function museFaviconHref(kind) {
+      return "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='" + (MUSE_FAVICON_COLORS[kind] || MUSE_FAVICON_COLORS.none) + "'/%3E%3C/svg%3E";
+    }
     function setMuseBadge(element, label, kind) {
       element.textContent = label;
       element.className = 'muse-badge muse-badge-' + kind;
@@ -290,6 +299,7 @@ export const MUSE_STATUS_SCRIPT = `
     function initMuseStatusPage(deps) {
       var doc = deps.document;
       var nodes = deps.nodes;
+      if (!deps.now) deps = Object.assign({}, deps, { now: function() { return Date.now(); } });
       var nixResults = {};
       var settings = readMuseStatusSettings(doc.cookie);
       var enabledInput = doc.getElementById('muse-signal-enabled');
@@ -314,6 +324,24 @@ export const MUSE_STATUS_SCRIPT = `
       }
       function setWasmState(text) {
         wasmState.textContent = text;
+      }
+      /** 「Tailscale: 状態」。Runningだけを緑の文字で点滅させる(ユーザー指定、2026-11-07)。状態はSDKの文字列なのでtextContentで入れる。 */
+      function setWasmTailscaleState(state) {
+        wasmState.textContent = 'Tailscale: ';
+        if (state === 'Running') {
+          var running = doc.createElement('span');
+          running.className = 'muse-wasm-running';
+          running.textContent = state;
+          wasmState.append(running);
+        } else {
+          wasmState.append(doc.createTextNode(state));
+        }
+      }
+      function renderFavicon() {
+        var icon = doc.getElementById('muse-favicon');
+        if (!icon) return;
+        var kind = lastStatus && lastStatus.containerRunning === true ? 'container' : wasmReady() ? 'wasm' : 'none';
+        icon.setAttribute('href', museFaviconHref(kind));
       }
       function wasmReady() {
         return wasm.client !== null && wasm.state === 'Running' && wasm.nodes !== null;
@@ -340,6 +368,7 @@ export const MUSE_STATUS_SCRIPT = `
         if (lastStatus) setMuseBadge(doc.getElementById('muse-container'), lastStatus.containerRunning ? '起動中' : '停止中', lastStatus.containerRunning ? 'ok' : 'ng');
         else setMuseBadge(doc.getElementById('muse-container'), '不明', 'muted');
         setMuseBadge(doc.getElementById('muse-source'), MUSE_SOURCE_LABELS[source], source === 'none' ? 'muted' : 'ok');
+        renderFavicon();
       }
       function refreshStatus() {
         return deps.fetchJson('/api/muse-status').then(function(data) {
@@ -373,9 +402,18 @@ export const MUSE_STATUS_SCRIPT = `
           .then(function() { button.disabled = false; });
       }
       function storage() {
-        try { return typeof sessionStorage === 'undefined' ? null : sessionStorage; } catch (e) { return null; }
+        try { return typeof localStorage === 'undefined' ? null : localStorage; } catch (e) { return null; }
+      }
+      /** ログインから30日を過ぎた参加状態と、保存した日時の分からない参加状態を消す。 */
+      function expireStoredWasmState() {
+        var store = storage();
+        if (!store) return;
+        var savedAt = NaN;
+        try { savedAt = Number(store.getItem(MUSE_WASM_SAVED_AT_KEY)); } catch (e) { return; }
+        if (!(savedAt > 0) || deps.now() - savedAt > MUSE_WASM_STATE_TTL_MS) clearStoredWasmState();
       }
       function hasStoredWasmState() {
+        expireStoredWasmState();
         var store = storage();
         if (!store) return false;
         try {
@@ -392,6 +430,7 @@ export const MUSE_STATUS_SCRIPT = `
           var keys = [];
           for (var i = 0; i < store.length; i++) keys.push(String(store.key(i)));
           keys.forEach(function(key) { if (key.indexOf(MUSE_WASM_STORAGE_PREFIX) === 0) store.removeItem(key); });
+          store.removeItem(MUSE_WASM_SAVED_AT_KEY);
         } catch (e) { /* 保存できない環境では、もともと何も残っていない */ }
       }
       function dropWasmView() {
@@ -414,7 +453,14 @@ export const MUSE_STATUS_SCRIPT = `
         setWasmState('Tailscale WASMを読み込み中…');
         var stateStorage = {
           getState: function(key) { var store = storage(); try { return store ? store.getItem(MUSE_WASM_STORAGE_PREFIX + key) || '' : ''; } catch (e) { return ''; } },
-          setState: function(key, value) { var store = storage(); try { if (store) store.setItem(MUSE_WASM_STORAGE_PREFIX + key, value); } catch (e) { /* メモリ上の参加状態だけで続ける */ } }
+          setState: function(key, value) {
+            var store = storage();
+            try {
+              if (!store) return;
+              store.setItem(MUSE_WASM_STORAGE_PREFIX + key, value);
+              if (!store.getItem(MUSE_WASM_SAVED_AT_KEY)) store.setItem(MUSE_WASM_SAVED_AT_KEY, String(deps.now()));
+            } catch (e) { /* メモリ上の参加状態だけで続ける */ }
+          }
         };
         function onPanic() {
           setWasmState('Tailscale接続でエラーが発生しました。ページを再読み込みしてください');
@@ -429,7 +475,7 @@ export const MUSE_STATUS_SCRIPT = `
             notifyState: function(state) {
               var wasReady = wasmReady();
               wasm.state = state;
-              setWasmState('Tailscale: ' + state);
+              setWasmTailscaleState(state);
               if (state === 'Running') {
                 wasmLogin.textContent = '';
                 if (!wasReady && wasmReady()) onWasmReady();
@@ -531,6 +577,7 @@ export const MUSE_STATUS_SCRIPT = `
       doc.getElementById('muse-wasm-logout').addEventListener('click', logoutWasm);
       doc.addEventListener('visibilitychange', schedule.checkIfDue);
 
+      expireStoredWasmState();
       var loading = [refreshStatus()].concat(nodes.map(loadNix));
       if (settings.enabled) { schedule.markSent(); loading.push(sendAll()); }
       schedule.apply();
@@ -571,6 +618,7 @@ export function getMuseStatusPage(): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Museの状態</title>
+  <link rel="icon" id="muse-favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%239ca3af'/%3E%3C/svg%3E">
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
@@ -607,6 +655,9 @@ export function getMuseStatusPage(): string {
     input[type="search"] { width: 100%; margin-top: 4px; }
     #muse-notice { color: var(--text-primary); background: var(--bg-secondary); border-left: 4px solid #cf222e; padding: 8px 12px; margin: 0 0 16px; }
     #muse-signal-error { color: #cf222e; font-size: 13px; }
+    /* ユーザー指定(2026-11-07): 「Tailscale: Running」のRunningは緑の文字で点滅し続ける。 */
+    .muse-wasm-running { color: var(--success-color); font-weight: 600; animation: muse-blink 1.2s ease-in-out infinite; }
+    @keyframes muse-blink { 50% { opacity: 0.25; } }
   </style>
 </head>
 <body>
@@ -631,7 +682,7 @@ export function getMuseStatusPage(): string {
         <button type="button" id="muse-wasm-logout">ログアウト</button>
         <span class="muse-meta" id="muse-wasm-state" role="status">未接続</span></p>
       <p id="muse-wasm-login"></p>
-      <p class="muse-meta">本体コンテナが停止中のとき、このブラウザがTailscaleの端末としてtailnetへ参加し、状態とmuse-vmの/healthを直接取得します。本体コンテナが起動中ならそちらを使います。Tailscaleへのログインが必要で、見える端末と届く先はログインしたアカウントとACLに従います。WASMは公式の@tailscale/connectで、接続を押したときだけ読み込みます。Nixの一覧はMUSE_API_KEYが要るため、WASMでは取得しません。参加状態はこのタブのsessionStorageに保存し、ログアウトで消します。</p>
+      <p class="muse-meta">本体コンテナが停止中のとき、このブラウザがTailscaleの端末としてtailnetへ参加し、状態とmuse-vmの/healthを直接取得します。本体コンテナが起動中ならそちらを使います。Tailscaleへのログインが必要で、見える端末と届く先はログインしたアカウントとACLに従います。WASMは公式の@tailscale/connectで、接続を押したときだけ読み込みます。Nixの一覧はMUSE_API_KEYが要るため、WASMでは取得しません。参加状態はこのブラウザのlocalStorageにログインから30日保存し、その間はページを開き直してもログインし直さずに再接続します。ログアウトか期限切れで消します。共有の端末では使い終わったらログアウトしてください。</p>
     </section>
     <div class="muse-grid">
       ${MUSE_NODE_NAMES.map(renderNodeCard).join('\n      ')}

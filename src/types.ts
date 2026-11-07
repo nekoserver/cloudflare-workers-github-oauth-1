@@ -51,6 +51,17 @@ export type Bindings = {
    */
   DEMO_CONTAINER?: DurableObjectNamespace<DemoContainer>;
   /**
+   * AIチャットのジョブ(src/durable/aichatJob.ts)。送信後にタブを閉じても、応答と
+   * ログ保存を最後まで行う(ユーザー指定、2026-11-07)。wrangler.tomlの
+   * [[durable_objects.bindings]]参照。未設定なら /api/aichat/jobs は503を返す。
+   */
+  AICHAT_JOB?: DurableObjectNamespace;
+  /**
+   * Museとの協議の記録(D1 agent-inquiries)。/muse-inquiriesのカンバンが読む(ユーザー指定、2026-11-07)。
+   * 書き込みはClaude Codeが問い合わせのたびに行い、Workerは読むだけ。未設定なら503を返す。
+   */
+  INQUIRY_DB?: D1Database;
+  /**
    * デモコンテナ内のcloudflared(トンネル名nekoroot)が公開するホスト名。
    * コンテナのenvVars経由で渡す(src/containers/demoContainer.ts参照)。
    */

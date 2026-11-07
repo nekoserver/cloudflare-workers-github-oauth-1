@@ -111,7 +111,7 @@ function judgeVersion(actual, expected, minimum) {
 // optional: 入っていなくても異常ではないもの。無ければNGではなく「未導入」と出す。
 const VERSION_SOURCES = [
   { name: 'node', cmd: process.execPath, args: ['--version'], key: 'node', minimum: '26.12.1' },
-  { name: 'apache', cmd: 'apache2ctl', args: ['-v'] },
+  { name: 'apache', cmd: 'apache2ctl', args: ['-v'], key: 'apache' },
   { name: 'openssh', cmd: 'ssh', args: ['-V'], key: 'openssh' },
   { name: 'openssl', cmd: 'openssl', args: ['version'] },
   { name: 'cloudflared', cmd: 'cloudflared', args: ['--version'], key: 'cloudflared' },

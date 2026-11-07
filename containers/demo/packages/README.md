@@ -76,3 +76,64 @@ tar --owner=0 --group=0 --numeric-owner -cJf openssh-VERSION-linux-x64-ubuntu26.
 
 After a rebuild, update `OPENSSH_VERSION` and `OPENSSH_PACKAGE_SHA256` in the
 Dockerfile and `SHA256SUMS` here. The package targets Ubuntu 26.04 x86_64 only.
+
+## Apache httpd 2.4.70
+
+`apache-2.4.70-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+release. It holds only `/usr/sbin/apache2` and `/usr/lib/apache2/modules/*.so`
+and unpacks over the APT `apache2` packages, which stay for `/etc/apache2`,
+`a2enmod`, `apache2ctl`, `envvars` and the runtime libraries. The Dockerfile
+holds those APT packages so an upgrade cannot put the old binary back.
+
+`httpd-2.4.70.tar.gz` and `.asc` are the unmodified source and its signature.
+
+- Source: https://downloads.apache.org/httpd/httpd-2.4.70.tar.gz
+  (permanent copy: https://archive.apache.org/dist/httpd/httpd-2.4.70.tar.gz)
+- Source SHA512: `5998908195bd99e719714befbcf328b98012625c5848e8ca34509e15ad5faff61a4c7575cccc43dae3c79f6a66bb89b7ed67d730e65ca9dabf5f6b8c33fbcf09`
+- Checked: 2026-11-07 against the `.sha512` files on both hosts and the PGP
+  signature by `65B2D44FE74BD5E3DE3AC3F082781DE46D5954FA` (Eric Covener, httpd `KEYS`).
+- Built: 2026-11-07 on Ubuntu 26.04 x86_64 against the APT APR 1.7.6,
+  APR-util 1.6.3 and PCRE2. No Ubuntu patches, no suexec, no mod_systemd.
+
+Rebuild on Ubuntu 26.04 from the unpacked source. Do not do this inside the
+cf-container (not enough CPU); build on another Ubuntu 26.04 x86_64 machine:
+
+```sh
+apt-get install -y --no-install-recommends build-essential libapr1-dev libaprutil1-dev \
+  libpcre2-dev libssl-dev zlib1g-dev libnghttp2-dev libxml2-dev libbrotli-dev \
+  libjansson-dev libcurl4-openssl-dev liblua5.4-dev
+./configure --enable-layout=Debian --with-program-name=apache2 \
+  --with-apr=/usr/bin/apr-1-config --with-apr-util=/usr/bin/apu-1-config --with-pcre=/usr/bin/pcre2-config \
+  --enable-mpms-shared=all --enable-mods-shared=reallyall \
+  --enable-watchdog=static --enable-log-config=static --enable-logio=static --enable-version=static --enable-unixd=static \
+  --enable-ssl=shared --enable-proxy=shared --enable-proxy-http=shared --enable-proxy-wstunnel=shared --enable-rewrite=shared \
+  --enable-cgid=shared --enable-include=shared --enable-remoteip=shared --enable-http2=shared \
+  --disable-suexec --disable-systemd
+# Ubuntu's binary looks for /etc/apache2/apache2.conf through these two defines.
+# The Debian layout leaves HTTPD_ROOT empty, so set them and check the result.
+sed -i 's|^#define HTTPD_ROOT ""$|#define HTTPD_ROOT "/etc/apache2"|; s|^#define SERVER_CONFIG_FILE "/etc/apache2/apache2.conf"$|#define SERVER_CONFIG_FILE "apache2.conf"|' include/ap_config_auto.h
+grep -qx '#define HTTPD_ROOT "/etc/apache2"' include/ap_config_auto.h
+grep -qx '#define SERVER_CONFIG_FILE "apache2.conf"' include/ap_config_auto.h
+make -j"$(nproc)"
+make DESTDIR="$PWD/dest" install
+mkdir -p pkg/usr/sbin pkg/usr/lib/apache2/modules
+install -m 755 -s dest/usr/sbin/apache2 pkg/usr/sbin/apache2
+install -m 644 dest/usr/lib/apache2/modules/*.so pkg/usr/lib/apache2/modules/
+strip --strip-unneeded pkg/usr/lib/apache2/modules/*.so
+tar --sort=name --mtime=2026-11-07T00:00:00Z --owner=0 --group=0 --numeric-owner \
+  -cJf apache-VERSION-linux-x64-ubuntu26.04.tar.xz -C pkg usr
+```
+
+The modules `mod_unixd`, `mod_log_config`, `mod_logio`, `mod_version` and
+`mod_watchdog` must be static: Ubuntu compiles them in, so `/etc/apache2` has
+no `LoadModule` for them and `User` fails as an unknown directive otherwise.
+Ubuntu's `mod_suexec.so` is not rebuilt and is left as the APT file; it is not enabled.
+
+Checked before packaging: `apache2 -V` shows `HTTPD_ROOT="/etc/apache2"` and
+`SERVER_CONFIG_FILE="apache2.conf"`; with a copy of the container's `/etc/apache2`
+it reports `Syntax OK` and loads ssl, proxy_wstunnel, cgid, include and remoteip;
+started on a spare port as `www-data`, it served an SSI page through a RewriteRule;
+`ldd` finds every library.
+
+After a rebuild, update `APACHE_VERSION` and `APACHE_PACKAGE_SHA256` in the
+Dockerfile and `SHA256SUMS` here. The package targets Ubuntu 26.04 x86_64 only.
