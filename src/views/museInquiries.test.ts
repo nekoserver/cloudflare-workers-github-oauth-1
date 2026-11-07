@@ -79,7 +79,7 @@ describe('Museとの協議のカンバン', () => {
     await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
     const button = (key: string) => document.querySelector<HTMLButtonElement>('[data-status-filter="' + key + '"]')!;
     const phases = () => [...document.querySelectorAll('[data-phase]')].map((p) => p.getAttribute('data-phase'));
-    expect(['all', 'discussing', 'pending', 'done'].map((key) => button(key).querySelector('[data-filter-count]')?.textContent)).toEqual(['7', '4', '1', '1']);
+    expect(['all', 'discussing', 'pending', 'done'].map((key) => button(key).querySelector('[data-filter-count]')?.textContent)).toEqual(['7', '2', '1', '4']);
     button('pending').click();
     expect(phases()).toEqual(['proposed']);
     expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(1);
@@ -88,10 +88,10 @@ describe('Museとの協議のカンバン', () => {
     button('pending').click();
     expect(phases()).toEqual(['proposed']);
     button('done').click();
-    expect(phases()).toEqual(['done']);
+    expect(phases()).toEqual(['inquiry', 'done', 'rejected']);
     button('discussing').click();
-    expect(phases()).toEqual(['inquiry', 'open-keys', 'adopted']);
-    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(4);
+    expect(phases()).toEqual(['open-keys', 'adopted']);
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(2);
     button('all').click();
     expect(phases()).toEqual(BOARD.phases.map((p) => p.key));
   });
@@ -112,11 +112,98 @@ describe('Museとの協議のカンバン', () => {
     await vi.waitFor(() => expect(fetchJson).toHaveBeenCalledTimes(2));
     expect(filter.value).toBe('nix-packages-20261107');
     expect(button('pending').getAttribute('aria-pressed')).toBe('true');
-    expect(document.querySelectorAll('[data-phase]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-phase]')).toHaveLength(0);
     filter.value = '';
     filter.dispatchEvent(new Event('change'));
     expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(1);
     expect(button('pending').querySelector('[data-filter-count]')!.textContent).toBe('1');
+  });
+
+  it('全カードに種類と状態を付け、回答済みと失敗を完了として分類する', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'inquiry' ? { ...p, panels: [...p.panels, { ...p.panels[0], seq: 3, status: 'failed', title: '' }] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    const cards = [...document.querySelectorAll('#inq-board [data-panel]')];
+    expect(cards.every((card) => card.querySelector('[data-card-type]')?.textContent?.trim())).toBe(true);
+    expect(cards.every((card) => card.querySelector('[data-card-status]')?.textContent?.trim())).toBe(true);
+    const answered = cards.find((card) => card.textContent?.includes('協議する'))!;
+    expect(answered.querySelector('[data-card-status]')!.textContent).toBe('完了');
+    expect(answered.textContent).toContain('回答済み');
+    const failed = cards.find((card) => card.getAttribute('data-card-key')?.endsWith(':3'))!;
+    expect(failed.textContent).toContain('失敗');
+    expect(failed.querySelector('.inq-panel-title')!.textContent).toBe('無題の問い合わせ');
+    (document.querySelector('[data-status-filter="discussing"]') as HTMLButtonElement).click();
+    expect(document.querySelectorAll('#inq-board [data-panel="entry"]')).toHaveLength(0);
+    (document.querySelector('[data-status-filter="done"]') as HTMLButtonElement).click();
+    expect(document.querySelectorAll('#inq-board [data-panel="entry"]')).toHaveLength(3);
+  });
+
+  it('同一カードIDの重複だけを除き、別IDの似た提案は残して件数も一致させる', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'proposed' ? { ...p, panels: [p.panels[0], p.panels[0], { ...p.panels[0], id: 'p-other' }] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    (document.querySelector('[data-status-filter="pending"]') as HTMLButtonElement).click();
+    const cards = document.querySelectorAll('#inq-board [data-panel]');
+    expect(cards).toHaveLength(2);
+    expect(new Set([...cards].map((card) => card.getAttribute('data-card-key'))).size).toBe(2);
+    expect(document.querySelector('[data-status-filter="pending"] [data-filter-count]')!.textContent).toBe('2');
+    (cards[0] as HTMLButtonElement).click();
+    expect(modal().textContent).toContain('renameで排他');
+  });
+
+  it('ケース一覧を区別して折りたたみ、各カードで長いケース名を繰り返さない', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    const cases = document.getElementById('inq-cases')!.closest('details')!;
+    expect(cases).not.toBeNull();
+    expect(cases.open).toBe(false);
+    expect(cases.querySelector('summary')!.textContent).toContain('ケース一覧');
+    const footer = document.querySelector('#inq-board .inq-panel-case')!;
+    expect(footer.textContent).toBe('ケース: ' + CASE_ID);
+    expect(footer.getAttribute('title')).toBe(BOARD.cases[0].goal);
+  });
+
+  it('完了カードをボードに残したまま末尾の表にも新しい順で並べ、元の会話を開ける', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'done' ? { ...p, panels: [
+      { type: 'proposal', caseId: CASE_ID, id: 'p-done-old', title: '前の提案', status: 'done', proposedBy: 'muse', reason: null, entryId: CASE_ID + '-e1', createdAt: '2026-11-06T00:00:00Z', sourceEntry: { id: CASE_ID + '-e1', seq: 1, title: '読み方' } },
+      { type: 'proposal', caseId: CASE_ID, id: 'p-done-new', title: '新しい提案', status: 'done', proposedBy: 'muse', reason: null, entryId: CASE_ID + '-e2', createdAt: '2026-11-08T00:00:00Z', sourceEntry: { id: CASE_ID + '-e2', seq: 2, title: '協議する' } },
+    ] } : p) };
+    const fetchJson = vi.fn(async (url: string) => url === '/api/muse-inquiries/board' ? board : DETAIL);
+    await script.initMuseInquiriesPage({ document, fetchJson });
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(6);
+    const section = document.getElementById('inq-completed')!;
+    expect(section.compareDocumentPosition(document.getElementById('inq-board')!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    const rows = [...section.querySelectorAll('tbody tr')];
+    expect(rows.map((r) => r.getAttribute('data-history-key'))).toEqual([
+      'proposal:' + CASE_ID + ':p-done-new', 'entry:' + CASE_ID + ':2', 'entry:nix-packages-20261107:1', 'proposal:' + CASE_ID + ':p-done-old',
+    ]);
+    expect(document.querySelector('[data-status-filter="all"] [data-filter-count]')!.textContent).toBe('6');
+    expect(document.querySelector('[data-status-filter="done"] [data-filter-count]')!.textContent).toBe('4');
+    const origin = rows[0].querySelector<HTMLAnchorElement>('[data-action="open-origin"]')!;
+    expect(origin.textContent).toContain('#2 協議する');
+    expect(origin.getAttribute('href')).toContain('inq-record-');
+    origin.click();
+    await vi.waitFor(() => expect(modal().textContent).toContain('質問2'));
+    (document.getElementById('inq-modal-close') as HTMLButtonElement).click();
+    (document.querySelector('[data-status-filter="pending"]') as HTMLButtonElement).click();
+    expect((section as HTMLElement).hidden).toBe(true);
+    (document.querySelector('[data-status-filter="done"]') as HTMLButtonElement).click();
+    expect((section as HTMLElement).hidden).toBe(false);
+    expect(section.querySelectorAll('tbody tr')).toHaveLength(4);
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(4);
+  });
+
+  it('完了表でも同一IDを重ねず、日時や発端のない記録は推測せず表示する', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'done' ? { ...p, panels: [
+      { type: 'proposal', caseId: CASE_ID, id: 'no-origin', title: '<img src=x>単独の提案', status: 'done', proposedBy: 'muse', reason: null, entryId: null },
+      { type: 'proposal', caseId: CASE_ID, id: 'no-origin', title: '<img src=x>単独の提案', status: 'done', proposedBy: 'muse', reason: null, entryId: null },
+    ] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    const rows = [...document.querySelectorAll('#inq-completed tbody tr')];
+    expect(rows).toHaveLength(3);
+    expect(rows.at(-1)!.textContent).toContain('日時不明');
+    expect(rows.at(-1)!.textContent).toContain('関連付けなし');
+    expect(rows.at(-1)!.querySelector('img')).toBeNull();
+    const filter = document.getElementById('inq-case-filter') as HTMLSelectElement;
+    filter.value = 'nix-packages-20261107'; filter.dispatchEvent(new Event('change'));
+    expect(document.querySelectorAll('#inq-completed tbody tr')).toHaveLength(1);
   });
 
   it('ケースのパネルに提案数・問い合わせ数・未解決の論点・所要時間を出し、ケースで絞り込める', async () => {
@@ -164,6 +251,67 @@ describe('Museとの協議のカンバン', () => {
     expect(modal().textContent).toContain('質問1');
     expect(modal().textContent).toContain('排他が無い');
     expect(modal().textContent).toContain('renameで排他');
+  });
+
+  it('詳細のMarkdownを見出し・表・リスト・コードとして表示し、生HTMLと危険なリンクを実行しない', async () => {
+    const answer = ['# 設計', '', '**重要**', '', '- 永続化', '- 再試行', '', '| 項目 | 方針 |', '|---|---|', '| 保存 | D1 |', '', '```sql', 'SELECT 1;', '<script>bad()</script>', '```', '', '[資料](https://example.com/docs)', '[危険](javascript:alert(1))', '<img src=x onerror=bad()>'].join('\n');
+    const detail = { ...DETAIL, entries: DETAIL.entries.map((e) => e.seq === 2 ? { ...e, answer } : e) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async (url: string) => url === '/api/muse-inquiries/board' ? BOARD : detail) });
+    (document.querySelector('[data-phase="inquiry"] [data-panel]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('.inq-markdown h1')?.textContent).toBe('設計'));
+    expect(modal().querySelector('.inq-markdown strong')?.textContent).toBe('重要');
+    expect(modal().querySelectorAll('.inq-markdown li')).toHaveLength(2);
+    expect(modal().querySelector('.inq-markdown td')?.textContent).toBe('保存');
+    expect(modal().querySelector('.inq-markdown pre code')?.textContent).toContain('SELECT 1;');
+    expect(modal().querySelector('.inq-markdown pre code')?.textContent).toContain('<script>bad()</script>');
+    expect(modal().querySelector('script, img, [onerror]')).toBeNull();
+    expect(modal().querySelector('a[href^="javascript:"]')).toBeNull();
+    expect(modal().querySelector('a[href="https://example.com/docs"]')?.getAttribute('rel')).toContain('noopener');
+  });
+
+  it('提案の直接表示とケース全体表示でもMarkdownを表示する', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'proposed' ? { ...p, panels: [{ ...p.panels[0], title: '## 提案見出し', reason: '**理由**' }] } : p) };
+    const detail = { ...DETAIL, proposals: [{ ...DETAIL.proposals[0], text: '## ケース内の提案' }], keys: [{ ...DETAIL.keys[0], text: '**論点**' }] };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async (url: string) => url === '/api/muse-inquiries/board' ? board : detail) });
+    (document.querySelector('[data-phase="proposed"] [data-panel]') as HTMLButtonElement).click();
+    expect(modal().querySelector('.inq-markdown h2')?.textContent).toBe('提案見出し');
+    expect(modal().querySelector('.inq-markdown strong')?.textContent).toBe('理由');
+    (document.querySelector('[data-case-summary]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('.inq-markdown h2')?.textContent).toBe('ケース内の提案'));
+    expect(modal().querySelector('.inq-markdown strong')?.textContent).toBe('論点');
+  });
+
+  it('提案者別に全提案・協議中・完了を集計し、表記揺れと同一IDの二重計上を防ぐ', async () => {
+    const proposal = BOARD.phases.find((p) => p.key === 'proposed')!.panels[0];
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => {
+      if (p.key === 'proposed') return { ...p, panels: [proposal, proposal, { ...proposal, id: 'p-alias', proposedBy: ' Muse ', caseId: 'nix-packages-20261107' }] };
+      if (p.key === 'adopted') return { ...p, panels: [{ ...proposal, id: 'p-active', status: 'adopted', proposedBy: 'Muse' }] };
+      if (p.key === 'done') return { ...p, panels: [{ ...proposal, id: 'p-finished', status: 'done', proposedBy: 'codex' }] };
+      if (p.key === 'rejected') return { ...p, panels: [{ ...proposal, id: 'p-unknown', status: 'rejected', proposedBy: '' }] };
+      return p;
+    }) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    const counts = (name: string) => {
+      const card = [...document.querySelectorAll('[data-proposer]')].find((e) => e.getAttribute('data-proposer') === name)!;
+      return [...card.querySelectorAll('[data-proposer-count]')].map((e) => e.textContent);
+    };
+    expect(document.querySelectorAll('[data-proposer]')).toHaveLength(3);
+    expect(counts('Muse')).toEqual(['3', '1', '0']);
+    expect(counts('Codex')).toEqual(['1', '0', '1']);
+    expect(counts('提案者未設定')).toEqual(['1', '0', '1']);
+    expect([...document.querySelectorAll('[data-proposer="Muse"] [data-proposer-label]')].map((e) => e.textContent)).toEqual(['提案', '協議中', '完了']);
+    const filter = document.getElementById('inq-case-filter') as HTMLSelectElement;
+    filter.value = CASE_ID; filter.dispatchEvent(new Event('change'));
+    expect(counts('Muse')).toEqual(['2', '1', '0']);
+    (document.querySelector('[data-status-filter="done"]') as HTMLButtonElement).click();
+    expect(counts('Muse')).toEqual(['2', '1', '0']);
+  });
+
+  it('提案がない場合は提案者別の空状態を示す', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => ({ ...p, panels: p.panels.filter((panel) => panel.type !== 'proposal') })) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    expect(document.querySelectorAll('[data-proposer]')).toHaveLength(0);
+    expect(document.getElementById('inq-proposers')!.textContent).toContain('提案はまだありません');
   });
 
   it('取得に失敗したら理由を表示し、空にしない', async () => {

@@ -63,7 +63,7 @@ export type InquiryPhaseKey = typeof INQUIRY_PHASES[number]['key'];
 export type InquiryPanel =
   | { type: 'entry'; caseId: string; seq: number; title: string; summary: string; status: string; durationSeconds: number | null; createdAt: string; agent: string }
   | { type: 'key'; caseId: string; id: string; kind: string; title: string; blocking: boolean; mutating: boolean }
-  | { type: 'proposal'; caseId: string; id: string; title: string; status: string; reason: string | null; proposedBy: string; entryId: string | null };
+  | { type: 'proposal'; caseId: string; id: string; title: string; status: string; reason: string | null; proposedBy: string; entryId: string | null; createdAt: string; sourceEntry: { id: string; seq: number; title: string } | null };
 
 const PROPOSAL_PHASE: Record<string, InquiryPhaseKey> = { proposed: 'proposed', adopted: 'adopted', done: 'done', rejected: 'rejected' };
 
@@ -71,11 +71,12 @@ export async function loadInquiryBoard(db: D1Database): Promise<{ cases: Inquiry
   // 一覧では回答の全文(answer)を読まない。パネルを開いたときにloadInquiryCaseで読む。
   const [{ results: caseRows }, { results: entries }, { results: keys }, { results: proposals }] = await Promise.all([
     db.prepare(`${CARD_SQL} ORDER BY COALESCE((SELECT MAX(e.created_at) FROM inquiry_entries e WHERE e.case_id = c.id), c.created_at) DESC`).all<Row>(),
-    db.prepare("SELECT case_id, seq, clue, agent, asked_by, info, progress, status, duration_seconds, created_at FROM inquiry_entries WHERE status != 'withdrawn' ORDER BY created_at DESC, seq DESC").all<Row>(),
+    db.prepare("SELECT id, case_id, seq, clue, agent, asked_by, info, progress, status, duration_seconds, created_at FROM inquiry_entries WHERE status != 'withdrawn' ORDER BY created_at DESC, seq DESC").all<Row>(),
     db.prepare("SELECT case_id, id, kind, text, status, blocking, mutating FROM inquiry_keys WHERE status = 'open' ORDER BY blocking DESC, created_at").all<Row>(),
-    db.prepare('SELECT case_id, id, entry_id, proposed_by, text, status, reason FROM inquiry_proposals ORDER BY created_at DESC, id').all<Row>(),
+    db.prepare('SELECT case_id, id, entry_id, proposed_by, text, status, reason, created_at FROM inquiry_proposals ORDER BY created_at DESC, id').all<Row>(),
   ]);
   const panels: Record<InquiryPhaseKey, InquiryPanel[]> = { inquiry: [], 'open-keys': [], proposed: [], adopted: [], done: [], rejected: [] };
+  const entriesById = new Map((entries ?? []).filter((e) => e.id).map((e) => [str(e.id), e]));
   for (const e of entries ?? []) {
     panels.inquiry.push({
       type: 'entry', caseId: str(e.case_id), seq: num(e.seq), title: str(e.clue), summary: str(e.info), status: str(e.status),
@@ -89,7 +90,10 @@ export async function loadInquiryBoard(db: D1Database): Promise<{ cases: Inquiry
   for (const p of proposals ?? []) {
     const phase = PROPOSAL_PHASE[str(p.status)];
     if (!phase) continue;
-    panels[phase].push({ type: 'proposal', caseId: str(p.case_id), id: str(p.id), title: str(p.text), status: str(p.status), reason: strOrNull(p.reason), proposedBy: str(p.proposed_by), entryId: strOrNull(p.entry_id) });
+    const entry = entriesById.get(str(p.entry_id));
+    panels[phase].push({ type: 'proposal', caseId: str(p.case_id), id: str(p.id), title: str(p.text), status: str(p.status), reason: strOrNull(p.reason), proposedBy: str(p.proposed_by), entryId: strOrNull(p.entry_id), createdAt: str(p.created_at),
+      sourceEntry: entry && entry.case_id === p.case_id ? { id: str(entry.id), seq: num(entry.seq), title: str(entry.clue) } : null,
+    });
   }
   return {
     cases: (caseRows ?? []).map(toCard),
