@@ -12,6 +12,13 @@ export const MUSE_INQUIRIES_SCRIPT = `
     var INQ_CASE_STATUS_LABELS = { open: '協議中', resolved: '解決', abandoned: '中止' };
     var INQ_KEY_KIND_LABELS = { unknown: '未確認', pitfall: '落とし穴', known: '事実' };
     var INQ_PROPOSAL_STATUS_LABELS = { proposed: '採否待ち', adopted: '採用', done: '完了', rejected: '不採用' };
+    // 件数は選択中ケースのカード数。業務フェーズは変更せず、表示対象だけを切り替える。
+    var INQ_STATUS_FILTERS = {
+      all: { label: 'すべて', phases: null },
+      discussing: { label: '協議中', phases: ['inquiry', 'open-keys', 'adopted'] },
+      pending: { label: '採否待ち', phases: ['proposed'] },
+      done: { label: '完了', phases: ['done'] }
+    };
 
     function formatInqDuration(seconds) {
       if (seconds === null || seconds === undefined) return '—';
@@ -57,6 +64,8 @@ export const MUSE_INQUIRIES_SCRIPT = `
       var modalBody = doc.getElementById('inq-modal-body');
       var board = null;
       var caseCache = {};
+      var statusFilter = 'all';
+      var statusButtons = doc.querySelectorAll('[data-status-filter]');
 
       function setNotice(text) { notice.textContent = text; notice.hidden = !text; }
       function caseById(id) { return board ? board.cases.filter(function(c) { return c.id === id; })[0] : null; }
@@ -204,9 +213,16 @@ export const MUSE_INQUIRIES_SCRIPT = `
       }
       function renderBoard() {
         var selected = filter.value;
+        var active = INQ_STATUS_FILTERS[statusFilter];
+        var counts = { all: 0, discussing: 0, pending: 0, done: 0 };
         boardEl.textContent = '';
         board.phases.forEach(function(phase) {
           var panels = phase.panels.filter(function(p) { return !selected || p.caseId === selected; });
+          Object.keys(counts).forEach(function(key) {
+            var phases = INQ_STATUS_FILTERS[key].phases;
+            if (!phases || phases.indexOf(phase.key) !== -1) counts[key] += panels.length;
+          });
+          if (active.phases && active.phases.indexOf(phase.key) === -1) return;
           var col = el(doc, 'section', 'inq-col');
           col.setAttribute('data-phase', phase.key);
           var head = el(doc, 'h2', 'inq-col-head');
@@ -225,6 +241,13 @@ export const MUSE_INQUIRIES_SCRIPT = `
           panels.forEach(function(panel) { col.appendChild(renderPanel(panel)); });
           boardEl.appendChild(col);
         });
+        statusButtons.forEach(function(button) {
+          var key = button.getAttribute('data-status-filter');
+          button.disabled = false;
+          button.setAttribute('aria-pressed', String(key === statusFilter));
+          button.querySelector('[data-filter-count]').textContent = String(counts[key]);
+        });
+        doc.getElementById('inq-filter-result').textContent = active.label + ': ' + counts[statusFilter] + '件';
       }
       function renderCases() {
         casesEl.textContent = '';
@@ -259,6 +282,13 @@ export const MUSE_INQUIRIES_SCRIPT = `
       modal.addEventListener('click', function(event) { if (event.target === modal) closeModal(); });
       doc.addEventListener('keydown', function(event) { if (event.key === 'Escape') closeModal(); });
       filter.addEventListener('change', function() { if (board) renderBoard(); });
+      statusButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          if (!board) return;
+          statusFilter = button.getAttribute('data-status-filter');
+          renderBoard();
+        });
+      });
       doc.getElementById('inq-refresh').addEventListener('click', function() { caseCache = {}; load(); });
 
       function load() {
@@ -289,6 +319,14 @@ export function getMuseInquiriesPage(): string {
     ${getThemeCSS()}
     ${getThemeToggleCSS()}
     body { margin: 0; background: var(--bg-secondary); color: var(--text-primary); font-family: system-ui, sans-serif; line-height: 1.6; }
+    .inq-header { position: sticky; top: 0; z-index: 20; background: var(--card-bg); border-bottom: 1px solid var(--border-color); }
+    .inq-header-content { padding: 0 16px 12px; }
+    .inq-status-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    .inq-filter-button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer; }
+    .inq-filter-button[aria-pressed="true"] { border-color: var(--accent-color); outline: 2px solid var(--accent-color); outline-offset: 1px; }
+    .inq-filter-button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+    .inq-filter-button:disabled { cursor: wait; opacity: 0.6; }
+    .inq-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .inq-nav { position: sticky; top: 0; z-index: 10; box-sizing: border-box; height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color); }
     .inq-nav a { color: var(--text-primary); }
     .inq-nav-end { margin-left: auto; display: flex; align-items: center; }
@@ -296,6 +334,8 @@ export function getMuseInquiriesPage(): string {
     h1 { font-size: 22px; margin: 8px 0; }
     h3 { font-size: 14px; margin: 16px 0 6px; }
     .inq-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
+    .inq-toolbar label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+    .inq-toolbar select { flex: 1; min-width: 0; max-width: 100%; }
     .inq-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; margin-bottom: 16px; }
     .inq-case, .inq-panel { display: block; width: 100%; text-align: left; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
     .inq-case:hover, .inq-panel:hover { border-color: var(--accent-color); }
@@ -336,9 +376,20 @@ export function getMuseInquiriesPage(): string {
   </style>
 </head>
 <body>
+  <header id="inq-header" class="inq-header">
   <nav class="inq-nav"><a href="/muse-status">← Museの状態</a><span class="inq-nav-end">${getThemeToggleHTML()}</span></nav>
-  <main class="inq-main">
+  <div class="inq-header-content">
     <h1>Museとの協議</h1>
+    <div class="inq-status-filters" role="group" aria-label="カードの状態で絞り込む">
+      <button type="button" class="inq-filter-button" data-status-filter="all" aria-pressed="true" aria-controls="inq-board" disabled><span class="inq-badge inq-badge-muted" data-filter-label>すべて</span><span class="inq-count" data-filter-count>—</span></button>
+      <button type="button" class="inq-filter-button" data-status-filter="discussing" aria-pressed="false" aria-controls="inq-board" disabled><span class="inq-badge inq-badge-warn" data-filter-label>協議中</span><span class="inq-count" data-filter-count>—</span></button>
+      <button type="button" class="inq-filter-button" data-status-filter="pending" aria-pressed="false" aria-controls="inq-board" disabled><span class="inq-badge inq-badge-warn" data-filter-label>採否待ち</span><span class="inq-count" data-filter-count>—</span></button>
+      <button type="button" class="inq-filter-button" data-status-filter="done" aria-pressed="false" aria-controls="inq-board" disabled><span class="inq-badge inq-badge-ok" data-filter-label>完了</span><span class="inq-count" data-filter-count>—</span></button>
+    </div>
+    <span id="inq-filter-result" class="inq-sr-only" role="status" aria-live="polite"></span>
+  </div>
+  </header>
+  <main class="inq-main">
     <p id="inq-notice" role="status" hidden></p>
     <div id="inq-cases" class="inq-cases" aria-label="ケース"></div>
     <div class="inq-toolbar">

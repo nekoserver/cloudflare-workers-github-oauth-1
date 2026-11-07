@@ -61,6 +61,64 @@ describe('Museとの協議のカンバン', () => {
     expect(document.querySelector('[data-phase="done"] [data-field="empty"]')!.textContent).toContain('ありません');
   });
 
+  it('上部の固定ヘッダに4種類の状態フィルタを置き、すべてを初期選択する', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-status-filter]')];
+    expect(buttons.map((b) => b.dataset.statusFilter)).toEqual(['all', 'discussing', 'pending', 'done']);
+    expect(buttons.map((b) => b.querySelector('[data-filter-label]')?.textContent)).toEqual(['すべて', '協議中', '採否待ち', '完了']);
+    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
+    expect(buttons.every((b) => b.closest('#inq-header'))).toBe(true);
+    expect(getMuseInquiriesPage()).toMatch(/\.inq-header \{[^}]*position: sticky; top: 0;/);
+  });
+
+  it('状態ごとのカード件数を表示し、繰り返し押しても該当フェーズだけを表示する', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((phase) => {
+      if (!['adopted', 'done', 'rejected'].includes(phase.key)) return phase;
+      return { ...phase, panels: [{ type: 'proposal', caseId: CASE_ID, id: phase.key, title: phase.label, status: phase.key, reason: null, proposedBy: 'muse', entryId: null }] };
+    }) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    const button = (key: string) => document.querySelector<HTMLButtonElement>('[data-status-filter="' + key + '"]')!;
+    const phases = () => [...document.querySelectorAll('[data-phase]')].map((p) => p.getAttribute('data-phase'));
+    expect(['all', 'discussing', 'pending', 'done'].map((key) => button(key).querySelector('[data-filter-count]')?.textContent)).toEqual(['7', '4', '1', '1']);
+    button('pending').click();
+    expect(phases()).toEqual(['proposed']);
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(1);
+    expect(button('pending').getAttribute('aria-pressed')).toBe('true');
+    expect(button('all').getAttribute('aria-pressed')).toBe('false');
+    button('pending').click();
+    expect(phases()).toEqual(['proposed']);
+    button('done').click();
+    expect(phases()).toEqual(['done']);
+    button('discussing').click();
+    expect(phases()).toEqual(['inquiry', 'open-keys', 'adopted']);
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(4);
+    button('all').click();
+    expect(phases()).toEqual(BOARD.phases.map((p) => p.key));
+  });
+
+  it('状態フィルタとケース選択を併用し、件数を更新して再読み込みでも状態を維持する', async () => {
+    const fetchJson = api();
+    await script.initMuseInquiriesPage({ document, fetchJson });
+    const filter = document.getElementById('inq-case-filter') as HTMLSelectElement;
+    filter.value = 'nix-packages-20261107';
+    filter.dispatchEvent(new Event('change'));
+    const button = (key: string) => document.querySelector<HTMLButtonElement>('[data-status-filter="' + key + '"]')!;
+    expect(button('all').querySelector('[data-filter-count]')!.textContent).toBe('1');
+    expect(button('pending').querySelector('[data-filter-count]')!.textContent).toBe('0');
+    button('pending').click();
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(0);
+    expect(document.getElementById('inq-filter-result')!.textContent).toContain('採否待ち: 0件');
+    (document.getElementById('inq-refresh') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fetchJson).toHaveBeenCalledTimes(2));
+    expect(filter.value).toBe('nix-packages-20261107');
+    expect(button('pending').getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelectorAll('[data-phase]')).toHaveLength(1);
+    filter.value = '';
+    filter.dispatchEvent(new Event('change'));
+    expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(1);
+    expect(button('pending').querySelector('[data-filter-count]')!.textContent).toBe('1');
+  });
+
   it('ケースのパネルに提案数・問い合わせ数・未解決の論点・所要時間を出し、ケースで絞り込める', async () => {
     await script.initMuseInquiriesPage({ document, fetchJson: api() });
     const summary = document.querySelector(`[data-case-summary="${CASE_ID}"]`)!;
