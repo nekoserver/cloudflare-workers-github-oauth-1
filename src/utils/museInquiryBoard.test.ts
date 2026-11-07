@@ -62,6 +62,18 @@ describe('協議のカンバンのデータ', () => {
     expect(calls.some((c) => /\banswer\b/.test(c.sql))).toBe(false);
   });
 
+  it('提案の記録日時と元の会話のID・番号・見出しを返す。回答全文は一覧で取得しない', async () => {
+    const { db, calls } = fakeDb({ ...TABLES,
+      inquiry_entries: [{ ...TABLES.inquiry_entries[0], id: CASE.id + '-e2' }],
+      inquiry_proposals: [{ ...TABLES.inquiry_proposals[0], created_at: '2026-11-08T01:00:00Z' }],
+    });
+    const board = await loadInquiryBoard(db);
+    expect(board.phases.find((p) => p.key === 'proposed')!.panels[0]).toMatchObject({
+      createdAt: '2026-11-08T01:00:00Z', sourceEntry: { id: CASE.id + '-e2', seq: 2, title: '協議する' },
+    });
+    expect(calls.some((c) => /\banswer\b/.test(c.sql))).toBe(false);
+  });
+
   it('ケースの詳細は、問い合わせを順番どおり、回答の全文・キー・提案と一緒に返す。IDはパラメータで渡す', async () => {
     const { db, calls } = fakeDb({
       inquiry_cases: [CASE],
