@@ -263,3 +263,9 @@ tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグ�
 ## 2026-11-07: muse-statusのブリッジ接続先を修正（本番未反映）
 
 museは外向き専用なのでTailscaleの状態表示だけとし、health/Nix取得をmuse-vmへ限定。画面の初回・定期・手動操作、Worker共通処理、コンテナ中継でmuse:8080への接続を抑止。関連5ファイル124テストと生成scriptのnode --check成功。修正した中継を使って現コンテナから実muse-vmの/health HTTP200/status=okを確認。本番Worker・常駐server.js・イメージには未反映。詳細は [MUSE STATUS REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-STATUS-BRIDGE.20261107.md)。
+
+## 2026-11-07: スイッチがMuseのときのスラッシュコマンド（本番未反映）
+
+スイッチが`muse`の`/usage`は、従来も本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vmのapi-bridgeへ届き、先方が推論せずに実行していた。問題はWorker側で、結果を通常のAI回答として保存し、`./usage`を別名として解決していなかった。応答の`bridge_command`があるときは`ai_chat_shares`へ保存せず`local/neko`として返し、`./usage`は`/usage`へ置き換えて送る。Tailscale停止・muse-vmオフラインでは従来どおり送らず、tunnelsへも切り替えない。muse-vm側の変更はなし。
+
+このコンテナの`server.js`経由で実muse-vmへ`/usage`・`/ping`を送り、HTTP200と実行結果、`/ping`の応答の`bridge_command`を確認した。本番Workerと`/aichat`の画面からの確認は未実施。

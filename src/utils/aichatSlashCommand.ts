@@ -2,7 +2,7 @@ import { MAX_ASKGK_TIMEOUT_SECONDS } from './askgkTimeoutSettings';
 import { MLB_DIVISIONS } from './mlbDivisions';
 import { parseCodexAskgkReply } from './codexAskgkReply';
 import { parseCodexFiveHourReset } from './codexResetCountdown';
-import { isAskgkSlashPrompt, parseAskMusePrompt } from './codexAskgkQuestion';
+import { isAskgkSlashPrompt, parseAskMusePrompt, resolveAskgkSlashAlias } from './codexAskgkQuestion';
 import type { MuseDirectError, MuseDirectResult } from './museDirectAsk';
 import { getRubyWasmVersionInfo, type RubyWasmVersionInfo } from '../views/rubyWasm';
 import { AICHAT_SOURCE_LABELS, type AichatSourceKey } from './aichatSourceStats';
@@ -1346,10 +1346,12 @@ async function interpretAskMuseCommand(message: string, deps: AichatSlashCommand
 /** Muse選択の通常入力はコマンドへ変換せず本文のまま実行する。 */
 export async function interpretMusePrompt(prompt: string, deps: AichatSlashCommandDeps, label = 'Muse'): Promise<AichatSlashCommandResult> {
   if (!deps.askMuseDirect) return { handled: true, response: `❌ ${label} は現在利用できません(DEMO_CONTAINER未設定)` };
-  const outcome = await raceWithTimeout(deps.askMuseDirect(prompt), ASKGK_TIMEOUT_MS);
+  const outcome = await raceWithTimeout(deps.askMuseDirect(resolveAskgkSlashAlias(prompt)), ASKGK_TIMEOUT_MS);
   if (outcome.status === 'timeout') return { handled: true, response: `❌ ${label} がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
   if (outcome.status === 'error') return { handled: true, response: `❌ ${label} でエラーが発生しました: ${outcome.message}` };
   if (!outcome.value.ok) return { handled: true, response: `❌ ${label} でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
+  // muse-vmが推論せずに実行したコマンドの結果は、Codex・Claudeの制御入力と同じくAI回答履歴に残さない。
+  if (outcome.value.bridgeCommand) return { handled: true, response: outcome.value.reply.trim(), saveAsAiResponse: false };
   return { handled: true, response: appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel), saveAsAiResponse: true, museAskgk: true };
 }
 

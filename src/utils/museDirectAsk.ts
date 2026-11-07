@@ -30,7 +30,8 @@ export type MuseDirectError =
   | 'muse_execution_failed'
   | 'llm_timeout';
 
-export type MuseDirectResult = { ok: true; reply: string; llmModel: string } | { ok: false; error: MuseDirectError };
+// bridgeCommandはmuse-vmのapi-bridgeが推論せずに実行したコマンド名。応答のbridge_commandから読む。
+export type MuseDirectResult = { ok: true; reply: string; llmModel: string; bridgeCommand?: string } | { ok: false; error: MuseDirectError };
 
 export type MuseContainer = { getState(): Promise<ContainerStateLike>; fetch(request: Request): Promise<Response> };
 
@@ -43,7 +44,7 @@ function errorForStatus(status: number): MuseDirectError {
 }
 
 function parseCompletion(payload: string): MuseDirectResult {
-  let data: { model?: unknown; choices?: { message?: { content?: unknown } }[] };
+  let data: { model?: unknown; bridge_command?: unknown; choices?: { message?: { content?: unknown } }[] };
   try {
     data = JSON.parse(payload);
   } catch {
@@ -56,6 +57,7 @@ function parseCompletion(payload: string): MuseDirectResult {
     ok: true,
     reply: bytes.length > MAX_REPLY_BYTES ? new TextDecoder().decode(bytes.slice(0, MAX_REPLY_BYTES)).replace(/\uFFFD+$/, '') : reply,
     llmModel: typeof data.model === 'string' && MODEL_NAME.test(data.model) ? data.model : MUSE_MODEL,
+    ...(typeof data.bridge_command === 'string' && data.bridge_command ? { bridgeCommand: data.bridge_command } : {}),
   };
 }
 
