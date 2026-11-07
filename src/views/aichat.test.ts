@@ -1442,7 +1442,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
     const fn = routeSource(src, "app.post('/api/aichat'");
-    const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
+    // 2026-11-07(1e39355)以降、Muse選択時の分岐を含むinterpretInput(既定はinterpretAichatSlashCommand)で判定する。
+    expect(fn).toContain(': interpretAichatSlashCommand;');
+    const slashCommandIdx = fn.indexOf('await interpretInput(message');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
     expect(aiBindingCheckIdx).toBeGreaterThan(-1);

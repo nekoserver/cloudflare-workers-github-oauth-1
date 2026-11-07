@@ -4,6 +4,16 @@ import { createJWT } from './utils/jwt';
 import { computeQuestionHash, computeConversationHash } from './utils/conversationHash';
 import { getMarkdownParserScript } from './utils/markdownRenderer';
 
+// 2026-11-07(#2532)以降、muse_promptは送信前に本体コンテナのTailscaleを確かめ、確かめられなければ送らない。
+// この保存のテストでは、Tailscaleが動いていてmuse-vmがオンラインの状態を与える(停止時の動作はmuseTailscalePreflightのテストで見る)。
+const stub = vi.hoisted(() => ({
+  getState: async () => ({ status: 'running' }),
+  fetch: async (request: Request) => (new URL(request.url).pathname === '/debug/tailscale-peers'
+    ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
+    : new Response('unexpected', { status: 500 })),
+}));
+vi.mock('@cloudflare/containers', () => ({ getContainer: () => stub }));
+
 describe('/neko askgk Codex/Claude/Museの応答ログ', () => {
   it.each([
     { threadId: '', saveFails: false, openQuote: '"' },
@@ -54,7 +64,7 @@ describe('/neko askgk Codex/Claude/Museの応答ログ', () => {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, source: 'textbox', threadId }),
-    }, { JWT_SECRET, DB, RUST_WORKER });
+    }, { JWT_SECRET, DB, RUST_WORKER, DEMO_CONTAINER: {} });
 
     if (saveFails) {
       if (threadId && !missingThread) {

@@ -43,7 +43,9 @@ describe('Codex質問のチャット表示と送信', () => {
       clearAttachedImage() {}, chatSendBtn: { disabled: false }, lastModel: 'test-model',
       langModeSelect: { value: 'a' }, currentThreadId: '', aichatStreamToggle: { checked: false },
       AICHAT_TUNABLE_MODEL_CONFIG: {},
-      fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body).message); return {}; },
+      // 2026-11-07(#2532)以降、送信ハンドラは応答のX-Muse-Tailscaleを読み、Museの枠色の監視へ伝える。
+      fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body).message); return { headers: new Headers() }; },
+      museHealthWatch: { beginSubmission() {}, finishSubmission() {} },
       readAichatResponse: async () => ({ response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }),
       prepareAichatRubyResponse: (data: unknown) => data,
       extractRespUsage() {}, showAichatSendToast() {}, MODEL_COLORS: {} as Record<string, string>,
