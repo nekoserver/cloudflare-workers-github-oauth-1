@@ -119,6 +119,13 @@ binding = "DB"
 database_name = "workers-github-oauth"
 database_id = "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf"
 
+# Museとの協議の記録(エージェントへの問い合わせ)。/muse-inquiriesのカンバンが読むだけで、書き込みはClaude Codeが
+# 問い合わせのたびに行う。人の問答集(ai_chat_shares)とは別のデータベース(ユーザー指定)。スキーマはmigrations-agent-inquiries/。
+[[d1_databases]]
+binding = "INQUIRY_DB"
+database_name = "agent-inquiries"
+database_id = "ab65ff96-6333-4673-9ad4-4324be622184"
+
 # Workers AI バインディング（PR要約に使用）
 [ai]
 binding = "AI"
@@ -156,6 +163,17 @@ class_name = "DemoContainer"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DemoContainer"]
+
+# AIチャットのジョブ(src/durable/aichatJob.ts)。送信後にタブを閉じたり別ウィンドウへ移ったりしても、
+# 応答とその後のログ保存を最後まで行う(ユーザー指定、2026-11-07)。1回の質問ごとに1つのオブジェクトを
+# 使い、完了から24時間でデータを消す。DOのリクエスト数・実行時間・ストレージの使用量課金が発生する。
+[[durable_objects.bindings]]
+name = "AICHAT_JOB"
+class_name = "AichatJob"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["AichatJob"]
 
 # dynamicneko（Cloudflare Dynamic Worker Loader使用）への直接呼び出し。/neko hellodwが
 # 起動確認pingを送る。公開URLへの通常fetch()は*.workers.dev同士だとCloudflareに

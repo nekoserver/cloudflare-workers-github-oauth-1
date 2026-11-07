@@ -43,11 +43,11 @@ describe('Workerエントリポイントがworkerdの起動時named-export検証
     expect(src).toContain('export default {');
   });
 
-  it('src/worker-entry.ts がexportするのはDurable Object(DemoContainer)のre-exportだけである(他の値を混ぜて許可を広げすぎていない)', () => {
+  it('src/worker-entry.ts がexportするのはDurable Object(DemoContainer・AichatJob)のre-exportだけである(他の値を混ぜて許可を広げすぎていない)', () => {
     const src = readFileSync('src/worker-entry.ts', 'utf8');
     const reExportRe = /^export\s*\{([^}]*)\}\s*from\s*['"][^'"]+['"]/gm;
     const matches = [...src.matchAll(reExportRe)].map((m) => m[1].trim());
-    expect(matches).toEqual(['DemoContainer']);
+    expect(matches).toEqual(['DemoContainer', 'AichatJob']);
   });
 
   it('src/index.ts は default export(Honoアプリ本体)を持つ', () => {

@@ -477,6 +477,8 @@ import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk'
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
+import { getMuseInquiriesPage } from './views/museInquiries';
+import { loadInquiryBoard, loadInquiryCase, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -7191,6 +7193,47 @@ async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName:
 }
 
 // 接続元IPにはクライアント指定可能なX-Forwarded-ForでなくCloudflareヘッダーだけを使う。
+// AIチャットのジョブ(ユーザー指定、2026-11-07)。送信をDurable Object(AICHAT_JOB)に登録してすぐ返し、
+// 生成とログ保存はDOのalarmで最後まで行う。ブラウザは下のGETで途中経過を取りに来るだけなので、
+// タブを閉じたり別ウィンドウへ移ったりしても応答が途切れない。中身は /api/aichat をそのまま使う。
+const AICHAT_JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** /api/aichat へ渡すときに引き継ぐヘッダー。認証(Cookie・APIキー)と本文の形式だけ。 */
+const AICHAT_JOB_FORWARD_HEADERS = ['cookie', 'authorization', 'content-type', 'user-agent', 'accept-language'];
+app.post('/api/aichat/jobs', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const body = await c.req.text();
+  try { JSON.parse(body); } catch { return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400); }
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  for (const name of AICHAT_JOB_FORWARD_HEADERS) {
+    const value = c.req.header(name);
+    if (value) headers[name] = value;
+  }
+  const jobId = crypto.randomUUID();
+  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const res = await stub.fetch('https://aichat-job/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner: user.sub, request: { url: new URL('/api/aichat', c.req.url).toString(), headers, body } }),
+  });
+  if (res.status !== 202) {
+    logger.warn('AI chat job start failed', { user: user.sub, status: res.status });
+    return jsonUtf8({ error: 'AIチャットのジョブを開始できませんでした (HTTP ' + res.status + ')' }, 502);
+  }
+  return jsonUtf8({ jobId }, 202);
+});
+app.get('/api/aichat/jobs/:jobId', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const jobId = c.req.param('jobId') ?? '';
+  if (!AICHAT_JOB_ID_RE.test(jobId)) return jsonUtf8({ error: 'not_found' }, 404);
+  const offset = Math.max(0, Number(c.req.query('offset')) || 0);
+  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const params = new URLSearchParams({ owner: user.sub, offset: String(offset) });
+  const res = await stub.fetch('https://aichat-job/status?' + params.toString());
+  return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+});
+
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   let body: AichatRequestBody;
@@ -20322,6 +20365,38 @@ app.get('/cf-containers/planner', authMiddleware, cfDashboardAdminMiddleware, as
 });
 
 /** tailnet上のmuse・muse-vmの状態、Nixのパッケージ、シグナル送信のページ(管理者のみ)。どの入口も停止中のコンテナは起動しない。 */
+// Museとの協議(D1 agent-inquiries)のカンバン(ユーザー指定、2026-11-07)。内部情報を含むため管理者だけ。読むだけ。
+app.get('/muse-inquiries', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.html(getMuseInquiriesPage());
+});
+app.get('/api/muse-inquiries/board', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  try {
+    return jsonUtf8(await loadInquiryBoard(db));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiries board failed', { error: message });
+    return jsonUtf8({ error: '協議の記録を読めませんでした: ' + message }, 500);
+  }
+});
+app.get('/api/muse-inquiries/cases/:caseId', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const caseId = c.req.param('caseId') ?? '';
+  if (!INQUIRY_CASE_ID_RE.test(caseId)) return jsonUtf8({ error: 'ケースが見つかりません' }, 404);
+  try {
+    const detail = await loadInquiryCase(db, caseId);
+    if (!detail) return jsonUtf8({ error: 'ケースが見つかりません' }, 404);
+    return jsonUtf8(detail);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiry case failed', { caseId, error: message });
+    return jsonUtf8({ error: '協議の記録を読めませんでした: ' + message }, 500);
+  }
+});
+
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
   c.header('Cache-Control', 'no-store');
   // 本体コンテナの停止中は、ページがTailscale WASMでtailnetへ参加して取得する

@@ -17,6 +17,9 @@ import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegi
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
 import { AICHAT_MUSE_HEALTH_SCRIPT } from './aichatMuseHealth';
+import { AICHAT_JOB_CLIENT_SCRIPT } from './aichatJobClient';
+import { AICHAT_DRAFT_SCRIPT } from './aichatDraft';
+import { AICHAT_PENDING_CSS, AICHAT_PENDING_SCRIPT } from './aichatPending';
 import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
@@ -1053,6 +1056,8 @@ export function getAiChatPage(user: {
     }
     .moondream-analysis-body th, .moondream-analysis-body td { overflow-wrap: normal; word-break: normal; }
     .moondream-analysis-body pre { max-width: 100%; overflow-x: auto; }
+    /* 回答待ちの表示(ユーザー指定、2026-11-07): 入力窓と応答バブルの外枠を同じ色で点滅させ、考え中の右に波形 */
+${AICHAT_PENDING_CSS}
   </style>
 </head>
 <body>
@@ -7178,6 +7183,23 @@ export function getAiChatPage(user: {
       chatInput.style.height = 'auto';
       chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
     });
+    // 入力中の文字を、タブの切り替えや再読み込みで消さない(ユーザー指定、2026-11-07)。URLのdraftがあればそちらを優先する。
+${AICHAT_DRAFT_SCRIPT}
+${AICHAT_PENDING_SCRIPT}
+    var aichatDraftStorage = (function() { try { return window.localStorage; } catch (e) { return null; } })();
+    function persistAichatDraft() { saveAichatDraft(aichatDraftStorage, chatInput.value); }
+    function restoreAichatDraft() {
+      if (chatInput.value) return;
+      var saved = loadAichatDraft(aichatDraftStorage);
+      if (!saved) return;
+      chatInput.value = saved;
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+    }
+    restoreAichatDraft();
+    chatInput.addEventListener('input', persistAichatDraft);
+    document.addEventListener('visibilitychange', persistAichatDraft);
+    window.addEventListener('pagehide', persistAichatDraft);
     chatInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || e.shiftKey)) {
         e.preventDefault();
@@ -8414,11 +8436,55 @@ ${getRubyWasmLoaderScript()}
       if (thinking.isConnected) thinking.remove();
       if (!state.bubble) {
         state.bubble = appendBubble(state.text, 'assistant', lastModel, !!streamMeta.fallbackUsed);
+        markAichatPendingBubble(state.bubble);
       } else {
         state.bubble.innerHTML = parseMd(state.text);
         chatLog.scrollTop = chatLog.scrollHeight;
       }
       return state.bubble;
+    }
+
+${AICHAT_JOB_CLIENT_SCRIPT}
+    var aichatJobDeps = {
+      fetch: function(url, init) { return fetch(url, init); },
+      storage: (function() { try { return window.localStorage; } catch (e) { return null; } })(),
+      now: function() { return Date.now(); },
+      sleep: function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
+    };
+    /** 送信をジョブとして登録し、途中経過を受け取りながら/api/aichatと同じ形の結果を返す(ユーザー指定、2026-11-07)。 */
+    function runAichatJob(payload, question, onDelta) {
+      return startAichatJob(aichatJobDeps, payload, { question: question, model: payload.model }).then(function(jobId) {
+        return pollAichatJob(aichatJobDeps, jobId, onDelta);
+      });
+    }
+    /** 前に開いていたタブで送ったまま終わっていないジョブを、続きから表示する。生成とログ保存はサーバー側で済んでいる。 */
+    function resumePendingAichatJobs() {
+      readPendingAichatJobs(aichatJobDeps).forEach(function(job) {
+        appendBubble(job.question, 'user');
+        var thinking = appendBubble('考え中...(前回の送信の続き)', 'thinking');
+        beginAichatPending(chatInput, thinking, getModelDotColor(job.model));
+        var streamState = { text: '', bubble: null };
+        var assistantBubbleEl = null;
+        pollAichatJob(aichatJobDeps, job.jobId, function(delta, streamMeta) {
+          assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
+        })
+          .then(prepareAichatRubyResponse)
+          .then(function(data) {
+            if (thinking.isConnected) thinking.remove();
+            if (data.error) { appendBubble('エラー: ' + data.error, 'error'); return; }
+            var responseText = data.response || '(応答なし)';
+            var usedModel = data.usedModel || job.model;
+            var isLocalCommand = usedModel === 'local/neko';
+            var completedBubble = buildAssistantBubble(responseText, usedModel, data.fallbackUsed, extractRespUsage(data), false, null, null, null, data.shareId);
+            if (assistantBubbleEl) assistantBubbleEl.replaceWith(completedBubble);
+            else chatLog.appendChild(completedBubble);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            if (!isLocalCommand) appendShareBtn(job.question, responseText, usedModel, data.shareId, data.userHash);
+            if (data.threadId) currentThreadId = data.threadId;
+          })
+          .catch(function(err) { if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
+          .then(function() { endAichatPending(chatInput); });
+      });
     }
 
     var formatAskgkPromptQuestion = ${formatAskgkPromptQuestion.toString()};
@@ -8452,6 +8518,10 @@ ${getRubyWasmLoaderScript()}
         payload.image = attachedImage;
         payload.preferMoondream = aichatPreferMoondream;
       }
+      // 送信したので入力の下書きを消す(ユーザー指定、2026-11-07)
+      saveAichatDraft(aichatDraftStorage, '');
+      // 回答を得るまで、入力窓と応答バブルの外枠を同じ色で点滅させる(ユーザー指定、2026-11-07)
+      beginAichatPending(chatInput, thinking, getModelDotColor(lastModel));
       // 色丸ドロップダウンの「⚙」で保存したパラメータ調整値(対象モデルの
       // 場合のみ)をpayloadへ含める。未調整・対象外モデルの場合は何も
       // 付けず、サーバー側のデフォルト値のまま動かす。
@@ -8502,18 +8572,15 @@ ${getRubyWasmLoaderScript()}
       var museSubmission = /^\\s*\\/neko\\s+askgk\\s+muse_prompt\\s*=/i.test(currentMsg)
         || (payload.model === 'muse' && !/^\\s*\\/(?:neko\\b|askmuse(?:\\s|$))/i.test(currentMsg));
       if (museSubmission) museHealthWatch.beginSubmission();
-      fetch('/api/aichat', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      // 生成とログ保存はサーバーのジョブ(Durable Object)が行う。タブを閉じても途切れない(ユーザー指定、2026-11-07)。
+      var streamState = { text: '', bubble: null };
+      runAichatJob(payload, currentMsg, function(delta, streamMeta) {
+        assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
       })
-        .then(function(res) {
-          var museConnection = res.headers.get('X-Muse-Tailscale');
+        .then(function(data) {
+          var museConnection = data.museTailscale || null;
           if (museConnection || museSubmission) museHealthWatch.finishSubmission(museConnection === 'connected');
-          var streamState = { text: '', bubble: null };
-          return readAichatResponse(res, function(delta, streamMeta) {
-            assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
-          });
+          return data;
         })
         .then(prepareAichatRubyResponse)
         .then(function(data) {
@@ -8549,9 +8616,10 @@ ${getRubyWasmLoaderScript()}
           }
         })
         .catch(function(err) { if (museSubmission) museHealthWatch.finishSubmission(false); if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
-        .finally(function() { chatSendBtn.disabled = false; chatInput.focus(); });
+        .finally(function() { endAichatPending(chatInput); chatSendBtn.disabled = false; chatInput.focus(); });
     });
 
+    resumePendingAichatJobs();
     chatInput.focus();
   </script>
 </body>

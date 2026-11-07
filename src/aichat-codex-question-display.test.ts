@@ -43,10 +43,13 @@ describe('Codex質問のチャット表示と送信', () => {
       clearAttachedImage() {}, chatSendBtn: { disabled: false }, lastModel: 'test-model',
       langModeSelect: { value: 'a' }, currentThreadId: '', aichatStreamToggle: { checked: false },
       AICHAT_TUNABLE_MODEL_CONFIG: {},
-      // 2026-11-07(#2532)以降、送信ハンドラは応答のX-Muse-Tailscaleを読み、Museの枠色の監視へ伝える。
-      fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body).message); return { headers: new Headers() }; },
+      // 2026-11-07: 送信はAIチャットのジョブ(Durable Object)に登録し、結果はrunAichatJobが/api/aichatと同じ形で返す。
+      // Museの枠色の監視へは、ジョブの結果のmuseTailscale(元はX-Muse-Tailscaleヘッダー)を伝える。
+      runAichatJob: async (payload: { message: string }) => { sent.push(payload.message); return { response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }; },
       museHealthWatch: { beginSubmission() {}, finishSubmission() {} },
-      readAichatResponse: async () => ({ response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }),
+      resumePendingAichatJobs() {},
+      saveAichatDraft() {}, aichatDraftStorage: null,
+      beginAichatPending() {}, endAichatPending() {},
       prepareAichatRubyResponse: (data: unknown) => data,
       extractRespUsage() {}, showAichatSendToast() {}, MODEL_COLORS: {} as Record<string, string>,
       getModelDotColor(modelId: string) { return bindings.MODEL_COLORS[modelId] || ''; },
