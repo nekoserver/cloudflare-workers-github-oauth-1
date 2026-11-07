@@ -114,6 +114,8 @@ export const MUSE_STATUS_SCRIPT = `
 
     function renderMuseNode(doc, node) {
       var field = function(name) { return doc.querySelector('[data-node="' + node.name + '"] [data-field="' + name + '"]'); };
+      var section = doc.querySelector('[data-node="' + node.name + '"]');
+      if (section) section.setAttribute('data-tailnet-online', node.found && node.online ? 'true' : 'false');
       if (!node.found) setMuseBadge(field('online'), 'tailnetに見つかりません', 'muted');
       else setMuseBadge(field('online'), node.online ? 'オンライン' : 'オフライン', node.online ? 'ok' : 'ng');
       field('connection').textContent = node.found ? (node.connection === 'direct' ? '直接' : node.connection === 'relay' ? '中継 ' + node.relay : 'なし') : '—';
@@ -130,6 +132,17 @@ export const MUSE_STATUS_SCRIPT = `
       var detail = formatMuseTime(result.checkedAt);
       if (typeof result.latencyMs === 'number') detail += ' / ' + result.latencyMs + 'ms';
       root.querySelector('[data-field="signalAt"]').textContent = detail;
+      // 接続できなかった理由(本体コンテナのtailscale ncのエラー出力)。上流の文字列なのでtextContentで表示する。
+      var reason = root.querySelector('[data-field="signalDetail"]');
+      var lines = [];
+      if (result.code === 'connection_failed') {
+        if (root.getAttribute('data-tailnet-online') === 'true') {
+          lines.push('Tailscaleではオンラインです。ノードの8080番(/health)で待ち受けていないか、途中で切断された可能性があります。');
+        }
+        lines.push(typeof result.detail === 'string' && result.detail ? '理由: ' + result.detail : '理由: 本体コンテナから詳細を受け取れませんでした');
+      }
+      reason.textContent = lines.join(' ');
+      reason.hidden = lines.length === 0;
     }
 
     function renderMuseNix(doc, result, filterText) {
@@ -266,6 +279,7 @@ function renderNodeCard(node: string): string {
       <p class="muse-row"><span class="muse-badge muse-badge-muted" data-field="signal">未送信</span>
         <span class="muse-meta" data-field="signalAt"></span>
         <button type="button" data-action="signal">シグナルを送信</button></p>
+      <p class="muse-meta muse-signal-detail" data-field="signalDetail" hidden></p>
       <h3>Nixのインストールパッケージ</h3>
       <p class="muse-row"><span class="muse-meta" data-field="nixSummary">取得中…</span>
         <button type="button" data-action="nixReload">再取得</button></p>

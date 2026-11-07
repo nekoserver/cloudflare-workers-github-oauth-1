@@ -44,7 +44,19 @@ export type MuseNodesResult = {
 };
 
 export type MuseSignalCode = 'ok' | 'unhealthy' | 'container_not_running' | 'not_authenticated' | 'connection_failed' | 'timeout';
-export type MuseSignalResult = { node: MuseNodeName; code: MuseSignalCode; latencyMs: number | null; checkedAt: string };
+// detailは接続できなかった理由(本体コンテナのtailscale ncのエラー出力)。502のときだけ入る。ページではtextContentで表示する。
+export type MuseSignalResult = { node: MuseNodeName; code: MuseSignalCode; latencyMs: number | null; checkedAt: string; detail: string | null };
+const MAX_SIGNAL_DETAIL = 300;
+
+/** 中継の502の本文{errorCode, detail}からdetailを取り出す。読めなければnull。 */
+function readRelayDetail(body: string): string | null {
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown } | null)?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail.trim().slice(0, MAX_SIGNAL_DETAIL) : null;
+  } catch {
+    return null;
+  }
+}
 
 export type MuseNixState =
   | 'ok'
@@ -137,7 +149,7 @@ export async function fetchMuseNodes(container: MuseContainer | null): Promise<M
 
 /** ノードの/healthへ死活確認のシグナルを1回送る。推論は走らない。 */
 export async function sendMuseSignal(container: MuseContainer | null, apiKey: string | undefined, node: MuseNodeName): Promise<MuseSignalResult> {
-  const finish = (code: MuseSignalCode, latencyMs: number | null = null): MuseSignalResult => ({ node, code, latencyMs, checkedAt: new Date().toISOString() });
+  const finish = (code: MuseSignalCode, latencyMs: number | null = null, detail: string | null = null): MuseSignalResult => ({ node, code, latencyMs, checkedAt: new Date().toISOString(), detail });
   if (!container) return finish('container_not_running');
   if (!apiKey) return finish('not_authenticated');
   const startedAt = Date.now();
@@ -146,7 +158,7 @@ export async function sendMuseSignal(container: MuseContainer | null, apiKey: st
   if (result.kind === 'stopped') return finish('container_not_running');
   if (result.kind === 'timeout') return finish('timeout');
   if (result.kind === 'failed') return finish('connection_failed');
-  if (result.status === 502) return finish('connection_failed');
+  if (result.status === 502) return finish('connection_failed', null, readRelayDetail(result.text));
   if (result.status === 504) return finish('timeout');
   if (result.status !== 200) return finish('unhealthy', latencyMs);
   try {

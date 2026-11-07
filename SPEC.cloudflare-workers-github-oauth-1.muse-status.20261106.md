@@ -100,6 +100,32 @@ Authorization: Bearer <MUSE_API_KEY>
 
 ---
 
+## 「接続できません」の理由を表示する（2026-11-07）
+
+**対象**: `containers/demo/server.js`の`connectMuse`・`relayMuseGet`、`src/utils/museNodeStatus.ts`の`sendMuseSignal`、`src/views/museStatus.ts`のシグナル欄 — Tailscaleではオンラインなのにシグナルが「接続できません」になるとき、理由をページに出す。
+
+### 背景
+
+2026-11-07、`muse`がTailscaleでオンラインと表示されているのに、シグナルが「接続できません」になると報告があった（`muse-vm`は稼働中）。シグナルの送り先は`muse:8080/health`で、`muse`は8080番で何も待ち受けていない（2026-11-06に接続拒否を確認済み）。Tailscaleの「オンライン」は端末がtailnetにいることしか表さず、8080番のサービスの有無は分からない。
+
+一方、中継は`tailscale nc`のエラー出力を捨てており、到達不能・接続拒否・途中切断が同じ「接続できません」になって、ページから原因を判断できなかった。
+
+### 修正内容
+
+| ファイル | 変更 |
+|---|---|
+| `containers/demo/server.js` | `tailscale nc`のstderrを受け取り、つながらなかったときは502の本文に`detail`（末尾300文字、加工なし）を入れる。ncの終了を最大500ミリ秒待ってから返す。`error`が2回出ても応答は1回にする |
+| `src/utils/museNodeStatus.ts` | 502の本文の`detail`を`MuseSignalResult.detail`に入れる（300文字まで。読めなければnull） |
+| `src/views/museStatus.ts` | 「接続できません」のとき、理由を`textContent`で表示する。Tailscaleでオンラインのノードには「8080番(/health)で待ち受けていないか、途中で切断された可能性」と添える。稼働中に戻れば消す |
+
+`tailscale nc`が出す文言は確かめていないので、文言で分類はしない（契約にしない）。
+
+### 残っていること
+
+`muse`のシグナルを稼働中にするには、`muse`側で8080番に`/health`を用意する必要がある。`muse`のソースはこのリポジトリに無い。
+
+---
+
 ## 確認の状況
 
 | 項目 | 結果 |

@@ -293,3 +293,41 @@ describe('ノードが何も返さず接続を閉じたとき', () => {
     expect(uncaught).toEqual([]);
   });
 });
+
+// 2026-11-07: /muse-statusのシグナルが「接続できません」になっても、Tailscaleの到達不能・8080番の接続拒否・
+// 途中切断の区別がつかなかった。ncのstderrは捨てていた。理由をそのまま返し、ページで見られるようにする。
+// ncの文言は確かめていない(契約にしない)。stderrの内容を加工せず、長さだけ制限して返す。
+describe('ノードへつながらないとき、ncのエラー出力を理由として返す', () => {
+  const servers: http.Server[] = [];
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => { s.closeAllConnections(); s.close(resolve); })));
+  });
+  async function listen(handler: http.RequestListener) {
+    const server = http.createServer(handler);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    return (server.address() as AddressInfo).port;
+  }
+  const failingNc = (stderr: string) => () => connectMuse((_: string, __: string[], options: object) => spawn('sh', ['-c', 'printf "%s" "$0" >&2; exit 1', stderr], options));
+  const headers = { Authorization: 'Bearer k' };
+
+  it('stderrの内容をdetailに入れて502を返す', async () => {
+    const port = await listen((req, res) => relayMuseNode(req, res, failingNc('Dial("muse", 8080): connection refused\n')));
+    const response = await fetch(`http://127.0.0.1:${port}/admin/muse/muse/health`, { headers });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ errorCode: 'muse_connection_failed', detail: 'Dial("muse", 8080): connection refused' });
+  });
+
+  it('長いstderrは末尾の300文字だけ返す', async () => {
+    const long = 'x'.repeat(500) + 'END';
+    const port = await listen((req, res) => relayMuseNode(req, res, failingNc(long)));
+    const body = await (await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/health`, { headers })).json();
+    expect(body.detail).toHaveLength(300);
+    expect(body.detail.endsWith('END')).toBe(true);
+  });
+
+  it('stderrが空ならdetailを付けない', async () => {
+    const port = await listen((req, res) => relayMuseNode(req, res, failingNc('')));
+    expect(await (await fetch(`http://127.0.0.1:${port}/admin/muse/muse-vm/health`, { headers })).json()).toEqual({ errorCode: 'muse_connection_failed' });
+  });
+});

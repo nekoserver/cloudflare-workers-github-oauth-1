@@ -625,9 +625,26 @@ function museNcArgs(node) {
 }
 
 // tailscaledはuserspace-networkingなので、`tailscale nc`の標準入出力をソケットとして使う。
+// ncのエラー出力は、つながらなかった理由として末尾だけ返す(文言は加工しない。tailscale ncの文言は契約にしない)。
+const MUSE_NC_STDERR_MAX = 300;
+// つながらなかったとき、ncの終了(=エラー出力の書き終わり)をこれだけ待ってから応答する。
+const MUSE_NC_EXIT_WAIT_MS = 500;
+
 function connectMuse(spawnNc = spawn, node = 'muse-vm') {
-  const nc = spawnNc('tailscale', museNcArgs(node), { stdio: ['pipe', 'pipe', 'ignore'] });
+  const nc = spawnNc('tailscale', museNcArgs(node), { stdio: ['pipe', 'pipe', 'pipe'] });
   const socket = Duplex.from({ readable: nc.stdout, writable: nc.stdin });
+  let stderr = '';
+  if (nc.stderr) {
+    nc.stderr.setEncoding('utf8');
+    nc.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-4 * MUSE_NC_STDERR_MAX); });
+  }
+  const exited = new Promise((resolve) => { nc.once('close', resolve); nc.once('error', resolve); });
+  // つながらなかった理由。ncの終了を待ってから(最大MUSE_NC_EXIT_WAIT_MS)、空白を除いた末尾を返す。空ならnull。
+  socket.ncFailureDetail = async () => {
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, MUSE_NC_EXIT_WAIT_MS))]);
+    const text = stderr.trim();
+    return text ? text.slice(-MUSE_NC_STDERR_MAX) : null;
+  };
   nc.once('error', (err) => socket.destroy(err));
   // 接続の失敗はhttp.requestのerrorで返す。応答後にdestroyするとDuplex.fromはABORT_ERRを
   // 出し、httpのリスナーは外れているので、ここで受けないとプロセスごと落ちる。
@@ -636,9 +653,9 @@ function connectMuse(spawnNc = spawn, node = 'muse-vm') {
   return socket;
 }
 
-function sendMuseProxyError(res, status, errorCode) {
+function sendMuseProxyError(res, status, errorCode, detail = null) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify({ errorCode }));
+  res.end(JSON.stringify(detail ? { errorCode, detail } : { errorCode }));
 }
 
 function readLimited(stream, onDone, onTooLarge) {
@@ -722,6 +739,7 @@ function relayMuseGet(req, res, { node, path, connect, timeoutMs, passAuthorizat
     sendMuseProxyError(res, 401, 'muse_not_authenticated');
     return;
   }
+  let socket = null;
   const upstream = http.request(
     {
       host: node,
@@ -730,7 +748,7 @@ function relayMuseGet(req, res, { node, path, connect, timeoutMs, passAuthorizat
       path,
       headers: passAuthorization ? { Authorization: authorization } : {},
       // forwardToMuseと同じく、agentは指定しない。
-      createConnection: () => connect(),
+      createConnection: () => (socket = connect()),
     },
     (response) => {
       readLimited(
@@ -752,8 +770,15 @@ function relayMuseGet(req, res, { node, path, connect, timeoutMs, passAuthorizat
     sendMuseProxyError(res, 504, 'llm_timeout');
     upstream.destroy();
   }, timeoutMs);
+  // errorは2回出ることがある(socket hang upの後にABORT_ERR)。onで受け、応答は1回だけにする。
+  let failed = false;
   upstream.on('error', () => {
-    if (!res.headersSent) sendMuseProxyError(res, 502, 'muse_connection_failed');
+    if (failed || res.headersSent) return;
+    failed = true;
+    const detail = socket && typeof socket.ncFailureDetail === 'function' ? socket.ncFailureDetail() : Promise.resolve(null);
+    detail.then((text) => {
+      if (!res.headersSent && !res.writableEnded) sendMuseProxyError(res, 502, 'muse_connection_failed', text);
+    });
   });
   res.once('close', () => {
     clearTimeout(timer);

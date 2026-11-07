@@ -110,6 +110,43 @@ describe('/muse-statusのページ', () => {
     expect(field('muse', 'signal').textContent).toBe('未送信');
   });
 
+  // 2026-11-07: Tailscaleではオンラインなのに「接続できません」になり、理由が分からなかった。
+  it('接続できないときは理由(ncのエラー出力)を文字として表示し、オンラインならTailscale以外の原因だと案内する', async () => {
+    document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify({ enabled: false, intervalSeconds: 120 }))}; path=/`;
+    const fetchJson = api({ '/api/muse-status/signal': { node: 'muse', code: 'connection_failed', latencyMs: null, checkedAt: '2026-11-06T00:00:00Z', detail: '<img src=x>connection refused' } });
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
+    (card('muse').querySelector('[data-action="signal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(field('muse', 'signal').textContent).toBe('接続できません'));
+    const detail = field('muse', 'signalDetail');
+    expect(detail.textContent).toContain('<img src=x>connection refused');
+    expect(detail.querySelector('img')).toBeNull();
+    expect(detail.textContent).toContain('Tailscaleではオンライン');
+    expect(detail.textContent).toContain('8080');
+    expect(detail.hidden).toBe(false);
+  });
+
+  it('稼働中に戻れば理由の表示を消す', async () => {
+    document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify({ enabled: false, intervalSeconds: 120 }))}; path=/`;
+    let code = 'connection_failed';
+    const fetchJson = api();
+    const base = fetchJson.getMockImplementation()!;
+    fetchJson.mockImplementation(async (url: string, init?: { body?: string }) => (url === '/api/muse-status/signal'
+      ? { node: 'muse-vm', code, latencyMs: null, checkedAt: '2026-11-06T00:00:00Z', detail: code === 'ok' ? null : 'refused' }
+      : base(url, init)));
+    await script.initMuseStatusPage({ document, nodes: NODES, fetchJson });
+    const button = card('muse-vm').querySelector('[data-action="signal"]') as HTMLButtonElement;
+    button.click();
+    await vi.waitFor(() => expect(field('muse-vm', 'signalDetail').hidden).toBe(false));
+    // muse-vmはTailscaleでオフラインなので、オンラインの案内は出さない
+    expect(field('muse-vm', 'signalDetail').textContent).not.toContain('Tailscaleではオンライン');
+    code = 'ok';
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    button.click();
+    await vi.waitFor(() => expect(field('muse-vm', 'signal').textContent).toBe('稼働中'));
+    expect(field('muse-vm', 'signalDetail').hidden).toBe(true);
+    expect(field('muse-vm', 'signalDetail').textContent).toBe('');
+  });
+
   it('Nixの一覧を表示して絞り込む。上流の文字列はHTMLとして解釈しない', async () => {
     const fetchJson = api({ '/api/muse-status/nix?node=muse': {
       node: 'muse', state: 'ok', total: 2, truncated: false, generatedAt: null,
