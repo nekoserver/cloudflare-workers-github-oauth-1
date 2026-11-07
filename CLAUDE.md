@@ -49,11 +49,10 @@ SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLIC
 
 ## Claude Code 環境の制約事項
 
-### GitHub API アクセス不可
-- GitHub APIトークンが存在しない
-- gitプロキシ（127.0.0.1:39093）は **gitプロトコルのみ** 対応。REST APIは通らない
-- `gh` CLIはインストール可能だが認証トークンがないためAPI操作不可
-- **PRはブラウザから手動作成する**。push後にcompareリンクを提示:
+### GitHub API アクセス（環境によって違う）
+- `gh` が使えるかどうかは環境によって違う。PRを作る前に `gh auth status` で確かめる
+- **`gh` が認証済みの環境**（`GH_TOKEN` があるコンテナなど。2026-11-07 にこのコンテナで確認し、`gh pr create` で PR #2539 を作成できた）: `gh pr create` でPRを作成し、PRのURLを提示する
+- **`gh` が認証されていない環境**（GitHub APIトークンが無い環境）: gitプロキシ（127.0.0.1:39093）は **gitプロトコルのみ** 対応で、REST APIは通らない。PRはブラウザから手動作成する。push後にcompareリンクを提示:
   `https://github.com/{OWNER}/{REPO}/compare/{base}...{head}`
 
 ### Cloudflare Workers デプロイ不可
@@ -141,8 +140,8 @@ SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLIC
 以下は過去のセッションで繰り返した失敗から導いたルールである。必ず守ること。
 
 1. **できないことを何度も試すな** — ツールやAPIが使えないと判明したら即座にユーザーに伝え、代替手段を提示する。同じ方法のバリエーションを繰り返し試さない
-2. **PRはブラウザで作成** — この環境からGitHub APIは使えない。compareリンクを提示して終わり
-2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したら比較リンクを提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
+2. **PRの作り方は `gh auth status` で決める** — `gh` が認証済みなら `gh pr create` で作成してPRのURLを提示する。認証されていなければ、ブラウザで作成してもらうためcompareリンクを提示して終わり（「Claude Code 環境の制約事項」の「GitHub API アクセス」を参照）
+2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したらPRのURL（`gh` が使えない環境ではcompareリンク）を提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
 3. **デプロイはユーザーに委ねる** — `CLOUDFLARE_API_TOKEN` がないため `wrangler deploy` は不可能。コード修正とpushまでが責務
 4. **秘密情報は `[vars]` に書かない** — `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`JWT_SECRET` はすべて `wrangler secret` で管理。`wrangler.toml` に平文で書き戻さない
 5. **テンプレートからクローンしたら最初に確認する3項目**:
