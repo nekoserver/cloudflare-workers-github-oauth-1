@@ -151,10 +151,8 @@ describe('Museとの協議のカンバン', () => {
 
   it('ケース一覧を区別して折りたたみ、各カードで長いケース名を繰り返さない', async () => {
     await script.initMuseInquiriesPage({ document, fetchJson: api() });
-    const cases = document.getElementById('inq-cases')!.closest('details')!;
-    expect(cases).not.toBeNull();
-    expect(cases.open).toBe(false);
-    expect(cases.querySelector('summary')!.textContent).toContain('ケース一覧');
+    expect(document.getElementById('inq-case-content')!.hidden).toBe(true);
+    expect(document.getElementById('inq-case-toggle')!.textContent).toContain('ケース一覧');
     const footer = document.querySelector('#inq-board .inq-panel-case')!;
     expect(footer.textContent).toBe('ケース: ' + CASE_ID);
     expect(footer.getAttribute('title')).toBe(BOARD.cases[0].goal);
@@ -204,6 +202,58 @@ describe('Museとの協議のカンバン', () => {
     const filter = document.getElementById('inq-case-filter') as HTMLSelectElement;
     filter.value = 'nix-packages-20261107'; filter.dispatchEvent(new Event('change'));
     expect(document.querySelectorAll('#inq-completed tbody tr')).toHaveLength(1);
+  });
+
+  it('ケース一覧は初期リスト形式で、開閉ボタンと選択状態を連動させる', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    const cases = document.getElementById('inq-cases')!;
+    const content = document.getElementById('inq-case-content')!;
+    const toggle = document.getElementById('inq-case-toggle') as HTMLButtonElement;
+    expect(cases.dataset.view).toBe('list');
+    expect(document.querySelector('[data-case-view="list"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('[data-case-view="panel"]')!.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('aria-controls')).toBe(content.id);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(content.hidden).toBe(true);
+    toggle.click();
+    expect(content.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.textContent).toContain('閉じる');
+    toggle.click();
+    expect(content.hidden).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.textContent).toContain('開く');
+  });
+
+  it('リストとパネルを独立して切り替え、ケースの内容・詳細操作と再読み込み時の選択を保つ', async () => {
+    const fetchJson = api();
+    await script.initMuseInquiriesPage({ document, fetchJson });
+    const toggle = document.getElementById('inq-case-toggle') as HTMLButtonElement;
+    const cases = document.getElementById('inq-cases')!;
+    const content = document.getElementById('inq-case-content')!;
+    const panel = document.querySelector('[data-case-view="panel"]') as HTMLButtonElement;
+    const list = document.querySelector('[data-case-view="list"]') as HTMLButtonElement;
+    const titles = () => [...cases.querySelectorAll('.inq-panel-title')].map((e) => e.textContent);
+    const original = titles();
+    panel.click();
+    expect(content.hidden).toBe(true);
+    expect(cases.dataset.view).toBe('panel');
+    expect(panel.getAttribute('aria-pressed')).toBe('true');
+    expect(list.getAttribute('aria-pressed')).toBe('false');
+    toggle.click();
+    expect(titles()).toEqual(original);
+    (cases.querySelector('[data-case-summary]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().textContent).toContain('質問1'));
+    (document.getElementById('inq-modal-close') as HTMLButtonElement).click();
+    (document.getElementById('inq-refresh') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fetchJson.mock.calls.filter(([url]) => url === '/api/muse-inquiries/board')).toHaveLength(2));
+    expect(content.hidden).toBe(false);
+    expect(cases.dataset.view).toBe('panel');
+    expect(panel.getAttribute('aria-pressed')).toBe('true');
+    list.click();
+    expect(cases.dataset.view).toBe('list');
+    expect(list.getAttribute('aria-pressed')).toBe('true');
+    expect(titles()).toEqual(original);
   });
 
   it('ケースのパネルに提案数・問い合わせ数・未解決の論点・所要時間を出し、ケースで絞り込める', async () => {

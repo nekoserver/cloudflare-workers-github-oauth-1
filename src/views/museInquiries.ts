@@ -74,6 +74,9 @@ export const MUSE_INQUIRIES_SCRIPT = `
       var completedEl = doc.getElementById('inq-completed');
       var completedBody = doc.getElementById('inq-completed-body');
       var casesEl = doc.getElementById('inq-cases');
+      var caseContent = doc.getElementById('inq-case-content');
+      var caseToggle = doc.getElementById('inq-case-toggle');
+      var caseViewButtons = doc.querySelectorAll('[data-case-view]');
       var filter = doc.getElementById('inq-case-filter');
       var modal = doc.getElementById('inq-modal');
       var modalTitle = doc.getElementById('inq-modal-title');
@@ -407,6 +410,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
           button.type = 'button';
           button.setAttribute('data-case-summary', c.id);
           button.id = 'inq-case-' + encodeURIComponent(c.id);
+          button.title = c.goal;
           var top = el(doc, 'div', 'inq-row');
           top.appendChild(badge(doc, INQ_CASE_STATUS_LABELS[c.status] || c.status, c.status === 'open' ? 'warn' : c.status === 'resolved' ? 'ok' : 'muted'));
           top.appendChild(el(doc, 'span', 'inq-panel-title', c.goal));
@@ -427,6 +431,18 @@ export const MUSE_INQUIRIES_SCRIPT = `
       modal.addEventListener('click', function(event) { if (event.target === modal) closeModal(); });
       doc.addEventListener('keydown', function(event) { if (event.key === 'Escape') closeModal(); });
       filter.addEventListener('change', function() { if (board) renderBoard(); });
+      caseToggle.addEventListener('click', function() {
+        caseContent.hidden = !caseContent.hidden;
+        caseToggle.setAttribute('aria-expanded', String(!caseContent.hidden));
+        caseToggle.textContent = caseContent.hidden ? 'ケース一覧を開く' : 'ケース一覧を閉じる';
+      });
+      caseViewButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          var view = button.getAttribute('data-case-view');
+          casesEl.setAttribute('data-view', view);
+          caseViewButtons.forEach(function(other) { other.setAttribute('aria-pressed', String(other === button)); });
+        });
+      });
       statusButtons.forEach(function(button) {
         button.addEventListener('click', function() {
           if (!board) return;
@@ -483,6 +499,19 @@ export function getMuseInquiriesPage(): string {
     .inq-toolbar label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
     .inq-toolbar select { flex: 1; min-width: 0; max-width: 100%; }
     .inq-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; margin-bottom: 16px; }
+    .inq-cases[data-view="list"] { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+    .inq-cases[data-view="list"] .inq-case { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 4px 16px; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; }
+    .inq-cases[data-view="list"] .inq-case:last-child { border-bottom: 0; }
+    .inq-cases[data-view="list"] .inq-case:hover { background: var(--bg-secondary); }
+    .inq-cases[data-view="list"] .inq-case > .inq-row:first-child { grid-column: 1; grid-row: 1; min-width: 0; }
+    .inq-cases[data-view="list"] .inq-panel-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .inq-cases[data-view="list"] .inq-stats { grid-column: 2; grid-row: 1 / span 2; align-content: center; margin-top: 0; }
+    .inq-cases[data-view="list"] .inq-case > .inq-meta { grid-column: 1; grid-row: 2; }
+    @media (max-width: 640px) {
+      .inq-cases[data-view="list"] .inq-case { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .inq-cases[data-view="list"] .inq-stats { grid-column: 1; grid-row: 2; }
+      .inq-cases[data-view="list"] .inq-case > .inq-meta { grid-row: 3; }
+    }
     .inq-case, .inq-panel { display: block; width: 100%; text-align: left; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
     .inq-case:hover, .inq-panel:hover { border-color: var(--accent-color); }
     .inq-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
@@ -524,6 +553,11 @@ export function getMuseInquiriesPage(): string {
     .inq-error { color: var(--danger-color); }
     .inq-link-btn { margin-top: 8px; padding: 0 12px; cursor: pointer; }
     .inq-case-list { margin-bottom: 12px; }
+    .inq-case-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .inq-case-header button { cursor: pointer; padding: 4px 10px; }
+    .inq-case-view-switch { display: inline-flex; gap: 4px; }
+    .inq-case-view-switch button[aria-pressed="true"] { border-color: var(--accent-color); outline: 2px solid var(--accent-color); outline-offset: 1px; }
+    #inq-case-content[hidden] { display: none; }
     .inq-proposer-section { margin-bottom: 16px; }
     .inq-proposer-section h2 { font-size: 16px; margin: 0 0 6px; }
     .inq-proposers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 8px; margin-top: 8px; }
@@ -567,7 +601,16 @@ export function getMuseInquiriesPage(): string {
       <p class="inq-meta">ケース選択内の全提案を集計。提案は採否待ちも含む全件、協議中は採用・実施中、完了は不採用を含む終了分です。</p>
       <div id="inq-proposers" class="inq-proposers" role="list"><p class="inq-meta">読み込み中…</p></div>
     </section>
-    <details class="inq-case-list"><summary>ケース一覧（詳細・集計）</summary><div id="inq-cases" class="inq-cases" aria-label="ケース"></div></details>
+    <section class="inq-case-list" aria-label="ケース一覧">
+      <div class="inq-case-header">
+        <button type="button" id="inq-case-toggle" aria-expanded="false" aria-controls="inq-case-content">ケース一覧を開く</button>
+        <div class="inq-case-view-switch" role="group" aria-label="ケースの表示形式">
+          <button type="button" data-case-view="list" aria-pressed="true" aria-controls="inq-cases">リスト</button>
+          <button type="button" data-case-view="panel" aria-pressed="false" aria-controls="inq-cases">パネル</button>
+        </div>
+      </div>
+      <div id="inq-case-content" hidden><div id="inq-cases" class="inq-cases" data-view="list" aria-label="ケース"></div></div>
+    </section>
     <div class="inq-toolbar">
       <label>ケース <select id="inq-case-filter" aria-label="ケースで絞り込む"><option value="">すべてのケース</option></select></label>
       <button type="button" id="inq-refresh">再読み込み</button>
