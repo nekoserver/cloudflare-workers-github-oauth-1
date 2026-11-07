@@ -269,3 +269,7 @@ museは外向き専用なのでTailscaleの状態表示だけとし、health/Nix
 スイッチが`muse`の`/usage`は、従来も本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vmのapi-bridgeへ届き、先方が推論せずに実行していた。問題はWorker側で、結果を通常のAI回答として保存し、`./usage`を別名として解決していなかった。応答の`bridge_command`があるときは`ai_chat_shares`へ保存せず`local/neko`として返し、`./usage`は`/usage`へ置き換えて送る。`/help`・`/status`・`/ping`・`/models`も同じ扱いで、`/Usage`のような大文字小文字の揺れは5コマンドに限って吸収する。`/ping`には本体Workerで測った往復時間を添え、api-bridgeの503は`muse_command_failed`として伝える。Tailscale停止・muse-vmオフラインでは従来どおり送らず、tunnelsへも切り替えない。muse-vm側の変更はなし。
 
 このコンテナの`server.js`経由で実muse-vmへ5コマンドと未対応の`/nope`を送り、すべてHTTP200と`bridge_command`を確認した。本番Workerと`/aichat`の画面からの確認は未実施。
+
+## 2026-11-07: /muse-statusを本体コンテナの停止中もTailscale WASMで取得（未反映）
+
+本体コンテナが停止中のとき、ページの「Tailscaleへ接続」で公式`@tailscale/connect`のWASMがブラウザからtailnetへ参加し、muse・muse-vmの状態（netmap）とmuse-vmの`/health`シグナルを取得する。コンテナが使えるときは従来どおりコンテナ経由。Nixの一覧は`MUSE_API_KEY`をブラウザへ渡さないためWASMでは取らない。`/muse-status`にWASMとTailscaleへの接続を許すCSPを設定し、WASMの読み込みを`public/tailscale-wasm-client.mjs`へ共通化した（`/container-monitor`も使用）。`/health`が認証不要であることはMuseへの問い合わせ（D1`agent-inquiries`の`muse-status-wasm-20261107`）で得た、ソース上の回答で稼働版は未確認。ページのテストと実Chromeでの公式WASMの初期化（`NeedsLogin`まで、外部通信は遮断）を確認。実tailnetへのログインとmuse-vmへの到達、本番反映は未確認。Dockerビルド・Workerデプロイなし。詳細は[muse-statusのSPEC](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。

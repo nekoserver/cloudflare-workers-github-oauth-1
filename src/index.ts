@@ -476,7 +476,7 @@ import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
-import { getMuseStatusPage } from './views/museStatus';
+import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -20324,6 +20324,8 @@ app.get('/cf-containers/planner', authMiddleware, cfDashboardAdminMiddleware, as
 /** tailnet上のmuse・muse-vmの状態、Nixのパッケージ、シグナル送信のページ(管理者のみ)。どの入口も停止中のコンテナは起動しない。 */
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
   c.header('Cache-Control', 'no-store');
+  // 本体コンテナの停止中は、ページがTailscale WASMでtailnetへ参加して取得する
+  c.header('Content-Security-Policy', MUSE_STATUS_CSP);
   return c.html(getMuseStatusPage());
 });
 

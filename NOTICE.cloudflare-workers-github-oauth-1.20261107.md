@@ -174,4 +174,5 @@ Claude Code側でも、本番反映の依頼は権限チェックの対象にな
 
 - [データベースの設計](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)
 - [Museとの会話と承認の扱い](NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md)
+- [Tailscale WASMで取得したときの知見](NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md)
 - [lib/claudeの設定の記録](https://github.com/nekoserver/lib/blob/main/NOTICE.lib.20261107.claude-host-setup.md)（`lib`リポジトリ）

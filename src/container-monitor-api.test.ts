@@ -25,3 +25,15 @@ describe('container monitoring API authorization', () => {
     expect((await app.request('/api/container-monitor/snapshot?provider=cloudflare-api', { headers }, env)).status).toBe(400);
   });
 });
+describe('/muse-statusのブラウザ方針', () => {
+  it('Tailscale WASMの読み込みと接続をCSPで許可し、それ以外の外部接続は許可しない', async () => {
+    const token = await createJWT({ sub: 'admin', github_id: 85157166 }, secret);
+    const page = await app.request('/muse-status', { headers: { Authorization: `Bearer ${token}` } }, env);
+    expect(page.status).toBe(200);
+    const csp = page.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("'wasm-unsafe-eval'");
+    expect(csp).toContain('wss://*.tailscale.com');
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).not.toMatch(/connect-src[^;]*\*(?!\.tailscale)/);
+  });
+});

@@ -1,4 +1,5 @@
-const WASM_ROOT = '/tailscale-connect/1.102.3-3';
+import { TAILSCALE_WASM_ROOT as WASM_ROOT, isTailscaleLoginURL, loadTailscaleClient } from './tailscale-wasm-client.mjs';
+export { loadTailscaleClient };
 const STORAGE_PREFIX = 'container-monitor.tailscale.';
 const labels = { running: '稼働中', provisioning: '起動準備中', starting: '起動中', stopping: '停止処理中', stopped: '停止', inactive: '非稼働', failed: '失敗', unhealthy: '異常', unknown: '不明', online: 'オンライン', offline: 'オフライン', 'no-instances': '記録なし' };
 
@@ -14,21 +15,6 @@ export function normalizeNetMap(value) {
 }
 export function chooseProvider(config, preferred) {
   return config.providers.some(provider => provider.id === preferred) ? preferred : config.defaultProvider;
-}
-
-/** Decode the file container separately from HTTP content encoding. */
-export async function loadTailscaleClient(config, fetcher = fetch) {
-  const response = await fetcher(config.wasmURL ?? `${WASM_ROOT}/main.wasm.gz`);
-  if (!response.ok) throw new Error(`WASM取得 HTTP ${response.status}`);
-  let bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-  }
-  if (bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw new Error('WASMの配信形式が不正です');
-  const wasmURL = URL.createObjectURL(new Blob([bytes], { type: 'application/wasm' }));
-  try { return await (await import(`${WASM_ROOT}/pkg.js`)).createIPN({ ...config, wasmURL }); }
-  finally { URL.revokeObjectURL(wasmURL); }
 }
 
 export function setupContainerMonitor(doc = document, dependencies = {}) {
@@ -99,8 +85,8 @@ export function setupContainerMonitor(doc = document, dependencies = {}) {
           catch (error) { status.textContent = error.message; }
         },
         notifyBrowseToURL: value => {
-          let url; try { url = new URL(value); } catch { return; }
-          if (url.protocol !== 'https:' || url.username || url.password || !(url.hostname === 'login.tailscale.com' || url.hostname.endsWith('.tailscale.com'))) return;
+          if (!isTailscaleLoginURL(value)) return;
+          const url = new URL(value);
           const link = doc.createElement('a'); link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Tailscaleのログイン画面を開く';
           byId('monitor-login').replaceChildren(link);
         },
