@@ -237,11 +237,21 @@ describe('シグナル送信のモーダル', () => {
     expect(interval.disabled).toBe(false);
   });
 
-  // 2026-11-07 ユーザー指定: Muse選択の接頭語なし投稿は常に直接muse-vmへ送るので、tunnelsへの切り替えの設定は出さない。
-  it('Tailscale未接続時にtunnelsを使う設定は表示しない', () => {
-    const view = open();
-    expect(view.overlay.querySelector('[data-muse-tunnels-fallback]')).toBeNull();
-    expect(view.overlay.textContent).not.toContain('tunnels');
+  // 2026-11-07 ユーザー指定(2回目): muse-vmへ直接届かないときにtunnels.rbを使うかのポリシー。既定OFF。
+  it('tunnels接続のポリシーは既定OFFで、保存・再表示・初期化できる', () => {
+    document.cookie = 'aichat_muse_tunnels=; path=/; max-age=0';
+    let view = open();
+    const policy = view.overlay.querySelector<HTMLInputElement>('[data-muse-tunnels-fallback]');
+    expect(policy).not.toBeNull();
+    expect(policy!.checked).toBe(false);
+    expect(policy!.closest('label')!.textContent).toContain('tunnels.rb');
+    policy!.click();
+    view.button('保存').click();
+    expect(document.cookie).toContain('aichat_muse_tunnels=on');
+    view = open();
+    expect(view.overlay.querySelector<HTMLInputElement>('[data-muse-tunnels-fallback]')!.checked).toBe(true);
+    view.button('デフォルトに戻す').click();
+    expect(document.cookie).not.toContain('aichat_muse_tunnels=on');
   });
 
   it('間隔の入力はチェックボックスに連動する', () => {

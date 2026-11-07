@@ -53,6 +53,21 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       document.cookie = AICHAT_MUSE_SIGNAL_COOKIE + '=; path=/; max-age=0; SameSite=Lax';
     }
 
+    // tunnels接続のポリシー(ユーザー指定 2026-11-07、既定OFF)。サーバーはCookieのaichat_muse_tunnels=onだけをONと読む。
+    function readMuseTunnelsFallback(cookieText) {
+      return String(cookieText || '').split(';').some(function(part) {
+        return part.trim() === 'aichat_muse_tunnels=on';
+      });
+    }
+
+    function writeMuseTunnelsFallback(enabled) {
+      document.cookie = 'aichat_muse_tunnels=' + (enabled === true ? 'on' : 'off') + '; path=/; max-age=' + (60 * 60 * 24 * 365) + '; SameSite=Lax';
+    }
+
+    function clearMuseTunnelsFallback() {
+      document.cookie = 'aichat_muse_tunnels=; path=/; max-age=0; SameSite=Lax';
+    }
+
     function createMuseHealthWatch(options) {
       var selected = null;
       var timer = null;
@@ -153,6 +168,19 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       enabledField.appendChild(enabledLabel);
       box.appendChild(enabledField);
 
+      var tunnelsField = document.createElement('div');
+      tunnelsField.className = 'aichat-tune-field';
+      var tunnelsLabel = document.createElement('label');
+      tunnelsLabel.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;';
+      var tunnelsInput = document.createElement('input');
+      tunnelsInput.type = 'checkbox';
+      tunnelsInput.setAttribute('data-muse-tunnels-fallback', '');
+      tunnelsInput.checked = readMuseTunnelsFallback(document.cookie);
+      tunnelsLabel.appendChild(tunnelsInput);
+      tunnelsLabel.appendChild(document.createTextNode('muse-vmへ直接届かないとき tunnels.rb を使う（初期OFF）'));
+      tunnelsField.appendChild(tunnelsLabel);
+      box.appendChild(tunnelsField);
+
       var intervalField = document.createElement('div');
       intervalField.className = 'aichat-tune-field';
       var intervalLabel = document.createElement('label');
@@ -182,6 +210,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       resetBtn.textContent = 'デフォルトに戻す';
       resetBtn.style.cssText = 'flex:1;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;';
       resetBtn.addEventListener('click', function() {
+        clearMuseTunnelsFallback();
         options.resetSettings();
         close();
       });
@@ -199,6 +228,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
           // OFFのときは入力が無効で直せないので、元の間隔を残す。
           seconds = current.intervalSeconds;
         }
+        writeMuseTunnelsFallback(tunnelsInput.checked);
         options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds });
         close();
       });

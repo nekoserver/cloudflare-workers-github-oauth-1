@@ -135,3 +135,52 @@ lib側はworkerの再起動で反映する。本体Worker側はデプロイが�
 | `src/aichat-askmuse-integration.test.ts`・`src/views/aichatMuseHealth.test.ts` | 指定やCookieがONでもtunnelsへ送らないこと、設定を表示しないことを確かめる |
 
 明示の`/neko askgk muse_prompt="…"`（tunnels経由）と`/askmuse prompt="…"`（直接）は変えていない。ブラウザに残った`aichat_muse_tunnels`のCookieは読まなくなるだけで、消してはいない。
+
+---
+
+## Muse選択の接頭語なし投稿は、muse-vmを確認できれば直接を最優先し、失敗時はtunnels接続のポリシーで決める（2026-11-07、2回目）
+
+**対象**: `src/utils/museRoute.ts`（新規、`routeMusePrompt`・`readMuseTunnelsPolicy`）、`src/utils/museTailscalePreflight.ts`（`checkMuseVmOnTailnet`・`museVmNotConfirmedMessage`）、`src/index.ts`の`POST /api/aichat`、`src/views/aichatMuseHealth.ts`のMuseの⚙モーダル — 言語モデルスイッチがMuseのときの、プレフィックスの無い投稿の経路と停止の条件。
+
+### 背景
+
+muse-vmとtunnels経由の経路（このホストのtunnels.rb → LLM worker → `tailscale nc`）が動いているのに、本体コンテナ（`DEMO_CONTAINER`）が停止中だったため「❌ Muse投稿を停止しました: Muse投稿を停止しました。本体コンテナが停止中のためTailscaleへ接続できません。」と表示され、投稿できなかった。ユーザー指定（2026-11-07）:
+
+1. tunnels.rbへ問い合わせる前に、tailnet上のmuse-vmが生きているかを確かめ、生きていれば直接接続を最優先する。
+2. それでも失敗し、選択中の言語モデルがMuseなら、tunnels接続のポリシー（ON/OFF）を確かめる。OFF（既定）ならtunnels.rbへの問い合わせも中止する。
+3. Muse投稿を停止してよいのは、tailnet上にmuse-vmを確認できない場合だけ。
+4. 判定と振り分けは単独の関数にして、ほかからも呼べるようにしてよい。
+
+### 振り分け
+
+| tailnet上のmuse-vm | 直接経路の結果 | ポリシーON | ポリシーOFF（既定） |
+|---|---|---|---|
+| 確認できた | 成功 | 直接の回答 | 直接の回答 |
+| 確認できた | muse-vmへ届かない（`container_not_running`・`muse_connection_failed`・`muse_not_authenticated`、または直接経路が未設定） | tunnels.rbへ問い合わせる | 直接のエラーを返す。停止とは書かない |
+| 確認できた | muse-vmが応答した失敗、タイムアウト | 直接のエラー（再送しない） | 直接のエラー |
+| 確認できない（本体コンテナ停止中を含む） | 送らない | tunnels.rbへ問い合わせる | 「❌ Muse投稿を停止しました。tailnet上にmuse-vmを確認できません（理由）。」tunnels.rbへも問い合わせない |
+
+- tunnels.rbへは本文を`/neko askgk muse_prompt="…"`で送る。このとき本体コンテナでの事前確認（`askgkDep`の`withMuseTailscalePreflight`）は挟まない。停止中のコンテナを起動しないため。
+- tunnels経由の回答には`fallbackUsed: true`を付ける。保存する質問は元の本文。
+- ポリシー: リクエストの`museTunnelsFallback`（`true`だけがON）を優先し、無ければCookie`aichat_muse_tunnels=on`、どちらも無ければOFF。⚙モーダルの「muse-vmへ直接届かないとき tunnels.rb を使う（初期OFF）」で保存し、「デフォルトに戻す」で消す。
+- 停止の文言から「停止しました」の重複（「停止しました: 停止しました。」）をなくした。
+
+### 修正内容
+
+| ファイル | 変更 |
+|---|---|
+| `src/utils/museRoute.ts` | 新規。`routeMusePrompt`（確認→直接→ポリシー→tunnelsまたは停止）、`readMuseTunnelsPolicy` |
+| `src/utils/museTailscalePreflight.ts` | 確認を`checkMuseVmOnTailnet`（`online`か`not_confirmed`と理由、例外なし）に切り出し、`requireMuseTailscale`はその薄い包みにした。停止の文言を`museVmNotConfirmedMessage`にそろえた |
+| `src/index.ts` | Muse選択の接頭語なし投稿を`routeMusePrompt`で扱う。`museTunnelsFallback`と`fallbackUsed`を戻した |
+| `src/views/aichatMuseHealth.ts` | ポリシーの設定（既定OFF）を戻した |
+| `AGENTS.md` | 「互いの代替として扱わない」に、この投稿だけの例外と停止の条件を書いた |
+| テスト | `src/utils/museRoute.test.ts`（新規）、`src/aichat-askmuse-integration.test.ts`、`src/views/aichatMuseHealth.test.ts` |
+
+明示の`/neko askgk muse_prompt="…"`と`/askmuse prompt="…"`の経路は変えていない（明示の`muse_prompt`は今も本体コンテナでの事前確認を通る）。
+
+### 確認
+
+- 新しい仕様のテストを先に書き、10件が失敗することを確かめてから実装した。
+- 関連テスト6ファイル308件が通る。`routeMusePrompt`を「muse-vmが応答した失敗も再送する」「ポリシーを無視する」「確認前にtunnelsへ送る」の3通りに壊すと、それぞれ8・14・11件が失敗する。
+- `tsc --noEmit`の型エラーは変更前と同じ87件で、増えていない。⚙モーダルのscriptは`node --check`を通る。
+- 未確認: デプロイ後の実画面、本体コンテナ停止中に実際にtunnels.rb経由で回答が届くこと（Workerのデプロイはこの環境からできない）。
