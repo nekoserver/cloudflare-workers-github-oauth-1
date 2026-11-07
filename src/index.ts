@@ -1,4 +1,5 @@
-import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
+import { checkMuseVmOnTailnet, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
+import { readMuseTunnelsPolicy, routeMusePrompt, type MuseRoute } from './utils/museRoute';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
 /**
@@ -7162,6 +7163,8 @@ type AichatRequestBody = {
   // resolveAichatRunOverridesがAICHAT_TUNABLE_MODELS(Gemma-4・Qwenのみ)に
   // 限って適用し、それ以外のモデルでは無視する。
   maxTokens?: number; temperature?: number;
+  // Muse選択の接頭語なし投稿で、直接経路が使えないときにtunnels.rbを使うか。省略時はCookie(aichat_muse_tunnels)、既定OFF。
+  museTunnelsFallback?: boolean;
 };
 
 async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName: string): Promise<SqlImpactCatalogRow[]> {
@@ -7210,20 +7213,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 明示プレフィックスを優先し、Muse選択の通常入力はtailnetへの直接経路(DEMO_CONTAINER → muse-vm)だけを使う。
-  // 2026-11-07 ユーザー指定: tunnels方向へは送らない。Tailscaleを確かめられなければ止める
-  // (AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」: 2つの経路を互いの代替にしない)。
+  // 明示プレフィックスを優先する。Muse選択の通常入力は、muse-vmを確認できれば直接経路を最優先し、
+  // それでも失敗したらtunnels接続のポリシー(既定OFF)を見る(routeMusePrompt、ユーザー指定 2026-11-07)。
   const selectedModelInput = !!message && !/^\/(?:neko\b|askmuse(?:\s|$))/i.test(message);
   const selectedMuseInput = body.model === 'muse' && selectedModelInput;
-  let museConnectionError: string | undefined;
-  if (selectedMuseInput) {
-    try {
-      await requireMuseTailscale(() => getDemoContainerStub(c.env), 4_000,
-        healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'));
-    } catch (error) {
-      museConnectionError = error instanceof Error ? error.message : 'Tailscaleの接続状態を確認できません。';
-    }
-  } else if ((body.model === 'codex' || body.model === 'claude') && selectedModelInput) {
+  const museTunnelsPolicy = readMuseTunnelsPolicy(body.museTunnelsFallback, c.req.header('Cookie'));
+  // Museの振り分けはinterpretInput(routeMusePrompt)で行い、結果の経路をここに残す。
+  let museRoute: MuseRoute | undefined;
+  if ((body.model === 'codex' || body.model === 'claude') && selectedModelInput) {
     message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
@@ -7257,9 +7254,22 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   };
 
   const interpretInput: typeof interpretAichatSlashCommand = selectedMuseInput
-    ? async (prompt, _now, deps) => museConnectionError
-      ? { handled: true, response: '❌ Muse投稿を停止しました: ' + museConnectionError }
-      : interpretMusePrompt(prompt, deps)
+    ? async (prompt, now, deps) => {
+      const rustWorker = c.env.RUST_WORKER;
+      const routed = await routeMusePrompt(prompt, {
+        checkMuseVm: () => checkMuseVmOnTailnet(() => getDemoContainerStub(c.env)),
+        askMuseDirect: deps.askMuseDirect,
+        interpretDirect: (p, ask) => interpretMusePrompt(p, { ...deps, askMuseDirect: ask }),
+        tunnelsPolicy: museTunnelsPolicy,
+        // tunnels経路は本体コンテナを通らないので、本体コンテナでの確認(askgkDepの事前確認)を挟まない。
+        askTunnels: rustWorker
+          ? p => interpretAichatSlashCommand('/neko askgk muse_prompt="' + p + '"', now, { ...deps, askTunnelSigner: m => askTunnelSigner(rustWorker, m, c.env) })
+          : undefined,
+      });
+      c.header('X-Muse-Tailscale', routed.museVm === 'online' ? 'connected' : 'unavailable');
+      museRoute = routed.route;
+      return routed.result;
+    }
     : interpretAichatSlashCommand;
   const slashCommand = await interpretInput(message, new Date(), {
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
@@ -7652,6 +7662,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         return jsonUtf8({
           response: answer,
           usedModel: askgkModel,
+          ...(museRoute === 'tunnels' ? { fallbackUsed: true } : {}),
           modelColor,
           modelColorError,
           userHash,
@@ -7669,7 +7680,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
         // 握りつぶさずログに残す。CLAUDE.mdルール8)。
         const saveError = saveErr instanceof Error ? saveErr.message : String(saveErr);
         if (requestedThreadId) return jsonUtf8({ error: '追加質問をスレッドへ保存できませんでした: ' + saveError }, 500);
-        return jsonUtf8({ response: answer, usedModel: askgkModel, systemPromptMode, saveError });
+        return jsonUtf8({ response: answer, usedModel: askgkModel, systemPromptMode, saveError, ...(museRoute === 'tunnels' ? { fallbackUsed: true } : {}) });
       }
     }
 
@@ -7685,6 +7696,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     return jsonUtf8({
       ...saved,
       response: slashCommand.response,
+      ...(museRoute === 'tunnels' ? { fallbackUsed: true } : {}),
       responseAlign: slashCommand.responseAlign,
       usedModel: askgkModel ?? (slashCommand.saveAsAiResponse ? 'neko/askgk' : 'local/neko'),
       systemPromptMode,

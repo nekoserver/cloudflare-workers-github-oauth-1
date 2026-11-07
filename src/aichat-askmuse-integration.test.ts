@@ -182,7 +182,7 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(inserts[0][3]).toBe(message);
   });
 
-  it('通常Museの直接接続が失敗してもtunnelsへフォールバックしない', async () => {
+  it('通常Museの直接接続が失敗しても、ポリシーOFF(既定)ならtunnelsへフォールバックしない', async () => {
     stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
       ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
       : new Response('{}', { status: 502 }));
@@ -222,27 +222,81 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(inserts).toHaveLength(0);
   });
 
-  // 2026-11-07 ユーザー指定: スイッチがMuseのときの接頭語なし投稿は、tunnels方向ではなく直接muse-vmへ送る。
-  // AGENTS.md「互いの代替として扱わない」に合わせ、Tailscaleを確かめられなくてもtunnelsへは切り替えない。
+  // 2026-11-07 ユーザー指定(2回目): muse-vmを確認できれば直接接続を最優先し、それでも失敗したら
+  // tunnels接続のポリシー(既定OFF)を見る。OFFならtunnels.rbへも問い合わせない。
+  // Muse投稿を停止してよいのは、tailnet上にmuse-vmを確認できない場合だけ。
+  const peersOnline = new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }));
+  const tunnelsReply = () => new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'tunnelsの回答' }) }));
+  const tunnelsPrompt = () => JSON.parse(JSON.parse(String(RUST_WORKER.fetch.mock.calls[0][1].body)).body).message;
+
   it.each([
-    [undefined, ''], [false, ''], [true, ''], ['true', ''],
-    [undefined, 'other=1; aichat_muse_tunnels=on'], [true, 'aichat_muse_tunnels=on'],
-  ])('Tailscale未接続ならtunnelsの指定(%s)やCookie(%s)に関係なく止め、tunnelsへ送らない', async (museTunnelsFallback, cookie) => {
+    [undefined, ''], [false, ''], ['true', ''], [false, 'aichat_muse_tunnels=on'], [undefined, 'aichat_muse_tunnels=off'],
+  ])('muse-vmを確認できずポリシーOFF(指定%s・Cookie%s)なら停止し、tunnels.rbへも問い合わせない', async (museTunnelsFallback, cookie) => {
     stub.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'NeedsLogin', peers: [] })));
-    RUST_WORKER.fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'tunnelsの回答' }) })));
+    RUST_WORKER.fetch.mockResolvedValue(tunnelsReply());
     const response = await post({ message: '質問 "そのまま"', model: 'muse', museTunnelsFallback }, { MUSE_API_KEY: 'key' }, cookie);
     const data = await response.json() as { response: string; fallbackUsed?: boolean };
-    expect(data.response).toContain('Tailscale');
-    expect(data.response).not.toContain('tunnelsの回答');
+    expect(data.response).toMatch(/^❌ Muse投稿を停止しました。tailnet上にmuse-vmを確認できません/);
+    expect(data.response).toContain('tunnels.rbへも問い合わせていません');
     expect(data.fallbackUsed).toBeUndefined();
     expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
     expect(inserts).toHaveLength(0);
   });
 
+  // 報告された事例: 本体コンテナが停止中(muse-vmとtunnels経路は生きている)。
+  it('本体コンテナが停止中でポリシーOFFなら、コンテナを起動せず停止の理由をmuse-vm未確認として返す', async () => {
+    stub.getState.mockResolvedValue({ status: 'stopped' });
+    const response = await post({ message: '質問本文', model: 'muse' });
+    const data = await response.json() as { response: string };
+    expect(data.response).toBe('❌ Muse投稿を停止しました。tailnet上にmuse-vmを確認できません（本体コンテナが停止中のため、Tailscaleの接続状態を確認できません）。Museへは送信していません。tunnels接続のポリシーがOFF（既定）のため、tunnels.rbへも問い合わせていません。');
+    expect(stub.fetch).not.toHaveBeenCalled();
+    expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, ''], [undefined, 'other=1; aichat_muse_tunnels=on'],
+  ])('本体コンテナが停止中でポリシーON(指定%s・Cookie%s)なら、tunnels.rbへ本文をmuse_promptで問い合わせる', async (museTunnelsFallback, cookie) => {
+    stub.getState.mockResolvedValue({ status: 'stopped' });
+    RUST_WORKER.fetch.mockResolvedValue(tunnelsReply());
+    const message = '質問 "そのまま"\n次の行 “△”';
+    const response = await post({ message, model: 'muse', museTunnelsFallback }, { MUSE_API_KEY: 'key' }, cookie);
+    expect(await response.json()).toMatchObject({ usedModel: 'muse', response: 'tunnelsの回答', fallbackUsed: true });
+    expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
+    expect(RUST_WORKER.fetch).toHaveBeenCalledTimes(1);
+    expect(tunnelsPrompt()).toBe('muse_prompt="' + message + '"');
+    // tunnels経路では本体コンテナを確認し直さない(停止中のコンテナを起動しない)。
+    expect(stub.fetch).not.toHaveBeenCalled();
+    expect(inserts[0][3]).toBe(message);
+    expect(inserts[0][5]).toBe('muse');
+  });
+
+  it('muse-vmを確認できても直接接続が失敗(502)したら、ポリシーONならtunnels.rbへ問い合わせる', async () => {
+    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
+      ? peersOnline.clone()
+      : new Response('{}', { status: 502 }));
+    RUST_WORKER.fetch.mockResolvedValue(tunnelsReply());
+    const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
+    expect(await response.json()).toMatchObject({ usedModel: 'muse', response: 'tunnelsの回答', fallbackUsed: true });
+    expect(response.headers.get('X-Muse-Tailscale')).toBe('connected');
+    expect(stub.fetch.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual(['/debug/tailscale-peers', '/muse/v1/chat/completions']);
+    expect(RUST_WORKER.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('muse-vmを確認できても直接接続が失敗(502)し、ポリシーOFFなら直接のエラーを返し、停止とは書かない', async () => {
+    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
+      ? peersOnline.clone()
+      : new Response('{}', { status: 502 }));
+    const response = await post({ message: '通常質問', model: 'muse' });
+    const text = (await response.json() as { response: string }).response;
+    expect(text).toContain('muse_connection_failed');
+    expect(text).not.toContain('停止');
+    expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
+  });
+
   it('tunnelsがONでもTailscale接続中は本文を直接Museへ送る', async () => {
     stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
+      ? peersOnline.clone()
       : new Response(reply));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
     expect(await response.json()).toMatchObject({ usedModel: 'muse', response: '回答本文\n\nEngine: Muse / Model: muse' });
@@ -250,12 +304,12 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(stub.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('tunnelsがONでもTailscale接続中なら直接送り、Muse実行失敗で再送しない', async () => {
+  it('tunnelsがONでも、muse-vmが応答した失敗(503)はtunnelsへ再送しない', async () => {
     stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response('{}', { status: 502 }));
+      ? peersOnline.clone()
+      : new Response(JSON.stringify({ error: { type: 'usage_unavailable' } }), { status: 503 }));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
-    expect((await response.json() as { response: string }).response).toContain('muse_connection_failed');
+    expect((await response.json() as { response: string }).response).toContain('muse-vmでコマンドを実行できませんでした');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
   });
 
