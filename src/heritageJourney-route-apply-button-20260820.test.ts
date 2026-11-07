@@ -87,6 +87,7 @@ describe('heritage-journeyページ: 「適用する」を押すとグレーア�
     // 経由地チェックボックスの追加でルート順序表示板の再描画が重くなったため、
     // 全候補選択後に多数のバッジを連続クリックするこのテストはデフォルトの
     // 5000msを超える場合がある。タイムアウトを緩和する。
+    // 2026-11-06の実測では単独実行でも約19秒かかり、20000msでは並列実行時に時間切れになった。
     setupPage();
     (document.getElementById('select-all-btn') as HTMLButtonElement).click();
     const durationBefore = document.getElementById('day-plan-duration')!.textContent;
@@ -102,7 +103,7 @@ describe('heritage-journeyページ: 「適用する」を押すとグレーア�
 
     const durationAfter = document.getElementById('day-plan-duration')!.textContent;
     expect(durationAfter).not.toBe(durationBefore);
-  }, 20000);
+  }, 120000);
 
   it('適用後、ボタンは再び非アクティブに戻る', () => {
     setupPage();

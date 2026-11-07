@@ -3,13 +3,14 @@ vi.mock('./index', () => ({
   default: { fetch: vi.fn() }, syncAllTreeViewSnapshots: vi.fn(),
   runCfContainerCronReport: vi.fn().mockResolvedValue({ ok: true }),
   runCfContainerFirewallCron: vi.fn().mockResolvedValue(undefined),
+  runCfContainerBuildTimingCollection: vi.fn().mockResolvedValue({ errors: [] }),
 }));
 vi.mock('./utils/codexResetCountdown', () => ({ runCodexResetCountdownCron: vi.fn().mockResolvedValue({ registered: 2 }) }));
 vi.mock('./utils/treeViewCronCountdown', () => ({ registerNextTreeViewCronCountdown: vi.fn() }));
 vi.mock('./utils/treeViewCronNotify', () => ({ notifyTreeViewCronUpdate: vi.fn() }));
 vi.mock('./containers/demoContainer', () => ({ DemoContainer: class {} }));
 import worker from './worker-entry';
-import { syncAllTreeViewSnapshots, runCfContainerCronReport } from './index';
+import { syncAllTreeViewSnapshots, runCfContainerCronReport, runCfContainerBuildTimingCollection } from './index';
 import { registerNextTreeViewCronCountdown } from './utils/treeViewCronCountdown';
 import { notifyTreeViewCronUpdate } from './utils/treeViewCronNotify';
 import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
@@ -32,6 +33,7 @@ describe('repository checks are fully stopped for cron', () => {
     expect(fetcher).not.toHaveBeenCalled();
     expect(runCodexResetCountdownCron).toHaveBeenCalledOnce();
     expect(runCfContainerCronReport).toHaveBeenCalledOnce();
+    expect(runCfContainerBuildTimingCollection).toHaveBeenCalledOnce();
   });
   it('keeps the remaining scheduled jobs independent when Codex fails', async () => {
     vi.mocked(runCodexResetCountdownCron).mockRejectedValueOnce(new Error('unavailable'));

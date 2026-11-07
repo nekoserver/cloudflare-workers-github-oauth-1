@@ -31,7 +31,8 @@ describe('画像添付時にmoondreamを優先する設定: 配線の整合性',
   it('GET /aichat はCookieヘッダーからresolveAichatPreferMoondreamを呼び、getAiChatPageへ渡す', () => {
     const idx = src.indexOf("app.get('/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const block = src.slice(idx, idx + 1400);
+    // ハンドラが伸びても読み切れるよう、次のルート登録(行頭のapp.)までを対象にする。
+    const block = src.slice(idx, src.indexOf('\napp.', idx + 1));
     expect(block).toContain('aichatPreferMoondream: resolveAichatPreferMoondream(');
   });
 

@@ -91,7 +91,7 @@ describe('Codex five-hour reset countdown', () => {
     await registerCodexResetCountdown(db, reply, now);
     await expect(registerCodexResetCountdown(db, 'リセット 不明', now)).rejects.toThrow();
     const fetcher = { fetch: vi.fn().mockRejectedValue(new Error('network failed')) };
-    await expect(runCodexResetCountdownCron({ DB: db, RUST_WORKER: fetcher as unknown as Fetcher })).rejects.toThrow('network failed');
+    await expect(runCodexResetCountdownCron({ DB: db, RUST_WORKER: fetcher as unknown as Fetcher })).rejects.toThrow('中継Worker(rust-worker-sqlx-d1)との通信に失敗しました');
     expect(sql.prepare('SELECT * FROM countdown_events').all()).toHaveLength(2);
   });
   it('rolls back logical deletion if inserting the replacement fails', async () => {

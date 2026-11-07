@@ -24,7 +24,7 @@ const minimalUser = {
 describe('/aichat ページ: Moondream画像分析結果の保存トリガー', () => {
   const html = getAiChatPage(minimalUser);
   const idx = html.indexOf("chatForm.addEventListener('submit'");
-  const fn = html.slice(idx, idx + 3600);
+  const fn = html.slice(idx, idx + 6000);
 
   it('tryAppendMoondream内で /api/aichat/moondream-analysis へPOSTする', () => {
     expect(fn).toContain("fetch('/api/aichat/moondream-analysis'");

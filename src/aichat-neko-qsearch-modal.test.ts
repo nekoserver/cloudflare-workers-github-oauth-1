@@ -78,7 +78,7 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
       });
     }
     if (u.includes('/api/aichat')) {
-      return Promise.resolve({ json: () => Promise.resolve(apiResponse) });
+      return Promise.resolve({ headers: new Headers({ 'content-type': 'application/json' }), json: () => Promise.resolve(apiResponse) });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });

@@ -18,7 +18,7 @@ export function highlightCode(code: string, lang: string): string {
   // 変数名に束縛したfunctionにすると、esbuildのname保持機能により関数本体の
   // 先頭に name-preserving ヘルパー呼び出し(バンドル専用、シンボル名は
   // アンダースコア2つ+name)が挿入される。この関数はhighlightCode.toString()
-  // で文字列化してブラウザの<script>内に単体で埋め込む用途(aichat.ts/
+  // で文字列化してブラウザのscript要素内に単体で埋め込む用途(aichat.ts/
   // aichat-share.ts)のため、バンドル環境の外ではそのヘルパーが未定義となり
   // ReferenceErrorでparseMd全体が失敗する(共有ページの本文が空白になった
   // 不具合の原因)。配列要素としてfunctionを置くことで変数名への束縛を避け、

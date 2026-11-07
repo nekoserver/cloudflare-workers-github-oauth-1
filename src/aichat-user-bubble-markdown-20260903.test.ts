@@ -29,8 +29,11 @@ const minimalUser = {
 
 let dom: JSDOM | undefined;
 
-afterEach(() => {
+afterEach(async () => {
   if (dom) {
+    // 送信直後のDOMだけを見るテストでも、ページのfetch→応答描画は続いている。
+    // 閉じたwindowへ描画して未処理の例外にならないよう、描画が終わるのを待ってから閉じる。
+    await new Promise((resolve) => setTimeout(resolve, 50));
     dom.window.close();
     dom = undefined;
   }

@@ -113,7 +113,19 @@ describe('/ruby-wasm REPLスニペット集', () => {
       'sqlx-d1ページング応答',
       'sqlx-d1集計行の変換',
       'sqlx-d1エラー境界',
+      // 2026-09-26(e1abc48)の拡充で追加
+      'sqlx-d1トランザクション結果',
+      'sqlx-d1バッチ書き込み',
+      'sqlx-d1楽観的ロック',
+      'sqlx-d1検索条件',
+      'sqlx-d1日付別集計',
+      'sqlx-d1リレーション結合',
     ]);
-    expect(sqlxSamples.every((item) => item.code.includes('JSON.parse'))).toBe(true);
+    // JSON応答を受け取る4件は、JSON.parseで応答を読む形にする。
+    // e1abc48で追加した残りの6件は、Rubyのハッシュから始める例(楽観的ロック・検索条件など)も含むため対象外。
+    const jsonResponseTitles = ['sqlx-d1出力アダプタ', 'sqlx-d1ページング応答', 'sqlx-d1集計行の変換', 'sqlx-d1エラー境界'];
+    const jsonResponseSamples = sqlxSamples.filter((item) => jsonResponseTitles.includes(item.title));
+    expect(jsonResponseSamples).toHaveLength(4);
+    expect(jsonResponseSamples.every((item) => item.code.includes('JSON.parse'))).toBe(true);
   });
 });
