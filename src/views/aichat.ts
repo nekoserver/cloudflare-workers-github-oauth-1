@@ -8082,6 +8082,7 @@ ${AICHAT_MUSE_HEALTH_SCRIPT}
       },
       getColor: function() { return getModelDotColor('muse'); },
       setBorderColor: function(color) { chatInput.style.borderColor = color; },
+      notifyUnavailable: function(message) { showAichatToast(message); },
       isHidden: function() { return document.hidden; },
       getSettings: function() { return readMuseSignalSettings(document.cookie); }
     });
@@ -8498,12 +8499,17 @@ ${getRubyWasmLoaderScript()}
           .catch(function() {});
       }
 
+      var museSubmission = /^\\s*\\/neko\\s+askgk\\s+muse_prompt\\s*=/i.test(currentMsg)
+        || (payload.model === 'muse' && !/^\\s*\\/(?:neko\\b|askmuse(?:\\s|$))/i.test(currentMsg));
+      if (museSubmission) museHealthWatch.beginSubmission();
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
         .then(function(res) {
+          var museConnection = res.headers.get('X-Muse-Tailscale');
+          if (museConnection || museSubmission) museHealthWatch.finishSubmission(museConnection === 'connected');
           var streamState = { text: '', bubble: null };
           return readAichatResponse(res, function(delta, streamMeta) {
             assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
@@ -8542,7 +8548,7 @@ ${getRubyWasmLoaderScript()}
             if (data.threadId) currentThreadId = data.threadId;
           }
         })
-        .catch(function(err) { if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
+        .catch(function(err) { if (museSubmission) museHealthWatch.finishSubmission(false); if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
         .finally(function() { chatSendBtn.disabled = false; chatInput.focus(); });
     });
 

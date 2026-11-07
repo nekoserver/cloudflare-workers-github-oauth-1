@@ -1,0 +1,29 @@
+vitest.config.ts (1:328) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'vitest/config' in vitest.config.ts
+ - Module not found, treating it as an external dependency in vitest.config.ts at 328..343
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/utils/museTailscalePreflight.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/utils/museTailscalePreflight.test.ts [ src/utils/museTailscalePreflight.test.ts ]
+Error: Cannot find module './museTailscalePreflight' imported from /root/cloudflare-workers-github-oauth-1/src/utils/museTailscalePreflight.test.ts
+ ❯ src/utils/museTailscalePreflight.test.ts:2:1
+      1| import { describe, expect, it, vi } from 'vitest';
+      2| import { withMuseTailscalePreflight } from './museTailscalePreflight';
+       | ^
+      3| function fixture(data: unknown, status = 200) {
+      4|   const container = { getState: vi.fn(async () => ({ status: 'healthy'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  23:56:14
+   Duration  673ms (setup 77%, worker 17%, transform 6%)

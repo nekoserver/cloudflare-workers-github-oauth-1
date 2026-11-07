@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AICHAT_MUSE_HEALTH_SCRIPT, AICHAT_MUSE_SIGNAL_DEFAULT_SECONDS } from './aichatMuseHealth';
@@ -293,6 +294,26 @@ describe('シグナル送信のモーダル', () => {
 
 describe('/aichatページへの組み込み', () => {
   const html = getAiChatPage({ username: 'u', aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', modelColors: { muse: '#3b82f6' } });
+
+  it('投稿時の枠色更新もプレフィックスとモデル選択を混同しない', () => {
+    const start = html.indexOf('      var museSubmission =');
+    const end = html.indexOf('      if (museSubmission)', start);
+    const decide = new Function('currentMsg', 'payload', html.slice(start, end) + ';return museSubmission;');
+    expect(decide('質問', { model: 'muse' })).toBe(true);
+    expect(decide('/neko askgk codex_prompt="質問"', { model: 'muse' })).toBe(false);
+    expect(decide('/neko askgk muse_prompt="質問"', { model: 'claude' })).toBe(true);
+    expect(decide('/askmuse prompt="質問"', { model: 'muse' })).toBe(false);
+  });
+
+  it('生成HTMLのインラインJavaScriptがnode --checkを通る', () => {
+    const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]).filter(text => text.trim());
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const source of scripts) {
+      const result = spawnSync(process.execPath, ['--check'], { input: source, encoding: 'utf8' });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+    }
+  });
 
   it('監視を読み込み、色丸で切り替えるすべての経路が通るapplyModelColorへ接続する', () => {
     expect(html).toContain('function createMuseHealthWatch');

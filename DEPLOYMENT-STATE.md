@@ -242,3 +242,8 @@ preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.1
 ## 2026-11-06: /muse-status（未反映）
 
 tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグナル送信のページ`/muse-status`を実装した。ソースのみで、未デプロイ。`containers/demo/server.js`を変更したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。Nixの一覧の表示には、ノード側の`GET /nix/packages`の追加が要る。`server.js`の中継がオフラインのノードで落ちる不具合の修正を含む。詳細は[仕様](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
+
+
+## 2026-11-07: Museの投稿前Tailscale確認と枠色・警告（未反映）
+
+通常のMuse投稿と`/neko askgk muse_prompt`に、Runningかつmuse-vm onlineを必要とする接続ゲートを追加。確認不可なら中継以降を呼ばない。枠色healthも同じ判定を使用し、投稿時に古い結果を無効化、未接続では色を解除して「Tailscaleの接続状況を確認してください」を一度表示。HTTP失敗とunsupported_engine等の表示を区別。ソースのみで、Dockerビルド・Workerデプロイ未実施。検証と境界は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-CONNECTIVITY.20261107.md)。
