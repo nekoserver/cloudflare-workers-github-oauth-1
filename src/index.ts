@@ -477,6 +477,9 @@ import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk'
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
+import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
+import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
+import { isSameOrigin as isSameOriginRequest } from './utils/sshPublicKey';
 import { getMuseInquiriesPage } from './views/museInquiries';
 import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
@@ -20424,6 +20427,38 @@ app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
   // 本体コンテナの停止中は、ページがTailscale WASMでtailnetへ参加して取得する
   c.header('Content-Security-Policy', MUSE_STATUS_CSP);
   return c.html(getMuseStatusPage());
+});
+
+// /muse-wasm-test: テスト用ページ(ユーザー指定、2026-11-08)。Tailscale WASMでmuse-vmへの到達を定期的に確かめ、
+// 要望はD1 agent-inquiriesのbridge_jobsへ積む(本体コンテナのCLIが片付ける。SPEC bridge-job-queue 12章)。
+app.get('/muse-wasm-test', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', MUSE_WASM_TEST_CSP);
+  return c.html(getMuseWasmTestPage());
+});
+
+app.get('/api/muse-wasm-test/jobs', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  return jsonUtf8({ jobs: await listBridgeJobs(db, c.get('user').sub) });
+});
+
+app.post('/api/muse-wasm-test/jobs', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  // 他のサイトから管理者の資格で積ませない
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return jsonUtf8({ error: '同じサイトからの送信だけを受け付けます' }, 403);
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const body = await c.req.json<{ request?: unknown; external?: unknown }>().catch(() => null);
+  const result = await registerBridgeJob(db, {
+    requestText: typeof body?.request === 'string' ? body.request : '',
+    createdBy: c.get('user').sub,
+    origin: 'muse-wasm-test',
+    externalWrite: body?.external === true,
+  });
+  if (!result.ok) return jsonUtf8({ error: result.detail, errorCode: result.errorCode }, result.errorCode === 'db_error' ? 500 : 400);
+  return jsonUtf8({ jobId: result.jobId });
 });
 
 app.get('/api/muse-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
