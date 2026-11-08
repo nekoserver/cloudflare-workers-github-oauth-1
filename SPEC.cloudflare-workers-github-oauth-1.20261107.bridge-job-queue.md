@@ -360,7 +360,9 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 | 結果 | `2026-11-08`（UTCの日付と一致）、終了コード0、sha256はロックと結果で一致 |
 | 履歴（トリガー） | `queued` → `claimed`（attempt 1）→ `completed` |
 
-未確認: `--executor claude`での実行、長いジョブでの期限の延長、外部へ書き込むジョブ、AIチャットのWorkerからの登録（実装の順序の4）。
+続けて`run-once --executor claude`でも1件流した（「1から5の合計」、job `db5691368eca46e2986e43407cce7ab1`）。7秒で`done`、結果`15`、履歴は同じ3行。子プロセスには限られた環境変数だけを渡したが、Claude Codeは`HOME`の下の資格情報で認証できた。
+
+未確認: 長いジョブでの期限の延長、外部へ書き込むジョブ、AIチャットのWorkerからの登録（実装の順序の4）。
 
 ### 実装の順序（案。Codexの計画`bridge-jobs-queue-20261107-c3`を12章の決定に合わせたもの）
 
