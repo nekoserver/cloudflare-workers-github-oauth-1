@@ -1,0 +1,131 @@
+# SPEC: 決定や業務に何が効いたかを、来歴で記録して数える
+
+作成日: 2026-11-08
+状態: **承認**（2026-11-08、利用者が「いいねその表」と承認し、6章を優先して片付けるよう指示した。マイグレーションは`migrations-agent-inquiries/0011_create_contribution_records.sql`。本番のD1には未適用）
+
+関連: D1`agent-inquiries`の議題`contribution-evaluation-20261108`（問い合わせ`ce-e0`〜`ce-c8`、論点`ce-k1`〜`ce-k16`）、[発議のルールと8段の過程](SPEC.cloudflare-workers-github-oauth-1.20261108.proposal-rule.md)（7章）、議題`task-commit-link-20261108`（コミットとの関連付け）。
+
+## 1. 目的
+
+**対象**: D1`agent-inquiries`に足す記録台帳（`inquiry_records`）と、効いたものの関連（`inquiry_contributions`）、生きなかったものの記録（`inquiry_unused`） — 決定や業務に「何が、どう効いたか」を、文面の類似性ではなく来歴として記録し、引用のように数えられるようにする。
+
+### 背景
+
+- 利用者の指摘（2026-11-08）: 発案者の提案と決定との関連を判定したいが、類似性では測れない。効いたものは提案に限らず、前提知識、既存実装、過去の解決方法もある。業務プロセスの改善も定量化したい。前提知識の体系的な抜けを指摘する提案も評価したい。
+- 類似性で測れない例: 2026-11-08、Codexの指摘「`ref_id`がNULLを許すので`UNIQUE`が効かない」（`trm-c4`）は、案の文面と似ていないが、直し方を2つに分けた。
+- 今あるもの: `inquiry_entries.avoidable_by_knowledge_id`（16件）、`inquiry_keys.closed_by_knowledge_id`（1件）、`inquiry_keys.useful`（68件）。どれも出どころが知識に限られ、決定とは結ばれていない。
+
+## 2. 決まったこと（採用済みの提案）
+
+| 提案 | 内容 | 採用 |
+|---|---|---|
+| `ce-p1`（Codex） | 共通の記録台帳を作り、関連の表の両端をその台帳への外部キーにする。種類は追加できる属性。関連には出典・対象・効き方・判定者・日時・根拠を持たせ、「使った」と「効いた」を分け、未判定を「生きなかった」に含めない | 2026-11-08 06:11 |
+| `ce-p3`（Muse） | 効き方に「前提を正した」「期限・費用を変えた」「後で使うために残した」を足す。「作らずに済んだ」と「問い合わせを省いた」の判定の基準を決める。「生きなかった」は効果とは別枠で数える | 2026-11-08 05:55 |
+| `ce-p4`（利用者の補足） | 一般化されたワークフロー・ベストプラクティス・アンチパターンを物差しにして、体系的な抜けを表で出す。外部の基準の項目IDを出どころのIDとして記録する | 2026-11-08 06:09 |
+
+## 3. 表の形
+
+正は`migrations-agent-inquiries/0011_create_contribution_records.sql`。承認の後に、6章の決定に合わせて`confirmed_by`・`confirmed_at`を足した。
+
+| 表 | 列（主なもの） |
+|---|---|
+| `inquiry_records` | `id`（`<kind>:<ref>`、NOT NULL）、`kind`、`ref`、`label`、`created_at`、`deleted_at`。`UNIQUE (kind, ref)` |
+| `inquiry_contributions` | `source_id`・`target_id`（台帳への外部キー）、`effect`（8種）、`phase`（3段）、`judged_by`、`judged_at`、`confirmed_by`・`confirmed_at`（両方空なら仮）、`evidence_entry_id`、`note`。`UNIQUE (source_id, target_id, effect, phase)`、自分自身は不可 |
+| `inquiry_unused` | `source_id`・`target_id`、`consequence`（`failure`・`rework`・`delay`・`none_observed`）、判定者と確かめた印、根拠。`UNIQUE (source_id, target_id)` |
+
+台帳への書き込み: 0011は、議題・問い合わせ・論点・提案・知識の既存の行を台帳に書き込み、5つの表それぞれに追加と削除のトリガーを付ける。元の行を消すと台帳には`deleted_at`が付き、同じIDで作り直すと`deleted_at`を空に戻す。議題を消したときの連鎖削除でも同じ。
+
+
+### 記録台帳（`inquiry_records`）
+
+- `id`は`<kind>:<ref>`。例: `case:bridge-jobs-queue-20261107`、`proposal:ce-p1`、`entry:trm-c4`、`key:ce-k9`、`knowledge:<id>`、`commit:nekoserver/lib@<フルSHA>`、`file:nekoserver/lib:claude/ops/bridge_jobs.py@<フルSHA>`、`ext:CWE-294`、`ext:OWASP-ASVS-V2.1.1`、`rule:cloudflare-workers-github-oauth-1/CLAUDE.md#26`。
+- `kind`は固定しない（`ce-p1`）。新しい種類の出どころ（利用者の一言、Museの実測値など）が出ても、表を変えずに記録できる。
+- 消さない。元の記録が消えたときは`deleted_at`を入れる（`ce-k4`: `CASCADE`・`SET NULL`で証跡を失わない）。関連の外部キーは`ON DELETE`を付けないので、台帳の行を物理的に消そうとすると拒否される。
+- 議題・提案・問い合わせ・論点・知識の台帳の行は、元の表への`INSERT`のトリガーで作る。コミット・ファイル・外部の基準・ルールは、関連を書く者が`INSERT OR IGNORE`で作る。
+
+### 効いたもの（`inquiry_contributions`）
+
+| `effect` | 効き方 | 判定の基準 |
+|---|---|---|
+| `changed_direction` | 向きを変えた | 前と後の案が記録に残っている |
+| `avoided_inquiry` | 問い合わせを省いた | 実際に問い合わせをしなかった（しようとした記録か、同じ種類の過去の問い合わせがある） |
+| `closed_key` | 論点を閉じた | 論点の`closed_by_*`か、閉じた根拠の問い合わせがある |
+| `prevented_defect` | 欠陥を防いだ | 実装の前に落とし穴の論点が出て、それを受けて直した記録がある |
+| `avoided_building` | 作らずに済んだ | 既存の実装・手順を流用し、新しく書かなかった。流用したファイルかコミットを出どころにする |
+| `corrected_premise` | 前提を正した | 誤っていた前提と、正した後の前提が記録に残っている |
+| `changed_cost` | 期限・費用を変えた | 所要時間・回数・費用の前後が記録に残っている |
+| `kept_for_later` | 後で使うために残した | 知識・NOTICE・記憶として残し、まだ使われていない |
+
+- `avoided_inquiry`と`avoided_building`の区別（`ce-p3`）: 情報を得る行為を省いたなら前者、成果物を作る行為を省いたなら後者。両方なら2行書く。
+- 「使った」だけの記録は今の`inquiry_entry_knowledge`などに残し、この表には「効いた」ものだけを書く（`ce-p1`）。
+- `phase`: 決めるとき（`decision`）、試験運用で確かめたとき（`trial`）、後から振り返ったとき（`retrospective`）。欠陥を防いだ・作らずに済んだは、決めるときには分からないことが多いので、試験運用か振り返りで足す（Codex）。
+
+### 生きなかったもの（`inquiry_unused`）
+
+- 効果ではなく別枠で数える（`ce-p3`）。出どころ（知識・手順・既存実装）があったのに使われなかったこと。
+- 例: 2026-11-08、`~/lib`のNOTICEに「`pkill -f`は同じ行のシェル自身にも一致する」とあったのに使わず、確認のコマンドまで止めた（`consequence = 'failure'`）。
+- 今の`avoidable_by_knowledge_id`（「この知識があれば問い合わせは要らなかった」）は、意味としてはこの表に当たる。二重に書かないため、移行はせず、5章の集計のビューで両方を合わせて読む。
+
+## 4. 物差し（`ce-p4`）の記録
+
+- 物差しの項目は台帳の`ext:`・`rule:`の行にする。照らした結果は論点（`inquiry_keys`、`domain`に分野）に書く。2026-11-08の試し: 認証（`ce-k9`〜`k12`、`domain = 'auth'`）、CLAUDE.mdのルール（`ce-k13`〜`k15`、`domain = 'code-rules'`）。
+- 件数は「検索の候補数」「文脈を見て確かめた違反数」「承認・互換性の確認待ち」を分けて持つ（`ce-k16`）。候補数を違反数として数えない。分けて持つ表を足すかは6章で決める。
+- 体系的な抜けは3種類に分ける（`ce-k7`）: 未整備（知識が無い）、知識化の不足（閉じた有用な論点が知識にならない）、発見・適用の不足（知識があるのに使われない。`inquiry_unused`で数える）。
+
+## 5. 数え方（案）
+
+- 提案者・出どころごとに、`inquiry_contributions`の`target_id`の重複を除いた件数を効き方別に数える。1つの出どころが複数の決定に効いたら、決定の数だけ数える（引用と同じ）。1つの決定に複数の出どころが効いたら、それぞれに1件ずつ数える。
+- 件数が少ない間は割合を出さず、件数と具体例を並べる（`ce-k5`、Muse）。0件の期間は「判定していない」と「効果が無かった」を区別し、判定していない件数（`ce-k6`: 未判定の割合）を並べて出す。
+- 業務プロセスの改善は、改善を台帳の1行（`kind = 'process'`など）にし、入れるときに対象の数字と向きを先に書く。前後の比較には段階の移り変わりの履歴と利用者の介入の記録が要る（`ce-k2`、提案`ce-p2`、採否待ち）。
+
+## 6. 決めたこと（2026-11-08）
+
+利用者の指示（「優先的に潰していって」）で、Claude Codeが戻せる方を既定に選んだ。変えるときは利用者が指示する。
+
+| 項目 | 決めたこと | 論点 |
+|---|---|---|
+| 効き方を付けられる人 | エージェントも付けられる。`judged_by`に残し、`confirmed_by`が空の間は仮として数え分ける | `ce-k5` |
+| 仮に付けたものを確かめる方法 | `confirmed_by`・`confirmed_at`の列を足した（片方だけは不可）。出来事の表（`ce-p2`）には頼らない | `ce-k5` |
+| 付けるとき | 採否で決めるときに付け、試験運用・振り返りで足す（`phase`で区別） | `ce-k5` |
+| 3章の表を足すか | 3つとも足す | — |
+| 物差しの候補数・確認済み数・確認待ちを分けて持つ表 | 今回は作らない。当面は論点の本文に分けて書く | `ce-k16` |
+| 出来事の表（`ce-p2`） | 今回は作らない。採否待ちのまま | `ce-k2` |
+| 画面 | 未着手。`/muse-inquiries`の採否のモーダルで効き方を選べるようにする（次に作る） | — |
+
+## 7. 確かめたこと
+
+承認前に、案のSQLを`migrations-agent-inquiries/`の全マイグレーション（0010まで）の上にSQLite（`node:sqlite`、外部キー有効）で当て、10通りが期待どおりになることを確かめた（2026-11-08）: 正しい効き方は入る、知らない効き方・同じ組の二重・自分自身・台帳に無い出どころ・`id`のNULLは拒否、段が違えば別の行、関連に使われている台帳の行は消せない、`inquiry_unused`の同じ組の二重は拒否。承認後は0011を書く前に`scripts/agent-inquiries-contributions.test.mjs`（7件）を書き、失敗を確かめてから実装した。既存の行の書き込み、トリガー、連鎖削除での`deleted_at`、作り直しでの復帰、外部の出どころ、効き方と段の制約、仮と確かめた印、生きなかったものを確かめている。本番のD1では確かめていない。
+
+## 8. ルールに適合しているかの点検と、直した件数（提案`ce-p5`、2026-11-08 06:19に利用者が採用）
+
+**対象**: 4章の物差し（ルール・外部の基準）をコードに当てた点検と、見つかった箇所の状態 — 利用者の要望（2026-11-08）「そのルールに適合してるかどうかをチェックして修正した件数なんかをカウントできる仕組みもほしい」。`ce-k16`（候補数・確認済み数・確認待ちを分けて持つ）を含む。
+
+```sql
+CREATE TABLE IF NOT EXISTS inquiry_rule_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL REFERENCES inquiry_records(id), target_ref TEXT NOT NULL, method TEXT NOT NULL, candidates INTEGER NOT NULL CHECK (candidates >= 0), checked_by TEXT NOT NULL, checked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL);
+CREATE TABLE IF NOT EXISTS inquiry_rule_findings (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL REFERENCES inquiry_records(id), location TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate' CHECK (status IN ('candidate', 'violation', 'not_violation', 'fixed', 'exception')), found_check_id INTEGER NOT NULL REFERENCES inquiry_rule_checks(id), fixed_by_id TEXT REFERENCES inquiry_records(id), fixed_at TEXT, judged_by TEXT, note TEXT, CHECK ((status = 'fixed') = (fixed_by_id IS NOT NULL AND fixed_at IS NOT NULL)), UNIQUE (rule_id, location));
+```
+
+| 表 | 役割 |
+|---|---|
+| `inquiry_rule_checks` | 点検1回分。どのルール（台帳の`rule:`・`ext:`）を、どの対象（`target_ref`、例 `nekoserver/cloudflare-workers-github-oauth-1@<フルSHA>:src/`）に、どの方法（`method`、検索の条件をそのまま）で当て、候補が何件だったか |
+| `inquiry_rule_findings` | 見つかった箇所1件ずつ。`candidate`（候補）→`violation`（違反と確定）か`not_violation`（違反でない）→`fixed`（直した。直したコミットを台帳の`commit:`で結ぶ）か`exception`（例外として認めた。理由を`note`に） |
+
+実装: `migrations-agent-inquiries/0012_create_rule_checks.sql`（表は上のSQLのまま）と、集計のビュー`inquiry_rule_summary`（ルールごとに、点検の回数、最新の点検の日時と候補数、状態ごとの件数）。テストは`scripts/agent-inquiries-rule-checks.test.mjs`（4件、先に失敗を確認）。
+
+数えられるもの:
+
+- 直した件数: ルールごと・期間ごとの`status = 'fixed'`の数。直したコミットから、どのPR・議題の成果かもたどれる（`task-commit-link`の結論を使う）
+- 守れているかの推移: 同じ`method`で点検を流し直したときの`candidates`の変化
+- 確認待ち: `candidate`のまま残っている数。候補数を違反数として数えない（`ce-k16`）
+
+注意:
+
+- `location`は`ファイル:行`だと、コードの変更で行がずれる。同じ箇所を追うには、点検のたびに位置を確かめ直す必要がある。関数名を含める（`src/views/status.ts:openModal`など）かは実装のときに決める
+- 2026-11-08の点検（`ce-c7`の認証、`ce-c8`のCLAUDE.mdのルール）を、最初の点検として書き込める
+- 点検の自動化（`method`の検索を定期的に流す）は、この表とは別に決める
+
+## 9. 注意事項
+
+- 台帳の`id`は、元の表をまたいで一意とは限らないIDに`kind`の接頭辞を付けて一意にする（Codex: 各表のIDが表をまたいで一意とは仮定しない）。
+- `inquiry_knowledge_effect`のビューは`planned`・`withdrawn`を除いていない（`ce-k3`）。5章の集計では0005と同じく除く。
+- 評価の数字は、件数が少ないうちは改善の効き方の候補として並べ、断定には使わない。

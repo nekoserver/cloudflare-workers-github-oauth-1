@@ -1,0 +1,2 @@
+ALTER TABLE inquiry_cases ADD COLUMN proposed_by TEXT;
+CREATE TABLE IF NOT EXISTS inquiry_case_steps (case_id TEXT NOT NULL REFERENCES inquiry_cases(id) ON DELETE CASCADE, step TEXT NOT NULL CHECK (step IN ('proposal', 'alignment', 'issues', 'similar', 'abstraction', 'spec_approval', 'implementation', 'trial')), status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'done', 'skipped')), entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL, note TEXT, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), PRIMARY KEY (case_id, step));
