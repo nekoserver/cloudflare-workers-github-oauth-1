@@ -321,7 +321,7 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 
 ### テーブル（実装した形。7章の`bridge_jobs`の案と、5章のロックの表に優先する）
 
-正は`/root/lib`（`nekoserver/lib`）の`claude/ops/bridge_jobs_schema.sql`で、このリポジトリの`migrations-agent-inquiries/0009_create_bridge_jobs.sql`はその写し。**本番のD1にはまだ適用していない。**
+正は`/root/lib`（`nekoserver/lib`）の`claude/ops/bridge_jobs_schema.sql`で、このリポジトリの`migrations-agent-inquiries/0009_create_bridge_jobs.sql`はその写し。**2026-11-08に本番のD1`agent-inquiries`へ適用した**（テーブル4つ、索引3つ、トリガー2つ）。
 
 | 表 | 持つもの |
 |---|---|
@@ -346,6 +346,21 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 - 子プロセスに渡す環境変数は`PATH`・`HOME`・`LANG`など10個だけ。トークン・秘密の値・アカウントIDは渡さない。
 - テスト（`claude/test/bridge_jobs_test.py`、17件）は、D1の代わりにSQLiteで本番と同じSQLを流す。取り合い、期限の境目、古い`claim_token`の拒否、応答が返らないときの照会、上限での`failed`、中止、トリガーの履歴、子の停止を確かめる。条件を1つ外すとテストが失敗することも確かめた（期限内の条件、結果が無い条件）。
 - D1のREST APIで応答が返らなかったとき（`D1Unknown`）は、取る・完了にするの成否を、自分の`claim_token`が入っているかで判断する。
+- 変更件数は1件以上で判定する（対象は主キー1行。D1の`meta.changes`がトリガーで書いた行を含む場合に備える）。
+- `--executor claude`は、`claude-helper.sh`と同じ順でネイティブのClaude Codeを探す（`/opt/node22/bin/claude`はスタブで動かない）。
+
+### 本番で1件流した結果（2026-11-08）
+
+`register`で「今日の日付をUTCで答えて」を入れ、`run-once --executor codex`で実行した（job `614f66bf5ab2413f8deace62c7aa7dcc`）。
+
+| 項目 | 結果 |
+|---|---|
+| 所要 | 5秒 |
+| ロック | `done`、1回目、`codex@cf-demo-container-1` |
+| 結果 | `2026-11-08`（UTCの日付と一致）、終了コード0、sha256はロックと結果で一致 |
+| 履歴（トリガー） | `queued` → `claimed`（attempt 1）→ `completed` |
+
+未確認: `--executor claude`での実行、長いジョブでの期限の延長、外部へ書き込むジョブ、AIチャットのWorkerからの登録（実装の順序の4）。
 
 ### 実装の順序（案。Codexの計画`bridge-jobs-queue-20261107-c3`を12章の決定に合わせたもの）
 
