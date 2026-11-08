@@ -58,3 +58,54 @@
 
 - `inquiry_keys`の`goal_similarity`は、議題どうしの近さではなく論点の列で、まだ計算していない。`NULL`を「似ていない」と読まない（Codex）。
 - 意味の近さを数値で判定するのは、実例で精度を確かめるまで補助にとどめる。似た言葉で別の議題をまとめてしまうおそれがある（Codex）。
+
+## 7. 発案から実装までの過程（案。利用者の承認待ち）
+
+**対象**: D1`agent-inquiries`の議題（`inquiry_cases`）が、発案から実装に進むまでの手順と、その記録 — どの段を済ませたかを、議題ごとに後から読めるようにする。
+
+### 背景
+
+利用者の指摘（2026-11-08）: 実装までの過程（発案者 → 実装計画のすり合わせ／問題点の洗い出し／類似機能との比較／抽象化の検討 → 実際の実装）を明確にできないとよくない。同じ日に、AIチャットからジョブを積む仕組みを、この過程を経ずに実装し始め、止めてSPEC 13章（bridge-jobs）に書き直した。
+
+### 段
+
+| 順 | 段 | すること | 記録 | 議題の段階（`stage`） |
+|---|---|---|---|---|
+| 1 | 発案 | 誰が（利用者・Claude Code・Codex・Muse）、何を、なぜ | 議題の発案者、最初の問い合わせ | 構想 |
+| 2 | すり合わせ | 目的、範囲、やらないことを発案者と合わせる | 問い合わせ | 構想 |
+| 3 | 問題点の洗い出し | 壊れ方、セキュリティ、既存のルール（CLAUDE.md・AGENTS.md）との衝突 | 論点（落とし穴・未確認） | 計画 |
+| 4 | 類似機能との比較 | 同じことをしている既存の機能・議題・SPECを探し、流用・統合・新規のどれにするかと理由 | 問い合わせ（比較の表） | 計画 |
+| 5 | 抽象化の検討 | ほかでも使える形にするか、今回は具体的に作るか、その理由 | 問い合わせ | 計画 |
+| 6 | SPECと承認 | SPECに「案・承認待ち」の節と「決めること」を書き、利用者の承認を受ける | 提案（利用者が採用） | 計画 |
+| 7 | 実装 | テストを先に書き、PRを作る | 問い合わせ、PR | 実装 |
+| 8 | 試験運用・レビュー | 実機で確かめ、結果を記録する | 問い合わせ | 試験運用 |
+
+- **6を済ませるまで7に進まない。** 1〜5は、要らないと判断した段は「省略」とし、理由を書く（例: 文言だけの修正なので類似機能との比較は不要）。
+- 議題の段階（`stage`）を「実装」に進めるのは、1〜6が「済み」か「省略（理由つき）」になってから。
+
+### 記録のしかた（D1に足すもの。案）
+
+```sql
+ALTER TABLE inquiry_cases ADD COLUMN proposed_by TEXT;
+CREATE TABLE IF NOT EXISTS inquiry_case_steps (case_id TEXT NOT NULL REFERENCES inquiry_cases(id) ON DELETE CASCADE, step TEXT NOT NULL CHECK (step IN ('proposal', 'alignment', 'issues', 'similar', 'abstraction', 'spec_approval', 'implementation', 'trial')), status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'done', 'skipped')), entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL, note TEXT, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), PRIMARY KEY (case_id, step));
+```
+
+- 段ごとに、根拠になった問い合わせ（`entry_id`）と一言（`note`、省略の理由もここ）を残す。
+- `/muse-inquiries`のケースの詳細に、8段のどれが済んだかを並べて表示する（画面の変更は、この案の承認後に別に作る）。
+
+### この過程を当てはめた例: bridge-jobs 13章（AIチャットからジョブを積む）
+
+| 段 | 状態 |
+|---|---|
+| 1 発案 | 済み（利用者。「Museの判断で積めばいい」） |
+| 2 すり合わせ | 一部（専用コマンドを作らない、スラッシュは別扱い、は合意。外部書き込みと実行の自動化は未定） |
+| 3 問題点の洗い出し | 一部（AGENTS.mdの「本文のまま」との関係、既存テスト5件。Museが印を付け忘れる・誤って付ける場合は未検討） |
+| 4 類似機能との比較 | **未着手**（libのworkerのジョブ記録、`/neko askgk`の`ask_id`の照会、`job-queue-design`の協議の結論との比較が要る） |
+| 5 抽象化の検討 | **未着手**（Codex・Claudeの回答にも同じ印を使うか、「エージェントが判断し、依頼した側が登録する」形を共通にするか） |
+| 6 SPECと承認 | 案を書いた（13章）。承認待ち |
+
+### 決めること（利用者）
+
+- この8段で進めるか。段の名前と順番。
+- D1に`proposed_by`と`inquiry_case_steps`を足すか。
+- 段を省略してよい条件（例: 文書だけの変更、表示の文言だけの変更）。
