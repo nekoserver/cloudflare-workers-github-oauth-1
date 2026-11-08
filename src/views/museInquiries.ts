@@ -295,6 +295,8 @@ export const MUSE_INQUIRIES_SCRIPT = `
         button.setAttribute('data-panel', panel.type);
         var key = panelKey(panel);
         if (key) { button.setAttribute('data-card-key', key); button.id = recordId(panel); }
+        // ユーザー指定(2026-11-08): 採否待ちの提案を見つけやすくする。枠の点滅はCSSのinq-panel-pending。
+        if (panel.type === 'proposal' && panel.status === 'proposed') { button.classList.add('inq-panel-pending'); button.setAttribute('data-attention', 'pending'); }
         button.appendChild(panelLabels(panel));
         var title = String(panel.title || '').trim() || '無題の' + (INQ_PANEL_TYPE_LABELS[panel.type] || '記録');
         button.title = title;
@@ -494,11 +496,26 @@ export const MUSE_INQUIRIES_SCRIPT = `
         caseToggle.textContent = caseContent.hidden ? 'ケース一覧を開く' : 'ケース一覧を閉じる';
       });
       // ボードの表示(ユーザー指定、2026-11-08)。通常は列の幅を保って横スクロール、俯瞰は画面の幅に収める。
+      // 選択はCookieで保ち、開き直しても同じ表示で始める(ユーザー指定、2026-11-08)。知らない値は通常に戻す。
       var layoutButtons = doc.querySelectorAll('[data-board-layout]');
+      function applyLayout(layout) {
+        boardEl.setAttribute('data-layout', layout);
+        layoutButtons.forEach(function(other) { other.setAttribute('aria-pressed', String(other.getAttribute('data-board-layout') === layout)); });
+      }
+      function savedLayout() {
+        var parts = String(doc.cookie || '').split(';');
+        for (var i = 0; i < parts.length; i++) {
+          var part = parts[i].trim();
+          if (part.indexOf('inq_board_layout=') === 0) return part.slice('inq_board_layout='.length) === 'overview' ? 'overview' : 'normal';
+        }
+        return 'normal';
+      }
+      applyLayout(savedLayout());
       layoutButtons.forEach(function(button) {
         button.addEventListener('click', function() {
-          boardEl.setAttribute('data-layout', button.getAttribute('data-board-layout'));
-          layoutButtons.forEach(function(other) { other.setAttribute('aria-pressed', String(other === button)); });
+          var layout = button.getAttribute('data-board-layout') === 'overview' ? 'overview' : 'normal';
+          applyLayout(layout);
+          doc.cookie = 'inq_board_layout=' + layout + '; Path=/muse-inquiries; Secure; SameSite=Lax; Max-Age=31536000';
         });
       });
       caseViewButtons.forEach(function(button) {
@@ -579,6 +596,14 @@ export function getMuseInquiriesPage(): string {
     }
     .inq-case, .inq-panel { display: block; width: 100%; text-align: left; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
     .inq-case:hover, .inq-panel:hover { border-color: var(--accent-color); }
+    .inq-panel-pending { border-color: var(--accent-color); animation: inq-pending-blink 1.2s ease-in-out infinite; }
+    @keyframes inq-pending-blink {
+      0%, 100% { border-color: var(--accent-color); box-shadow: 0 0 0 2px var(--accent-color); }
+      50% { border-color: var(--border-color); box-shadow: 0 0 0 0 transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .inq-panel-pending { animation: none; box-shadow: 0 0 0 2px var(--accent-color); }
+    }
     .inq-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
     .inq-board[data-layout="overview"] { grid-auto-columns: minmax(0, 1fr); overflow-x: visible; gap: 8px; }
     .inq-board[data-layout="overview"] .inq-col { padding: 8px; min-width: 0; overflow: hidden; }

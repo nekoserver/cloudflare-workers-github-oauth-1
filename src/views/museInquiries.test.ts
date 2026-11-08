@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// @vitest-environment-options {"url": "https://inq.test/muse-inquiries"}
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -37,7 +38,9 @@ const DETAIL = {
   proposals: [{ id: 'p1', proposedBy: 'muse', text: 'renameで排他', status: 'proposed', reason: '利用者が決める', entryId: CASE_ID + '-e2' }],
 };
 
+const LAYOUT_COOKIE = 'inq_board_layout';
 function loadBody() {
+  document.cookie = LAYOUT_COOKIE + '=; Path=/muse-inquiries; Secure; Max-Age=0';
   const html = getMuseInquiriesPage();
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>', html.indexOf('<body>')));
 }
@@ -357,6 +360,23 @@ describe('Museとの協議のカンバン', () => {
     expect(counts('Muse')).toEqual(['2', '1', '0']);
   });
 
+  // ユーザー指定(2026-11-08): 採否待ちの提案を見つけやすくする。枠を点滅させる。
+  it('採否待ちの提案のカードだけに点滅の印を付け、採用・完了・不採用の提案や問い合わせ・論点には付けない', async () => {
+    const decided = (id: string, status: string) => ({ type: 'proposal', caseId: CASE_ID, id, title: id, status, reason: null, proposedBy: 'codex', entryId: null });
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'adopted' ? { ...p, panels: [decided('pa', 'adopted')] }
+      : p.key === 'done' ? { ...p, panels: [decided('pd', 'done')] } : p.key === 'rejected' ? { ...p, panels: [decided('pr', 'rejected')] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
+    const pending = [...document.querySelectorAll('#inq-board .inq-panel-pending')];
+    expect(pending.map((card) => card.getAttribute('data-card-key'))).toEqual(['proposal:' + CASE_ID + ':p1']);
+    expect(pending[0].getAttribute('data-attention')).toBe('pending');
+    for (const id of ['pa', 'pd', 'pr']) {
+      expect(document.querySelector(`[data-card-key="proposal:${CASE_ID}:${id}"]`)!.classList.contains('inq-panel-pending')).toBe(false);
+    }
+    expect(document.querySelector('#inq-board [data-panel="entry"].inq-panel-pending, #inq-board [data-panel="key"].inq-panel-pending')).toBeNull();
+    (document.querySelector('[data-status-filter="pending"]') as HTMLButtonElement).click();
+    expect(document.querySelectorAll('#inq-board .inq-panel-pending')).toHaveLength(1);
+  });
+
   it('提案がない場合は提案者別の空状態を示す', async () => {
     const board = { ...BOARD, phases: BOARD.phases.map((p) => ({ ...p, panels: p.panels.filter((panel) => panel.type !== 'proposal') })) };
     await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board) });
@@ -379,6 +399,14 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     expect(scripts.length).toBeGreaterThan(0);
     for (const s of scripts) expect(() => execFileSync(process.execPath, ['--check'], { input: s })).not.toThrow();
     expect(html).toMatch(/\.inq-nav \{[^}]*position: sticky; top: 0;[^}]*height: 44px;/);
+  });
+  it('採否待ちの印は外枠をテーマの色で点滅させ、動きを減らす設定では点滅をやめて太い枠だけにする', () => {
+    const html = getMuseInquiriesPage();
+    expect(html).toMatch(/\.inq-panel-pending \{[^}]*animation: inq-pending-blink [^;]*infinite;/);
+    expect(html).toMatch(/@keyframes inq-pending-blink \{[^@]*var\(--accent-color\)/);
+    expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.inq-panel-pending \{[^}]*animation: none;[^}]*var\(--accent-color\)/);
+    const rules = html.match(/\.inq-panel-pending \{[^}]*\}|@keyframes inq-pending-blink \{[\s\S]*?\}\s*\}/g) ?? [];
+    for (const rule of rules) expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(/);
   });
   // ユーザー指定(2026-11-08): 議題を段階(構想・計画・実装・試験運用)で区別する。
   it('ケースの一覧と詳細に段階を出し、未設定は「段階未設定」と出す', async () => {
@@ -461,6 +489,29 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     buttons[0].click();
     expect(boardEl.getAttribute('data-layout')).toBe('normal');
   });
+  // ユーザー指定(2026-11-08): 通常・俯瞰の選択をCookieで保ち、開き直しても同じ表示にする。
+  it('通常・俯瞰の選択をCookieに保存し、開き直すとその表示で始まる。知らない値は通常に戻す', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    (document.querySelector('[data-board-layout="overview"]') as HTMLButtonElement).click();
+    expect(document.cookie).toContain(LAYOUT_COOKIE + '=overview');
+    document.body.innerHTML = '';
+    const html = getMuseInquiriesPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>', html.indexOf('<body>')));
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    expect(document.getElementById('inq-board')!.getAttribute('data-layout')).toBe('overview');
+    expect([...document.querySelectorAll('[data-board-layout]')].map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    (document.querySelector('[data-board-layout="normal"]') as HTMLButtonElement).click();
+    expect(document.cookie).toContain(LAYOUT_COOKIE + '=normal');
+    loadBody();
+    document.cookie = LAYOUT_COOKIE + '=<b>; Path=/muse-inquiries; Secure';
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    expect(document.getElementById('inq-board')!.getAttribute('data-layout')).toBe('normal');
+    expect([...document.querySelectorAll('[data-board-layout]')].map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+  });
+  it('レイアウトのCookieはテーマと同じくSecure・SameSite=Lax・1年で、Pathをこのページに絞る', () => {
+    expect(MUSE_INQUIRIES_SCRIPT).toContain("'; Path=/muse-inquiries; Secure; SameSite=Lax; Max-Age=31536000'");
+  });
+
   it('通常は列の最小幅を保って横スクロール、俯瞰は列を画面の幅に収めて横スクロールしない', () => {
     const html = getMuseInquiriesPage();
     expect(html).toMatch(/\.inq-board \{[^}]*grid-auto-columns: minmax\(260px, 1fr\);[^}]*overflow-x: auto;/);
