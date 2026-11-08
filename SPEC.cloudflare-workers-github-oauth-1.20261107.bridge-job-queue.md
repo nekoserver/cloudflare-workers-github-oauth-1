@@ -408,3 +408,23 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 | 対象の経路 | Muse選択の通常入力と`/askmuse prompt="…"`（同じ処理）。`/neko askgk muse_prompt="…"`（tunnels経由）は対象外 |
 | 外部へ書き込むジョブ（PR作成など） | 印を分ける（`[[bridge-job:external]]`なら試す回数を1回にする） |
 | 積んだジョブの実行 | 今は手動（`run-once`）。自動にするなら、本体コンテナに常駐の見張り役を置き、30秒ごとにD1を見て1件ずつ片付ける（同時に1件、1件あたり最長3時間） |
+
+## 14. テスト用ページから要望を積む（2026-11-08 実装）
+
+**対象**: 本体Workerの`/muse-wasm-test`・`GET/POST /api/muse-wasm-test/jobs`、`src/utils/bridgeJobs.ts`（`registerBridgeJob`・`listBridgeJobs`）、`scripts/check-muse-vm-wasm-live.mjs` — 12章の「依頼した側の登録」を、Workerの管理者向けテスト用ページから行えるようにする。13章（AIチャットでMuseの判断で積む）とは別で、13章は未着手のまま。
+
+### 背景
+
+2026-11-08、公式のTailscale WASMからtailnetに参加し、muse-vmの`/health`へ届くことを確かめた（名前とIPの両方で`200 {"status": "ok"}`）。利用者の指示で、この確認をテスト用のページとスクリプトにし、ページから要望を渡せるようにした。WASMの`fetch`はGETだけでヘッダーを付けられず、Museの質問APIへは送れないので、要望は12章のジョブキューに積む（利用者が選択）。
+
+### 修正内容
+
+| ファイル | 変更 |
+|---|---|
+| `src/utils/bridgeJobs.ts` | `registerBridgeJob`: `bridge_jobs`と`bridge_job_locks`の行を1つのbatchで作る（外部へ書き込む要望は`max_attempts = 1`、要望は8000文字まで）。`listBridgeJobs`: 依頼者のジョブを新しい順に、状態と結果（`result_path`が指す`bridge_job_results`）を添えて返す |
+| `src/views/museWasmTest.ts` | ページ。Tailscale WASMで接続し、muse-vmの名前とIPの`/health`へ間隔（既定30秒、10〜3600秒）ごとにGETを送って記録する。要望の入力欄と一覧。上流の文字列は`textContent`で表示 |
+| `src/index.ts` | `/muse-wasm-test`（CSPは`/muse-status`と同じ）と`/api/muse-wasm-test/jobs`。管理者だけ。POSTは同じオリジンからだけ受け付け、依頼者はログイン名、`origin = 'muse-wasm-test'` |
+| `scripts/check-muse-vm-wasm-live.mjs` | 手動の確認スクリプト。ヘッドレスChromeで同じWASMを動かし、ログインURLを表示し、承認後に`/health`を確かめる |
+
+- 積んだジョブを片付けるのは、これまでどおり本体コンテナの`bridge_jobs.py run-once`（手動）。Workerは積むだけ。
+- ナビのメニューにはリンクを足していない（CLAUDE.mdのルール30）。
