@@ -493,6 +493,14 @@ export const MUSE_INQUIRIES_SCRIPT = `
         caseToggle.setAttribute('aria-expanded', String(!caseContent.hidden));
         caseToggle.textContent = caseContent.hidden ? 'ケース一覧を開く' : 'ケース一覧を閉じる';
       });
+      // ボードの表示(ユーザー指定、2026-11-08)。通常は列の幅を保って横スクロール、俯瞰は画面の幅に収める。
+      var layoutButtons = doc.querySelectorAll('[data-board-layout]');
+      layoutButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          boardEl.setAttribute('data-layout', button.getAttribute('data-board-layout'));
+          layoutButtons.forEach(function(other) { other.setAttribute('aria-pressed', String(other === button)); });
+        });
+      });
       caseViewButtons.forEach(function(button) {
         button.addEventListener('click', function() {
           var view = button.getAttribute('data-case-view');
@@ -572,6 +580,11 @@ export function getMuseInquiriesPage(): string {
     .inq-case, .inq-panel { display: block; width: 100%; text-align: left; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
     .inq-case:hover, .inq-panel:hover { border-color: var(--accent-color); }
     .inq-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+    .inq-board[data-layout="overview"] { grid-auto-columns: minmax(0, 1fr); overflow-x: visible; gap: 8px; }
+    .inq-board[data-layout="overview"] .inq-col { padding: 8px; min-width: 0; overflow: hidden; }
+    .inq-board[data-layout="overview"] .inq-col-head { flex-wrap: wrap; overflow-wrap: anywhere; }
+    .inq-board[data-layout="overview"] .inq-panel { padding: 8px; min-width: 0; overflow: hidden; overflow-wrap: anywhere; }
+    .inq-board[data-layout="overview"] .inq-row { flex-wrap: wrap; min-width: 0; }
     .inq-col { background: var(--bg-primary, var(--card-bg)); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
     .inq-col-head { display: flex; align-items: center; justify-content: space-between; font-size: 15px; margin: 0 0 4px; }
     .inq-count { font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0 8px; }
@@ -675,9 +688,13 @@ export function getMuseInquiriesPage(): string {
     <div class="inq-toolbar">
       <label>ケース <select id="inq-case-filter" aria-label="ケースで絞り込む"><option value="">すべてのケース</option></select></label>
       <button type="button" id="inq-refresh">再読み込み</button>
+      <div class="inq-case-view-switch" role="group" aria-label="ボードの表示">
+        <button type="button" data-board-layout="normal" aria-pressed="true" aria-controls="inq-board">通常</button>
+        <button type="button" data-board-layout="overview" aria-pressed="false" aria-controls="inq-board">俯瞰</button>
+      </div>
       <span class="inq-meta">パネルを押すと詳細を開きます。記録はD1 agent-inquiriesで、Claude Codeが問い合わせのたびに書きます。</span>
     </div>
-    <div id="inq-board" class="inq-board"></div>
+    <div id="inq-board" class="inq-board" data-layout="normal"></div>
     <section id="inq-completed" class="inq-completed" aria-labelledby="inq-completed-title" hidden>
       <h2 id="inq-completed-title">完了履歴 <span id="inq-completed-count" class="inq-count">0</span></h2>
       <p class="inq-meta">新しい記録から表示しています。日時は記録日時（UTC）です。元の会話を押すと発端の問い合わせを開きます。ボードにも同じ記録を残しています。</p>

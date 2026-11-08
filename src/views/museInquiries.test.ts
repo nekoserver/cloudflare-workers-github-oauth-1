@@ -446,6 +446,27 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     await vi.waitFor(() => expect(modal().textContent).toContain('#2 🙄 User / 🙄 User / '));
   });
 
+  // ユーザー指定(2026-11-08): 俯瞰モードではボードを画面の幅いっぱいに収め、通常モードは列の幅を保って横スクロールにする。
+  it('ボードの表示を通常と俯瞰で切り替える。既定は通常', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    const boardEl = document.getElementById('inq-board')!;
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-board-layout]')];
+    expect(buttons.map((b) => [b.getAttribute('data-board-layout'), b.textContent, b.getAttribute('aria-pressed')])).toEqual([['normal', '通常', 'true'], ['overview', '俯瞰', 'false']]);
+    expect(boardEl.getAttribute('data-layout')).toBe('normal');
+    buttons[1].click();
+    expect(boardEl.getAttribute('data-layout')).toBe('overview');
+    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    (document.querySelector('[data-status-filter="pending"]') as HTMLButtonElement).click();
+    expect(boardEl.getAttribute('data-layout')).toBe('overview');
+    buttons[0].click();
+    expect(boardEl.getAttribute('data-layout')).toBe('normal');
+  });
+  it('通常は列の最小幅を保って横スクロール、俯瞰は列を画面の幅に収めて横スクロールしない', () => {
+    const html = getMuseInquiriesPage();
+    expect(html).toMatch(/\.inq-board \{[^}]*grid-auto-columns: minmax\(260px, 1fr\);[^}]*overflow-x: auto;/);
+    expect(html).toMatch(/\.inq-board\[data-layout="overview"\] \{[^}]*grid-auto-columns: minmax\(0, 1fr\);[^}]*overflow-x: visible;/);
+  });
+
   it('管理者だけが見られ、INQUIRY_DBのバインディングで読む', () => {
     const index = readFileSync('src/index.ts', 'utf8');
     expect(index).toContain("app.get('/muse-inquiries', authMiddleware, cfDashboardAdminMiddleware,");
