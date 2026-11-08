@@ -39,7 +39,7 @@
 | 本体コンテナのClaude Code・Codex | `queue/`から取り出して実行し、結果を書き戻す | キュー（SSH経由） |
 | 同期役（本体コンテナ） | キューを読み、D1へ履歴と知見を反映する。取り合いの判定はしない（5章のロックで行う） | D1（MuseはD1に書けない） |
 
-- 消費者は本体コンテナのCLIに寄せる。Museのメインチャットも取り出すなら、キューに`target`（`muse-main`・`claude-code`・`codex`・`any`）と`assignee`を足し、`any`だけを先着で取る。
+- 消費者は本体コンテナのCLIだけ（10章で決定）。`target`・`assignee`は使わない。
 - **正の分け方**（2026-11-08改訂）: ジョブの中身（依頼と結果の本文）の正はキューのファイル。ジョブの状態（誰が持っているか、終わったか、何回目か）の正はD1の`bridge_job_locks`。両方が食い違ったら、状態はD1に合わせてファイルを直す。履歴と検索の正はD1。
 
 ## 4. キューの形式（合意案、`schema_version: 1`）
@@ -53,8 +53,6 @@
   "created": 1794080684,
   "source": "api-bridge",
   "origin": "aichat",
-  "target": "claude-code",
-  "assignee": null,
   "priority": 0,
   "status": "queued",
   "attempts": 0,
@@ -112,14 +110,14 @@
 ### ロックの表（案。未適用）
 
 ```sql
-CREATE TABLE IF NOT EXISTS bridge_job_locks (job_id TEXT PRIMARY KEY, created_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'claimed', 'done', 'failed')), claim_token TEXT, claimed_by TEXT, claimed_at INTEGER, lease_until INTEGER, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, result_path TEXT, result_sha256 TEXT, last_error TEXT, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)));
+CREATE TABLE IF NOT EXISTS bridge_job_locks (job_id TEXT PRIMARY KEY, created_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'claimed', 'done', 'failed', 'cancelled')), claim_token TEXT, claimed_by TEXT, claimed_at INTEGER, lease_until INTEGER, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, result_path TEXT, result_sha256 TEXT, last_error TEXT, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)));
 ```
 
 時刻はすべてD1の時計のepoch秒で書く（`CAST(strftime('%s','now') AS INTEGER)`）。muse-vmやコンテナの時計を使わない。
 
 ### 着手
 
-状態が変わったら（取った、完了にした、`failed`にした）、7章の`bridge_job_events`に1行書く。D1のロックの表は最新の状態だけを持つので、途中の経過は履歴の表で追う。
+状態を変えた者（取った、延長した、完了にした、`failed`・`cancelled`にした）が、**同じD1のバッチで**7章の`bridge_job_events`に1行書く。ロックの表は最新の状態だけを持つので、途中の経過は履歴の表で追う。履歴の番号は`AUTOINCREMENT`で振り、同時に書いても衝突しない。同期役は履歴を書かない。REST APIのバッチが途中で失敗したときに前の文が戻るかは未確認なので、実装時にテストで確かめる（11章）。
 
 1. SSHで`queue/<id>.json`を読む。読めなければ取らない（期限だけ進むのを避ける）。
 2. 実行ごとに新しい`claim_token`（UUID）を作り、1文で取る。
@@ -149,12 +147,17 @@ UPDATE bridge_job_locks SET status = 'claimed', claim_token = ?1, claimed_by = ?
 
 ### 再実行（利用者の方針）
 
-- **ロックがあって結果が無く、期限が切れていれば、次に見たCLIが取り直して再実行する。** 着手の`UPDATE`の条件（`status = 'claimed' AND lease_until < 今`）がそのまま再実行の条件になる。回収役は置かない。
+- **ロックがあって結果が無く、期限が切れていれば、次に見たCLIが取り直して再実行する。** 着手の`UPDATE`の条件（`status = 'claimed' AND lease_until <= 今`）がそのまま再実行の条件になる。回収役は置かない。
 - 期限内は待つ。前の実行がまだ動いている可能性がある。
 - `attempts`が`max_attempts`に達して期限が切れたら、見つけた者が1文で`failed`にする: `UPDATE bridge_job_locks SET status = 'failed', last_error = ?1, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?2 AND status = 'claimed' AND result_path IS NULL AND attempts >= max_attempts AND lease_until <= CAST(strftime('%s','now') AS INTEGER);`（無条件に書くと、期限内の延長や完了を上書きする）
 - 「結果が無い」は、D1の`result_path`が空であること。`done/`に残った`.md`（完了にできなかった実行の結果）は結果に数えず、再実行した後に見比べる材料にする。
 - 期限が切れた前の実行が、まだ動いていることはある。延長と完了は期限内の条件で拒まれるので、D1の状態は壊れない。ただし、二重に実行された分の課金は防げない。
 - このキューのジョブは調査と回答の作成が主で、再実行の損失は主に二重の課金。外部へ書き込むジョブを扱うときは、再実行してよいかを別に決める（10章）。
+
+### 中止
+
+- 中止は人が決める。`UPDATE bridge_job_locks SET status = 'cancelled', last_error = ?1, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?2 AND status IN ('queued', 'claimed');`
+- 実行中のCLIは、次の延長が`changes = 0`になるので止まる。中止の前に送った外部への操作は取り消せない。
 
 ### SSHが届かないとき
 
@@ -191,8 +194,6 @@ CREATE TABLE IF NOT EXISTS bridge_jobs (
   schema_version INTEGER NOT NULL DEFAULT 1,
   origin TEXT NOT NULL DEFAULT 'api-bridge',
   ai_chat_share_id TEXT,
-  target TEXT,
-  assignee TEXT,
   priority INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('queued', 'in_progress', 'done', 'failed', 'cancelled')),
   attempts INTEGER NOT NULL DEFAULT 0,
@@ -214,14 +215,14 @@ CREATE TABLE IF NOT EXISTS bridge_jobs (
 CREATE INDEX IF NOT EXISTS idx_bridge_jobs_status ON bridge_jobs(status, priority);
 CREATE INDEX IF NOT EXISTS idx_bridge_jobs_share ON bridge_jobs(ai_chat_share_id) WHERE ai_chat_share_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS bridge_job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id TEXT NOT NULL REFERENCES bridge_jobs(job_id) ON DELETE CASCADE,
-  seq INTEGER NOT NULL,
   at TEXT NOT NULL,
   actor TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('queued', 'claimed', 'heartbeat', 'requeued', 'completed', 'failed', 'cancelled', 'note')),
-  body TEXT,
-  PRIMARY KEY (job_id, seq)
+  body TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_bridge_job_events_job ON bridge_job_events(job_id, id);
 CREATE TABLE IF NOT EXISTS inquiry_job_links (
   entry_id TEXT NOT NULL REFERENCES inquiry_entries(id) ON DELETE CASCADE,
   job_id TEXT NOT NULL REFERENCES bridge_jobs(job_id) ON DELETE CASCADE,
@@ -254,7 +255,7 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 
 **対象**: 本体コンテナのCLIがジョブを片付けるときに、D1へ何を書くか — 次のジョブで問い合わせや手探りを省けるようにする。
 
-1. 同期役がキューを読み、`bridge_jobs`へ追加・更新し、状態の変化を`bridge_job_events`に書く。
+1. 同期役がキューを読み、`bridge_jobs`（検索用の写し）へ追加・更新する。状態の正は5章の`bridge_job_locks`で、`bridge_jobs`の状態の列はそれを写したもの。状態の履歴（`bridge_job_events`）は、状態を変えた者が5章の手順で書く。
 2. CLIが着手し、必要ならMuseへ問い合わせる。問い合わせは[問い合わせの記録の手順](SPEC.cloudflare-workers-github-oauth-1.20261107.muse-inquiry-recording.md)どおり`inquiry_entries`に書き、`inquiry_job_links`でジョブと結ぶ（発端は`origin`、続きは`followup`）。
 3. 完了したら、結果から次に使える事実を`inquiry_knowledge`へ書き、`bridge_job_knowledge`で結ぶ。実測で確かめたものは`confidence: measured`、回答だけのものは`answered`。
 4. 解決後に、予備知識で何手省けたかを判定する（既存の`inquiry_case_review`・`inquiry_knowledge_effect`）。
@@ -281,14 +282,75 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 | `bridge job id:`の行をAIチャットの表示から消すか | **消す**。Workerが拾ってD1に保存し、回答の吹き出しにリンクとして出す（2026-11-08決定） |
 | `lease_until`の長さ・`max_attempts` | **30分・3回**（2026-11-08決定） |
 | D1の結び方 | **7章のB＋C**（`inquiry_job_links`と`bridge_job_events`）（2026-11-08決定） |
-| 同期役の動かし方 | 未定。案は、手動（「キューを確認して」と頼まれたとき）から始め、定期実行は後で決める |
-| 外部へ書き込むジョブ（PRの作成、デプロイ、メールなど）も期限切れで再実行してよいか | 未定。案は、しない。そうしたジョブは`max_attempts = 1`で登録し、期限切れは`failed`にして人が判断する |
-| READMEの書き直しと時刻の統一（`bjw-p1`・`bjw-p2`） | 未定。muse-vmのファイルの変更なので、承認後にメインのチャットで依頼する。案はD1の提案の本文 |
+| **ジョブの入れ方** | **依頼した側がD1に直接入れる**（2026-11-08決定）。12章。muse-vmのキューとSSHは使わない |
+| 本体コンテナのCLIの起動のしかた | **まず手動で1件ずつ**（「キューを確認して」と頼まれたときに`run-once`）（2026-11-08決定）。定期実行は、課金と権限を少ないジョブで確かめてから決める |
+| 外部へ書き込むジョブ（PRの作成、デプロイ、メールなど）も期限切れで再実行してよいか | **しない**（2026-11-08決定）。そうしたジョブは`max_attempts = 1`で登録し、期限切れは`failed`にして、人が外部の状態を確かめてから再実行を決める |
+| READMEの書き直しと時刻の統一（`bjw-p1`・`bjw-p2`） | 見送り（2026-11-08）。12章の決定で、本体コンテナのCLIはmuse-vmのキューを使わなくなったため |
 
 ## 11. 未確認
 
+- **（2026-11-08に実測）キューは今は使われていない。** READMEは「新しいbridgeジョブが届いたら、応答する前にキューへ写す」と書くが、`queue/`は空で、直前のジョブ（`3602e565…`）も、この協議の質問（`a8df60d3…`。応答の1行目にjob id行が出た）も写されていない。Museから本体コンテナへ新着を知らせる手段も無い。**誰がどうやってキューへ入れるかを決めるまで、取り出す側を作っても動かない**（D1の未確認キー`u-feed`）。
 - 本体コンテナからキューへの**書き込み**（rename・`.md`の作成）。読み取りだけを実測した（2026-11-07と2026-11-08）。ディレクトリは`drwxrws--- root`で、rootなら書けるはず。
 - D1のREST APIの応答で`meta.changes`が条件付き`UPDATE`の結果を正しく返すこと（実装時にテストで確かめる）。
 - Codex CLIからの`tailscale ssh`（Codexのsandboxから使えるか）。
 - Museが`queue-job.sh`で写さない場合（「読み取りのみ」と指示した問い合わせは写さなかった）の扱い。
 - 自動で見に行く仕組み。Museのメインチャットは今は自動では見ない。
+
+## 12. 2026-11-08の改訂: 依頼した側がジョブをD1に入れる
+
+**対象**: ジョブの入り口と中身の置き場所 — muse-vmの`queue/`が実際には使われていなかったこと（11章）を受け、利用者が決めた形。**この章は、2〜6章のうちmuse-vmのキューとSSHに関わる記述に優先する。**
+
+### 理由
+
+- Museは、READMEの「新しいbridgeジョブが届いたら応答の前にキューへ写す」を守っていなかった（`queue/`は空。2026-11-08に実測）。Museの判断で写す方式では、写し漏れが起きる。
+- Museから本体コンテナへ新着を知らせる手段も無い。
+- ロックについては、既に「依頼した側が行を作り、Museは関わらない」と決めている。同じ考え方を、依頼の中身にも広げる。
+
+### 流れ
+
+| 段 | 主体 | すること |
+|---|---|---|
+| 1 | 依頼した側（AIチャットのWorker、本体コンテナのCLI） | `bridge_jobs`（依頼の本文`request_text`、出どころ、`ai_chat_share_id`）と`bridge_job_locks`の行を、同じバッチで作る。外部へ書き込むジョブは`max_attempts = 1` |
+| 2 | 本体コンテナのCLI | 頼まれたときに`run-once`で1件取る（5章の条件付き`UPDATE`）。依頼の本文はD1から読む。**SSHは使わない** |
+| 3 | 本体コンテナのCLI | 実行し、結果を`bridge_jobs.result_text`（とハッシュ）に書き、5章の条件付き`UPDATE`で完了にする。状態の変化は同じバッチで`bridge_job_events`に書く |
+| 4 | 利用者 | AIチャットや`/muse-inquiries`から結果を見る |
+
+- 5章の「SSHで`queue/<id>.json`を読む」「`done/<id>.<claim_token>.md`に書く」「ファイル側を直す」は使わない。ロックの条件（期限、`claim_token`、`attempts`）はそのまま使う。
+- 結果の本文が大きいときは、D1の1行の上限に収まるよう、実装時に上限を決める（未確認）。
+- Museとmuse-vmのキューは、この流れには関わらない。Museに相談したいジョブは、CLIがこれまでどおり`muse_prompt`で問い合わせる。
+
+### テーブル（実装した形。7章の`bridge_jobs`の案と、5章のロックの表に優先する）
+
+正は`/root/lib`（`nekoserver/lib`）の`claude/ops/bridge_jobs_schema.sql`で、このリポジトリの`migrations-agent-inquiries/0009_create_bridge_jobs.sql`はその写し。**本番のD1にはまだ適用していない。**
+
+| 表 | 持つもの |
+|---|---|
+| `bridge_jobs` | 依頼の本文`request_text`、出どころ、依頼者、`ai_chat_share_id`、外部へ書き込むか（`external_write`）。状態は持たない |
+| `bridge_job_locks` | 状態の正。5章のロックの表と同じ（`cancelled`を含む） |
+| `bridge_job_results` | 結果の本文とsha256を`(job_id, claim_token)`ごとに保存する。上書きしない。完了にしたロックの`result_path`は`bridge_job_results:<claim_token>` |
+| `bridge_job_events` | 状態の履歴。**ロックの表のトリガーが書く**（行を作ると`queued`、状態か`claim_token`が変わると`claimed`・`released`・`completed`・`failed`・`cancelled`）。状態の変更と同じ文の中で書かれるので、片方だけ残ることはない |
+
+- 結果は、期限内で自分が持っているときだけ保存し（条件付きの`INSERT … SELECT … WHERE EXISTS`）、その後で完了にする。保存と完了の間に期限が切れると、結果だけが残る。残った結果は、取り直した者の結果と見比べる材料にする。
+- 実行に失敗したら、上限に達していれば`failed`、まだなら`queued`に戻す（`release`）。
+- 外部へ書き込むジョブは`max_attempts = 1`で登録する（`register --external`）。
+
+### 実装（`nekoserver/lib`の`claude/ops/bridge_jobs.py`）
+
+| コマンド | すること |
+|---|---|
+| `register` | 依頼の本文を標準入力から読み、`bridge_jobs`と`bridge_job_locks`の行を作る。同じ`job_id`で2回呼んでも上書きしない |
+| `run-once --executor claude\|codex` | 期限が切れて上限に達したものを`failed`にし、取れる最も古い1件を取る。依頼の本文を標準入力で子プロセスに渡し、5分ごとに期限を延ばす。延ばせなければ子を止める。結果を保存して完了にする |
+| `list` | 直近50件の状態 |
+| `cancel` | 人が中止する |
+
+- 子プロセスに渡す環境変数は`PATH`・`HOME`・`LANG`など10個だけ。トークン・秘密の値・アカウントIDは渡さない。
+- テスト（`claude/test/bridge_jobs_test.py`、17件）は、D1の代わりにSQLiteで本番と同じSQLを流す。取り合い、期限の境目、古い`claim_token`の拒否、応答が返らないときの照会、上限での`failed`、中止、トリガーの履歴、子の停止を確かめる。条件を1つ外すとテストが失敗することも確かめた（期限内の条件、結果が無い条件）。
+- D1のREST APIで応答が返らなかったとき（`D1Unknown`）は、取る・完了にするの成否を、自分の`claim_token`が入っているかで判断する。
+
+### 実装の順序（案。Codexの計画`bridge-jobs-queue-20261107-c3`を12章の決定に合わせたもの）
+
+1. 失敗するテストを先に書く: 同時に取ったときに勝つのは1件だけ、期限ちょうどでの取り直し、期限後・古い`claim_token`での延長・完了の拒否、上限に達したときの`failed`、応答が返らなかったときの照会、状態の更新と履歴の片方だけが残らないこと。
+2. `migrations-agent-inquiries/`に`bridge_jobs`（`request_text`・`result_text`を足す）・`bridge_job_locks`・`bridge_job_events`を足す。本番への適用は利用者の確認の後。
+3. 本体コンテナ側: `/root/lib`に`bridge_jobs.py`（`register`・`run-once`）。D1の操作は親プロセスで行い、Claude Code・Codexには認証情報を渡さない。
+4. AIチャットのWorker側の登録（`register`の相当）は、1〜3を確かめた後。
+
