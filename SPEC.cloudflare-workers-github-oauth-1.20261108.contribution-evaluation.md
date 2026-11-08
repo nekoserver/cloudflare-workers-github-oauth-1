@@ -96,7 +96,7 @@
 
 承認前に、案のSQLを`migrations-agent-inquiries/`の全マイグレーション（0010まで）の上にSQLite（`node:sqlite`、外部キー有効）で当て、10通りが期待どおりになることを確かめた（2026-11-08）: 正しい効き方は入る、知らない効き方・同じ組の二重・自分自身・台帳に無い出どころ・`id`のNULLは拒否、段が違えば別の行、関連に使われている台帳の行は消せない、`inquiry_unused`の同じ組の二重は拒否。承認後は0011を書く前に`scripts/agent-inquiries-contributions.test.mjs`（7件）を書き、失敗を確かめてから実装した。既存の行の書き込み、トリガー、連鎖削除での`deleted_at`、作り直しでの復帰、外部の出どころ、効き方と段の制約、仮と確かめた印、生きなかったものを確かめている。本番のD1では確かめていない。
 
-## 8. ルールに適合しているかの点検と、直した件数（案。採否待ち、提案`ce-p5`）
+## 8. ルールに適合しているかの点検と、直した件数（提案`ce-p5`、2026-11-08 06:19に利用者が採用）
 
 **対象**: 4章の物差し（ルール・外部の基準）をコードに当てた点検と、見つかった箇所の状態 — 利用者の要望（2026-11-08）「そのルールに適合してるかどうかをチェックして修正した件数なんかをカウントできる仕組みもほしい」。`ce-k16`（候補数・確認済み数・確認待ちを分けて持つ）を含む。
 
@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS inquiry_rule_findings (id INTEGER PRIMARY KEY AUTOINC
 |---|---|
 | `inquiry_rule_checks` | 点検1回分。どのルール（台帳の`rule:`・`ext:`）を、どの対象（`target_ref`、例 `nekoserver/cloudflare-workers-github-oauth-1@<フルSHA>:src/`）に、どの方法（`method`、検索の条件をそのまま）で当て、候補が何件だったか |
 | `inquiry_rule_findings` | 見つかった箇所1件ずつ。`candidate`（候補）→`violation`（違反と確定）か`not_violation`（違反でない）→`fixed`（直した。直したコミットを台帳の`commit:`で結ぶ）か`exception`（例外として認めた。理由を`note`に） |
+
+実装: `migrations-agent-inquiries/0012_create_rule_checks.sql`（表は上のSQLのまま）と、集計のビュー`inquiry_rule_summary`（ルールごとに、点検の回数、最新の点検の日時と候補数、状態ごとの件数）。テストは`scripts/agent-inquiries-rule-checks.test.mjs`（4件、先に失敗を確認）。
 
 数えられるもの:
 
