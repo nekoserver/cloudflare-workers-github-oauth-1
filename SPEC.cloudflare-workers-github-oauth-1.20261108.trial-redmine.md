@@ -64,6 +64,24 @@ CREATE TABLE IF NOT EXISTS inquiry_redmine_outbox (id INTEGER PRIMARY KEY AUTOIN
 - **匿名で読める範囲**: `/issues.json`が未ログインで200なら、公開プロジェクトのチケットは誰でも読める可能性がある。議題の本文に内部の情報が入るので、プロジェクトは非公開にする必要がある（未確認）。
 - **Redmineでの編集**: Redmine側で書かれたコメント・状態の変更をD1へ戻すか（6章）。戻さない場合、Redmineの変更はD1に残らない。
 
+### MuseとCodexとの協議で分かった欠陥（2026-11-08、問い合わせ`trm-m3`・`trm-c4`）
+
+3〜4章の案のままでは、次の欠陥がある。直し方は2案に分かれていて、採否待ち（提案`trm-p1`・`trm-p2`）。
+
+| 論点 | 内容 | 出どころ |
+|---|---|---|
+| `trm-k2` | `inquiry_redmine_outbox`の`ref_id`はNULLを許すので、`UNIQUE (case_id, kind, ref_id)`があっても`open`を何件でも積める（メモリ内のSQLiteで再現）。取り出しのclaim・lease・tokenも無い | Codex |
+| `trm-k3` | 検索→作成→D1への保存が別々の操作で、途中で止まると二重作成や注記の二重追加が起こる。出来事のIDをRedmine側にも残して照合する必要がある | Codex |
+| `trm-k5` | `r9Gateway.ts`の`r9-v1`署名は`redmineProxy.ts`の`redmine-v1`と互換がなく、書き込みには使えない。`redmineProxy`の署名と中継は流用できるが、利用者のAPIキーとセッションに依存するので共通のクライアントへの切り出しが要る | Codex |
+| `trm-k4` | `trm-p2`のように試験運用へ移すときにその場で作ると、R9が止まっている間は試験運用へ進めない | Claude Code |
+
+ほかにCodexの指摘: 確認結果を上書きする形では再判定のときに前の結果が消えるので追記型にする。`synced_revision`に対応する元データの改訂番号が無い。`entry_id`が別の議題の問い合わせを指せる。`TEXT PRIMARY KEY`はSQLiteではNULLを許すので`NOT NULL`を明示する。
+
+| 案 | 内容 |
+|---|---|
+| `trm-p1`（Codex） | 3〜4章を直す。出来事IDを`NOT NULL UNIQUE`に、取り出しは`migrations-agent-inquiries/0009_create_bridge_jobs.sql`のclaim・lease・tokenに倣う、確認結果は追記型、出来事IDをRedmine側にも残す |
+| `trm-p2`（Muse） | outboxをやめる。D1には`redmine_issue_id`と送信状態だけを持ち、試験運用へ移すときにその場で1件作り、失敗したら移すのを止める。確認項目は`inquiry_entries`に種別として足す |
+
 ## 6. 決めること（利用者）
 
 | 項目 | 選択肢 |
