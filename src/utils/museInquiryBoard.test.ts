@@ -42,10 +42,10 @@ const TABLES = {
 };
 
 describe('協議のカンバンのデータ', () => {
-  // ユーザー指定(2026-11-08): 回答済み(と失敗)の問い合わせは、協議の列のすぐ右の専用の列に分ける。
-  it('フェーズは協議・回答済みの問い合わせ・未解決の論点・提案・採用・完了・不採用の順', () => {
-    expect(INQUIRY_PHASES.map((p) => p.key)).toEqual(['inquiry', 'answered', 'open-keys', 'proposed', 'adopted', 'done', 'rejected']);
-    expect(INQUIRY_PHASES.find((p) => p.key === 'answered')!.label).toBe('回答済み・失敗の問い合わせ');
+  // ユーザー指定(2026-11-08午後): 完了のカードが左の列に残らないよう、回答済み・失敗の問い合わせは「完了」の列に置く。
+  // 午前に足した専用の列(回答済み・失敗の問い合わせ)はやめた。カードの「完了」の印と列を一致させる。
+  it('フェーズは協議・未解決の論点・提案・採用・完了・不採用の順で、回答済みの専用の列は無い', () => {
+    expect(INQUIRY_PHASES.map((p) => p.key)).toEqual(['inquiry', 'open-keys', 'proposed', 'adopted', 'done', 'rejected']);
   });
 
   it('各フェーズにパネルを振り分け、ケースの集計(提案数・問い合わせ数など)を返す。回答の全文は読まない', async () => {
@@ -55,9 +55,8 @@ describe('協議のカンバンのデータ', () => {
     const phase = (key: string) => board.phases.find((p) => p.key === key)! as unknown as { panels: Array<Record<string, unknown>> };
     // ユーザー指定(2026-11-08): カードは今の状態に合った列に置く。回答済みの問い合わせは協議の列に残さず、完了の列へ。
     expect(phase('inquiry').panels).toEqual([]);
-    expect(phase('answered').panels.map((p) => p.type + ':' + p.seq)).toEqual(['entry:2', 'entry:1']);
-    expect(phase('done').panels.filter((p) => p.type === 'entry')).toEqual([]);
-    expect(phase('answered').panels[0]).toMatchObject({ caseId: CASE.id, title: '協議する', summary: '役割を分ける', durationSeconds: 145 });
+    expect(phase('done').panels.filter((p) => p.type === 'entry').map((p) => p.type + ':' + p.seq)).toEqual(['entry:2', 'entry:1']);
+    expect(phase('done').panels.find((p) => p.type === 'entry')).toMatchObject({ caseId: CASE.id, title: '協議する', summary: '役割を分ける', durationSeconds: 145 });
     expect(phase('open-keys').panels).toEqual([expect.objectContaining({ type: 'key', id: 'k1', kind: 'pitfall', title: '排他が無い', mutating: true })]);
     expect(phase('proposed').panels).toEqual([expect.objectContaining({ type: 'proposal', id: 'p1', title: 'renameで排他', entryId: CASE.id + '-e2' })]);
     expect(phase('adopted').panels.map((p) => p.id)).toEqual(['p2']);
@@ -97,14 +96,27 @@ describe('協議のカンバンのデータ', () => {
     expect(calls.every((c) => c.params[0] === CASE.id)).toBe(true);
   });
 
-  it('問い合わせは、回答待ち・未送信なら協議の列、回答済み・失敗なら回答済みの問い合わせの列に置く', async () => {
+  // ユーザー指定(2026-11-08): 構想段階の議題がどう肉付けされたかを追える「経緯」の表示のため、論点を開いた・閉じた問い合わせと、提案の記録日時も返す。
+  it('ケースの詳細は、論点を開いた・閉じた問い合わせのIDと、提案の記録日時も返す', async () => {
+    const { db } = fakeDb({
+      inquiry_cases: [CASE],
+      inquiry_entries: TABLES.inquiry_entries,
+      inquiry_keys: [{ case_id: CASE.id, id: 'k2', kind: 'unknown', text: '未確認', status: 'closed', blocking: 0, mutating: 0, opened_by_entry_id: CASE.id + '-e1', closed_by_entry_id: CASE.id + '-e2' }],
+      inquiry_proposals: [{ case_id: CASE.id, id: 'p2', entry_id: CASE.id + '-e2', proposed_by: 'muse', text: '案', status: 'adopted', reason: null, created_at: '2026-11-07T20:31:00Z' }],
+    });
+    const detail = await loadInquiryCase(db, CASE.id);
+    expect(detail?.keys[0]).toMatchObject({ id: 'k2', openedByEntryId: CASE.id + '-e1', closedByEntryId: CASE.id + '-e2' });
+    expect(detail?.proposals[0]).toMatchObject({ id: 'p2', entryId: CASE.id + '-e2', createdAt: '2026-11-07T20:31:00Z' });
+  });
+
+  it('問い合わせは、回答待ち・未送信なら協議の列、回答済み・失敗なら完了の列に置く', async () => {
     const e = (seq: number, status: string) => ({ ...TABLES.inquiry_entries[0], id: 'e' + seq, seq, status, created_at: '2026-11-08T00:0' + seq + ':00Z' });
     const { db } = fakeDb({ ...TABLES, inquiry_entries: [e(1, 'sent'), e(2, 'planned'), e(3, 'answered'), e(4, 'failed')] });
     const board = await loadInquiryBoard(db);
     const seqs = (key: string) => (board.phases.find((p) => p.key === key)!.panels as Array<Record<string, unknown>>).filter((p) => p.type === 'entry').map((p) => p.seq);
     expect(seqs('inquiry')).toEqual([1, 2]);
-    expect(seqs('answered')).toEqual([3, 4]);
-    expect(seqs('done')).toEqual([]);
+    expect(seqs('done')).toEqual([3, 4]);
+    expect(board.phases.some((p) => (p.key as string) === 'answered')).toBe(false);
   });
 
   // ユーザー指定(2026-11-08): 議題を段階(構想・計画・実装・試験運用)で区別する。状態(open・resolved・abandoned)とは別の列。

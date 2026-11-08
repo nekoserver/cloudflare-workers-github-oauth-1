@@ -77,6 +77,27 @@ export const MUSE_INQUIRIES_SCRIPT = `
       if (text !== undefined && text !== null) node.textContent = String(text);
       return node;
     }
+    // 一覧(カード・完了表)用の平文。Markdownの囲み・見出し・引用・箇条書き・コード・太字の記号を外して1行にまとめる(詳細はMarkdownのまま描く)。
+    // ルール29: テンプレートリテラル内なので正規表現とエスケープ文字を使わない。
+    function inquiryPlainLine(raw) {
+      var BT = String.fromCharCode(96);
+      var line = String(raw || '').trim();
+      if (line.indexOf(BT + BT + BT) === 0 || line.indexOf('~~~') === 0) return '';
+      if (line && line.split('|').join('').split('-').join('').split(':').join('').trim() === '') return '';
+      while (line.charAt(0) === '#' || line.charAt(0) === '>') line = line.slice(1).trim();
+      if (line.indexOf('- ') === 0 || line.indexOf('* ') === 0 || line.indexOf('+ ') === 0) line = line.slice(2).trim();
+      return line.split(BT).join('').split('**').join('').split('__').join('').trim();
+    }
+    function inquiryPlainLines(value, max) {
+      var lines = String(value || '').split(String.fromCharCode(10));
+      var out = [];
+      for (var i = 0; i < lines.length && (!max || out.length < max); i++) {
+        var line = inquiryPlainLine(lines[i]);
+        if (line) out.push(line);
+      }
+      return out;
+    }
+    function inquiryPlainText(value) { return inquiryPlainLines(value, 0).join(' '); }
     function badge(doc, text, kind) {
       return el(doc, 'span', 'inq-badge inq-badge-' + kind, text);
     }
@@ -119,7 +140,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         modal.hidden = false;
         return modalBody;
       }
-      function closeModal() { modal.hidden = true; }
+      function closeModal() { modal.hidden = true; if (pendingBoard) applyBoard(pendingBoard); }
       function field(body, label, value, pre) {
         if (value === null || value === undefined || value === '') return;
         var row = el(doc, 'div', 'inq-field');
@@ -227,6 +248,69 @@ export const MUSE_INQUIRIES_SCRIPT = `
         }
         if (panel.status === 'proposed' && deps.postJson) renderDecision(body, panel);
       }
+      // 経緯: 1行=1問い合わせ(seq順)。論点は開いた・閉じた問い合わせの行、提案は発端の行に出す(Museの案、muse-2f4d62a8)。
+      // 行は出来事(kind・順序・日時・主体)として組み、段階の移り変わりなどを後から別の種類として足せるようにする。
+      function renderTimeline(detail) {
+        var panel = el(doc, 'div', 'inq-detail-panel inq-timeline');
+        panel.setAttribute('data-detail-panel', 'timeline');
+        var entryIds = {};
+        var events = detail.entries.map(function(e) { entryIds[e.id] = true; return { kind: 'entry', order: e.seq, at: e.createdAt, actor: e.agent, ref: e }; });
+        events.sort(function(a, b) { return a.order - b.order; });
+        var list = el(doc, 'ol', 'inq-timeline-list');
+        events.forEach(function(ev) {
+          var entry = ev.ref;
+          var li = el(doc, 'li', 'inq-timeline-row');
+          li.setAttribute('data-timeline-entry', String(entry.seq));
+          li.appendChild(el(doc, 'div', 'inq-meta', '#' + entry.seq + ' ' + agentLabel(entry.agent) + ' / ' + formatInqTime(entry.createdAt) + ' / ' + (INQ_ENTRY_STATUS_LABELS[entry.status] || entry.status)));
+          li.appendChild(el(doc, 'div', 'inq-timeline-clue', entry.clue));
+          var parts = [];
+          if (entry.progress) parts.push('前進: ' + inquiryPlainText(entry.progress));
+          if (entry.info) parts.push('事実: ' + inquiryPlainText(entry.info));
+          var summaryText = parts.length ? parts.join(' / ') : inquiryPlainLines(entry.answer, 2).join(' ');
+          if (summaryText) li.appendChild(el(doc, 'div', 'inq-timeline-summary', summaryText));
+          var marks = el(doc, 'ul', 'inq-list');
+          detail.keys.forEach(function(k) {
+            [['opened', k.openedByEntryId, '論点を開いた'], ['closed', k.closedByEntryId, '論点を閉じた']].forEach(function(m) {
+              if (m[1] !== entry.id) return;
+              var item = el(doc, 'li');
+              item.setAttribute('data-timeline-key', m[0]);
+              item.appendChild(badge(doc, m[2], m[0] === 'opened' ? 'warn' : 'ok'));
+              item.appendChild(doc.createTextNode(' ' + (INQ_KEY_KIND_LABELS[k.kind] || k.kind) + ': ' + inquiryPlainText(k.text)));
+              marks.appendChild(item);
+            });
+          });
+          detail.proposals.forEach(function(p) {
+            if (p.entryId !== entry.id) return;
+            var item = el(doc, 'li');
+            item.setAttribute('data-timeline-proposal', p.id);
+            item.appendChild(badge(doc, '提案・' + (INQ_PROPOSAL_STATUS_LABELS[p.status] || p.status), p.status === 'proposed' ? 'warn' : p.status === 'rejected' ? 'muted' : 'ok'));
+            item.appendChild(doc.createTextNode(' ' + inquiryPlainText(p.text)));
+            marks.appendChild(item);
+          });
+          if (marks.childNodes.length) li.appendChild(marks);
+          if (entry.answer) {
+            var full = el(doc, 'details', 'inq-details');
+            full.appendChild(el(doc, 'summary', '', '回答の全文'));
+            field(full, '回答', entry.answer, true);
+            li.appendChild(full);
+          }
+          list.appendChild(li);
+        });
+        panel.appendChild(list);
+        var loose = [];
+        detail.keys.forEach(function(k) { if (!entryIds[k.openedByEntryId] && !entryIds[k.closedByEntryId]) loose.push('論点 ' + (INQ_KEY_KIND_LABELS[k.kind] || k.kind) + ': ' + inquiryPlainText(k.text)); });
+        detail.proposals.forEach(function(p) { if (!entryIds[p.entryId]) loose.push('提案・' + (INQ_PROPOSAL_STATUS_LABELS[p.status] || p.status) + ': ' + inquiryPlainText(p.text)); });
+        if (loose.length) {
+          var section = el(doc, 'div', 'inq-timeline-unlinked');
+          section.setAttribute('data-timeline-unlinked', '');
+          section.appendChild(el(doc, 'h3', '', '問い合わせと結ばれていない記録（' + loose.length + '件）'));
+          var ul = el(doc, 'ul', 'inq-list');
+          loose.forEach(function(t) { ul.appendChild(el(doc, 'li', '', t)); });
+          section.appendChild(ul);
+          panel.appendChild(section);
+        }
+        return panel;
+      }
       function openCase(caseId) {
         var c = caseById(caseId);
         var body = openModal(c ? c.goal : caseId);
@@ -236,6 +320,28 @@ export const MUSE_INQUIRIES_SCRIPT = `
           var meta = el(doc, 'p', 'inq-meta');
           meta.textContent = caseId + ' / ' + (INQ_CASE_STATUS_LABELS[detail.case.status] || detail.case.status) + ' / ' + (INQ_CASE_STAGE_LABELS[detail.case.stage] || '段階未設定') + ' / 開始 ' + formatInqTime(detail.case.createdAt) + ' / 所要 ' + formatInqDuration(detail.case.durationSeconds);
           body.appendChild(meta);
+          // ユーザー指定(2026-11-08): 「項目別」と、構想からどう肉付けされたかを追う「経緯」を切り替える。
+          var views = el(doc, 'div', 'inq-case-view-switch');
+          var itemsPanel = el(doc, 'div', 'inq-detail-panel');
+          itemsPanel.setAttribute('data-detail-panel', 'items');
+          var timelinePanel = renderTimeline(detail);
+          timelinePanel.hidden = true;
+          [['items', '項目別', itemsPanel], ['timeline', '経緯', timelinePanel]].forEach(function(v) {
+            var b = el(doc, 'button', '', v[1]);
+            b.type = 'button';
+            b.setAttribute('data-detail-view', v[0]);
+            b.setAttribute('aria-pressed', String(v[0] === 'items'));
+            b.addEventListener('click', function() {
+              views.querySelectorAll('[data-detail-view]').forEach(function(o) { o.setAttribute('aria-pressed', String(o === b)); });
+              itemsPanel.hidden = v[0] !== 'items';
+              timelinePanel.hidden = v[0] !== 'timeline';
+            });
+            views.appendChild(b);
+          });
+          body.appendChild(views);
+          body.appendChild(itemsPanel);
+          body.appendChild(timelinePanel);
+          body = itemsPanel;
           body.appendChild(el(doc, 'h3', '', '協議（' + detail.entries.length + '件）'));
           detail.entries.forEach(function(entry) {
             var details = el(doc, 'details', 'inq-details');
@@ -298,7 +404,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         // ユーザー指定(2026-11-08): 採否待ちの提案を見つけやすくする。枠の点滅はCSSのinq-panel-pending。
         if (panel.type === 'proposal' && panel.status === 'proposed') { button.classList.add('inq-panel-pending'); button.setAttribute('data-attention', 'pending'); }
         button.appendChild(panelLabels(panel));
-        var title = String(panel.title || '').trim() || '無題の' + (INQ_PANEL_TYPE_LABELS[panel.type] || '記録');
+        var title = inquiryPlainText(panel.title) || '無題の' + (INQ_PANEL_TYPE_LABELS[panel.type] || '記録');
         button.title = title;
         var c = caseById(panel.caseId);
         if (panel.type === 'entry') {
@@ -345,7 +451,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
           row.appendChild(dateCell);
           var statusCell = el(doc, 'td'); statusCell.appendChild(panelLabels(panel)); row.appendChild(statusCell);
           var contentCell = el(doc, 'td');
-          var content = el(doc, 'button', 'inq-history-title', String(panel.title || '').trim() || '無題の' + (INQ_PANEL_TYPE_LABELS[panel.type] || '記録'));
+          var content = el(doc, 'button', 'inq-history-title', inquiryPlainText(panel.title) || '無題の' + (INQ_PANEL_TYPE_LABELS[panel.type] || '記録'));
           content.type = 'button';
           content.title = content.textContent;
           content.addEventListener('click', function() { openPanel(panel); });
@@ -534,16 +640,55 @@ export const MUSE_INQUIRIES_SCRIPT = `
       });
       doc.getElementById('inq-refresh').addEventListener('click', function() { caseCache = {}; load(); });
 
+      // 自動の読み直し(ユーザー指定、2026-11-08。Codexの案bar-p1、board-auto-refresh-20261108)。
+      // 取得が終わってから次を予約する。取得に番号を振り、古い応答で新しい一覧を上書きしない。
+      // 裏のタブでは取得せず、表に戻ったら1回読む。詳細を開いている間は描き直さず「更新あり」を出し、閉じたら反映する。
+      // 失敗したら間隔を倍にする(上限5分)。setTimeoutを渡されたときだけ動く(テストや埋め込みで止められるように)。
+      var REFRESH_MS = 30000;
+      var REFRESH_MAX_MS = 300000;
+      var refreshDelay = REFRESH_MS;
+      var loadSeq = 0;
+      var pendingBoard = null;
+      var autoRefresh = typeof deps.setTimeout === 'function';
+      function scheduleRefresh() {
+        if (!autoRefresh) return;
+        deps.setTimeout(function() {
+          if (doc.visibilityState === 'hidden') { scheduleRefresh(); return; }
+          load();
+        }, refreshDelay);
+      }
+      if (autoRefresh) {
+        doc.addEventListener('visibilitychange', function() { if (doc.visibilityState === 'visible') load(); });
+      }
+      function applyBoard(data) {
+        pendingBoard = null;
+        board = data;
+        setNotice('');
+        var selected = filter.value;
+        renderCases();
+        filter.value = selected && caseById(selected) ? selected : '';
+        renderBoard();
+      }
       function load() {
+        loadSeq += 1;
+        var seq = loadSeq;
         return deps.fetchJson('/api/muse-inquiries/board').then(function(data) {
-          board = data;
-          setNotice('');
-          var selected = filter.value;
-          renderCases();
-          filter.value = selected && caseById(selected) ? selected : '';
-          renderBoard();
+          if (seq !== loadSeq) return;
+          refreshDelay = REFRESH_MS;
+          if (!modal.hidden && board) {
+            if (JSON.stringify(data) !== JSON.stringify(board)) {
+              pendingBoard = data;
+              setNotice('更新あり（詳細を閉じると反映します）');
+            }
+          } else {
+            applyBoard(data);
+          }
+          scheduleRefresh();
         }, function(error) {
+          if (seq !== loadSeq) return;
           setNotice('協議の記録を読み込めませんでした: ' + (error && error.message ? error.message : String(error)));
+          refreshDelay = Math.min(refreshDelay * 2, REFRESH_MAX_MS);
+          scheduleRefresh();
         });
       }
       return load();
@@ -677,6 +822,12 @@ export function getMuseInquiriesPage(): string {
     .inq-history th:nth-child(5) { width: 18%; }
     .inq-history-title { text-align: left; border: 0; padding: 0; cursor: pointer; color: var(--text-primary); background: transparent; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .inq-origin-link { color: var(--accent-color); text-decoration: underline; }
+    .inq-detail-panel[hidden] { display: none; }
+    .inq-timeline-list { list-style: none; padding: 0; margin: 8px 0; border-left: 2px solid var(--border-color); }
+    .inq-timeline-row { margin: 0 0 12px; padding: 0 0 0 12px; overflow-wrap: anywhere; }
+    .inq-timeline-clue { font-weight: 600; }
+    .inq-timeline-summary { margin: 4px 0; color: var(--text-primary); }
+    .inq-timeline-unlinked { margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -738,6 +889,8 @@ export function getMuseInquiriesPage(): string {
   <script>${MUSE_INQUIRIES_SCRIPT}
     initMuseInquiriesPage({
       document: document,
+      setTimeout: function(fn, ms) { return window.setTimeout(fn, ms); },
+      clearTimeout: function(id) { window.clearTimeout(id); },
       postJson: function(url, payload) {
         return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(function(response) {
           return response.json().catch(function() { return {}; }).then(function(data) {
