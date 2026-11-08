@@ -4,7 +4,7 @@ import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdow
 /**
  * /muse-inquiries: Museとの協議(D1 agent-inquiries)のカンバン。ユーザー指定(2026-11-07)。
  *
- * 列はフェーズ(協議・未解決の論点・提案・採用・完了・不採用)で、各列に問い合わせ・キー・提案のパネルを並べる。
+ * 列はフェーズ(協議・回答済みの問い合わせ・未解決の論点・提案・採用・完了・不採用)で、各列に問い合わせ・キー・提案のパネルを並べる。
  * 上部にケースごとのパネル(採否待ちの提案数・問い合わせ数・未解決の論点・所要時間)を置き、ケースで絞り込める。
  * どのパネルからも詳細モーダルを開く。一覧はtextContent、詳細の本文はHTMLをエスケープする共有Markdownパーサーで表示する。
  * template literalに埋め込むため、バックスラッシュのエスケープと正規表現リテラルを使わない(CLAUDE.md ルール29)。
@@ -12,10 +12,24 @@ import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdow
 export const MUSE_INQUIRIES_SCRIPT = `
     var renderInquiryMarkdown = (function() { ${getMarkdownParserScript()} return parseMd; })();
     var INQ_CASE_STATUS_LABELS = { open: '協議中', resolved: '解決', abandoned: '中止' };
+    // 議題の段階(ユーザー指定、2026-11-08)。状態とは別に表示する。
+    var INQ_CASE_STAGE_LABELS = { concept: '構想', plan: '計画', implementation: '実装', trial: '試験運用' };
+    function caseStageBadge(doc, stage) {
+      var label = INQ_CASE_STAGE_LABELS[stage] || '段階未設定';
+      var b = badge(doc, label, stage === 'trial' ? 'ok' : 'muted');
+      b.setAttribute('data-case-stage', INQ_CASE_STAGE_LABELS[stage] ? stage : 'unset');
+      return b;
+    }
     var INQ_KEY_KIND_LABELS = { unknown: '未確認', pitfall: '落とし穴', known: '事実' };
     var INQ_PROPOSAL_STATUS_LABELS = { proposed: '採否待ち', adopted: '採用', done: '完了', rejected: '不採用' };
     var INQ_ENTRY_STATUS_LABELS = { planned: '未送信', sent: '回答待ち', answered: '回答済み', failed: '失敗', withdrawn: '取り下げ' };
     var INQ_PANEL_TYPE_LABELS = { entry: '問い合わせ', key: '論点', proposal: '提案' };
+    // 主体の表示名。利用者(user)は「🙄 User」(ユーザー指定、2026-11-08)。
+    var INQ_AGENT_LABELS = { user: '🙄 User', muse: 'Muse', codex: 'Codex', 'claude-code': 'Claude Code' };
+    function agentLabel(value) {
+      var raw = String(value || '').trim();
+      return INQ_AGENT_LABELS[raw.toLowerCase()] || raw;
+    }
     // 件数は選択中ケースのカード数。業務フェーズは変更せず、表示対象だけを切り替える。
     var INQ_STATUS_FILTERS = {
       all: { label: 'すべて' },
@@ -121,7 +135,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
       }
       function renderEntry(body, entry) {
         var meta = el(doc, 'p', 'inq-meta');
-        meta.textContent = '#' + entry.seq + ' ' + entry.agent + ' / ' + entry.askedBy + ' / ' + formatInqTime(entry.createdAt) + ' / 所要 ' + formatInqDuration(entry.durationSeconds) + (entry.askId ? ' / ' + entry.askId : '');
+        meta.textContent = '#' + entry.seq + ' ' + agentLabel(entry.agent) + ' / ' + agentLabel(entry.askedBy) + ' / ' + formatInqTime(entry.createdAt) + ' / 所要 ' + formatInqDuration(entry.durationSeconds) + (entry.askId ? ' / ' + entry.askId : '');
         body.appendChild(meta);
         field(body, '手掛かり', entry.clue);
         field(body, '質問', entry.question, true);
@@ -154,6 +168,48 @@ export const MUSE_INQUIRIES_SCRIPT = `
         field(body, '止まるか', panel.blocking ? '止まる(先に解決する)' : '止まらない');
         field(body, '変更を伴うか', panel.mutating ? '変更を伴う(承認が要る)' : '読み取りのみ');
       }
+      // 採否待ちの提案を、その場で採用・不採用にする(ユーザー指定、2026-11-08)。採用は判断の記録だけで、実行は始めない。
+      function renderDecision(body, panel) {
+        var box = el(doc, 'div', 'inq-decision');
+        box.appendChild(el(doc, 'div', 'inq-field-label', '採否を決める'));
+        box.appendChild(el(doc, 'p', 'inq-meta', '採否を記録するだけで、実行は始めません。メモは理由の先頭に、決めた人と日時と一緒に残ります。'));
+        var note = doc.createElement('textarea');
+        note.className = 'inq-decision-note';
+        note.setAttribute('data-field', 'decision-note');
+        note.setAttribute('aria-label', '採否のメモ（任意）');
+        note.setAttribute('maxlength', '1000');
+        note.placeholder = 'メモ（任意）';
+        box.appendChild(note);
+        var row = el(doc, 'div', 'inq-row');
+        var result = el(doc, 'p', 'inq-meta');
+        result.setAttribute('data-field', 'decision-result');
+        result.setAttribute('aria-live', 'polite');
+        var buttons = [];
+        [['adopted', '採用する'], ['rejected', '不採用にする']].forEach(function(item) {
+          var button = el(doc, 'button', 'inq-decision-btn', item[1]);
+          button.type = 'button';
+          button.setAttribute('data-action', 'decide-' + item[0]);
+          button.addEventListener('click', function() {
+            buttons.forEach(function(b) { b.disabled = true; });
+            result.textContent = '記録しています…';
+            deps.postJson('/api/muse-inquiries/proposals/' + encodeURIComponent(panel.id) + '/decision', { decision: item[0], note: note.value }).then(function() {
+              row.remove();
+              note.remove();
+              result.textContent = (item[0] === 'adopted' ? '採用' : '不採用') + 'として記録しました';
+              caseCache = {};
+              return load();
+            }, function(error) {
+              result.textContent = '記録できませんでした: ' + (error && error.message ? error.message : String(error));
+              buttons.forEach(function(b) { b.disabled = false; });
+            });
+          });
+          buttons.push(button);
+          row.appendChild(button);
+        });
+        box.appendChild(row);
+        box.appendChild(result);
+        body.appendChild(box);
+      }
       function openProposal(panel) {
         var body = openModal('提案');
         var c = caseById(panel.caseId);
@@ -161,7 +217,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         field(body, '提案', panel.title, true);
         field(body, '状態', INQ_PROPOSAL_STATUS_LABELS[panel.status] || panel.status);
         field(body, '理由', panel.reason, true);
-        field(body, '提案者', panel.proposedBy);
+        field(body, '提案者', agentLabel(panel.proposedBy));
         if (panel.entryId) {
           var button = el(doc, 'button', 'inq-link-btn', '発端の問い合わせを開く');
           button.type = 'button';
@@ -169,6 +225,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
           button.addEventListener('click', function() { openEntry(panel.caseId, { id: panel.entryId }); });
           body.appendChild(button);
         }
+        if (panel.status === 'proposed' && deps.postJson) renderDecision(body, panel);
       }
       function openCase(caseId) {
         var c = caseById(caseId);
@@ -177,7 +234,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         return loadCase(caseId).then(function(detail) {
           body.textContent = '';
           var meta = el(doc, 'p', 'inq-meta');
-          meta.textContent = caseId + ' / ' + (INQ_CASE_STATUS_LABELS[detail.case.status] || detail.case.status) + ' / 開始 ' + formatInqTime(detail.case.createdAt) + ' / 所要 ' + formatInqDuration(detail.case.durationSeconds);
+          meta.textContent = caseId + ' / ' + (INQ_CASE_STATUS_LABELS[detail.case.status] || detail.case.status) + ' / ' + (INQ_CASE_STAGE_LABELS[detail.case.stage] || '段階未設定') + ' / 開始 ' + formatInqTime(detail.case.createdAt) + ' / 所要 ' + formatInqDuration(detail.case.durationSeconds);
           body.appendChild(meta);
           body.appendChild(el(doc, 'h3', '', '協議（' + detail.entries.length + '件）'));
           detail.entries.forEach(function(entry) {
@@ -245,7 +302,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         if (panel.type === 'entry') {
           button.appendChild(el(doc, 'div', 'inq-panel-title', title));
           if (panel.summary) button.appendChild(el(doc, 'div', 'inq-panel-summary', panel.summary));
-          button.appendChild(el(doc, 'div', 'inq-meta', '#' + panel.seq + ' ' + panel.agent + ' / 所要 ' + formatInqDuration(panel.durationSeconds) + ' / ' + formatInqTime(panel.createdAt)));
+          button.appendChild(el(doc, 'div', 'inq-meta', '#' + panel.seq + ' ' + agentLabel(panel.agent) + ' / 所要 ' + formatInqDuration(panel.durationSeconds) + ' / ' + formatInqTime(panel.createdAt)));
           button.addEventListener('click', function() { openEntry(panel.caseId, { seq: panel.seq }); });
         } else if (panel.type === 'key') {
           var row = el(doc, 'div', 'inq-row');
@@ -370,10 +427,9 @@ export const MUSE_INQUIRIES_SCRIPT = `
         var container = doc.getElementById('inq-proposers');
         container.textContent = '';
         var authors = new Map();
-        var aliases = new Map([['muse', 'Muse'], ['codex', 'Codex'], ['claude-code', 'Claude Code']]);
         proposals.forEach(function(p) {
           var raw = String(p.proposedBy || '').trim();
-          var name = aliases.get(raw.toLowerCase()) || raw || '提案者未設定';
+          var name = agentLabel(raw) || '提案者未設定';
           if (!authors.has(name)) authors.set(name, { name: name, total: 0, discussing: 0, done: 0 });
           var stats = authors.get(name); stats.total += 1;
           var status = panelFilterStatus(p);
@@ -413,6 +469,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
           button.title = c.goal;
           var top = el(doc, 'div', 'inq-row');
           top.appendChild(badge(doc, INQ_CASE_STATUS_LABELS[c.status] || c.status, c.status === 'open' ? 'warn' : c.status === 'resolved' ? 'ok' : 'muted'));
+          top.appendChild(caseStageBadge(doc, c.stage));
           top.appendChild(el(doc, 'span', 'inq-panel-title', c.goal));
           button.appendChild(top);
           var stats = el(doc, 'div', 'inq-row inq-stats');
@@ -435,6 +492,14 @@ export const MUSE_INQUIRIES_SCRIPT = `
         caseContent.hidden = !caseContent.hidden;
         caseToggle.setAttribute('aria-expanded', String(!caseContent.hidden));
         caseToggle.textContent = caseContent.hidden ? 'ケース一覧を開く' : 'ケース一覧を閉じる';
+      });
+      // ボードの表示(ユーザー指定、2026-11-08)。通常は列の幅を保って横スクロール、俯瞰は画面の幅に収める。
+      var layoutButtons = doc.querySelectorAll('[data-board-layout]');
+      layoutButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          boardEl.setAttribute('data-layout', button.getAttribute('data-board-layout'));
+          layoutButtons.forEach(function(other) { other.setAttribute('aria-pressed', String(other === button)); });
+        });
       });
       caseViewButtons.forEach(function(button) {
         button.addEventListener('click', function() {
@@ -515,6 +580,11 @@ export function getMuseInquiriesPage(): string {
     .inq-case, .inq-panel { display: block; width: 100%; text-align: left; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
     .inq-case:hover, .inq-panel:hover { border-color: var(--accent-color); }
     .inq-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+    .inq-board[data-layout="overview"] { grid-auto-columns: minmax(0, 1fr); overflow-x: visible; gap: 8px; }
+    .inq-board[data-layout="overview"] .inq-col { padding: 8px; min-width: 0; overflow: hidden; }
+    .inq-board[data-layout="overview"] .inq-col-head { flex-wrap: wrap; overflow-wrap: anywhere; }
+    .inq-board[data-layout="overview"] .inq-panel { padding: 8px; min-width: 0; overflow: hidden; overflow-wrap: anywhere; }
+    .inq-board[data-layout="overview"] .inq-row { flex-wrap: wrap; min-width: 0; }
     .inq-col { background: var(--bg-primary, var(--card-bg)); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
     .inq-col-head { display: flex; align-items: center; justify-content: space-between; font-size: 15px; margin: 0 0 4px; }
     .inq-count { font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0 8px; }
@@ -542,6 +612,10 @@ export function getMuseInquiriesPage(): string {
     .inq-modal-body { padding: 12px 14px; overflow: auto; }
     .inq-field { margin: 8px 0; }
     .inq-field-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .inq-decision { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); display: grid; gap: 8px; }
+    .inq-decision-note { width: 100%; min-height: 64px; box-sizing: border-box; font: inherit; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; }
+    .inq-decision-btn { min-height: 36px; padding: 6px 14px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; }
+    .inq-decision-btn:disabled { opacity: 0.6; cursor: wait; }
     .inq-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; font-size: 13px; }
     .inq-markdown { overflow-wrap: anywhere; overflow-x: auto; max-width: 100%; }
     .inq-markdown > :first-child { margin-top: 0; }
@@ -614,9 +688,13 @@ export function getMuseInquiriesPage(): string {
     <div class="inq-toolbar">
       <label>ケース <select id="inq-case-filter" aria-label="ケースで絞り込む"><option value="">すべてのケース</option></select></label>
       <button type="button" id="inq-refresh">再読み込み</button>
+      <div class="inq-case-view-switch" role="group" aria-label="ボードの表示">
+        <button type="button" data-board-layout="normal" aria-pressed="true" aria-controls="inq-board">通常</button>
+        <button type="button" data-board-layout="overview" aria-pressed="false" aria-controls="inq-board">俯瞰</button>
+      </div>
       <span class="inq-meta">パネルを押すと詳細を開きます。記録はD1 agent-inquiriesで、Claude Codeが問い合わせのたびに書きます。</span>
     </div>
-    <div id="inq-board" class="inq-board"></div>
+    <div id="inq-board" class="inq-board" data-layout="normal"></div>
     <section id="inq-completed" class="inq-completed" aria-labelledby="inq-completed-title" hidden>
       <h2 id="inq-completed-title">完了履歴 <span id="inq-completed-count" class="inq-count">0</span></h2>
       <p class="inq-meta">新しい記録から表示しています。日時は記録日時（UTC）です。元の会話を押すと発端の問い合わせを開きます。ボードにも同じ記録を残しています。</p>
@@ -635,6 +713,14 @@ export function getMuseInquiriesPage(): string {
   <script>${MUSE_INQUIRIES_SCRIPT}
     initMuseInquiriesPage({
       document: document,
+      postJson: function(url, payload) {
+        return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(function(response) {
+          return response.json().catch(function() { return {}; }).then(function(data) {
+            if (!response.ok) throw new Error((data && data.error) || ('HTTP ' + response.status));
+            return data;
+          });
+        });
+      },
       fetchJson: function(url) {
         return fetch(url, { credentials: 'same-origin' }).then(function(response) {
           return response.json().catch(function() { return {}; }).then(function(data) {

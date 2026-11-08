@@ -30,7 +30,7 @@
 
 | 名前 | 内容 |
 |---|---|
-| `inquiry_cases` | 問題と解決条件 |
+| `inquiry_cases` | 問題と解決条件。状態（`status`）と段階（`stage`） |
 | `inquiry_entries` | 問い合わせ1回。手掛かり、相手、`ask_id`、質問、回答、前進、状態、時間、選んだ根拠 |
 | `inquiry_keys` | キー。種類は`known`、`unknown`、`pitfall`。開閉、止まるか、変更を伴うか、依存先 |
 | `inquiry_entry_keys` | 問い合わせが狙ったキーと得たキー |
@@ -47,7 +47,22 @@
 | `inquiry_hunch_accuracy` | 勘の試行数と当たり数 |
 | `inquiry_agent_candidates` | 分野ごとの相手候補 |
 
-スキーマは`migrations-agent-inquiries/`の7ファイル。
+スキーマは`migrations-agent-inquiries/`の8ファイル。
+
+## 議題の段階（2026-11-08に追加）
+
+利用者の指定で、議題を段階で区別する。`inquiry_cases.stage`（`0008_add_case_stage.sql`、既定は`concept`）。状態（`status`の`open`・`resolved`・`abandoned`）は議論が終わったかどうかで、段階はその議題の中身がどこまで進んだか。両者は別に変わる（例: 計画の段階で協議が終わり`resolved`になる）。
+
+| `stage` | 表示 | 意味 | 例（2026-11-08時点） |
+|---|---|---|---|
+| `concept` | 構想 | 具体案に乏しい。何を決めるか、原因は何かから探る | `muse-vm-reboots-20261108` |
+| `plan` | 計画 | 一部策定済み、または策定中（SPECの案がある） | `bridge-jobs-queue-20261107`、`muse-vm-dashboard-20261107` |
+| `implementation` | 実装 | コードやVMの変更に着手した、または入れた | `nix-packages-20261107` |
+| `trial` | 試験運用 | 入れたものを試している、レビューや実機確認を待っている | `muse-status-wasm-20261107`、`proposal-rule-20261108` |
+
+- 段階を変えたエージェントは、その理由を問い合わせの`progress`か提案の`reason`に書く。
+- 実装へ進めるのは利用者の承認の後（変更を伴うため）。構想から計画へは協議で進めてよい。
+- `/muse-inquiries`のケース一覧と詳細に段階を表示する。
 
 ## 問い合わせの進め方
 
@@ -59,6 +74,10 @@
 4. 得たキーを予備知識に登録する
 
 聞く順番は、止まるものが先、依存されるものが先、解決条件に近いものが先、変更は最後。未確認キーは、問いに実際に答えが返ったときだけ閉じる。回答が返っただけでは閉じない。
+
+## 発議のルール（2026-11-08に採用）
+
+議題（`inquiry_cases`）を新しく作る前に、全期間・全状態の議題を検索し、同一の議題が解決済みにも未解決にも無いことを確かめて、`inquiry_entries`の`seq = 0`に記録する。同一の議題があれば、新しく起こさずにその続きにする。1回の作業で自分から発議するのは20件まで。発議するときは段階（`stage`）も入れる。MuseはD1を読めないので、本体側が代わりに発議する。詳細は[SPEC](SPEC.cloudflare-workers-github-oauth-1.20261108.proposal-rule.md)。
 
 ## 勘
 

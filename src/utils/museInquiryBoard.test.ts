@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadInquiryBoard, loadInquiryCase, INQUIRY_CASE_ID_RE, INQUIRY_PHASES } from './museInquiryBoard';
+import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE, INQUIRY_PHASES, INQUIRY_STAGES } from './museInquiryBoard';
 
 // ユーザー指定(2026-11-07): Museとの協議内容(D1 agent-inquiries)を、本体ワーカーのページでカンバン形式に表示する。
 // 列はフェーズ(協議・未解決の論点・提案・採用・完了・不採用)、各列に提案や協議内容のパネルを並べ、パネルから詳細を開く。
@@ -25,7 +25,7 @@ function fakeDb(tables: Record<string, Row[]>) {
   return { db: db as unknown as D1Database, calls };
 }
 
-const CASE = { id: 'bridge-jobs-queue-20261107', goal: 'キューを読む', status: 'open', created_at: '2026-11-07T19:50:00Z', resolved_at: null, entries: 2, last_asked_at: '2026-11-07T20:30:00Z', duration_seconds: 313, open_keys: 1, blocking_open_keys: 0, proposed: 1 };
+const CASE = { id: 'bridge-jobs-queue-20261107', goal: 'キューを読む', status: 'open', stage: 'plan', created_at: '2026-11-07T19:50:00Z', resolved_at: null, entries: 2, last_asked_at: '2026-11-07T20:30:00Z', duration_seconds: 313, open_keys: 1, blocking_open_keys: 0, proposed: 1 };
 const TABLES = {
   inquiry_cases: [CASE],
   inquiry_entries: [
@@ -42,8 +42,10 @@ const TABLES = {
 };
 
 describe('協議のカンバンのデータ', () => {
-  it('フェーズは協議・未解決の論点・提案・採用・完了・不採用の順', () => {
-    expect(INQUIRY_PHASES.map((p) => p.key)).toEqual(['inquiry', 'open-keys', 'proposed', 'adopted', 'done', 'rejected']);
+  // ユーザー指定(2026-11-08): 回答済み(と失敗)の問い合わせは、協議の列のすぐ右の専用の列に分ける。
+  it('フェーズは協議・回答済みの問い合わせ・未解決の論点・提案・採用・完了・不採用の順', () => {
+    expect(INQUIRY_PHASES.map((p) => p.key)).toEqual(['inquiry', 'answered', 'open-keys', 'proposed', 'adopted', 'done', 'rejected']);
+    expect(INQUIRY_PHASES.find((p) => p.key === 'answered')!.label).toBe('回答済み・失敗の問い合わせ');
   });
 
   it('各フェーズにパネルを振り分け、ケースの集計(提案数・問い合わせ数など)を返す。回答の全文は読まない', async () => {
@@ -51,12 +53,15 @@ describe('協議のカンバンのデータ', () => {
     const board = await loadInquiryBoard(db);
     // パネルは型ごとに項目が違うため、テストでは項目を自由に読む
     const phase = (key: string) => board.phases.find((p) => p.key === key)! as unknown as { panels: Array<Record<string, unknown>> };
-    expect(phase('inquiry').panels.map((p) => p.type + ':' + p.seq)).toEqual(['entry:2', 'entry:1']);
-    expect(phase('inquiry').panels[0]).toMatchObject({ caseId: CASE.id, title: '協議する', summary: '役割を分ける', durationSeconds: 145 });
+    // ユーザー指定(2026-11-08): カードは今の状態に合った列に置く。回答済みの問い合わせは協議の列に残さず、完了の列へ。
+    expect(phase('inquiry').panels).toEqual([]);
+    expect(phase('answered').panels.map((p) => p.type + ':' + p.seq)).toEqual(['entry:2', 'entry:1']);
+    expect(phase('done').panels.filter((p) => p.type === 'entry')).toEqual([]);
+    expect(phase('answered').panels[0]).toMatchObject({ caseId: CASE.id, title: '協議する', summary: '役割を分ける', durationSeconds: 145 });
     expect(phase('open-keys').panels).toEqual([expect.objectContaining({ type: 'key', id: 'k1', kind: 'pitfall', title: '排他が無い', mutating: true })]);
     expect(phase('proposed').panels).toEqual([expect.objectContaining({ type: 'proposal', id: 'p1', title: 'renameで排他', entryId: CASE.id + '-e2' })]);
     expect(phase('adopted').panels.map((p) => p.id)).toEqual(['p2']);
-    expect(phase('done').panels.map((p) => p.id)).toEqual(['p3']);
+    expect(phase('done').panels.filter((p) => p.type === 'proposal').map((p) => p.id)).toEqual(['p3']);
     expect(phase('rejected').panels[0]).toMatchObject({ id: 'p4', reason: '混合コンテンツに当たらない' });
     expect(board.cases[0]).toMatchObject({ id: CASE.id, entries: 2, openKeys: 1, proposed: 1, durationSeconds: 313 });
     expect(calls.some((c) => /\banswer\b/.test(c.sql))).toBe(false);
@@ -92,11 +97,76 @@ describe('協議のカンバンのデータ', () => {
     expect(calls.every((c) => c.params[0] === CASE.id)).toBe(true);
   });
 
+  it('問い合わせは、回答待ち・未送信なら協議の列、回答済み・失敗なら回答済みの問い合わせの列に置く', async () => {
+    const e = (seq: number, status: string) => ({ ...TABLES.inquiry_entries[0], id: 'e' + seq, seq, status, created_at: '2026-11-08T00:0' + seq + ':00Z' });
+    const { db } = fakeDb({ ...TABLES, inquiry_entries: [e(1, 'sent'), e(2, 'planned'), e(3, 'answered'), e(4, 'failed')] });
+    const board = await loadInquiryBoard(db);
+    const seqs = (key: string) => (board.phases.find((p) => p.key === key)!.panels as Array<Record<string, unknown>>).filter((p) => p.type === 'entry').map((p) => p.seq);
+    expect(seqs('inquiry')).toEqual([1, 2]);
+    expect(seqs('answered')).toEqual([3, 4]);
+    expect(seqs('done')).toEqual([]);
+  });
+
+  // ユーザー指定(2026-11-08): 議題を段階(構想・計画・実装・試験運用)で区別する。状態(open・resolved・abandoned)とは別の列。
+  it('議題の段階は構想・計画・実装・試験運用の順で、ケースのstageを読む。未知の値や未設定はnull', async () => {
+    expect(INQUIRY_STAGES).toEqual(['concept', 'plan', 'implementation', 'trial']);
+    const { db, calls } = fakeDb({ ...TABLES, inquiry_cases: [CASE, { ...CASE, id: 'x-20261108', stage: 'bogus' }, { ...CASE, id: 'y-20261108', stage: null }] });
+    const board = await loadInquiryBoard(db);
+    expect(board.cases.map((c) => c.stage)).toEqual(['plan', null, null]);
+    expect(calls.some((c) => /\bc\.stage\b/.test(c.sql))).toBe(true);
+  });
+
   it('存在しないケースはnull、IDの形式は英数字とハイフンだけを受け付ける', async () => {
     const { db } = fakeDb({ inquiry_cases: [] });
     expect(await loadInquiryCase(db, 'none-20261107')).toBeNull();
     expect(INQUIRY_CASE_ID_RE.test('bridge-jobs-queue-20261107')).toBe(true);
     expect(INQUIRY_CASE_ID_RE.test("x' OR 1=1")).toBe(false);
     expect(INQUIRY_CASE_ID_RE.test('')).toBe(false);
+  });
+});
+
+// ユーザー指定(2026-11-08): 採否待ちの提案のモーダルから、その場で採用・不採用を記録する。採用は判断の記録だけで、実行は始めない。
+function decisionDb(proposal: Row | null, changes = 1) {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      let params: unknown[] = [];
+      const stmt = {
+        bind(...p: unknown[]) { params = p; return stmt; },
+        async first() { calls.push({ sql, params }); return proposal; },
+        async run() { calls.push({ sql, params }); return { meta: { changes } }; },
+      };
+      return stmt;
+    },
+  };
+  return { db: db as unknown as D1Database, calls };
+}
+
+describe('提案の採否の記録', () => {
+  const NOW = new Date('2026-11-08T02:00:00Z');
+  it('採否待ちの提案だけを、条件付きのUPDATE1文で採用にし、誰がいつ画面で決めたかを理由の先頭に足す', async () => {
+    const { db, calls } = decisionDb({ id: 'p1', status: 'proposed', reason: '利用者が決める' });
+    const result = await decideInquiryProposal(db, 'p1', 'adopted', 'これで進める', 'okiraku', NOW);
+    expect(result).toEqual({ ok: true, status: 'adopted' });
+    const update = calls.find((c) => /^UPDATE inquiry_proposals/.test(c.sql))!;
+    expect(update.sql).toMatch(/WHERE id = \?3 AND status = 'proposed'/);
+    expect(update.params).toEqual(['adopted', '［2026-11-08T02:00:00Z okirakuが/muse-inquiriesで採用］ これで進める / 以前の理由: 利用者が決める', 'p1']);
+  });
+  it('不採用も記録でき、メモと以前の理由が無ければ見出しだけを書く', async () => {
+    const { db, calls } = decisionDb({ id: 'p2', status: 'proposed', reason: null });
+    expect(await decideInquiryProposal(db, 'p2', 'rejected', '  ', 'okiraku', NOW)).toEqual({ ok: true, status: 'rejected' });
+    expect(calls.find((c) => /^UPDATE/.test(c.sql))!.params[1]).toBe('［2026-11-08T02:00:00Z okirakuが/muse-inquiriesで不採用］');
+  });
+  it('無い提案はnot_found、採否待ちでない提案や更新の競合はnot_pending、不正な入力はinvalidで、書き込まない', async () => {
+    expect(await decideInquiryProposal(decisionDb(null).db, 'none', 'adopted', '', 'u', NOW)).toMatchObject({ ok: false, errorCode: 'not_found' });
+    const done = decisionDb({ id: 'p3', status: 'done', reason: null });
+    expect(await decideInquiryProposal(done.db, 'p3', 'adopted', '', 'u', NOW)).toMatchObject({ ok: false, errorCode: 'not_pending' });
+    expect(done.calls.some((c) => /^UPDATE/.test(c.sql))).toBe(false);
+    expect(await decideInquiryProposal(decisionDb({ id: 'p4', status: 'proposed', reason: null }, 0).db, 'p4', 'adopted', '', 'u', NOW)).toMatchObject({ ok: false, errorCode: 'not_pending' });
+    const bad = decisionDb({ id: 'p5', status: 'proposed', reason: null });
+    expect(await decideInquiryProposal(bad.db, 'p5', 'done' as never, '', 'u', NOW)).toMatchObject({ ok: false, errorCode: 'invalid' });
+    expect(await decideInquiryProposal(bad.db, "x' OR 1=1", 'adopted', '', 'u', NOW)).toMatchObject({ ok: false, errorCode: 'invalid' });
+    expect(await decideInquiryProposal(bad.db, 'p5', 'adopted', 'あ'.repeat(1001), 'u', NOW)).toMatchObject({ ok: false, errorCode: 'invalid' });
+    expect(bad.calls).toEqual([]);
   });
 });
