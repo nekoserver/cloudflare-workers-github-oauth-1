@@ -191,6 +191,72 @@ describe('Museとの協議のカンバン', () => {
     expect(document.querySelectorAll('#inq-board [data-panel]')).toHaveLength(4);
   });
 
+  // ユーザー指定(2026-11-08): 表やカードにMarkdownの記号(バッククォート・コードブロックの囲み・見出しの#・太字の**)がそのまま出て、3行で切れてコードブロックも崩れていた。
+  // 一覧は記号を外した平文で出し、詳細のモーダルは従来どおりMarkdownとして描く。
+  // ユーザー指定(2026-11-08): 構想段階の議題がどう肉付けされたかを追える「経緯」をケースの詳細に置く。
+  // Muse(muse-2f4d62a8)の案: 1行=1問い合わせでseq順。論点は開いた・閉じた行、提案は発端の行にバッジで出す。要約(info・progress)だけを出し、全文は展開で読む。
+  it('ケースの詳細で「項目別」と「経緯」を切り替え、経緯では問い合わせ順に要約と、開いた・閉じた論点、出た提案を並べる', async () => {
+    const BT = String.fromCharCode(96);
+    const detail = {
+      ...DETAIL,
+      entries: [
+        { ...DETAIL.entries[1], info: '', progress: '', answer: '# 見出し' + String.fromCharCode(10) + BT + 'outcome' + BT + 'を足す' + String.fromCharCode(10) + '二行目' + String.fromCharCode(10) + '三行目' },
+        DETAIL.entries[0],
+      ],
+      keys: [
+        { id: 'k1', kind: 'unknown', text: '読めるか', status: 'closed', blocking: false, mutating: false, openedByEntryId: CASE_ID + '-e1', closedByEntryId: CASE_ID + '-e2' },
+        { id: 'k9', kind: 'pitfall', text: '結び先なし', status: 'open', blocking: false, mutating: false, openedByEntryId: null, closedByEntryId: null },
+      ],
+      proposals: [{ id: 'p1', proposedBy: 'muse', text: 'renameで**排他**', status: 'adopted', reason: null, entryId: CASE_ID + '-e2', createdAt: '2026-11-07T20:31:00Z' }],
+    };
+    const fetchJson = vi.fn(async (url: string) => url === '/api/muse-inquiries/board' ? BOARD : detail);
+    await script.initMuseInquiriesPage({ document, fetchJson });
+    (document.querySelector('[data-case-summary="' + CASE_ID + '"]') as HTMLElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('[data-detail-view="timeline"]')).not.toBeNull());
+    const byItem = modal().querySelector<HTMLButtonElement>('[data-detail-view="items"]')!;
+    const timelineButton = modal().querySelector<HTMLButtonElement>('[data-detail-view="timeline"]')!;
+    expect(byItem.getAttribute('aria-pressed')).toBe('true');
+    expect((modal().querySelector('[data-detail-panel="timeline"]') as HTMLElement).hidden).toBe(true);
+    timelineButton.click();
+    expect(timelineButton.getAttribute('aria-pressed')).toBe('true');
+    expect((modal().querySelector('[data-detail-panel="items"]') as HTMLElement).hidden).toBe(true);
+    const rows = [...modal().querySelectorAll('[data-timeline-entry]')];
+    expect(rows.map((r) => r.getAttribute('data-timeline-entry'))).toEqual(['1', '2']);
+    expect(rows[0].textContent).toContain('前進1');
+    expect(rows[0].querySelector('[data-timeline-key="opened"]')!.textContent).toContain('読めるか');
+    expect(rows[1].querySelector('[data-timeline-key="closed"]')!.textContent).toContain('読めるか');
+    const proposal = rows[1].querySelector('[data-timeline-proposal]')!;
+    expect(proposal.textContent).toContain('renameで排他');
+    expect(proposal.textContent).toContain('採用');
+    const summary = rows[1].querySelector('.inq-timeline-summary')!.textContent || '';
+    expect(summary).toBe('見出し outcomeを足す');
+    expect(summary).not.toContain(BT);
+    expect(rows[1].querySelector('details .inq-markdown')).not.toBeNull();
+    expect(modal().querySelector('[data-timeline-unlinked]')!.textContent).toContain('結び先なし');
+  });
+
+  it('完了表とカードではMarkdownの記号を外した平文を出し、詳細ではMarkdownとして描く', async () => {
+    const BT = String.fromCharCode(96);
+    const md = ['# レビューの見出し', '', '- ' + BT + 'outcome' + BT + 'を**足す**', BT + BT + BT + 'sql', 'SELECT 1;', BT + BT + BT, '> 引用の行'].join(String.fromCharCode(10));
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'done' ? { ...p, panels: [
+      { type: 'proposal', caseId: CASE_ID, id: 'p-md', title: md, status: 'done', proposedBy: 'codex', reason: null, entryId: null, createdAt: '2026-11-08T00:00:00Z', sourceEntry: null },
+    ] } : p) };
+    const fetchJson = vi.fn(async (url: string) => url === '/api/muse-inquiries/board' ? board : DETAIL);
+    await script.initMuseInquiriesPage({ document, fetchJson });
+    const row = document.querySelector('[data-history-key="proposal:' + CASE_ID + ':p-md"]')!;
+    const cell = row.querySelector('.inq-history-title')!;
+    const card = document.querySelector('#inq-board [data-panel] .inq-panel-title');
+    const cardTitles = [...document.querySelectorAll('#inq-board .inq-panel-title')].map((n) => n.textContent || '');
+    const cardText = cardTitles.find((t) => t.includes('レビューの見出し'))!;
+    for (const text of [cell.textContent || '', cardText]) {
+      expect(text).toBe('レビューの見出し outcomeを足す SELECT 1; 引用の行');
+    }
+    expect(card).not.toBeNull();
+    (cell as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('.inq-markdown code')).not.toBeNull());
+    expect(modal().querySelector('.inq-markdown pre')!.textContent).toContain('SELECT 1;');
+  });
+
   it('完了表でも同一IDを重ねず、日時や発端のない記録は推測せず表示する', async () => {
     const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'done' ? { ...p, panels: [
       { type: 'proposal', caseId: CASE_ID, id: 'no-origin', title: '<img src=x>単独の提案', status: 'done', proposedBy: 'muse', reason: null, entryId: null },

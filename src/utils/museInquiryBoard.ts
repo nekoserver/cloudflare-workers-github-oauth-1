@@ -55,10 +55,9 @@ function toCard(row: Row): InquiryCard {
   };
 }
 
-/** カンバンの列(フェーズ)。協議→回答済みの問い合わせ→未解決の論点→提案→採用→完了、と、見送った提案。 */
+/** カンバンの列(フェーズ)。協議→未解決の論点→提案→採用→完了、と、見送った提案。回答済み・失敗の問い合わせは完了の列(ユーザー指定、2026-11-08午後)。 */
 export const INQUIRY_PHASES = [
   { key: 'inquiry', label: '協議（問い合わせ）' },
-  { key: 'answered', label: '回答済み・失敗の問い合わせ' },
   { key: 'open-keys', label: '未解決の論点' },
   { key: 'proposed', label: '提案（採否待ち）' },
   { key: 'adopted', label: '採用・実施中' },
@@ -84,11 +83,11 @@ export async function loadInquiryBoard(db: D1Database): Promise<{ cases: Inquiry
     db.prepare("SELECT case_id, id, kind, text, status, blocking, mutating FROM inquiry_keys WHERE status = 'open' ORDER BY blocking DESC, created_at").all<Row>(),
     db.prepare('SELECT case_id, id, entry_id, proposed_by, text, status, reason, created_at FROM inquiry_proposals ORDER BY created_at DESC, id').all<Row>(),
   ]);
-  const panels: Record<InquiryPhaseKey, InquiryPanel[]> = { inquiry: [], answered: [], 'open-keys': [], proposed: [], adopted: [], done: [], rejected: [] };
+  const panels: Record<InquiryPhaseKey, InquiryPanel[]> = { inquiry: [], 'open-keys': [], proposed: [], adopted: [], done: [], rejected: [] };
   const entriesById = new Map((entries ?? []).filter((e) => e.id).map((e) => [str(e.id), e]));
   for (const e of entries ?? []) {
-    // カードは今の状態に合った列に置く(ユーザー指定、2026-11-08)。回答済み・失敗は協議の列に残さず、その右の専用の列へ。
-    panels[ENTRY_DONE_STATUSES.includes(str(e.status)) ? 'answered' : 'inquiry'].push({
+    // カードは今の状態に合った列に置く(ユーザー指定、2026-11-08)。回答済み・失敗は、カードの「完了」の印と同じ完了の列へ。
+    panels[ENTRY_DONE_STATUSES.includes(str(e.status)) ? 'done' : 'inquiry'].push({
       type: 'entry', caseId: str(e.case_id), seq: num(e.seq), title: str(e.clue), summary: str(e.info), status: str(e.status),
       durationSeconds: e.duration_seconds === null || e.duration_seconds === undefined ? null : num(e.duration_seconds), createdAt: str(e.created_at), agent: str(e.agent),
     });
@@ -116,8 +115,8 @@ export async function loadInquiryCase(db: D1Database, caseId: string) {
   if (!caseRows?.length) return null;
   const [{ results: entries }, { results: keys }, { results: proposals }] = await Promise.all([
     db.prepare('SELECT id, seq, clue, asked_by, agent, ask_id, question, answer, info, progress, status, error, duration_seconds, created_at FROM inquiry_entries WHERE case_id = ? ORDER BY seq').bind(caseId).all<Row>(),
-    db.prepare('SELECT id, kind, text, status, blocking, mutating FROM inquiry_keys WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
-    db.prepare('SELECT id, entry_id, proposed_by, text, status, reason FROM inquiry_proposals WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
+    db.prepare('SELECT id, kind, text, status, blocking, mutating, opened_by_entry_id, closed_by_entry_id FROM inquiry_keys WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
+    db.prepare('SELECT id, entry_id, proposed_by, text, status, reason, created_at FROM inquiry_proposals WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
   ]);
   return {
     case: toCard(caseRows[0]),
@@ -127,8 +126,9 @@ export async function loadInquiryCase(db: D1Database, caseId: string) {
       status: str(e.status), error: strOrNull(e.error), durationSeconds: e.duration_seconds === null || e.duration_seconds === undefined ? null : num(e.duration_seconds),
       createdAt: str(e.created_at),
     })),
-    keys: (keys ?? []).map((k) => ({ id: str(k.id), kind: str(k.kind), text: str(k.text), status: str(k.status), blocking: num(k.blocking) === 1, mutating: num(k.mutating) === 1 })),
-    proposals: (proposals ?? []).map((p) => ({ id: str(p.id), proposedBy: str(p.proposed_by), text: str(p.text), status: str(p.status), reason: strOrNull(p.reason), entryId: strOrNull(p.entry_id) })),
+    keys: (keys ?? []).map((k) => ({ id: str(k.id), kind: str(k.kind), text: str(k.text), status: str(k.status), blocking: num(k.blocking) === 1, mutating: num(k.mutating) === 1,
+      openedByEntryId: strOrNull(k.opened_by_entry_id), closedByEntryId: strOrNull(k.closed_by_entry_id) })),
+    proposals: (proposals ?? []).map((p) => ({ id: str(p.id), proposedBy: str(p.proposed_by), text: str(p.text), status: str(p.status), reason: strOrNull(p.reason), entryId: strOrNull(p.entry_id), createdAt: strOrNull(p.created_at) })),
   };
 }
 
