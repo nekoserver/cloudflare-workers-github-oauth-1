@@ -96,7 +96,33 @@
 
 承認前に、案のSQLを`migrations-agent-inquiries/`の全マイグレーション（0010まで）の上にSQLite（`node:sqlite`、外部キー有効）で当て、10通りが期待どおりになることを確かめた（2026-11-08）: 正しい効き方は入る、知らない効き方・同じ組の二重・自分自身・台帳に無い出どころ・`id`のNULLは拒否、段が違えば別の行、関連に使われている台帳の行は消せない、`inquiry_unused`の同じ組の二重は拒否。承認後は0011を書く前に`scripts/agent-inquiries-contributions.test.mjs`（7件）を書き、失敗を確かめてから実装した。既存の行の書き込み、トリガー、連鎖削除での`deleted_at`、作り直しでの復帰、外部の出どころ、効き方と段の制約、仮と確かめた印、生きなかったものを確かめている。本番のD1では確かめていない。
 
-## 8. 注意事項
+## 8. ルールに適合しているかの点検と、直した件数（案。採否待ち、提案`ce-p5`）
+
+**対象**: 4章の物差し（ルール・外部の基準）をコードに当てた点検と、見つかった箇所の状態 — 利用者の要望（2026-11-08）「そのルールに適合してるかどうかをチェックして修正した件数なんかをカウントできる仕組みもほしい」。`ce-k16`（候補数・確認済み数・確認待ちを分けて持つ）を含む。
+
+```sql
+CREATE TABLE IF NOT EXISTS inquiry_rule_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL REFERENCES inquiry_records(id), target_ref TEXT NOT NULL, method TEXT NOT NULL, candidates INTEGER NOT NULL CHECK (candidates >= 0), checked_by TEXT NOT NULL, checked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL);
+CREATE TABLE IF NOT EXISTS inquiry_rule_findings (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL REFERENCES inquiry_records(id), location TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate' CHECK (status IN ('candidate', 'violation', 'not_violation', 'fixed', 'exception')), found_check_id INTEGER NOT NULL REFERENCES inquiry_rule_checks(id), fixed_by_id TEXT REFERENCES inquiry_records(id), fixed_at TEXT, judged_by TEXT, note TEXT, CHECK ((status = 'fixed') = (fixed_by_id IS NOT NULL AND fixed_at IS NOT NULL)), UNIQUE (rule_id, location));
+```
+
+| 表 | 役割 |
+|---|---|
+| `inquiry_rule_checks` | 点検1回分。どのルール（台帳の`rule:`・`ext:`）を、どの対象（`target_ref`、例 `nekoserver/cloudflare-workers-github-oauth-1@<フルSHA>:src/`）に、どの方法（`method`、検索の条件をそのまま）で当て、候補が何件だったか |
+| `inquiry_rule_findings` | 見つかった箇所1件ずつ。`candidate`（候補）→`violation`（違反と確定）か`not_violation`（違反でない）→`fixed`（直した。直したコミットを台帳の`commit:`で結ぶ）か`exception`（例外として認めた。理由を`note`に） |
+
+数えられるもの:
+
+- 直した件数: ルールごと・期間ごとの`status = 'fixed'`の数。直したコミットから、どのPR・議題の成果かもたどれる（`task-commit-link`の結論を使う）
+- 守れているかの推移: 同じ`method`で点検を流し直したときの`candidates`の変化
+- 確認待ち: `candidate`のまま残っている数。候補数を違反数として数えない（`ce-k16`）
+
+注意:
+
+- `location`は`ファイル:行`だと、コードの変更で行がずれる。同じ箇所を追うには、点検のたびに位置を確かめ直す必要がある。関数名を含める（`src/views/status.ts:openModal`など）かは実装のときに決める
+- 2026-11-08の点検（`ce-c7`の認証、`ce-c8`のCLAUDE.mdのルール）を、最初の点検として書き込める
+- 点検の自動化（`method`の検索を定期的に流す）は、この表とは別に決める
+
+## 9. 注意事項
 
 - 台帳の`id`は、元の表をまたいで一意とは限らないIDに`kind`の接頭辞を付けて一意にする（Codex: 各表のIDが表をまたいで一意とは仮定しない）。
 - `inquiry_knowledge_effect`のビューは`planned`・`withdrawn`を除いていない（`ce-k3`）。5章の集計では0005と同じく除く。
