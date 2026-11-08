@@ -18,8 +18,8 @@ export function getConversationStreamToggle(): string {
 export function getConversationStreamPanel(config: ConversationStreamRoutes | null = resolveConversationStreamRoutes(), configError?: string): string {
   const routes = config?.routes ?? [];
   const options = routes.map(route => `<option value="${escapeHtml(route.id)}">${escapeHtml(route.label)}</option>`).join('\n        ');
-  const embedUrls = Object.fromEntries(routes.map(route => [route.id, route.endpoints.embed]));
-  const labels = Object.fromEntries(routes.map(route => [route.id, route.label]));
+  const embedUrls = { worker: '/aichat/worker-stream', ...Object.fromEntries(routes.map(route => [route.id, route.endpoints.embed])) };
+  const labels = { worker: 'Worker', ...Object.fromEntries(routes.map(route => [route.id, route.label])) };
   const errorNotice = configError ? `<p id="conversationStreamConfigError" class="conversation-stream-config-error" role="alert">${escapeHtml(configError)}</p>` : '';
   return `<style>
     .conversation-stream-panel { position: fixed; top: var(--aichat-navbar-height, 44px); right: 0; bottom: 0; z-index: 190; width: min(420px, 100%); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-left: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); overflow: hidden; }
@@ -57,6 +57,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       <select id="conversationStreamHost" aria-label="ストリーム接続先の値" hidden tabindex="-1">
         <option value="auto" selected>自動</option>
         ${options}
+        <option value="worker">Worker</option>
       </select>
       </span>
       <span id="conversationStreamHostStatus" role="status" aria-live="polite">自動</span>
@@ -80,6 +81,20 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
     var hostPicker = document.getElementById('conversationStreamHostPicker');
     var hostOptions = document.getElementById('conversationStreamHostOptions');
     var hostChoices = {};
+    var workerHealthy = false;
+    var workerCheck = null;
+    function probeWorker() {
+      if (workerCheck) return workerCheck;
+      if (panel.hidden || document.hidden) return Promise.resolve();
+      workerCheck = (async function() { try {
+        var res = await fetch('/api/aichat/conversation-stream/worker-health', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+        var data = res.ok ? await res.json() : null;
+        workerHealthy = !!(data && data.healthy === true && data.service === 'worker-conversation-stream');
+      } catch (e) { workerHealthy = false; }
+      finally { renderHostOptions(); }
+      })().finally(function() { workerCheck = null; });
+      return workerCheck;
+    }
     function setHostMenuOpen(open, restoreFocus) {
       hostOptions.hidden = !open;
       hostPicker.setAttribute('aria-expanded', String(open));
@@ -102,7 +117,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       hostChoices[option.value] = choice;
       hostOptions.appendChild(choice);
     });
-    hostPicker.addEventListener('click', function () { setHostMenuOpen(hostOptions.hidden, false); });
+    hostPicker.addEventListener('click', function () { setHostMenuOpen(hostOptions.hidden, false); probeWorker(); });
     hostPicker.addEventListener('keydown', function (event) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setHostMenuOpen(true, false); }
     });
@@ -132,7 +147,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
     var embedUrls = ${scriptJson(embedUrls)};
     var hostLabels = ${scriptJson(labels)};
     if (${configError ? 'true' : 'false'}) toggle.disabled = true;
-    var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
+    var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1], location.href).origin]; }));
     var protocol = 'websocket';
     var healthTimer = null;
     var checkingHealth = false;
@@ -151,6 +166,12 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
         option.dataset.streamState = automatic ? state : 'manual';
         option.title = automatic ? label + ' — ' + (connected ? '接続済み' : available ? '接続可能（認証が必要な場合があります）' : availabilityKnown ? '接続不可' : '接続状況を確認できません') : label;
         var choice = hostChoices[option.value];
+        if (option.value === 'worker') {
+          option.style.color = workerHealthy ? '#16a34a' : '#9ca3af';
+          option.dataset.streamState = workerHealthy ? 'available' : 'unavailable';
+          option.title = workerHealthy ? 'Worker — 接続可能' : 'Worker — 接続を確認できません';
+          if (hostPreference === 'worker') hostPicker.style.color = option.style.color;
+        }
         choice.textContent = option.textContent;
         choice.style.color = option.style.color;
         choice.dataset.streamState = option.dataset.streamState;
@@ -158,6 +179,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
         choice.setAttribute('aria-label', option.title);
         choice.setAttribute('aria-selected', String(option.value === hostPreference));
       });
+      if (hostPreference !== 'worker') hostPicker.style.color = '';
     }
     function applyHealth(data) {
       latestHealth = data;
@@ -254,9 +276,16 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
         return;
       }
       activeHost = host;
+      buttons.forEach(function(button) { button.disabled = host === 'worker'; });
       renderHostOptions();
       hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + hostLabels[host];
-      var url = new URL(embedUrls[host]);
+      if (host === 'worker') {
+        await probeWorker();
+        if (generation !== loadGeneration || panel.hidden || document.hidden) return;
+        if (!workerHealthy) { hostStatus.textContent = 'Worker: 接続を確認できません'; return; }
+        toggle.setAttribute('data-server-state', 'healthy');
+      }
+      var url = new URL(embedUrls[host], location.href);
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());
       frame.src = url.href;
@@ -283,6 +312,7 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       toggle.setAttribute('aria-expanded', String(open));
       toggle.setAttribute('aria-pressed', String(open));
       document.body.classList.toggle('conversation-stream-open', open);
+      if (open) probeWorker();
       if (open && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else load(); }
       else suspendStream();
       renderHostOptions();
@@ -290,10 +320,26 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
     frame.addEventListener('load', function () {
       if (!panel.hidden && frame.getAttribute('src') && activeHost) frame.contentWindow.postMessage({ type: 'conversation-controls' }, origins[activeHost]);
     });
+    function sendWorkerSnapshot() {
+      if (activeHost !== 'worker' || panel.hidden || document.hidden || !frame.getAttribute('src')) return;
+      var log = document.getElementById('chatLog');
+      var turns = log ? Array.from(log.querySelectorAll('.chat-bubble')).map(function(bubble) {
+        var copy = bubble.cloneNode(true);
+        copy.querySelectorAll('button,script,style').forEach(function(el) { el.remove(); });
+        return { role: bubble.classList.contains('user') ? 'user' : bubble.classList.contains('thinking') ? 'thinking' : 'assistant', text: copy.textContent || '' };
+      }) : [];
+      frame.contentWindow.postMessage({ type: 'conversation-snapshot', turns: turns }, location.origin);
+    }
+    function observeWorkerChat() {
+      var log = document.getElementById('chatLog');
+      if (log) new MutationObserver(sendWorkerSnapshot).observe(log, { childList: true, subtree: true, characterData: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeWorkerChat, { once: true }); else observeWorkerChat();
     start.addEventListener('click', function () { if (activeHost) frame.contentWindow.postMessage({ type: 'conversation-start' }, origins[activeHost]); });
     stop.addEventListener('click', function () { if (activeHost) frame.contentWindow.postMessage({ type: 'conversation-stop' }, origins[activeHost]); });
     window.addEventListener('message', function (event) {
       if (!activeHost || event.origin !== origins[activeHost] || event.source !== frame.contentWindow || panel.hidden) return;
+      if (activeHost === 'worker' && event.data && event.data.type === 'conversation-ready') sendWorkerSnapshot();
       if (event.data && event.data.type === 'conversation-state' && typeof event.data.busy === 'boolean') {
         connectedHost = activeHost;
         renderHostOptions();

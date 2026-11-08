@@ -18,7 +18,7 @@ it('never probes while closed, stops after close, and resumes only on explicit o
     expect(probe).not.toHaveBeenCalled();
     d.getElementById('conversationStreamToggle')!.click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).toHaveBeenCalledTimes(2);
     expect(d.getElementById('conversationStreamFrame')!.getAttribute('src')).toContain('mygw.');
     d.getElementById('conversationStreamClose')!.click();
     const calls = probe.mock.calls.length;
@@ -27,7 +27,7 @@ it('never probes while closed, stops after close, and resumes only on explicit o
     expect(d.getElementById('conversationStreamFrame')!.hasAttribute('src')).toBe(false);
     d.getElementById('conversationStreamToggle')!.click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(probe).toHaveBeenCalledTimes(calls + 1);
+    expect(probe).toHaveBeenCalledTimes(calls + 2);
   } finally { dom.window.close(); vi.useRealTimers(); }
 });
 
@@ -43,7 +43,7 @@ it('does not probe other hosts when a manual destination is selected', async () 
     select.value = 'redmine'; select.dispatchEvent(new dom.window.Event('change'));
     d.getElementById('conversationStreamToggle')!.click();
     await Promise.resolve();
-    expect(probe).not.toHaveBeenCalled();
+    expect(probe.mock.calls.map(call => call[0])).toEqual(['/api/aichat/conversation-stream/worker-health']);
     expect(d.getElementById('conversationStreamFrame')!.getAttribute('src')).toContain('r9.');
   } finally { dom.window.close(); }
 });

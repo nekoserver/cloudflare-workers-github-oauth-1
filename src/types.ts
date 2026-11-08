@@ -82,6 +82,12 @@ export type Bindings = {
    * コンテナのenvVarsには入れず、要求ごとにAuthorizationで渡す(src/utils/museDirectAsk.ts)。
    */
   MUSE_API_KEY?: string;
+  /** Worker-owned tailnet node; default route for prefixless Muse input. */
+  TAILSCALE_WASM?: DurableObjectNamespace;
+  /** Optional dedicated key; otherwise use the existing TAILSCALE_AUTHKEY for this route. */
+  TAILSCALE_WASM_AUTHKEY?: string;
+  MUSE_GADGET_SDK_TOKEN?: string;
+  MUSE_GADGET_RELAY_URL?: string;
   /** デモコンテナのsshのed25519ホスト秘密鍵(base64)。未設定時は起動のたびに新しい鍵になる。 */
   SSH_HOST_ED25519_KEY_B64?: string;
   /** デモコンテナのauthorized_keysへ足す公開鍵。改行か;で区切る。 */

@@ -1,6 +1,12 @@
+import { renderTailscaleWasmPage } from './views/tailscaleWasm';
+import { fetchWorkerMuseCost } from './utils/workerMuseCost';
+import { TailscalePageTools } from './utils/tailscalePageTools';
+import { getWorkerConversationStreamPage } from './views/workerConversationStream';
+import { resolveMuseTransport, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
 import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
+import { requestT3PairingHandoff } from './utils/t3PairingHandoff';
 /**
  * Cloudflare Workers GitHub OAuth
  * GitHub OAuthとJWT認証の実装
@@ -6993,6 +6999,15 @@ app.get('/md-preview', (c) => {
 });
 
 /** 埋め込み先の死活確認（認証が必要）。 */
+app.get('/api/aichat/conversation-stream/worker-health', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ healthy: true, service: 'worker-conversation-stream' });
+});
+app.get('/aichat/worker-stream', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'");
+  return c.html(getWorkerConversationStreamPage());
+});
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   let routes: ConversationStreamRoutes;
@@ -7011,9 +7026,11 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 /** /aichatの入力窓の枠色に使うMuseの死活確認（認証が必要）。停止中のコンテナは起動しない。 */
 app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
+  const transport = resolveMuseTransport(c.req.header('Cookie') || '');
+  if (transport === 'worker') return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport });
   const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
   const connected = await checkMuseTailscale(async () => stub);
-  return c.json({ healthy: connected && stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false });
+  return c.json({ healthy: connected && stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false, transport });
 });
 
 /**
@@ -7092,7 +7109,7 @@ app.get('/aichat', authMiddleware, async (c) => {
   }
   c.header(
     'Content-Security-Policy',
-    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${streamRoutes ? conversationStreamFrameOrigins(streamRoutes) : "'none'"}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src 'self' ${streamRoutes ? conversationStreamFrameOrigins(streamRoutes) : ''}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   const containerRunning = await getAichatContainerRunning(c.env, isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS));
   return c.html(getAiChatPage({
@@ -7202,28 +7219,42 @@ async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName:
 const AICHAT_JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** /api/aichat へ渡すときに引き継ぐヘッダー。認証(Cookie・APIキー)と本文の形式だけ。 */
 const AICHAT_JOB_FORWARD_HEADERS = ['cookie', 'authorization', 'content-type', 'user-agent', 'accept-language'];
-app.post('/api/aichat/jobs', aichatAuthMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
-  const body = await c.req.text();
-  try { JSON.parse(body); } catch { return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400); }
+/** 生成系フォームの共通Durable Object受付。内部APIの宛先は呼び出し側が固定値で指定する。 */
+async function enqueueAichatJob(env: Bindings, owner: string, request: Request, endpoint: '/api/aichat' | '/api/tailscale-wasm/bridge-chat' | '/api/tailscale-wasm/agent-ask', body: string, museTransport?: 'worker' | 'container'): Promise<Response> {
+  if (!env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   for (const name of AICHAT_JOB_FORWARD_HEADERS) {
-    const value = c.req.header(name);
+    const value = request.headers.get(name);
     if (value) headers[name] = value;
   }
+  if (museTransport) {
+    const cookies = (headers.cookie || '').split(';').map(value => value.trim()).filter(Boolean);
+    const index = cookies.findIndex(value => value.startsWith('aichat_muse_signal='));
+    let settings: Record<string, unknown> = {};
+    if (index >= 0) {
+      try { settings = JSON.parse(decodeURIComponent(cookies[index].slice('aichat_muse_signal='.length))) || {}; } catch { settings = {}; }
+      cookies.splice(index, 1);
+    }
+    cookies.push('aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ ...settings, transport: museTransport })));
+    headers.cookie = cookies.join('; ');
+  }
   const jobId = crypto.randomUUID();
-  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const stub = env.AICHAT_JOB.get(env.AICHAT_JOB.idFromName(jobId));
   const res = await stub.fetch('https://aichat-job/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner: user.sub, request: { url: new URL('/api/aichat', c.req.url).toString(), headers, body } }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner, request: { url: new URL(endpoint, request.url).toString(), headers, body } }),
   });
   if (res.status !== 202) {
-    logger.warn('AI chat job start failed', { user: user.sub, status: res.status });
-    return jsonUtf8({ error: 'AIチャットのジョブを開始できませんでした (HTTP ' + res.status + ')' }, 502);
+    logger.warn('AI chat durable task start failed', { user: owner, status: res.status, endpoint });
+    return jsonUtf8({ error: '処理をジョブとして登録できませんでした (HTTP ' + res.status + ')' }, 502);
   }
   return jsonUtf8({ jobId }, 202);
+}
+app.post('/api/aichat/jobs', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.text();
+  try { JSON.parse(body); } catch { return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400); }
+  return enqueueAichatJob(c.env, user.sub, c.req.raw, '/api/aichat', body);
 });
 app.get('/api/aichat/jobs/:jobId', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
@@ -7256,13 +7287,15 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 明示プレフィックスを優先し、Muse選択の通常入力はtailnetへの直接経路(DEMO_CONTAINER → muse-vm)だけを使う。
-  // 2026-11-07 ユーザー指定: tunnels方向へは送らない。Tailscaleを確かめられなければ止める
+  // 明示プレフィックスを優先し、prefixなしのMuse入力はWorker内Tailscale WASMを既定経路にする。
+  // 旧コンテナ直通はユーザーが設定モーダルで選んだときのみ使い、失敗時にtunnelsへは送らない。
   // (AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」: 2つの経路を互いの代替にしない)。
-  const selectedModelInput = !!message && !/^\/(?:neko\b|askmuse(?:\s|$))/i.test(message);
+  const selectedModelInput = !!message && !/^\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(message);
   const selectedMuseInput = body.model === 'muse' && selectedModelInput;
+  const museTransport = resolveMuseTransport(c.req.header('Cookie') || '');
+  if (selectedMuseInput) c.header('X-Muse-Transport', museTransport);
   let museConnectionError: string | undefined;
-  if (selectedMuseInput) {
+  if (selectedMuseInput && museTransport === 'container') {
     try {
       await requireMuseTailscale(() => getDemoContainerStub(c.env), 4_000,
         healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'));
@@ -7581,7 +7614,22 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
     askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
-    askMuseDirect: museDirectDep(c.env, getDemoContainerStub),
+    askMuseDirect: selectedMuseInput && museTransport === 'worker'
+      ? museWorkerDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'))
+      : museDirectDep(c.env, getDemoContainerStub),
+    askMuseGadget: async (prompt) => {
+      if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return { ok: false, error: '管理者権限が必要です' };
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.sub + ':' + (body.threadId || 'default')));
+      const conversationId = 'askmgs-' + Array.from(new Uint8Array(hash).slice(0, 16)).map(x => x.toString(16).padStart(2, '0')).join('');
+      const headers = new Headers({ 'Content-Type': 'application/json', Origin: new URL(c.req.url).origin });
+      for (const name of ['Authorization', 'Cookie']) { const value = c.req.header(name); if (value) headers.set(name, value); }
+      const response = await app.fetch(new Request(new URL('/api/tailscale-wasm/chat', c.req.url), {
+        method: 'POST', headers, body: JSON.stringify({ prompt, conversationId, requestId: crypto.randomUUID() }),
+      }), c.env);
+      const data = await response.json() as { ok?: boolean; reply?: string; error?: string; partial?: boolean };
+      return { ...data, ok: response.ok && data.ok === true };
+    },
+
     loadMentionEditorRuby: c.env.DB ? async (filename) => {
       const row = await c.env.DB!.prepare(
         'SELECT config_json FROM mention_editor_documents WHERE user_id = ? AND title = ? COLLATE NOCASE LIMIT 1'
@@ -20431,6 +20479,126 @@ app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
 
 // /muse-wasm-test: テスト用ページ(ユーザー指定、2026-11-08)。Tailscale WASMでmuse-vmへの到達を定期的に確かめ、
 // 要望はD1 agent-inquiriesのbridge_jobsへ積む(本体コンテナのCLIが片付ける。SPEC bridge-job-queue 12章)。
+app.get('/tailscale-wasm', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+  return c.html(renderTailscaleWasmPage());
+});
+app.get('/api/tailscale-wasm/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const ns = c.env.TAILSCALE_WASM;
+  if (!ns) return c.json({ error: 'tailscale_wasm_not_configured' }, 503);
+  const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/status'));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+});
+function tailscalePageTools(env: Bindings, owner: string) {
+  return new TailscalePageTools(() => getDemoContainerStub(env), askgkDep({ ...env, ASKGK_ROUTE_ID: 'main' }), env.TAILSCALE_WASM ? async engine => {
+    const res = await forwardMuseJobs(env, owner, '/changes?consumer=' + engine);
+    if (!res.ok) throw new Error('handoff unavailable');
+    const data = await res.json() as { cursor: number; events: { state: string; jobId: string; prompt: string; reply: string | null }[] };
+    const context = data.events.filter(e => e.state === 'done').map(e => 'Job '+e.jobId+'\n依頼：'+e.prompt+'\nMuse：'+e.reply).join('\n\n');
+    return { context, acknowledge: async () => (await forwardMuseJobs(env, owner, '/ack?consumer=' + engine, { cursor: data.cursor })).ok };
+  } : undefined);
+}
+app.get('/api/tailscale-wasm/container-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(await tailscalePageTools(c.env, c.get('user').sub).status());
+});
+app.get('/api/tailscale-wasm/cost', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const token = cfApiKey(c.env), account = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !account) return c.json({ error: 'Cloudflare Analyticsの認証設定がありません' }, 503);
+  try { return c.json(await fetchWorkerMuseCost(account, token)); }
+  catch { return c.json({ error: 'Cloudflare Analyticsの使用量を取得できません。権限・接続状態を確認してください。' }, 502); }
+});
+app.get('/api/tailscale-wasm/fleet', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const results = await Promise.allSettled([collectContainerMonitor(c.env, 'cloudflare-api'), c.env.DB ? loadContainerSessions(c.env.DB) : Promise.reject(new Error('DB未設定'))]);
+  return c.json({ fetchedAt: new Date().toISOString(), snapshot: results[0].status === 'fulfilled' ? results[0].value : null, costs: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.flatMap((r, i) => r.status === 'rejected' ? [i === 0 ? 'コンテナ一覧を取得できません（API認証・権限を確認）' : '稼働台帳の費用を取得できません'] : []) });
+});
+app.get('/api/tailscale-wasm/bridge-health', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport: 'worker' });
+});
+async function forwardMuseJobs(env: Bindings, owner: string, path: string, body?: unknown) {
+  if (!env.TAILSCALE_WASM) return Response.json({ error: 'tailscale_wasm_not_configured' }, { status: 503 });
+  const response = await env.TAILSCALE_WASM.get(env.TAILSCALE_WASM.idFromName('muse')).fetch(new Request('http://tailnet/agent-jobs' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Muse-Owner': owner, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+app.get('/api/tailscale-wasm/jobs', authMiddleware, cfDashboardAdminMiddleware, c => forwardMuseJobs(c.env, c.get('user').sub, ''));
+app.get('/api/tailscale-wasm/jobs/changes', authMiddleware, cfDashboardAdminMiddleware, c => {
+  const consumer = c.req.query('consumer');
+  if (consumer !== 'codex' && consumer !== 'claude') return c.json({ error: 'invalid_consumer' }, 400);
+  return forwardMuseJobs(c.env, c.get('user').sub, '/changes?consumer=' + consumer);
+});
+app.post('/api/tailscale-wasm/jobs/ack', authMiddleware, cfDashboardAdminMiddleware, async c => {
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return c.json({ error: 'cross_origin_forbidden' }, 403);
+  const consumer = c.req.query('consumer');
+  if (consumer !== 'codex' && consumer !== 'claude') return c.json({ error: 'invalid_consumer' }, 400);
+  const text = await c.req.text(); if (text.length > 1024) return c.json({ error: 'payload_too_large' }, 413);
+  let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+  return forwardMuseJobs(c.env, c.get('user').sub, '/ack?consumer=' + consumer, data);
+});
+app.post('/api/tailscale-wasm/:action', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const origin = c.req.header('Origin');
+  if ((origin && origin !== new URL(c.req.url).origin) || c.req.header('Sec-Fetch-Site') === 'cross-site') return c.json({ error: 'cross_origin_forbidden' }, 403);
+  const action = c.req.param('action');
+  if (action === 'jobs') {
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    return forwardMuseJobs(c.env, c.get('user').sub, '', data);
+  }
+  if (action === 'bridge-chat') {
+    c.header('Cache-Control', 'no-store');
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    if (!data || typeof data.prompt !== 'string' || !data.prompt.trim() || new TextEncoder().encode(data.prompt).length > 16384) return c.json({ error: 'invalid_prompt' }, 400);
+    const result = await museWorkerDep(c.env)(data.prompt);
+    return result.ok ? c.json({ ...result, transport: 'worker' }) : c.json(result, 503);
+  }
+  if (action === 'tasks') {
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data: { action?: unknown; payload?: unknown };
+    try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    if (!data || !['bridge-chat', 'agent-ask', 'legacy-chat'].includes(String(data.action)) || !data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) return c.json({ error: 'invalid_task' }, 400);
+    if (data.action === 'legacy-chat') {
+      const payload = data.payload as { model?: unknown; message?: unknown };
+      if (payload.model !== 'muse' || typeof payload.message !== 'string' || !payload.message.trim() || new TextEncoder().encode(payload.message).length > 16384 || /^\s*\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(payload.message)) return c.json({ error: 'invalid_legacy_muse_request' }, 400);
+      return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, '/api/aichat', JSON.stringify({ ...payload, source: 'textbox', stream: false }), 'container');
+    }
+    const endpoint = data.action === 'bridge-chat' ? '/api/tailscale-wasm/bridge-chat' : '/api/tailscale-wasm/agent-ask';
+    return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, endpoint, JSON.stringify(data.payload));
+  }
+  if (action === 't3-test' || action === 't3-pairing' || action === 'agent-ask') {
+    c.header('Cache-Control', 'no-store');
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    const tools = tailscalePageTools(c.env, c.get('user').sub);
+    if (action === 't3-test') return tools.t3();
+    if (action === 't3-pairing') return tools.t3Pairing();
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    return tools.agent(data);
+  }
+  if (!action || !['login', 'logout', 'chat', 'gadget-status'].includes(action)) return c.json({ error: 'not_found' }, 404);
+  const ns = c.env.TAILSCALE_WASM;
+  if (!ns) return c.json({ error: 'tailscale_wasm_not_configured' }, 503);
+  const text = await c.req.text();
+  if (new TextEncoder().encode(text).length > (action === 'chat' ? 32768 : 1024)) return c.json({ error: 'payload_too_large' }, 413);
+  let body: { prompt?: unknown; authKey?: unknown };
+  try { body = JSON.parse(text || '{}'); } catch { return c.json({ error: 'invalid_json' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'invalid_json' }, 400);
+  if (action === 'chat') {
+    const data = body as { prompt?: unknown; conversationId?: unknown; requestId?: unknown };
+    if (typeof data.prompt !== 'string' || !data.prompt.trim() || new TextEncoder().encode(data.prompt).length > 16384 || typeof data.conversationId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(data.conversationId) || typeof data.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(data.requestId)) return c.json({ error: 'invalid_prompt' }, 400);
+    const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/gadget/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: data.prompt, conversationId: data.conversationId, requestId: data.requestId }) }));
+    return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  }
+  const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/' + (action === 'gadget-status' ? 'gadget/status' : action), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+});
+
 app.get('/muse-wasm-test', authMiddleware, cfDashboardAdminMiddleware, (c) => {
   c.header('Cache-Control', 'no-store');
   c.header('Content-Security-Policy', MUSE_WASM_TEST_CSP);
@@ -21045,6 +21213,10 @@ app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, as
   const forwardPath = url.pathname.slice(prefix.length) || '/';
   // 公開鍵の追記はHMAC照合付きの /api/cf-containers/authorized-keys からのみ受け付ける。
   if (forwardPath === '/admin' || forwardPath.startsWith('/admin/')) return jsonUtf8({ error: 'このパスはプロキシできません' }, 403);
+  if (forwardPath === '/t3/pairing') {
+    if (c.req.method !== 'POST') return jsonUtf8({ error: 'method_not_allowed' }, 405);
+    return requestT3PairingHandoff(request => stub.fetch(request));
+  }
   const forwardUrl = `${url.origin}${forwardPath}${url.search}`;
   const diagAction = diagActionForProxyPath(forwardPath);
   const user = c.get('user');

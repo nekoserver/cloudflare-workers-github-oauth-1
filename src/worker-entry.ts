@@ -11,6 +11,7 @@ import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 export { DemoContainer } from './containers/demoContainer';
 // AIチャットの応答とログ保存を、ブラウザの接続と切り離して最後まで行うジョブ(wrangler.tomlのAICHAT_JOB)。
 export { AichatJob } from './durable/aichatJob';
+export { TailscaleWasm } from './durable/tailscaleWasm';
 
 export default {
   fetch: app.fetch,

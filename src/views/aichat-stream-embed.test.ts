@@ -187,7 +187,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
     const toggle = doc.getElementById('conversationStreamToggle')!;
     const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw', 'testcfc', 'redmine']);
+    expect(Array.from(host.options).map(option => option.value)).toEqual(['auto', 'mygw', 'mynw', 'testcfc', 'redmine', 'worker']);
     expect(host.value).toBe('auto');
     expect(frame.getAttribute('src')).toBeNull();
     toggle.click();
@@ -230,7 +230,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     try {
       const doc = dom.window.document;
       const host = doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement;
-      expect(Array.from(host.options).map(option => [option.value, option.textContent])).toEqual([['auto', '自動'], ['mygw', 'mygw.nekomaneki.work'], ['next', '<b>次</b>']]);
+      expect(Array.from(host.options).map(option => [option.value, option.textContent])).toEqual([['auto', '自動'], ['mygw', 'mygw.nekomaneki.work'], ['next', '<b>次</b>'], ['worker', 'Worker']]);
       expect(doc.querySelector('#conversationStreamHost b')).toBeNull();
       doc.getElementById('conversationStreamToggle')!.click();
       const frame = doc.getElementById('conversationStreamFrame') as unknown as HTMLIFrameElement;
@@ -242,7 +242,7 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     try {
       const doc = dom.window.document;
       expect(doc.getElementById('conversationStreamConfigError')?.textContent).toContain('会話ストリームの接続先の設定が不正です');
-      expect(Array.from((doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement).options).map(option => option.value)).toEqual(['auto']);
+      expect(Array.from((doc.getElementById('conversationStreamHost') as unknown as HTMLSelectElement).options).map(option => option.value)).toEqual(['auto', 'worker']);
       expect((doc.getElementById('conversationStreamToggle') as HTMLButtonElement).disabled).toBe(true);
     } finally { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); }
   });

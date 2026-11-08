@@ -1,0 +1,3 @@
+{"phase":"real-aichat-textbox-post","submitStatus":202,"jobStatus":"done","museTailscale":"unavailable","exactMarker":false}
+{"phase":"diagnostic","summary":"Full Worker bundle failed to bring up the Tailscale WASM runtime (syscall/js os.Getpid panic); the API job completed with Muse unavailable. No retry was sent."}
+{"phase":"separate-real-do-post","status":200,"exactMarker":true,"source":"worker-do-live.jsonl"}

@@ -2,6 +2,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 const calls=vi.hoisted(()=>({state:{status:'stopped',lastChange:1},start:vi.fn(),stop:vi.fn()}));
 vi.mock('@cloudflare/containers',()=>({Container:class{
  envVars={};
+ ctx={container:{get running(){return calls.state.status==='running'||calls.state.status==='healthy';}}};
  async getState(){return {...calls.state};}
  async start(){await calls.start();calls.state={status:'running',lastChange:2};}
  async stop(){await calls.stop();calls.state={status:'stopped',lastChange:3};}

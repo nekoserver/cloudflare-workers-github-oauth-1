@@ -6,6 +6,9 @@
       "ES2022"
     ],
     "moduleResolution": "bundler",
+    "paths": {
+      "@ai-ecoverse/wasm-tailscale": ["./node_modules/@ai-ecoverse/wasm-tailscale/index.d.ts"]
+    },
     "types": [
       "@cloudflare/workers-types",
       "vitest/globals"

@@ -29,6 +29,18 @@ export class DemoContainer extends Container<Bindings> {
   // 停止は/cf-containersまたはtree-viewの明示操作で行う(タイマーは基底クラスが延長する)。
   override async onActivityExpired(): Promise<void> {}
 
+  override async getState(): ReturnType<Container['getState']> {
+    const state = await super.getState();
+    // The SDK returns its stored lifecycle state, which can disagree with the
+    // runtime after reconnection. All callers must use the same live decision;
+    // reading this flag neither starts the container nor sends a request.
+    if (state.status === 'stopping') return state;
+    const running = this.ctx.container!.running;
+    const storedRunning = state.status === 'running' || state.status === 'healthy';
+    if (running === storedRunning) return state;
+    return { status: running ? 'running' : 'stopped', lastChange: Date.now() };
+  }
+
   constructor(ctx: ConstructorParameters<typeof Container<Bindings>>[0], env: Bindings) {
     super(ctx, env);
     // nekorootトンネル(cloudflared)・SSH用の設定をコンテナのenvVars経由で

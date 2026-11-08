@@ -29,7 +29,7 @@ describe('POST /api/aichat の /askmuse', () => {
     const token = await createJWT({ sub: 'test-user', name: 'Test' }, JWT_SECRET);
     return app.request('/api/aichat', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Cookie: cookie },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Cookie: cookie || 'aichat_muse_signal=%7B%22transport%22%3A%22container%22%7D' },
       body: JSON.stringify(body),
     }, { JWT_SECRET, DB, RUST_WORKER, DEMO_CONTAINER: {}, ...env });
   }
@@ -188,7 +188,7 @@ describe('POST /api/aichat の /askmuse', () => {
       : new Response('{}', { status: 502 }));
     const response = await post({ message: '質問本文', model: 'muse' });
     const data = await response.json() as { response: string };
-    expect(data.response).toContain('muse_connection_failed');
+    expect(data.response).toContain('Museへの接続を確認できません');
     expect(data.response).not.toContain('unsupported_engine');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
     expect(inserts).toHaveLength(0);
@@ -255,7 +255,7 @@ describe('POST /api/aichat の /askmuse', () => {
       ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
       : new Response('{}', { status: 502 }));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
-    expect((await response.json() as { response: string }).response).toContain('muse_connection_failed');
+    expect((await response.json() as { response: string }).response).toContain('Museへの接続を確認できません');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
   });
 
@@ -294,7 +294,7 @@ describe('GET /api/aichat/muse-health', () => {
 
   async function get(env: Record<string, unknown> = { MUSE_API_KEY: 'key', DEMO_CONTAINER: {} }, authorized = true) {
     const token = await createJWT({ sub: 'test-user', name: 'Test' }, JWT_SECRET);
-    return app.request('/api/aichat/muse-health', { headers: authorized ? { Authorization: `Bearer ${token}` } : {} }, { JWT_SECRET, DB, ...env });
+    return app.request('/api/aichat/muse-health', { headers: authorized ? { Authorization: `Bearer ${token}`, Cookie: 'aichat_muse_signal=%7B%22transport%22%3A%22container%22%7D' } : {} }, { JWT_SECRET, DB, ...env });
   }
 
   beforeEach(() => {
@@ -305,18 +305,18 @@ describe('GET /api/aichat/muse-health', () => {
 
   it('稼働中ならhealthy: trueを返し、応答を保存させない', async () => {
     const response = await get();
-    expect(await response.json()).toEqual({ healthy: true });
+    expect(await response.json()).toEqual({ healthy: true, transport: 'container' });
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
   it('コンテナの停止中は起動せず、healthy: falseを返す', async () => {
     stub.getState.mockResolvedValue({ status: 'stopped' });
-    expect(await (await get()).json()).toEqual({ healthy: false });
+    expect(await (await get()).json()).toEqual({ healthy: false, transport: 'container' });
     expect(stub.fetch).not.toHaveBeenCalled();
   });
 
   it('DEMO_CONTAINERが無ければhealthy: falseを返す', async () => {
-    expect(await (await get({ MUSE_API_KEY: 'key' })).json()).toEqual({ healthy: false });
+    expect(await (await get({ MUSE_API_KEY: 'key' })).json()).toEqual({ healthy: false, transport: 'container' });
   });
 
   it('未認証では確認しない', async () => {
