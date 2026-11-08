@@ -1,7 +1,7 @@
 # SPEC: 決定や業務に何が効いたかを、来歴で記録して数える
 
 作成日: 2026-11-08
-状態: **案**（計画。提案`ce-p1`・`ce-p3`・`ce-p4`は利用者が採用済み。この表の形と6章の「決めること」は承認待ち。D1は変更していない）
+状態: **承認**（2026-11-08、利用者が「いいねその表」と承認し、6章を優先して片付けるよう指示した。マイグレーションは`migrations-agent-inquiries/0011_create_contribution_records.sql`。本番のD1には未適用）
 
 関連: D1`agent-inquiries`の議題`contribution-evaluation-20261108`（問い合わせ`ce-e0`〜`ce-c8`、論点`ce-k1`〜`ce-k16`）、[発議のルールと8段の過程](SPEC.cloudflare-workers-github-oauth-1.20261108.proposal-rule.md)（7章）、議題`task-commit-link-20261108`（コミットとの関連付け）。
 
@@ -23,13 +23,18 @@
 | `ce-p3`（Muse） | 効き方に「前提を正した」「期限・費用を変えた」「後で使うために残した」を足す。「作らずに済んだ」と「問い合わせを省いた」の判定の基準を決める。「生きなかった」は効果とは別枠で数える | 2026-11-08 05:55 |
 | `ce-p4`（利用者の補足） | 一般化されたワークフロー・ベストプラクティス・アンチパターンを物差しにして、体系的な抜けを表で出す。外部の基準の項目IDを出どころのIDとして記録する | 2026-11-08 06:09 |
 
-## 3. 表の形（案）
+## 3. 表の形
 
-```sql
-CREATE TABLE IF NOT EXISTS inquiry_records (id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, ref TEXT NOT NULL, label TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), deleted_at TEXT, UNIQUE (kind, ref));
-CREATE TABLE IF NOT EXISTS inquiry_contributions (id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL REFERENCES inquiry_records(id), target_id TEXT NOT NULL REFERENCES inquiry_records(id), effect TEXT NOT NULL CHECK (effect IN ('changed_direction', 'avoided_inquiry', 'closed_key', 'prevented_defect', 'avoided_building', 'corrected_premise', 'changed_cost', 'kept_for_later')), phase TEXT NOT NULL CHECK (phase IN ('decision', 'trial', 'retrospective')), judged_by TEXT NOT NULL, judged_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), evidence_entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL, note TEXT, CHECK (source_id <> target_id), UNIQUE (source_id, target_id, effect, phase));
-CREATE TABLE IF NOT EXISTS inquiry_unused (id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL REFERENCES inquiry_records(id), target_id TEXT NOT NULL REFERENCES inquiry_records(id), consequence TEXT NOT NULL CHECK (consequence IN ('failure', 'rework', 'delay', 'none_observed')), judged_by TEXT NOT NULL, judged_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), evidence_entry_id TEXT REFERENCES inquiry_entries(id) ON DELETE SET NULL, note TEXT, UNIQUE (source_id, target_id));
-```
+正は`migrations-agent-inquiries/0011_create_contribution_records.sql`。承認の後に、6章の決定に合わせて`confirmed_by`・`confirmed_at`を足した。
+
+| 表 | 列（主なもの） |
+|---|---|
+| `inquiry_records` | `id`（`<kind>:<ref>`、NOT NULL）、`kind`、`ref`、`label`、`created_at`、`deleted_at`。`UNIQUE (kind, ref)` |
+| `inquiry_contributions` | `source_id`・`target_id`（台帳への外部キー）、`effect`（8種）、`phase`（3段）、`judged_by`、`judged_at`、`confirmed_by`・`confirmed_at`（両方空なら仮）、`evidence_entry_id`、`note`。`UNIQUE (source_id, target_id, effect, phase)`、自分自身は不可 |
+| `inquiry_unused` | `source_id`・`target_id`、`consequence`（`failure`・`rework`・`delay`・`none_observed`）、判定者と確かめた印、根拠。`UNIQUE (source_id, target_id)` |
+
+台帳への書き込み: 0011は、議題・問い合わせ・論点・提案・知識の既存の行を台帳に書き込み、5つの表それぞれに追加と削除のトリガーを付ける。元の行を消すと台帳には`deleted_at`が付き、同じIDで作り直すと`deleted_at`を空に戻す。議題を消したときの連鎖削除でも同じ。
+
 
 ### 記録台帳（`inquiry_records`）
 
@@ -73,21 +78,23 @@ CREATE TABLE IF NOT EXISTS inquiry_unused (id INTEGER PRIMARY KEY AUTOINCREMENT,
 - 件数が少ない間は割合を出さず、件数と具体例を並べる（`ce-k5`、Muse）。0件の期間は「判定していない」と「効果が無かった」を区別し、判定していない件数（`ce-k6`: 未判定の割合）を並べて出す。
 - 業務プロセスの改善は、改善を台帳の1行（`kind = 'process'`など）にし、入れるときに対象の数字と向きを先に書く。前後の比較には段階の移り変わりの履歴と利用者の介入の記録が要る（`ce-k2`、提案`ce-p2`、採否待ち）。
 
-## 6. 決めること（利用者）
+## 6. 決めたこと（2026-11-08）
 
-| 項目 | 選択肢 | 論点 |
+利用者の指示（「優先的に潰していって」）で、Claude Codeが戻せる方を既定に選んだ。変えるときは利用者が指示する。
+
+| 項目 | 決めたこと | 論点 |
 |---|---|---|
-| 効き方を付けられる人 | 利用者だけ／エージェントも付けられるが「判定者」を残し、利用者が確かめるまで仮扱い | `ce-k5` |
-| 仮に付けたものを確かめる方法 | `UNIQUE (source_id, target_id, effect, phase)`により同じ組は1行なので、利用者が確かめるときは行を足さず`judged_by`を書き換え、確かめた記録を出来事の表（`ce-p2`）に残す（案）／確かめた印の列を足す | `ce-k5` |
-| 付けるとき | 採否のボタンで決めるとき＋試験運用・振り返りで足す（案）／決めるときだけ | `ce-k5` |
-| 3章の表を足すか | 3つとも足す／台帳と`inquiry_contributions`だけ先に足す | — |
-| 物差しの候補数・確認済み数・確認待ちを分けて持つ表 | 足す／当面は論点の本文に書く | `ce-k16` |
-| 出来事の表（`ce-p2`） | 採用して一緒に作る／後にする | `ce-k2` |
-| 画面 | `/muse-inquiries`の採否のモーダルで効き方を選べるようにする（この案の承認後に別に作る） | — |
+| 効き方を付けられる人 | エージェントも付けられる。`judged_by`に残し、`confirmed_by`が空の間は仮として数え分ける | `ce-k5` |
+| 仮に付けたものを確かめる方法 | `confirmed_by`・`confirmed_at`の列を足した（片方だけは不可）。出来事の表（`ce-p2`）には頼らない | `ce-k5` |
+| 付けるとき | 採否で決めるときに付け、試験運用・振り返りで足す（`phase`で区別） | `ce-k5` |
+| 3章の表を足すか | 3つとも足す | — |
+| 物差しの候補数・確認済み数・確認待ちを分けて持つ表 | 今回は作らない。当面は論点の本文に分けて書く | `ce-k16` |
+| 出来事の表（`ce-p2`） | 今回は作らない。採否待ちのまま | `ce-k2` |
+| 画面 | 未着手。`/muse-inquiries`の採否のモーダルで効き方を選べるようにする（次に作る） | — |
 
 ## 7. 確かめたこと
 
-3章のSQLを、`migrations-agent-inquiries/`の全マイグレーション（0010まで）の上にSQLite（`node:sqlite`、外部キー有効）で当て、10通りが期待どおりになることを確かめた（2026-11-08）: 正しい効き方は入る、知らない効き方・同じ組の二重・自分自身・台帳に無い出どころ・`id`のNULLは拒否、段が違えば別の行、関連に使われている台帳の行は消せない、`inquiry_unused`の同じ組の二重は拒否。本番のD1では確かめていない。
+承認前に、案のSQLを`migrations-agent-inquiries/`の全マイグレーション（0010まで）の上にSQLite（`node:sqlite`、外部キー有効）で当て、10通りが期待どおりになることを確かめた（2026-11-08）: 正しい効き方は入る、知らない効き方・同じ組の二重・自分自身・台帳に無い出どころ・`id`のNULLは拒否、段が違えば別の行、関連に使われている台帳の行は消せない、`inquiry_unused`の同じ組の二重は拒否。承認後は0011を書く前に`scripts/agent-inquiries-contributions.test.mjs`（7件）を書き、失敗を確かめてから実装した。既存の行の書き込み、トリガー、連鎖削除での`deleted_at`、作り直しでの復帰、外部の出どころ、効き方と段の制約、仮と確かめた印、生きなかったものを確かめている。本番のD1では確かめていない。
 
 ## 8. 注意事項
 
