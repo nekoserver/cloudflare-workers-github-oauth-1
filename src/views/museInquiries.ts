@@ -140,7 +140,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         modal.hidden = false;
         return modalBody;
       }
-      function closeModal() { modal.hidden = true; }
+      function closeModal() { modal.hidden = true; if (pendingBoard) applyBoard(pendingBoard); }
       function field(body, label, value, pre) {
         if (value === null || value === undefined || value === '') return;
         var row = el(doc, 'div', 'inq-field');
@@ -640,16 +640,55 @@ export const MUSE_INQUIRIES_SCRIPT = `
       });
       doc.getElementById('inq-refresh').addEventListener('click', function() { caseCache = {}; load(); });
 
+      // 自動の読み直し(ユーザー指定、2026-11-08。Codexの案bar-p1、board-auto-refresh-20261108)。
+      // 取得が終わってから次を予約する。取得に番号を振り、古い応答で新しい一覧を上書きしない。
+      // 裏のタブでは取得せず、表に戻ったら1回読む。詳細を開いている間は描き直さず「更新あり」を出し、閉じたら反映する。
+      // 失敗したら間隔を倍にする(上限5分)。setTimeoutを渡されたときだけ動く(テストや埋め込みで止められるように)。
+      var REFRESH_MS = 30000;
+      var REFRESH_MAX_MS = 300000;
+      var refreshDelay = REFRESH_MS;
+      var loadSeq = 0;
+      var pendingBoard = null;
+      var autoRefresh = typeof deps.setTimeout === 'function';
+      function scheduleRefresh() {
+        if (!autoRefresh) return;
+        deps.setTimeout(function() {
+          if (doc.visibilityState === 'hidden') { scheduleRefresh(); return; }
+          load();
+        }, refreshDelay);
+      }
+      if (autoRefresh) {
+        doc.addEventListener('visibilitychange', function() { if (doc.visibilityState === 'visible') load(); });
+      }
+      function applyBoard(data) {
+        pendingBoard = null;
+        board = data;
+        setNotice('');
+        var selected = filter.value;
+        renderCases();
+        filter.value = selected && caseById(selected) ? selected : '';
+        renderBoard();
+      }
       function load() {
+        loadSeq += 1;
+        var seq = loadSeq;
         return deps.fetchJson('/api/muse-inquiries/board').then(function(data) {
-          board = data;
-          setNotice('');
-          var selected = filter.value;
-          renderCases();
-          filter.value = selected && caseById(selected) ? selected : '';
-          renderBoard();
+          if (seq !== loadSeq) return;
+          refreshDelay = REFRESH_MS;
+          if (!modal.hidden && board) {
+            if (JSON.stringify(data) !== JSON.stringify(board)) {
+              pendingBoard = data;
+              setNotice('更新あり（詳細を閉じると反映します）');
+            }
+          } else {
+            applyBoard(data);
+          }
+          scheduleRefresh();
         }, function(error) {
+          if (seq !== loadSeq) return;
           setNotice('協議の記録を読み込めませんでした: ' + (error && error.message ? error.message : String(error)));
+          refreshDelay = Math.min(refreshDelay * 2, REFRESH_MAX_MS);
+          scheduleRefresh();
         });
       }
       return load();
@@ -850,6 +889,8 @@ export function getMuseInquiriesPage(): string {
   <script>${MUSE_INQUIRIES_SCRIPT}
     initMuseInquiriesPage({
       document: document,
+      setTimeout: function(fn, ms) { return window.setTimeout(fn, ms); },
+      clearTimeout: function(id) { window.clearTimeout(id); },
       postJson: function(url, payload) {
         return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(function(response) {
           return response.json().catch(function() { return {}; }).then(function(data) {

@@ -457,6 +457,83 @@ describe('Museとの協議のカンバン', () => {
   });
 });
 
+// ユーザー指定(2026-11-08): カンバンの変更が即座に反映されない。Codexの案(bar-p1、board-auto-refresh-20261108)で周期取得にする。
+// 取得が終わってから次を予約し、古い応答で上書きせず、裏のタブでは止め、詳細を開いている間は描き直さず「更新あり」を出し、失敗したら間隔を延ばす。
+describe('Museとの協議のカンバン: 自動の読み直し', () => {
+  beforeEach(() => { loadBody(); Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
+  function timers() {
+    const queue: Array<{ fn: () => void; ms: number }> = [];
+    return { queue, setTimeout: (fn: () => void, ms: number) => { queue.push({ fn, ms }); return queue.length; }, clearTimeout: () => {} };
+  }
+  const board2 = { ...BOARD, cases: [{ ...BOARD.cases[0], goal: '更新後の目的' }, BOARD.cases[1]] };
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('読み込みが終わってから30秒後に次を予約し、届いた新しい一覧で描き直す', async () => {
+    const t = timers();
+    let n = 0;
+    const fetchJson = vi.fn(async (url: string) => (url === '/api/muse-inquiries/board' ? (n++ === 0 ? BOARD : board2) : DETAIL));
+    await script.initMuseInquiriesPage({ document, fetchJson, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+    expect(t.queue.at(-1)!.ms).toBe(30000);
+    t.queue.at(-1)!.fn(); await flush(); await flush();
+    expect(document.getElementById('inq-cases')!.textContent).toContain('更新後の目的');
+    expect(t.queue.at(-1)!.ms).toBe(30000);
+  });
+
+  it('後から届いた古い応答で、新しい一覧を上書きしない', async () => {
+    const t = timers();
+    const resolvers: Array<(v: unknown) => void> = [];
+    let first = true;
+    const fetchJson = vi.fn((url: string) => {
+      if (url !== '/api/muse-inquiries/board') return Promise.resolve(DETAIL);
+      if (first) { first = false; return Promise.resolve(BOARD); }
+      return new Promise((r) => resolvers.push(r));
+    });
+    await script.initMuseInquiriesPage({ document, fetchJson, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+    (document.getElementById('inq-refresh') as HTMLButtonElement).click();
+    (document.getElementById('inq-refresh') as HTMLButtonElement).click();
+    resolvers[1](board2); await flush();
+    resolvers[0](BOARD); await flush();
+    expect(document.getElementById('inq-cases')!.textContent).toContain('更新後の目的');
+  });
+
+  it('タブが裏にある間は取得せず、表に戻ったら1回読み直す', async () => {
+    const t = timers();
+    const fetchJson = vi.fn(async (url: string) => (url === '/api/muse-inquiries/board' ? BOARD : DETAIL));
+    await script.initMuseInquiriesPage({ document, fetchJson, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+    const boardCalls = () => fetchJson.mock.calls.filter((c) => c[0] === '/api/muse-inquiries/board').length;
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    t.queue.at(-1)!.fn(); await flush();
+    expect(boardCalls()).toBe(1);
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange')); await flush();
+    expect(boardCalls()).toBe(2);
+  });
+
+  it('詳細を開いている間は描き直さず「更新あり」を出し、閉じたら反映する', async () => {
+    const t = timers();
+    let n = 0;
+    const fetchJson = vi.fn(async (url: string) => (url === '/api/muse-inquiries/board' ? (n++ === 0 ? BOARD : board2) : DETAIL));
+    await script.initMuseInquiriesPage({ document, fetchJson, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+    (document.querySelector('[data-case-summary="' + CASE_ID + '"]') as HTMLElement).click();
+    await flush();
+    t.queue.at(-1)!.fn(); await flush(); await flush();
+    expect(document.getElementById('inq-cases')!.textContent).not.toContain('更新後の目的');
+    expect(document.getElementById('inq-notice')!.textContent).toContain('更新あり');
+    (document.getElementById('inq-modal-close') as HTMLButtonElement).click(); await flush();
+    expect(document.getElementById('inq-cases')!.textContent).toContain('更新後の目的');
+  });
+
+  it('取得に失敗したら間隔を倍にし、上限は5分', async () => {
+    const t = timers();
+    let n = 0;
+    const fetchJson = vi.fn(async (url: string) => { if (url === '/api/muse-inquiries/board' && n++ > 0) throw new Error('503'); return url === '/api/muse-inquiries/board' ? BOARD : DETAIL; });
+    await script.initMuseInquiriesPage({ document, fetchJson, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+    const seen: number[] = [];
+    for (let i = 0; i < 6; i++) { t.queue.at(-1)!.fn(); await flush(); await flush(); seen.push(t.queue.at(-1)!.ms); }
+    expect(seen).toEqual([60000, 120000, 240000, 300000, 300000, 300000]);
+  });
+});
+
 describe('Museとの協議のカンバン: ページとルート', () => {
   beforeEach(loadBody);
   it('生成HTMLの全scriptがnode --checkに通り、上部の帯は高さ44pxで固定', () => {
