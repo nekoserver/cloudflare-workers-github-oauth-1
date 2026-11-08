@@ -10,6 +10,8 @@
 
 ## 背景
 
+**2026-11-08追記**: 以下の「WorkerはTailscaleのノードになれない」は当初の構成を前提とした記述。実workerd内のTailscale WASMでノード登録・muse-vmへの認証付きPOST・実回答取得を確認した。成功時の質問・回答、認証条件と未反映範囲は [Worker内WASMからMuseブリッジへの直接POST](SPEC.cloudflare-workers-github-oauth-1.wasm-muse-bridge.20261108.md) を参照。既存の/askmuseの本番経路を切り替えたことは意味しない。
+
 `/neko askgk muse_prompt="◯"`は5段を経由し、ジョブの登録と照会を行う。WorkerはTailscaleのノードになれないため、tailnetへ届くには必ずノードを1つ経由する。本体デモコンテナはWorkerのDurable Object（`DEMO_CONTAINER`）から直接呼べるノードなので、これを唯一の中継にする。
 
 ---

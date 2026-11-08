@@ -287,3 +287,28 @@ museは外向き専用なのでTailscaleの状態表示だけとし、health/Nix
 ## 2026-11-07: /muse-statusを本体コンテナの停止中もTailscale WASMで取得（未反映）
 
 本体コンテナが停止中のとき、ページの「Tailscaleへ接続」で公式`@tailscale/connect`のWASMがブラウザからtailnetへ参加し、muse・muse-vmの状態（netmap）とmuse-vmの`/health`シグナルを取得する。コンテナが使えるときは従来どおりコンテナ経由。Nixの一覧は`MUSE_API_KEY`をブラウザへ渡さないためWASMでは取らない。`/muse-status`にWASMとTailscaleへの接続を許すCSPを設定し、WASMの読み込みを`public/tailscale-wasm-client.mjs`へ共通化した（`/container-monitor`も使用）。`/health`が認証不要であることはMuseへの問い合わせ（D1`agent-inquiries`の`muse-status-wasm-20261107`）で得た、ソース上の回答で稼働版は未確認。ページのテストと実Chromeでの公式WASMの初期化（`NeedsLogin`まで、外部通信は遮断）を確認。実tailnetへのログインとmuse-vmへの到達、本番反映は未確認。Dockerビルド・Workerデプロイなし。詳細は[muse-statusのSPEC](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
+
+
+## 2026-11-08: 現コンテナのlibネットワーク再配置
+
+現在ENVを優先してApacheのSSI/CGI・observer/App Server/LLM用ソケット・WebSocket/SSE/NDJSON/JSON-seqを現コンテナへ配置。公開mygwで実会話配信とCodexの引用符付きprompt実応答を確認。Chromeで公開embed投稿フォームから現在会話のキューへ1件投入済み、実回答は未確認。Cloudflare現トークンの権限不足、Claude未認証、MuseのLLM worker未対応、stream接続不能、r9 502は未解消。現entrypointとcronへ復帰経路を配置したが、イメージ再作成後は未確認。Dockerビルド・Workerデプロイなし。詳細はREPORT.cloudflare-workers-github-oauth-1.NETWORK.20261108.md。
+
+2026-11-08後続確認: 同一会話のパネル投稿を実受信しSTREAM_POST_OK_20261108を返答。native queue待機0と公開observerでの投稿・assistant応答を確認。投稿の応答配信は確認済みに更新。詳細は上記NETWORK REPORTの後続ターン節。
+
+
+## 2026-11-08: Muse通常入力の実稼働判定（本番未反映）
+
+DemoContainer.getStateの保存状態をctx.container.runningと照合し、保存状態stoppedだが実行中のときMuse投稿がTailscale確認前に止まるケースを修正。逆方向の古いhealthyも停止として扱い、stoppingを維持する。関連134テストと実APIハンドラーを通す2テスト成功、元実装では後者2件失敗を再現。現server.jsからmuse-vmの実推論成功。本番DOでの状態不一致と本番UIは未確認。全体typecheckの診断は元実装と同一。Dockerビルド・Workerデプロイなし。詳細はREPORT.cloudflare-workers-github-oauth-1.MUSE-LIVE-STATE.20261108.md。
+
+
+## 2026-11-08: Worker内wasm-tailscale（本番未反映）
+
+2026-11-08追記: 独立したローカルworkerdの実WASMからmuse-vm:8080/v1/chat/completionsへBearer認証付きPOSTを1回送り、HTTP200と指定文字列の実回答を確認した。Gadgetsペアリング・Bluetooth不使用。検証ノードはログアウト済み。現在の/tailscale-wasmページはGadgets専用経路のままで、この直接APIへの接続変更と本番反映は未実施。詳細はREPORT.cloudflare-workers-github-oauth-1.WASM-BRIDGE-POST.20261108.md。以下の未確認記述のうち「WASM経由muse-vm実応答」はこのローカル検証で更新する。本番の実応答は引き続き未確認。
+
+@ai-ecoverse/wasm-tailscale 1.104.1-13、専用TailscaleWasm DO、管理画面/tailscale-wasmと管理APIを追加。MUSE_TRANSPORT=wasmでMuse通常入力・/askmuseの直通をWorker内WASMへ固定し、未指定では従来のコンテナ直通を維持。2経路同時送信/自動fallbackなし、投稿の直列化ロックはなし。現workerdの実WASM・実DOでNeedsLoginまで成功。本番デプロイ・ログイン・WASM経由muse-vm実応答は未確認。配布サイズは上限に近く、本番計測が必要。詳細はREPORT.cloudflare-workers-github-oauth-1.WASM-TAILSCALE.20261108.md。
+
+### 2026-11-08後続: Worker→Muse本線、コスト・全コンテナ・T3引き継ぎ（本番未反映）
+
+実Durable Objectを含むWorker→Tailscale WASM→muse-vm POSTがHTTP200・指定応答一致。prefixなしMuseと`/askmuse`はWorkerを既定、旧コンテナ直通は設定モーダルで選ぶ構成へ変更。tailscale-wasmページに永続Job/同じJobへの返信、次回Codex/Claude問い合わせ時のMuse結果引き継ぎ、T3確認と`/cf-containers`共通の一回限りログインリンク生成、Worker/DOおよび全コンテナの費用・状態ウィジェットを実装。費用はAnalyticsと台帳ベースの集計・概算で請求書ではない。コンテナ停止時の自動起動なし。関連テスト群、実Chrome UI、実DO POSTに成功。Worker dry-runは圧縮後約9.83MiBで通過、コンテナrolloutなし。Production binding/migrationを伴う公開は未実施。詳細は[WASM→Muse SPEC](SPEC.cloudflare-workers-github-oauth-1.wasm-muse-bridge.20261108.md)。
+
+入力窓相当のPOSTを`/api/aichat/jobs`へ実際に1回送り、202でJobを作成し終端まで追跡したが、全Worker bundle内のTailscale WASM起動時に`syscall/js os.Getpid` panicとなりMuseへ到達せず、実回答マーカーは不一致。再送なし。実DOだけのPOST成功とは区別し、AIチャット入力窓の実応答は未確認に更新。障害結果は[artifact](artifacts/wasm-tailscale-20261108/aichat-live-e2e-result.jsonl)。通常のAIチャットでのCodex/Claude投稿は既存AICHAT_JOB経由でタブ切替後も継続し、`/tailscale-wasm`の補助tunnels問い合わせは別経路である。

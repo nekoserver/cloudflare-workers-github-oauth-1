@@ -21,6 +21,7 @@ const MAX_REPLY_BYTES = 32_768;
 const MODEL_NAME = /^[a-zA-Z0-9_.:/-]{1,128}$/;
 
 export type MuseDirectError =
+  | 'tailscale_wasm_not_configured'
   | 'container_not_running'
   | 'muse_not_authenticated'
   | 'prompt_too_large'
@@ -46,7 +47,7 @@ function errorForStatus(status: number): MuseDirectError {
   return 'muse_execution_failed';
 }
 
-function parseCompletion(payload: string): MuseDirectResult {
+export function parseCompletion(payload: string): MuseDirectResult {
   let data: { model?: unknown; bridge_command?: unknown; choices?: { message?: { content?: unknown } }[] };
   try {
     data = JSON.parse(payload);

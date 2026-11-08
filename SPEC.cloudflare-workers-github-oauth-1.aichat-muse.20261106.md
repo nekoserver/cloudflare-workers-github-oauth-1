@@ -118,6 +118,57 @@ lib側はworkerの再起動で反映する。本体Worker側はデプロイが�
 
 ---
 
+## 2026-11-08: Worker→Muse POSTを既定経路にする
+
+### 経路と保存の境界
+
+```mermaid
+flowchart LR
+  UI["AIチャット入力窓"] -->|"POST /api/aichat/jobs<br/>入力・認証・設定Cookie"| AJ["AICHAT_JOB DO<br/>要求を保存して生成を継続"]
+  AJ -->|"内部POST /api/aichat"| W["本体Worker<br/>設定Cookieから経路選択"]
+  W -->|"POST /muse/v1/chat/completions"| TW["TAILSCALE_WASM DO<br/>ノード状態・WASM・Job台帳"]
+  TW -->|"Tailscale内POST"| M["muse-vm:8080<br/>Muse推論API"]
+  M --> TW --> W --> AJ
+  AJ -->|"GET /api/aichat/jobs/:id"| UI
+  W -->|"回答保存"| D1["D1 ai_chat_shares<br/>通常の会話履歴"]
+  W -. "旧コンテナ直通を選択した場合" .-> C["DemoContainer<br/>native Tailscale"]
+```
+
+ブラウザの入力窓はモデルがMuse・Codex・Claudeのどれでも`POST /api/aichat/jobs`へ送る。AICHAT_JOB DOが内容と認証Cookieを保持し、非同期に同じWorkerの`POST /api/aichat`へ渡す。タブ切替・再読み込み時はlocalStorage上のJob IDから進捗を取り直すため、通常入力窓のエージェント問い合わせもブラウザ接続切断後に継続する。Workerは設定された経路でMuseへ一度だけ要求する。回答は通常のAIチャット履歴へ1件保存し、transport名やテストマーカーを質問本文へ足さない。Worker経路と旧コンテナ経路はユーザーの保存済み設定で選び、失敗時に相互fallback・再送しない。
+
+`/tailscale-wasm`の補助エージェント欄はtunnels.rbへ直接問い合わせるためAICHAT_JOBを使わず、同画面を閉じた後の進捗回収はしない。この補助問い合わせにもタブ切替を越えたジョブ再開を提供する場合は、別途AICHAT_JOB経由へ接続する変更が必要。
+
+### GET/POSTの区別
+
+| 用途 | HTTP | 接続先 | 推論するか |
+|---|---|---|---|
+| Museのhealth/状態確認 | GET | `GET /muse/health` → `GET http://muse-vm:8080/health` | しない。到達・稼働状態だけ |
+| Workerを本線とする質問 | POST | `POST /api/aichat/jobs` → `POST /api/aichat` → TAILSCALE_WASM DO → `POST /v1/chat/completions` | する。Workerの既定経路 |
+| 旧コンテナ直通を選んだ質問 | POST | `POST /api/aichat` → DemoContainer → `POST /muse/v1/chat/completions` → `POST /v1/chat/completions` | する。明示選択時の互換経路 |
+
+したがってGET専用なのは参照用health endpointであり、旧コンテナ直通の質問生成は現在もPOSTである。「旧MuseはGET専用」という表現を旧コンテナの推論経路の意味で使うと実装と矛盾するため、ここではGET=status/health、POST=inferenceとして区別する。Muse推論APIへのGET送信は行わない。
+
+### Durable Objectの役割と必要性
+
+`TAILSCALE_WASM`は入力履歴のキャッシュではない。Cloudflare Workerの通常リクエスト実行は要求ごとに終わる一方、サーバー側Tailscaleノードには秘密のノード状態を再利用できる安定した保存場所と、要求を処理するWorker isolateが必要となる。専用DOはSQLite内の非公開Tailscale状態を保持し、同じ`muse`ノードとして再接続し、WASMから固定のMuse宛先へ送信する実行主体である。これを外したままWorker内Tailscale接続を保つことはできず、ブラウザ内WASMか別の常時接続ノード（例: コンテナ）へ役割を移す設計変更が必要になる。
+
+別用途で、同DOのSQLiteにMuseのAgent Job/返信台帳を持つ。これらはAIチャット履歴ではなく、Job受付・重複排除・配送結果の記録である。送信中に処理が途切れた状態は`delivery_unknown`とし、自動再送しない。
+
+`AICHAT_JOB`は異なるDOで、AIチャットの入力送信をブラウザ接続から分離し、タブを閉じても生成・履歴保存を続ける。通常の会話履歴はD1の`ai_chat_shares`が保持する。同期送信に作り替えればAICHAT_JOBを外せるが、ブラウザ切断後の完了・結果回収は失われる。AICHAT_JOBはTailscaleネットワーク接続の代替ではない。
+
+### 接続先ページの補助機能
+
+`/tailscale-wasm`はWorker→Muse POST、永続Job/返信、全コンテナ状況、Worker/DO利用量とコンテナ台帳の費用概算を提供する。Codex/Claudeのtunnels問い合わせとT3テスト/ログイン引き継ぎは補助経路で、本体コンテナが稼働中の場合だけ有効。T3の一回限りpairing link生成は`src/utils/t3PairingHandoff.ts`の共通関数を`/cf-containers`と本ページから呼ぶ。料金部品は`src/views/tailscaleWasmCost.ts`でWorker/DOとcontainer widgetsを独立したHTML/JS関数として構成する。
+
+### 検証と現在の状態
+
+- 実Durable Object→Tailscale WASM→`muse-vm:8080/v1/chat/completions`のPOSTはHTTP200、指定回答完全一致。logout後に503で停止も確認: [結果](artifacts/wasm-tailscale-20261108/worker-do-live.jsonl)。
+- 入力窓と同じ`source: textbox`ペイロードをAICHAT_JOB APIへ実POSTしたところ、Jobは202で作成され完了したが、全Worker bundleでWASMの`syscall/js os.Getpid` panicが発生し、Muse到達不可・マーカー応答なし。実DO直通成功とは区別する。再送はしていない: [診断結果](artifacts/wasm-tailscale-20261108/aichat-live-e2e-result.jsonl)。よってAIチャット入力窓のMuse実回答は未確認。
+- 関連テスト: `src/aichat-muse-transport.test.ts`、`src/aichat-askmuse-integration.test.ts`、`src/utils/museAgentJobs.test.ts`、`src/utils/t3PairingHandoff.test.ts`、`src/utils/tailscalePageTools.test.ts`、`src/views/tailscaleWasmCost.test.ts`ほか。ページ生成JavaScript・実Chromeのtailscale-wasm UI検査は成功。Chrome APIは模擬。
+- Cloudflare productionのWorker公開・DO migrationは未実施。本番ログイン済みAIチャットからの実投稿は確認していない。
+
+---
+
 ## Muse選択の接頭語なし投稿は、tunnelsへ切り替えず直接muse-vmへ送る（2026-11-07）
 
 **対象**: `src/index.ts`の`POST /api/aichat`、`src/views/aichatMuseHealth.ts`のMuseの⚙モーダル — 言語モデルスイッチがMuseのときの、プレフィックスの無い投稿の経路。

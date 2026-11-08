@@ -48,7 +48,11 @@ export async function loadContainerSessions(db:D1Database,containerKey?:string) 
     WHERE NOT EXISTS (SELECT 1 FROM cf_container_session_notes newer WHERE newer.start_operation_id=n.start_operation_id AND newer.revision>n.revision)`).all<{start_operation_id:number;revision:number;content:string;recorded_by:string;created_at:string}>();
   const latest=new Map((notes??[]).map(n=>[n.start_operation_id,n]));
   const totals=report.sessions.reduce((all,s)=>({seconds:all.seconds+s.seconds,knownEstimateUsd:all.knownEstimateUsd+(s.estimatedCostUsd??0),unknownCostSessions:all.unknownCostSessions+(s.estimatedCostUsd===null?1:0)}),{seconds:0,knownEstimateUsd:0,unknownCostSessions:0});
-  return {...report,totals,containers,multiContainer:computeMultiContainerDays(report.sessions),totalSessions:report.sessions.length,sessions:report.sessions.slice(-100).reverse().map(s=>({...s,note:latest.get(s.startOperationId)??null}))};
+  const byContainer = containers.map(container => {
+    const sessions = report.sessions.filter(s => s.containerKey === container.key);
+    return { ...container, seconds: sessions.reduce((n,s) => n+s.seconds,0), knownEstimateUsd: sessions.reduce((n,s) => n+(s.estimatedCostUsd??0),0), unknownCostSessions: sessions.filter(s => s.estimatedCostUsd===null).length };
+  });
+  return {...report,totals,containers,byContainer,multiContainer:computeMultiContainerDays(report.sessions),totalSessions:report.sessions.length,sessions:report.sessions.slice(-100).reverse().map(s=>({...s,note:latest.get(s.startOperationId)??null}))};
 }
 /** Append-only revisions. A stale editor must reload rather than overwrite another editor's note. */
 export async function appendSessionNote(db:D1Database,id:number,expectedRevision:number,content:string,actor:string) {

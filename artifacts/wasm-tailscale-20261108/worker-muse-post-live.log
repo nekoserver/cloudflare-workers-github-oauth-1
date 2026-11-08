@@ -1,0 +1,3 @@
+{"phase": "start", "state": "NotStarted"}
+{"phase": "tailnet", "state": "NeedsLogin", "panic": false, "peerOnline": false}
+{"phase": "cleanup", "loggedOut": true}

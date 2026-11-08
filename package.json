@@ -26,6 +26,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-ecoverse/wasm-tailscale": "1.104.1-13",
     "@cloudflare/containers": "^0.3.7",
     "hono": "^4.13.13",
     "playwright": "^1.61.1",

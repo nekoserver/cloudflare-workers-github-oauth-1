@@ -36,6 +36,8 @@ NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
 # askgkは独立側のCodex認証復旧まで、本体コンテナ(mygw)へ一時的に送る。
 # 経路一覧はsrc/data/askgk-routes.json。ASKGK_ROUTESのJSON設定で上書きできる。
 ASKGK_ROUTE_ID = "main"
+# Independent Gadgets page; API token is the MUSE_GADGET_SDK_TOKEN secret.
+MUSE_GADGET_RELAY_URL = "http://cf-demo-container:8766"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -174,6 +176,16 @@ class_name = "AichatJob"
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["AichatJob"]
+
+# Independent server-side WASM tailnet node for /tailscale-wasm.
+# No container image build is needed for this class.
+[[durable_objects.bindings]]
+name = "TAILSCALE_WASM"
+class_name = "TailscaleWasm"
+
+[[migrations]]
+tag = "v3-tailscale-wasm"
+new_sqlite_classes = ["TailscaleWasm"]
 
 # dynamicneko（Cloudflare Dynamic Worker Loader使用）への直接呼び出し。/neko hellodwが
 # 起動確認pingを送る。公開URLへの通常fetch()は*.workers.dev同士だとCloudflareに

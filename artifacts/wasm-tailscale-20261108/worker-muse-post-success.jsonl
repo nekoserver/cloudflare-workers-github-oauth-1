@@ -1,0 +1,4 @@
+{"phase": "start", "state": "Running", "panic": false}
+{"phase": "tailnet", "state": "Running", "panic": false, "peerOnline": true}
+{"phase": "single-post", "target": "muse-vm:8080/v1/chat/completions", "status": 200, "json": true, "responseBytes": 325, "hasChoices": true, "exactMarker": true}
+{"phase": "cleanup", "loggedOut": true}

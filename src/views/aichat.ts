@@ -8176,8 +8176,8 @@ ${AICHAT_MUSE_HEALTH_SCRIPT}
           signalBtn.type = 'button';
           signalBtn.className = 'model-dot-dropdown-tune-btn';
           signalBtn.textContent = '⚙';
-          signalBtn.title = 'muse のシグナル送信を設定';
-          signalBtn.setAttribute('aria-label', 'muse のシグナル送信を設定');
+          signalBtn.title = 'muse の接続・シグナル設定';
+          signalBtn.setAttribute('aria-label', 'muse の接続・シグナル設定');
           signalBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             closeModelDotDropdown();
@@ -8570,7 +8570,7 @@ ${AICHAT_JOB_CLIENT_SCRIPT}
       }
 
       var museSubmission = /^\\s*\\/neko\\s+askgk\\s+muse_prompt\\s*=/i.test(currentMsg)
-        || (payload.model === 'muse' && !/^\\s*\\/(?:neko\\b|askmuse(?:\\s|$))/i.test(currentMsg));
+        || (payload.model === 'muse' && !/^\\s*\\/(?:neko\\b|(?:askmuse|askmgs)(?:\\s|$))/i.test(currentMsg));
       if (museSubmission) museHealthWatch.beginSubmission();
       // 生成とログ保存はサーバーのジョブ(Durable Object)が行う。タブを閉じても途切れない(ユーザー指定、2026-11-07)。
       var streamState = { text: '', bubble: null };

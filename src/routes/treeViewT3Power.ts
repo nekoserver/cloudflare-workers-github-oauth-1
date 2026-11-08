@@ -3,6 +3,7 @@ import type {Bindings} from '../types';
 import type {ContainerOperationLogEntry} from '../utils/cfContainerOperationLog';
 import {buildWorkerSignatureMessage} from '../utils/workerRequestSignature';
 import {parseAuthorizedKeyResponse, validatePublicKeyLine} from '../utils/authorizedKeyInput';
+import {requestT3PairingHandoff} from '../utils/t3PairingHandoff';
 
 export type T3ContainerState = {status: string; lastChange?: number};
 export type T3PowerStub = {
@@ -50,14 +51,10 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
     if (!stub) return c.json({error:'DEMO_CONTAINERが未設定です'},503);
     // tree-viewのログインで、T3にもそのまま入る。コンテナ内でT3のペアリング(1回限り・5分)を作り、そのURLを返す。
     if (action === 'pairing') {
-      try {
-        const response = await stub.fetch(new Request('http://container/t3/pairing',{method:'POST'}));
-        const data = await response.json() as {ok?:boolean;pairUrl?:unknown;expiresAt?:unknown;errorCode?:string;detail?:string;remedy?:string};
-        if (response.ok && data?.ok === true && typeof data.pairUrl === 'string' && typeof data.expiresAt === 'string') return c.json({pairUrl:data.pairUrl,expiresAt:data.expiresAt});
-        return c.json({error:data?.errorCode ?? 'pairing_failed',detail:data?.detail ?? 'HTTP '+response.status,remedy:data?.remedy ?? ''},502);
-      } catch (error) {
-        return c.json({error:'container_unreachable',detail:error instanceof Error ? error.message : String(error),remedy:'本体demoコンテナが起動していないか、応答していません。'},502);
-      }
+      const handoff = await requestT3PairingHandoff(request => stub.fetch(request));
+      const data = await handoff.json() as {ok?: boolean; pairUrl?: string; expiresAt?: string; errorCode?: string; detail?: string; remedy?: string};
+      if (handoff.ok) return c.json({pairUrl:data.pairUrl,expiresAt:data.expiresAt});
+      return c.json({error:data.errorCode ?? 'pairing_failed',detail:data.detail ?? 'T3 pairing failed',remedy:data.remedy ?? ''},502);
     }
     // tree-viewのターミナルから本体コンテナのcodexを呼ぶため、ターミナルの公開鍵を本体のauthorized_keysに登録する。
     if (action === 'authorize-key') {

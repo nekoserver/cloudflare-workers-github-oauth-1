@@ -192,6 +192,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko hellodw | ダイナミックWorker(dynamicneko)にhelloを送り、worldが返るか起動確認します |',
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" / /neko askgk muse_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /help /usage /status /ping /models | 言語モデルがMuseのとき、本体コンテナを経由してmuse-vmで直接実行します。推論は走らず、結果はD1に記録しません |',
+    '| /askmgs prompt="<質問文>" | 独立したGadgets用ページと共通のAPIへ送り、専用会話で応答を取得します |',
     '| /askmuse prompt="<質問文>" | 本体コンテナを経由してtailnet上のMuseへ直接問い合わせ、Museの回答として保存します。tunnelsを通りません。本体コンテナの起動中だけ使えます |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko secureminelog | "secureminelog"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
@@ -1025,6 +1026,7 @@ export type AichatSlashCommandDeps = {
   askTunnelSigner?: (message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>;
   /** `/askmuse prompt="..."` 用。本体コンテナを経由してtailnet上のmuse-vmへ直接問い合わせる。 */
   askMuseDirect?: (prompt: string) => Promise<MuseDirectResult>;
+  askMuseGadget?: (prompt: string) => Promise<{ ok: boolean; reply?: string; error?: string; partial?: boolean }>;
   /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */
   loadMentionEditorRuby?: (filename: string) => Promise<string | null>;
   fetchAichatSourceTotals?: () => Promise<Record<AichatSourceKey, number>>;
@@ -1332,6 +1334,8 @@ export type AichatSlashCommandResult =
 const ASKMUSE_USAGE = '使い方: /askmuse prompt="<質問文>"';
 
 const ASKMUSE_ERROR_MESSAGES: Partial<Record<MuseDirectError, string>> = {
+  tailscale_wasm_not_configured: 'Worker内Tailscaleの接続経路が未設定です',
+  muse_connection_failed: 'Museへの接続を確認できません。Tailscaleの接続状況を確認してください（自動再送はしません）',
   container_not_running: '本体コンテナが停止しています。/cf-containersから起動してください',
   muse_not_authenticated: 'WorkerのsecretにMUSE_API_KEYが設定されていません',
   prompt_too_large: '質問文が長すぎます(16KiBまで)',
@@ -1376,6 +1380,15 @@ export async function interpretAichatSlashCommand(
   deps: AichatSlashCommandDeps
 ): Promise<AichatSlashCommandResult> {
   const trimmed = message.trim();
+  if (/^\/askmgs(?:\s|$)/i.test(trimmed)) {
+    const prompt = parseAskMusePrompt(trimmed.replace(/^\/askmgs/i, '/askmuse'));
+    if (!prompt?.trim()) return { handled: true, response: '使い方: /askmgs prompt="<質問文>"' };
+    if (!deps.askMuseGadget) return { handled: true, response: '❌ /askmgs は現在利用できません' };
+    const result = await raceWithTimeout(deps.askMuseGadget(prompt), ASKGK_TIMEOUT_MS);
+    if (result.status !== 'ok') return { handled: true, response: '❌ /askmgs: 応答を確認できません。自動再送はしません。' };
+    if (!result.value.ok || !result.value.reply?.trim()) return { handled: true, response: '❌ /askmgs: ' + (result.value.error || '回答を確認できませんでした') };
+    return { handled: true, response: result.value.reply + (result.value.partial ? '\n\n（途中までの回答）' : '') + '\n\nEngine: Muse Gadget SDK', saveAsAiResponse: false };
+  }
   if (/^\/askmuse(?:\s|$)/i.test(trimmed)) return interpretAskMuseCommand(trimmed, deps);
   if (!trimmed.toLowerCase().startsWith('/neko')) {
     return { handled: false };
