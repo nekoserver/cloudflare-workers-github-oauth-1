@@ -12,8 +12,8 @@ const script = new Function(`${MUSE_INQUIRIES_SCRIPT}\nreturn { initMuseInquirie
 const CASE_ID = 'bridge-jobs-queue-20261107';
 const BOARD = {
   cases: [
-    { id: CASE_ID, goal: '<img src=x onerror=alert(1)>キューを読む', status: 'open', entries: 2, openKeys: 1, blockingOpenKeys: 1, proposed: 1, durationSeconds: 313, lastAskedAt: '2026-11-07T20:30:00Z', createdAt: '2026-11-07T19:50:00Z', resolvedAt: null },
-    { id: 'nix-packages-20261107', goal: 'Nixの一覧', status: 'resolved', entries: 20, openKeys: 0, blockingOpenKeys: 0, proposed: 0, durationSeconds: 2000, lastAskedAt: null, createdAt: '2026-11-07T01:00:00Z', resolvedAt: '2026-11-07T05:00:00Z' },
+    { id: CASE_ID, goal: '<img src=x onerror=alert(1)>キューを読む', status: 'open', stage: 'plan', entries: 2, openKeys: 1, blockingOpenKeys: 1, proposed: 1, durationSeconds: 313, lastAskedAt: '2026-11-07T20:30:00Z', createdAt: '2026-11-07T19:50:00Z', resolvedAt: null },
+    { id: 'nix-packages-20261107', goal: 'Nixの一覧', status: 'resolved', stage: null, entries: 20, openKeys: 0, blockingOpenKeys: 0, proposed: 0, durationSeconds: 2000, lastAskedAt: null, createdAt: '2026-11-07T01:00:00Z', resolvedAt: '2026-11-07T05:00:00Z' },
   ],
   phases: [
     { key: 'inquiry', label: '協議（問い合わせ）', panels: [
@@ -372,6 +372,7 @@ describe('Museとの協議のカンバン', () => {
 });
 
 describe('Museとの協議のカンバン: ページとルート', () => {
+  beforeEach(loadBody);
   it('生成HTMLの全scriptがnode --checkに通り、上部の帯は高さ44pxで固定', () => {
     const html = getMuseInquiriesPage();
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
@@ -379,11 +380,81 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     for (const s of scripts) expect(() => execFileSync(process.execPath, ['--check'], { input: s })).not.toThrow();
     expect(html).toMatch(/\.inq-nav \{[^}]*position: sticky; top: 0;[^}]*height: 44px;/);
   });
+  // ユーザー指定(2026-11-08): 議題を段階(構想・計画・実装・試験運用)で区別する。
+  it('ケースの一覧と詳細に段階を出し、未設定は「段階未設定」と出す', async () => {
+    await script.initMuseInquiriesPage({ document, fetchJson: api() });
+    const stage = (id: string) => document.querySelector(`[data-case-summary="${id}"] [data-case-stage]`);
+    expect(stage(CASE_ID)!.textContent).toBe('計画');
+    expect(stage(CASE_ID)!.getAttribute('data-case-stage')).toBe('plan');
+    expect(stage('nix-packages-20261107')!.textContent).toBe('段階未設定');
+    (document.querySelector(`[data-case-summary="${CASE_ID}"]`) as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().textContent).toContain(CASE_ID + ' / 協議中 / 計画 / 開始'));
+  });
+
+  // ユーザー指定(2026-11-08): 採否待ちの提案のモーダルから、その場で採用・不採用を伝える。
+  it('採否待ちの提案のモーダルに採用・不採用のボタンを出し、押すと記録して一覧を読み直す', async () => {
+    const fetchJson = api();
+    const postJson = vi.fn(async () => ({ ok: true, status: 'adopted' }));
+    await script.initMuseInquiriesPage({ document, fetchJson, postJson });
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    expect(modal().textContent).toContain('実行は始めません');
+    (modal().querySelector('[data-field="decision-note"]') as HTMLTextAreaElement).value = 'これで進める';
+    (modal().querySelector('[data-action="decide-adopted"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('[data-field="decision-result"]')!.textContent).toBe('採用として記録しました'));
+    expect(postJson).toHaveBeenCalledWith('/api/muse-inquiries/proposals/p1/decision', { decision: 'adopted', note: 'これで進める' });
+    expect(fetchJson.mock.calls.filter((c) => c[0] === '/api/muse-inquiries/board').length).toBe(2);
+    expect(modal().querySelector('[data-action="decide-adopted"]')).toBeNull();
+  });
+  it('記録に失敗したら理由を出し、ボタンを押せる状態に戻す', async () => {
+    const postJson = vi.fn(async () => { throw new Error('この提案はもう採否待ちではありません'); });
+    await script.initMuseInquiriesPage({ document, fetchJson: api(), postJson });
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    (modal().querySelector('[data-action="decide-rejected"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().querySelector('[data-field="decision-result"]')!.textContent).toContain('記録できませんでした: この提案はもう採否待ちではありません'));
+    expect((modal().querySelector('[data-action="decide-rejected"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(postJson).toHaveBeenCalledWith('/api/muse-inquiries/proposals/p1/decision', { decision: 'rejected', note: '' });
+  });
+
+  it('採否待ちでない提案にはボタンを出さない', async () => {
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'adopted' ? { ...p, panels: [{ ...BOARD.phases[2].panels[0], id: 'p9', status: 'adopted' }] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board), postJson: vi.fn() });
+    (document.querySelector('#inq-board [data-card-key="proposal:' + CASE_ID + ':p9"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    expect(modal().querySelector('[data-action^="decide-"]')).toBeNull();
+  });
+
+  // ユーザー指定(2026-11-08): 利用者(user)の表示名は「🙄 User」にする。
+  it('提案者・問い合わせの相手と依頼者がuserなら「🙄 User」と表示する', async () => {
+    const proposal = BOARD.phases.find((p) => p.key === 'proposed')!.panels[0];
+    const entry = BOARD.phases[0].panels[0];
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => {
+      if (p.key === 'proposed') return { ...p, panels: [{ ...proposal, proposedBy: 'user' }] };
+      if (p.key === 'inquiry') return { ...p, panels: [{ ...entry, agent: 'User' }] };
+      return p;
+    }) };
+    const detail = { ...DETAIL, entries: [{ ...DETAIL.entries[1], agent: 'user', askedBy: 'user' }] };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async (url: string) => (url === '/api/muse-inquiries/board' ? board : detail)) });
+    const proposer = [...document.querySelectorAll('[data-proposer]')].find((e) => e.getAttribute('data-proposer') === '🙄 User');
+    expect(proposer?.querySelector('h3')?.textContent).toBe('🙄 User');
+    const card = document.querySelector('#inq-board [data-panel="entry"]')!;
+    expect(card.textContent).toContain('#2 🙄 User / 所要');
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    expect(modal().textContent).toContain('提案者🙄 User');
+    (card as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().textContent).toContain('#2 🙄 User / 🙄 User / '));
+  });
+
   it('管理者だけが見られ、INQUIRY_DBのバインディングで読む', () => {
     const index = readFileSync('src/index.ts', 'utf8');
     expect(index).toContain("app.get('/muse-inquiries', authMiddleware, cfDashboardAdminMiddleware,");
     expect(index).toContain("app.get('/api/muse-inquiries/board', authMiddleware, cfDashboardAdminMiddleware,");
     expect(index).toContain("app.get('/api/muse-inquiries/cases/:caseId', authMiddleware, cfDashboardAdminMiddleware,");
+    // 採否の記録は管理者だけ、同じオリジンからだけ受け付ける(2026-11-08)。
+    const route = index.slice(index.indexOf("app.post('/api/muse-inquiries/proposals/:proposalId/decision', authMiddleware, cfDashboardAdminMiddleware,"));
+    expect(route.length).toBeGreaterThan(0);
+    expect(route.slice(0, 600)).toContain("c.req.header('Origin') !== new URL(c.req.url).origin");
     const toml = readFileSync('wrangler.toml', 'utf8');
     expect(toml).toMatch(/\[\[d1_databases\]\]\nbinding = "INQUIRY_DB"\ndatabase_name = "agent-inquiries"\ndatabase_id = "ab65ff96-6333-4673-9ad4-4324be622184"/);
     expect(readFileSync('src/types.ts', 'utf8')).toContain('INQUIRY_DB?: D1Database;');

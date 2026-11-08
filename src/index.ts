@@ -478,7 +478,7 @@ import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { getMuseInquiriesPage } from './views/museInquiries';
-import { loadInquiryBoard, loadInquiryCase, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
+import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
 import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
@@ -20394,6 +20394,28 @@ app.get('/api/muse-inquiries/cases/:caseId', authMiddleware, cfDashboardAdminMid
     const message = err instanceof Error ? err.message : String(err);
     logger.warn('muse inquiry case failed', { caseId, error: message });
     return jsonUtf8({ error: '協議の記録を読めませんでした: ' + message }, 500);
+  }
+});
+
+// 採否待ちの提案を、モーダルからその場で採用・不採用にする(ユーザー指定、2026-11-08)。採用は判断の記録だけで、実行は始めない。
+app.post('/api/muse-inquiries/proposals/:proposalId/decision', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const body = await c.req.json<{ decision?: unknown; note?: unknown }>().catch(() => null);
+  if (!body) return jsonUtf8({ error: 'JSONで送ってください' }, 400);
+  const user = c.get('user');
+  const actor = (user?.name || user?.sub || '').slice(0, 100);
+  try {
+    const result = await decideInquiryProposal(db, c.req.param('proposalId') ?? '', body.decision as 'adopted' | 'rejected', typeof body.note === 'string' ? body.note : '', actor);
+    if (result.ok) return jsonUtf8({ ok: true, status: result.status });
+    const status = result.errorCode === 'not_found' ? 404 : result.errorCode === 'not_pending' ? 409 : 400;
+    return jsonUtf8({ error: result.detail, errorCode: result.errorCode }, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiry decision failed', { error: message });
+    return jsonUtf8({ error: '採否を記録できませんでした: ' + message }, 500);
   }
 });
 

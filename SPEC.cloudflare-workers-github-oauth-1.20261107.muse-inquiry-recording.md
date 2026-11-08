@@ -2,7 +2,7 @@
 
 作成日: 2026-11-07
 
-関連: [エージェントへの問い合わせを記録するデータベース（NOTICE）](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)、スキーマ`migrations-agent-inquiries/`（7ファイル）、ジョブキューの仕様は[SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md](SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md)。
+関連: [エージェントへの問い合わせを記録するデータベース（NOTICE）](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)、スキーマ`migrations-agent-inquiries/`（8ファイル）、ジョブキューの仕様は[SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md](SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md)。
 
 ## 1. 目的と範囲
 
@@ -39,7 +39,7 @@
 
 | 順 | テーブル | 書く内容 | いつ |
 |---|---|---|---|
-| 1 | `inquiry_cases` | `id`（`<話題>-<YYYYMMDD>`）、`goal`（解決条件を1文） | 問題に取りかかったとき。1問題1行 |
+| 1 | `inquiry_cases` | `id`（`<話題>-<YYYYMMDD>`）、`goal`（解決条件を1文）、`stage`（構想`concept`・計画`plan`・実装`implementation`・試験運用`trial`。2026-11-08追加） | 問題に取りかかったとき。1問題1行。段階が進んだら`stage`を更新する |
 | 2 | `inquiry_entries` | `seq`、`clue`（なぜこの質問か）、`asked_by`（`claude-code`・`codex`・`user`）、`agent`（`muse`・`muse-main-chat`）、`ask_id`、`question`（送った全文）、`answer`（全文）、`info`（聞き出した事実の要約）、`progress`（前進したこと）、`status`、`duration_seconds` | 回答を受け取った直後。失敗・取り下げも行として残す |
 | 3 | `inquiry_keys` | 得たキー。`kind`は`known`（事実）・`unknown`（未確認で、答えが返ったら閉じる）・`pitfall`（落とし穴）。`blocking`（止まるか）、`mutating`（変更を伴うか）、`opened_by_entry_id`・`closed_by_entry_id` | 回答を読んだとき |
 | 4 | `inquiry_entry_keys` | 問い合わせとキーの対応。`role`は`target`（狙った）・`obtained`（得た） | 3と同時 |

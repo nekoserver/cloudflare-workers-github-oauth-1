@@ -1,7 +1,7 @@
 # SPEC: AIチャットからMuseに依頼したジョブを、本体コンテナのCLIが片付けて知見を貯める
 
 作成日: 2026-11-07
-状態: **案**（Museと協議済み。採否と実装は利用者が決める。キュー・D1ともまだ変更していない）
+状態: **案・主な判断は決定済み**（Museと協議済み。2026-11-08にロックをD1へ移す改訂をし、Codexがレビューした。10章の主な項目は利用者が決めた。キュー・D1ともまだ変更していない。実装は未着手）
 
 関連: [Museへの問い合わせを記録する処理（SPEC）](SPEC.cloudflare-workers-github-oauth-1.20261107.muse-inquiry-recording.md)、D1`agent-inquiries`のケース`bridge-jobs-queue-20261107`（問い合わせ2件、キー14件、Museの提案6件）。
 
@@ -37,10 +37,10 @@
 |---|---|---|
 | Muse（muse-vm） | 依頼の受付と振り分け。bridgeのジョブを`queue/`へ写し、応答の1行目にjob idを返す。結果の確認 | キュー（README・`queue-job.sh`の持ち主） |
 | 本体コンテナのClaude Code・Codex | `queue/`から取り出して実行し、結果を書き戻す | キュー（SSH経由） |
-| 同期役（本体コンテナ） | キューを読み、D1へ履歴と知見を反映する | D1（MuseはD1に書けない） |
+| 同期役（本体コンテナ） | キューを読み、D1へ履歴と知見を反映する。取り合いの判定はしない（5章のロックで行う） | D1（MuseはD1に書けない） |
 
 - 消費者は本体コンテナのCLIに寄せる。Museのメインチャットも取り出すなら、キューに`target`（`muse-main`・`claude-code`・`codex`・`any`）と`assignee`を足し、`any`だけを先着で取る。
-- **正の分け方**: 運用の正はキューのファイル、履歴と検索の正はD1。
+- **正の分け方**（2026-11-08改訂）: ジョブの中身（依頼と結果の本文）の正はキューのファイル。ジョブの状態（誰が持っているか、終わったか、何回目か）の正はD1の`bridge_job_locks`。両方が食い違ったら、状態はD1に合わせてファイルを直す。履歴と検索の正はD1。
 
 ## 4. キューの形式（合意案、`schema_version: 1`）
 
@@ -77,35 +77,89 @@
 | `status` | 置き場所 | 意味 |
 |---|---|---|
 | `queued` | `queue/` | 未着手 |
-| `in_progress` | `claimed/` | 着手済み。`claimed_by`・`claimed_at`・`lease_until`を持つ |
+| `in_progress` | `queue/`のまま | 着手済み。2026-11-08の改訂で`claimed/`は使わない。誰が持っているかはD1の`bridge_job_locks`で見る |
 | `done` | `done/` | 成功 |
 | `failed` | `done/` | 失敗。`.md`に理由・終了コード・ログの要約・再試行できるか |
 | `cancelled` | `done/` | 中止。`.md`に誰が・なぜ・どこまで進んだか |
 
 `done/`は「終わったもの」の置き場で、成功・失敗・中止を`status`で区別する。
 
-## 5. 着手・書き戻し・回収の手順
+## 5. 着手・書き戻し・再実行の手順（2026-11-08改訂: ロックはD1）
 
-**対象**: 本体コンテナのCLIがジョブを扱う手順 — 二重着手と、結果の無い完了を防ぐ。
+**対象**: 本体コンテナのCLI（Claude Code・Codex）がジョブを扱う手順と、D1`agent-inquiries`のロックの表`bridge_job_locks` — 二重着手と結果の無い完了を防ぎ、muse-vmの再起動やSSHの不通をまたいでも続きから片付けられるようにする。
+
+### 改訂の理由
+
+2026-11-07の案は、`queue/`から`claimed/`へのrenameで取り合いを決め、期限切れを回収役1つが`queue/`へ戻すものだった。Codexのレビュー（2026-11-08）で、次の穴が挙がった。
+
+- renameした後、JSONに所有者と期限を書く前に止まると、所有者の分からないジョブが残る。
+- 期限の判定がmuse-vmの時計に頼る。muse-vmは2026-11-07〜08に3回以上再起動した（23:03:52、00:23:47、00:38:49 UTC）。
+- 取る・延長する・完了にする、のすべてがSSHのファイル操作で、SSHが届かないと全体が止まる（00:45 UTCに再起動の直後で30秒の時間切れを実測。00:5x UTCには読めた）。
+- 前の実行者が残っていても、後から取った者と見分ける印（`claim_token`）が無い。
+
+**利用者の指示（2026-11-08）で、ロックをD1に置く。** 行は最初にジョブを依頼した側が作る。Museはロックに関わらない。ロックがあって結果が無く、期限が切れていれば、再実行する。
+
+### 役割
+
+| 主体 | すること |
+|---|---|
+| 依頼した側（AIチャットのWorker、本体コンテナのCLI） | Museへ依頼し、`bridge job id`が分かった時点で`bridge_job_locks`に行を作る |
+| Muse | 今までどおり`queue/`へジョブのファイルを置く。ロックには触れない |
+| 本体コンテナのCLI | `queue/`をSSHで読み、D1でロックを取り、実行し、結果を書き、D1で完了にする |
+
+行は依頼した側だけが作る。`queue/`にあってD1に行が無いジョブは、CLIは取らずにログに残し、依頼した側に行の作成を任せる（依頼した側は、`bridge job id`の行を拾えなかったときに作り直す）。
+
+### ロックの表（案。未適用）
+
+```sql
+CREATE TABLE IF NOT EXISTS bridge_job_locks (job_id TEXT PRIMARY KEY, created_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'claimed', 'done', 'failed')), claim_token TEXT, claimed_by TEXT, claimed_at INTEGER, lease_until INTEGER, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, result_path TEXT, result_sha256 TEXT, last_error TEXT, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)));
+```
+
+時刻はすべてD1の時計のepoch秒で書く（`CAST(strftime('%s','now') AS INTEGER)`）。muse-vmやコンテナの時計を使わない。
 
 ### 着手
 
-1. `ls queue/`で未着手を見る。`target`が自分か`any`のものだけを候補にする。
-2. `mv queue/<id>.json claimed/<id>.json`（同じファイルシステム内のrenameで原子的）。失敗したら、ほかの者が取ったので次へ。
-3. 取った後にJSONへ`status: in_progress`・`claimed_by`（例: `claude-code@cf-demo-container/run-<id>`）・`claimed_at`・`lease_until`を書く。**取り合いの判定はrenameで、項目は記録**。
-4. 実行中は`lease_until`を延長する（ハートビート）。
+状態が変わったら（取った、完了にした、`failed`にした）、7章の`bridge_job_events`に1行書く。D1のロックの表は最新の状態だけを持つので、途中の経過は履歴の表で追う。
 
-### 書き戻し（この順で行う）
+1. SSHで`queue/<id>.json`を読む。読めなければ取らない（期限だけ進むのを避ける）。
+2. 実行ごとに新しい`claim_token`（UUID）を作り、1文で取る。
 
-1. `done/<id>.md.tmp`に結果を書く。
-2. `done/<id>.md`へrenameする。
-3. JSONに`status`・`completed_at`・`result_summary`・`result_path`・`exit_code`を書き、`claimed/<id>.json`を`done/<id>.json`へ移す。**JSONの移動が完了の合図**。
+```sql
+UPDATE bridge_job_locks SET status = 'claimed', claim_token = ?1, claimed_by = ?2, claimed_at = CAST(strftime('%s','now') AS INTEGER), lease_until = CAST(strftime('%s','now') AS INTEGER) + ?3, attempts = attempts + 1, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?4 AND attempts < max_attempts AND result_path IS NULL AND (status = 'queued' OR (status = 'claimed' AND lease_until <= CAST(strftime('%s','now') AS INTEGER)));
+```
 
-### 期限切れの回収
+3. 応答の`meta.changes`が1なら取れた。0なら取らずに止める。0の理由（行が無い、終わっている、期限内、上限に達した）は断定しない。
+   - **応答が返らなかったとき**（D1は更新したが通信が切れた可能性がある）は、実行を始めない。`SELECT claim_token, status FROM bridge_job_locks WHERE job_id = ?`で、自分の`claim_token`が入っていれば取れている。入っていなければ取れていない。
+4. `attempts`は取ったときに増やす（同じ日の設計相談`job-queue-design-20261107-4ec8c0c5`の結論と同じ）。
 
-- 回収役は1つだけに決める（候補: 本体コンテナの同期役）。複数で回収すると再び競合する。
-- 回収は`claimed/`から`queue/`へ戻し、`status: queued`、`attempts`を1増やし、`last_error`に「期限切れで回収」を書く。
-- 回収した直後に`failed`にしない。`failed`は実行者が明示したとき、または`attempts`が`max_attempts`に達したときだけ。
+### 実行中
+
+- 期限の延長は`claim_token`と期限内であることを条件にする: `UPDATE bridge_job_locks SET lease_until = CAST(strftime('%s','now') AS INTEGER) + ?1, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?2 AND claim_token = ?3 AND status = 'claimed' AND lease_until > CAST(strftime('%s','now') AS INTEGER);`
+- 期限内は`lease_until > 今`、期限切れは`lease_until <= 今`で、着手・延長・完了の境界を揃える。
+- `changes`が0なら、結果を書かずに止める（期限が切れた、ほかの者に取られた、など。理由は断定しない）。
+
+### 書き戻し
+
+1. 結果を`done/<id>.<claim_token>.md.tmp`に書き、`done/<id>.<claim_token>.md`へrenameする。**名前に`claim_token`を入れるので、前の実行者と後の実行者が同じファイルを書かない**。
+2. D1で完了にする: `UPDATE bridge_job_locks SET status = 'done', result_path = ?1, result_sha256 = ?2, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?3 AND claim_token = ?4 AND status = 'claimed' AND lease_until > CAST(strftime('%s','now') AS INTEGER);`
+   - 応答が返らなかったときは、着手と同じく`SELECT`で、`status = 'done'`かつ自分の`result_path`になっているかを確かめる。
+3. `changes`が1なら、`queue/<id>.json`に`status: done`・`completed_at`・`result_path`を書き、`done/<id>.json`へ移す（ファイル側の記録。正はD1）。
+4. `changes`が0なら完了にできていない。書いた`.md`は消さずに残し、ログに書く（後から取った者の結果と見比べられる）。
+5. **D1で完了にした後、ファイル側を直す前に止まった場合**: 次に見たCLIは、D1が`done`で`queue/<id>.json`が残っていれば、D1の`result_path`を使ってファイル側（3.）だけを直す。**再実行しない**。
+
+### 再実行（利用者の方針）
+
+- **ロックがあって結果が無く、期限が切れていれば、次に見たCLIが取り直して再実行する。** 着手の`UPDATE`の条件（`status = 'claimed' AND lease_until < 今`）がそのまま再実行の条件になる。回収役は置かない。
+- 期限内は待つ。前の実行がまだ動いている可能性がある。
+- `attempts`が`max_attempts`に達して期限が切れたら、見つけた者が1文で`failed`にする: `UPDATE bridge_job_locks SET status = 'failed', last_error = ?1, updated_at = CAST(strftime('%s','now') AS INTEGER) WHERE job_id = ?2 AND status = 'claimed' AND result_path IS NULL AND attempts >= max_attempts AND lease_until <= CAST(strftime('%s','now') AS INTEGER);`（無条件に書くと、期限内の延長や完了を上書きする）
+- 「結果が無い」は、D1の`result_path`が空であること。`done/`に残った`.md`（完了にできなかった実行の結果）は結果に数えず、再実行した後に見比べる材料にする。
+- 期限が切れた前の実行が、まだ動いていることはある。延長と完了は期限内の条件で拒まれるので、D1の状態は壊れない。ただし、二重に実行された分の課金は防げない。
+- このキューのジョブは調査と回答の作成が主で、再実行の損失は主に二重の課金。外部へ書き込むジョブを扱うときは、再実行してよいかを別に決める（10章）。
+
+### SSHが届かないとき
+
+- 取らない。取った後に届かなくなったら、延長もしない。期限が切れれば、次に届いた者が再実行する。
+- muse-vmの再起動の直後は、tailscaledが戻るまで（2026-11-08 00:38:49の起動では約6分）SSHが拒否される。
 
 ## 6. AIチャットからの依頼とjob idの対応
 
@@ -211,26 +265,30 @@ ALTER TABLE ai_chat_shares ADD COLUMN bridge_job_id TEXT;
 
 1. **利用者が10章の「決めること」を決める。**
 2. Museが、READMEと`queue-job.sh`を更新し、`schema_version: 1`と追加の項目を後方互換で足す。応答の1行目に`bridge job id:`を出す。
-3. `claimed/`の新設など破壊的な変更は、キューを空にしてから切り替える。
+3. 5章のロックの表をD1に作る（`claimed/`は使わない。キューのファイルの形は変えない）。
 4. 本体側: D1に7章のテーブルを作る（`agent-inquiries`は利用者がSQLを実行する）。`ai_chat_shares.bridge_job_id`を足す。
 5. 本体コンテナ側: 同期役と、CLIの取り出し・書き戻しの手順（スクリプト）を作る。テストを先に書く。
 6. ダミーのジョブ1件で、取得・実行・書き戻し・D1への反映を通す。
 7. 両方で確かめたら、古い形式の読み取りをやめる。
 
-## 10. 決めること（利用者）
+## 10. 決めたこと・決めること（利用者）
 
-| 決めること | 案 |
+| 項目 | 結果 |
 |---|---|
-| Museのメインチャットも消費者にするか | しない（本体コンテナのCLIだけ）を推奨。する場合は`target`で振り分ける |
-| 期限切れの回収役 | 本体コンテナの同期役 |
-| 同期役の動かし方 | 手動（「キューを確認して」と頼まれたとき）から始め、定期実行は後で決める |
-| `bridge job id:`の行をAIチャットの表示から消すか | 消して、回答バブルにリンクとして出す |
-| `lease_until`の長さ・`max_attempts` | 30分・3回 |
-| D1の結び方 | 7章のB＋C |
+| Museのメインチャットも消費者にするか | **しない**。取り出すのは本体コンテナのCLIだけ（2026-11-08決定）。`target`・`assignee`は足さない |
+| 期限切れの回収役 | **置かない**。期限が切れたら、次に見たCLIが取り直す（2026-11-08、利用者の指示） |
+| ロックの置き場所 | **D1の`bridge_job_locks`**。最初の依頼者が行を作り、Museは関わらない（2026-11-08、利用者の指示） |
+| `bridge job id:`の行をAIチャットの表示から消すか | **消す**。Workerが拾ってD1に保存し、回答の吹き出しにリンクとして出す（2026-11-08決定） |
+| `lease_until`の長さ・`max_attempts` | **30分・3回**（2026-11-08決定） |
+| D1の結び方 | **7章のB＋C**（`inquiry_job_links`と`bridge_job_events`）（2026-11-08決定） |
+| 同期役の動かし方 | 未定。案は、手動（「キューを確認して」と頼まれたとき）から始め、定期実行は後で決める |
+| 外部へ書き込むジョブ（PRの作成、デプロイ、メールなど）も期限切れで再実行してよいか | 未定。案は、しない。そうしたジョブは`max_attempts = 1`で登録し、期限切れは`failed`にして人が判断する |
+| READMEの書き直しと時刻の統一（`bjw-p1`・`bjw-p2`） | 未定。muse-vmのファイルの変更なので、承認後にメインのチャットで依頼する。案はD1の提案の本文 |
 
 ## 11. 未確認
 
-- 本体コンテナからキューへの**書き込み**（rename・`.md`の作成）。今回は読み取りだけを実測した。ディレクトリは`drwxrws--- root`で、rootなら書けるはず。
+- 本体コンテナからキューへの**書き込み**（rename・`.md`の作成）。読み取りだけを実測した（2026-11-07と2026-11-08）。ディレクトリは`drwxrws--- root`で、rootなら書けるはず。
+- D1のREST APIの応答で`meta.changes`が条件付き`UPDATE`の結果を正しく返すこと（実装時にテストで確かめる）。
 - Codex CLIからの`tailscale ssh`（Codexのsandboxから使えるか）。
 - Museが`queue-job.sh`で写さない場合（「読み取りのみ」と指示した問い合わせは写さなかった）の扱い。
 - 自動で見に行く仕組み。Museのメインチャットは今は自動では見ない。
