@@ -312,3 +312,28 @@ DemoContainer.getStateの保存状態をctx.container.runningと照合し、保�
 実Durable Objectを含むWorker→Tailscale WASM→muse-vm POSTがHTTP200・指定応答一致。prefixなしMuseと`/askmuse`はWorkerを既定、旧コンテナ直通は設定モーダルで選ぶ構成へ変更。tailscale-wasmページに永続Job/同じJobへの返信、次回Codex/Claude問い合わせ時のMuse結果引き継ぎ、T3確認と`/cf-containers`共通の一回限りログインリンク生成、Worker/DOおよび全コンテナの費用・状態ウィジェットを実装。費用はAnalyticsと台帳ベースの集計・概算で請求書ではない。コンテナ停止時の自動起動なし。関連テスト群、実Chrome UI、実DO POSTに成功。Worker dry-runは圧縮後約9.83MiBで通過、コンテナrolloutなし。Production binding/migrationを伴う公開は未実施。詳細は[WASM→Muse SPEC](SPEC.cloudflare-workers-github-oauth-1.wasm-muse-bridge.20261108.md)。
 
 入力窓相当のPOSTを`/api/aichat/jobs`へ実際に1回送り、202でJobを作成し終端まで追跡したが、全Worker bundle内のTailscale WASM起動時に`syscall/js os.Getpid` panicとなりMuseへ到達せず、実回答マーカーは不一致。再送なし。実DOだけのPOST成功とは区別し、AIチャット入力窓の実応答は未確認に更新。障害結果は[artifact](artifacts/wasm-tailscale-20261108/aichat-live-e2e-result.jsonl)。通常のAIチャットでのCodex/Claude投稿は既存AICHAT_JOB経由でタブ切替後も継続し、`/tailscale-wasm`の補助tunnels問い合わせは別経路である。
+
+
+## 2026-11-08 現セッションのネットワーク再配置
+
+現ENV優先でApache SSI/CGIとApp Server/observer/LLM・WS/SSEを復元。限定ソケット・公開会話受信・Codex実応答成功。Tunnel一覧権限不足、stream530、r9 API502、Claude未認証、Muse未対応が残る。Chromeは認証ページでフォームに到達せず3回失敗、投稿未実施。AGENTSの停止指定に従い追加検証を停止。Worker/イメージ未更新。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK-CURRENT.20261108.md)。
+
+
+## 2026-11-08: dynamicneko tree-viewのMuse切り替え（2026-11-09に配備）
+
+⚙️モーダルの排他的checkboxと接続先一覧にmuse-vmを追加し、既存ワーカーiframeと会話を保持して切り替える。owner/Origin/HMAC/userToken認証の専用中継を本体Workerへ追加し、既存コンテナの固定Tailscale bridgeへ履歴付きPOST。本体65テスト・Chrome11テスト・dynamicneko型検査/relay検査成功。新本体ルートから実muse-vmへの1回の推論と履歴トークン回答を確認。本番Worker/新UI未配備。現コンテナのframe親サイト許可のみ適用済みで、dynamicnekoオリジンのfixtureから実認証フォーム可視を確認。詳細は[TREE VIEW MUSE REPORT](REPORT.cloudflare-workers-github-oauth-1.TREE-VIEW-MUSE.20261108.md)。
+
+
+## 2026-11-09: tree-viewチャットのウィンドウ/キーボードとMuse接続先設定（未配備）
+
+dynamicneko/lib側でAIチャット全体のフローティング化、サイズ変更、タイトルバー操作、tree-view Muse接続先の切り替えを実装。本体の署名付き専用ルートでもcontainer/workerの選択に従う。既定はcontainer、fallbackなし。AIチャット固有のミニキーボードは後続指定で撤去し、OSソフトウェアキーボードを使う。パネル右下⬜︎のみ表示し、浮動窓では下部⬜︎を表示しない。履歴・プレビュー・日付結果・TerminalSurfaceを共通リサイズ関数へ統一。main-worker-muse-1の状態に依存しない推論成功は未確認。関連ブラウザ19件、本体17件、lib 57件、Apache設定13件成功。dynamicneko全体npm testは既存ページブラウザテストの複数失敗とsandbox iframe初期化timeoutを含む。詳細はdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md。
+
+
+## 2026-11-09: 再テスト・Worker履歴ブリッジとtheme修正（未配備）
+
+Workerブリッジの単一入力制限を入口と共通の履歴検証に修正。単体/統合は成功したが、コンテナ実推論110秒timeout、Workerの初期health503・再検査はhealth200後に推論timeout。通信復旧とは扱わない。tailscale-wasm上部へ共通theme切替追加、関連7テスト成功。libのqueue受付表示もAI未受信を明示する文言へ修正。push/配備なし。詳細は[再テストREPORT](REPORT.cloudflare-workers-github-oauth-1.CHAT-RETEST.20261109.md)。
+
+
+## 2026-11-09 後続: UIを公開反映（コンテナ更新なし）
+
+本体Worker ca303d16-b1e6-4276-91d8-13f50ec41390、dynamicneko 7fd593e7-53d5-4606-b6f0-7b029e58661cをcontainers-rollout none/keep-varsで公開。公開JSはローカル本番ビルドとSHA256一致し、パネル⬜︎、chat固有キーボード撤去、共通リサイズ処理を含む。tailscale-wasmのthemeも配備済み。現libにはqueue件数配信/更新表示とトークンURL露出防止を配置し、observer/HTTP streamを再起動。公開conversation entry HTTP200で、チケット遷移にトークンフラグメントがないことを確認。iPhone実機PWAとログイン済み本番UI操作、Muse実推論は未確認。Git pushなし。詳細は[UI PUBLISH REPORT](REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md)とdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md、lib/REPORT.lib.20261109.pwa-session-url.md。

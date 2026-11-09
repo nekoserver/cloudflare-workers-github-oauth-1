@@ -1,3 +1,4 @@
+import {parseMuseMessages} from './museMessages';
 import type { IPN, IPNResponse } from '@ai-ecoverse/wasm-tailscale';
 
 /** Private DO endpoint: no caller-selected destination, credentials or redirects. */
@@ -16,12 +17,12 @@ export class WasmMuseBridge {
     let body: Uint8Array | undefined;
     if (chat) {
       const text = await request.text();
-      if (new TextEncoder().encode(text).length > 32768) return Response.json({ error: 'payload_too_large' }, { status: 413 });
+      if (new TextEncoder().encode(text).length > 100000) return Response.json({ error: 'payload_too_large' }, { status: 413 });
       let data;
       try { data = JSON.parse(text); } catch { return Response.json({ error: 'invalid_prompt' }, { status: 400 }); }
-      const prompt = data?.messages?.[0]?.content;
-      if (!Array.isArray(data?.messages) || data.messages.length !== 1 || data.messages[0].role !== 'user' || typeof prompt !== 'string' || !prompt.trim() || new TextEncoder().encode(prompt).length > 16384) return Response.json({ error: 'invalid_prompt' }, { status: 400 });
-      body = new TextEncoder().encode(JSON.stringify({ model: 'muse', stream: false, messages: [{ role: 'user', content: prompt }] }));
+      const messages = parseMuseMessages(data?.messages);
+      if (!messages) return Response.json({ error: 'invalid_prompt' }, { status: 400 });
+      body = new TextEncoder().encode(JSON.stringify({ model: 'muse', stream: false, messages }));
     }
     let upstream: IPNResponse | undefined, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

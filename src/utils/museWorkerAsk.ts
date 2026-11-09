@@ -25,19 +25,20 @@ export async function checkMuseWorkerHealth(env: Env): Promise<boolean> {
   try { const res = await boundedFetch(env, '/muse/health'); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
   catch { return false; }
 }
-export function museWorkerDep(env: Env, onStatus?: (healthy: boolean) => void) {
-  return async (prompt: string): Promise<MuseDirectResult> => {
+export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 'assistant'; content: string}[], onStatus?: (healthy: boolean) => void, maxTimeoutSeconds?: number): Promise<MuseDirectResult> {
     if (!env.TAILSCALE_WASM) { onStatus?.(false); return { ok: false, error: 'tailscale_wasm_not_configured' }; }
     if (!env.MUSE_API_KEY) { onStatus?.(false); return { ok: false, error: 'muse_not_authenticated' }; }
-    if (new TextEncoder().encode(prompt).length > 16384) return { ok: false, error: 'prompt_too_large' };
+    if (messages.reduce((size, message) => size + new TextEncoder().encode(message.content).length, 0) > 16384) return { ok: false, error: 'prompt_too_large' };
     try {
       const timeout = env.DB ? (await readAskgkTimeoutSetting(env.DB)).timeoutSeconds : DEFAULT_ASKGK_TIMEOUT_SECONDS;
-      const res = await boundedFetch(env, '/muse/v1/chat/completions', { messages: [{ role: 'user', content: prompt }] }, timeout * 1000);
+      const res = await boundedFetch(env, '/muse/v1/chat/completions', { messages }, Math.min(timeout, maxTimeoutSeconds ?? timeout) * 1000);
       if (res.status !== 200) {
         onStatus?.(false);
         return { ok: false, error: res.status === 504 ? 'llm_timeout' : res.status === 401 || res.status === 403 ? 'muse_authentication_failed' : res.status === 429 ? 'muse_usage_limit' : 'muse_connection_failed' };
       }
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
-  };
+ }
+export function museWorkerDep(env: Env, onStatus?: (healthy: boolean) => void) {
+  return (prompt: string): Promise<MuseDirectResult> => askMuseWorkerMessages(env, [{ role: 'user', content: prompt }], onStatus);
 }
