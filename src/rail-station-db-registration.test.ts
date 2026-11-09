@@ -23,4 +23,3 @@ describe('D1テーブル定義・登録の整合性', () => {
     expect(src).toMatch(/rail_station_fetched: 'system'/);
   });
 });
-
