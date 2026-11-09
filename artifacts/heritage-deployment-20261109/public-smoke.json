@@ -1,0 +1,37 @@
+[
+  {
+    "path": "/health",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a58063938bbacc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/webgl-heritage",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a58063938bb1cc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/heritage-access",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a58063938bc2cc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/heritage-area",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a5806393ac07cc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/heritage-journey",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a5806393ac10cc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/api/heritage/auth-context",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a5806393ac0fcc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  },
+  {
+    "path": "/api/heritage-area-boxes",
+    "status": 403,
+    "body": "{\"type\":\"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/\",\"title\":\"Error 1010: Access denied\",\"status\":403,\"detail\":\"The site owner has blocked access based on your browser's signature.\",\"instance\":\"a5806393cc50cc7b\",\"error_code\":1010,\"error_name\":\"browser_signature_banned\",\"error_categ"
+  }
+]

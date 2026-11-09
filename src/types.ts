@@ -9,6 +9,8 @@ import type { DemoContainer } from './containers/demoContainer';
 
 /** Cloudflare Workers 環境変数バインディング */
 export type Bindings = {
+  /** Separate world-heritage Worker; both Workers use the existing shared D1. */
+  HERITAGE?: Fetcher;
   /** Redmine公開URL→Apache HMACゲートウェイURLのJSONマップ */
   REDMINE_HMAC_TARGETS?: string;
   /** Shared origin HMAC; legacy Redmine-specific binding remains a fallback. */

@@ -1,0 +1,37 @@
+[
+  {
+    "path": "/health",
+    "status": 200,
+    "body": "{\"status\":\"ok\",\"timestamp\":\"2026-11-09T22:53:27.064Z\",\"environment\":\"development\"}"
+  },
+  {
+    "path": "/webgl-heritage",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  },
+  {
+    "path": "/heritage-access",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  },
+  {
+    "path": "/heritage-area",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  },
+  {
+    "path": "/heritage-journey",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  },
+  {
+    "path": "/api/heritage/auth-context",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  },
+  {
+    "path": "/api/heritage-area-boxes",
+    "status": 401,
+    "body": "{\"error\":\"認証が必要です\"}"
+  }
+]

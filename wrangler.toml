@@ -223,3 +223,8 @@ dataset = "github_oauth_metrics"
 # インストールも次回実行時に自動反映される）。
 [triggers]
 crons = ["0 */6 * * *", "5 * * * *"]
+
+# World heritage pages/APIs; D1 remains shared.
+[[services]]
+binding = "HERITAGE"
+service = "world-heritage"

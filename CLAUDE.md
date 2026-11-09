@@ -56,10 +56,11 @@ SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLIC
 - **`gh` が認証されていない環境**（GitHub APIトークンが無い環境）: gitプロキシ（127.0.0.1:39093）は **gitプロトコルのみ** 対応で、REST APIは通らない。PRはブラウザから手動作成する。push後にcompareリンクを提示:
   `https://github.com/{OWNER}/{REPO}/compare/{base}...{head}`
 
-### Cloudflare Workers デプロイ不可
-- `CLOUDFLARE_API_TOKEN` が存在しないため `wrangler deploy` は実行不可
-- Cloudflare MCP は参照のみ（一覧・詳細・コード取得）。デプロイ機能なし
-- **デプロイはユーザーのローカル環境から行う**
+### Cloudflare Workers の認証と配備（2026-11-09確認）
+- `CLOUDFLARE_API_TOKEN` だけでなく `CF_*` の変数名も確認する。この環境の `CF_CONTAINER_API_TOKEN` が有効で、Workersの参照・アップロード・配備に利用できることを確認済み。値をログや回答に出さない。
+- Wranglerを使う際はコマンドの環境だけで `CLOUDFLARE_API_TOKEN="$CF_CONTAINER_API_TOKEN"` として渡す。認証情報をファイルへ複製しない。
+- コンテナ変更のない本体の反映は `wrangler versions upload` と `wrangler versions deploy` で行える。適用前に新旧VersionのD1接続先とコンテナ定義を比較する。
+- このコンテナではDockerビルドを行わない。通常の `wrangler deploy` を本体に対して無条件に実行しない。
 
 ### 利用可能なMCPツール
 - **Cloudflare Developer Platform**: Workers/KV/D1/R2 の参照操作のみ
@@ -143,7 +144,7 @@ SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLIC
 1. **できないことを何度も試すな** — ツールやAPIが使えないと判明したら即座にユーザーに伝え、代替手段を提示する。同じ方法のバリエーションを繰り返し試さない
 2. **PRの作り方は `gh auth status` で決める** — `gh` が認証済みなら `gh pr create` で作成してPRのURLを提示する。認証されていなければ、ブラウザで作成してもらうためcompareリンクを提示して終わり（「Claude Code 環境の制約事項」の「GitHub API アクセス」を参照）
 2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したらPRのURL（`gh` が使えない環境ではcompareリンク）を提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
-3. **デプロイはユーザーに委ねる** — `CLOUDFLARE_API_TOKEN` がないため `wrangler deploy` は不可能。コード修正とpushまでが責務
+3. **認証情報と配備対象を確認する** — 上の「Cloudflare Workers の認証と配備」を参照。`CLOUDFLARE_API_TOKEN` が無いことだけで配備不可と判断しない。コンテナビルドの制約は別途守る。
 4. **秘密情報は `[vars]` に書かない** — `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`JWT_SECRET` はすべて `wrangler secret` で管理。`wrangler.toml` に平文で書き戻さない
 5. **テンプレートからクローンしたら最初に確認する3項目**:
    - `wrangler.toml` の `name` がインスタンス名と一致しているか

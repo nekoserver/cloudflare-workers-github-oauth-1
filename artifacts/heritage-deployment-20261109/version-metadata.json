@@ -1,0 +1,94 @@
+{
+  "before": {
+    "version": "20d48207-5117-4f42-be0c-61b0f1a0dd4c",
+    "containers": [
+      {
+        "class_name": "DemoContainer",
+        "name": "cloudflare-workers-github-oauth-1-democontainer"
+      }
+    ],
+    "database_bindings": [
+      {
+        "database_id": "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf",
+        "id": "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf",
+        "name": "DB",
+        "type": "d1"
+      },
+      {
+        "database_id": "ab65ff96-6333-4673-9ad4-4324be622184",
+        "id": "ab65ff96-6333-4673-9ad4-4324be622184",
+        "name": "INQUIRY_DB",
+        "type": "d1"
+      }
+    ],
+    "service_bindings": [
+      {
+        "environment": "production",
+        "name": "CF_AUTH",
+        "service": "cf-auth",
+        "type": "service"
+      },
+      {
+        "environment": "production",
+        "name": "DYNAMICNEKO",
+        "service": "dynamicneko",
+        "type": "service"
+      },
+      {
+        "environment": "production",
+        "name": "RUST_WORKER",
+        "service": "rust-worker-sqlx-d1",
+        "type": "service"
+      }
+    ]
+  },
+  "after": {
+    "version": "f873a68a-201b-4d7a-9203-45f03dcded8d",
+    "containers": [
+      {
+        "class_name": "DemoContainer",
+        "name": "cloudflare-workers-github-oauth-1-democontainer"
+      }
+    ],
+    "database_bindings": [
+      {
+        "database_id": "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf",
+        "id": "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf",
+        "name": "DB",
+        "type": "d1"
+      },
+      {
+        "database_id": "ab65ff96-6333-4673-9ad4-4324be622184",
+        "id": "ab65ff96-6333-4673-9ad4-4324be622184",
+        "name": "INQUIRY_DB",
+        "type": "d1"
+      }
+    ],
+    "service_bindings": [
+      {
+        "environment": "production",
+        "name": "CF_AUTH",
+        "service": "cf-auth",
+        "type": "service"
+      },
+      {
+        "environment": "production",
+        "name": "DYNAMICNEKO",
+        "service": "dynamicneko",
+        "type": "service"
+      },
+      {
+        "environment": "production",
+        "name": "HERITAGE",
+        "service": "world-heritage",
+        "type": "service"
+      },
+      {
+        "environment": "production",
+        "name": "RUST_WORKER",
+        "service": "rust-worker-sqlx-d1",
+        "type": "service"
+      }
+    ]
+  }
+}
