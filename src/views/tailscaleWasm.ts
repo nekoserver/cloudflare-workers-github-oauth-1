@@ -1,8 +1,10 @@
+import {getThemeCSS,getThemeInitScript,getThemeToggleCSS,getThemeToggleHTML,getThemeToggleScript} from '../utils/theme';
 import { TAILSCALE_COST_HTML, TAILSCALE_COST_SCRIPT } from './tailscaleWasmCost';
 export function renderTailscaleWasmPage(): string {
   return `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Worker → Muse</title>
-<style>body{font:16px system-ui;max-width:48rem;margin:2rem auto;padding:0 1rem}button,a{margin:.5rem .5rem .5rem 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}textarea{width:100%;box-sizing:border-box}article{border-bottom:1px solid #8885;padding:1rem 0}</style>
-<h1>Worker → Muse</h1><p>Worker内のTailscale WASMからMuseへ質問を送ります。コンテナやBluetoothは不要です。</p>
+${getThemeInitScript()}
+<style>${getThemeCSS()}${getThemeToggleCSS()}html{background:var(--bg-primary);color:var(--text-primary);color-scheme:light}html[data-theme="dark"]{color-scheme:dark}header{display:flex;align-items:center;justify-content:space-between;gap:1rem}button,input,textarea,select{background:var(--input-bg);color:var(--text-primary);border:1px solid var(--input-border);border-radius:6px;padding:.4rem}a{color:var(--accent-color)}body{font:16px system-ui;max-width:48rem;margin:2rem auto;padding:0 1rem}button,a{margin:.5rem .5rem .5rem 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}textarea{width:100%;box-sizing:border-box}article{border-bottom:1px solid #8885;padding:1rem 0}</style>
+<header><h1>Worker → Muse</h1>${getThemeToggleHTML()}</header><p>Worker内のTailscale WASMからMuseへ質問を送ります。コンテナやBluetoothは不要です。</p>
 <button id="connect">Tailscaleへ接続</button><button id="refresh">状態を更新</button><button id="logout">ログアウト</button>
 <p id="status" role="status">未取得</p><p id="gadget">Museへの接続を確認してください。</p><p><a id="login" hidden target="_blank" rel="noopener noreferrer">Tailscaleでログイン</a></p><pre id="peers"></pre>
 <form id="chat"><label for="prompt">質問</label><textarea id="prompt" rows="4" required maxlength="16384"></textarea><button id="send" type="submit" disabled>Worker経路で送信</button><button id="legacy-send" type="button" disabled>旧コンテナ経路で明示送信</button></form>
@@ -16,6 +18,7 @@ ${TAILSCALE_COST_HTML}
 <form id="agent-form"><label>エージェント <select id="agent-engine"><option value="codex">Codex</option><option value="claude">Claude Code</option></select></label><label><input id="agent-review" type="checkbox" checked>レビューを依頼</label><textarea id="agent-prompt" rows="4" required maxlength="16384" aria-label="レビュー対象・質問"></textarea><button id="agent-send" type="submit" disabled>tunnels.rb経由で送信</button></form><pre id="tools-result" role="status"></pre>
 </details>
 <script>
+${getThemeToggleScript()}
 const $=id=>document.getElementById(id),status=$('status'),link=$('login');let timer,ready=false,busy=false,sequence=0;
 const codes={pairing_required:'SDKトークンは設定済みです。GadgetをMuseアプリとペアリングしてください。',pair_again_with_sdk_token:'現在のSDKトークンでペアリングし直してください。',gadget_connecting:'GadgetからMuseへ接続中です。',sdk_token_mismatch:'WorkerとGadgetのSDKトークンが一致しません。',device_credentials_rejected:'Museがデバイスの認証を拒否しました。',device_credentials_unverified:'デバイスの認証を確認できません。',gadget_sdk_token_missing_or_invalid:'Gadgets用SDKトークンが未設定か、形式が不正です。',gadget_relay_offline:'Gadget窓口へ接続できません。',gadget_relay_not_configured:'Gadget窓口が未設定です。',existing_gadget_service_active:'別のGadgetサービスが稼働しています。',gadget_busy:'前の質問を処理中です。',reply_unavailable:'回答を確認できませんでした。投稿された可能性があるため自動再送はしません。',delivery_unknown_do_not_retry:'以前の投稿結果を確認できません。自動再送はしません。',container_not_running:'本体コンテナが停止中です。起動は行っていません。'};
 function buttons(){$('send').disabled=!ready||busy;$('legacy-send').disabled=busy||!containerRunning;}

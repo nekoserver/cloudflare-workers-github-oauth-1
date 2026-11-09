@@ -1,3 +1,4 @@
+import { createTreeViewMuseChatRoutes } from './routes/treeViewMuseChat';
 import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
 import { TailscalePageTools } from './utils/tailscalePageTools';
@@ -17250,6 +17251,17 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
   return !!expected && auth === expected;
 }
+
+// The tree-view Muse target uses the existing container's fixed tailnet bridge.
+app.route('/', createTreeViewMuseChatRoutes({
+  getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
 
 // T3 Code controls the same demo container as /cf-containers.
 app.route('/', createTreeViewT3PowerRoutes({

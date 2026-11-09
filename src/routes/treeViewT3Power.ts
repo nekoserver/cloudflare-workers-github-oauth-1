@@ -21,7 +21,7 @@ function statusResponse(state: T3ContainerState) {
   if (!state || !knownStates.has(state.status)) throw new Error('本体demoコンテナの状態を確認できません');
   return {status: state.status, running: state.status === 'running' || state.status === 'healthy'};
 }
-async function authenticated(request: Request, raw: string, secret: string | undefined): Promise<boolean> {
+export async function verifyTreeViewWorkerRequest(request: Request, raw: string, secret: string | undefined): Promise<boolean> {
   if (!secret || request.headers.get('CF-Worker') !== 'dynamicneko') return false;
   const timestamp = request.headers.get('CF-Worker-Timestamp') ?? '';
   const signature = request.headers.get('CF-Worker-Signature') ?? '';
@@ -39,7 +39,7 @@ export function createTreeViewT3PowerRoutes(dependencies: Dependencies) {
   app.post('/api/tree-view/t3-power-external',async c => {
     c.header('Cache-Control','no-store');
     const raw = await c.req.text();
-    if (raw.length > 8192 || !(await authenticated(c.req.raw,raw,c.env.DYNAMICNEKO_WORKER_HMAC_SECRET))) return c.json({error:'Unauthorized'},401);
+    if (raw.length > 8192 || !(await verifyTreeViewWorkerRequest(c.req.raw,raw,c.env.DYNAMICNEKO_WORKER_HMAC_SECRET))) return c.json({error:'Unauthorized'},401);
     let body: {action?:unknown;userToken?:unknown;publicKey?:unknown};
     try {body=JSON.parse(raw);} catch {return c.json({error:'不正なリクエストです'},400);}
     if (!body || (typeof body.action !== 'string' || !['status','start','stop','pairing','session','authorize-key'].includes(body.action)) || typeof body.userToken !== 'string') return c.json({error:'actionはstatus/start/stop/pairing/session/authorize-keyで指定してください'},400);
