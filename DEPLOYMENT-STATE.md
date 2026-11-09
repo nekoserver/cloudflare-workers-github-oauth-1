@@ -1,17 +1,23 @@
 # コード・稼働環境・ユーザー指定の差分
 
-## 2026-11-09: 世界遺産機能を別Workerへ切り出し（本番未反映）
+## 2026-11-09: 世界遺産機能を別Workerへ切り出し（Worker反映済み・PR未マージ）
 
-世界遺産の4画面・47ルート・マスタ・専用補助処理と関連テストを非公開リポジトリ
-`nekoserver/world-heritage` へ移動。本体は `HERITAGE` Service Bindingへ既存URLを転送し、
-新Workerは `MAIN` Bindingで本体の認証APIを使う。DBは既存D1 `workers-github-oauth` を
-共通利用し、マイグレーション管理は本体に残す。データ移行は行っていない。
+非公開リポジトリ `nekoserver/world-heritage` のWorkerを先に配備し、
+本体を `wrangler versions upload` → `wrangler versions deploy` で100%切り替えた。
+認証は本体へService Bindingで照会し、D1 `workers-github-oauth` を共通利用する。
+DBのコピー・マイグレーションは行っていない。
 
-新Worker側を先に配備し、その後本体側を配備する必要がある。ローカルで本体38件・
-別Worker228件の対象テストと別Workerの型検査・Wrangler dry-runは成功したが、
-本番デプロイ・本番DB操作・本番ブラウザ確認は未実施。本体の既存型エラーは残る。
-コンテナ再ビルド・再起動は不要。詳細は
-`REPORT.cloudflare-workers-github-oauth-1.HERITAGE-EXTRACTION.20261109.md`。
+2026-11-09 22:53 UTCのAPI確認:
+- 世界遺産: `d2bb3478-c5de-46ea-a488-20253b4494bb`（100%）
+- 本体: `f873a68a-201b-4d7a-9203-45f03dcded8d`（100%）
+- 本体の旧Version（切り戻し先）: `20d48207-5117-4f42-be0c-61b0f1a0dd4c`
+
+新旧VersionのD1接続先とコンテナ定義は一致。コンテナのビルド・ロールアウトは実施していない。
+本体38件、世界遺産側8件の境界テストを今回再実行して成功。公開URLは `/health` が200、
+4画面・認証API・エリアAPIが未認証で401となることを確認した。
+ログイン後の画面操作・AI連携は未確認。本体のPR #2554は未マージで、mainと本番コードに差がある。
+詳細と証跡は `REPORT.cloudflare-workers-github-oauth-1.HERITAGE-EXTRACTION.20261109.md`、
+`artifacts/heritage-deployment-20261109/` を参照。
 
 ## 2026-11-07: /muse-inquiriesの固定ヘッダ・状態表示・完了履歴・Markdown・提案者集計（本番未反映）
 

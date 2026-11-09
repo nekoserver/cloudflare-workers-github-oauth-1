@@ -1,0 +1,36 @@
+{
+  "world-heritage": {
+    "id": "a36e18aa-9845-4487-8245-b375aeeb2775",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "author_email": "okiraku.cloud@gmail.com",
+    "annotations": {
+      "workers/message": "Automatic deployment on upload.",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "d2bb3478-c5de-46ea-a488-20253b4494bb",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-09T22:50:59.332028Z"
+  },
+  "cloudflare-workers-github-oauth-1": {
+    "id": "5b507c10-2210-4e0b-880e-cc21dbbb0ff3",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "author_email": "okiraku.cloud@gmail.com",
+    "annotations": {
+      "workers/message": "World heritage extraction; shared D1; existing containers preserved",
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "f873a68a-201b-4d7a-9203-45f03dcded8d",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-09T22:52:20.586017Z"
+  }
+}
