@@ -9,6 +9,5 @@ export default defineConfig({
     testTimeout: 20_000,
     // scripts/*.test.mjs は node:test で書かれている(vitestのテストではない)。npm run test:node で実行する。
     exclude: ['node_modules/**', '.claude/**', 'scripts/**/*.test.mjs'],
-    setupFiles: ['./src/test-setup-heritage-journey-city-cookies.ts'],
   },
 });
