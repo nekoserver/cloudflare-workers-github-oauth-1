@@ -5,8 +5,10 @@ import { MUSE_STATUS_CSP } from './museStatus';
  * /muse-wasm-test: テスト用ページ(ユーザー指定、2026-11-08)。
  * 1. 公式Tailscale WASM(public/tailscale-connect)でブラウザをtailnetに参加させ、muse-vmの/healthへ定期的にGETを送って記録する。
  *    WASMのfetchはGETだけでヘッダーを付けられないので、確かめられるのは到達性だけ(推論は送らない)。
- * 2. 要望はWorkerのAPI(/api/muse-wasm-test/jobs)経由でD1 agent-inquiriesのbridge_jobsへ積む。
- *    片付けるのは本体コンテナのCLI(bridge_jobs.py run-once)。SPEC bridge-job-queue の12章。
+ * 2. 要望はWorkerのジョブ台帳(MuseAgentJobs、/api/tailscale-wasm/jobs)へ送る。DOのアラームが取り出し、
+ *    WorkerのTailscale WASMノードがmuse-vmのMuseへ届ける。コンテナ上のエージェントは使わない(このWorkerの方針)。
+ *    以前はD1 bridge_jobsに積んでいたが、それは本体コンテナのCLIが手動で片付ける前提で、積まれたまま止まっていた。
+ * 3. muse-monitor経由のモニタ: 本体→muse-monitor→muse-vm(:8090)で15項目を読む(/api/muse-monitor/:section)。
  *
  * template literalに埋め込むため、バックスラッシュのエスケープと正規表現リテラルを使わない(CLAUDE.md ルール29)。
  * 上流の文字列(応答の本文・要望・結果)はtextContentで表示し、HTMLとして解釈しない。
@@ -199,37 +201,52 @@ export const MUSE_WASM_TEST_SCRIPT = `
         if (state.timer !== null) startSchedule();
       }
 
+      var MWT_JOBS_URL = '/api/tailscale-wasm/jobs';
+      var MWT_PENDING = { queued: true, sending: true };
+      var jobPoll = null;
+      function stopJobPoll() {
+        if (jobPoll !== null) { deps.clearInterval(jobPoll); jobPoll = null; }
+      }
       function renderJobs(jobs) {
         var tbody = el('mwt-jobs');
         tbody.textContent = '';
-        if (!jobs.length) {
+        var pending = false;
+        var rows = [];
+        jobs.forEach(function(job) {
+          (job.messages || []).forEach(function(message) {
+            if (MWT_PENDING[message.state]) pending = true;
+            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, message.state, message.reply === null || message.reply === undefined ? '' : message.reply]);
+          });
+        });
+        if (!rows.length) {
           var empty = doc.createElement('tr');
           var cell = doc.createElement('td');
           cell.colSpan = 4;
           cell.textContent = 'まだ要望はありません';
           empty.appendChild(cell);
           tbody.appendChild(empty);
-          return;
         }
-        jobs.forEach(function(job) {
+        rows.forEach(function(values) {
           var row = doc.createElement('tr');
-          var status = job.status + ' (' + job.attempts + '/' + job.maxAttempts + ')' + (job.externalWrite ? ' 外部書き込み' : '');
-          var result = job.resultText !== null && job.resultText !== undefined
-            ? job.resultText + (job.resultTruncated ? ' …(続きは省略)' : '')
-            : (job.lastError ? 'エラー: ' + job.lastError : '');
-          [mwtFormatTime(job.createdAt * 1000) + ' ' + job.jobId, job.requestText, status, result].forEach(function(value) {
-            var cell = doc.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
+          values.forEach(function(value) {
+            var td = doc.createElement('td');
+            td.textContent = value;
+            row.appendChild(td);
           });
           tbody.appendChild(row);
         });
+        return pending;
       }
       function loadJobs() {
-        return deps.fetchJson('/api/muse-wasm-test/jobs').then(function(data) {
-          if (data && Array.isArray(data.jobs)) { renderJobs(data.jobs); setText('mwt-jobs-error', ''); }
-          else setText('mwt-jobs-error', (data && data.error) || '一覧を読めませんでした');
+        return deps.fetchJson(MWT_JOBS_URL).then(function(data) {
+          if (data && Array.isArray(data.jobs)) {
+            setText('mwt-jobs-error', '');
+            if (!renderJobs(data.jobs)) stopJobPoll();
+          } else setText('mwt-jobs-error', (data && data.error) || '一覧を読めませんでした');
         }).catch(function(error) { setText('mwt-jobs-error', '一覧を読めませんでした: ' + (error && error.message ? error.message : String(error))); });
+      }
+      function startJobPoll() {
+        if (jobPoll === null) jobPoll = deps.setInterval(function() { loadJobs(); }, 5000);
       }
       function submitJob() {
         var input = el('mwt-request');
@@ -237,23 +254,23 @@ export const MUSE_WASM_TEST_SCRIPT = `
         if (!text) { setText('mwt-submit-result', '要望を入力してください'); return Promise.resolve(); }
         el('mwt-submit').disabled = true;
         setText('mwt-submit-result', '送信中…');
-        return deps.fetchJson('/api/muse-wasm-test/jobs', {
+        var requestId = 'mwt-' + deps.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        return deps.fetchJson(MWT_JOBS_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request: text, external: el('mwt-external').checked })
+          body: JSON.stringify({ requestId: requestId, prompt: text })
         }).then(function(data) {
-          if (data && typeof data.jobId === 'string') {
-            setText('mwt-submit-result', 'ジョブとして積みました: ' + data.jobId + '(本体コンテナのCLIが片付けます)');
+          if (data && data.ok && typeof data.messageId === 'string') {
+            setText('mwt-submit-result', '受け付けました: ' + data.messageId + '(Workerがmuse-vmのMuseへ送ります)');
             input.value = '';
-            el('mwt-external').checked = false;
+            startJobPoll();
             return loadJobs();
           }
-          setText('mwt-submit-result', '積めませんでした: ' + ((data && (data.error || data.detail)) || '理由が返りませんでした'));
+          setText('mwt-submit-result', '送れませんでした: ' + ((data && (data.error || data.detail)) || '理由が返りませんでした'));
         }).catch(function(error) {
-          setText('mwt-submit-result', '積めませんでした: ' + (error && error.message ? error.message : String(error)));
+          setText('mwt-submit-result', '送れませんでした: ' + (error && error.message ? error.message : String(error)));
         }).then(function() { el('mwt-submit').disabled = false; });
       }
-
       function monText(data) {
         if (data && typeof data.errorCode === 'string') {
           return { ok: false, text: 'エラー(' + data.errorCode + (data.upstreamStatus ? ', HTTP ' + data.upstreamStatus : '') + '): ' + (data.error || '理由が返りませんでした') };
@@ -368,13 +385,12 @@ export function getMuseWasmTestPage(): string {
     </section>
     <section>
       <h2>要望を渡す</h2>
-      <p class="mwt-meta">要望はD1のジョブキュー(bridge_jobs)に積まれ、本体コンテナのClaude Code・Codexが片付けます。PRの作成など外部へ書き込む要望は、試す回数を1回にするためチェックを入れてください。</p>
-      <textarea id="mwt-request" aria-label="要望" maxlength="8000" placeholder="例: READMEの誤字を探して一覧にして"></textarea>
-      <p class="mwt-row"><label><input type="checkbox" id="mwt-external"> 外部へ書き込む(PR作成など)</label>
-        <button type="button" id="mwt-submit">ジョブとして積む</button></p>
+      <p class="mwt-meta">要望はWorkerのジョブ台帳(MuseAgentJobs)に積まれ、WorkerのTailscale WASMノードがmuse-vmのMuseへ送ります。コンテナ上のエージェントは使いません。処理中は5秒ごとに一覧を読み直します。</p>
+      <textarea id="mwt-request" aria-label="要望" maxlength="8000" placeholder="例: muse-monitorの状態を確認して"></textarea>
+      <p class="mwt-row"><button type="button" id="mwt-submit">送る</button></p>
       <p id="mwt-submit-result" class="mwt-meta" role="status"></p>
       <p class="mwt-row"><button type="button" id="mwt-jobs-reload">一覧を読み直す</button><span id="mwt-jobs-error" class="mwt-error"></span></p>
-      <div class="mwt-scroll"><table><thead><tr><th scope="col">登録・job id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">結果</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
+      <div class="mwt-scroll"><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
     </section>
   </main>
   <script>${getThemeToggleScript()}</script>
