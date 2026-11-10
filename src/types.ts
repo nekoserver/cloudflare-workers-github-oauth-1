@@ -43,6 +43,14 @@ export type Bindings = {
    */
   DYNAMICNEKO?: Fetcher;
   /**
+   * muse-monitor(読み取り専用のMuseシステムモニタWorker)へのService Binding。
+   * *.workers.dev同士の直接fetch()は1042で拒否されるため、[[services]]でbindingする。
+   * 認証はMONITOR_HMAC_SECRETによるHMAC署名(src/utils/museMonitor.ts)。
+   */
+  MUSE_MONITOR?: Fetcher;
+  /** muse-monitorと共有するHMAC鍵(wrangler secret)。両方のWorkerに同じ値を設定する。 */
+  MONITOR_HMAC_SECRET?: string;
+  /**
    * /cf-containers（Cloudflare Containersのデモ用管理ページ、管理者限定）が
    * 起動・停止・再起動・プロキシの対象にするデモコンテナのDurable Object
    * バインディング。wrangler.tomlの[[containers]]・

@@ -182,6 +182,74 @@ describe('/muse-wasm-testの要望', () => {
   });
 });
 
+describe('/muse-wasm-testのmuse-monitor', () => {
+  beforeEach(loadBody);
+  const SECTIONS = ['status', 'diag', 'sdkhealth', 'sdkprofiles', 'sdksessions', 'sdkts', 'jobs', 'pending', 'execlog', 'pkgs', 'vm', 'procs', 'ports', 'git', 'recent'];
+
+  it('「全て取得」で15項目を/api/muse-monitor/<section>から取り、内容を文字として表に出す', async () => {
+    const { deps, fetchJson } = setup({
+      api: async (url) => {
+        if (url.endsWith('/jobs') && url.includes('muse-wasm-test')) return { jobs: [] };
+        const section = url.split('/').pop();
+        return section === 'status'
+          ? { status: 200, body: { node: 'Running', receiver: { resolvedIp: '100.86.29.77' } } }
+          : { status: 200, body: { section, rc: 0, output: '<b>' + section + '</b> ok' } };
+      },
+    });
+    await script.initMuseWasmTest(deps);
+    $('mwt-mon-all').click();
+    await flush(); await flush();
+    const urls = fetchJson.mock.calls.map(([url]) => url).filter((u) => String(u).startsWith('/api/muse-monitor/'));
+    expect(urls).toEqual(SECTIONS.map((s) => '/api/muse-monitor/' + s));
+    const rows = $('mwt-mon-log').querySelectorAll('tr');
+    expect(rows).toHaveLength(15);
+    expect($('mwt-mon-log').textContent).toContain('<b>jobs</b> ok');
+    expect($('mwt-mon-log').querySelector('b')).toBeNull();
+    expect($('mwt-mon-log').textContent).toContain('100.86.29.77');
+  });
+
+  it('選んだ1項目だけを取る', async () => {
+    const { deps, fetchJson } = setup({ api: async (url) => (url.includes('muse-wasm-test') ? { jobs: [] } : { status: 200, body: { output: 'vm info' } }) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLInputElement>('mwt-mon-section').value = 'vm';
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    expect(fetchJson.mock.calls.map(([url]) => url).filter((u) => String(u).startsWith('/api/muse-monitor/'))).toEqual(['/api/muse-monitor/vm']);
+    expect($('mwt-mon-log').textContent).toContain('vm info');
+  });
+
+  it('失敗は理由(errorCode・説明・muse-monitorの本文)を表に残す', async () => {
+    const { deps } = setup({
+      api: async (url) => {
+        if (url.includes('muse-wasm-test')) return { jobs: [] };
+        if (url.endsWith('/diag')) return { error: '本体とmuse-monitorのMONITOR_HMAC_SECRETが同じ値か', errorCode: 'hmac_rejected', upstreamStatus: 401 };
+        return { status: 502, body: { error: 'receiver_not_found', message: 'no reachable peer named muse-vm(-*)' } };
+      },
+    });
+    await script.initMuseWasmTest(deps);
+    $<HTMLInputElement>('mwt-mon-section').value = 'diag';
+    $('mwt-mon-get').click();
+    $<HTMLInputElement>('mwt-mon-section').value = 'jobs';
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    const rows = [...$('mwt-mon-log').querySelectorAll('tr')];
+    expect(rows.every((r) => r.classList.contains('mwt-ng'))).toBe(true);
+    const text = $('mwt-mon-log').textContent ?? '';
+    expect(text).toContain('hmac_rejected');
+    expect(text).toContain('MONITOR_HMAC_SECRET');
+    expect(text).toContain('receiver_not_found');
+    expect(text).toContain('no reachable peer');
+  });
+
+  it('通信の失敗も表に残す', async () => {
+    const { deps } = setup({ api: async (url) => { if (url.includes('muse-wasm-test')) return { jobs: [] }; throw new Error('Failed to fetch'); } });
+    await script.initMuseWasmTest(deps);
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    expect($('mwt-mon-log').textContent).toContain('Failed to fetch');
+  });
+});
+
 describe('getMuseWasmTestPage', () => {
   it('生成HTMLの全scriptがnode --checkに通る', () => {
     const page = new DOMParser().parseFromString(getMuseWasmTestPage(), 'text/html');

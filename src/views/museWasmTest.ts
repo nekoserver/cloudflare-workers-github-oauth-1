@@ -13,6 +13,14 @@ import { MUSE_STATUS_CSP } from './museStatus';
  */
 export const MUSE_WASM_TEST_CSP = MUSE_STATUS_CSP;
 
+// muse-monitorのダッシュボード(src/index.ts SECTIONS)と同じ並びと見出し。
+const MUSE_MONITOR_SECTION_LABELS: [string, string][] = [
+  ['status', '状態(tailscaled / Bridge)'], ['diag', '診断サマリ'],
+  ['sdkhealth', 'SDK ヘルス'], ['sdkprofiles', 'SDK プロファイル'], ['sdksessions', 'SDK セッション'], ['sdkts', 'SDK ヘルス(TypeScript)'],
+  ['jobs', 'ジョブキュー'], ['pending', '承認待ち'], ['execlog', '実行監査ログ'],
+  ['pkgs', 'パッケージ版数'], ['vm', 'VM 情報'], ['procs', 'プロセス上位'], ['ports', '待ち受けポート'], ['git', 'git 状態'], ['recent', '直近の完了ジョブ'],
+];
+
 export const MUSE_WASM_TEST_SCRIPT = `
     var MWT_DEFAULT_SECONDS = 30;
     var MWT_MIN_SECONDS = 10;
@@ -21,6 +29,9 @@ export const MUSE_WASM_TEST_SCRIPT = `
     var MWT_LOG_MAX = 50;
     var MWT_NODE = 'muse-vm';
 
+    var MWT_MON_SECTIONS = ${JSON.stringify(MUSE_MONITOR_SECTION_LABELS)};
+    var MWT_MON_TITLES = {};
+    MWT_MON_SECTIONS.forEach(function(pair) { MWT_MON_TITLES[pair[0]] = pair[1]; });
     function mwtIsTailscaleLoginURL(value) {
       var url;
       try { url = new URL(value); } catch (e) { return false; }
@@ -243,6 +254,44 @@ export const MUSE_WASM_TEST_SCRIPT = `
         }).then(function() { el('mwt-submit').disabled = false; });
       }
 
+      function monText(data) {
+        if (data && typeof data.errorCode === 'string') {
+          return { ok: false, text: 'エラー(' + data.errorCode + (data.upstreamStatus ? ', HTTP ' + data.upstreamStatus : '') + '): ' + (data.error || '理由が返りませんでした') };
+        }
+        if (data && data.body !== undefined) {
+          var body = data.body;
+          var ok = data.status === 200;
+          var text;
+          if (body && typeof body.output === 'string') text = body.output + (body.truncated ? ' …(続きは省略)' : '');
+          else if (body && typeof body.error === 'string') text = body.error + (body.message ? ': ' + body.message : '');
+          else text = JSON.stringify(body, null, 2);
+          return { ok: ok, text: 'HTTP ' + data.status + ' ' + text };
+        }
+        return { ok: false, text: '予期しない応答: ' + JSON.stringify(data) };
+      }
+      function addMonRow(section, startedAt, outcome) {
+        var row = doc.createElement('tr');
+        if (!outcome.ok) row.className = 'mwt-ng';
+        [mwtFormatTime(startedAt), (MWT_MON_TITLES[section] || section) + ' (' + section + ')', outcome.ok ? 'OK' : 'NG', outcome.text].forEach(function(value) {
+          var cell = doc.createElement('td');
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        var tbody = el('mwt-mon-log');
+        tbody.insertBefore(row, tbody.firstChild);
+      }
+      function monGet(section) {
+        var startedAt = deps.now();
+        return deps.fetchJson('/api/muse-monitor/' + encodeURIComponent(section)).then(function(data) {
+          addMonRow(section, startedAt, monText(data));
+        }).catch(function(error) {
+          addMonRow(section, startedAt, { ok: false, text: '取得できませんでした: ' + (error && error.message ? error.message : String(error)) });
+        });
+      }
+      function monAll() {
+        return Promise.all(MWT_MON_SECTIONS.map(function(pair) { return monGet(pair[0]); }));
+      }
+
       el('mwt-interval').value = String(MWT_DEFAULT_SECONDS);
       el('mwt-connect').addEventListener('click', function() { connect(); });
       el('mwt-disconnect').addEventListener('click', disconnect);
@@ -250,6 +299,14 @@ export const MUSE_WASM_TEST_SCRIPT = `
       el('mwt-interval').addEventListener('change', applyInterval);
       el('mwt-submit').addEventListener('click', function() { submitJob(); });
       el('mwt-jobs-reload').addEventListener('click', function() { loadJobs(); });
+      MWT_MON_SECTIONS.forEach(function(pair) {
+        var option = doc.createElement('option');
+        option.value = pair[0];
+        option.textContent = pair[1] + ' (' + pair[0] + ')';
+        el('mwt-mon-section').appendChild(option);
+      });
+      el('mwt-mon-get').addEventListener('click', function() { monGet(el('mwt-mon-section').value); });
+      el('mwt-mon-all').addEventListener('click', function() { monAll(); });
       return loadJobs();
     }
 `;
@@ -300,6 +357,14 @@ export function getMuseWasmTestPage(): string {
       <p class="mwt-row"><label>確認の間隔(秒) <input type="number" id="mwt-interval" min="10" max="3600" step="1"></label>
         <span id="mwt-interval-error" class="mwt-error" role="alert"></span></p>
       <div class="mwt-scroll"><table><thead><tr><th scope="col">時刻</th><th scope="col">宛先</th><th scope="col">結果</th><th scope="col">本文・理由</th><th scope="col">所要</th></tr></thead><tbody id="mwt-log"></tbody></table></div>
+    </section>
+    <section>
+      <h2>muse-monitor経由のモニタ</h2>
+      <p class="mwt-meta">本体ワーカーがService Binding(MUSE_MONITOR)とHMAC署名(MONITOR_HMAC_SECRET)でmuse-monitorを呼び、muse-monitorがTailscale WASMノードでmuse-vmの受信側(:8090)から読み取ります。このブラウザのTailscale接続は使いません。</p>
+      <p class="mwt-row"><label>項目 <select id="mwt-mon-section"></select></label>
+        <button type="button" id="mwt-mon-get">取得</button>
+        <button type="button" id="mwt-mon-all">全て取得</button></p>
+      <div class="mwt-scroll"><table><thead><tr><th scope="col">時刻</th><th scope="col">項目</th><th scope="col">結果</th><th scope="col">内容・理由</th></tr></thead><tbody id="mwt-mon-log"></tbody></table></div>
     </section>
     <section>
       <h2>要望を渡す</h2>
