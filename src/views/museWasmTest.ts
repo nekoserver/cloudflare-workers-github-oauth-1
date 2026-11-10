@@ -3,8 +3,9 @@ import { MUSE_STATUS_CSP } from './museStatus';
 
 /**
  * /muse-wasm-test: テスト用ページ(ユーザー指定、2026-11-08)。
- * 1. 公式Tailscale WASM(public/tailscale-connect)でブラウザをtailnetに参加させ、muse-vmの/healthへ定期的にGETを送って記録する。
- *    WASMのfetchはGETだけでヘッダーを付けられないので、確かめられるのは到達性だけ(推論は送らない)。
+ * 1. 本体ワーカーのTailscaleノード(TAILSCALE_WASM、main-worker-muse)で、muse-vmの/healthへ届くかを定期的に確かめる
+ *    (/api/tailscale-wasm/bridge-health・/status)。以前はブラウザ自身をノードにしていたが、状態をメモリにしか持たず
+ *    開くたびにログインが要ったため替えた。Workerのノードは状態をDOのSQLiteに保存し、認証キーで自動ログインする。
  * 2. 要望はWorkerのジョブ台帳(MuseAgentJobs、/api/tailscale-wasm/jobs)へ送る。DOのアラームが取り出し、
  *    WorkerのTailscale WASMノードがmuse-vmのMuseへ届ける。コンテナ上のエージェントは使わない(このWorkerの方針)。
  *    以前はD1 bridge_jobsに積んでいたが、それは本体コンテナのCLIが手動で片付ける前提で、積まれたまま止まっていた。
@@ -27,7 +28,6 @@ export const MUSE_WASM_TEST_SCRIPT = `
     var MWT_DEFAULT_SECONDS = 30;
     var MWT_MIN_SECONDS = 10;
     var MWT_MAX_SECONDS = 3600;
-    var MWT_FETCH_TIMEOUT_MS = 20000;
     var MWT_LOG_MAX = 50;
     var MWT_NODE = 'muse-vm';
 
@@ -59,12 +59,6 @@ export const MUSE_WASM_TEST_SCRIPT = `
       return { found: false, ip: '', online: null };
     }
 
-    function mwtHealthURLs(node) {
-      var urls = ['http://' + MWT_NODE + ':8080/health'];
-      if (node && node.ip) urls.push('http://' + node.ip + ':8080/health');
-      return urls;
-    }
-
     function mwtFormatTime(ms) {
       try { return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false }); } catch (e) { return String(ms); }
     }
@@ -72,7 +66,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
     function initMuseWasmTest(deps) {
       var doc = deps.document;
       var el = function(id) { return doc.getElementById(id); };
-      var state = { client: null, loading: null, tailscale: '', node: null, timer: null, seconds: MWT_DEFAULT_SECONDS };
+      var state = { timer: null, seconds: MWT_DEFAULT_SECONDS, checking: null };
 
       function setText(id, text) { el(id).textContent = text; }
       function stopSchedule() {
@@ -83,110 +77,59 @@ export const MUSE_WASM_TEST_SCRIPT = `
         state.timer = deps.setInterval(checkAll, state.seconds * 1000);
       }
 
-      function addLog(url, startedAt, outcome) {
+      function addLog(startedAt, ok, result, detail, ms) {
         var tbody = el('mwt-log');
         var row = doc.createElement('tr');
-        var cells = [
-          mwtFormatTime(startedAt),
-          url,
-          outcome.error ? '失敗' : String(outcome.status) + ' ' + (outcome.statusText || ''),
-          outcome.error ? outcome.error : outcome.body,
-          String(outcome.ms) + 'ms'
-        ];
-        cells.forEach(function(value) { var cell = doc.createElement('td'); cell.textContent = value; row.appendChild(cell); });
-        if (outcome.error || outcome.status !== 200) row.className = 'mwt-ng';
+        [mwtFormatTime(startedAt), 'Workerのノード → ' + MWT_NODE + ':8080/health', result, detail, String(ms) + 'ms'].forEach(function(value) {
+          var cell = doc.createElement('td'); cell.textContent = value; row.appendChild(cell);
+        });
+        if (!ok) row.className = 'mwt-ng';
         tbody.insertBefore(row, tbody.firstChild);
         while (tbody.children.length > MWT_LOG_MAX) tbody.removeChild(tbody.lastChild);
       }
 
-      function checkOne(url) {
+      function describeNode(status) {
+        if (!status || typeof status !== 'object') return 'ノードの状態を読めませんでした';
+        if (status.error) return 'ノードの状態: ' + status.error;
+        var node = mwtMuseVmFromNetMap(status);
+        var text = 'ノード: ' + (status.state || '不明') + ' / ';
+        if (!node.found) return text + 'ピアにmuse-vmが見つかりません';
+        return text + 'muse-vm ' + (node.ip || '(IPv4なし)') + ' ' + (node.online === true ? 'オンライン' : node.online === false ? 'オフライン' : 'オンライン表示なし');
+      }
+
+      function renderLogin(status) {
+        var box = el('mwt-login');
+        box.textContent = '';
+        if (!status || status.state === 'Running' || !mwtIsTailscaleLoginURL(status.loginURL)) return;
+        var link = doc.createElement('a');
+        link.href = status.loginURL;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Workerのノードを承認する(一度承認すれば状態はWorkerに保存され、以後ログインは要りません)';
+        box.appendChild(link);
+      }
+
+      function checkAll() {
+        if (state.checking) return state.checking;
         var startedAt = deps.now();
         var started = Date.now();
-        var timeout = new Promise(function(_, reject) { setTimeout(function() { reject(new Error('時間切れ(' + (MWT_FETCH_TIMEOUT_MS / 1000) + '秒)')); }, MWT_FETCH_TIMEOUT_MS); });
-        return Promise.race([Promise.resolve().then(function() { return state.client.fetch(url); }), timeout])
-          .then(function(res) {
-            return res.text().then(function(body) {
-              addLog(url, startedAt, { status: res.status, statusText: res.statusText, body: String(body).slice(0, 300), ms: Date.now() - started });
-            });
-          })
-          .catch(function(error) {
-            addLog(url, startedAt, { error: error && error.message ? error.message : String(error), ms: Date.now() - started });
-          });
-      }
-      function checkAll() {
-        if (!state.client || state.tailscale !== 'Running') return Promise.resolve();
-        var urls = mwtHealthURLs(state.node);
-        var chain = Promise.resolve();
-        urls.forEach(function(url) { chain = chain.then(function() { return checkOne(url); }); });
-        return chain;
-      }
-
-      function renderNode() {
-        var node = state.node;
-        if (!node) { setText('mwt-node', 'まだnetmapを受け取っていません'); return; }
-        if (!node.found) { setText('mwt-node', 'netmapにmuse-vmが見つかりません(名前だけで送ります)'); return; }
-        setText('mwt-node', 'muse-vm ' + (node.ip || '(IPv4なし)') + ' / ' + (node.online === true ? 'オンライン' : node.online === false ? 'オフライン' : 'オンライン表示なし'));
-      }
-
-      function connect() {
-        if (state.client) { state.client.login(); return Promise.resolve(); }
-        if (state.loading) return state.loading;
-        el('mwt-connect').disabled = true;
-        setText('mwt-state', 'Tailscale WASMを読み込み中…');
-        var memory = {};
-        var stateStorage = {
-          getState: function(key) { return memory[key] || ''; },
-          setState: function(key, value) { memory[key] = value; }
-        };
-        function onPanic() { setText('mwt-state', 'Tailscale接続でエラーが発生しました。ページを再読み込みしてください'); stopSchedule(); }
-        state.loading = Promise.resolve().then(function() {
-          return deps.createTailscaleClient({ authKey: '', hostname: 'muse-wasm-test', stateStorage: stateStorage, panicHandler: onPanic });
-        }).then(function(client) {
-          state.client = client;
-          client.run({
-            notifyState: function(value) {
-              var was = state.tailscale;
-              state.tailscale = value;
-              setText('mwt-state', 'Tailscale: ' + value);
-              if (value === 'Running') {
-                el('mwt-login').textContent = '';
-                if (was !== 'Running') { startSchedule(); checkAll(); }
-              } else {
-                stopSchedule();
-              }
-            },
-            notifyNetMap: function(value) {
-              try { state.node = mwtMuseVmFromNetMap(value); } catch (e) { setText('mwt-node', 'netmapを読めませんでした'); return; }
-              renderNode();
-            },
-            notifyBrowseToURL: function(value) {
-              if (!mwtIsTailscaleLoginURL(value)) return;
-              var link = doc.createElement('a');
-              link.href = value;
-              link.target = '_blank';
-              link.rel = 'noopener noreferrer';
-              link.textContent = 'Tailscaleのログイン画面を開く';
-              el('mwt-login').textContent = '';
-              el('mwt-login').appendChild(link);
-            },
-            notifyPanicRecover: onPanic
-          });
-          client.login();
+        setText('mwt-state', '確認中…');
+        state.checking = Promise.all([
+          deps.fetchJson('/api/tailscale-wasm/bridge-health'),
+          deps.fetchJson('/api/tailscale-wasm/status')
+        ]).then(function(results) {
+          var health = results[0] || {};
+          var status = results[1];
+          var ok = health.healthy === true;
+          var detail = describeNode(status) + (health.error ? ' / ' + health.error : '');
+          addLog(startedAt, ok, ok ? '200 OK' : '届かない', detail, Date.now() - started);
+          setText('mwt-state', ok ? '届いています' : '届いていません');
+          renderLogin(status);
         }).catch(function(error) {
-          state.client = null;
-          setText('mwt-state', 'WASMの読み込みに失敗しました: ' + (error && error.message ? error.message : String(error)));
-        }).then(function() {
-          state.loading = null;
-          el('mwt-connect').disabled = false;
-        });
-        return state.loading;
-      }
-
-      function disconnect() {
-        stopSchedule();
-        if (state.client) { try { state.client.logout(); } catch (e) { /* 既に止まっている */ } }
-        state.tailscale = '';
-        setText('mwt-state', '切断しました。もう一度接続するとログインが要ります');
+          addLog(startedAt, false, '失敗', error && error.message ? error.message : String(error), Date.now() - started);
+          setText('mwt-state', '確認できませんでした');
+        }).then(function() { state.checking = null; });
+        return state.checking;
       }
 
       function applyInterval() {
@@ -215,7 +158,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
         jobs.forEach(function(job) {
           (job.messages || []).forEach(function(message) {
             if (MWT_PENDING[message.state]) pending = true;
-            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, message.state, message.reply === null || message.reply === undefined ? '' : message.reply]);
+            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, message.state + (message.error ? ' ' + message.error : ''), message.reply === null || message.reply === undefined ? '' : message.reply]);
           });
         });
         if (!rows.length) {
@@ -310,8 +253,6 @@ export const MUSE_WASM_TEST_SCRIPT = `
       }
 
       el('mwt-interval').value = String(MWT_DEFAULT_SECONDS);
-      el('mwt-connect').addEventListener('click', function() { connect(); });
-      el('mwt-disconnect').addEventListener('click', disconnect);
       el('mwt-check-now').addEventListener('click', function() { checkAll(); });
       el('mwt-interval').addEventListener('change', applyInterval);
       el('mwt-submit').addEventListener('click', function() { submitJob(); });
@@ -324,6 +265,8 @@ export const MUSE_WASM_TEST_SCRIPT = `
       });
       el('mwt-mon-get').addEventListener('click', function() { monGet(el('mwt-mon-section').value); });
       el('mwt-mon-all').addEventListener('click', function() { monAll(); });
+      startSchedule();
+      checkAll();
       return loadJobs();
     }
 `;
@@ -363,17 +306,14 @@ export function getMuseWasmTestPage(): string {
   <main>
     <h1>Muse WASMテスト</h1>
     <section>
-      <h2>Tailscale WASMからmuse-vmへの到達</h2>
-      <p class="mwt-meta">このブラウザを公式のTailscale WASMでtailnetに参加させ、muse-vmの/healthへ定期的にGETを送ります。確かめるのは到達性だけで、Museへの推論は送りません。ページを閉じるか「切断」で止まります。</p>
-      <p class="mwt-row"><button type="button" id="mwt-connect">Tailscaleへ接続</button>
-        <button type="button" id="mwt-disconnect">切断</button>
-        <button type="button" id="mwt-check-now">今すぐ確認</button>
-        <span id="mwt-state" class="mwt-meta">未接続</span></p>
+      <h2>Workerのノードからmuse-vmへの到達</h2>
+      <p class="mwt-meta">本体ワーカーのTailscaleノード(main-worker-muse)で、muse-vmの/healthへ定期的に届くかを確かめます。ノードの状態はWorker(Durable Object)に保存され、シークレットの認証キーで自動的にログインし直すので、このページでのログインは要りません。</p>
+      <p class="mwt-row"><button type="button" id="mwt-check-now">今すぐ確認</button>
+        <span id="mwt-state" class="mwt-meta">未確認</span></p>
       <p class="mwt-row" id="mwt-login"></p>
-      <p class="mwt-row"><span id="mwt-node" class="mwt-meta">まだnetmapを受け取っていません</span></p>
       <p class="mwt-row"><label>確認の間隔(秒) <input type="number" id="mwt-interval" min="10" max="3600" step="1"></label>
         <span id="mwt-interval-error" class="mwt-error" role="alert"></span></p>
-      <div class="mwt-scroll"><table><thead><tr><th scope="col">時刻</th><th scope="col">宛先</th><th scope="col">結果</th><th scope="col">本文・理由</th><th scope="col">所要</th></tr></thead><tbody id="mwt-log"></tbody></table></div>
+      <div class="mwt-scroll"><table><thead><tr><th scope="col">時刻</th><th scope="col">経路</th><th scope="col">結果</th><th scope="col">状態・理由</th><th scope="col">所要</th></tr></thead><tbody id="mwt-log"></tbody></table></div>
     </section>
     <section>
       <h2>muse-monitor経由のモニタ</h2>
@@ -398,7 +338,6 @@ export function getMuseWasmTestPage(): string {
   <script type="module">
     initMuseWasmTest({
       document: document,
-      createTailscaleClient: function(config) { return import('/tailscale-wasm-client.mjs').then(function(module) { return module.loadTailscaleClient(config); }); },
       fetchJson: function(url, init) { return fetch(url, Object.assign({ credentials: 'same-origin' }, init || {})).then(function(res) { return res.json(); }); },
       setInterval: function(fn, ms) { return window.setInterval(fn, ms); },
       clearInterval: function(id) { window.clearInterval(id); },
