@@ -32,7 +32,7 @@ function setup(options: { fetchImpl?: (url: string) => Promise<unknown>; api?: (
     fetch: vi.fn(options.fetchImpl ?? (async () => ({ status: 200, statusText: '200 OK', text: async () => '{"status": "ok"}' }))) as Client['fetch'],
   };
   const intervals: { fn: () => void; ms: number; cleared: boolean }[] = [];
-  const fetchJson = vi.fn(options.api ?? (async (url: string) => (url.endsWith('/jobs') ? { jobs: [] } : {})));
+  const fetchJson = vi.fn(options.api ?? (async (url: string) => (url === '/api/tailscale-wasm/jobs' ? { jobs: [] } : {})));
   const deps = {
     document,
     createTailscaleClient: vi.fn(async () => client),
@@ -136,49 +136,138 @@ describe('/muse-wasm-testのTailscale WASM', () => {
   });
 });
 
-describe('/muse-wasm-testの要望', () => {
+describe('/muse-wasm-testの要望(Workerのジョブ台帳 MuseAgentJobs)', () => {
   beforeEach(loadBody);
+  const JOBS_URL = '/api/tailscale-wasm/jobs';
+  const isPost = (init: unknown) => (init as { method?: string } | undefined)?.method === 'POST';
 
-  it('要望をAPIへ送ってjob idを表示し、一覧を読み直す', async () => {
-    const jobs = [{ jobId: 'a'.repeat(32), createdAt: 1794139200, requestText: '<b>READMEを要約</b>', externalWrite: false, status: 'done', attempts: 1, maxAttempts: 3, claimedBy: 'codex@cf', lastError: null, resultText: '<script>x</script>要約です', resultTruncated: false, exitCode: 0 }];
-    const { deps, fetchJson } = setup({
-      api: async (url, init) => (init?.method === 'POST' ? { jobId: 'a'.repeat(32) } : { jobs }),
-    });
+  it('要望をWorkerのジョブ台帳へ送り(コンテナのbridge_jobsへは積まない)、一覧に状態とMuseの返事を文字として出す', async () => {
+    const jobs = [{ jobId: 'job-1', createdAt: '2026-11-10T23:30:00Z', messages: [
+      { messageId: 'm-1', agent: 'user', prompt: '<b>muse-monitorのテスト</b>', state: 'done', reply: '<script>x</script>確認しました' },
+    ] }];
+    const { deps, fetchJson } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'job-1', messageId: 'm-1', state: 'queued' } : url === JOBS_URL ? { jobs } : {}) });
     await script.initMuseWasmTest(deps);
-    $<HTMLTextAreaElement>('mwt-request').value = '  READMEを要約  ';
-    $<HTMLInputElement>('mwt-external').checked = true;
+    $<HTMLTextAreaElement>('mwt-request').value = '  muse-monitorのテスト  ';
     $('mwt-submit').click();
     await flush(); await flush();
-    const post = fetchJson.mock.calls.find(([, init]) => (init as { method?: string } | undefined)?.method === 'POST')!;
-    expect(post[0]).toBe('/api/muse-wasm-test/jobs');
-    expect(JSON.parse((post[1] as { body: string }).body)).toEqual({ request: 'READMEを要約', external: true });
-    expect($('mwt-submit-result').textContent).toContain('a'.repeat(32));
+    const post = fetchJson.mock.calls.find(([, init]) => isPost(init))!;
+    expect(post[0]).toBe(JOBS_URL);
+    const body = JSON.parse((post[1] as { body: string }).body);
+    expect(body.prompt).toBe('muse-monitorのテスト');
+    expect(body.requestId).toMatch(/^[a-zA-Z0-9-]{1,64}$/);
+    expect(fetchJson.mock.calls.some(([url]) => String(url).includes('/api/muse-wasm-test/jobs'))).toBe(false);
+    expect($('mwt-submit-result').textContent).toContain('m-1');
     expect($<HTMLTextAreaElement>('mwt-request').value).toBe('');
     const list = $('mwt-jobs');
-    expect(list.textContent).toContain('<b>READMEを要約</b>');
-    expect(list.textContent).toContain('<script>x</script>要約です');
+    expect(list.textContent).toContain('<b>muse-monitorのテスト</b>');
+    expect(list.textContent).toContain('<script>x</script>確認しました');
     expect(list.textContent).toContain('done');
     expect(list.querySelector('b, script')).toBeNull();
   });
 
-  it('空の要望は送らない', async () => {
-    const { deps, fetchJson } = setup();
-    await script.initMuseWasmTest(deps);
-    $<HTMLTextAreaElement>('mwt-request').value = '  ';
-    $('mwt-submit').click();
-    await flush();
-    expect(fetchJson.mock.calls.some(([, init]) => (init as { method?: string } | undefined)?.method === 'POST')).toBe(false);
-    expect($('mwt-submit-result').textContent).toContain('要望');
-  });
-
-  it('APIのエラーはそのまま表示し、入力を残す', async () => {
-    const { deps } = setup({ api: async (_url, init) => (init?.method === 'POST' ? { error: '協議の記録(INQUIRY_DB)が未設定です' } : { jobs: [] }) });
+  it('処理中(queued・sending)がある間は5秒ごとに一覧を読み直し、片付いたら止める', async () => {
+    let state = 'queued';
+    const { deps, intervals, fetchJson } = setup({ api: async (_url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm', state: 'queued' } : { jobs: [{ jobId: 'j', createdAt: 'x', messages: [{ messageId: 'm', agent: 'user', prompt: 'p', state, reply: null }] }] }) });
     await script.initMuseWasmTest(deps);
     $<HTMLTextAreaElement>('mwt-request').value = '要望';
     $('mwt-submit').click();
     await flush(); await flush();
-    expect($('mwt-submit-result').textContent).toContain('INQUIRY_DB');
+    const poll = intervals.filter((i) => !i.cleared && i.ms === 5000);
+    expect(poll).toHaveLength(1);
+    const before = fetchJson.mock.calls.length;
+    state = 'done';
+    poll[0].fn();
+    await flush(); await flush();
+    expect(fetchJson.mock.calls.length).toBe(before + 1);
+    expect(poll[0].cleared).toBe(true);
+  });
+
+  it('空の要望は送らない', async () => {
+    const { deps, fetchJson } = setup({ api: async () => ({ jobs: [] }) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '  ';
+    $('mwt-submit').click();
+    await flush();
+    expect(fetchJson.mock.calls.some(([, init]) => isPost(init))).toBe(false);
+    expect($('mwt-submit-result').textContent).toContain('要望');
+  });
+
+  it('APIのエラーはそのまま表示し、入力を残す', async () => {
+    const { deps } = setup({ api: async (_url, init) => (isPost(init) ? { error: 'tailscale_wasm_not_configured' } : { jobs: [] }) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    expect($('mwt-submit-result').textContent).toContain('tailscale_wasm_not_configured');
     expect($<HTMLTextAreaElement>('mwt-request').value).toBe('要望');
+  });
+});
+
+describe('/muse-wasm-testのmuse-monitor', () => {
+  beforeEach(loadBody);
+  const SECTIONS = ['status', 'diag', 'sdkhealth', 'sdkprofiles', 'sdksessions', 'sdkts', 'jobs', 'pending', 'execlog', 'pkgs', 'vm', 'procs', 'ports', 'git', 'recent'];
+
+  it('「全て取得」で15項目を/api/muse-monitor/<section>から取り、内容を文字として表に出す', async () => {
+    const { deps, fetchJson } = setup({
+      api: async (url) => {
+        if (url === '/api/tailscale-wasm/jobs') return { jobs: [] };
+        const section = url.split('/').pop();
+        return section === 'status'
+          ? { status: 200, body: { node: 'Running', receiver: { resolvedIp: '100.86.29.77' } } }
+          : { status: 200, body: { section, rc: 0, output: '<b>' + section + '</b> ok' } };
+      },
+    });
+    await script.initMuseWasmTest(deps);
+    $('mwt-mon-all').click();
+    await flush(); await flush();
+    const urls = fetchJson.mock.calls.map(([url]) => url).filter((u) => String(u).startsWith('/api/muse-monitor/'));
+    expect(urls).toEqual(SECTIONS.map((s) => '/api/muse-monitor/' + s));
+    const rows = $('mwt-mon-log').querySelectorAll('tr');
+    expect(rows).toHaveLength(15);
+    expect($('mwt-mon-log').textContent).toContain('<b>jobs</b> ok');
+    expect($('mwt-mon-log').querySelector('b')).toBeNull();
+    expect($('mwt-mon-log').textContent).toContain('100.86.29.77');
+  });
+
+  it('選んだ1項目だけを取る', async () => {
+    const { deps, fetchJson } = setup({ api: async (url) => (url === '/api/tailscale-wasm/jobs' ? { jobs: [] } : { status: 200, body: { output: 'vm info' } }) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLInputElement>('mwt-mon-section').value = 'vm';
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    expect(fetchJson.mock.calls.map(([url]) => url).filter((u) => String(u).startsWith('/api/muse-monitor/'))).toEqual(['/api/muse-monitor/vm']);
+    expect($('mwt-mon-log').textContent).toContain('vm info');
+  });
+
+  it('失敗は理由(errorCode・説明・muse-monitorの本文)を表に残す', async () => {
+    const { deps } = setup({
+      api: async (url) => {
+        if (url === '/api/tailscale-wasm/jobs') return { jobs: [] };
+        if (url.endsWith('/diag')) return { error: '本体とmuse-monitorのMONITOR_HMAC_SECRETが同じ値か', errorCode: 'hmac_rejected', upstreamStatus: 401 };
+        return { status: 502, body: { error: 'receiver_not_found', message: 'no reachable peer named muse-vm(-*)' } };
+      },
+    });
+    await script.initMuseWasmTest(deps);
+    $<HTMLInputElement>('mwt-mon-section').value = 'diag';
+    $('mwt-mon-get').click();
+    $<HTMLInputElement>('mwt-mon-section').value = 'jobs';
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    const rows = [...$('mwt-mon-log').querySelectorAll('tr')];
+    expect(rows.every((r) => r.classList.contains('mwt-ng'))).toBe(true);
+    const text = $('mwt-mon-log').textContent ?? '';
+    expect(text).toContain('hmac_rejected');
+    expect(text).toContain('MONITOR_HMAC_SECRET');
+    expect(text).toContain('receiver_not_found');
+    expect(text).toContain('no reachable peer');
+  });
+
+  it('通信の失敗も表に残す', async () => {
+    const { deps } = setup({ api: async (url) => { if (url === '/api/tailscale-wasm/jobs') return { jobs: [] }; throw new Error('Failed to fetch'); } });
+    await script.initMuseWasmTest(deps);
+    $('mwt-mon-get').click();
+    await flush(); await flush();
+    expect($('mwt-mon-log').textContent).toContain('Failed to fetch');
   });
 });
 

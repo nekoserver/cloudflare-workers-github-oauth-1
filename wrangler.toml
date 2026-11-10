@@ -208,6 +208,13 @@ service = "rust-worker-sqlx-d1"
 binding = "CF_AUTH"
 service = "cf-auth"
 
+# muse-monitor(読み取り専用のMuseシステムモニタ、別デプロイのWorker)への呼び出し。
+# /api/muse-monitor/:sectionがHMAC署名(MONITOR_HMAC_SECRET)付きで/api/hmac/*を呼ぶ。
+# 上と同じ理由(1042)でService Binding経由にする。
+[[services]]
+binding = "MUSE_MONITOR"
+service = "muse-monitor"
+
 # オブザーバビリティ設定
 [observability]
 enabled = true

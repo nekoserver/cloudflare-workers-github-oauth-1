@@ -486,6 +486,7 @@ import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } 
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
+import { fetchMuseMonitor } from './utils/museMonitor';
 import { isSameOrigin as isSameOriginRequest } from './utils/sshPublicKey';
 import { getMuseInquiriesPage } from './views/museInquiries';
 import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
@@ -20639,6 +20640,16 @@ app.post('/api/muse-wasm-test/jobs', authMiddleware, cfDashboardAdminMiddleware,
   });
   if (!result.ok) return jsonUtf8({ error: result.detail, errorCode: result.errorCode }, result.errorCode === 'db_error' ? 500 : 400);
   return jsonUtf8({ jobId: result.jobId });
+});
+
+// /api/muse-monitor/:section: muse-monitor(読み取り専用のMuseシステムモニタ)の1項目を、Service Binding経由で
+// HMAC署名付きで取得する(管理者限定)。失敗は理由と一緒に返す(src/utils/museMonitor.ts)。
+app.get('/api/muse-monitor/:section', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await fetchMuseMonitor(c.env.MUSE_MONITOR, c.env.MONITOR_HMAC_SECRET, c.req.param('section') ?? '');
+  if (result.ok) return jsonUtf8({ status: result.status, body: result.body }, result.status === 200 ? 200 : 502);
+  const status = result.errorCode === 'not_configured' ? 503 : result.errorCode === 'unknown_section' ? 404 : 502;
+  return jsonUtf8({ error: result.detail, errorCode: result.errorCode, upstreamStatus: result.status ?? null }, status);
 });
 
 app.get('/api/muse-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
