@@ -1,0 +1,36 @@
+{
+  "mygw": {
+    "/lib/date.shtml": {
+      "http": 200,
+      "ssi_expanded": true
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 401
+    }
+  },
+  "stream": {
+    "/lib/date.shtml": {
+      "error": "ClientConnectorDNSError"
+    },
+    "/lib/api/tunnels.rb": {
+      "error": "ClientConnectorDNSError"
+    }
+  },
+  "r8": {
+    "/lib/date.shtml": {
+      "http": 200,
+      "ssi_expanded": true
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 401
+    }
+  },
+  "r9": {
+    "/lib/date.shtml": {
+      "http": 404
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 401
+    }
+  }
+}

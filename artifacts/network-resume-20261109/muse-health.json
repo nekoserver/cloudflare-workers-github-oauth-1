@@ -1,0 +1,14 @@
+{
+  "backend": "Running",
+  "muse_peers": [
+    {
+      "host": "muse-vm",
+      "dns": "muse-vm.taile4e096.ts.net.",
+      "online": true
+    }
+  ],
+  "health": {
+    "exit": 0,
+    "status_line": "no_http_response"
+  }
+}

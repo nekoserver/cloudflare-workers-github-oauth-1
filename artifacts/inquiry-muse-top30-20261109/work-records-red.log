@@ -1,0 +1,103 @@
+✖ 選定理由と集約理由を元の問い合わせと別に保存する (3.504331ms)
+✖ 別議題・未対応の論点、重複順位、空の理由を拒否する (1.456286ms)
+✖ 全件を記録する前は完了記録を作れず、揃っても成果評価は自動生成しない (1.058158ms)
+✖ 履歴は追記のみで、根拠の物理削除も拒否する (1.021453ms)
+✖ 成功・進展の評価には根拠が必要で、失敗や再評価も別行で残る (1.135896ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 99.995792
+
+✖ failing tests:
+
+test at scripts/agent-inquiries-work-records.test.mjs:19:1
+✖ 選定理由と集約理由を元の問い合わせと別に保存する (3.504331ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:9:145)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:20:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:25:1
+✖ 別議題・未対応の論点、重複順位、空の理由を拒否する (1.456286ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:9:145)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:26:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:31:1
+✖ 全件を記録する前は完了記録を作れず、揃っても成果評価は自動生成しない (1.058158ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:9:145)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:32:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:37:1
+✖ 履歴は追記のみで、根拠の物理削除も拒否する (1.021453ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:9:145)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:38:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:46:1
+✖ 成功・進展の評価には根拠が必要で、失敗や再評価も別行で残る (1.135896ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:9:145)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:47:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0013_create_inquiry_work_records.sql'
+  }

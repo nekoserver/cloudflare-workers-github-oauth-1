@@ -1,0 +1,17 @@
+{
+  "entry_id": "muse-top30-20261109-board-auto-refresh-20261108",
+  "case_id": "board-auto-refresh-20261108",
+  "keys": [
+    "bar-k1",
+    "bar-k2"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250372.4667885,
+  "receipt": {
+    "ask_id": "muse-dd5c7dc9-4d23-4296-95f6-21a52305e3ef",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250372.4675488
+  }
+}

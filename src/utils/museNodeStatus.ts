@@ -1,3 +1,4 @@
+import { matchesTailnetPeer, onlineTailnetPeer } from './tailnetPeer';
 import { isContainerRunning, type ContainerStateLike } from './cfContainerStatus';
 import type { MuseContainer } from './museDirectAsk';
 
@@ -117,7 +118,8 @@ const text = (value: unknown): string => (typeof value === 'string' ? value : ''
 export function pickMuseNodes(peers: unknown): MuseNodeSummary[] {
   const list = Array.isArray(peers) ? (peers as Record<string, unknown>[]) : [];
   return MUSE_NODE_NAMES.map((name) => {
-    const peer = list.find((item) => item?.hostName === name);
+    const matching = list.filter(item => item && matchesTailnetPeer(item, name));
+    const peer = onlineTailnetPeer(matching, name) ?? (matching.every(item => item.online !== true) && matching.length === 1 ? matching[0] : null);
     if (!peer) return emptyNode(name);
     return {
       name,

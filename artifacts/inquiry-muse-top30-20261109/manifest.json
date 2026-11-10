@@ -1,0 +1,167 @@
+[
+  {
+    "entry_id": "muse-top30-20261109-securemine-redmine-interface-20261108",
+    "case_id": "securemine-redmine-interface-20261108",
+    "keys": [
+      "smri-k2",
+      "smri-k3"
+    ],
+    "status": "answered",
+    "ask_id": "muse-dde67654-c6da-487f-a469-20fedce5f890",
+    "started_at": 1794250360.3342588,
+    "receipt": {
+      "ask_id": "muse-dde67654-c6da-487f-a469-20fedce5f890",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250360.3349652
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-trial-redmine-20261108",
+    "case_id": "trial-redmine-20261108",
+    "keys": [
+      "trm-k2",
+      "trm-k3",
+      "trm-k4",
+      "trm-k5",
+      "trm-k6"
+    ],
+    "status": "answered",
+    "ask_id": "muse-6ba1cf92-8eed-482d-b231-45ae47b6b781",
+    "started_at": 1794250362.9644847,
+    "receipt": {
+      "ask_id": "muse-6ba1cf92-8eed-482d-b231-45ae47b6b781",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250362.965228
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-side-chat-workflow-20261109",
+    "case_id": "side-chat-workflow-20261109",
+    "keys": [
+      "side-chat-workflow-20261109-states",
+      "side-chat-workflow-20261109-authority",
+      "side-chat-workflow-20261109-terminal",
+      "side-chat-workflow-20261109-roles"
+    ],
+    "status": "answered",
+    "ask_id": "muse-22250f7e-4f6a-4748-a80c-bce3d87ac7e0",
+    "started_at": 1794250365.372671,
+    "receipt": {
+      "ask_id": "muse-22250f7e-4f6a-4748-a80c-bce3d87ac7e0",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250365.373458
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-muse-bridge-injection-20261109",
+    "case_id": "muse-bridge-injection-20261109",
+    "keys": [
+      "muse-bridge-injection-20261109-job",
+      "muse-bridge-injection-20261109-rule",
+      "muse-bridge-injection-20261109-silence",
+      "muse-bridge-injection-20261109-mitigation"
+    ],
+    "status": "answered",
+    "ask_id": "muse-477f1784-7d74-4f26-8093-adc8185b5723",
+    "started_at": 1794250367.7809858,
+    "receipt": {
+      "ask_id": "muse-477f1784-7d74-4f26-8093-adc8185b5723",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250367.7817552
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-contribution-evaluation-20261108",
+    "case_id": "contribution-evaluation-20261108",
+    "keys": [
+      "ce-k9",
+      "ce-k10",
+      "ce-k11",
+      "ce-k12",
+      "ce-k4"
+    ],
+    "status": "answered",
+    "ask_id": "muse-2bbde64e-7651-4a9e-bc18-29824ab4e59f",
+    "started_at": 1794250370.380288,
+    "receipt": {
+      "ask_id": "muse-2bbde64e-7651-4a9e-bc18-29824ab4e59f",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250370.3810635
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-board-auto-refresh-20261108",
+    "case_id": "board-auto-refresh-20261108",
+    "keys": [
+      "bar-k1",
+      "bar-k2"
+    ],
+    "status": "answered",
+    "ask_id": "muse-dd5c7dc9-4d23-4296-95f6-21a52305e3ef",
+    "started_at": 1794250372.4667885,
+    "receipt": {
+      "ask_id": "muse-dd5c7dc9-4d23-4296-95f6-21a52305e3ef",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250372.4675488
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-user-message-to-board-20261108",
+    "case_id": "user-message-to-board-20261108",
+    "keys": [
+      "umb-k4",
+      "umb-k6"
+    ],
+    "status": "answered",
+    "ask_id": "muse-00074b4a-89e4-46bd-bb6f-2a27c95ad0ff",
+    "started_at": 1794250374.5620062,
+    "receipt": {
+      "ask_id": "muse-00074b4a-89e4-46bd-bb6f-2a27c95ad0ff",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250374.5625887
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-case-resolution-criteria-20261108",
+    "case_id": "case-resolution-criteria-20261108",
+    "keys": [
+      "crc-k1",
+      "crc-k2",
+      "crc-k3",
+      "crc-k4"
+    ],
+    "status": "answered",
+    "ask_id": "muse-f98b4037-519f-4afb-bf12-94c40300a32a",
+    "started_at": 1794250377.0735474,
+    "receipt": {
+      "ask_id": "muse-f98b4037-519f-4afb-bf12-94c40300a32a",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250377.074366
+    }
+  },
+  {
+    "entry_id": "muse-top30-20261109-task-commit-link-20261108",
+    "case_id": "task-commit-link-20261108",
+    "keys": [
+      "tcl-k3",
+      "tcl-k4"
+    ],
+    "status": "answered",
+    "ask_id": "muse-7fbecbe6-c1a4-4a2f-8250-0b144d80ac22",
+    "started_at": 1794250379.1462865,
+    "receipt": {
+      "ask_id": "muse-7fbecbe6-c1a4-4a2f-8250-0b144d80ac22",
+      "ask_status": "pending",
+      "via": "muse",
+      "created_at": 1794250379.1482255
+    }
+  }
+]

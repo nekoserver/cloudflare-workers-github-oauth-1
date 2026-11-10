@@ -1,0 +1,482 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/cloudflare-workers-github-oauth-1
+
+····································································································································································································································································································································································································································································································································································································································································································stdout | src/cursor-agent-launch.test.ts > POST /api/cursor-agent/launch > Cursor APIがエラーを返した場合はD1に記録せずエラーを返す(握りつぶさない)
+{"timestamp":"2026-11-09T06:27:48.414Z","level":"WARN","message":"[cursor-agent] Cursor APIエラー応答","userId":"user1","status":401,"text":"Unauthorized"}
+
+stdout | src/cursor-agent-launch.test.ts > POST /api/cursor-agent/launch > D1への記録が失敗して(テーブル未作成等)も、Agent起動自体は成功として返す(500にしない)
+{"timestamp":"2026-11-09T06:27:48.479Z","level":"ERROR","message":"[cursor-agent] 履歴のD1保存に失敗しました(migration未実行の可能性があります)","userId":"user1","error":"no such table: cursor_agent_launch_log"}
+
+···········stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history > 回答キャッシュ表が無い検索は空成功にせずsearchErrorを返す
+{"timestamp":"2026-11-09T06:27:48.677Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュ件数の取得に失敗","userId":"user1","error":"no such table: cursor_agent_answer_cache"}
+
+stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history > 回答キャッシュ表が無い検索は空成功にせずsearchErrorを返す
+{"timestamp":"2026-11-09T06:27:48.682Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュの履歴検索に失敗","userId":"user1","error":"回答キャッシュの検索に失敗しました: no such table: cursor_agent_answer_cache"}
+
+stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history > 回答キャッシュ表が無くてもプロンプトに一致する行は返し、searchErrorも残す
+{"timestamp":"2026-11-09T06:27:48.685Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュ件数の取得に失敗","userId":"user1","error":"no such table: cursor_agent_answer_cache"}
+
+stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history > 回答キャッシュ表が無くてもプロンプトに一致する行は返し、searchErrorも残す
+{"timestamp":"2026-11-09T06:27:48.685Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュの履歴検索に失敗","userId":"user1","error":"回答キャッシュの検索に失敗しました: no such table: cursor_agent_answer_cache"}
+
+········stdout | src/cursor-agent-launch.test.ts > DELETE /api/cursor-agent/history/:id > 自分の履歴行を削除できる(関連するstatus_log行も削除される)
+{"timestamp":"2026-11-09T06:27:48.699Z","level":"ERROR","message":"[cursor-agent] 過去ログ検索明細の削除失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_search_history"}
+{"timestamp":"2026-11-09T06:27:48.699Z","level":"ERROR","message":"[cursor-agent] 過去ログ検索集計の削除失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_search_log"}
+
+stdout | src/cursor-agent-launch.test.ts > DELETE /api/cursor-agent/history/:id > 回答キャッシュテーブルが未作成でも履歴削除は成功し、launch/statusは消える
+{"timestamp":"2026-11-09T06:27:48.706Z","level":"ERROR","message":"[cursor-agent] 過去ログ検索明細の削除失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_search_history"}
+{"timestamp":"2026-11-09T06:27:48.706Z","level":"ERROR","message":"[cursor-agent] 過去ログ検索集計の削除失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_search_log"}
+{"timestamp":"2026-11-09T06:27:48.706Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュ削除失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_answer_cache"}
+
+stdout | src/cursor-agent-launch.test.ts > POST /api/cursor-agent/history/:id/refresh > Cursor APIがエラーを返した場合はstatus_logに追記せずエラーを返す(握りつぶさない)
+{"timestamp":"2026-11-09T06:27:48.773Z","level":"WARN","message":"[cursor-agent] 最新状態取得でCursor APIエラー応答","userId":"user1","agentId":"bc_1","status":404,"text":"Not Found"}
+
+stdout | src/cursor-agent-launch.test.ts > POST /api/cursor-agent/history/:id/refresh > Cursor APIがHTTP 200でもJSONとして解析できない応答を返した場合はstatus_logに記録せずエラーを返す(空の「未取得」行を積み上げない)
+{"timestamp":"2026-11-09T06:27:48.780Z","level":"WARN","message":"[cursor-agent] 最新状態取得でCursor APIの応答がJSONとして解析できませんでした","userId":"user1","agentId":"bc_1"}
+
+············stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history/:id/conversation > Cursor API失敗は502を返し、空のanswersを成功扱いしない
+{"timestamp":"2026-11-09T06:27:48.815Z","level":"WARN","message":"[cursor-agent] 会話取得でCursor APIエラー応答","userId":"user1","agentId":"bc-1","status":500,"text":"boom"}
+
+··········stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history/:id/conversation > キャッシュテーブル未作成でもCursor APIの回答は返し、cacheErrorを残す
+{"timestamp":"2026-11-09T06:27:48.902Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュ読み出し失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_answer_cache"}
+
+stdout | src/cursor-agent-launch.test.ts > GET /api/cursor-agent/history/:id/conversation > キャッシュテーブル未作成でもCursor APIの回答は返し、cacheErrorを残す
+{"timestamp":"2026-11-09T06:27:48.902Z","level":"ERROR","message":"[cursor-agent] 回答キャッシュ保存失敗","userId":"user1","launchId":1,"error":"no such table: cursor_agent_answer_cache"}
+
+································stdout | src/d1-query-catalog-20260906.test.ts > GET /d1-query-catalog > DBクエリが失敗しても500にならず空一覧で表示される
+{"timestamp":"2026-11-09T06:28:00.015Z","level":"WARN","message":"d1-query-catalog: fetch failed","error":"db error"}
+
+··········································································································································································stdout | src/commit-summary-external-endpoint.test.ts > POST /api/commit-summary-external > 未許可メールアドレスは403で拒否される
+{"timestamp":"2026-11-09T06:28:22.515Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+···············stdout | src/commit-summary-external-endpoint.test.ts > POST /api/commit-summary-external > AI生成に失敗した場合は502を返し、握りつぶして200にしない
+{"timestamp":"2026-11-09T06:28:22.807Z","level":"ERROR","message":"[commit-summary-external] 新規要約生成に失敗","commitHash":"orphan-sha","repoName":"nekoserver/dynamicneko","summary":"[AI_UNEXPECTED_FORMAT] type=object value={\"error\":\"boom\"} (primary failed: [AI_UNEXPECTED_FORMAT] type=object value={\"error\":\"boom\"})","errorCode":"UNEXPECTED_FORMAT"}
+
+·······stdout | src/commit-summary-external-endpoint.test.ts > POST /api/commit-summary-status-external > commitHashesが空・不正なら400、未許可メールは403
+{"timestamp":"2026-11-09T06:28:22.917Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+······stdout | src/commit-summary-external-endpoint.test.ts > POST /api/commit-file-latest-external > filePathsが空・repoName未指定は400、未許可メールは403
+{"timestamp":"2026-11-09T06:28:23.007Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+·····stdout | src/commit-summary-external-endpoint.test.ts > POST /api/commit-file-changes-external > 未許可メールは403、Bearer secret不一致は401
+{"timestamp":"2026-11-09T06:28:23.188Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+···stdout | src/commit-summary-external-endpoint.test.ts > POST /api/repo-commit-committed-at-external > 未許可メールは403、Bearer secret不一致は401
+{"timestamp":"2026-11-09T06:28:23.291Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+·····························stdout | src/aichat-answer-vectorize.test.ts > vectorizeAnswerKeywords: 抽出キーワード群をshare_idに紐付けてループ処理する > 1件のベクタ化が失敗しても残りのキーワードの処理を続ける(1件の失敗で全体を巻き込まない)
+{"timestamp":"2026-11-09T06:28:27.802Z","level":"WARN","message":"vectorize-answer: keyword embedding failed","shareId":"s1","keyword":"東京駅","error":"AI down"}
+
+···············································································································stdout | src/thread-tracker.test.ts > GET /api/aichat/threads/:threadId > DBエラーの詳細を汎用サーバーエラーで隠さない
+{"timestamp":"2026-11-09T06:28:32.611Z","level":"ERROR","message":"AI chat thread turns query failed","userId":"alice","threadId":"0123456789abcdef0123456789abcdef","error":"no such column: thread_id"}
+
+···············stdout | src/thread-tracker.test.ts > GET /api/aichat/threads/growing > DBエラーの詳細をページへ返す
+{"timestamp":"2026-11-09T06:28:32.673Z","level":"ERROR","message":"Growing AI chat threads query failed","userId":"alice","error":"no such column: thread_id"}
+
+···(node:12832) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+······························stderr | src/mention-editor-page-20260927.test.ts > getMentionEditorPage: HTML構造 > パース後はパースボタンの右にクリアボタンを表示し、本文を未入力に戻す
+ReferenceError: fetch is not defined
+    at loadSavedDocuments (https://example.com/mention-editor:904:5)
+    at https://example.com/mention-editor:1061:3
+    at https://example.com/mention-editor:1193:3
+    at Script.runInContext (node:vm:150:12)
+    at Object.runInContext (node:vm:302:6)
+    at processJavaScript (/root/cloudflare-workers-github-oauth-1/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:231:10)
+    at HTMLScriptElementImpl._innerEval (/root/cloudflare-workers-github-oauth-1/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:5)
+    at /root/cloudflare-workers-github-oauth-1/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:107:12
+    at ResourceQueue.push (/root/cloudflare-workers-github-oauth-1/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+    at HTMLScriptElementImpl._fetchInternalScript (/root/cloudflare-workers-github-oauth-1/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:106:21)
+
+··········································································································································x······················································································stdout | src/tree-view-snapshot-external-endpoint.test.ts > POST /api/tree-view-repos-external > 未許可メールアドレスは403
+{"timestamp":"2026-11-09T06:30:49.091Z","level":"WARN","message":"[jev-score-board-external] 未許可メールアドレスからの問い合わせを拒否","email":"ng@example.com"}
+
+···········stdout | src/tree-view-snapshot-external-endpoint.test.ts > POST /api/tree-view-snapshot-refresh-external > GitHub API呼び出し失敗時は502を返し、jev同様に握りつぶさない
+{"timestamp":"2026-11-09T06:30:49.283Z","level":"ERROR","message":"[tree-view-snapshot-refresh-external] GitHub Trees API取得失敗","repoName":"nekoserver/dynamicneko","errorCode":"http_error","detail":"GitHub Trees APIがステータス404を返しました: not found"}
+
+········································································Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンを押すと最上位レイヤーにベクタ化済みデータ一覧が開き、既存データとモデルが列挙される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:190:70
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンを押すと最上位レイヤーにベクタ化済みデータ一覧が開き、既存データとモデルが列挙される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+····Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンを押すと埋め込みモデル別の登録済みキーワード率円グラフがタイトルと表の間に表示される(cookie未設定時はデフォルトON)
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:211:61
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンを押すと埋め込みモデル別の登録済みキーワード率円グラフがタイトルと表の間に表示される(cookie未設定時はデフォルトON)
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📊ボタンを押すと円グラフ表示がOFFになり、cookieにoffが保存される。もう一度押すとONに戻りcookieもonになる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:225:84
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📊ボタンを押すと円グラフ表示がOFFになり、cookieにoffが保存される。もう一度押すとONに戻りcookieもonになる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > cookieにoffが保存されている状態でモーダルを開くと円グラフは非表示のまま
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:242:61
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > cookieにoffが保存されている状態でモーダルを開くと円グラフは非表示のまま
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 埋め込みモデルヘッダの右側にztOverviewModelFilterドロップダウンが表示され、「すべて」が最上位、以降はベクタ化済みキーワード総数の多い順に並ぶ
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:251:53
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 埋め込みモデルヘッダの右側にztOverviewModelFilterドロップダウンが表示され、「すべて」が最上位、以降はベクタ化済みキーワード総数の多い順に並ぶ
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+x·Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでplamo-embedding-1bを選ぶと、plamoが登録されているキーワードだけに表が絞り込まれる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:278:53
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでplamo-embedding-1bを選ぶと、plamoが登録されているキーワードだけに表が絞り込まれる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでembeddinggemma-300mを選ぶと、gemmaが登録されているキーワードだけに表が絞り込まれる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:294:53
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでembeddinggemma-300mを選ぶと、gemmaが登録されているキーワードだけに表が絞り込まれる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンで「すべて」に戻すと全キーワードが再び表示される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:310:53
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンで「すべて」に戻すと全キーワードが再び表示される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓にキーワードを入力すると、表がそのキーワードを含む行だけに絞り込まれる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:329:83
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓にキーワードを入力すると、表がそのキーワードを含む行だけに絞り込まれる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓とモデル絞り込みドロップダウンは併用でき、両方の条件を満たす行だけ表示される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:343:83
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓とモデル絞り込みドロップダウンは併用でき、両方の条件を満たす行だけ表示される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓は空文字に戻すと全キーワードが再び表示される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:361:83
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 検索窓は空文字に戻すと全キーワードが再び表示される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 表のth(ヘッダ行)にposition:stickyが指定され、スクロールしても上部に固定される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:378:53
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 表のth(ヘッダ行)にposition:stickyが指定され、スクロールしても上部に固定される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 表内の各キーワードはリンクになっており、タップすると最上位レイヤーのモーダルで関連する会話一覧が表示される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:392:146
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 表内の各キーワードはリンクになっており、タップすると最上位レイヤーのモーダルで関連する会話一覧が表示される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「関連する会話」モーダルの「🔗 別タブで開く」リンクはデフォルトでOFF(表示されない)
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:423:74
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「関連する会話」モーダルの「🔗 別タブで開く」リンクはデフォルトでOFF(表示されない)
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「関連する会話」モーダル内の質問文をタップすると、左サイドパネルの質問タップ時と同じ質問/回答バブルモーダルがキーワードハイライト付きで表示される
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:436:85
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「関連する会話」モーダル内の質問文をタップすると、左サイドパネルの質問タップ時と同じ質問/回答バブルモーダルがキーワードハイライト付きで表示される
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ztKeywordSharesCloseを押すとztKeywordSharesModalが閉じる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:463:97
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ztKeywordSharesCloseを押すとztKeywordSharesModalが閉じる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:481:54
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでplamo-embedding-1bを選ぶと、プレビューされる問い合わせ内容のmodelが動的に切り替わる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:500:61
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > ドロップダウンでplamo-embedding-1bを選ぶと、プレビューされる問い合わせ内容のmodelが動的に切り替わる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+xNot implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「登録する」を押すと表示中の問い合わせ内容(選択中のモデル込み)がそのままPOST bodyに送られる
+カウントダウン通知の復元に失敗しました TypeError: Cannot read properties of undefined (reading 'getItem')
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:62:65)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:343:7)
+    at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:26)
+    at /root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:513:90
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///root/cloudflare-workers-github-oauth-1/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+
+stderr | src/aichat-zt-embedding-model-ui.test.ts > ZTモーダルのDOM実動作(jsdom) > 「登録する」を押すと表示中の問い合わせ内容(選択中のモデル込み)がそのままPOST bodyに送られる
+カウントダウン通知の保存に失敗しました TypeError: Cannot read properties of undefined (reading 'setItem')
+    at saveNotifications (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:188:31)
+    at eval (eval at setupZtUi (/root/cloudflare-workers-github-oauth-1/src/aichat-zt-embedding-model-ui.test.ts:161:3), <anonymous>:332:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+x(node:13201) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+xx····························································································xxxxxxx·xxxxx

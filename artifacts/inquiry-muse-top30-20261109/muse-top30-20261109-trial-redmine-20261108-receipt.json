@@ -1,0 +1,20 @@
+{
+  "entry_id": "muse-top30-20261109-trial-redmine-20261108",
+  "case_id": "trial-redmine-20261108",
+  "keys": [
+    "trm-k2",
+    "trm-k3",
+    "trm-k4",
+    "trm-k5",
+    "trm-k6"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250362.9644847,
+  "receipt": {
+    "ask_id": "muse-6ba1cf92-8eed-482d-b231-45ae47b6b781",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250362.965228
+  }
+}

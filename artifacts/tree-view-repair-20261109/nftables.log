@@ -1,0 +1,9 @@
+/tmp/nekoroot-firewall.FbYBdf:18:23-32: Error: Could not process rule: No such file or directory
+    meta nfproto ipv6 limit rate 10/second burst 20 packets log prefix "nft-drop ipv6 "
+                      ^^^^^^^^^^
+/tmp/nekoroot-firewall.FbYBdf:21:22-31: Error: Could not process rule: No such file or directory
+    ct state invalid limit rate 10/second burst 20 packets log prefix "nft-drop invalid "
+                     ^^^^^^^^^^
+/tmp/nekoroot-firewall.FbYBdf:25:5-14: Error: Could not process rule: No such file or directory
+    limit rate 10/second burst 20 packets log prefix "nft-drop policy "
+    ^^^^^^^^^^

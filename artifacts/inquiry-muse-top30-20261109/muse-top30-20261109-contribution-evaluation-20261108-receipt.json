@@ -1,0 +1,20 @@
+{
+  "entry_id": "muse-top30-20261109-contribution-evaluation-20261108",
+  "case_id": "contribution-evaluation-20261108",
+  "keys": [
+    "ce-k9",
+    "ce-k10",
+    "ce-k11",
+    "ce-k12",
+    "ce-k4"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250370.380288,
+  "receipt": {
+    "ask_id": "muse-2bbde64e-7651-4a9e-bc18-29824ab4e59f",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250370.3810635
+  }
+}

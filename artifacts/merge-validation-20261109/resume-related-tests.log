@@ -1,0 +1,14 @@
+npm notice run cloudflare-workers-github-oauth@1.0.0 npx
+npm notice run 'vitest' run src/routes/treeViewMuseChat.test.ts src/utils/tailnetPeer.test.ts src/utils/museNodeStatus.test.ts src/utils/museTailscalePreflight.test.ts src/utils/wasmMuseBridge.test.ts src/utils/wasmTailnetService.test.ts src/utils/aichatSlashCommand.test.ts --maxWorkers=1
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/cloudflare-workers-github-oauth-1
+
+
+ Test Files  7 passed (7)
+      Tests  215 passed (215)
+   Start at  17:50:21
+   Duration  4.90s (transform 776ms, setup 177ms, import 928ms, tests 1.28s, environment 1ms)
+

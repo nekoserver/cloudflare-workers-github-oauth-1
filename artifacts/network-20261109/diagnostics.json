@@ -1,0 +1,67 @@
+{
+  "claude": {
+    "http": 200,
+    "ask_status": "done",
+    "ask_error": null,
+    "error": "no_api_token",
+    "via": "claude",
+    "reply_present": true
+  },
+  "muse": {
+    "http": 200,
+    "ask_status": "failed",
+    "ask_error": "unsupported_engine",
+    "error": "no_api_token",
+    "via": "muse",
+    "reply_present": true
+  },
+  "mygw": {
+    "/lib/date.shtml": {
+      "http": 200,
+      "ssi_expanded": true
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 401
+    }
+  },
+  "stream": {
+    "/lib/date.shtml": {
+      "error": "ClientConnectorDNSError"
+    },
+    "/lib/api/tunnels.rb": {
+      "error": "ClientConnectorDNSError"
+    }
+  },
+  "r8": {
+    "/lib/date.shtml": {
+      "http": 200,
+      "ssi_expanded": true
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 401
+    }
+  },
+  "r9": {
+    "/lib/date.shtml": {
+      "error": "TimeoutError"
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 502
+    }
+  },
+  "tailscale": {
+    "BackendState": "Running",
+    "peers": 7
+  },
+  "claude_inference_authenticated": false,
+  "stream_env": {
+    "chat_websocket": {
+      "hmac_matches_current_env": true,
+      "management_credentials_absent": true
+    },
+    "chat_http_stream": {
+      "hmac_matches_current_env": true,
+      "management_credentials_absent": true
+    }
+  }
+}

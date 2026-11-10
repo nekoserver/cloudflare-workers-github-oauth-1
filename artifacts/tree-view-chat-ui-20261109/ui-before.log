@@ -1,0 +1,412 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-muse-chat.browser.test.tsx (4 tests | 4 failed) 60604ms
+   × settings checkboxes switch to Muse, exchange multi-turn messages and preserve both chats 15280ms
+   × Muse can be selected when the tunnel ledger fails; HTTP 200 error keeps the submitted message visible and the input empty 15116ms
+   × Muse transport setting is exclusive, persists, and determines the only outgoing route 15050ms
+   × Muse/worker buttons switch the preserved screens and pending submission clears input with two loaders 15146ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-muse-chat.browser.test.tsx > settings checkboxes switch to Muse, exchange multi-turn messages and preserve both chats
+VitestBrowserElementError: Cannot find element with locator: page.getByRole('checkbox', { name: '本体' })
+
+ARIA tree:
+- region "AIチャットのストリーム":
+  - region "muse-vmとのチャット":
+    - strong: muse-vm · コンテナのTailscale
+    - button "新しい会話"
+    - log "Museの会話":
+      - paragraph: muse-vmにメッセージを送信できます。
+    - text: Museへのメッセージ
+    - textbox "Museへのメッセージ"
+    - button "送信" [disabled]
+  - button "AIチャットをウィンドウで開く": ⬜︎
+- dialog "設定":
+  - banner:
+    - heading "設定" [level=2]
+    - button "設定を閉じる": 閉じる
+  - group "チャットの接続先":
+    - text: チャットの接続先
+    - checkbox "このワーカーのチャット"
+    - text: このワーカーのチャット
+    - checkbox "muse-vm（tailnet）" [checked]
+    - text: muse-vm（tailnet）
+  - group "Museの通信経路":
+    - text: Museの通信経路
+    - checkbox "起動中コンテナのTailscale" [checked]
+    - text: 起動中コンテナのTailscale
+    - checkbox "Worker内Tailscale"
+    - text: Worker内Tailscale
+  - text: 接続先
+  - combobox "接続先":
+    - option "mygw"
+    - option "muse-vm（tailnet）" [selected]
+  - text: 通信方式
+  - combobox "通信方式" [disabled]:
+    - option "WebSocket" [selected]
+    - option "SSE"
+    - option "NDJSON"
+    - option "JSON Text Sequence"
+  - text: 送信許可の有効期間
+  - combobox "送信許可の有効期間" [disabled]:
+    - option "15分"
+    - option "1時間" [selected]
+    - option "8時間"
+    - option "1日"
+    - option "7日"
+  - button "再読み込み" [disabled]
+  - checkbox "コンテナタブを開いたら自動で接続する" [checked]
+  - text: コンテナタブを開いたら自動で接続する
+
+HTML:
+[36m<body>[39m
+  [0m
+  
+
+[0m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-label[39m=[32m"AIチャットのストリーム"[39m
+      [33mclass[39m=[32m"tree-view-conversation-stream bg-white text-slate-700"[39m
+      [33mdata-theme-synced[39m=[32m"false"[39m
+    [36m>[39m
+      [36m<div[39m …[36m />[39m
+    [36m</section>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33maria-label[39m=[32m"AIチャットウィンドウ"[39m
+    [33mclass[39m=[32m"tree-view-terminal-window bg-white border-slate-200 text-slate-700"[39m
+    [33mdata-focused[39m=[32m"false"[39m
+    [33mdata-maximized[39m=[32m"false"[39m
+    [33mdata-shaded[39m=[32m"false"[39m
+    [33mdata-surface-mode[39m=[32m"panel"[39m
+    [33mdata-terminal-surface[39m=[32m"true"[39m
+    [33mdata-tree-view-window[39m=[32m"ai-chat"[39m
+    [33mhidden[39m=[32m""[39m
+    [33mrole[39m=[32m"dialog"[39m
+    [33mstyle[39m=[32m"left: 0px; top: 40px; width: 414px; height: 560px; z-index: 1200;"[39m
+    [33mtabindex[39m=[32m"-1"[39m
+  [36m>[39m
+    [36m<header[39m
+      [33mclass[39m=[32m"tree-view-terminal-titlebar bg-white border-slate-200"[39m
+    [36m>[39m
+      [36m<div[39m …[36m />[39m
+    [36m</header>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"tree-view-terminal-window-body"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"tree-view-terminal-window-status"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 n"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-n"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 ne"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-ne"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 e"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-e"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 se"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-se"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 s"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-s"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 sw"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-sw"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 w"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-w"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 nw"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-nw"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"tree-view-stream-settings-modal"[39m
+  [36m>[39m
+    [36m<section[39m
+      [33maria-labelledby[39m=[32m"tree-view-stream-settings-title"[39m
+      [33maria-modal[39m=[32m"true"[39m
+      [33mclass[39m=[32m"tree-view-stream-settings-panel bg-white border-slate-200 text-slate-700"[39m
+      [33mrole[39m=[32m"dialog"[39m
+    [36m>[39m
+      [36m<header[39m …[36m />[39m
+      [36m<fieldset[39m …[36m />[39m
+      [36m<fieldset[39m …[36m />[39m
+      [36m<div[39m …[36m />[39m
+      [36m<div[39m …[36m />[39m
+    [36m</section>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-chat.browser.test.tsx/settings-checkboxes-switch-to-Muse--exchange-multi-turn-messages-and-preserve-both-chats.png
+
+ ❯ Proxy.__VITEST_POLL_CHAIN__ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7359:47
+ ❯ test/tree-view-muse-chat.browser.test.tsx:17:64
+     15|  await s.getByRole('checkbox',{name:'muse-vm（tailnet）'}).click();
+     16|  await expect.element(s.getByRole('checkbox',{name:'muse-vm（tailnet）'}…
+     17|  await expect.element(s.getByRole('checkbox',{name:'本体'})).not.toBeChe…
+       |                                                                ^
+     18|  expect(sends).toHaveLength(0);
+     19|  // close the settings dialog so the native form can be operated
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ throwWithCause node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7339:34
+ ❯ promise node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7424:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |chromium| test/tree-view-muse-chat.browser.test.tsx > Muse can be selected when the tunnel ledger fails; HTTP 200 error keeps the submitted message visible and the input empty
+TimeoutError: locator.fill: Timeout 14693ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByTestId('__vitest_0__').getByLabel('接続中', { exact: true })[22m
+
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-chat.browser.test.tsx/Muse-can-be-selected-when-the-tunnel-ledger-fails--HTTP-200-error-keeps-the-submitted-message-visible-and-the-input-empty.png
+
+ ❯ test/tree-view-muse-chat.browser.test.tsx:45:32
+     43|  await s.getByRole('checkbox',{name:'muse-vm（tailnet）'}).click();
+     44|  await s.rerender(<TreeViewConversationStream snippetStyle="minimal" s…
+     45|  await s.getByLabelText('接続中').fill('<script>alert(1)</script>');
+       |                                ^
+     46|  await s.getByRole('button',{name:'送信',exact:true}).click();
+     47|  await expect.element(s.getByRole('alert')).toHaveTextContent('Muse is…
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |chromium| test/tree-view-muse-chat.browser.test.tsx > Muse transport setting is exclusive, persists, and determines the only outgoing route
+VitestBrowserElementError: Cannot find element with locator: page.getByRole('checkbox', { name: 'コンテナ' })
+
+ARIA tree:
+- region "AIチャットのストリーム":
+  - region "muse-vmとのチャット":
+    - strong: muse-vm · コンテナのTailscale
+    - button "新しい会話"
+    - log "Museの会話":
+      - paragraph: muse-vmにメッセージを送信できます。
+    - text: Museへのメッセージ
+    - textbox "Museへのメッセージ"
+    - button "送信" [disabled]
+  - button "AIチャットをウィンドウで開く": ⬜︎
+- dialog "設定":
+  - banner:
+    - heading "設定" [level=2]
+    - button "設定を閉じる": 閉じる
+  - group "チャットの接続先":
+    - text: チャットの接続先
+    - checkbox "このワーカーのチャット"
+    - text: このワーカーのチャット
+    - checkbox "muse-vm（tailnet）" [checked]
+    - text: muse-vm（tailnet）
+  - group "Museの通信経路":
+    - text: Museの通信経路
+    - checkbox "起動中コンテナのTailscale" [checked]
+    - text: 起動中コンテナのTailscale
+    - checkbox "Worker内Tailscale"
+    - text: Worker内Tailscale
+  - text: 接続先
+  - combobox "接続先":
+    - option "mygw"
+    - option "muse-vm（tailnet）" [selected]
+  - text: 通信方式
+  - combobox "通信方式" [disabled]:
+    - option "WebSocket" [selected]
+    - option "SSE"
+    - option "NDJSON"
+    - option "JSON Text Sequence"
+  - text: 送信許可の有効期間
+  - combobox "送信許可の有効期間" [disabled]:
+    - option "15分"
+    - option "1時間" [selected]
+    - option "8時間"
+    - option "1日"
+    - option "7日"
+  - button "再読み込み" [disabled]
+  - checkbox "コンテナタブを開いたら自動で接続する" [checked]
+  - text: コンテナタブを開いたら自動で接続する
+
+HTML:
+[36m<body>[39m
+  [0m
+  
+
+[0m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-label[39m=[32m"AIチャットのストリーム"[39m
+      [33mclass[39m=[32m"tree-view-conversation-stream bg-white text-slate-700"[39m
+      [33mdata-theme-synced[39m=[32m"false"[39m
+    [36m>[39m
+      [36m<div[39m …[36m />[39m
+    [36m</section>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33maria-label[39m=[32m"AIチャットウィンドウ"[39m
+    [33mclass[39m=[32m"tree-view-terminal-window bg-white border-slate-200 text-slate-700"[39m
+    [33mdata-focused[39m=[32m"false"[39m
+    [33mdata-maximized[39m=[32m"false"[39m
+    [33mdata-shaded[39m=[32m"false"[39m
+    [33mdata-surface-mode[39m=[32m"panel"[39m
+    [33mdata-terminal-surface[39m=[32m"true"[39m
+    [33mdata-tree-view-window[39m=[32m"ai-chat"[39m
+    [33mhidden[39m=[32m""[39m
+    [33mrole[39m=[32m"dialog"[39m
+    [33mstyle[39m=[32m"left: 0px; top: 40px; width: 414px; height: 560px; z-index: 1200;"[39m
+    [33mtabindex[39m=[32m"-1"[39m
+  [36m>[39m
+    [36m<header[39m
+      [33mclass[39m=[32m"tree-view-terminal-titlebar bg-white border-slate-200"[39m
+    [36m>[39m
+      [36m<div[39m …[36m />[39m
+    [36m</header>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"tree-view-terminal-window-body"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"tree-view-terminal-window-status"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 n"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-n"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 ne"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-ne"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 e"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-e"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 se"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-se"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 s"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-s"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 sw"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-sw"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 w"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-w"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-label[39m=[32m"AIチャットのサイズ変更 nw"[39m
+      [33mclass[39m=[32m"tree-view-terminal-resize tree-view-terminal-resize-nw"[39m
+      [33mrole[39m=[32m"separator"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"tree-view-stream-settings-modal"[39m
+  [36m>[39m
+    [36m<section[39m
+      [33maria-labelledby[39m=[32m"tree-view-stream-settings-title"[39m
+      [33maria-modal[39m=[32m"true"[39m
+      [33mclass[39m=[32m"tree-view-stream-settings-panel bg-white border-slate-200 text-slate-700"[39m
+      [33mrole[39m=[32m"dialog"[39m
+    [36m>[39m
+      [36m<header[39m …[36m />[39m
+      [36m<fieldset[39m …[36m />[39m
+      [36m<fieldset[39m …[36m />[39m
+      [36m<div[39m …[36m />[39m
+      [36m<div[39m …[36m />[39m
+    [36m</section>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-chat.browser.test.tsx/Muse-transport-setting-is-exclusive--persists--and-determines-the-only-outgoing-route.png
+
+ ❯ Proxy.__VITEST_POLL_CHAIN__ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7359:47
+ ❯ test/tree-view-muse-chat.browser.test.tsx:61:62
+     59|  const s=await render(<TreeViewConversationStream snippetStyle="minima…
+     60|  await s.getByRole('checkbox',{name:'muse-vm（tailnet）'}).click();
+     61|  await expect.element(s.getByRole('checkbox',{name:'コンテナ'})).toBeCheck…
+       |                                                              ^
+     62|  await s.getByRole('checkbox',{name:'ワーカー'}).click();
+     63|  await expect.element(s.getByRole('checkbox',{name:'コンテナ'})).not.toBeC…
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ throwWithCause node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7339:34
+ ❯ promise node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7424:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |chromium| test/tree-view-muse-chat.browser.test.tsx > Muse/worker buttons switch the preserved screens and pending submission clears input with two loaders
+TimeoutError: locator.click: Timeout 14890ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByTestId('__vitest_0__').getByRole('button', { name: 'Muse', exact: true })[22m
+
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-chat.browser.test.tsx/Muse-worker-buttons-switch-the-preserved-screens-and-pending-submission-clears-input-with-two-loaders.png
+
+ ❯ test/tree-view-muse-chat.browser.test.tsx:84:13
+     82|  const s=await render(<TreeViewConversationStream snippetStyle="minima…
+     83|  const muse=s.getByRole('button',{name:'Muse',exact:true}),worker=s.ge…
+     84|  await muse.click();await expect.element(muse).toHaveAttribute('aria-p…
+       |             ^
+     85|  expect(worker.element().getAttribute('aria-pressed')).toBe('false');
+     86|  const input=s.getByLabelText('接続中');await input.fill('pending prompt'…
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  05:50:00
+   Duration  74.06s (tests 88%, import 9%, worker 3%)
+

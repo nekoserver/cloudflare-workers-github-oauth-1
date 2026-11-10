@@ -1,0 +1,176 @@
+[
+  {
+    "id": "nix-packages-20261107",
+    "goal": "/muse-statusでmuse-vmのNixパッケージ一覧が表示される",
+    "status": "resolved",
+    "stage": "implementation"
+  },
+  {
+    "id": "muse-status-wasm-20261107",
+    "goal": "/muse-statusが本体コンテナ停止中でもブラウザのTailscale WASMで状態取得とmuse-vmの/healthシグナルを行える",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "muse-vm-dashboard-20261107",
+    "goal": "muse-vmのダッシュボードの作成案をMuseと協議し、SPECにまとめる（実装はしない）",
+    "status": "resolved",
+    "stage": "plan"
+  },
+  {
+    "id": "bridge-jobs-queue-20261107",
+    "goal": "muse-vmの~/workspace/bridge-jobs(Museが用意したジョブキュー)を、本体コンテナのClaude Code CLI・Codex CLIが読み、積まれたジョブを片付けて結果を書き戻せるようにする。まず読めることを確かめる",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "job-queue-design-20261107-4ec8c0c5",
+    "goal": "ジョブキューの設計をMuseに相談し、提案・注意点を会話要約として記録する（実装は対象外）。",
+    "status": "resolved",
+    "stage": "concept"
+  },
+  {
+    "id": "bridge-jobs-wording-20261108",
+    "goal": "bridge-jobsのREADMEと最初のジョブで、本体ワーカーが利用者の意図(本体コンテナのClaude Code・Codex)と違うMuseのメインチャットを指し、日付が日本時間で書かれている件をMuseと協議し、直し方を決める(変更は利用者の承認後) 【2026-11-08中止: 未解決のbridge-jobs-queue-20261107と同じ議題(論点k-consumer、SPEC9章のREADME更新)。記録はそちらへ移した】",
+    "status": "abandoned",
+    "stage": "concept"
+  },
+  {
+    "id": "proposal-rule-20261108",
+    "goal": "議事録(D1 agent-inquiries)を読めるエージェントが、過去に解決済みの同一議題が無いことを確かめれば発議の条件を満たすものとして発案できる、というルールをMuse・Codexと協議し、条件と手順を決める",
+    "status": "resolved",
+    "stage": "trial"
+  },
+  {
+    "id": "muse-vm-reboots-20261108",
+    "goal": "muse-vmが繰り返し再起動する原因(または再起動させている仕組み)をMuseと協議して突き止め、作業が途中で切れる影響を減らす方針を決める。変更は利用者の承認後",
+    "status": "resolved",
+    "stage": "plan"
+  },
+  {
+    "id": "inquiry-proposal-decision-20261108",
+    "goal": "/muse-inquiriesの採否待ちの提案のモーダルから、その場で採用・不採用を決めて記録できるようにする(利用者の提案)",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "page-hot-reload-20261108",
+    "goal": "ページの書き換えだけの変更は、Workerのデプロイを待たず、コンテナ上のWebサーバを再起動するだけで反映されるようにする(利用者の提案)。方式・認証・コンテナ停止中の扱いを決める",
+    "status": "open",
+    "stage": "plan"
+  },
+  {
+    "id": "inquiry-board-placement-20261108",
+    "goal": "/muse-inquiriesのボードで、完了したカードが左の列に残り続けないよう、どのカードも今の状態に合った列へ置く(利用者の提案)",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "idea-to-implementation-process-20261108",
+    "goal": "発案から実装までの過程(発案者→すり合わせ・問題点・類似機能との比較・抽象化→SPECと承認→実装)を決め、議題ごとに記録できるようにする(利用者の指摘)",
+    "status": "open",
+    "stage": "implementation"
+  },
+  {
+    "id": "trial-redmine-20261108",
+    "goal": "議題が試験運用の段階に入ったら、Redmine(r9)から読み出せるデータの構成と、そのための記録の方式を決める(利用者の提案)",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "securemine-redmine-interface-20261108",
+    "goal": "SecureMine(/taskmine)とRedmine(R9)のインターフェースを統一する。何を統一するか(画面・API・認証と接続先)を決める(利用者の提案)。関連: trial-redmine-20261108(Redmineへの書き込み口を共有する可能性)",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "board-auto-refresh-20261108",
+    "goal": "提案の採否・発議・段階の移動などの出来事が、一定の周期で/muse-inquiriesのカンバンボードに自動で反映されるようにする(利用者の提案)。周期・取得の方式・開いているカードやモーダルとの両立を決める",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "task-commit-link-20261108",
+    "goal": "完了したタスク(議題・提案・ジョブ)と、それを実装したコミット・PRを、文ではなくデータベースの行として関連付けられるようにする(利用者の提案)。何を単位に結ぶか、どちらのD1に置くか、誰がいつ書くかを決める",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "user-message-to-board-20261108",
+    "goal": "利用者の発言は処理の流れと関係なく割り込む前提に立ち、処理中の議題へ一律に結んで保存しない。発言ごとに「協議へ」ボタンを置き、押された発言だけを/muse-inquiriesのカンバンの「協議(問い合わせ)」列へ移す(利用者の提案)",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "contribution-evaluation-20261108",
+    "goal": "決定や業務に何が効いたかを、類似性ではなく来歴で評価し定量化できるようにする(利用者の提案)。出どころ(提案・前提知識・既存実装・過去の解決方法・回答・論点など)は種類を固定せず記録のIDで指し、効き方は少数に固定して引用のように数える。業務プロセスの改善は前後比較で測る。前提知識の体系的な抜けを指摘する提案も評価の対象にする",
+    "status": "open",
+    "stage": "implementation"
+  },
+  {
+    "id": "case-resolution-criteria-20261108",
+    "goal": "議題を「解決」にする条件(目的を満たした根拠・採否待ちの提案と未解決の論点が無いこと)を決め、満たさない議題を解決にできないようにする。協議の終了と目的の達成を分けて記録する(利用者の指摘「完了の妥当性がよくわからない」)",
+    "status": "open",
+    "stage": "plan"
+  },
+  {
+    "id": "agent-guard-hooks-20261108",
+    "goal": "Claude CodeのPreToolUse・Stopフックで、利用者の指定(このコンテナで全体テストを走らせない、利用者に見える文章は日本語)を強制する。フックの妥当性(誤検知・すり抜け・詰まり)をCodex・Museに評価させ、直してから使い続ける(利用者の指示)",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "muse-restart-backlog-20261108",
+    "goal": "muse-vmの再起動の後、止まっている間に溜まったMuseへの問い合わせ(本体側のキューと、接続に失敗したジョブ)を、新しい問い合わせより先に処理し、片付いたら利用者に知らせる(利用者の提案)。どのキューを対象にするか、順番、通知先、二重送信の防ぎ方を決める",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "nix-job-tools-20261108",
+    "goal": "Job処理を支援するMuse側の調査・レビューに役立つNix追加パッケージを、導入済みツールと役割分担を踏まえ優先順に選ぶ",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "redmine-ticket-db-review-20261108",
+    "goal": "既存Muse Job88dd27e8c0ca417f832b84995cf4167cへ版確認の追加条件を反映し、公式Redmine7.0.3を主対象、リポジトリ7.0.2を補助比較としてDB設計報告を補正する。Museとの協議・訂正・要約と残る確認範囲を記録する。実DB変更は対象外。",
+    "status": "resolved",
+    "stage": "plan"
+  },
+  {
+    "id": "jj-practical-use-20261108",
+    "goal": "jj(jujutsu)の応用例と有効性を、対象版・根拠・安全な確認・限界を分けてMuseに調査させ報告する。既存リポジトリとリモートは変更しない。",
+    "status": "open",
+    "stage": "concept"
+  },
+  {
+    "id": "muse-bridge-injection-20261109",
+    "goal": "Museブリッジのプロンプトインジェクション判定条件と未応答の理由を確認し、安全性を維持して誤検知・無限待ちを防ぐ方法を検討する",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "side-chat-workflow-20261109",
+    "goal": "サイドチャット投稿の状態遷移・本人確認と外部指示の境界・拒否通知・重複防止についてMuseと協議し経緯を記録する",
+    "status": "open",
+    "stage": "plan"
+  },
+  {
+    "id": "muse-502-path-20261109",
+    "goal": "アプリからMuseへの502について発生区間をログと相関IDで特定し、接続失敗と処理遅延を区別する。重複実行を防ぎながら復旧方針を決める。",
+    "status": "open",
+    "stage": "plan"
+  },
+  {
+    "id": "t3-window-geometry-20261109",
+    "goal": "T3Codeウィンドウの移動・サイズ・最大化復元後の座標が保存されない原因を、実コードとブラウザ試験で特定する。",
+    "status": "open",
+    "stage": "trial"
+  },
+  {
+    "id": "muse-pr-review-access-20261109",
+    "goal": "MuseがPRレビューを実行できる安全なソース共有経路を定め、レビュー不能時の報告を明確にする。",
+    "status": "open",
+    "stage": "concept"
+  }
+]

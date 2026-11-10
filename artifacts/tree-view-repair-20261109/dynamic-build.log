@@ -1,0 +1,30 @@
+npm notice run dynamicneko@0.0.0 build
+npm notice run vite build
+vite v8.2.2 building dynamicneko environment for production...
+transforming...
+✓ 173 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/dynamicneko/.vite/manifest.json      0.15 kB │ gzip:   0.11 kB
+dist/dynamicneko/wrangler.json            2.27 kB │ gzip:   1.16 kB
+dist/dynamicneko/index.js             1,123.71 kB │ gzip: 190.33 kB │ map: 2,296.72 kB
+
+✓ built in 609ms
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 4833 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/client/.assetsignore                     0.02 kB
+dist/client/index.html                        1.88 kB │ gzip:   1.03 kB
+dist/client/assets/index-DJYBXmJG.css       306.91 kB │ gzip:  48.91 kB
+dist/client/assets/addon-fit-DIOBYJe3.js      1.20 kB │ gzip:   0.49 kB
+dist/client/assets/xterm-ScmBfeDI.js        331.17 kB │ gzip:  83.03 kB
+dist/client/assets/index-BM5xJdo7.js      1,673.72 kB │ gzip: 424.84 kB
+
+✓ built in 9.41s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

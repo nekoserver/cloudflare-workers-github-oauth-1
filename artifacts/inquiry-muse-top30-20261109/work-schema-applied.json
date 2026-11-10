@@ -1,0 +1,126 @@
+{
+  "migration": "0013_create_inquiry_work_records.sql",
+  "sha256": "6430762fad7b6a2b218ebc2cd408055c8c93c9aa84e3656e6293f7f364334590",
+  "objects": [
+    {
+      "name": "inquiry_work_audits",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_completions",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_evaluations",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_groups",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_items",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_runs",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_work_audits_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_audits_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_audits_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_complete_audit",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_complete_count",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_completions_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_completions_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_completions_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_evaluations_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_evaluations_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_evaluations_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_groups_match",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_groups_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_groups_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_groups_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_groups_sealed",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_items_match",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_items_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_items_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_items_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_items_sealed",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_runs_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_runs_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_work_runs_no_update",
+      "type": "trigger"
+    }
+  ]
+}

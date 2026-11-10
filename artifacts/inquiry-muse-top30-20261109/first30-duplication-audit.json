@@ -1,0 +1,740 @@
+[
+  {
+    "source_kind": "key",
+    "source_id": "smri-k2",
+    "case_id": "securemine-redmine-interface-20261108",
+    "audit_status": "既知事実の再確認を含む",
+    "prior_answer_entry_ids": [
+      "smri-e0",
+      "smri-e1",
+      "smri-m2",
+      "smri-c3",
+      "smri-e4"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "smri-p1",
+      "smri-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "3接続口の存在は既知の前提。新しい情報だけを比較し、一覧を回答し直しただけでは前進と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "smri-k3",
+    "case_id": "securemine-redmine-interface-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "smri-e0",
+      "smri-e1",
+      "smri-m2",
+      "smri-c3",
+      "smri-e4"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "smri-p1",
+      "smri-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "trm-k2",
+    "case_id": "trial-redmine-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "trm-e0",
+      "trm-e1",
+      "trm-e2",
+      "trm-m3",
+      "trm-c4",
+      "trm-e5"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "trm-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "trm-k3",
+    "case_id": "trial-redmine-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "trm-e0",
+      "trm-e1",
+      "trm-e2",
+      "trm-m3",
+      "trm-c4",
+      "trm-e5"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "trm-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "trm-k4",
+    "case_id": "trial-redmine-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "trm-e0",
+      "trm-e1",
+      "trm-e2",
+      "trm-m3",
+      "trm-c4",
+      "trm-e5"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "trm-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "trm-k5",
+    "case_id": "trial-redmine-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "trm-e0",
+      "trm-e1",
+      "trm-e2",
+      "trm-m3",
+      "trm-c4",
+      "trm-e5"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "trm-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "trm-k6",
+    "case_id": "trial-redmine-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "trm-e0",
+      "trm-e1",
+      "trm-e2",
+      "trm-m3",
+      "trm-c4",
+      "trm-e5"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "trm-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "side-chat-workflow-20261109-states",
+    "case_id": "side-chat-workflow-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "side-chat-workflow-20261109-bridge-status"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "side-chat-workflow-20261109-submission-states",
+      "side-chat-workflow-20261109-authenticated-boundary",
+      "side-chat-workflow-20261109-terminal-and-control"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "side-chat-workflow-20261109-authority",
+    "case_id": "side-chat-workflow-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "side-chat-workflow-20261109-bridge-status"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "side-chat-workflow-20261109-submission-states",
+      "side-chat-workflow-20261109-authenticated-boundary",
+      "side-chat-workflow-20261109-terminal-and-control"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "side-chat-workflow-20261109-terminal",
+    "case_id": "side-chat-workflow-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "side-chat-workflow-20261109-bridge-status"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "side-chat-workflow-20261109-submission-states",
+      "side-chat-workflow-20261109-authenticated-boundary",
+      "side-chat-workflow-20261109-terminal-and-control"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "side-chat-workflow-20261109-roles",
+    "case_id": "side-chat-workflow-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "side-chat-workflow-20261109-bridge-status"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "side-chat-workflow-20261109-submission-states",
+      "side-chat-workflow-20261109-authenticated-boundary",
+      "side-chat-workflow-20261109-terminal-and-control"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "muse-bridge-injection-20261109-job",
+    "case_id": "muse-bridge-injection-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "muse-bridge-injection-20261109-user-report",
+      "muse-bridge-injection-20261109-user-policy-report",
+      "timeout-20261109-96881006",
+      "timeout-20261109-verify"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "muse-bridge-injection-20261109-explicit-rejection",
+      "muse-bridge-injection-20261109-structured-input",
+      "muse-bridge-injection-20261109-controlled-retest",
+      "muse-bridge-injection-20261109-authorized-request-boundary"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "muse-bridge-injection-20261109-rule",
+    "case_id": "muse-bridge-injection-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "muse-bridge-injection-20261109-user-report",
+      "muse-bridge-injection-20261109-user-policy-report",
+      "timeout-20261109-96881006",
+      "timeout-20261109-verify"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "muse-bridge-injection-20261109-explicit-rejection",
+      "muse-bridge-injection-20261109-structured-input",
+      "muse-bridge-injection-20261109-controlled-retest",
+      "muse-bridge-injection-20261109-authorized-request-boundary"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "muse-bridge-injection-20261109-silence",
+    "case_id": "muse-bridge-injection-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "muse-bridge-injection-20261109-user-report",
+      "muse-bridge-injection-20261109-user-policy-report",
+      "timeout-20261109-96881006",
+      "timeout-20261109-verify"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "muse-bridge-injection-20261109-explicit-rejection",
+      "muse-bridge-injection-20261109-structured-input",
+      "muse-bridge-injection-20261109-controlled-retest",
+      "muse-bridge-injection-20261109-authorized-request-boundary"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "muse-bridge-injection-20261109-mitigation",
+    "case_id": "muse-bridge-injection-20261109",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "muse-bridge-injection-20261109-user-report",
+      "muse-bridge-injection-20261109-user-policy-report",
+      "timeout-20261109-96881006",
+      "timeout-20261109-verify"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "muse-bridge-injection-20261109-explicit-rejection",
+      "muse-bridge-injection-20261109-structured-input",
+      "muse-bridge-injection-20261109-controlled-retest",
+      "muse-bridge-injection-20261109-authorized-request-boundary"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "同caseの既回答とadopted提案がある。新しい回答に追加制約・具体的な失敗根拠がある場合だけ残差とし、一般原則の繰返しは解決件数へ加えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "ce-k9",
+    "case_id": "contribution-evaluation-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "ce-e0",
+      "ce-e1",
+      "ce-m2",
+      "ce-c3",
+      "ce-e4",
+      "ce-m5",
+      "ce-e6",
+      "ce-c7",
+      "ce-c8",
+      "ce-e9",
+      "ce-e10",
+      "ce-e11",
+      "ce-e12",
+      "ce-e13",
+      "contribution-evaluation-20261108-e14",
+      "contribution-evaluation-20261108-e15"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "ce-p1",
+      "ce-p2",
+      "ce-p3",
+      "ce-p4",
+      "ce-p5"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "ce-k10",
+    "case_id": "contribution-evaluation-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "ce-e0",
+      "ce-e1",
+      "ce-m2",
+      "ce-c3",
+      "ce-e4",
+      "ce-m5",
+      "ce-e6",
+      "ce-c7",
+      "ce-c8",
+      "ce-e9",
+      "ce-e10",
+      "ce-e11",
+      "ce-e12",
+      "ce-e13",
+      "contribution-evaluation-20261108-e14",
+      "contribution-evaluation-20261108-e15"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "ce-p1",
+      "ce-p2",
+      "ce-p3",
+      "ce-p4",
+      "ce-p5"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "ce-k11",
+    "case_id": "contribution-evaluation-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "ce-e0",
+      "ce-e1",
+      "ce-m2",
+      "ce-c3",
+      "ce-e4",
+      "ce-m5",
+      "ce-e6",
+      "ce-c7",
+      "ce-c8",
+      "ce-e9",
+      "ce-e10",
+      "ce-e11",
+      "ce-e12",
+      "ce-e13",
+      "contribution-evaluation-20261108-e14",
+      "contribution-evaluation-20261108-e15"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "ce-p1",
+      "ce-p2",
+      "ce-p3",
+      "ce-p4",
+      "ce-p5"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "ce-k12",
+    "case_id": "contribution-evaluation-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "ce-e0",
+      "ce-e1",
+      "ce-m2",
+      "ce-c3",
+      "ce-e4",
+      "ce-m5",
+      "ce-e6",
+      "ce-c7",
+      "ce-c8",
+      "ce-e9",
+      "ce-e10",
+      "ce-e11",
+      "ce-e12",
+      "ce-e13",
+      "contribution-evaluation-20261108-e14",
+      "contribution-evaluation-20261108-e15"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "ce-p1",
+      "ce-p2",
+      "ce-p3",
+      "ce-p4",
+      "ce-p5"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "ce-k4",
+    "case_id": "contribution-evaluation-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "ce-e0",
+      "ce-e1",
+      "ce-m2",
+      "ce-c3",
+      "ce-e4",
+      "ce-m5",
+      "ce-e6",
+      "ce-c7",
+      "ce-c8",
+      "ce-e9",
+      "ce-e10",
+      "ce-e11",
+      "ce-e12",
+      "ce-e13",
+      "contribution-evaluation-20261108-e14",
+      "contribution-evaluation-20261108-e15"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "ce-p1",
+      "ce-p2",
+      "ce-p3",
+      "ce-p4",
+      "ce-p5"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "bar-k1",
+    "case_id": "board-auto-refresh-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "bar-e0",
+      "bar-e1",
+      "bar-m2",
+      "bar-c3"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "bar-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "bar-k2",
+    "case_id": "board-auto-refresh-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "bar-e0",
+      "bar-e1",
+      "bar-m2",
+      "bar-c3"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "bar-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "umb-k4",
+    "case_id": "user-message-to-board-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "umb-e0",
+      "umb-e1",
+      "umb-m2",
+      "umb-c3",
+      "umb-e4",
+      "user-message-to-board-20261108-e5",
+      "user-message-to-board-20261108-e6"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "umb-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "umb-k6",
+    "case_id": "user-message-to-board-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "umb-e0",
+      "umb-e1",
+      "umb-m2",
+      "umb-c3",
+      "umb-e4",
+      "user-message-to-board-20261108-e5",
+      "user-message-to-board-20261108-e6"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "umb-p1"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "crc-k1",
+    "case_id": "case-resolution-criteria-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "crc-e0",
+      "crc-e1",
+      "crc-e2",
+      "crc-e3",
+      "crc-e5",
+      "case-resolution-criteria-20261108-e6",
+      "case-resolution-criteria-20261108-e7",
+      "case-resolution-criteria-20261108-e8",
+      "case-resolution-criteria-20261108-e9",
+      "case-resolution-criteria-20261108-e10",
+      "case-resolution-criteria-20261108-e11"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "crc-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "crc-e5〜e11で解決条件/停止基準/SPECが改訂済み。初回質問が旧goal/旧open状態を前提にしている可能性がある。回答を最新SPECと照合し、条件の新規決定と再説明を分ける。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "crc-k2",
+    "case_id": "case-resolution-criteria-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "crc-e0",
+      "crc-e1",
+      "crc-e2",
+      "crc-e3",
+      "crc-e5",
+      "case-resolution-criteria-20261108-e6",
+      "case-resolution-criteria-20261108-e7",
+      "case-resolution-criteria-20261108-e8",
+      "case-resolution-criteria-20261108-e9",
+      "case-resolution-criteria-20261108-e10",
+      "case-resolution-criteria-20261108-e11"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "crc-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "crc-e5〜e11で解決条件/停止基準/SPECが改訂済み。初回質問が旧goal/旧open状態を前提にしている可能性がある。回答を最新SPECと照合し、条件の新規決定と再説明を分ける。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "crc-k3",
+    "case_id": "case-resolution-criteria-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "crc-e0",
+      "crc-e1",
+      "crc-e2",
+      "crc-e3",
+      "crc-e5",
+      "case-resolution-criteria-20261108-e6",
+      "case-resolution-criteria-20261108-e7",
+      "case-resolution-criteria-20261108-e8",
+      "case-resolution-criteria-20261108-e9",
+      "case-resolution-criteria-20261108-e10",
+      "case-resolution-criteria-20261108-e11"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "crc-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "crc-e5〜e11で解決条件/停止基準/SPECが改訂済み。初回質問が旧goal/旧open状態を前提にしている可能性がある。回答を最新SPECと照合し、条件の新規決定と再説明を分ける。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "crc-k4",
+    "case_id": "case-resolution-criteria-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "crc-e0",
+      "crc-e1",
+      "crc-e2",
+      "crc-e3",
+      "crc-e5",
+      "case-resolution-criteria-20261108-e6",
+      "case-resolution-criteria-20261108-e7",
+      "case-resolution-criteria-20261108-e8",
+      "case-resolution-criteria-20261108-e9",
+      "case-resolution-criteria-20261108-e10",
+      "case-resolution-criteria-20261108-e11"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "crc-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "crc-e5〜e11で解決条件/停止基準/SPECが改訂済み。初回質問が旧goal/旧open状態を前提にしている可能性がある。回答を最新SPECと照合し、条件の新規決定と再説明を分ける。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "tcl-k3",
+    "case_id": "task-commit-link-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "tcl-e0",
+      "tcl-e1",
+      "tcl-m2",
+      "tcl-c3",
+      "tcl-e4"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "tcl-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  },
+  {
+    "source_kind": "key",
+    "source_id": "tcl-k4",
+    "case_id": "task-commit-link-20261108",
+    "audit_status": "同caseに既回答あり。本文照合前は新規性未確認",
+    "prior_answer_entry_ids": [
+      "tcl-e0",
+      "tcl-e1",
+      "tcl-m2",
+      "tcl-c3",
+      "tcl-e4"
+    ],
+    "adopted_or_done_proposal_ids": [
+      "tcl-p2"
+    ],
+    "count_as_new_resolution": false,
+    "next_action": "既送信依頼は削除/取消しない。新着回答を既回答と差分比較し、既知部分の反復は新規の解決と数えず、新しい根拠・残差・検証結果のみを記録する。",
+    "prior_answer_bodies_retrieved": true,
+    "work_review_basis": "work-review-v1",
+    "concrete_finding": "過去の既回答本文を回収済み。次の統合で差分と現コードの根拠を照合し、既知の落とし穴の再列挙を新たな発見/解決と数えない。"
+  }
+]

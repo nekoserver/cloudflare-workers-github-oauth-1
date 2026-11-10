@@ -1,0 +1,17 @@
+...F.tunnel_list_incomplete: active tunnel missing from listing
+....
+======================================================================
+FAIL: test_default_frame_parents_and_explicit_env_precedence (__main__.NetworkSettingsTest.test_default_frame_parents_and_explicit_env_precedence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_settings_test.py", line 115, in test_default_frame_parents_and_explicit_env_precedence
+    self.assertIn(expected, result.split(','))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'https://dynamicneko.nekoflare.workers.dev' not found in ['']
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.583s
+
+FAILED (failures=1)
+Tunnel cache updated: 0 tunnels
+Tunnel cache updated: 0 tunnels

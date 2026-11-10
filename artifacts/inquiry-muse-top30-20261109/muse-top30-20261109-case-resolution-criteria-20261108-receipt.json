@@ -1,0 +1,19 @@
+{
+  "entry_id": "muse-top30-20261109-case-resolution-criteria-20261108",
+  "case_id": "case-resolution-criteria-20261108",
+  "keys": [
+    "crc-k1",
+    "crc-k2",
+    "crc-k3",
+    "crc-k4"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250377.0735474,
+  "receipt": {
+    "ask_id": "muse-f98b4037-519f-4afb-bf12-94c40300a32a",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250377.074366
+  }
+}

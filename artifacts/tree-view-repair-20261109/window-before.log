@@ -1,0 +1,39 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-window-stack.browser.test.tsx (1 test | 1 failed) 6900ms
+   × preview and history activation raises above floating surfaces and clears the previous active window 6899ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-window-stack.browser.test.tsx > preview and history activation raises above floating surfaces and clears the previous active window
+AssertionError: expected 1000 to be greater than 1202
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-window-stack.browser.test.tsx/preview-and-history-activation-raises-above-floating-surfaces-and-clears-the-previous-active-window.png
+
+ ❯ Proxy.__VITEST_POLL_CHAIN__ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=e843740c:7359:47
+ ❯ test/tree-view-window-stack.browser.test.tsx:27:48
+     25|   const historyLayer = s.getByTestId('tree-view-history-modal-backdrop…
+     26|   const layer = (el:HTMLElement) => Number(el.style.zIndex);
+     27|   await expect.poll(() => layer(historyLayer)).toBeGreaterThan(layer(t…
+       |                                                ^
+     28|   expect(history.dataset.focused).toBe('true');
+     29|   expect(terminal.dataset.focused).toBe('false');
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=e843740c:4951:20
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ throwWithCause node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=e843740c:7339:34
+ ❯ promise node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=e843740c:7424:7
+ ❯ test/tree-view-window-stack.browser.test.tsx:27:3
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=e843740c:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  05:23:23
+   Duration  28.98s (worker 40%, tests 31%, import 29%)
+

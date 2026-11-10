@@ -72,3 +72,11 @@ it('runs the worker-selected route through the actual bridge history contract',a
  expect(r.status).toBe(200);expect(await r.json()).toMatchObject({reply:'history arrived'});
  expect(send).toHaveBeenCalledOnce();expect(deps.getContainer).not.toHaveBeenCalled();
 });
+it('connect action checks the selected transport without inference or starting containers',async()=>{
+ stub.fetch.mockImplementation(async(r:Request)=>new URL(r.url).pathname==='/debug/tailscale-peers'?Response.json({backendState:'Running',peers:[{hostName:'muse-vm',online:true}]}):Response.json({status:'ok'}));
+ const body=JSON.stringify({userToken:'owner',action:'connect',transport:'container'});
+ const headers=await signWorkerRequest(secret,'dynamicneko','POST',path,body);
+ const r=await createTreeViewMuseChatRoutes(deps).request('https://main'+path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body},{DYNAMICNEKO_WORKER_HMAC_SECRET:secret,MUSE_API_KEY:'private-key'} as never);
+ expect(r.status).toBe(200);expect(await r.json()).toMatchObject({healthy:true,transport:'container'});
+ expect(stub.fetch.mock.calls.map(([r])=>new URL(r.url).pathname)).toEqual(['/debug/tailscale-peers','/muse/health']);
+});

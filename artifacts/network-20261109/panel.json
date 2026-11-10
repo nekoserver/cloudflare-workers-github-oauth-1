@@ -1,0 +1,7 @@
+{
+  "http": 200,
+  "accepted": true,
+  "queued": true,
+  "parent": "same-origin test harness; production Worker parent not tested",
+  "tls_verification": true
+}

@@ -1,3 +1,4 @@
+import { onlineTailnetPeer, tailnetPeerAddress } from './tailnetPeer';
 import type { IPN, IPNResponse } from '@ai-ecoverse/wasm-tailscale';
 export type NodeStatus = { state?: string; peers?: { name?: string; dnsName?: string; online?: boolean }[]; shieldsUp?: boolean };
 type GadgetEnv = { MUSE_GADGET_SDK_TOKEN?: string; MUSE_GADGET_RELAY_URL?: string; ORIGIN_HMAC_SECRET?: string; TAILSCALE_WASM_AUTHKEY?: string; TAILSCALE_AUTHKEY?: string };
@@ -39,7 +40,9 @@ export class WasmTailnetService {
     if (target.protocol !== 'http:' || target.username || target.password || target.pathname !== '/' || target.search || target.hash) return Response.json({ error: 'invalid_relay_configuration' }, { status: 503 });
     const state = this.status();
     const host = target.hostname.split('.')[0];
-    if (state.state !== 'Running' || !state.peers?.some(p => (p.name?.split('.')[0] === host || p.dnsName?.split('.')[0] === host) && p.online === true)) return Response.json({ error: 'gadget_relay_offline' }, { status: 503 });
+    const peer = onlineTailnetPeer(state.peers, host);
+    if (state.state !== 'Running' || !peer) return Response.json({ error: 'gadget_relay_offline' }, { status: 503 });
+    target.hostname = tailnetPeerAddress(peer, host);
     let data: Record<string, unknown> = {};
     if (chat) {
       const raw = await request.text();

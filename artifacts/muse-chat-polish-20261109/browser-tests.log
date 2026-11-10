@@ -1,0 +1,10 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+
+ Test Files  2 passed (2)
+      Tests  9 passed (9)
+   Start at  06:11:09
+   Duration  24.10s (worker 42%, import 34%, tests 24%)
+

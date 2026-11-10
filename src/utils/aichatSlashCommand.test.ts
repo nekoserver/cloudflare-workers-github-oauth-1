@@ -1118,7 +1118,7 @@ describe('/askmuse prompt="..."', () => {
 
   // 故障想定: lib経由へ黙って切り替えると、どちらの経路の結果か分からなくなる。
   it.each([
-    ['container_not_running', '本体コンテナ'], ['muse_not_authenticated', 'MUSE_API_KEY'], ['muse_connection_failed', 'muse_connection_failed'], ['llm_timeout', 'llm_timeout'],
+    ['container_not_running', '本体コンテナ'], ['muse_not_authenticated', 'MUSE_API_KEY'], ['muse_connection_failed', 'Museへの接続を確認できません'], ['llm_timeout', 'llm_timeout'],
   ])('%sは保存せず、別の経路へ送らない', async (error, text) => {
     const askTunnelSigner = vi.fn();
     const result = await interpretAichatSlashCommand('/askmuse prompt="質問"', now, { ...deps, askMuseDirect: vi.fn().mockResolvedValue({ ok: false, error }), askTunnelSigner });

@@ -1,0 +1,58 @@
+{
+  "migration": "0014_create_inquiry_improvement_events.sql",
+  "sha256": "b9cb42fa040ae35b2f88f5ee9d17bd8f4f7b9840d7c01ed24398ed792faa61b6",
+  "objects": [
+    {
+      "name": "inquiry_context_summary",
+      "type": "view"
+    },
+    {
+      "name": "inquiry_improvement_baseline",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_case",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_chain",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_context_shape",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_contexts",
+      "type": "view"
+    },
+    {
+      "name": "inquiry_improvement_current",
+      "type": "view"
+    },
+    {
+      "name": "inquiry_improvement_events",
+      "type": "table"
+    },
+    {
+      "name": "inquiry_improvement_no_delete",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_no_replace",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_no_update",
+      "type": "trigger"
+    },
+    {
+      "name": "inquiry_improvement_one_root",
+      "type": "index"
+    },
+    {
+      "name": "inquiry_improvement_summary",
+      "type": "view"
+    }
+  ]
+}

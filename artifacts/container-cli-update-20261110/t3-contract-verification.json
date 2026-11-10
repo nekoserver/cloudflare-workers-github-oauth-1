@@ -1,0 +1,104 @@
+{
+  "version": "0.1.8",
+  "tag": "v0.1.8",
+  "checks": [
+    {
+      "contract": "auth_session_unauthenticated",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/EnvironmentAuth.ts",
+      "sha256": "f2aeaeeeaeb557776fa220fe4c0c95778977bdad837d98cd76476ecac3d822e1",
+      "line_numbers": [
+        846,
+        848,
+        840
+      ]
+    },
+    {
+      "contract": "protected_api_401",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/packages/contracts/src/environmentHttp.ts",
+      "sha256": "77634e27bf9f42a7f637ad44ba4e628726d5152462dc2bc13626d4115cb8c653",
+      "line_numbers": [
+        169,
+        180
+      ]
+    },
+    {
+      "contract": "current_cookie_before_bearer",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/EnvironmentAuth.ts",
+      "sha256": "f2aeaeeeaeb557776fa220fe4c0c95778977bdad837d98cd76476ecac3d822e1",
+      "line_numbers": [
+        663,
+        668
+      ]
+    },
+    {
+      "contract": "loopback_cookie_name",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/utils.ts",
+      "sha256": "d6a33296e7326ddb4fd1ec68270ee75e27aa33447fb9d1d9b55467784b321943",
+      "line_numbers": [
+        15,
+        43
+      ]
+    },
+    {
+      "contract": "auth_descriptor_on_session",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/EnvironmentAuth.ts",
+      "sha256": "f2aeaeeeaeb557776fa220fe4c0c95778977bdad837d98cd76476ecac3d822e1",
+      "line_numbers": [
+        848,
+        840
+      ]
+    },
+    {
+      "contract": "pairing_requires_access_write",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/http.ts",
+      "sha256": "48cb6f2fd9862d834a771e771eb63e88e4b1519153d44eb421ff88e36af3a3ed",
+      "line_numbers": [
+        445,
+        449,
+        464
+      ]
+    },
+    {
+      "contract": "pairing_ttl_5_minutes",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/server/src/auth/PairingGrantStore.ts",
+      "sha256": "89f0e9dc63afe6d32369cb563eb54816a01504118aa10a398c84b975821825df",
+      "line_numbers": [
+        261
+      ]
+    },
+    {
+      "contract": "pairing_url_bootstrap",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/packages/shared/src/remote.ts",
+      "sha256": "de815ac7f3e17e217d4ca6345d9d0715892d669a660a3707dcd1b99c75f4fdfb",
+      "line_numbers": [
+        146,
+        147,
+        152
+      ]
+    },
+    {
+      "contract": "session_poll_2s_100ms",
+      "scope": "upstream_source_review",
+      "url": "https://github.com/pingdotgg/t3code/blob/v0.1.8/apps/web/src/environments/primary/auth.ts",
+      "sha256": "745aea46da9c2d10879f4f285b65c600590e21161272964c4f25ee590136cd82",
+      "line_numbers": [
+        139,
+        140,
+        242
+      ]
+    }
+  ],
+  "limitations": [
+    "Source review does not execute upstream browser or HTTP authentication tests.",
+    "Duplicate same-name cookie parsing order was not separately exercised on 0.1.8; current-cookie-before-Bearer selection was reviewed.",
+    "Isolated executable --version passed; full layout service/browser behavior and Docker image remain unverified."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "official_archive_sha256_verified": true,
+  "files": [
+    "lib/libatomic.so.1",
+    "t3"
+  ],
+  "exit_code": 0,
+  "stdout": "t3 v0.1.8\n",
+  "stderr": "",
+  "scope": "isolated --version only; no Docker build, installation or authentication"
+}

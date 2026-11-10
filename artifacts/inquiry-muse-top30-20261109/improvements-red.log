@@ -1,0 +1,84 @@
+✖ 改善案数と成立確認済み案数を分け、再評価で二重計上しない (3.605262ms)
+✖ 既存案を新案に数えず、条件付きと実現性確認を混ぜない (2.269437ms)
+✖ 根拠のない実現性確認、上書き、履歴分岐を拒否する (2.109517ms)
+✖ 重複と判明した候補は独立案数から外し、過去イベントを残す (2.053193ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.482398
+
+✖ failing tests:
+
+test at scripts/agent-inquiries-improvements.test.mjs:18:1
+✖ 改善案数と成立確認済み案数を分け、再評価で二重計上しない (3.605262ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:8:221)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:19:11)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+  }
+
+test at scripts/agent-inquiries-improvements.test.mjs:23:1
+✖ 既存案を新案に数えず、条件付きと実現性確認を混ぜない (2.269437ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:8:221)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:24:11)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+  }
+
+test at scripts/agent-inquiries-improvements.test.mjs:27:1
+✖ 根拠のない実現性確認、上書き、履歴分岐を拒否する (2.109517ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:8:221)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:28:11)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+  }
+
+test at scripts/agent-inquiries-improvements.test.mjs:34:1
+✖ 重複と判明した候補は独立案数から外し、過去イベントを残す (2.053193ms)
+  Error: ENOENT: no such file or directory, open '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+      at readFileSync (node:fs:624:20)
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:8:221)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:35:11)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/root/cloudflare-workers-github-oauth-1/migrations-agent-inquiries/0014_create_inquiry_improvement_events.sql'
+  }

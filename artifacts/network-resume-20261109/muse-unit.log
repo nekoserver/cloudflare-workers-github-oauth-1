@@ -1,0 +1,10 @@
+...{"ask_id": "muse-fdcab63e-f873-4bae-90a0-11fa405d91cd", "status": "done"}
+.{"ask_id": "muse-9962cd02-1007-4879-a305-c415835aa3a8", "status": "done"}
+.{"ask_id": "muse-65d5301c-a0cc-4a48-9e14-399e926735ea", "status": "failed"}
+{"ask_id": "muse-36a5abd6-a6f8-411e-b8f6-70ac29b26bbe", "status": "failed"}
+{"ask_id": "muse-0b86a724-cbd0-4f6a-b7ac-e6b6520c4fa2", "status": "failed"}
+....
+----------------------------------------------------------------------
+Ran 9 tests in 0.185s
+
+OK

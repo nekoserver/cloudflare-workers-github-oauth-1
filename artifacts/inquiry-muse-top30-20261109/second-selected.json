@@ -1,0 +1,65 @@
+[
+  {
+    "source_kind": "case",
+    "source_id": "muse-restart-backlog-20261108",
+    "case_id": "muse-restart-backlog-20261108",
+    "title": "muse-vmの再起動の後、止まっている間に溜まったMuseへの問い合わせ(本体側のキューと、接続に失敗したジョブ)を、新しい問い合わせより先に処理し、片付いたら利用者に知らせる(利用者の提案)。どのキューを対象にするか、順番、通知先、二重送信の防ぎ方を決める",
+    "priority_rank": 1,
+    "selection_reason": "今回の後付け評価（当初の選定理由ではない）: e5は要確認を完了の妨げとして停滞通知を別に出す案、e6は要確認を完了の妨げにせず完了通知へ含める案で、利用者が片付いたと受け取る意味が異なる。e9は費用対効果、e10はboot_id/重複排除の案で、この通知意味の相違を決着した根拠は取得した記録内に無い。",
+    "grouping_reason": "再起動後のbacklog復旧を一つの議題として扱い、複数キューと通知の整合をまとめて協議する。",
+    "observed_case_status": "open",
+    "review_mode": "追加協議候補",
+    "residual_question": "既回答e5/e6を再利用して相違だけを協議する。e5の「要確認が残れば未完了＋停滞通知」とe6の「要確認を別枠にして完了通知へ含める」を、全成功/自動処理終了/要確認残りの3状態に分ければ両立するか。利用者の「片付いたら知らせる」を成功と誤表示せず、要確認で無通知にもならない最小の通知語彙・発火条件・同じ復旧回の通知重複防止を決めたい。既回答のFIFO・固定ID・boot_id設計の再提案、再送・実装・設定変更は不要。",
+    "send_ready": true,
+    "prior_answer_entry_ids": [
+      "muse-restart-backlog-20261108-e1",
+      "muse-restart-backlog-20261108-e2",
+      "muse-restart-backlog-20261108-e3",
+      "muse-restart-backlog-20261108-e4",
+      "muse-restart-backlog-20261108-e5",
+      "muse-restart-backlog-20261108-e6",
+      "muse-restart-backlog-20261108-e9",
+      "muse-restart-backlog-20261108-e10"
+    ],
+    "review_basis": "work-review-v1",
+    "work_kind": "discuss",
+    "previous_gap": "e5は要確認を完了の妨げとして停滞通知を別に出す案、e6は要確認を完了の妨げにせず完了通知へ含める案で、利用者が片付いたと受け取る意味が異なる。e9は費用対効果、e10はboot_id/重複排除の案で、この通知意味の相違を決着した根拠は取得した記録内に無い。",
+    "decision_change_condition": "取得した既回答または現行の承認済み仕様に通知意味と要確認時の扱いが既に決まっている根拠があれば再協議せずその仕様を適用する。なければ「処理走査終了」と「全件成功」を分け、要確認は未解決として通知できる最小案を比較する。",
+    "exit_condition": "同じ復旧回で成功/失敗/要確認の各件数と未解決IDを示す条件、要確認を含む通知を成功と呼ばない表示、停滞/終了/更新通知の一意性と再起動時の境界を定義し、残る実機検証と承認が明確になること。",
+    "prior_answer_evidence": [
+      "fresh-answers.json:muse-restart-backlog-20261108-e5",
+      "fresh-answers.json:muse-restart-backlog-20261108-e6",
+      "fresh-answers.json:muse-restart-backlog-20261108-e9",
+      "fresh-answers.json:muse-restart-backlog-20261108-e10"
+    ]
+  },
+  {
+    "source_kind": "case",
+    "source_id": "page-hot-reload-20261108",
+    "case_id": "page-hot-reload-20261108",
+    "title": "ページの書き換えだけの変更は、Workerのデプロイを待たず、コンテナ上のWebサーバを再起動するだけで反映されるようにする(利用者の提案)。方式・認証・コンテナ停止中の扱いを決める",
+    "priority_rank": 2,
+    "selection_reason": "今回の後付け評価（当初の選定理由ではない）: phr-c1はWorker認証後の検証済み完成HTML取得と同梱版fallbackを推奨しphr-p1が採用済み。今回追加されたSSI比較はその回答に含まれず、SSIで増えるinclude/exec・個人別キャッシュ境界と採用案との差分は未選定。",
+    "grouping_reason": "SSI・ページ配信・認証・キャッシュ・停止時動作は同じ反映方式の制約なので一つの議題で扱う。",
+    "observed_case_status": "open",
+    "review_mode": "追加協議候補",
+    "residual_question": "phr-c1の完成HTML中継案とphr-p1採用は前提として維持する。SSIで同じページを構成するときに、検証済み成果物・Worker認証・CSP・API契約版・個人別キャッシュ・コンテナ停止時の表示のうち、既採用案から追加/変更が必要な部分だけを示してほしい。方式の一般論や採用済み案の再提案は不要。",
+    "send_ready": true,
+    "prior_answer_entry_ids": [
+      "phr-e0",
+      "phr-e1",
+      "phr-c1",
+      "phr-e3"
+    ],
+    "review_basis": "work-review-v1",
+    "work_kind": "discuss",
+    "previous_gap": "phr-c1はWorker認証後の検証済み完成HTML取得と同梱版fallbackを推奨しphr-p1が採用済み。今回追加されたSSI比較はその回答に含まれず、SSIで増えるinclude/exec・個人別キャッシュ境界と採用案との差分は未選定。",
+    "decision_change_condition": "SSIを使ってもWorkerの認証認可・CSP・API契約版・停止時表示を維持し、secret/任意execを公開せず、同じ検証済み成果物を配信でき、完成HTML方式に対する具体的な保守利点が示される場合だけSSI構成の採用候補を追加する。満たさなければ既採用案を維持する。",
+    "exit_condition": "既採用方式とSSIの差分表、使う/使わない範囲、必要な初回配備、失敗時同梱版の扱い、認証/版不一致/キャッシュ/停止時の合格条件を示し、採否を利用者判断に渡せる状態。再び一般方式の比較を始めない。",
+    "prior_answer_evidence": [
+      "fresh-answers.json:phr-c1",
+      "fresh-progress.json:phr-p1 adopted",
+      "fresh-progress.json:phr-e3 SPEC承認へ進む段階"
+    ]
+  }
+]

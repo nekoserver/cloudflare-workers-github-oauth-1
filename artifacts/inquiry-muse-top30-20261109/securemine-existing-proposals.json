@@ -1,0 +1,16 @@
+[
+  {
+    "id": "smri-p1",
+    "case_id": "securemine-redmine-interface-20261108",
+    "text": "Redmine RESTの送信処理(接続先の確認・許可パス・署名・送信)をproxyRedmineから切り出し、SecureMineの画面・ログインの確認・試験運用の写しで共用する。鍵の解決順は変えない",
+    "status": "adopted",
+    "reason": "［2026-11-08T06:48:22Z 利用者がClaude Codeの問いで決定(smri-e4)］ smri-k1で送信処理までの統一に決定。鍵の解決順は変えない / 以前の理由: 採否は利用者が決める。範囲(smri-k1)が決まってから"
+  },
+  {
+    "id": "smri-p2",
+    "case_id": "securemine-redmine-interface-20261108",
+    "text": "SPEC.cloudflare-workers-github-oauth-1.SecureMine.mdの旧名/taskmine・/api/taskmineを、現行の/securemine・/api/securemineに直す",
+    "status": "adopted",
+    "reason": "［2026-11-09T12:53:06Z nekoserverが/muse-inquiriesで採用］ / 以前の理由: 文書だけの修正"
+  }
+]
