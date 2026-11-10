@@ -1,0 +1,38 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-muse-typewriter.browser.test.tsx (3 tests | 1 failed | 2 skipped) 787ms
+   × send border blinks only while a request is pending and stops on failure 786ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-muse-typewriter.browser.test.tsx > send border blinks only while a request is pending and stops on failure
+AssertionError: expected null to be 'true' // Object.is equality
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-typewriter.browser.test.tsx/send-border-blinks-only-while-a-request-is-pending-and-stops-on-failure.png
+
+[32m- Expected:[39m
+"true"
+
+[31m+ Received:[39m
+null
+
+ ❯ test/tree-view-muse-typewriter.browser.test.tsx:49:51
+     47|  await s.getByLabelText('接続中').fill('test');
+     48|  const send=s.getByRole('button',{name:'送信',exact:true});await send.cl…
+     49|  expect(send.element().getAttribute('aria-busy')).toBe('true');
+       |                                                   ^
+     50|  expect(getComputedStyle(send.element()).animationName).toBe('tree-vie…
+     51|  await expect.element(send).toBeDisabled();
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  06:10:39
+   Duration  12.62s (import 79%, worker 11%, tests 10%)
+

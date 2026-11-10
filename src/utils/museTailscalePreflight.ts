@@ -1,3 +1,4 @@
+import { onlineTailnetPeer } from './tailnetPeer';
 import { askgkEngine } from './askgkRoutes';
 
 type Container = { getState(): Promise<{ status: string }>; fetch(request: Request): Promise<Response> };
@@ -20,7 +21,7 @@ export async function requireMuseTailscale(getContainer: () => Promise<Container
     const data = await response.json() as { backendState?: unknown; peers?: { hostName?: unknown; dnsName?: unknown; online?: unknown }[] } | null;
     if (!data || typeof data.backendState !== 'string' || !Array.isArray(data.peers)) return UNKNOWN;
     if (data.backendState !== 'Running') return 'Muse投稿を停止しました。Tailscaleが停止中または未接続です。' + NOT_SENT;
-    const peer = data.peers.find(p => p && (p.hostName === 'muse-vm' || typeof p.dnsName === 'string' && p.dnsName.split('.')[0] === 'muse-vm'));
+    const peer = onlineTailnetPeer(data.peers, 'muse-vm');
     if (peer?.online !== true) return 'Muse投稿を停止しました。Tailscaleの宛先muse-vmへの接続を確認できません（オフラインまたは未登録）。' + NOT_SENT;
     return null;
   };

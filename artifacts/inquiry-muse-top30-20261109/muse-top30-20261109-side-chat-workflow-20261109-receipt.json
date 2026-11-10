@@ -1,0 +1,19 @@
+{
+  "entry_id": "muse-top30-20261109-side-chat-workflow-20261109",
+  "case_id": "side-chat-workflow-20261109",
+  "keys": [
+    "side-chat-workflow-20261109-states",
+    "side-chat-workflow-20261109-authority",
+    "side-chat-workflow-20261109-terminal",
+    "side-chat-workflow-20261109-roles"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250365.372671,
+  "receipt": {
+    "ask_id": "muse-22250f7e-4f6a-4748-a80c-bce3d87ac7e0",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250365.373458
+  }
+}

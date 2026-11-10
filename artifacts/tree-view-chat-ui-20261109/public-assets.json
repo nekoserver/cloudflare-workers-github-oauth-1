@@ -1,0 +1,15 @@
+{
+  "page_status": 200,
+  "assets": [
+    {
+      "path": "/assets/index-0mpZN_Mf.css",
+      "status": 200,
+      "sha256_matches_build": true
+    },
+    {
+      "path": "/assets/index-ClzImiRd.js",
+      "status": 200,
+      "sha256_matches_build": true
+    }
+  ]
+}

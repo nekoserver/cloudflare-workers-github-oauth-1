@@ -42,7 +42,7 @@ describe('issueT3Pairing', () => {
       const r = await issueT3Pairing(async () => out);
       expect(r.ok).toBe(false);
       expect(r.errorCode).toBe('unexpected_output');
-      expect(r.remedy).toContain('0.1.7');
+      expect(r.remedy).toContain('0.1.8');
     }
   });
 });

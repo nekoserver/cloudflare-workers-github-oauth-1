@@ -1,0 +1,212 @@
+{
+  "basis": "work-review-v1。D1のanswered221件のanswer本文をfresh-answers.jsonへ回収し、既存SPEC・初回30/補足2依頼と照合。全理由は今回の後付け評価。",
+  "target_count": 30,
+  "conditional_candidates": 0,
+  "send_ready_count": 2,
+  "shortfall_to_30": 28,
+  "reason_for_shortfall": "残りは既知/既決定、採否待ち、取得可能な実測不足、実装検証の仕事。独立した協議不足に該当する2件以外は追加質問しない。",
+  "already_sent_supplements_excluded": [
+    "microkernel-secure-vm-20261109",
+    "keys-centralization-rotation-20261109"
+  ],
+  "exclusions_or_holds": [
+    {
+      "source_kind": "key",
+      "source_id": "k-native",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "k-nogit",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-name-version",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-nixwrap-race",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-bootstrap-race",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-cross-process",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-bootstrap-each-call",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-vm-reboots",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "p-new-perm",
+      "case_id": "nix-packages-20261107",
+      "reason": "resolved議題内のknown/pitfall記録。最初30のcrc-k3で既に扱っており重複追加しない。新しい結論変更根拠なしに再質問・再開・閉鎖しない。",
+      "work_kind": "exclude_resolved_context"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "msw-k11",
+      "case_id": "muse-status-wasm-20261107",
+      "reason": "合格条件はある。ブラウザWASM実tailnetの到達性・ACL・実応答を測る仕事で、Museに既存のhealth条件を再質問しない。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "bar-k3",
+      "case_id": "board-auto-refresh-20261108",
+      "reason": "15〜30秒は未実測だが周期取得の案は採用済み。利用者数・更新頻度・読取負荷を測り、既送信のbar-k1/k2回答と合わせて決める。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "tcl-k2",
+      "case_id": "task-commit-link-20261108",
+      "reason": "主単位(repo_name,commit_hash)はtcl-e4で利用者決定済み。squash時PR抽出の欠落はAPI照合等の実装/検証候補であり一般案の再質問をしない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "umb-k1",
+      "case_id": "user-message-to-board-20261108",
+      "reason": "umb-e4で利用者がstatus優先と回答後の列移動を決定済み。未解決の設計問題として再質問しない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "umb-k2",
+      "case_id": "user-message-to-board-20261108",
+      "reason": "未所属をNULLにしてentry ID基準へ変える案へのCodex/Muse回答はe5/e6にあり、umb-p2が採否待ち。既回答を材料に採否へ進める。",
+      "work_kind": "await_approval"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "umb-k5",
+      "case_id": "user-message-to-board-20261108",
+      "reason": "既知の配置候補は設計前提。利用者発言ボタンの対象画面範囲を既存案の採否と一緒に決める。候補一覧をMuseへ再質問しない。",
+      "work_kind": "await_approval"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k1",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "知識表の環境偏りは既知の監査結果。現データと利用経路を再収集し、採用済み知識監査案の実装範囲へ落とす。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k2",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "contribution SPEC6章で出来事表は今回作らないと決定済み。0010の段階履歴と未適用状態を確かめる。一般的な記録設計は再質問しない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k3",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "母集団不一致はce-c3で指摘済み。採用済み台帳/集計仕様に従う対象テストと修正候補。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k5",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "contribution SPEC6章に付与者・confirmed_by/at・採否時/phaseの決定、5章に重複計上/少数件表示がある。open keyは仕様未決の証拠にならない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k6",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "contribution SPEC5章が未判定件数/割合を効果無しと分けると定義。表示と集計の実装検証へ進める。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k7",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "既知の知識不足3分類を採用済み物差しの文脈で使う。分類一般論を再質問しない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k8",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "利用者指定の工程一覧照合は採用済み監査方針の前提。再質問でなく候補と確定結果の区別を実装/検証する。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k13",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "過去の候補数は現在の確定違反数ではない。現コードの対象を再収集し文脈付きで監査する。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k14",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "違反候補は現コード・承認・互換根拠の収集が先。参照不能なMuseへ同じ候補を再質問しない。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k15",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "承認済み限定/互換の可能性をコード履歴・利用者指示で確認する仕事。文脈無しに一般論で決めない。",
+      "work_kind": "collect_evidence"
+    },
+    {
+      "source_kind": "key",
+      "source_id": "ce-k16",
+      "case_id": "contribution-evaluation-20261108",
+      "reason": "contribution SPEC6章で専用表は今回作らず本文に候補数/確認済み/確認待ちを分けると決定。再設計しない。",
+      "work_kind": "implement/verify"
+    },
+    {
+      "source_kind": "proposal",
+      "source_id": "umb-p2",
+      "case_id": "user-message-to-board-20261108",
+      "reason": "e5/e6の比較回答は双方NULL案推奨。既存提案の採否と移行影響を整理する仕事で、同じ方式選択を再質問しない。",
+      "work_kind": "await_approval"
+    },
+    {
+      "source_kind": "proposal",
+      "source_id": "crc-p1",
+      "case_id": "case-resolution-criteria-20261108",
+      "reason": "旧提案のopen keyゼロ条件は後続協議で緩和/分類へ改訂済み。case-resolution SPECとe5〜e11を正として採否を整理する。",
+      "work_kind": "await_approval"
+    }
+  ],
+  "mutations": "D1/キューの追加・削除・取消・状態更新は実施していない。",
+  "confirmed_residual_candidates": 2
+}

@@ -1,0 +1,10 @@
+{
+  "run_id": "muse-priority30-20261109-01",
+  "counts": {
+    "inquiry_work_groups": 9,
+    "inquiry_work_items": 30,
+    "inquiry_work_audits": 9,
+    "inquiry_work_completions": 1,
+    "inquiry_work_evaluations": 1
+  }
+}

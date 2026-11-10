@@ -1,0 +1,9 @@
+{
+  "ask_id": "muse-f7811f4a-8abd-4cd2-b320-b41222298bfa",
+  "ask_status": "failed",
+  "via": "muse",
+  "created_at": 1794251926.947861,
+  "started_at": 1794253578.9868453,
+  "ask_error": "llm_timeout",
+  "finished_at": 1794253879.0889916
+}

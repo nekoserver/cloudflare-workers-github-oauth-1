@@ -27,6 +27,7 @@ for name in ('/etc/lib-chat.env', '/etc/lib-hmac.env'):
             if not line.strip() or line.lstrip().startswith('#'): continue
             key, raw = line.split('=', 1)
             values[key] = ' '.join(shlex.split(raw))
+values.setdefault('LIB_CHAT_FRAME_ORIGINS', 'https://mygw.nekomaneki.work,https://dynamicneko.nekoflare.workers.dev,https://1.cfw1.nekomaneki.work,https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev')
 values.update(os.environ)
 secret = (os.environ.get('ORIGIN_HMAC_SECRET', '').strip() or os.environ.get('HMAC_SECRET', '').strip()
           or values.get('ORIGIN_HMAC_SECRET', '').strip() or values.get('HMAC_SECRET', '').strip())

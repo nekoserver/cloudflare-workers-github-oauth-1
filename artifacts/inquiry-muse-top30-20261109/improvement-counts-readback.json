@@ -1,0 +1,56 @@
+{
+  "summary": [
+    {
+      "run_id": "muse-priority30-20261109-01",
+      "tracked_plans": 1,
+      "new_independent": 0,
+      "refinements": 1,
+      "duplicates": 0,
+      "conditional": 1,
+      "unverified": 0,
+      "confirmed_feasible": 0,
+      "confirmed_competitive": 0,
+      "conditional_competitive": 0,
+      "adopted_confirmed": 0,
+      "implemented": 0,
+      "effect_verified": 0,
+      "invalid_or_rejected": 0
+    },
+    {
+      "run_id": "muse-residual-and-new-scope-20261109-02",
+      "tracked_plans": 0,
+      "new_independent": 0,
+      "refinements": 0,
+      "duplicates": 0,
+      "conditional": 0,
+      "unverified": 0,
+      "confirmed_feasible": 0,
+      "confirmed_competitive": 0,
+      "conditional_competitive": 0,
+      "adopted_confirmed": 0,
+      "implemented": 0,
+      "effect_verified": 0,
+      "invalid_or_rejected": 0
+    }
+  ],
+  "contexts": [
+    {
+      "run_id": "muse-priority30-20261109-01",
+      "category": "dependencies",
+      "context_count": 1,
+      "affected_plans": 1
+    },
+    {
+      "run_id": "muse-priority30-20261109-01",
+      "category": "policy_constraints",
+      "context_count": 1,
+      "affected_plans": 1
+    },
+    {
+      "run_id": "muse-priority30-20261109-01",
+      "category": "uncertainties",
+      "context_count": 1,
+      "affected_plans": 1
+    }
+  ]
+}

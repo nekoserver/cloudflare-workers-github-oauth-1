@@ -1,0 +1,35 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-window-tabs.browser.test.tsx (2 tests | 1 failed) 25183ms
+   × 垂直タブを押すたび対応ウィンドウをアクティブ化して前面へ移しフォーカスする 17365ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-window-tabs.browser.test.tsx > 垂直タブを押すたび対応ウィンドウをアクティブ化して前面へ移しフォーカスする
+TimeoutError: locator.click: Timeout 101ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByTestId('__vitest_0__').getByRole('button', { name: 'ウィンドウで開く', exact: true })[22m
+
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-window-tabs.browser.test.tsx/-------------------------------------.png
+
+ ❯ test/tree-view-window-tabs.browser.test.tsx:14:71
+     12|   const screen = await setup();
+     13|   await screen.getByRole('tab', { name: 'コンテナ', exact: true }).click();
+     14|   await screen.getByRole('button', { name: 'ウィンドウで開く', exact: true }).…
+       |                                                                       ^
+     15|   const terminal = document.querySelector<HTMLElement>('[data-tree-vie…
+     16|   await screen.getByRole('tab', { name: 'ビルド', exact: true }).click();
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 11 passed (12)
+   Start at  05:56:55
+   Duration  99.03s (worker 65%, tests 21%, import 15%)
+

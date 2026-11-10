@@ -350,9 +350,9 @@ async function statAuthFile() {
 
 // tree-view・PWAで、トークンを手で入れずにT3へ入るためのペアリングを作る。
 // /cf-containers/proxy/* (GitHubログイン済みの管理者だけ)からしか届かない。
-// 契約(T3 0.1.7): `t3 auth pairing create --json --base-url` は {credential, expiresAt, pairUrl} を出す。
+// 契約(T3 0.1.8): `t3 auth pairing create --json --base-url` は {credential, expiresAt, pairUrl} を出す。
 const T3_ORIGIN = 'https://t3.nekomaneki.work';
-const T3_BINARY = '/root/.t3/runtime/versions/0.1.7/t3';
+const T3_BINARY = '/root/.t3/runtime/versions/0.1.8/t3';
 const T3_PAIRING_ARGS = ['auth', 'pairing', 'create', '--json', '--label', 'one-click', '--base-url', T3_ORIGIN];
 function runT3(args) {
   return new Promise((resolve, reject) => {
@@ -371,7 +371,7 @@ async function issueT3Pairing(run = runT3) {
     const data = JSON.parse(out);
     if (typeof data.pairUrl === 'string' && data.pairUrl.startsWith(T3_ORIGIN + '/pair#token=') && typeof data.expiresAt === 'string') return { ok: true, pairUrl: data.pairUrl, expiresAt: data.expiresAt };
   } catch {}
-  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.7と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
+  return { ok: false, errorCode: 'unexpected_output', detail: 'T3の出力が想定と違います', remedy: 'T3の版が0.1.8と違う可能性があります。契約テスト(src/cf-containers-t3-one-click-pairing.test.ts)をその版で確かめ直してください。' };
 }
 
 // tree-viewのiframe用。iOSのSafariはiframeの中でクッキーを保存・送信しないため、Bearerトークンを発行する。

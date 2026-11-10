@@ -62,8 +62,9 @@ ARG NODE_VERSION=26.13.0
 ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.166.0
-ARG T3_VERSION=0.1.7
-ARG CLAUDE_VERSION=2.1.318
+# Verified 2026-11-10 against the official releases; see CONTAINER-CLI-UPDATE report.
+ARG T3_VERSION=0.1.8
+ARG CLAUDE_VERSION=2.1.321
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.7
@@ -198,8 +199,10 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
 # T3 Code。npmのパッケージは起動用の小さなプログラムで、初回の実行時にGitHub Releasesから本体(約122MB)を
 # ~/.t3/runtime へ取り込む。起動のたびにダウンロードしないよう、ビルド時に t3 --version を実行して
 # イメージへ取り込む(専用のRUNにして、キャッシュは同じRUNで消す)。
+ARG T3_NATIVE_SHA256=9bb28f51f118ebc881b04859848e8895458e7f26c13d44e07d316442f8422074
 RUN npm install -g t3@${T3_VERSION} \
     && t3 --version \
+    && echo "${T3_NATIVE_SHA256}  /root/.t3/runtime/versions/${T3_VERSION}/t3" | sha256sum -c - \
     && npm cache clean --force
 # Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
 ARG INSTALL_VITEST=true
@@ -222,7 +225,7 @@ RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-ARG CLAUDE_NATIVE_SHA256=708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd
+ARG CLAUDE_NATIVE_SHA256=426c33815ca6645a772f722fbff10dbf2cbdb124a8aeab733c1365dbf8bbf61f
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \

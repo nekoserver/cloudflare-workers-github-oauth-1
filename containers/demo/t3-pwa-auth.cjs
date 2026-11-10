@@ -12,7 +12,7 @@ const ORIGIN = 'https://t3.nekomaneki.work';
 const SCOPES = ['orchestration:read', 'orchestration:operate', 'settings:write', 'providers:manage', 'diagnostics:read', 'terminal:read', 'terminal:operate', 'source-control:write', 'filesystem:read', 'filesystem:write', 'preview:operate'];
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const nativeBinary = '/root/.t3/runtime/versions/0.1.7/t3';
+const nativeBinary = '/root/.t3/runtime/versions/0.1.8/t3';
 class InvalidBody extends Error {}
 async function nativeCommand(args) {
   const { stdout } = await execute(nativeBinary, ['auth', 'session', ...args], { timeout: 20000, maxBuffer: 1024 * 1024 });

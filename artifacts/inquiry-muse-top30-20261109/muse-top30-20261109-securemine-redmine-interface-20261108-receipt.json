@@ -1,0 +1,17 @@
+{
+  "entry_id": "muse-top30-20261109-securemine-redmine-interface-20261108",
+  "case_id": "securemine-redmine-interface-20261108",
+  "keys": [
+    "smri-k2",
+    "smri-k3"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250360.3342588,
+  "receipt": {
+    "ask_id": "muse-dde67654-c6da-487f-a469-20fedce5f890",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250360.3349652
+  }
+}

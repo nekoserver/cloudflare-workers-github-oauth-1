@@ -1,0 +1,64 @@
+{
+  "mygw": {
+    "dns_addresses": [
+      "104.21.25.6",
+      "172.67.221.135",
+      "2606:4700:3030::ac43:dd87",
+      "2606:4700:3035::6815:1906"
+    ],
+    "/lib/date.shtml": {
+      "http": 403
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 403
+    }
+  },
+  "stream": {
+    "dns_error": "resolution_failed",
+    "/lib/date.shtml": {
+      "error": "URLError"
+    },
+    "/lib/api/tunnels.rb": {
+      "error": "URLError"
+    }
+  },
+  "r8": {
+    "dns_addresses": [
+      "104.21.25.6",
+      "172.67.221.135",
+      "2606:4700:3030::ac43:dd87",
+      "2606:4700:3035::6815:1906"
+    ],
+    "/lib/date.shtml": {
+      "http": 403
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 403
+    }
+  },
+  "r9": {
+    "dns_addresses": [
+      "104.21.25.6",
+      "172.67.221.135",
+      "2606:4700:3030::ac43:dd87",
+      "2606:4700:3035::6815:1906"
+    ],
+    "/lib/date.shtml": {
+      "http": 403
+    },
+    "/lib/api/tunnels.rb": {
+      "http": 403
+    }
+  },
+  "redmine": {
+    "app_present": false,
+    "bundle_present": false,
+    "database_dir_present": false
+  },
+  "credentials_present": {
+    "MUSE_API_KEY": false,
+    "CLOUDFLARE_API_TOKEN": false,
+    "CF_CONTAINER_API_TOKEN": true
+  },
+  "claude_auth_present": false
+}

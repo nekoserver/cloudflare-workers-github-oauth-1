@@ -1,0 +1,2848 @@
+{
+  "cases": [
+    {
+      "id": "nix-packages-20261107",
+      "status": "resolved",
+      "stage": "implementation"
+    },
+    {
+      "id": "muse-status-wasm-20261107",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "muse-vm-dashboard-20261107",
+      "status": "resolved",
+      "stage": "plan"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "resolved",
+      "stage": "concept"
+    },
+    {
+      "id": "bridge-jobs-wording-20261108",
+      "status": "abandoned",
+      "stage": "concept"
+    },
+    {
+      "id": "proposal-rule-20261108",
+      "status": "resolved",
+      "stage": "trial"
+    },
+    {
+      "id": "muse-vm-reboots-20261108",
+      "status": "resolved",
+      "stage": "plan"
+    },
+    {
+      "id": "inquiry-proposal-decision-20261108",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "page-hot-reload-20261108",
+      "status": "open",
+      "stage": "plan"
+    },
+    {
+      "id": "inquiry-board-placement-20261108",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "idea-to-implementation-process-20261108",
+      "status": "open",
+      "stage": "implementation"
+    },
+    {
+      "id": "trial-redmine-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "securemine-redmine-interface-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "board-auto-refresh-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "task-commit-link-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "user-message-to-board-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "contribution-evaluation-20261108",
+      "status": "open",
+      "stage": "implementation"
+    },
+    {
+      "id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "stage": "plan"
+    },
+    {
+      "id": "agent-guard-hooks-20261108",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "muse-restart-backlog-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "nix-job-tools-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "redmine-ticket-db-review-20261108",
+      "status": "resolved",
+      "stage": "plan"
+    },
+    {
+      "id": "jj-practical-use-20261108",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "muse-bridge-injection-20261109",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "side-chat-workflow-20261109",
+      "status": "open",
+      "stage": "plan"
+    },
+    {
+      "id": "muse-502-path-20261109",
+      "status": "open",
+      "stage": "plan"
+    },
+    {
+      "id": "t3-window-geometry-20261109",
+      "status": "open",
+      "stage": "trial"
+    },
+    {
+      "id": "muse-pr-review-access-20261109",
+      "status": "open",
+      "stage": "concept"
+    },
+    {
+      "id": "microkernel-secure-vm-20261109",
+      "status": "open",
+      "stage": "concept"
+    }
+  ],
+  "entries": [
+    {
+      "id": "e1",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-6e112e66-e77e-4e34-b358-cc0b0eebb16e"
+    },
+    {
+      "id": "e2",
+      "case_id": "nix-packages-20261107",
+      "status": "failed",
+      "ask_id": "muse-bef31695-dba6-48b5-b84d-cdaf6586d1fa"
+    },
+    {
+      "id": "e3",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-e965a31f-b8b4-409d-be5b-d01e75df3b7a"
+    },
+    {
+      "id": "e4",
+      "case_id": "nix-packages-20261107",
+      "status": "withdrawn",
+      "ask_id": null
+    },
+    {
+      "id": "e5",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-f16f395c-01ec-4b1f-a14b-df4211fb326a"
+    },
+    {
+      "id": "e6",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-b3e157c9-d1d1-4c7d-b37e-b4eddbd11dff"
+    },
+    {
+      "id": "e7",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-dde4b352-462c-4516-af7b-def8ad174ff5"
+    },
+    {
+      "id": "e8",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-f3194db0-141b-4e3b-9105-bdb15e3b87aa"
+    },
+    {
+      "id": "e9",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-d81cd36f-a8ec-40e0-887d-2bcee155c2d5"
+    },
+    {
+      "id": "e10",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-c9a66410-d42e-4381-aaec-af99da3fd559"
+    },
+    {
+      "id": "e11",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-1c9d3685-7a26-43bf-9f4e-a226f2291400"
+    },
+    {
+      "id": "e12",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-5bc2eb2c-9ea0-4039-bd37-bddb5d34a87c"
+    },
+    {
+      "id": "e13",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-efda6a30-d346-4938-9532-49b5fe3c2882"
+    },
+    {
+      "id": "e14",
+      "case_id": "nix-packages-20261107",
+      "status": "failed",
+      "ask_id": "muse-b12c2c31-b70f-4a34-a41b-5e4b73e26f02"
+    },
+    {
+      "id": "e15",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-e018d19d-8372-4326-936f-7c6ad6dee984"
+    },
+    {
+      "id": "e16",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-e1aeb428-cd48-47b7-84ee-e80e4d9b6ccd"
+    },
+    {
+      "id": "e17",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-90af0ac6-1088-4dc3-95e5-967bd285c9f3"
+    },
+    {
+      "id": "e18",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-507ba1c3-cf54-44f5-b818-01bc62f1c819"
+    },
+    {
+      "id": "e19",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-7d440a66-db33-4c3e-8dd4-48f03cbdbd14"
+    },
+    {
+      "id": "e20",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "msw-e1",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-f5f76351-371f-4e6b-8b84-535130aef96e"
+    },
+    {
+      "id": "msw-e2",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-d4126e23-a6fa-4bed-9789-e85d98c771a3"
+    },
+    {
+      "id": "mvd-e1",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-b1e96f44-c428-403d-9fe1-5b4320ba0dcc"
+    },
+    {
+      "id": "mvd-e2",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-a9d5eecf-146e-4f32-aa2f-1d6d260924f4"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": "muse-8c5793ad-bfd8-4ca0-821f-f859ea8eec30"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e2",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": "muse-a280fbce-1bd4-4593-a087-029dfadf7b64"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q1",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q2",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q3",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q4",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q5",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q6",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-q7",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvd-e3",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "failed",
+      "ask_id": "muse-984174b2-b3ef-4bb4-9921-604c7a35caf1"
+    },
+    {
+      "id": "mvd-e4",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-1c73c75a-9b8a-4a17-a5c9-7b5dac1c45f7"
+    },
+    {
+      "id": "mvd-e5",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-2758f390-dcb2-40b0-80b7-dad41c56ce24"
+    },
+    {
+      "id": "mvd-e6",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-9b15786e-19ac-4902-9725-75d57041f321"
+    },
+    {
+      "id": "mvd-e7",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-47135ffb-2df9-4849-a177-95ff51e3be5b"
+    },
+    {
+      "id": "mvd-e8",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-a1888638-9a63-4018-9edd-78fdb04524c8"
+    },
+    {
+      "id": "mvd-e9",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": "muse-e8d064d0-379d-486d-8ba4-5b4e2750382a"
+    },
+    {
+      "id": "mvd-c1",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvd-c2",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvd-c3",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvd-c4",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvd-c5",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "msw-e3",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "failed",
+      "ask_id": "muse-5f1d0417-130d-49a4-9fa1-df062265c491"
+    },
+    {
+      "id": "msw-c1",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "msw-e4",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-7f09f050-e78a-4fae-a5d0-7b09d085077d"
+    },
+    {
+      "id": "msw-c2",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "msw-e5",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-370984fe-51a1-4fd0-8cc7-7ca0e7fe8b20"
+    },
+    {
+      "id": "msw-c3",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-c1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e3",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": "muse-6637f8d3-8c28-4fde-91e9-585d4096dbd3"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-c2",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bjw-e1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": "muse-d9a11480-d6c5-4d78-bb45-2bc15b2fa92b"
+    },
+    {
+      "id": "pr-e0",
+      "case_id": "proposal-rule-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "pr-e1",
+      "case_id": "proposal-rule-20261108",
+      "status": "answered",
+      "ask_id": "muse-fe9e5cff-9796-46c0-bb85-636314d818e1"
+    },
+    {
+      "id": "pr-c1",
+      "case_id": "proposal-rule-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvr-e0",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvr-e1",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "failed",
+      "ask_id": "muse-6db3a86c-e649-4f2b-a455-6ba086e7b2ff"
+    },
+    {
+      "id": "mvr-e2",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "failed",
+      "ask_id": "muse-22c7ce48-24a1-4e35-8a62-bee732f98c70"
+    },
+    {
+      "id": "mvr-e3",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "answered",
+      "ask_id": "muse-f1a8e4f0-1b1c-46cf-a7c6-dd47502d1e92"
+    },
+    {
+      "id": "mvr-e4",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ipd-e0",
+      "case_id": "inquiry-proposal-decision-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ipd-e1",
+      "case_id": "inquiry-proposal-decision-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ipd-e2",
+      "case_id": "inquiry-proposal-decision-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "phr-e0",
+      "case_id": "page-hot-reload-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "phr-e1",
+      "case_id": "page-hot-reload-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "phr-c1",
+      "case_id": "page-hot-reload-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "mvr-e5",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "answered",
+      "ask_id": "muse-557c4050-609e-4554-921f-501b65c5f110"
+    },
+    {
+      "id": "mvr-e6",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "answered",
+      "ask_id": "muse-372d4191-458b-4669-a780-e69cec42b575"
+    },
+    {
+      "id": "ibp-e0",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ibp-e1",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ibp-e2",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ibp-e3",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e4",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": "muse-8c06a21a-b703-441a-973f-f37f10c74213"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-c3",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e5",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e6",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e7",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e8",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "itip-e0",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "itip-e1",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "phr-e3",
+      "case_id": "page-hot-reload-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "itip-e2",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "itip-e3",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-e9",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ipd-e3",
+      "case_id": "inquiry-proposal-decision-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ibp-e4",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "trm-e0",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "trm-e1",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "trm-e2",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "smri-e0",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "smri-e1",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bar-e0",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bar-e1",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "tcl-e0",
+      "case_id": "task-commit-link-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "tcl-e1",
+      "case_id": "task-commit-link-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "umb-e0",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "umb-e1",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "trm-m3",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": "muse-6d3e57c8-8069-454b-878b-920fdc4031ea"
+    },
+    {
+      "id": "smri-m2",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": "muse-73e168fc-7912-4aa9-9ecb-1fadcc2bfc41"
+    },
+    {
+      "id": "bar-m2",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "answered",
+      "ask_id": "muse-81ea33d0-63f4-4659-8283-be097a3dac76"
+    },
+    {
+      "id": "trm-c4",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "tcl-m2",
+      "case_id": "task-commit-link-20261108",
+      "status": "answered",
+      "ask_id": "muse-d84d89e4-3b50-4c0a-a45e-35db436c6b87"
+    },
+    {
+      "id": "umb-m2",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": "muse-b0b0e115-b56e-4eab-8655-736840300a42"
+    },
+    {
+      "id": "smri-c3",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bar-c3",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "tcl-c3",
+      "case_id": "task-commit-link-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "umb-c3",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e0",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e1",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-m2",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": "muse-7b1500e3-d1ee-4b51-9fa0-9868c4deab60"
+    },
+    {
+      "id": "ce-c3",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e4",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-m5",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": "muse-375a6052-01ac-46cd-8e13-c132116ca37d"
+    },
+    {
+      "id": "ce-e6",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-c7",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ipd-e4",
+      "case_id": "inquiry-proposal-decision-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-c8",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e9",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e10",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e11",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e12",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ce-e13",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "tcl-e4",
+      "case_id": "task-commit-link-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "trm-e5",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "smri-e4",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "umb-e4",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "crc-e0",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "crc-e1",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "crc-e2",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "crc-e3",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "codex-38c357cc-58a2-406f-8540-d69400792c82"
+    },
+    {
+      "id": "crc-e4",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "failed",
+      "ask_id": "muse-d5fbef34-e921-41ed-a2fb-daf50c9901bb"
+    },
+    {
+      "id": "itp-e4",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "crc-e5",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "muse-98bc3483-a5ed-49fd-8359-33b95b0069cb"
+    },
+    {
+      "id": "itp-e5",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "muse-2f4d62a8-9e9c-44ec-bf97-587b3a4a7d31"
+    },
+    {
+      "id": "itp-e6",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "ibp-e5",
+      "case_id": "inquiry-board-placement-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-guard-hooks-20261108-e1",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-guard-hooks-20261108-e2",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-guard-hooks-20261108-e3",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": "codex-9e58435a-fb7f-4b0d-b21a-fc61a8f2febf"
+    },
+    {
+      "id": "agent-guard-hooks-20261108-e4",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": "muse-bdd4d860-e32d-4d65-9816-5661390ec596"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e1",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e6",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "muse-40d60c51-fe91-4c9f-81a3-7198b6620c72"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e2",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "idea-to-implementation-process-20261108-e7",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "muse-d07764fc-30e7-4773-bc7a-5592bc8b9bc5"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e3",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "codex-3d0a8b85-724c-43f2-9a91-f268015fc2bc"
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e7",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "muse-8d4ff3bd-147f-45fe-9618-0b665936feda"
+    },
+    {
+      "id": "agent-guard-hooks-20261108-e5",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e4",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "muse-49d25da9-5697-4132-8af4-66846d136c07"
+    },
+    {
+      "id": "idea-to-implementation-process-20261108-e8",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "muse-e6db231b-7c8d-4168-81e5-10db06445808"
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e8",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "muse-4d520ff7-ddef-44d7-afee-efd2453b3bc2"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e5",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "codex-a3971a31-8cde-405e-a26e-bb47c717117b"
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e9",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e6",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "muse-2b43675a-2511-4c9b-b19c-de23bc00c94a"
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e10",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-packages-20261107-e21",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "muse-0ef4a304-dcaa-45cd-a10d-d47f707a70d9"
+    },
+    {
+      "id": "nix-packages-20261107-e22",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "codex-7cce6f4c-8338-42c4-bb09-75b12224629c"
+    },
+    {
+      "id": "nix-packages-20261107-e23",
+      "case_id": "nix-packages-20261107",
+      "status": "answered",
+      "ask_id": "codex-ed443a83-cb31-4c00-ade1-ae289a528521"
+    },
+    {
+      "id": "nix-packages-20261107-e24",
+      "case_id": "nix-packages-20261107",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "case-resolution-criteria-20261108-e11",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "idea-to-implementation-process-20261108-e9",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "codex-aa384ca8-2fb1-4afb-b034-f40addbcb5ca"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e7",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "contribution-evaluation-20261108-e14",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": "codex-b53ecf61-2077-4c36-8bea-5e898b4c6775"
+    },
+    {
+      "id": "muse-status-wasm-20261107-e9",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "user-message-to-board-20261108-e5",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": "codex-ff3fba10-c68b-46c7-8104-205923dd44d5"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e8",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "failed",
+      "ask_id": "muse-840fcfb1-3726-4638-93d4-2d41cbdb83ca"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e9",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "muse-6499dd77-5a10-48cf-adfd-ccd143fd9f9d"
+    },
+    {
+      "id": "muse-status-wasm-20261107-e10",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-43f472ec-e295-44cf-ad1c-5291401c83d8"
+    },
+    {
+      "id": "muse-status-wasm-20261107-e11",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "answered",
+      "ask_id": "muse-53ade007-fbba-4bb0-907c-5fd9f731050b"
+    },
+    {
+      "id": "muse-restart-backlog-20261108-e10",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "answered",
+      "ask_id": "muse-28a71e49-c7c4-48a5-85df-365cd3a966bc"
+    },
+    {
+      "id": "contribution-evaluation-20261108-e15",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": "muse-9c5750e4-d1d6-48cc-b42a-e1b1cc83c198"
+    },
+    {
+      "id": "user-message-to-board-20261108-e6",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": "muse-e1d9a377-298a-4bd9-8b45-78f5c59af27f"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-priority-fa732ae8",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-priority-c7b19638",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-priority-user-20261108",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-priority-f2def5ae",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-watch-13b28482",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-e0",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-e1",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-e2",
+      "case_id": "nix-job-tools-20261108",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-e3",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-e4",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-recheck-da1e7763",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-ui-500843cc",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-qemu-installed-c1ca1f09",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-user-jobs-31a61617",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "nix-job-tools-20261108-reconcile-ef1430ab",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "rtdb-e0",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "rtdb-e1",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "rtdb-e2",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "rtdb-e3",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "rtdb-e4",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-job-hooks-20261108-q1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-job-review-rules-20261108-intake",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "response-monitor-review-original-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "bridge-job-hooks-20261108-codex-check",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-review-rules-5a3553946c1f6947",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-review-rules-f7db13c010a43792",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-monitor-minimum-20261108-intake",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-review-rules-20261108-codex-summary",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-monitor-minimum-23cf2e0f851282f0",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-monitor-minimum-6210b7c46bdb6c11",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "review-test-priority-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "review-test-three-axes-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "review-state-quality-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "review-reuse-and-boolean-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-response-monitor-resumed-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "agent-monitor-minimum-summary-20261108",
+      "case_id": "agent-guard-hooks-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "jj-practical-use-20261108-search",
+      "case_id": "jj-practical-use-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "jj-practical-use-20261108-intake",
+      "case_id": "jj-practical-use-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "jj-practical-use-425203e9a31f804b",
+      "case_id": "jj-practical-use-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "jj-practical-use-4633b46b18dee6fb",
+      "case_id": "jj-practical-use-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-bridge-injection-20261109-user-report",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-bridge-injection-20261109-consult-1",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "muse-bridge-injection-20261109-user-policy-report",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "side-chat-workflow-20261109-consult-1",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "failed",
+      "ask_id": null
+    },
+    {
+      "id": "side-chat-workflow-20261109-bridge-status",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "timeout-20261109-96881006",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "answered",
+      "ask_id": "968810060afb4021a0807a55d52f8bb3"
+    },
+    {
+      "id": "timeout-20261109-verify",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "answered",
+      "ask_id": "3c355d6abda04a27b38f5d2f69c67f47"
+    },
+    {
+      "id": "periodic-muse-9d573b13739f4f0f8dd5e01e17568dcc",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "9d573b13739f4f0f8dd5e01e17568dcc"
+    },
+    {
+      "id": "periodic-muse-ee19ce98cb1748f3b4f40580a4a245c5",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "e5356980abcc4b3e89da6f8638b08a13"
+    },
+    {
+      "id": "periodic-muse-6bd692f1cb1349ae9e2f2df6e972c235",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "bb53586e0fe94f128ea55a8e8ef1f95e"
+    },
+    {
+      "id": "periodic-muse-e32a2ad05d7e419b9fdba07950ff412e",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "answered",
+      "ask_id": "64b847f63ec34359abb4fba7e02d2a1e"
+    },
+    {
+      "id": "periodic-muse-eac7c9be550e4f75a775c171105adbf8",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "failed",
+      "ask_id": "89b1b5f84de6423cad7050851f81744c"
+    },
+    {
+      "id": "mvd-e15",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "njt-e7",
+      "case_id": "nix-job-tools-20261108",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-502-path-20261109-e0",
+      "case_id": "muse-502-path-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-502-e1",
+      "case_id": "muse-502-path-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "t3-window-geometry-20261109-e0",
+      "case_id": "t3-window-geometry-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "t3-geometry-e1",
+      "case_id": "t3-window-geometry-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-pr-review-access-20261109-e0",
+      "case_id": "muse-pr-review-access-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-pr-e1",
+      "case_id": "muse-pr-review-access-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-top30-20261109-securemine-redmine-interface-20261108",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "answered",
+      "ask_id": "muse-dde67654-c6da-487f-a469-20fedce5f890"
+    },
+    {
+      "id": "muse-top30-20261109-trial-redmine-20261108",
+      "case_id": "trial-redmine-20261108",
+      "status": "answered",
+      "ask_id": "muse-6ba1cf92-8eed-482d-b231-45ae47b6b781"
+    },
+    {
+      "id": "muse-top30-20261109-side-chat-workflow-20261109",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "answered",
+      "ask_id": "muse-22250f7e-4f6a-4748-a80c-bce3d87ac7e0"
+    },
+    {
+      "id": "muse-top30-20261109-muse-bridge-injection-20261109",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "answered",
+      "ask_id": "muse-477f1784-7d74-4f26-8093-adc8185b5723"
+    },
+    {
+      "id": "muse-top30-20261109-contribution-evaluation-20261108",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "answered",
+      "ask_id": "muse-2bbde64e-7651-4a9e-bc18-29824ab4e59f"
+    },
+    {
+      "id": "muse-top30-20261109-board-auto-refresh-20261108",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "answered",
+      "ask_id": "muse-dd5c7dc9-4d23-4296-95f6-21a52305e3ef"
+    },
+    {
+      "id": "muse-top30-20261109-user-message-to-board-20261108",
+      "case_id": "user-message-to-board-20261108",
+      "status": "answered",
+      "ask_id": "muse-00074b4a-89e4-46bd-bb6f-2a27c95ad0ff"
+    },
+    {
+      "id": "muse-top30-20261109-case-resolution-criteria-20261108",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "answered",
+      "ask_id": "muse-f98b4037-519f-4afb-bf12-94c40300a32a"
+    },
+    {
+      "id": "muse-top30-20261109-task-commit-link-20261108",
+      "case_id": "task-commit-link-20261108",
+      "status": "sent",
+      "ask_id": "muse-7fbecbe6-c1a4-4a2f-8250-0b144d80ac22"
+    },
+    {
+      "id": "microkernel-secure-vm-20261109-init",
+      "case_id": "microkernel-secure-vm-20261109",
+      "status": "answered",
+      "ask_id": null
+    },
+    {
+      "id": "muse-priority-followup-20261109-keys-centralization-rotation",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "sent",
+      "ask_id": "muse-61c0cdf4-a796-4cdd-8b8f-5cb0d446e7c3"
+    },
+    {
+      "id": "muse-priority-followup-20261109-microkernel-secure-vm",
+      "case_id": "microkernel-secure-vm-20261109",
+      "status": "sent",
+      "ask_id": "muse-64014709-529d-46b7-81f5-ec9dd25f036d"
+    },
+    {
+      "id": "muse-next-work-20261109-residual-muse-restart-backlog-20261108",
+      "case_id": "muse-restart-backlog-20261108",
+      "status": "sent",
+      "ask_id": "muse-6f1fc13d-f1da-4dc1-a4d8-95c3ec5bd934"
+    },
+    {
+      "id": "muse-next-work-20261109-residual-page-hot-reload-20261108",
+      "case_id": "page-hot-reload-20261108",
+      "status": "sent",
+      "ask_id": "muse-4c8f4015-dba6-4bc1-bbbd-6a28da6f3a04"
+    },
+    {
+      "id": "muse-next-work-20261109-review-and-exceptions-v2",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "sent",
+      "ask_id": "muse-1c26922a-187b-4a1d-93e1-94fefd6683d8"
+    },
+    {
+      "id": "muse-next-work-20261109-constrained-best-plans",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "sent",
+      "ask_id": "muse-d3565fa0-3573-4204-bfe0-64a2fbb9dd17"
+    },
+    {
+      "id": "muse-next-work-20261109-work-ledger-design-review",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "planned",
+      "ask_id": null
+    },
+    {
+      "id": "muse-next-work-20261109-principles-exception-research",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "planned",
+      "ask_id": null
+    },
+    {
+      "id": "muse-next-work-20261109-constraint-validity",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "sent",
+      "ask_id": "muse-1435c38a-81c5-49cf-90e0-c9472ee5f69a"
+    },
+    {
+      "id": "muse-next-work-20261109-freedom-feasible-best-plans",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "sent",
+      "ask_id": "muse-27fe6b15-cb64-4677-85a9-6fff760b3504"
+    }
+  ],
+  "keys": [
+    {
+      "id": "k-source",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "k-nix",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "k-addpoint",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "k-native",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "k-nogit",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "k-timeout",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "u-run",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-output",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-wrap",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-lost",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-deploy",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-impl",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "p-name-version",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "p-nixwrap-race",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "p-bootstrap-race",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "u-cache",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "p-cross-process",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "u-other-callers",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "p-bootstrap-each-call",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "u-bypass",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-manifest-format",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-why-down",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "u-reboot-cause",
+      "case_id": "nix-packages-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "p-vm-reboots",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "p-new-perm",
+      "case_id": "nix-packages-20261107",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k1",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "msw-k2",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "msw-k3",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "msw-k4",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "msw-k5",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k6",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "mvd-k1",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "mvd-k2",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "mvd-k3",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "mvd-k4",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k5",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k6",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k7",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-read-method",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-ssh-allowed",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-format",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-home",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-no-claim",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-no-poll",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-readonly-not-queued",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-consumer",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-claim",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-writeback",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-jobid-return",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-muse-no-d1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-lease-recover-one",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-schema-order",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k8",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k9",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvd-k10",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k11",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvd-k12",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvd-k13",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvd-k14",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvd-k15",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvd-k16",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k7",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k8",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k9",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k10",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "msw-k11",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-p-ssh-after-reboot",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-k-d1-lock",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "bjw-k1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "pr-k1",
+      "case_id": "proposal-rule-20261108",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvr-k1",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "mvr-k2",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "mvr-k3",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "mvr-k4",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-u-feed",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "trm-k1",
+      "case_id": "trial-redmine-20261108",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "trm-k2",
+      "case_id": "trial-redmine-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "trm-k3",
+      "case_id": "trial-redmine-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "trm-k4",
+      "case_id": "trial-redmine-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "trm-k5",
+      "case_id": "trial-redmine-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "trm-k6",
+      "case_id": "trial-redmine-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "smri-k1",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "smri-k2",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "open",
+      "kind": "known"
+    },
+    {
+      "id": "smri-k3",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bar-k1",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bar-k2",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "bar-k3",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "tcl-k1",
+      "case_id": "task-commit-link-20261108",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "tcl-k2",
+      "case_id": "task-commit-link-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "tcl-k3",
+      "case_id": "task-commit-link-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "tcl-k4",
+      "case_id": "task-commit-link-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "umb-k1",
+      "case_id": "user-message-to-board-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "umb-k2",
+      "case_id": "user-message-to-board-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "umb-k3",
+      "case_id": "user-message-to-board-20261108",
+      "status": "closed",
+      "kind": "unknown"
+    },
+    {
+      "id": "umb-k4",
+      "case_id": "user-message-to-board-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "umb-k5",
+      "case_id": "user-message-to-board-20261108",
+      "status": "open",
+      "kind": "known"
+    },
+    {
+      "id": "umb-k6",
+      "case_id": "user-message-to-board-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k1",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k2",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "ce-k3",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k4",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k5",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "ce-k6",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k7",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "known"
+    },
+    {
+      "id": "ce-k8",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "known"
+    },
+    {
+      "id": "ce-k9",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k10",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k11",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k12",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "ce-k13",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k14",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "ce-k15",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "ce-k16",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "known"
+    },
+    {
+      "id": "crc-k1",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "crc-k2",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "crc-k3",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "crc-k4",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "kind": "pitfall"
+    },
+    {
+      "id": "rtdb-k-version",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "rtdb-k-columns",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "rtdb-k-foreign-keys",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "rtdb-k-old-pdf",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "rtdb-k-job-addendum",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "known"
+    },
+    {
+      "id": "rtdb-k-scope",
+      "case_id": "redmine-ticket-db-review-20261108",
+      "status": "closed",
+      "kind": "pitfall"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-job",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-rule",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-silence",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-mitigation",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "side-chat-workflow-20261109-states",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "side-chat-workflow-20261109-authority",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "side-chat-workflow-20261109-terminal",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "side-chat-workflow-20261109-roles",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "principles-exception-scope-20261109",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "constraint-validity-20261109",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    },
+    {
+      "id": "freedom-feasible-best-plans-20261109",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "open",
+      "kind": "unknown"
+    }
+  ],
+  "proposals": [
+    {
+      "id": "pr-cache",
+      "case_id": "nix-packages-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "pr-flock",
+      "case_id": "nix-packages-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "pr-manifest",
+      "case_id": "nix-packages-20261107",
+      "status": "done"
+    },
+    {
+      "id": "pr-idle-check",
+      "case_id": "nix-packages-20261107",
+      "status": "done"
+    },
+    {
+      "id": "pr-git-store",
+      "case_id": "nix-packages-20261107",
+      "status": "done"
+    },
+    {
+      "id": "pr-flock-scripts",
+      "case_id": "nix-packages-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "pr-boot-check",
+      "case_id": "nix-packages-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "pr-bin-gate",
+      "case_id": "nix-packages-20261107",
+      "status": "done"
+    },
+    {
+      "id": "pr-hash-log",
+      "case_id": "nix-packages-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "msw-p1",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "done"
+    },
+    {
+      "id": "msw-p2",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "msw-p3",
+      "case_id": "muse-status-wasm-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "mvd-p1",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "mvd-p2",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "done"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr2",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr3",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr4",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr5",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr6",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-proposal",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-proposal-detail",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-review-detail",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-proposal-kanban",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "job-queue-design-20261107-4ec8c0c5-review-kanban",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "mvd-p3",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "done"
+    },
+    {
+      "id": "mvd-p4",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "mvd-p5",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "done"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr7",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "bjw-p1",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "bjw-p2",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "rejected"
+    },
+    {
+      "id": "pr-p1",
+      "case_id": "proposal-rule-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "pr-p2",
+      "case_id": "proposal-rule-20261108",
+      "status": "done"
+    },
+    {
+      "id": "phr-p1",
+      "case_id": "page-hot-reload-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "mvr-p1",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "mvr-p2",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "mvr-p3",
+      "case_id": "muse-vm-reboots-20261108",
+      "status": "done"
+    },
+    {
+      "id": "bridge-jobs-queue-20261107-pr8",
+      "case_id": "bridge-jobs-queue-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "trm-p1",
+      "case_id": "trial-redmine-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "trm-p2",
+      "case_id": "trial-redmine-20261108",
+      "status": "rejected"
+    },
+    {
+      "id": "smri-p1",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "smri-p2",
+      "case_id": "securemine-redmine-interface-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "bar-p1",
+      "case_id": "board-auto-refresh-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "tcl-p1",
+      "case_id": "task-commit-link-20261108",
+      "status": "rejected"
+    },
+    {
+      "id": "tcl-p2",
+      "case_id": "task-commit-link-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "umb-p1",
+      "case_id": "user-message-to-board-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "umb-p2",
+      "case_id": "user-message-to-board-20261108",
+      "status": "proposed"
+    },
+    {
+      "id": "ce-p1",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "ce-p2",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "ce-p3",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "ce-p4",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "ce-p5",
+      "case_id": "contribution-evaluation-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "crc-p1",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "proposed"
+    },
+    {
+      "id": "crc-p2",
+      "case_id": "case-resolution-criteria-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "itp-p-timeline",
+      "case_id": "idea-to-implementation-process-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "nix-qemu-guest-check-20261108",
+      "case_id": "nix-job-tools-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "kanban-view-remaining-20261108",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "kanban-consult-remaining-20261108",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "kanban-view-detail-20261108",
+      "case_id": "job-queue-design-20261107-4ec8c0c5",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-explicit-rejection",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-structured-input",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-controlled-retest",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-bridge-injection-20261109-authorized-request-boundary",
+      "case_id": "muse-bridge-injection-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "side-chat-workflow-20261109-submission-states",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "side-chat-workflow-20261109-authenticated-boundary",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "side-chat-workflow-20261109-terminal-and-control",
+      "case_id": "side-chat-workflow-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "mvd-rv-e15-p1",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "mvd-rv-e15-p2",
+      "case_id": "muse-vm-dashboard-20261107",
+      "status": "adopted"
+    },
+    {
+      "id": "njt-rv-e7-p1",
+      "case_id": "nix-job-tools-20261108",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-502-path-20261109-review-p1",
+      "case_id": "muse-502-path-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "t3-window-geometry-20261109-review-p1",
+      "case_id": "t3-window-geometry-20261109",
+      "status": "adopted"
+    },
+    {
+      "id": "muse-pr-review-access-20261109-review-p1",
+      "case_id": "muse-pr-review-access-20261109",
+      "status": "adopted"
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-muse-typewriter.browser.test.tsx (2 tests | 1 failed | 1 skipped) 15033ms
+   × send immediately shows one user bubble, then an assistant bubble without duplicating the input 15031ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-muse-typewriter.browser.test.tsx > send immediately shows one user bubble, then an assistant bubble without duplicating the input
+VitestBrowserElementError: Cannot find element with locator: page.getByRole('article', { name: 'あなたのメッセージ' })
+
+ARIA tree:
+- region "muse-vmとのチャット":
+  - log "Museの会話":
+    - article:
+      - strong: あなた
+      - paragraph: こんにちは テスト
+  - text: 接続中
+  - textbox "接続中" [disabled]
+  - button "送信" [disabled]
+
+HTML:
+[36m<body>[39m
+  [0m
+  
+
+[0m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mstyle[39m=[32m"height: 400px; width: 360px; display: flex;"[39m
+    [36m>[39m
+      [36m<section[39m
+        [33maria-label[39m=[32m"muse-vmとのチャット"[39m
+        [33mclass[39m=[32m"tree-view-muse-chat"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Museの会話"[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mrole[39m=[32m"log"[39m
+        [36m>[39m
+          [36m<article>[39m
+            [36m<strong>[39m
+              [0mあなた[0m
+            [36m</strong>[39m
+            [36m<p[39m
+              [33mstyle[39m=[32m"white-space: pre-wrap; overflow-wrap: anywhere;"[39m
+            [36m>[39m
+              [0mこんにちは
+テスト[0m
+            [36m</p>[39m
+          [36m</article>[39m
+        [36m</div>[39m
+        [36m<span[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"tree-view-muse-loading-left"[39m
+          [33mdata-testid[39m=[32m"muse-loading-bottom-left"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"tree-view-muse-loading-icon"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"h-full w-full animate-spin"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mopacity[39m=[32m"0.9"[39m
+                [33mr[39m=[32m"9"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-dasharray[39m=[32m"40.715040790523716 56.548667764616276"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"tree-view-typewriter-loader"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mdata-testid[39m=[32m"muse-waiting-text"[39m
+            [36m>[39m
+              [0mMuseの応答[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"tree-view-typewriter-cursor"[39m
+            [36m>[39m
+              [0m▌[0m
+            [36m</span>[39m
+          [36m</span>[39m
+        [36m</span>[39m
+        [36m<form>[39m
+          [36m<label[39m
+            [33mfor[39m=[32m"tree-view-muse-prompt"[39m
+          [36m>[39m
+            [0m接続中[0m
+          [36m</label>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"tree-view-muse-composer"[39m
+          [36m>[39m
+            [36m<textarea[39m
+              [33mdisabled[39m=[32m""[39m
+              [33mid[39m=[32m"tree-view-muse-prompt"[39m
+              [33minputmode[39m=[32m"text"[39m
+              [33mmaxlength[39m=[32m"16384"[39m
+              [33mrows[39m=[32m"3"[39m
+            [36m/>[39m
+            [36m<button[39m
+              [33mdisabled[39m=[32m""[39m
+              [33mtype[39m=[32m"submit"[39m
+            [36m>[39m
+              [0m送信[0m
+            [36m</button>[39m
+          [36m</div>[39m
+        [36m</form>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-muse-typewriter.browser.test.tsx/send-immediately-shows-one-user-bubble--then-an-assistant-bubble-without-duplicating-the-input.png
+
+ ❯ Proxy.__VITEST_POLL_CHAIN__ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7359:47
+ ❯ test/tree-view-muse-typewriter.browser.test.tsx:27:29
+     25|  await s.getByRole('button',{name:'送信',exact:true}).click();
+     26|  const user=s.getByRole('article',{name:'あなたのメッセージ'});
+     27|  await expect.element(user).toBeVisible();
+       |                             ^
+     28|  expect(user.element().classList.contains('is-user')).toBe(true);
+     29|  expect(user.element().querySelector('p')?.textContent).toBe('こんにちは\nテ…
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ throwWithCause node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7339:34
+ ❯ promise node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/index.m3L2HgmY-CbA0rOax.js?v=8d48c316:7424:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  06:07:54
+   Duration  27.32s (tests 67%, import 29%, worker 4%)
+

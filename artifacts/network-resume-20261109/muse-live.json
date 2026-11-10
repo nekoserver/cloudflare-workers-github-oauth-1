@@ -1,0 +1,14 @@
+{
+  "public_muse": {
+    "http": 401,
+    "ask_status": null,
+    "ask_error": null,
+    "via": null,
+    "marker_matches": false
+  },
+  "private_muse": {
+    "ask_status": "failed",
+    "ask_error": "muse_authentication_failed",
+    "marker_matches": false
+  }
+}

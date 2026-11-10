@@ -1,0 +1,61 @@
+{
+  "claude": {
+    "url": "https://github.com/anthropics/claude-code/releases/download/v2.1.321/claude-linux-x64.tar.gz",
+    "head_status": 200,
+    "archive_bytes": 157375212,
+    "archive_sha256": "361ef5837059512dcddb0d6b6319357b61604ff849b3dcd2693e2fcbb40b207a",
+    "published_checksum_kind": "sha256",
+    "published_checksum_verified": true,
+    "executables": [
+      {
+        "path": "claude",
+        "bytes": 341910032,
+        "sha256": "426c33815ca6645a772f722fbff10dbf2cbdb124a8aeab733c1365dbf8bbf61f"
+      }
+    ],
+    "version_check": {
+      "exit_code": 0,
+      "stdout": "2.1.321 (Claude Code)",
+      "stderr": ""
+    },
+    "release_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.321",
+    "version": "2.1.321",
+    "published_at": "2026-11-09T19:22:30Z",
+    "asset_digest": "sha256:361ef5837059512dcddb0d6b6319357b61604ff849b3dcd2693e2fcbb40b207a",
+    "npm_native": {
+      "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.321.tgz",
+      "head_status": 200,
+      "archive_bytes": 159254830,
+      "archive_sha256": "249f294c2f6bfc1e6503f0780b610e880f7e9d7ae15ab34dd4ebdf23adf7664a",
+      "published_checksum_kind": "sha512",
+      "published_checksum_verified": true,
+      "executables": [
+        {
+          "path": "package/claude",
+          "bytes": 341910032,
+          "sha256": "426c33815ca6645a772f722fbff10dbf2cbdb124a8aeab733c1365dbf8bbf61f"
+        }
+      ]
+    }
+  },
+  "t3": {
+    "url": "https://github.com/pingdotgg/t3code/releases/download/v0.1.8/t3-0.1.8-linux-x64.tar.gz",
+    "head_status": 200,
+    "archive_bytes": 148551979,
+    "archive_sha256": "b9c49dc00c23fbbc5961bdaff2d88e556d96c8dbd638c4501e2937c70650a9e5",
+    "published_checksum_kind": "sha256",
+    "published_checksum_verified": true,
+    "executables": [
+      {
+        "path": "t3-0.1.8-linux-x64/t3",
+        "bytes": 169241728,
+        "sha256": "9bb28f51f118ebc881b04859848e8895458e7f26c13d44e07d316442f8422074"
+      }
+    ],
+    "release_url": "https://github.com/pingdotgg/t3code/releases/tag/v0.1.8",
+    "version": "0.1.8",
+    "published_at": "2026-11-09T22:46:42Z",
+    "asset_digest": "sha256:b9c49dc00c23fbbc5961bdaff2d88e556d96c8dbd638c4501e2937c70650a9e5"
+  },
+  "verification_scope": "Published prebuilt binaries; isolated --version only. No Docker build, global installation, sign-in or inference."
+}

@@ -1,0 +1,44 @@
+
+ RUN  v5.0.1 /root/dynamicneko
+      API started at http://localhost:63315/
+
+ ❯ |chromium| test/tree-view-window-stack.browser.test.tsx (2 tests | 1 failed | 1 skipped) 5596ms
+   × preview restores its size immediately before maximization and ignores double clicks on controls 5595ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| test/tree-view-window-stack.browser.test.tsx > preview restores its size immediately before maximization and ignores double clicks on controls
+AssertionError: expected { width: '420px', …(3) } to deeply equal { width: '370px', …(3) }
+
+Failure screenshot:
+  - .vitest/attachments/failure-screenshots/tree-view-window-stack.browser.test.tsx/preview-restores-its-size-immediately-before-maximization-and-ignores-double-clicks-on-controls.png
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "height": "270px",[39m
+[31m+   "height": "320px",[39m
+[2m    "left": "16px",[22m
+[2m    "top": "560px",[22m
+[32m-   "width": "370px",[39m
+[31m+   "width": "420px",[39m
+[2m  }[22m
+
+ ❯ test/tree-view-window-stack.browser.test.tsx:60:113
+     58|   await title.getByLabelText('最大化',{exact:true}).click();
+     59|   await title.getByLabelText('元のサイズに戻す',{exact:true}).click();
+     60|   expect({width:preview.style.width,height:preview.style.height,left:p…
+       |                                                                                                                 ^
+     61|   const maximize=title.getByLabelText('最大化',{exact:true}).element();
+     62|   maximize.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
+ ❯ node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/deps/plugins.Cigb0uSy-CkDeEwY3.js?v=8d48c316:4951:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  05:27:23
+   Duration  19.12s (import 53%, tests 40%, worker 6%)
+

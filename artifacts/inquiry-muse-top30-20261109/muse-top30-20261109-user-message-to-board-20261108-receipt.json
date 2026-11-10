@@ -1,0 +1,17 @@
+{
+  "entry_id": "muse-top30-20261109-user-message-to-board-20261108",
+  "case_id": "user-message-to-board-20261108",
+  "keys": [
+    "umb-k4",
+    "umb-k6"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250374.5620062,
+  "receipt": {
+    "ask_id": "muse-00074b4a-89e4-46bd-bb6f-2a27c95ad0ff",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250374.5625887
+  }
+}

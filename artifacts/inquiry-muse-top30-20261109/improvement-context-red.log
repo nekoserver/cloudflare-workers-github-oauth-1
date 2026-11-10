@@ -1,0 +1,30 @@
+✔ 改善案数と成立確認済み案数を分け、再評価で二重計上しない (5.618154ms)
+✔ 既存案を新案に数えず、条件付きと実現性確認を混ぜない (4.065643ms)
+✔ 根拠のない実現性確認、上書き、履歴分岐を拒否する (3.815097ms)
+✔ 重複と判明した候補は独立案数から外し、過去イベントを残す (5.461629ms)
+✖ 制約・不確実性・依存関係を分け、共通条件と影響案を別々に数える (2.799513ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 90.132536
+
+✖ failing tests:
+
+test at scripts/agent-inquiries-improvements.test.mjs:39:1
+✖ 制約・不確実性・依存関係を分け、共通条件と影響案を別々に数える (2.799513ms)
+  Error: no such table: inquiry_context_summary
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-improvements.test.mjs:43:16)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }

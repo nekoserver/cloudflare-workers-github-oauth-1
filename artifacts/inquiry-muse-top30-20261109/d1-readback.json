@@ -1,0 +1,79 @@
+[
+  {
+    "id": "muse-top30-20261109-securemine-redmine-interface-20261108",
+    "case_id": "securemine-redmine-interface-20261108",
+    "status": "answered",
+    "ask_id": "muse-dde67654-c6da-487f-a469-20fedce5f890",
+    "targeted_keys": 2
+  },
+  {
+    "id": "muse-top30-20261109-trial-redmine-20261108",
+    "case_id": "trial-redmine-20261108",
+    "status": "answered",
+    "ask_id": "muse-6ba1cf92-8eed-482d-b231-45ae47b6b781",
+    "targeted_keys": 5
+  },
+  {
+    "id": "muse-top30-20261109-side-chat-workflow-20261109",
+    "case_id": "side-chat-workflow-20261109",
+    "status": "sent",
+    "ask_id": "muse-22250f7e-4f6a-4748-a80c-bce3d87ac7e0",
+    "targeted_keys": 4
+  },
+  {
+    "id": "muse-top30-20261109-muse-bridge-injection-20261109",
+    "case_id": "muse-bridge-injection-20261109",
+    "status": "sent",
+    "ask_id": "muse-477f1784-7d74-4f26-8093-adc8185b5723",
+    "targeted_keys": 4
+  },
+  {
+    "id": "muse-top30-20261109-contribution-evaluation-20261108",
+    "case_id": "contribution-evaluation-20261108",
+    "status": "sent",
+    "ask_id": "muse-2bbde64e-7651-4a9e-bc18-29824ab4e59f",
+    "targeted_keys": 5
+  },
+  {
+    "id": "muse-top30-20261109-board-auto-refresh-20261108",
+    "case_id": "board-auto-refresh-20261108",
+    "status": "sent",
+    "ask_id": "muse-dd5c7dc9-4d23-4296-95f6-21a52305e3ef",
+    "targeted_keys": 2
+  },
+  {
+    "id": "muse-top30-20261109-user-message-to-board-20261108",
+    "case_id": "user-message-to-board-20261108",
+    "status": "sent",
+    "ask_id": "muse-00074b4a-89e4-46bd-bb6f-2a27c95ad0ff",
+    "targeted_keys": 2
+  },
+  {
+    "id": "muse-top30-20261109-case-resolution-criteria-20261108",
+    "case_id": "case-resolution-criteria-20261108",
+    "status": "sent",
+    "ask_id": "muse-f98b4037-519f-4afb-bf12-94c40300a32a",
+    "targeted_keys": 4
+  },
+  {
+    "id": "muse-top30-20261109-task-commit-link-20261108",
+    "case_id": "task-commit-link-20261108",
+    "status": "sent",
+    "ask_id": "muse-7fbecbe6-c1a4-4a2f-8250-0b144d80ac22",
+    "targeted_keys": 2
+  },
+  {
+    "id": "muse-priority-followup-20261109-keys-centralization-rotation",
+    "case_id": "contribution-evaluation-20261108",
+    "status": "sent",
+    "ask_id": "muse-61c0cdf4-a796-4cdd-8b8f-5cb0d446e7c3",
+    "targeted_keys": 4
+  },
+  {
+    "id": "muse-priority-followup-20261109-microkernel-secure-vm",
+    "case_id": "microkernel-secure-vm-20261109",
+    "status": "sent",
+    "ask_id": "muse-64014709-529d-46b7-81f5-ec9dd25f036d",
+    "targeted_keys": 0
+  }
+]

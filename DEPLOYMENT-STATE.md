@@ -337,3 +337,40 @@ Workerブリッジの単一入力制限を入口と共通の履歴検証に修�
 ## 2026-11-09 後続: UIを公開反映（コンテナ更新なし）
 
 本体Worker ca303d16-b1e6-4276-91d8-13f50ec41390、dynamicneko 7fd593e7-53d5-4606-b6f0-7b029e58661cをcontainers-rollout none/keep-varsで公開。公開JSはローカル本番ビルドとSHA256一致し、パネル⬜︎、chat固有キーボード撤去、共通リサイズ処理を含む。tailscale-wasmのthemeも配備済み。現libにはqueue件数配信/更新表示とトークンURL露出防止を配置し、observer/HTTP streamを再起動。公開conversation entry HTTP200で、チケット遷移にトークンフラグメントがないことを確認。iPhone実機PWAとログイン済み本番UI操作、Muse実推論は未確認。Git pushなし。詳細は[UI PUBLISH REPORT](REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md)とdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md、lib/REPORT.lib.20261109.pwa-session-url.md。
+
+## 2026-11-09: 現コンテナのネットワーク再配置・公開パネル投稿
+
+現ENV優先でlib/cf-containerのApache SSI/CGI、observer/App Server/LLMソケットと配信を現コンテナへ配置。公開mygwのWS/SSE/NDJSON/JSON-seq受信、引用符付きCodex実回答、Chromeパネルから同一会話のキューへの1件投入を確認。投稿のwriter受信・実回答は未確認。streamはDNS解決不可、r9 API502、Cloudflare現トークン権限不足、Claude未認証、MuseのLLM worker未対応が残る。APT更新候補0件。entrypoint/cronへ復帰経路を配置したが再作成後は未検証。Dockerビルド・Workerデプロイ・pushなし。詳細は[NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261109.md)。
+
+2026-11-09後続: パネル投稿を既存writerの同一会話で受信し、STREAM_POST_OK_20261109を返答。writer受信・assistant返答は確認済みへ更新。公開observer/ブラウザ上の返答表示は未確認。NETWORK.20261109 REPORT参照。
+
+## 2026-11-09: tree-viewの重なり順・最大化・タイムライン・tailnet照合修正
+
+dynamicneko 666ad9f2-4de6-4c96-a2ef-65176b4dd8d9、本体5943c560-297c-4fc5-9934-a17036af065eへcontainers-rollout none/keep-varsで配備。共通レイヤー管理・最大化直前のサイズ復元・Workerのオンライン番号付きtailnetノード照合を修正。現HTTP配信のframe親サイト許可も復元し、公開iframeの認証と会話表示を確認。Chrome13件、設定9件、本体62+54件成功。本番ログイン済みUI操作・WASM実推論は未確認。コンテナ内nc宛先の固定名は未変更。詳細は[REPAIR REPORT](REPORT.cloudflare-workers-github-oauth-1.TREE-VIEW-REPAIR.20261109.md)。
+
+## 2026-11-09: Muse画面の整理・切り離し時接続
+
+dynamicneko 442cccee-9c7c-40b3-b14c-113196fe87df、本体28186cee-4b5b-4ab6-bf4c-d269bae6adbaへコンテナ更新なしで配備。指定表記、Muse/ワーカー切り替え、即時入力クリア、中央と左下ローディング、下端配置、切り離し時worker stream開始/Muse health確認を追加。UI10件と座標検証、型検査・relay検証・本番ビルド成功。既存窓tabsは並行実行で1件時間切れ、単独再2件成功。本体関連28件、整理後route9件成功。公開JS/CSSのSHA256一致。本番認証UIの実操作・実推論未確認。詳細は[TREE-VIEW-CHAT-UI REPORT](REPORT.cloudflare-workers-github-oauth-1.TREE-VIEW-CHAT-UI.20261109.md)。
+
+2026-11-09後続: dynamicneko 5386105d-cb99-4d7f-9c15-550d4b8bda91へ、Muse待機文字のTypewriter表示・送受信吹き出し・自動スクロール・送信ボタン枠の点滅を公開。Chrome9件、型検査、ビルド成功。公開JS/CSSのSHA256一致。本体追加配備とコンテナ更新なし。詳細はTREE-VIEW-CHAT-UI REPORTの後続節。
+
+## 2026-11-09: UI・埋め込み設定のマージ
+
+dynamicneko #442を3df1de9a9a5107ca4bc2e48337805b3bada8171e、cf-container #19を8e25697cf642bfad22485feeab709c18713c3aa1としてマージ確認。UIの選択色は薄緑へ統一し、dynamicneko c86c1712-a74b-4c09-a559-8bfe8c4e88cfへ公開。公開JS/CSSはビルドとSHA256一致。本体Workerの関連変更は全体テスト実行中に既存のUIテスト失敗を検出し、push・PR・マージ未実施。TESTPOLICYの全green条件を満たしたとは扱わない。
+
+## 2026-11-09: 再開時の本体関連検証
+
+17:50 UTC、未コミットのMuse接続確認・tailnet選択・スラッシュコマンド表示について、対象7ファイル215テスト成功（`artifacts/merge-validation-20261109/resume-related-tests.log`）。`git diff --check`も成功。全体テスト・Dockerビルド・本番実推論・追加デプロイ・push・PR作成は未実施。この結果はローカルの対象テストの成功のみを示す。
+
+## 2026-11-09: ネットワーク再調査
+
+18:31–18:35 UTC、mygw/r8のSSI200・未署名API401、stream DNS失敗、既存Cloudflare資格情報のトンネル権限拒否を再確認。r9の最終採取はlib日付404/API401だがRedmineアプリ・DBの配置なし。既存Muse対応workerを発見し模擬9テスト成功、tailscale nc経由のmuse-vm health200を確認。現在はMuse非対応workerが起動。Museキーと専用Claude認証が無く、非公開キー入力は時間切れのため切替・実推論なし。ランタイム4テスト成功。設定変更・配備・pushなし。詳細と確認境界はNETWORK REPORTの再開節、根拠はartifacts/network-resume-20261109。
+
+## 2026-11-09: Museのlib経路を実復元
+
+ユーザー提供キーをroot専用ファイルへ保存し、現コンテナのLLM起動先を既存Muse対応workerへ変更。未完了ジョブ0件を確認してworkerのみ再起動。公開mygw tunnels.rbのmuse_prompt → LLM worker → tailscale nc → muse-vmでHTTP200/done/指定返答完全一致を確認（artifacts/network-resume-20261109/muse-public-final.json）。関連worker14テスト、切替後runtime4テスト成功。起動時とcronのsupervisor参照を確認したが、コンテナ再作成・イメージ反映は未確認。/askmuse経路は対象外。Cloudflare権限・stream DNS・r9 Redmine・Claude認証は未解決。詳細はNETWORK REPORT最終節。Dockerビルド・Worker配備・pushなし。
+
+
+## 2026-11-10: 保存用PRとClaude/T3固定版更新（未ビルド・未配備）
+
+既存の未コミット変更・協議記録・マイグレーション・検証資料を保存するPRを準備。Claude Codeを2.1.318から2.1.321、T3を0.1.7から0.1.8へ更新し、両ネイティブバイナリのSHA-256とT3認証ヘルパーの固定パスを整合させた。公式アーカイブdigestとnpm integrityの照合、隔離した版表示、T3ソース9項目の照合を実施。関連230テスト、SQLite15テスト、必須コンテナ範囲310テスト成功。全体テスト・Dockerビルド・新画像での起動・本番推論は未実施。新イメージ反映には再ビルド・再起動が必要。詳細は[CLI更新REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-CLI-UPDATE.20261110.md)。

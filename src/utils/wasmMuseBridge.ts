@@ -1,3 +1,4 @@
+import { onlineTailnetPeer, tailnetPeerAddress } from './tailnetPeer';
 import {parseMuseMessages} from './museMessages';
 import type { IPN, IPNResponse } from '@ai-ecoverse/wasm-tailscale';
 
@@ -13,7 +14,8 @@ export class WasmMuseBridge {
     const raw = this.node.status();
     if (raw instanceof Error) return Response.json({ error: 'tailscale_not_connected' }, { status: 503 });
     const state = JSON.parse(raw);
-    if (state.state !== 'Running' || !state.peers?.some((p: { name?: string; dnsName?: string; online?: boolean }) => (p.name || p.dnsName || '').split('.')[0] === 'muse-vm' && p.online === true)) return Response.json({ error: 'tailscale_not_connected' }, { status: 503 });
+    const peer = onlineTailnetPeer(state.peers, 'muse-vm');
+    if (state.state !== 'Running' || !peer) return Response.json({ error: 'tailscale_not_connected' }, { status: 503 });
     let body: Uint8Array | undefined;
     if (chat) {
       const text = await request.text();
@@ -27,7 +29,7 @@ export class WasmMuseBridge {
     let upstream: IPNResponse | undefined, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const run = async () => {
-      upstream = await this.node.fetch({ url: 'http://muse-vm:8080' + (health ? '/health' : '/v1/chat/completions'), method: health ? 'GET' : 'POST', manualRedirects: true, headers: [['Authorization', 'Bearer ' + this.apiKey], ['Content-Type', 'application/json']], ...(body ? { body } : {}) });
+      upstream = await this.node.fetch({ url: 'http://' + tailnetPeerAddress(peer, 'muse-vm') + ':8080' + (health ? '/health' : '/v1/chat/completions'), method: health ? 'GET' : 'POST', manualRedirects: true, headers: [['Authorization', 'Bearer ' + this.apiKey], ['Content-Type', 'application/json']], ...(body ? { body } : {}) });
       if (expired) { upstream.cancel(); throw new Error('expired'); }
       const chunks: Uint8Array[] = []; let size = 0;
       for (;;) {

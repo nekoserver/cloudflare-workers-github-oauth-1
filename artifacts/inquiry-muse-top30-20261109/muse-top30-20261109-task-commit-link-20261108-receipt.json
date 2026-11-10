@@ -1,0 +1,17 @@
+{
+  "entry_id": "muse-top30-20261109-task-commit-link-20261108",
+  "case_id": "task-commit-link-20261108",
+  "keys": [
+    "tcl-k3",
+    "tcl-k4"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250379.1462865,
+  "receipt": {
+    "ask_id": "muse-7fbecbe6-c1a4-4a2f-8250-0b144d80ac22",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250379.1482255
+  }
+}

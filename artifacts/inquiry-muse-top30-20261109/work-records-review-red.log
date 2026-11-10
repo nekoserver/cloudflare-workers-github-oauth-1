@@ -1,0 +1,146 @@
+✖ 選定理由と集約理由を元の問い合わせと別に保存する (8.20691ms)
+✖ 別議題・未対応の論点、重複順位、空の理由を拒否する (3.027405ms)
+✖ 全件を記録する前は完了記録を作れず、揃っても成果評価は自動生成しない (1.916377ms)
+✖ 履歴は追記のみで、根拠の物理削除も拒否する (1.832321ms)
+✖ 成功・進展の評価には根拠が必要で、失敗や再評価も別行で残る (2.123788ms)
+✖ 提案と独立した議題も型を分けて記録し、完了後の追加を拒否する (2.011189ms)
+✖ REPLACEやUPSERTでも作業履歴を置換できない (1.78516ms)
+✖ 集約ごとの全体進捗・重複監査が無ければ作業記録を完了にしない (2.648636ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 180.115647
+
+✖ failing tests:
+
+test at scripts/agent-inquiries-work-records.test.mjs:20:1
+✖ 選定理由と集約理由を元の問い合わせと別に保存する (8.20691ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:21:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:26:1
+✖ 別議題・未対応の論点、重複順位、空の理由を拒否する (3.027405ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:27:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:32:1
+✖ 全件を記録する前は完了記録を作れず、揃っても成果評価は自動生成しない (1.916377ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:33:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:38:1
+✖ 履歴は追記のみで、根拠の物理削除も拒否する (1.832321ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:39:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:47:1
+✖ 成功・進展の評価には根拠が必要で、失敗や再評価も別行で残る (2.123788ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:48:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:56:1
+✖ 提案と独立した議題も型を分けて記録し、完了後の追加を拒否する (2.011189ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:57:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:65:1
+✖ REPLACEやUPSERTでも作業履歴を置換できない (1.78516ms)
+  Error: no such table: inquiry_work_audits
+      at open (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:16:21)
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:66:11)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at scripts/agent-inquiries-work-records.test.mjs:70:1
+✖ 集約ごとの全体進捗・重複監査が無ければ作業記録を完了にしない (2.648636ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/agent-inquiries-work-records.test.mjs:72:9)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /audit/,
+    operator: 'throws',
+    diff: 'simple'
+  }

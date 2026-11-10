@@ -1,0 +1,15 @@
+{
+  "page_status": 200,
+  "assets": [
+    {
+      "path": "/assets/index-BrHGhohA.js",
+      "status": 200,
+      "sha256_matches_build": true
+    },
+    {
+      "path": "/assets/index-D1I-Fn5V.css",
+      "status": 200,
+      "sha256_matches_build": true
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "collected_at_utc": "2026-11-09T05:18:08.007201+00:00",
+  "mode": "counters-only",
+  "rules_changed": false,
+  "files": {
+    "firewall.log": {
+      "bytes": 12150,
+      "sha256": "996a6a048476cd6341a351be66ef3c2b04f7595ce15b210f0793b2b412eeed30"
+    },
+    "firewall-collector.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "nftables.log": {
+      "bytes": 620,
+      "sha256": "c0962a8f9f34ce3909f212ceb45f526527728a4e8d405ea227566749620047cf"
+    },
+    "nft-ruleset.txt": {
+      "bytes": 1226,
+      "sha256": "60dca9f2674a8c5d44bfcc44e6cacb6a60d6d4a84318db45f3f00231fa3214e1"
+    }
+  },
+  "nft_exit_code": 0
+}

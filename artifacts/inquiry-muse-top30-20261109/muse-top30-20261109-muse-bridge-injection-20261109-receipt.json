@@ -1,0 +1,19 @@
+{
+  "entry_id": "muse-top30-20261109-muse-bridge-injection-20261109",
+  "case_id": "muse-bridge-injection-20261109",
+  "keys": [
+    "muse-bridge-injection-20261109-job",
+    "muse-bridge-injection-20261109-rule",
+    "muse-bridge-injection-20261109-silence",
+    "muse-bridge-injection-20261109-mitigation"
+  ],
+  "status": "planned",
+  "ask_id": null,
+  "started_at": 1794250367.7809858,
+  "receipt": {
+    "ask_id": "muse-477f1784-7d74-4f26-8093-adc8185b5723",
+    "ask_status": "pending",
+    "via": "muse",
+    "created_at": 1794250367.7817552
+  }
+}
