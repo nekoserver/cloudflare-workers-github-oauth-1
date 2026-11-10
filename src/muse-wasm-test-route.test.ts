@@ -62,7 +62,7 @@ describe('/muse-wasm-testのページ', () => {
     expect(csp).toContain("'wasm-unsafe-eval'");
     expect(csp).toContain('wss://*.tailscale.com');
     expect(csp).toContain("frame-ancestors 'none'");
-    expect(await page.text()).toContain("import('/tailscale-wasm-client.mjs')");
+    expect(await page.text()).toContain('/api/tailscale-wasm/bridge-health');
   });
 });
 

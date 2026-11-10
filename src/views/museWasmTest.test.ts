@@ -46,85 +46,65 @@ function setup(options: { fetchImpl?: (url: string) => Promise<unknown>; api?: (
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe('/muse-wasm-testのTailscale WASM', () => {
+describe('/muse-wasm-testの到達確認(Workerのノード、ブラウザのログイン無し)', () => {
   beforeEach(loadBody);
+  const STATUS = { state: 'Running', peers: [
+    { name: 'muse-vm.taile4e096.ts.net.', addresses: ['100.86.29.77', 'fd7a::1'], online: true },
+    { name: 'muse.taile4e096.ts.net.', addresses: ['100.73.113.53'], online: true },
+  ] };
+  const api = (health: unknown, status: unknown) => async (url: string) =>
+    url === '/api/tailscale-wasm/bridge-health' ? health : url === '/api/tailscale-wasm/status' ? status : url === '/api/tailscale-wasm/jobs' ? { jobs: [] } : {};
 
-  it('接続するとtailscale.comのログインURLだけをリンクにする', async () => {
-    const { deps, client, callbacks } = setup();
+  it('開くとWorkerのノードでmuse-vmの/healthを確かめ、ブラウザ側のTailscaleは使わない', async () => {
+    const { deps, fetchJson, intervals } = setup({ api: api({ healthy: true, transport: 'worker' }, STATUS) });
     await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    expect(client.login).toHaveBeenCalledOnce();
-    callbacks().notifyBrowseToURL('https://evil.example/a/1');
-    expect($('mwt-login').querySelector('a')).toBeNull();
-    callbacks().notifyBrowseToURL('https://login.tailscale.com/a/abc');
-    expect($('mwt-login').querySelector('a')?.getAttribute('href')).toBe('https://login.tailscale.com/a/abc');
-  });
-
-  it('Runningになるとmuse-vmの名前とIPの/healthへGETを送り、結果を文字として記録し、間隔ごとに繰り返す', async () => {
-    const { deps, client, intervals, callbacks } = setup({ fetchImpl: async () => ({ status: 200, statusText: '200 OK', text: async () => '<img src=x>{"status": "ok"}' }) });
-    await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    callbacks().notifyNetMap(NETMAP);
-    callbacks().notifyState('Running');
     await flush(); await flush();
-    expect((client.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => url)).toEqual(['http://muse-vm:8080/health', 'http://100.86.29.77:8080/health']);
-    expect($('mwt-node').textContent).toContain('100.86.29.77');
+    const urls = fetchJson.mock.calls.map(([url]) => url);
+    expect(urls).toContain('/api/tailscale-wasm/bridge-health');
+    expect(urls).toContain('/api/tailscale-wasm/status');
+    expect(deps.createTailscaleClient).not.toHaveBeenCalled();
     const rows = $('mwt-log').querySelectorAll('tr');
-    expect(rows).toHaveLength(2);
-    expect(rows[0].textContent).toContain('200');
-    expect(rows[0].textContent).toContain('<img src=x>');
-    expect($('mwt-log').querySelector('img')).toBeNull();
-    const active = intervals.filter((i) => !i.cleared);
-    expect(active).toHaveLength(1);
-    expect(active[0].ms).toBe(30_000);
-    active[0].fn();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].classList.contains('mwt-ng')).toBe(false);
+    expect(rows[0].textContent).toContain('Running');
+    expect(rows[0].textContent).toContain('100.86.29.77');
+    expect(intervals.filter((i) => !i.cleared).map((i) => i.ms)).toEqual([30_000]);
+    intervals[0].fn();
     await flush(); await flush();
-    expect(client.fetch).toHaveBeenCalledTimes(4);
+    expect($('mwt-log').querySelectorAll('tr')).toHaveLength(2);
   });
 
-  it('届かなかったときは理由を記録に残す', async () => {
-    const { deps, callbacks } = setup({ fetchImpl: async () => { throw new Error('dial tcp: no route'); } });
+  it('届かないときは、ノードの状態とmuse-vmのオンライン表示を理由として残す', async () => {
+    const { deps } = setup({ api: api({ healthy: false, transport: 'worker' }, { state: 'Running', peers: [{ name: 'muse-vm.x.', addresses: ['100.86.29.77'], online: false }] }) });
     await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    callbacks().notifyNetMap(NETMAP);
-    callbacks().notifyState('Running');
     await flush(); await flush();
-    expect($('mwt-log').textContent).toContain('dial tcp: no route');
+    const row = $('mwt-log').querySelector('tr')!;
+    expect(row.classList.contains('mwt-ng')).toBe(true);
+    expect(row.textContent).toContain('オフライン');
   });
 
-  it('netmapにmuse-vmが無ければ名前だけに送る', async () => {
-    const { deps, client, callbacks } = setup();
+  it('Workerのノードが承認待ちなら、tailscale.comの承認URLだけをリンクにする(一度承認すればWorkerに保存される)', async () => {
+    const { deps } = setup({ api: api({ healthy: false }, { state: 'NeedsLogin', peers: [], loginURL: 'https://login.tailscale.com/a/abc' }) });
     await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    callbacks().notifyNetMap(JSON.stringify({ peers: [] }));
-    callbacks().notifyState('Running');
     await flush(); await flush();
-    expect((client.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => url)).toEqual(['http://muse-vm:8080/health']);
+    expect($('mwt-login').querySelector('a')?.getAttribute('href')).toBe('https://login.tailscale.com/a/abc');
+    const evil = setup({ api: api({ healthy: false }, { state: 'NeedsLogin', peers: [], loginURL: 'https://evil.example/a/1' }) });
+    loadBody();
+    await script.initMuseWasmTest(evil.deps);
+    await flush(); await flush();
+    expect($('mwt-login').querySelector('a')).toBeNull();
   });
 
-  it('切断するとログアウトし、定期送信を止める', async () => {
-    const { deps, client, intervals, callbacks } = setup();
+  it('APIの失敗も表に残す', async () => {
+    const { deps } = setup({ api: async (url: string) => { if (url === '/api/tailscale-wasm/jobs') return { jobs: [] }; throw new Error('Failed to fetch'); } });
     await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    callbacks().notifyState('Running');
-    await flush();
-    $('mwt-disconnect').click();
-    expect(client.logout).toHaveBeenCalledOnce();
-    expect(intervals.every((i) => i.cleared)).toBe(true);
+    await flush(); await flush();
+    expect($('mwt-log').textContent).toContain('Failed to fetch');
   });
 
   it('間隔は10〜3600秒の整数だけを受け付ける', async () => {
-    const { deps, intervals, callbacks } = setup();
+    const { deps, intervals } = setup({ api: api({ healthy: true }, STATUS) });
     await script.initMuseWasmTest(deps);
-    $('mwt-connect').click();
-    await flush();
-    callbacks().notifyState('Running');
-    await flush();
     const input = $<HTMLInputElement>('mwt-interval');
     input.value = '5';
     input.dispatchEvent(new Event('change'));
@@ -180,6 +160,19 @@ describe('/muse-wasm-testの要望(Workerのジョブ台帳 MuseAgentJobs)', () 
     await flush(); await flush();
     expect(fetchJson.mock.calls.length).toBe(before + 1);
     expect(poll[0].cleared).toBe(true);
+  });
+
+  it('失敗や再試行の理由を一覧に出す', async () => {
+    const jobs = [{ jobId: 'j', createdAt: 'x', messages: [
+      { messageId: 'm1', agent: 'user', prompt: 'p1', state: 'failed', reply: null, error: 'HTTP 503 muse_not_authenticated' },
+      { messageId: 'm2', agent: 'user', prompt: 'p2', state: 'queued', reply: null, error: 'HTTP 503 tailscale_not_connected (attempt 1/5, retrying)' },
+    ] }];
+    const { deps } = setup({ api: async (url) => (url === '/api/tailscale-wasm/jobs' ? { jobs } : {}) });
+    await script.initMuseWasmTest(deps);
+    await flush(); await flush();
+    const text = $('mwt-jobs').textContent ?? '';
+    expect(text).toContain('muse_not_authenticated');
+    expect(text).toContain('attempt 1/5, retrying');
   });
 
   it('空の要望は送らない', async () => {
@@ -281,10 +274,10 @@ describe('getMuseWasmTestPage', () => {
       expect(() => execFileSync(process.execPath, ['--input-type=module', '--check'], { input: source })).not.toThrow();
     }
   });
-  it('WASMは同一オリジンの共通ローダーから読み、CSPは/muse-statusと同じ', () => {
+  it('ブラウザ用のTailscale WASMは読み込まない(ログインはWorkerのノードだけ)。CSPは/muse-statusと同じ', () => {
     const html = getMuseWasmTestPage();
-    expect(html).toContain("import('/tailscale-wasm-client.mjs')");
-    expect(html).not.toMatch(/https?:\/\/[^"'\s]*tailscale-connect/);
+    expect(html).not.toContain('tailscale-wasm-client');
+    expect(html).not.toContain('tailscale-connect');
     expect(MUSE_WASM_TEST_CSP).toBe(MUSE_STATUS_CSP);
   });
 });
