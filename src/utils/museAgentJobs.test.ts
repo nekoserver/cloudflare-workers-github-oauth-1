@@ -98,3 +98,21 @@ it('keeps working on a ledger created before the error and attempts columns exis
   expect((await jobs.list('owner'))[0].messages[0]).toMatchObject({ messageId: 'old', state: 'done', error: null });
   f.db.close();
 });
+it('returns when each message was queued, first sent and finished, from the event log', async () => {
+  const f = fixture(); const jobs = f.create();
+  f.send.mockResolvedValueOnce(Response.json({ error: 'tailscale_not_connected' }, { status: 503 }));
+  await jobs.enqueue('owner', { requestId, prompt: '依頼' });
+  let [message] = (await jobs.list('owner'))[0].messages;
+  expect(message).toMatchObject({ startedAt: null, finishedAt: null });
+  expect(message.queuedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  await jobs.processOne();
+  await jobs.processOne();
+  // 記録は queued, sending, queued(再試行), sending, done の順。時刻を決まった値にしてから読む。
+  const rows = f.db.prepare('SELECT id, state FROM muse_agent_events ORDER BY id').all() as { id: number; state: string }[];
+  expect(rows.map((r) => r.state)).toEqual(['queued', 'sending', 'queued', 'sending', 'done']);
+  const times = ['2026-11-11T06:00:00.000Z', '2026-11-11T06:00:02.000Z', '2026-11-11T06:00:09.000Z', '2026-11-11T06:00:15.000Z', '2026-11-11T06:00:20.000Z'];
+  rows.forEach((r, i) => f.db.prepare('UPDATE muse_agent_events SET at=? WHERE id=?').run(times[i], r.id));
+  [message] = (await jobs.list('owner'))[0].messages;
+  expect(message).toMatchObject({ state: 'done', queuedAt: times[0], startedAt: times[1], finishedAt: times[4] });
+  f.db.close();
+});

@@ -46,8 +46,15 @@ export class MuseAgentJobs {
     await this.storage.setAlarm(Date.now() + 1000);
     return Response.json({ ok: true, jobId, messageId: data.requestId, state: 'queued' }, { status: 202 });
   }
+  /** 状態の記録(muse_agent_events)から、受付・最初の送信・終了の時刻を返す。終わっていなければfinishedAtはnull。 */
+  private timing(messageId: string): { queuedAt: string | null; startedAt: string | null; finishedAt: string | null } {
+    const row = [...this.storage.sql.exec<{ queuedAt: string | null; startedAt: string | null; finishedAt: string | null }>(
+      "SELECT MIN(CASE WHEN state='queued' THEN at END) AS queuedAt, MIN(CASE WHEN state='sending' THEN at END) AS startedAt, MAX(CASE WHEN state IN ('done','failed','delivery_unknown') THEN at END) AS finishedAt FROM muse_agent_events WHERE message_id=?",
+      messageId)][0];
+    return { queuedAt: row?.queuedAt ?? null, startedAt: row?.startedAt ?? null, finishedAt: row?.finishedAt ?? null };
+  }
   async list(owner: string) {
-    return [...this.storage.sql.exec<{ id: string; created_at: string }>('SELECT id,created_at FROM muse_agent_jobs WHERE owner=? ORDER BY rowid DESC LIMIT 20', owner)].map(job => ({ jobId: job.id, createdAt: job.created_at, messages: [...this.storage.sql.exec<Message>('SELECT * FROM muse_agent_messages WHERE job_id=? AND owner=? ORDER BY rowid DESC LIMIT 50', job.id, owner)].reverse().map(row => ({ messageId: row.id, agent: row.agent, prompt: row.prompt, state: row.state, reply: row.reply, error: row.error ?? null })) }));
+    return [...this.storage.sql.exec<{ id: string; created_at: string }>('SELECT id,created_at FROM muse_agent_jobs WHERE owner=? ORDER BY rowid DESC LIMIT 20', owner)].map(job => ({ jobId: job.id, createdAt: job.created_at, messages: [...this.storage.sql.exec<Message>('SELECT * FROM muse_agent_messages WHERE job_id=? AND owner=? ORDER BY rowid DESC LIMIT 50', job.id, owner)].reverse().map(row => ({ messageId: row.id, agent: row.agent, prompt: row.prompt, state: row.state, reply: row.reply, error: row.error ?? null, ...this.timing(row.id) })) }));
   }
   async processOne() {
     const row = this.storage.transactionSync(() => {

@@ -36,6 +36,8 @@ export function getThemeCSS(): string {
       --badge-bg: #edf2f7;
       --success-color: #48bb78;
       --danger-color: #e53e3e;
+      --warning-color: #b7791f;
+      --info-color: #0ea5e9;
       --accent-color: #667eea;
       --accent-hover: #5a67d8;
       --code-bg: #edf2f7;
@@ -70,6 +72,8 @@ export function getThemeCSS(): string {
       --badge-bg: #4a5568;
       --success-color: #48bb78;
       --danger-color: #fc8181;
+      --warning-color: #f6e05e;
+      --info-color: #63b3ed;
       --accent-color: #7f9cf5;
       --accent-hover: #667eea;
       --code-bg: #1a202c;
