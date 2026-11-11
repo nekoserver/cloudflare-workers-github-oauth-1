@@ -1,6 +1,9 @@
 import { parseCompletion } from './museDirectAsk';
 const ID = /^[a-zA-Z0-9-]{1,64}$/;
-type Message = { id: string; job_id: string; owner: string; agent: string; prompt: string; state: string; reply: string | null };
+type Message = { id: string; job_id: string; owner: string; agent: string; prompt: string; state: string; reply: string | null; error?: string | null; attempts?: number };
+/** Not-yet-sent deliveries (the tailnet was not connected) are retried this many times in total. */
+export const MUSE_AGENT_MAX_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000];
 /** Durable work ledger. A delivery interrupted after claiming is never resent automatically. */
 export class MuseAgentJobs {
   constructor(private storage: DurableObjectStorage, private send: (prompt: string) => Promise<Response>) {
@@ -9,10 +12,13 @@ export class MuseAgentJobs {
     sql.exec("CREATE TABLE IF NOT EXISTS muse_agent_messages (id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES muse_agent_jobs(id), owner TEXT NOT NULL, agent TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', reply TEXT)");
     sql.exec('CREATE TABLE IF NOT EXISTS muse_agent_events (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL, message_id TEXT NOT NULL, owner TEXT NOT NULL, agent TEXT NOT NULL, state TEXT NOT NULL, at TEXT NOT NULL)');
     sql.exec('CREATE INDEX IF NOT EXISTS muse_agent_events_owner ON muse_agent_events(owner,id)');
+    const columns = new Set([...sql.exec<{ name: string }>('PRAGMA table_info(muse_agent_messages)')].map(c => c.name));
+    if (!columns.has('error')) sql.exec('ALTER TABLE muse_agent_messages ADD COLUMN error TEXT');
+    if (!columns.has('attempts')) sql.exec('ALTER TABLE muse_agent_messages ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
     sql.exec('CREATE TABLE IF NOT EXISTS muse_agent_cursors (owner TEXT NOT NULL, consumer TEXT NOT NULL, cursor INTEGER NOT NULL, PRIMARY KEY(owner,consumer))');
     storage.transactionSync(() => {
       for (const row of sql.exec<Message>("SELECT * FROM muse_agent_messages WHERE state='sending'")) {
-        sql.exec("UPDATE muse_agent_messages SET state='delivery_unknown' WHERE id=?", row.id);
+        sql.exec("UPDATE muse_agent_messages SET state='delivery_unknown', error=? WHERE id=?", 'interrupted while sending (the Durable Object restarted); not resent automatically', row.id);
         this.event(row, 'delivery_unknown');
       }
     });
@@ -41,7 +47,7 @@ export class MuseAgentJobs {
     return Response.json({ ok: true, jobId, messageId: data.requestId, state: 'queued' }, { status: 202 });
   }
   async list(owner: string) {
-    return [...this.storage.sql.exec<{ id: string; created_at: string }>('SELECT id,created_at FROM muse_agent_jobs WHERE owner=? ORDER BY rowid DESC LIMIT 20', owner)].map(job => ({ jobId: job.id, createdAt: job.created_at, messages: [...this.storage.sql.exec<Message>('SELECT * FROM muse_agent_messages WHERE job_id=? AND owner=? ORDER BY rowid DESC LIMIT 50', job.id, owner)].reverse().map(row => ({ messageId: row.id, agent: row.agent, prompt: row.prompt, state: row.state, reply: row.reply })) }));
+    return [...this.storage.sql.exec<{ id: string; created_at: string }>('SELECT id,created_at FROM muse_agent_jobs WHERE owner=? ORDER BY rowid DESC LIMIT 20', owner)].map(job => ({ jobId: job.id, createdAt: job.created_at, messages: [...this.storage.sql.exec<Message>('SELECT * FROM muse_agent_messages WHERE job_id=? AND owner=? ORDER BY rowid DESC LIMIT 50', job.id, owner)].reverse().map(row => ({ messageId: row.id, agent: row.agent, prompt: row.prompt, state: row.state, reply: row.reply, error: row.error ?? null })) }));
   }
   async processOne() {
     const row = this.storage.transactionSync(() => {
@@ -51,7 +57,8 @@ export class MuseAgentJobs {
       this.event(row, 'sending'); return row;
     });
     if (!row) return;
-    let state = 'delivery_unknown', reply: string | null = null;
+    let state = 'delivery_unknown', reply: string | null = null, error: string | null = null, retryInMs: number | null = null;
+    const attempts = (row.attempts ?? 0) + 1;
     try {
       const earlier = [...this.storage.sql.exec<Message>("SELECT * FROM muse_agent_messages WHERE job_id=? AND rowid < (SELECT rowid FROM muse_agent_messages WHERE id=?) AND state='done' AND reply IS NOT NULL ORDER BY rowid", row.job_id, row.id)];
       const encoder = new TextEncoder();
@@ -68,13 +75,28 @@ export class MuseAgentJobs {
       const response = await this.send(history.length ? `同じJobの会話履歴を参考にしてください。\n${history.join('')}\n\n${current}` : row.prompt);
       if (response.status === 200) {
         const result = parseCompletion(await response.text());
-        if (result.ok) { state = 'done'; reply = result.reply; }
-      } else if ([400, 401, 403, 404, 413, 429, 503].includes(response.status)) state = 'failed';
-    } catch { /* Unknown delivery is recorded and never automatically retried. */ }
+        if (result.ok) { state = 'done'; reply = result.reply; error = null; }
+        else error = 'HTTP 200 but the reply could not be read';
+      } else {
+        const text = await response.text();
+        let code = '';
+        try { code = String((JSON.parse(text) as { error?: unknown }).error ?? ''); } catch { code = text.slice(0, 200); }
+        error = `HTTP ${response.status} ${code}`.trim();
+        if (response.status === 503 && code === 'tailscale_not_connected') {
+          // Nothing reached Muse yet (the bridge checks the connection before sending), so retrying is safe.
+          if (attempts < MUSE_AGENT_MAX_ATTEMPTS) { state = 'queued'; retryInMs = RETRY_DELAYS_MS[Math.min(attempts - 1, RETRY_DELAYS_MS.length - 1)]; error = `${error} (attempt ${attempts}/${MUSE_AGENT_MAX_ATTEMPTS}, retrying)`; }
+          else { state = 'failed'; error = `${error} (gave up after ${MUSE_AGENT_MAX_ATTEMPTS} attempts)`; }
+        } else if ([400, 401, 403, 404, 413, 429, 503].includes(response.status)) state = 'failed';
+      }
+    } catch (thrown) {
+      // Unknown delivery is recorded and never automatically retried.
+      error = `delivery result unknown: ${thrown instanceof Error ? thrown.message : String(thrown)}`;
+    }
     this.storage.transactionSync(() => {
-      this.storage.sql.exec('UPDATE muse_agent_messages SET state=?,reply=? WHERE id=?', state, reply, row.id);
+      this.storage.sql.exec('UPDATE muse_agent_messages SET state=?,reply=?,error=?,attempts=? WHERE id=?', state, reply, error, attempts, row.id);
       this.event(row, state);
     });
+    if (retryInMs !== null) { await this.storage.setAlarm(Date.now() + retryInMs); return; }
     if ([...this.storage.sql.exec("SELECT id FROM muse_agent_messages WHERE state='queued' LIMIT 1")].length) await this.storage.setAlarm(Date.now() + 1000);
   }
   async changes(owner: string, consumer: string) {
