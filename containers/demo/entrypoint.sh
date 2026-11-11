@@ -219,6 +219,22 @@ python3 /usr/local/libexec/container_setup.py \
   && log "container SSI configured" \
   || log "WARN: container SSI setup failed"
 
+# --- lib(SSI): /root/lib を /var/www/html/lib に見せる(apache-lib.conf、管理者だけ) ---
+# libはイメージに入れない(container_setup.py・lib-network/README.mdの方針)。コンテナに置かれた /root/lib を、
+# Apacheの実行ユーザー(www-data)が /root を通らずに読めるようbind mountする。失敗しても起動は続ける。
+if [ -d /root/lib ]; then
+  mkdir -p /var/www/html/lib
+  if mountpoint -q /var/www/html/lib; then
+    log "lib: /var/www/html/lib is already mounted"
+  elif mount --bind /root/lib /var/www/html/lib; then
+    log "lib: mounted /root/lib on /var/www/html/lib"
+  else
+    log "WARN: lib: mount --bind /root/lib /var/www/html/lib failed (lib SSI stays unavailable)"
+  fi
+else
+  log "lib: no /root/lib, lib SSI stays unavailable (/root/lib が無い)"
+fi
+
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
 apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
   && (apache2ctl start >/tmp/apache.log 2>&1 && log "apache2 started") \

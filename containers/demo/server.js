@@ -602,6 +602,31 @@ function proxyToRedmine(req, res) {
   req.pipe(upstream);
 }
 
+// lib(SSI)への内部プロキシ。Apacheの127.0.0.1:8445(apache-lib.conf)が/var/www/html/libを処理する。
+// /lib prefixは剥がさない(Apache側はDocumentRoot /var/www/htmlで/lib以下を出す)。
+// 外部(8443のトンネル)はApacheが/libを拒否するので、ここへは/cf-containers/proxy/*の
+// 認証(管理者だけ)を通った要求しか届かない(ユーザー指定、2026-11-11)。
+const LIB_PREFIX = '/lib';
+const LIB_PORT = 8445;
+function isLibPath(url) {
+  return url === LIB_PREFIX || url.startsWith(LIB_PREFIX + '/') || url.startsWith(LIB_PREFIX + '?');
+}
+function proxyToLib(req, res, port = LIB_PORT) {
+  const upstream = http.request(
+    { host: '127.0.0.1', port, method: req.method, path: req.url, headers: req.headers },
+    (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+      upstreamRes.pipe(res);
+    }
+  );
+  upstream.on('error', (err) => {
+    if (res.headersSent) { res.destroy(err); return; }
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'libへのプロキシに失敗しました: ' + (err.code || err.message) }));
+  });
+  req.pipe(upstream);
+}
+
 // /askmuse用の中継。Workerはtailnetに参加できないので、ここからmuse-vmへ1本だけ通す。
 // 送り先は固定し、キーは持たず呼び出し側のAuthorizationを渡すだけにする(環境変数に
 // 置くとT3やエージェントの子プロセスから読める)。8080はtailnetの端末からも届くが、
@@ -812,6 +837,10 @@ const server = http
       proxyToRedmine(req, res);
       return;
     }
+    if (isLibPath(req.url)) {
+      proxyToLib(req, res);
+      return;
+    }
     if (req.method === 'POST' && req.url === '/admin/authorized-keys') {
       appendAuthorizedKey(req, res);
       return;
@@ -925,7 +954,7 @@ const server = http
   })
   ;
 
-module.exports = { forwardToMuse, checkMuseHealth, connectMuse, relayMuseNode, MUSE_NODE_ROUTE, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
+module.exports = { isLibPath, proxyToLib, forwardToMuse, checkMuseHealth, connectMuse, relayMuseNode, MUSE_NODE_ROUTE, MUSE_NC_ARGS, MUSE_MAX_BODY, readHostKeys, issueT3Pairing, T3_PAIRING_ARGS, issueT3Session, T3_SESSION_ARGS, judgeT3Health, parseCodexLoginStatus, parseListenAddresses, collectT3Health, summarizeTailscalePeers, extractVersion, compareVersions, judgeVersion, parseAptCandidate, judgeAptVersion, VERSION_SOURCES, APT_TOOLS };
 
 // テストからrequireしたときは起動しない
 if (require.main === module) {
