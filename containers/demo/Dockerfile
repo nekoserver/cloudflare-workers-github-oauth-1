@@ -61,9 +61,9 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.13.0
 ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 ARG NPM_VERSION=12.2.0
-ARG CODEX_VERSION=0.166.0
+ARG CODEX_VERSION=0.167.1
 ARG T3_VERSION=0.1.7
-ARG CLAUDE_VERSION=2.1.318
+ARG CLAUDE_VERSION=2.1.322
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.10.7
@@ -222,7 +222,7 @@ RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-ARG CLAUDE_NATIVE_SHA256=708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd
+ARG CLAUDE_NATIVE_SHA256=bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \
