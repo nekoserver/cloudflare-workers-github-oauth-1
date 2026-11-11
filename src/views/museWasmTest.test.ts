@@ -32,6 +32,7 @@ function setup(options: { fetchImpl?: (url: string) => Promise<unknown>; api?: (
     fetch: vi.fn(options.fetchImpl ?? (async () => ({ status: 200, statusText: '200 OK', text: async () => '{"status": "ok"}' }))) as Client['fetch'],
   };
   const intervals: { fn: () => void; ms: number; cleared: boolean }[] = [];
+  const clock = { now: Date.parse('2026-11-08T12:00:00Z') };
   const fetchJson = vi.fn(options.api ?? (async (url: string) => (url === '/api/tailscale-wasm/jobs' ? { jobs: [] } : {})));
   const deps = {
     document,
@@ -39,9 +40,9 @@ function setup(options: { fetchImpl?: (url: string) => Promise<unknown>; api?: (
     fetchJson,
     setInterval: (fn: () => void, ms: number) => { intervals.push({ fn, ms, cleared: false }); return intervals.length - 1; },
     clearInterval: (id: number) => { if (intervals[id]) intervals[id].cleared = true; },
-    now: () => Date.parse('2026-11-08T12:00:00Z'),
+    now: () => clock.now,
   };
-  return { client, deps, intervals, fetchJson, callbacks: () => callbacks };
+  return { client, deps, intervals, fetchJson, clock, callbacks: () => callbacks };
 }
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -261,6 +262,125 @@ describe('/muse-wasm-testのmuse-monitor', () => {
     $('mwt-mon-get').click();
     await flush(); await flush();
     expect($('mwt-mon-log').textContent).toContain('Failed to fetch');
+  });
+});
+
+describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結果のトースト', () => {
+  beforeEach(loadBody);
+  const JOBS_URL = '/api/tailscale-wasm/jobs';
+  const isPost = (init: unknown) => (init as { method?: string } | undefined)?.method === 'POST';
+  const jobsWith = (state: string, reply: string | null = null) => ({ jobs: [{ jobId: 'j', createdAt: 'x', messages: [{ messageId: 'm1', agent: 'user', prompt: 'p', state, reply }] }] });
+  const stateCell = () => $('mwt-jobs').querySelector('tr td:nth-child(3)') as HTMLElement;
+  const toast = () => $('mwt-toast');
+
+  it('sendingは点滅させ、doneは緑、failed・delivery_unknownは赤で表示する', async () => {
+    let state = 'sending';
+    const { deps } = setup({ api: async (url) => (url === JOBS_URL ? jobsWith(state) : {}) });
+    await script.initMuseWasmTest(deps);
+    $('mwt-jobs-toggle').click();
+    await flush(); await flush();
+    expect(stateCell().classList.contains('mwt-blink')).toBe(true);
+    for (const [s, cls] of [['done', 'mwt-ok'], ['failed', 'mwt-bad'], ['delivery_unknown', 'mwt-bad'], ['queued', '']] as const) {
+      state = s;
+      $('mwt-jobs-toggle').click(); $('mwt-jobs-toggle').click();
+      await flush(); await flush();
+      const cell = stateCell();
+      expect(cell.classList.contains('mwt-blink'), s).toBe(false);
+      if (cls) expect(cell.classList.contains(cls), s).toBe(true);
+      else expect(cell.classList.contains('mwt-ok') || cell.classList.contains('mwt-bad'), s).toBe(false);
+    }
+  });
+
+  it('「一覧を表示」は押すたびに表示と非表示を切り替え、表示するときに読み直す', async () => {
+    const { deps, fetchJson } = setup({ api: async (url) => (url === JOBS_URL ? jobsWith('done', 'ok') : {}) });
+    await script.initMuseWasmTest(deps);
+    const button = $('mwt-jobs-toggle');
+    const list = $('mwt-jobs-list');
+    expect(list.hidden).toBe(true);
+    expect(button.textContent).toBe('一覧を表示');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    const loads = () => fetchJson.mock.calls.filter(([url, init]) => url === JOBS_URL && !isPost(init)).length;
+    const before = loads();
+    button.click();
+    await flush(); await flush();
+    expect(list.hidden).toBe(false);
+    expect(button.textContent).toBe('一覧を隠す');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(loads()).toBe(before + 1);
+    button.click();
+    expect(list.hidden).toBe(true);
+    expect(button.textContent).toBe('一覧を表示');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('送ってから片付くまで、画面上部のトーストに経過時間を数え、正常なら薄緑で合格を出す', async () => {
+    let state = 'queued';
+    const { deps, intervals, clock } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? jobsWith(state) : {}) });
+    await script.initMuseWasmTest(deps);
+    expect($<HTMLInputElement>('mwt-toast-enabled').checked).toBe(true);
+    expect(toast().hidden).toBe(true);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    expect(toast().hidden).toBe(false);
+    expect(toast().textContent).toContain('0秒');
+    expect(Number(toast().style.zIndex)).toBeGreaterThan(0);
+    const tick = intervals.find((i) => i.ms === 1000 && !i.cleared)!;
+    expect(tick).toBeTruthy();
+    clock.now += 12_000;
+    tick.fn();
+    expect(toast().textContent).toContain('12秒');
+    state = 'sending';
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(toast().hidden).toBe(false);
+    expect(toast().classList.contains('mwt-toast-ok')).toBe(false);
+    state = 'done';
+    clock.now += 3_000;
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(toast().classList.contains('mwt-toast-ok')).toBe(true);
+    expect(toast().textContent).toContain('合格');
+    expect(toast().textContent).toContain('15秒');
+    expect(tick.cleared).toBe(true);
+  });
+
+  it('失敗ならピンクで失敗と出す', async () => {
+    let state = 'queued';
+    const { deps, intervals } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? jobsWith(state) : {}) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    state = 'failed';
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(toast().classList.contains('mwt-toast-bad')).toBe(true);
+    expect(toast().textContent).toContain('失敗');
+  });
+
+  it('「結果をトースト表示」を外すとトーストを出さない', async () => {
+    const { deps, intervals } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? jobsWith('queued') : {}) });
+    await script.initMuseWasmTest(deps);
+    const box = $<HTMLInputElement>('mwt-toast-enabled');
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    expect(toast().hidden).toBe(true);
+    expect(intervals.some((i) => i.ms === 1000 && !i.cleared)).toBe(false);
+  });
+
+  it('点滅は動きを減らす設定で止め、色はテーマの変数を使う', () => {
+    const html = getMuseWasmTestPage();
+    expect(html).toMatch(/\.mwt-blink \{[^}]*animation:/);
+    expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mwt-blink \{ animation: none/);
+    expect(html).toMatch(/\.mwt-ok \{ color: var\(--success-color\)/);
+    expect(html).toMatch(/\.mwt-bad \{ color: var\(--danger-color\)/);
+    expect(html).toMatch(/\.mwt-toast-ok \{[^}]*var\(--success-color\)/);
+    expect(html).toMatch(/\.mwt-toast-bad \{[^}]*var\(--danger-color\)/);
+    expect(html).not.toContain('var(--bg-primary)');
   });
 });
 
