@@ -372,6 +372,48 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     expect(intervals.some((i) => i.ms === 1000 && !i.cleared)).toBe(false);
   });
 
+  it('送信中はトーストを点滅させ、終われば点滅を止める', async () => {
+    let state = 'queued';
+    const { deps, intervals } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? jobsWith(state) : {}) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    expect(toast().classList.contains('mwt-toast-blink')).toBe(true);
+    state = 'done';
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(toast().classList.contains('mwt-toast-blink')).toBe(false);
+  });
+
+  it('一覧に、受付から終了までにかかった時間(送信待ちと送信の内訳)を残す', async () => {
+    const jobs = { jobs: [{ jobId: 'j', createdAt: 'x', messages: [
+      { messageId: 'm1', agent: 'user', prompt: 'p', state: 'done', reply: 'ok', queuedAt: '2026-11-11T06:00:00.000Z', startedAt: '2026-11-11T06:00:02.000Z', finishedAt: '2026-11-11T06:00:20.000Z' },
+      { messageId: 'm2', agent: 'user', prompt: 'q', state: 'sending', reply: null, queuedAt: '2026-11-11T06:01:00.000Z', startedAt: '2026-11-11T06:01:01.000Z', finishedAt: null },
+    ] }] };
+    const { deps } = setup({ api: async (url) => (url === JOBS_URL ? jobs : {}) });
+    await script.initMuseWasmTest(deps);
+    $('mwt-jobs-toggle').click();
+    await flush(); await flush();
+    const rows = [...$('mwt-jobs').querySelectorAll('tr')];
+    expect(rows[0].cells[4].textContent).toBe('合計 20秒(送信待ち 2秒・送信 18秒)');
+    expect(rows[1].cells[4].textContent).toBe('送信中');
+    expect($('mwt-jobs-list').textContent).toContain('かかった時間');
+  });
+
+  it('終わったときのトーストは、サーバーの記録がある場合はその合計秒数を出す', async () => {
+    let msg: Record<string, unknown> = { messageId: 'm1', agent: 'user', prompt: 'p', state: 'queued', reply: null };
+    const { deps, intervals } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? { jobs: [{ jobId: 'j', createdAt: 'x', messages: [msg] }] } : {}) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    msg = { ...msg, state: 'done', reply: 'ok', queuedAt: '2026-11-11T06:00:00.000Z', startedAt: '2026-11-11T06:00:02.000Z', finishedAt: '2026-11-11T06:00:20.000Z' };
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(toast().textContent).toBe('合格(20秒)');
+  });
+
   it('点滅は動きを減らす設定で止め、色はテーマの変数を使う', () => {
     const html = getMuseWasmTestPage();
     expect(html).toMatch(/\.mwt-blink \{[^}]*animation:/);
@@ -381,6 +423,8 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     expect(html).toMatch(/\.mwt-toast-ok \{[^}]*var\(--success-color\)/);
     expect(html).toMatch(/\.mwt-toast-bad \{[^}]*var\(--danger-color\)/);
     expect(html).not.toContain('var(--bg-primary)');
+    expect(html).toMatch(/\.mwt-toast-blink \{[^}]*animation:/);
+    expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mwt-toast-blink \{ animation: none/);
   });
 });
 

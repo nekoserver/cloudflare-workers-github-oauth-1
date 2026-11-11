@@ -150,6 +150,23 @@ export const MUSE_WASM_TEST_SCRIPT = `
       var listShown = false;
       var toast = { enabled: true, messageId: null, startedAt: 0, timer: null };
 
+      function mwtSecondsBetween(from, to) {
+        var a = Date.parse(from), b = Date.parse(to);
+        if (!(a >= 0) || !(b >= 0)) return null;
+        return Math.max(0, Math.round((b - a) / 1000));
+      }
+      /** 受付から終了までにかかった時間。サーバーの記録(queuedAt・startedAt・finishedAt)から作る。 */
+      function mwtTimingText(message) {
+        var total = message.finishedAt ? mwtSecondsBetween(message.queuedAt, message.finishedAt) : null;
+        if (total !== null) {
+          var waited = message.startedAt ? mwtSecondsBetween(message.queuedAt, message.startedAt) : null;
+          var sent = message.startedAt ? mwtSecondsBetween(message.startedAt, message.finishedAt) : null;
+          return '合計 ' + total + '秒' + (waited !== null && sent !== null ? '(送信待ち ' + waited + '秒・送信 ' + sent + '秒)' : '');
+        }
+        if (message.state === 'queued') return '送信待ち';
+        if (message.state === 'sending') return '送信中';
+        return '';
+      }
       function mwtStateClass(state) {
         if (state === 'sending') return 'mwt-blink';
         if (state === 'done') return 'mwt-ok';
@@ -185,7 +202,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
         if (box.hidden) { box.style.zIndex = String(mwtNextZ()); box.hidden = false; }
       }
       function tickToast(state) {
-        showToast('mwt-toast-run', '送信中(' + (state || 'queued') + ')… ' + toastSeconds() + '秒経過');
+        showToast('mwt-toast-run mwt-toast-blink', '送信中(' + (state || 'queued') + ')… ' + toastSeconds() + '秒経過');
       }
       function startToast(messageId) {
         if (!toast.enabled) return;
@@ -196,11 +213,15 @@ export const MUSE_WASM_TEST_SCRIPT = `
         tickToast(toast.state);
         toast.timer = deps.setInterval(function() { tickToast(toast.state); }, 1000);
       }
-      function followToast(state) {
+      function followToast(message) {
         if (!toast.enabled || toast.timer === null) return;
+        var state = message.state;
         toast.state = state;
-        if (state === 'done') { stopToastTimer(); showToast('mwt-toast-ok', '合格(' + toastSeconds() + '秒)'); }
-        else if (state === 'failed' || state === 'delivery_unknown') { stopToastTimer(); showToast('mwt-toast-bad', '失敗(' + toastSeconds() + '秒、' + state + ')'); }
+        // 終わったときの秒数は、サーバーの記録(受付から終了まで)があればそれを使う。無ければこのページで数えた秒数。
+        var total = message.finishedAt ? mwtSecondsBetween(message.queuedAt, message.finishedAt) : null;
+        var seconds = total !== null ? total : toastSeconds();
+        if (state === 'done') { stopToastTimer(); showToast('mwt-toast-ok', '合格(' + seconds + '秒)'); }
+        else if (state === 'failed' || state === 'delivery_unknown') { stopToastTimer(); showToast('mwt-toast-bad', '失敗(' + seconds + '秒、' + state + ')'); }
         else tickToast(state);
       }
       function toggleList() {
@@ -222,14 +243,14 @@ export const MUSE_WASM_TEST_SCRIPT = `
         jobs.forEach(function(job) {
           (job.messages || []).forEach(function(message) {
             if (MWT_PENDING[message.state]) pending = true;
-            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, { text: message.state + (message.error ? ' ' + message.error : ''), className: mwtStateClass(message.state) }, message.reply === null || message.reply === undefined ? '' : message.reply]);
-            if (toast.messageId === message.messageId) followToast(message.state);
+            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, { text: message.state + (message.error ? ' ' + message.error : ''), className: mwtStateClass(message.state) }, message.reply === null || message.reply === undefined ? '' : message.reply, mwtTimingText(message)]);
+            if (toast.messageId === message.messageId) followToast(message);
           });
         });
         if (!rows.length) {
           var empty = doc.createElement('tr');
           var cell = doc.createElement('td');
-          cell.colSpan = 4;
+          cell.colSpan = 5;
           cell.textContent = 'まだ要望はありません';
           empty.appendChild(cell);
           tbody.appendChild(empty);
@@ -376,6 +397,8 @@ export function getMuseWasmTestPage(): string {
     @media (prefers-reduced-motion: reduce) { .mwt-blink { animation: none; text-decoration: underline; } }
     .mwt-toast { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); max-width: min(90vw, 480px); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); box-shadow: 0 6px 20px color-mix(in srgb, var(--text-primary) 25%, transparent); font-weight: 600; text-align: center; cursor: default; }
     .mwt-toast[hidden] { display: none; }
+    .mwt-toast-blink { animation: mwt-blink 1s step-start infinite; }
+    @media (prefers-reduced-motion: reduce) { .mwt-toast-blink { animation: none; } }
     .mwt-toast-ok { background: color-mix(in srgb, var(--success-color) 22%, var(--card-bg)); border-color: var(--success-color); cursor: pointer; }
     .mwt-toast-bad { background: color-mix(in srgb, var(--danger-color) 18%, var(--card-bg)); border-color: var(--danger-color); cursor: pointer; }
     textarea { width: 100%; box-sizing: border-box; min-height: 90px; font: inherit; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; }
@@ -412,7 +435,7 @@ export function getMuseWasmTestPage(): string {
         <label><input type="checkbox" id="mwt-toast-enabled" checked> 結果をトースト表示</label></p>
       <p id="mwt-submit-result" class="mwt-meta" role="status"></p>
       <p class="mwt-row"><button type="button" id="mwt-jobs-toggle" aria-expanded="false" aria-controls="mwt-jobs-list">一覧を表示</button><span id="mwt-jobs-error" class="mwt-error"></span></p>
-      <div class="mwt-scroll" id="mwt-jobs-list" hidden><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
+      <div class="mwt-scroll" id="mwt-jobs-list" hidden><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th><th scope="col">かかった時間</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
     </section>
   </main>
   <div id="mwt-toast" class="mwt-toast" role="status" aria-live="polite" hidden></div>
