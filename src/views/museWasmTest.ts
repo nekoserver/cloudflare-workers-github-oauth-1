@@ -201,14 +201,16 @@ export const MUSE_WASM_TEST_SCRIPT = `
         toast.messageId = null;
         el('mwt-toast').hidden = true;
       }
-      function showToast(className, text) {
+      function showToast(className, text, blink) {
         var box = el('mwt-toast');
         box.className = 'mwt-toast ' + className;
-        box.textContent = text;
+        var body = el('mwt-toast-text');
+        body.className = blink ? 'mwt-toast-text mwt-toast-blink' : 'mwt-toast-text';
+        body.textContent = text;
         if (box.hidden) { box.style.zIndex = String(mwtNextZ()); box.hidden = false; }
       }
       function tickToast(state) {
-        showToast('mwt-toast-run mwt-toast-blink', '送信中(' + (state || 'queued') + ')… ' + toastSeconds() + '秒経過');
+        showToast('mwt-toast-run', '送信中(' + (state || 'queued') + ')… ' + toastSeconds() + '秒経過', true);
       }
       function startToast(messageId) {
         if (!toast.enabled) return;
@@ -422,7 +424,10 @@ export function getMuseWasmTestPage(): string {
     .mwt-blink { animation: mwt-blink 1s step-start infinite; }
     @keyframes mwt-blink { 50% { opacity: 0.25; } }
     @media (prefers-reduced-motion: reduce) { .mwt-blink { animation: none; text-decoration: underline; } }
-    .mwt-toast { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); max-width: min(90vw, 480px); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); box-shadow: 0 6px 20px color-mix(in srgb, var(--text-primary) 25%, transparent); font-weight: 600; text-align: center; cursor: default; }
+    .mwt-toast { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(90vw, 420px); padding: 20px 24px 16px; border-radius: 24px; border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent); background: var(--card-bg); color: var(--text-primary); box-shadow: 0 12px 32px color-mix(in srgb, var(--text-primary) 18%, transparent); text-align: left; cursor: default; }
+    .mwt-toast-icon { display: block; color: var(--accent-color); font-size: 28px; font-weight: 800; font-style: italic; line-height: 1; letter-spacing: -0.04em; }
+    .mwt-toast-text { margin: 12px 0 0; font-size: 1rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+    .mwt-toast-from { margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary); opacity: 0.75; }
     .mwt-toast[hidden] { display: none; }
     .mwt-toast-blink { animation: mwt-blink 1s step-start infinite; }
     .mwt-dur-ok { color: var(--success-color); font-weight: 600; }
@@ -432,8 +437,9 @@ export function getMuseWasmTestPage(): string {
     @keyframes mwt-cell-pulse { 0%, 100% { box-shadow: inset 0 0 0 2px var(--info-color); } 50% { box-shadow: inset 0 0 0 2px transparent; } }
     @media (prefers-reduced-motion: reduce) { .mwt-cell-pulse { animation: none; box-shadow: inset 0 0 0 2px var(--info-color); } }
     @media (prefers-reduced-motion: reduce) { .mwt-toast-blink { animation: none; } }
-    .mwt-toast-ok { background: color-mix(in srgb, var(--success-color) 22%, var(--card-bg)); border-color: var(--success-color); cursor: pointer; }
-    .mwt-toast-bad { background: color-mix(in srgb, var(--danger-color) 18%, var(--card-bg)); border-color: var(--danger-color); cursor: pointer; }
+    .mwt-toast-ok, .mwt-toast-bad { cursor: pointer; }
+    .mwt-toast-ok .mwt-toast-text { color: var(--success-color); }
+    .mwt-toast-bad .mwt-toast-text { color: var(--danger-color); }
     textarea { width: 100%; box-sizing: border-box; min-height: 90px; font: inherit; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; }
     input[type=number] { width: 6em; }
   </style>
@@ -471,7 +477,7 @@ export function getMuseWasmTestPage(): string {
       <div class="mwt-scroll" id="mwt-jobs-list" hidden><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th><th scope="col">かかった時間</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
     </section>
   </main>
-  <div id="mwt-toast" class="mwt-toast" role="status" aria-live="polite" hidden></div>
+  <div id="mwt-toast" class="mwt-toast" role="status" aria-live="polite" hidden><span class="mwt-toast-icon" aria-hidden="true">m</span><p id="mwt-toast-text" class="mwt-toast-text"></p><div class="mwt-toast-from">Museから</div></div>
   <script>${getThemeToggleScript()}</script>
   <script>${MUSE_WASM_TEST_SCRIPT}</script>
   <script type="module">
