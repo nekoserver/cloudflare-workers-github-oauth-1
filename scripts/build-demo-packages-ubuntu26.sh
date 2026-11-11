@@ -3,7 +3,7 @@
 # cf-container やエージェントのコンテナでは実行しない(CLAUDE.md コンテナビルドのルール8。CPU が足りない・OS が違う)。
 # 手順は containers/demo/packages/README.md と同じ。取得物は上流が公開するハッシュで照合する。
 #
-#   sudo apt-get update   # 初回だけ
+#   sudo apt-get update   # 初回だけ(root なら sudo は不要。GitHub Actions の demo-packages は ubuntu:26.04 のコンテナで root として動かす)
 #   bash scripts/build-demo-packages-ubuntu26.sh /tmp/demo-packages
 #
 # 出力: <出力先>/git-<版>-linux-x64-ubuntu26.04.tar.xz、apache-<版>-linux-x64-ubuntu26.04.tar.xz、
@@ -31,7 +31,9 @@ OUT="$(cd "$OUT" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-sudo apt-get install -y --no-install-recommends build-essential cargo rustc \
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then SUDO=sudo; fi
+$SUDO apt-get install -y --no-install-recommends build-essential cargo rustc \
   libcurl4-openssl-dev libssl-dev zlib1g-dev libexpat1-dev libpcre2-dev gettext \
   libapr1-dev libaprutil1-dev libnghttp2-dev libxml2-dev libbrotli-dev \
   libjansson-dev liblua5.4-dev curl xz-utils
