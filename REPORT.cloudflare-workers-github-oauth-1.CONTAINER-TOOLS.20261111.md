@@ -7,6 +7,7 @@
 | Codex CLI (`@openai/codex`) | 0.166.0 → 0.167.1 | npmの `dist-tags.latest` が0.167.1(2026-11-10公開)。0.166.0と同じく `@openai/codex-linux-x64` を optionalDependencies に持つ。`engines.node` は `>=16`(Node 26.13.0で満たす)。入れ方は従来どおり版の指定だけ |
 | Claude CLI (`@anthropic-ai/claude-code`) | 2.1.318 → 2.1.322 | npmの `dist-tags.latest` が2.1.322(2026-11-10公開)。`engines.node` は `>=22.0.0`(Node 26.13.0で満たす) |
 | jq | 変更なし | すでにaptで入っている(`containers/demo/Dockerfile` 81行目) |
+| Tailscale | 1.104.5 → 1.104.6 | `https://pkgs.tailscale.com/stable/?mode=json` の `TarballsVersion` が1.104.6。取得物のsha256 `82a85429f733e52fd1a95dedb2c8dd8cd46d6603504e566a56b1779c9a7a4809` が、配布元が公開する `tailscale_1.104.6_amd64.tgz.sha256` と一致。取り出した `tailscale version`・`tailscaled --version` がともに1.104.6(追記: 同日) |
 
 ## Claudeのネイティブバイナリのsha256
 

@@ -1,5 +1,5 @@
 # 固定する版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
-ARG TAILSCALE_VERSION=1.104.5
+ARG TAILSCALE_VERSION=1.104.6
 ARG GH_VERSION=2.103.3
 ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
@@ -10,7 +10,7 @@ ARG APACHE_VERSION=2.4.70
 # Official precompiled Tailscale package; no Go source build.
 FROM ubuntu:26.04 AS tailscale-binaries
 ARG TAILSCALE_VERSION
-ARG TAILSCALE_SHA256=720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7
+ARG TAILSCALE_SHA256=82a85429f733e52fd1a95dedb2c8dd8cd46d6603504e566a56b1779c9a7a4809
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/tailscale.tgz \
         "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz" \
