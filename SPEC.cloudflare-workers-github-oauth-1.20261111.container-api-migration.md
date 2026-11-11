@@ -80,4 +80,4 @@
 
 ## 関連コミット
 
-(コミット後に追記)
+- [`71e0a32`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/71e0a32) demo コンテナを Durable Object Container API へ移す(@cloudflare/containers をやめる)
