@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs';
 
 // T3の挙動の契約。私たちのコード(プロキシ・PWAのクライアント)は、T3の次の挙動に頼っている。
 // どれも、T3 0.1.7 の公式リリース(t3-0.1.7-linux-x64.tar.gz、SHA256SUMSと照合済み)とタグ v0.1.7(322f6544)のソースで確かめた(2026-11-06)。
+// 0.1.9(タグ v0.1.9、24e77473)のソースで各項目の根拠の箇所を確かめ直した(2026-11-11)。getSessionState・selectRequestCredential・resolveSessionCookieName・
+// DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES・takePairingTokenFromUrl・waitForAuthenticatedSessionAfterBootstrap は 0.1.7 と同じ。pairingCredential は
+// access:write が要るのは同じで、任意の access(MCPクライアント向け)が足されただけ。公式リリース t3-0.1.9-linux-x64.tar.gz は SHA256SUMS にある。
 // 画面以外は、別のポートと状態ディレクトリで起動した実物でも確かめた。0.1.7 で GET /api/auth/clients は無くなった(このリポジトリは使っていない)。
 // T3の版を上げるときは、テストを先に直す: 新しい版のソースで下の各項目を確かめ直し、CONTRACT_VERIFIED_VERSION を上げてから、
 // Dockerfile の T3_VERSION を上げる。確かめないまま版だけ上げると、このテストが失敗する。
-const CONTRACT_VERIFIED_VERSION = '0.1.7';
+const CONTRACT_VERIFIED_VERSION = '0.1.9';
 const CONTRACT = [
   { behavior: '/api/auth/session は、認証に失敗した要求に、401ではなく 200 の { authenticated: false } を返す', source: 'サーバー getSessionState の catchIf(isServerAuthCredentialError)' },
   { behavior: 'ほかの認証付きAPIは、認証に失敗すると 401 を返す', source: 'サーバー EnvironmentAuthenticatedAuth' },

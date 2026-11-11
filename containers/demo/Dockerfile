@@ -58,11 +58,11 @@ FROM ubuntu:26.04
 
 # Use one supported Node runtime for the server and both CLIs. The archive
 # digest is pinned independently of the download, so corruption fails the build.
-ARG NODE_VERSION=26.13.0
-ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
+ARG NODE_VERSION=26.13.1
+ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 ARG NPM_VERSION=12.2.0
 ARG CODEX_VERSION=0.167.1
-ARG T3_VERSION=0.1.7
+ARG T3_VERSION=0.1.9
 ARG CLAUDE_VERSION=2.1.322
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
