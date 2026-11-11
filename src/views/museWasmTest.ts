@@ -155,17 +155,23 @@ export const MUSE_WASM_TEST_SCRIPT = `
         if (!(a >= 0) || !(b >= 0)) return null;
         return Math.max(0, Math.round((b - a) / 1000));
       }
-      /** 受付から終了までにかかった時間。サーバーの記録(queuedAt・startedAt・finishedAt)から作る。 */
-      function mwtTimingText(message) {
+      /** 終わった秒数の色: 100秒以下は緑、300秒以下は黄、それより長いと赤。 */
+      function mwtDurationClass(seconds) {
+        if (seconds <= 100) return 'mwt-dur-ok';
+        if (seconds <= 300) return 'mwt-dur-warn';
+        return 'mwt-dur-bad';
+      }
+      /** 受付から終了までにかかった時間の欄。サーバーの記録(queuedAt・startedAt・finishedAt)から作る。 */
+      function mwtTimingCell(message) {
         var total = message.finishedAt ? mwtSecondsBetween(message.queuedAt, message.finishedAt) : null;
         if (total !== null) {
           var waited = message.startedAt ? mwtSecondsBetween(message.queuedAt, message.startedAt) : null;
           var sent = message.startedAt ? mwtSecondsBetween(message.startedAt, message.finishedAt) : null;
-          return '合計 ' + total + '秒' + (waited !== null && sent !== null ? '(送信待ち ' + waited + '秒・送信 ' + sent + '秒)' : '');
+          return { text: '合計 ' + total + '秒' + (waited !== null && sent !== null ? '(送信待ち ' + waited + '秒・送信 ' + sent + '秒)' : ''), className: mwtDurationClass(total) };
         }
-        if (message.state === 'queued') return '送信待ち';
-        if (message.state === 'sending') return '送信中';
-        return '';
+        if (message.state === 'queued') return { text: '送信待ち', className: '' };
+        if (message.state === 'sending') return { text: '送信中', className: 'mwt-blink mwt-cell-pulse' };
+        return { text: '', className: '' };
       }
       function mwtStateClass(state) {
         if (state === 'sending') return 'mwt-blink';
@@ -243,7 +249,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
         jobs.forEach(function(job) {
           (job.messages || []).forEach(function(message) {
             if (MWT_PENDING[message.state]) pending = true;
-            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, { text: message.state + (message.error ? ' ' + message.error : ''), className: mwtStateClass(message.state) }, message.reply === null || message.reply === undefined ? '' : message.reply, mwtTimingText(message)]);
+            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, { text: message.state + (message.error ? ' ' + message.error : ''), className: mwtStateClass(message.state) }, message.reply === null || message.reply === undefined ? '' : message.reply, mwtTimingCell(message)]);
             if (toast.messageId === message.messageId) followToast(message);
           });
         });
@@ -260,7 +266,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
           values.forEach(function(value, index) {
             var td = doc.createElement('td');
             td.textContent = value.text === undefined ? value : value.text;
-            if (index === 2 && value.className) td.className = value.className;
+            if (value.className) td.className = value.className;
             row.appendChild(td);
           });
           tbody.appendChild(row);
@@ -398,6 +404,12 @@ export function getMuseWasmTestPage(): string {
     .mwt-toast { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); max-width: min(90vw, 480px); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); box-shadow: 0 6px 20px color-mix(in srgb, var(--text-primary) 25%, transparent); font-weight: 600; text-align: center; cursor: default; }
     .mwt-toast[hidden] { display: none; }
     .mwt-toast-blink { animation: mwt-blink 1s step-start infinite; }
+    .mwt-dur-ok { color: var(--success-color); font-weight: 600; }
+    .mwt-dur-warn { color: var(--warning-color); font-weight: 600; }
+    .mwt-dur-bad { color: var(--danger-color); font-weight: 600; }
+    .mwt-cell-pulse { animation: mwt-cell-pulse 1s ease-in-out infinite, mwt-blink 1s step-start infinite; }
+    @keyframes mwt-cell-pulse { 0%, 100% { box-shadow: inset 0 0 0 2px var(--info-color); } 50% { box-shadow: inset 0 0 0 2px transparent; } }
+    @media (prefers-reduced-motion: reduce) { .mwt-cell-pulse { animation: none; box-shadow: inset 0 0 0 2px var(--info-color); } }
     @media (prefers-reduced-motion: reduce) { .mwt-toast-blink { animation: none; } }
     .mwt-toast-ok { background: color-mix(in srgb, var(--success-color) 22%, var(--card-bg)); border-color: var(--success-color); cursor: pointer; }
     .mwt-toast-bad { background: color-mix(in srgb, var(--danger-color) 18%, var(--card-bg)); border-color: var(--danger-color); cursor: pointer; }

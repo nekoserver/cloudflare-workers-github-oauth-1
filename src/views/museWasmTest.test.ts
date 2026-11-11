@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP, MUSE_WASM_TEST_SCRIPT } from './museWasmTest';
 import { MUSE_STATUS_CSP } from './museStatus';
+import { getThemeCSS } from '../utils/theme';
 
 // 対象: /muse-wasm-testのページ。公式Tailscale WASMでtailnetに入り、muse-vmの/healthへ定期的にGETを送って
 // 記録する。要望はWorkerのAPI経由でbridge_jobsへ積む(WASMのfetchはGETだけでヘッダーを付けられないため)。
@@ -399,6 +400,42 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     expect(rows[0].cells[4].textContent).toBe('合計 20秒(送信待ち 2秒・送信 18秒)');
     expect(rows[1].cells[4].textContent).toBe('送信中');
     expect($('mwt-jobs-list').textContent).toContain('かかった時間');
+  });
+
+  it('「送信中」は文字と枠(水色)を点滅させ、終わった秒数は100秒以下を緑、300秒以下を黄、それより長いと赤にする', async () => {
+    const at = (sec: number) => new Date(Date.parse('2026-11-11T06:00:00.000Z') + sec * 1000).toISOString();
+    const done = (id: string, sec: number) => ({ messageId: id, agent: 'user', prompt: id, state: 'done', reply: 'ok', queuedAt: at(0), startedAt: at(1), finishedAt: at(sec) });
+    const jobs = { jobs: [{ jobId: 'j', createdAt: 'x', messages: [
+      { messageId: 's', agent: 'user', prompt: 's', state: 'sending', reply: null, queuedAt: at(0), startedAt: at(1), finishedAt: null },
+      done('a', 100), done('b', 101), done('c', 300), done('d', 301),
+    ] }] };
+    const { deps } = setup({ api: async (url) => (url === JOBS_URL ? jobs : {}) });
+    await script.initMuseWasmTest(deps);
+    $('mwt-jobs-toggle').click();
+    await flush(); await flush();
+    const cells = [...$('mwt-jobs').querySelectorAll('tr')].map((r) => r.cells[4]);
+    expect(cells[0].textContent).toBe('送信中');
+    expect(cells[0].classList.contains('mwt-blink')).toBe(true);
+    expect(cells[0].classList.contains('mwt-cell-pulse')).toBe(true);
+    expect([1, 2, 3, 4].map((i) => cells[i].className)).toEqual(['mwt-dur-ok', 'mwt-dur-warn', 'mwt-dur-warn', 'mwt-dur-bad']);
+    expect(cells[1].textContent).toContain('合計 100秒');
+  });
+
+  it('色はテーマの変数(黄・水色はライトとダークの両方に定義)を使い、枠の点滅は動きを減らす設定で止める', () => {
+    const html = getMuseWasmTestPage();
+    expect(html).toMatch(/\.mwt-dur-ok \{ color: var\(--success-color\)/);
+    expect(html).toMatch(/\.mwt-dur-warn \{ color: var\(--warning-color\)/);
+    expect(html).toMatch(/\.mwt-dur-bad \{ color: var\(--danger-color\)/);
+    expect(html).toMatch(/\.mwt-cell-pulse \{[^}]*animation:/);
+    expect(html).toMatch(/@keyframes mwt-cell-pulse \{[^}]*var\(--info-color\)/);
+    expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mwt-cell-pulse \{ animation: none/);
+    const theme = getThemeCSS();
+    const light = theme.slice(0, theme.indexOf('[data-theme="dark"]'));
+    const dark = theme.slice(theme.indexOf('[data-theme="dark"]'));
+    for (const name of ['--warning-color', '--info-color']) {
+      expect(light, name).toContain(name + ':');
+      expect(dark, name).toContain(name + ':');
+    }
   });
 
   it('終わったときのトーストは、サーバーの記録がある場合はその合計秒数を出す', async () => {
