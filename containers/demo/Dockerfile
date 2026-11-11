@@ -294,11 +294,12 @@ COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /us
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
 COPY cf /usr/local/bin/cf
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
+COPY apache-lib.conf /etc/apache2/sites-available/010-lib.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
     && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
     && a2dissite 000-default \
-    && a2ensite 000-demo \
+    && a2ensite 000-demo 010-lib \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
     && mkdir -p /run/sshd
 
