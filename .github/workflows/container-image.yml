@@ -1,0 +1,100 @@
+# demo コンテナのイメージを作り直し、固定(containers/demo/image.lock.json・wrangler.toml)を更新する PR を出す。
+# 仕様: SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md。デプロイはしない(PR のマージ後に Workers Builds が行う)。
+# 必要なシークレット: CLOUDFLARE_API_TOKEN(コンテナのレジストリに送れる権限)・CLOUDFLARE_ACCOUNT_ID。
+name: container-image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: container-image
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # 入力が固定したイメージと同じなら、何もしない(同じ入力で作り直さない)
+      - id: check
+        run: |
+          set -eu
+          if node scripts/demo-image-lock.mjs --check; then
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.rebuild == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - if: steps.check.outputs.rebuild == 'true'
+        run: npm ci --progress=false
+
+      # image.lock.json の buildArgs(以前の image_vars)でビルドする
+      - if: steps.check.outputs.rebuild == 'true'
+        run: |
+          set -eu
+          args=()
+          while IFS= read -r kv; do args+=(--build-arg "$kv"); done < <(jq -r '.buildArgs | to_entries[] | "\(.key)=\(.value)"' containers/demo/image.lock.json)
+          docker buildx build --platform linux/amd64 --load "${args[@]}" \
+            -t "cloudflare-workers-github-oauth-1-democontainer:${GITHUB_SHA}" containers/demo
+
+      - if: steps.check.outputs.rebuild == 'true'
+        id: push
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          npx wrangler containers push "cloudflare-workers-github-oauth-1-democontainer:${GITHUB_SHA}"
+          ref="registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/cloudflare-workers-github-oauth-1-democontainer"
+          image="$(docker image inspect "${ref}:${GITHUB_SHA}" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep "^${ref}@sha256:" | head -n 1)"
+          if [ -z "$image" ]; then
+            echo "no registry digest for ${ref}:${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.check.outputs.rebuild == 'true'
+        run: |
+          set -eu
+          node scripts/demo-image-lock.mjs --write --image "${{ steps.push.outputs.image }}" \
+            --built-from "main ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M') UTC GitHub Actions container-image run ${GITHUB_RUN_ID})"
+          node scripts/demo-image-lock.mjs --check
+          npx vitest run src/cf-containers
+
+      - if: steps.check.outputs.rebuild == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          branch="image/demo-${GITHUB_SHA::12}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add containers/demo/image.lock.json wrangler.toml
+          git commit -m "demo コンテナのイメージを ${GITHUB_SHA::12} から作り直して固定する"
+          git push origin "$branch"
+          {
+            echo "GitHub Actions(container-image)が main の ${GITHUB_SHA} からイメージを作り、registry.cloudflare.com に送りました。containers/demo/image.lock.json と wrangler.toml の image を更新します。マージすると Workers Builds がこのイメージでデプロイします。"
+            echo
+            echo "## コンテナ"
+            echo "- 再ビルド: 済み(この PR のイメージ)"
+            echo "- 再起動: 必要(新しいイメージで動かすため)"
+            echo
+            echo "仕様: SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md"
+          } > pr-body.md
+          gh pr create --base main --head "$branch" \
+            --title "demo コンテナのイメージを ${GITHUB_SHA::12} から作り直して固定する" \
+            --body-file pr-body.md
