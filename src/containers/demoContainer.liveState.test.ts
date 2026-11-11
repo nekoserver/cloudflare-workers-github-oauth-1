@@ -1,33 +1,30 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
-// @cloudflare/containers 0.3.7: getState reads stored lifecycle state;
-// ctx.container.running reports the runtime separately.
-// Contract: https://github.com/cloudflare/containers/blob/v0.3.7/src/lib/container.ts
-const runtime = vi.hoisted(() => ({ running: true, stored: { status: 'stopped', lastChange: 1 }, start: vi.fn() }));
-vi.mock('@cloudflare/containers', () => ({ Container: class {
-  ctx = { container: runtime };
-  async getState() { return { ...runtime.stored }; }
-  async start() { runtime.start(); }
-} }));
+// 状態は ctx.container.running(実行時の真の状態)から作る。読んでも起動しない。
+// SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md 3章の1。
+vi.mock('cloudflare:workers', () => ({
+  DurableObject: class { ctx: unknown; env: unknown; constructor(ctx: unknown, env: unknown) { this.ctx = ctx; this.env = env; } },
+}));
+vi.mock('../utils/cfContainerOperationLog', () => ({ recordContainerOperation: async () => {} }));
 import { DemoContainer } from './demoContainer';
+import { createFakeCtx } from './demoContainerFakeCtx';
 import { withMuseTailscalePreflight } from '../utils/museTailscalePreflight';
 
-beforeEach(() => { runtime.running = true; runtime.stored = { status: 'stopped', lastChange: 1 }; runtime.start.mockClear(); });
-const instance = () => new DemoContainer({} as never, {} as never);
-it('stored stopped does not block a running container before tailnet inspection and direct submission', async () => {
-  const c = instance(); const order: string[] = [];
+const instance = (running: boolean) => {
+  const fake = createFakeCtx({ running });
+  return { ...fake, c: new DemoContainer(fake.ctx as never, {} as never) };
+};
+
+it('a running container passes tailnet inspection and direct submission without starting', async () => {
+  const { c, calls } = instance(true); const order: string[] = [];
   const fetch = vi.fn(async () => { order.push('tailnet'); return Response.json({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }); });
   const send = vi.fn(async (message: string) => { order.push('direct'); return message; });
   await expect(withMuseTailscalePreflight(send, async () => ({ getState: () => c.getState(), fetch }))('muse_prompt="質問"')).resolves.toBe('muse_prompt="質問"');
-  expect(order).toEqual(['tailnet', 'direct']); expect(send).toHaveBeenCalledOnce(); expect(runtime.start).not.toHaveBeenCalled();
+  expect(order).toEqual(['tailnet', 'direct']); expect(send).toHaveBeenCalledOnce(); expect(calls.start).toHaveLength(0);
 });
-it('stored healthy does not allow a stopped runtime to fetch or submit', async () => {
-  runtime.running = false; runtime.stored.status = 'healthy';
-  const c = instance(); const fetch = vi.fn(); const send = vi.fn();
+
+it('a stopped runtime does not fetch or submit', async () => {
+  const { c, calls } = instance(false); const fetch = vi.fn(); const send = vi.fn();
   await expect(withMuseTailscalePreflight(send, async () => ({ getState: () => c.getState(), fetch }))('muse_prompt="質問"')).rejects.toThrow('停止中');
-  expect(fetch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled(); expect(runtime.start).not.toHaveBeenCalled();
-});
-it('preserves healthy when runtime agrees, and preserves stopping during an explicit stop', async () => {
-  runtime.stored.status = 'healthy'; expect(await instance().getState()).toEqual(runtime.stored);
-  runtime.stored.status = 'stopping'; expect(await instance().getState()).toEqual(runtime.stored);
+  expect(fetch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled(); expect(calls.start).toHaveLength(0);
 });

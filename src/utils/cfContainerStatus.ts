@@ -1,7 +1,7 @@
 /**
  * 対象: /cf-containers(Cloudflare Containersのデモ用管理ページ)が使う、
  * DBアクセス・fetchを含まない純粋関数(CLAUDE.mdルール15)。
- * 実際のContainer状態取得(@cloudflare/containersのgetState())や起動/停止
+ * 実際のContainer状態取得(DemoContainer.getState())や起動/停止
  * 操作自体はindex.ts側で行い、ここではその結果の解釈・表示整形・入力検証
  * だけを担う。
  */

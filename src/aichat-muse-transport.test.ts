@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
 const container = vi.hoisted(() => ({ getState: vi.fn(), fetch: vi.fn() }));
-vi.mock('@cloudflare/containers', () => ({ getContainer: () => container }));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => container }));
 const worker = { fetch: vi.fn() };
 const ns = { idFromName: vi.fn(() => 'muse'), get: vi.fn(() => worker) };
 const rust = { fetch: vi.fn() };

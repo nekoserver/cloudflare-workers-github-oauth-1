@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
 const container = vi.hoisted(() => ({ getState: vi.fn(), fetch: vi.fn() }));
-vi.mock('@cloudflare/containers', () => ({ getContainer: () => container }));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => container }));
 const taskStub = { fetch: vi.fn(async () => Response.json({ status: 'pending' }, { status: 202 })) };
 const AICHAT_JOB = { idFromName: vi.fn((id: string) => id), get: vi.fn(() => taskStub) };
 const secret = 'tailscale-durable-task-test';
