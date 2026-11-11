@@ -273,6 +273,7 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
   const jobsWith = (state: string, reply: string | null = null) => ({ jobs: [{ jobId: 'j', createdAt: 'x', messages: [{ messageId: 'm1', agent: 'user', prompt: 'p', state, reply }] }] });
   const stateCell = () => $('mwt-jobs').querySelector('tr td:nth-child(3)') as HTMLElement;
   const toast = () => $('mwt-toast');
+  const toastText = () => $('mwt-toast-text');
 
   it('sendingは点滅させ、doneは緑、failed・delivery_unknownは赤で表示する', async () => {
     let state = 'sending';
@@ -324,13 +325,13 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     $('mwt-submit').click();
     await flush(); await flush();
     expect(toast().hidden).toBe(false);
-    expect(toast().textContent).toContain('0秒');
+    expect(toastText().textContent).toContain('0秒');
     expect(Number(toast().style.zIndex)).toBeGreaterThan(0);
     const tick = intervals.find((i) => i.ms === 1000 && !i.cleared)!;
     expect(tick).toBeTruthy();
     clock.now += 12_000;
     tick.fn();
-    expect(toast().textContent).toContain('12秒');
+    expect(toastText().textContent).toContain('12秒');
     state = 'sending';
     intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
     await flush(); await flush();
@@ -341,8 +342,8 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
     await flush(); await flush();
     expect(toast().classList.contains('mwt-toast-ok')).toBe(true);
-    expect(toast().textContent).toContain('合格');
-    expect(toast().textContent).toContain('15秒');
+    expect(toastText().textContent).toContain('合格');
+    expect(toastText().textContent).toContain('15秒');
     expect(tick.cleared).toBe(true);
   });
 
@@ -357,7 +358,7 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
     await flush(); await flush();
     expect(toast().classList.contains('mwt-toast-bad')).toBe(true);
-    expect(toast().textContent).toContain('失敗');
+    expect(toastText().textContent).toContain('失敗');
   });
 
   it('「結果をトースト表示」を外すとトーストを出さない', async () => {
@@ -380,11 +381,29 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     $<HTMLTextAreaElement>('mwt-request').value = '要望';
     $('mwt-submit').click();
     await flush(); await flush();
-    expect(toast().classList.contains('mwt-toast-blink')).toBe(true);
+    expect(toastText().classList.contains('mwt-toast-blink')).toBe(true);
     state = 'done';
     intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
     await flush(); await flush();
-    expect(toast().classList.contains('mwt-toast-blink')).toBe(false);
+    expect(toastText().classList.contains('mwt-toast-blink')).toBe(false);
+  });
+
+  it('トーストは通知カードの形(アイコン・本文・差出元)で、本文を変えてもアイコンと差出元は残る', async () => {
+    let state = 'queued';
+    const { deps, intervals } = setup({ api: async (url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm1', state: 'queued' } : url === JOBS_URL ? jobsWith(state) : {}) });
+    await script.initMuseWasmTest(deps);
+    $<HTMLTextAreaElement>('mwt-request').value = '要望';
+    $('mwt-submit').click();
+    await flush(); await flush();
+    const parts = () => [...toast().children].map((c) => c.className.split(' ')[0]);
+    expect(parts()).toEqual(['mwt-toast-icon', 'mwt-toast-text', 'mwt-toast-from']);
+    expect(toast().querySelector('.mwt-toast-icon')!.getAttribute('aria-hidden')).toBe('true');
+    expect(toast().querySelector('.mwt-toast-from')!.textContent).toBe('Museから');
+    state = 'done';
+    intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
+    await flush(); await flush();
+    expect(parts()).toEqual(['mwt-toast-icon', 'mwt-toast-text', 'mwt-toast-from']);
+    expect(toast().querySelector('.mwt-toast-from')!.textContent).toBe('Museから');
   });
 
   it('一覧に、受付から終了までにかかった時間(送信待ちと送信の内訳)を残す', async () => {
@@ -448,7 +467,7 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     msg = { ...msg, state: 'done', reply: 'ok', queuedAt: '2026-11-11T06:00:00.000Z', startedAt: '2026-11-11T06:00:02.000Z', finishedAt: '2026-11-11T06:00:20.000Z' };
     intervals.find((i) => i.ms === 5000 && !i.cleared)!.fn();
     await flush(); await flush();
-    expect(toast().textContent).toBe('合格(20秒)');
+    expect(toastText().textContent).toBe('合格(20秒)');
   });
 
   it('点滅は動きを減らす設定で止め、色はテーマの変数を使う', () => {
@@ -457,8 +476,14 @@ describe('/muse-wasm-testの要望: 状態の表示・一覧のトグル・結�
     expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mwt-blink \{ animation: none/);
     expect(html).toMatch(/\.mwt-ok \{ color: var\(--success-color\)/);
     expect(html).toMatch(/\.mwt-bad \{ color: var\(--danger-color\)/);
-    expect(html).toMatch(/\.mwt-toast-ok \{[^}]*var\(--success-color\)/);
-    expect(html).toMatch(/\.mwt-toast-bad \{[^}]*var\(--danger-color\)/);
+    expect(html).toMatch(/\.mwt-toast-ok \.mwt-toast-text \{[^}]*var\(--success-color\)/);
+    expect(html).toMatch(/\.mwt-toast-bad \.mwt-toast-text \{[^}]*var\(--danger-color\)/);
+    // 通知カード: 角を大きく丸め、背景はカードの色、差出元は控えめな文字色。固定色は使わない
+    expect(html).toMatch(/\.mwt-toast \{[^}]*border-radius: 2\dpx/);
+    expect(html).toMatch(/\.mwt-toast \{[^}]*background: var\(--card-bg\)/);
+    expect(html).toMatch(/\.mwt-toast-from \{[^}]*color: var\(--text-secondary\)/);
+    expect(html).toMatch(/\.mwt-toast-icon \{[^}]*color: var\(--accent-color\)/);
+    for (const rule of html.match(/\.mwt-toast[^{]*\{[^}]*\}/g) ?? []) expect(rule, rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(html).not.toContain('var(--bg-primary)');
     expect(html).toMatch(/\.mwt-toast-blink \{[^}]*animation:/);
     expect(html).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mwt-toast-blink \{ animation: none/);
