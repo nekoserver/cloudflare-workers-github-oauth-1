@@ -147,6 +147,70 @@ export const MUSE_WASM_TEST_SCRIPT = `
       var MWT_JOBS_URL = '/api/tailscale-wasm/jobs';
       var MWT_PENDING = { queued: true, sending: true };
       var jobPoll = null;
+      var listShown = false;
+      var toast = { enabled: true, messageId: null, startedAt: 0, timer: null };
+
+      function mwtStateClass(state) {
+        if (state === 'sending') return 'mwt-blink';
+        if (state === 'done') return 'mwt-ok';
+        if (state === 'failed' || state === 'delivery_unknown') return 'mwt-bad';
+        return '';
+      }
+      /** 開いているposition:fixedの要素より手前に出すz-index(CLAUDE.md ルール26)。 */
+      function mwtNextZ() {
+        var max = 0;
+        var view = doc.defaultView;
+        var nodes = doc.querySelectorAll('body *');
+        for (var i = 0; i < nodes.length; i++) {
+          var style = view && view.getComputedStyle ? view.getComputedStyle(nodes[i]) : null;
+          if (!style || (style.position !== 'fixed' && style.position !== 'sticky')) continue;
+          var z = parseInt(style.zIndex, 10);
+          if (z > max) max = z;
+        }
+        return max + 100;
+      }
+      function toastSeconds() { return Math.max(0, Math.floor((deps.now() - toast.startedAt) / 1000)); }
+      function stopToastTimer() {
+        if (toast.timer !== null) { deps.clearInterval(toast.timer); toast.timer = null; }
+      }
+      function hideToast() {
+        stopToastTimer();
+        toast.messageId = null;
+        el('mwt-toast').hidden = true;
+      }
+      function showToast(className, text) {
+        var box = el('mwt-toast');
+        box.className = 'mwt-toast ' + className;
+        box.textContent = text;
+        if (box.hidden) { box.style.zIndex = String(mwtNextZ()); box.hidden = false; }
+      }
+      function tickToast(state) {
+        showToast('mwt-toast-run', '送信中(' + (state || 'queued') + ')… ' + toastSeconds() + '秒経過');
+      }
+      function startToast(messageId) {
+        if (!toast.enabled) return;
+        stopToastTimer();
+        toast.messageId = messageId;
+        toast.startedAt = deps.now();
+        toast.state = 'queued';
+        tickToast(toast.state);
+        toast.timer = deps.setInterval(function() { tickToast(toast.state); }, 1000);
+      }
+      function followToast(state) {
+        if (!toast.enabled || toast.timer === null) return;
+        toast.state = state;
+        if (state === 'done') { stopToastTimer(); showToast('mwt-toast-ok', '合格(' + toastSeconds() + '秒)'); }
+        else if (state === 'failed' || state === 'delivery_unknown') { stopToastTimer(); showToast('mwt-toast-bad', '失敗(' + toastSeconds() + '秒、' + state + ')'); }
+        else tickToast(state);
+      }
+      function toggleList() {
+        listShown = !listShown;
+        el('mwt-jobs-list').hidden = !listShown;
+        el('mwt-jobs-toggle').textContent = listShown ? '一覧を隠す' : '一覧を表示';
+        el('mwt-jobs-toggle').setAttribute('aria-expanded', listShown ? 'true' : 'false');
+        if (listShown) return loadJobs();
+        return Promise.resolve();
+      }
       function stopJobPoll() {
         if (jobPoll !== null) { deps.clearInterval(jobPoll); jobPoll = null; }
       }
@@ -158,7 +222,8 @@ export const MUSE_WASM_TEST_SCRIPT = `
         jobs.forEach(function(job) {
           (job.messages || []).forEach(function(message) {
             if (MWT_PENDING[message.state]) pending = true;
-            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, message.state + (message.error ? ' ' + message.error : ''), message.reply === null || message.reply === undefined ? '' : message.reply]);
+            rows.push([job.createdAt + ' ' + message.messageId, message.prompt, { text: message.state + (message.error ? ' ' + message.error : ''), className: mwtStateClass(message.state) }, message.reply === null || message.reply === undefined ? '' : message.reply]);
+            if (toast.messageId === message.messageId) followToast(message.state);
           });
         });
         if (!rows.length) {
@@ -171,9 +236,10 @@ export const MUSE_WASM_TEST_SCRIPT = `
         }
         rows.forEach(function(values) {
           var row = doc.createElement('tr');
-          values.forEach(function(value) {
+          values.forEach(function(value, index) {
             var td = doc.createElement('td');
-            td.textContent = value;
+            td.textContent = value.text === undefined ? value : value.text;
+            if (index === 2 && value.className) td.className = value.className;
             row.appendChild(td);
           });
           tbody.appendChild(row);
@@ -206,6 +272,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
           if (data && data.ok && typeof data.messageId === 'string') {
             setText('mwt-submit-result', '受け付けました: ' + data.messageId + '(Workerがmuse-vmのMuseへ送ります)');
             input.value = '';
+            startToast(data.messageId);
             startJobPoll();
             return loadJobs();
           }
@@ -256,7 +323,12 @@ export const MUSE_WASM_TEST_SCRIPT = `
       el('mwt-check-now').addEventListener('click', function() { checkAll(); });
       el('mwt-interval').addEventListener('change', applyInterval);
       el('mwt-submit').addEventListener('click', function() { submitJob(); });
-      el('mwt-jobs-reload').addEventListener('click', function() { loadJobs(); });
+      el('mwt-jobs-toggle').addEventListener('click', function() { toggleList(); });
+      el('mwt-toast-enabled').addEventListener('change', function() {
+        toast.enabled = el('mwt-toast-enabled').checked;
+        if (!toast.enabled) hideToast();
+      });
+      el('mwt-toast').addEventListener('click', function() { if (toast.timer === null) hideToast(); });
       MWT_MON_SECTIONS.forEach(function(pair) {
         var option = doc.createElement('option');
         option.value = pair[0];
@@ -292,12 +364,21 @@ export function getMuseWasmTestPage(): string {
     h2 { font-size: 16px; margin: 0 0 8px; }
     .mwt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
     .mwt-meta { color: var(--text-secondary); font-size: 13px; }
-    .mwt-error { color: #cf222e; font-size: 13px; }
+    .mwt-error { color: var(--danger-color); font-size: 13px; }
     .mwt-scroll { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; font-size: 13px; }
     th, td { border-bottom: 1px solid var(--border-color); padding: 4px 6px; text-align: left; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
-    tr.mwt-ng td { color: #cf222e; }
-    textarea { width: 100%; box-sizing: border-box; min-height: 90px; font: inherit; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; }
+    tr.mwt-ng td { color: var(--danger-color); }
+    .mwt-ok { color: var(--success-color); font-weight: 600; }
+    .mwt-bad { color: var(--danger-color); font-weight: 600; }
+    .mwt-blink { animation: mwt-blink 1s step-start infinite; }
+    @keyframes mwt-blink { 50% { opacity: 0.25; } }
+    @media (prefers-reduced-motion: reduce) { .mwt-blink { animation: none; text-decoration: underline; } }
+    .mwt-toast { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); max-width: min(90vw, 480px); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); box-shadow: 0 6px 20px color-mix(in srgb, var(--text-primary) 25%, transparent); font-weight: 600; text-align: center; cursor: default; }
+    .mwt-toast[hidden] { display: none; }
+    .mwt-toast-ok { background: color-mix(in srgb, var(--success-color) 22%, var(--card-bg)); border-color: var(--success-color); cursor: pointer; }
+    .mwt-toast-bad { background: color-mix(in srgb, var(--danger-color) 18%, var(--card-bg)); border-color: var(--danger-color); cursor: pointer; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 90px; font: inherit; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; }
     input[type=number] { width: 6em; }
   </style>
 </head>
@@ -327,12 +408,14 @@ export function getMuseWasmTestPage(): string {
       <h2>要望を渡す</h2>
       <p class="mwt-meta">要望はWorkerのジョブ台帳(MuseAgentJobs)に積まれ、WorkerのTailscale WASMノードがmuse-vmのMuseへ送ります。コンテナ上のエージェントは使いません。処理中は5秒ごとに一覧を読み直します。</p>
       <textarea id="mwt-request" aria-label="要望" maxlength="8000" placeholder="例: muse-monitorの状態を確認して"></textarea>
-      <p class="mwt-row"><button type="button" id="mwt-submit">送る</button></p>
+      <p class="mwt-row"><button type="button" id="mwt-submit">送る</button>
+        <label><input type="checkbox" id="mwt-toast-enabled" checked> 結果をトースト表示</label></p>
       <p id="mwt-submit-result" class="mwt-meta" role="status"></p>
-      <p class="mwt-row"><button type="button" id="mwt-jobs-reload">一覧を読み直す</button><span id="mwt-jobs-error" class="mwt-error"></span></p>
-      <div class="mwt-scroll"><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
+      <p class="mwt-row"><button type="button" id="mwt-jobs-toggle" aria-expanded="false" aria-controls="mwt-jobs-list">一覧を表示</button><span id="mwt-jobs-error" class="mwt-error"></span></p>
+      <div class="mwt-scroll" id="mwt-jobs-list" hidden><table><thead><tr><th scope="col">登録・message id</th><th scope="col">要望</th><th scope="col">状態</th><th scope="col">Museの返事</th></tr></thead><tbody id="mwt-jobs"></tbody></table></div>
     </section>
   </main>
+  <div id="mwt-toast" class="mwt-toast" role="status" aria-live="polite" hidden></div>
   <script>${getThemeToggleScript()}</script>
   <script>${MUSE_WASM_TEST_SCRIPT}</script>
   <script type="module">
