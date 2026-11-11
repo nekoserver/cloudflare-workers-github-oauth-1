@@ -6,8 +6,8 @@ const require=createRequire(import.meta.url);
 const server=require('../containers/demo/server.js');
 const df=readFileSync('containers/demo/Dockerfile','utf8');
 const arg=(n:string)=>df.match(new RegExp('^ARG '+n+'=(\\S+)','m'))?.[1];
-// Official metadata and downloaded binaries checked 2026-11-05; see REPORT.
-const VERIFIED={CLOUDFLARED_VERSION:'2026.10.7',TAILSCALE_VERSION:'1.104.5',CLAUDE_VERSION:'2.1.318',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
+// Official metadata and downloaded binaries checked 2026-11-05 (Claude 2026-11-11); see REPORT.
+const VERIFIED={CLOUDFLARED_VERSION:'2026.10.7',TAILSCALE_VERSION:'1.104.5',CLAUDE_VERSION:'2.1.322',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
 describe('container tools: verified precompiled releases',()=>{
  it('pins every requested tool to its verified release',()=>{for(const [n,v] of Object.entries(VERIFIED))expect(arg(n),n).toBe(v);});
  it('verifies downloaded archives and native Claude bytes',()=>{
@@ -15,7 +15,7 @@ describe('container tools: verified precompiled releases',()=>{
   expect(arg('TAILSCALE_SHA256')).toBe('720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7');
   expect(arg('PREPRINT_SHA256')).toBe('451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f');
   expect(arg('CHROME_SHA256')).toBe('a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d');
-  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd');
+  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478');
   for(const name of ['TAILSCALE','PREPRINT','CHROME','CLAUDE_NATIVE'])expect(df).toContain('${'+name+'_SHA256}');
  });
  it('uses official Tailscale binaries without a Go build',()=>{
