@@ -456,6 +456,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.20261107.md)
   [`NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md)
   [`NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)
+- Worker由来のTailscaleノード(`main-worker-muse`・`muse-monitor`)の所在と状態の保存先、ブラウザをノードにすると毎回ログインが要る理由、Museへの要望の2つの仕組み(`bridge_jobs`は手動・`MuseAgentJobs`は自動)と`failed`の理由:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261110.md`](NOTICE.cloudflare-workers-github-oauth-1.20261110.md)
 - `/muse-status`のTailscale WASM経由の取得(`@tailscale/connect`の`fetch`の制約・ルートのCSP・`/health`の性質・このコンテナでの検証の注意・再ビルドの判断):
   [`NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md)
 - コミットとファイルの関連付け(`commit_file_changes`テーブル。「どのコミットがどのファイルを変更したか」の汎用記録。push webhook経由の自動蓄積が主経路、dynamicneko `/api/tree-view/commit-files`からの"ついで書き込み"による段階的バックフィルが補助経路。関連する既存の`ai_summary_files`はPR/push単位でしかファイルを持たず個別コミットに紐付かない点に注意)。この関係の実装・調査をする際は、必ず先にこのSPECを読むこと:
