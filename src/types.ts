@@ -2,7 +2,7 @@
  * 共通型定義
  */
 import type { JWTPayload } from './utils/jwt';
-// import typeのため実行時にはこの行自体が消える(@cloudflare/containersの
+// import typeのため実行時にはこの行自体が消える(demoContainer.tsの
 // cloudflare:workers importも実行されない)。プレーンNode環境のテストが
 // このファイルをimportしても問題ない。
 import type { DemoContainer } from './containers/demoContainer';

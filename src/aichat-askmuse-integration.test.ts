@@ -3,7 +3,7 @@ import app from './index';
 import { createJWT } from './utils/jwt';
 
 const stub = vi.hoisted(() => ({ getState: vi.fn(), fetch: vi.fn() }));
-vi.mock('@cloudflare/containers', () => ({ getContainer: () => stub }));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => stub }));
 
 describe('POST /api/aichat の /askmuse', () => {
   const JWT_SECRET = 'askmuse-test-secret';

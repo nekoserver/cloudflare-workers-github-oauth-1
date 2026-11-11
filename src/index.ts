@@ -621,6 +621,7 @@ import { RAIL_LINES } from './data/railLines';
 import { AIRPORT_LIST } from './data/airports';
 import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './utils/railLineStations';
 import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
+import { getDemoContainer } from './containers/demoContainerStub';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -20375,13 +20376,6 @@ app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) =
   return c.html(getCfDashboardPage());
 });
 
-/**
- * @cloudflare/containersはcloudflare:workers(workerdのみに存在する組み込み
- * モジュール)を読み込むため、プレーンNode環境のテストが./indexを直接
- * importしたときに巻き込まれて失敗しないよう、静的importせず実際に
- * リクエストを処理するときにだけdynamic importする
- * (src/containers/demoContainer.tsのコメント参照)。
- */
 function demoContainerOperationContext(env: Bindings) {
   return {
     containerKey: env.DEMO_CONTAINER ? 'DemoContainer:' + env.DEMO_CONTAINER.idFromName('demo').toString() : undefined,
@@ -20391,10 +20385,13 @@ function demoContainerOperationContext(env: Bindings) {
   };
 }
 
+/**
+ * 本体demoコンテナのスタブ。demoContainer.ts(cloudflare:workersを読み込む)は
+ * 静的importせず、名前'demo'のDurable ObjectをdemoContainerStub.tsで取り出す。
+ */
 async function getDemoContainerStub(env: Bindings) {
   if (!env.DEMO_CONTAINER) return null;
-  const { getContainer } = await import('@cloudflare/containers');
-  return getContainer(env.DEMO_CONTAINER, 'demo');
+  return getDemoContainer(env.DEMO_CONTAINER);
 }
 
 async function buildContainerStatusResponse(

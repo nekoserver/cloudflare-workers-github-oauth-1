@@ -12,7 +12,7 @@ const stub = vi.hoisted(() => ({
     ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
     : new Response('unexpected', { status: 500 })),
 }));
-vi.mock('@cloudflare/containers', () => ({ getContainer: () => stub }));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => stub }));
 
 describe('/neko askgk Codex/Claude/Museの応答ログ', () => {
   it.each([

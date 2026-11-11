@@ -2,10 +2,8 @@
  * /cf-containers・/api/cf-containers/* のテスト。
  *
  * 対象: Cloudflare Containersのデモ用管理ページ(管理者限定)。
- * @cloudflare/containersはcloudflare:workers(workerdのみに存在する組み込み
- * モジュール)を読み込むため、プレーンNode環境のこのテストでは
- * vi.mock('@cloudflare/containers', ...)で実体を差し替える(dynamic import
- * もvi.mockの対象になる)。
+ * DemoContainerのスタブはsrc/containers/demoContainerStub.tsのgetDemoContainerで
+ * 取り出すため、このテストではそれをvi.mockで差し替える。
  *
  * 故障シナリオ:
  *   (1) 未ログイン・管理者以外がstatus/action/proxyへ到達してしまう
@@ -31,8 +29,8 @@ const stubMethods = {
   fetch: vi.fn(),
 };
 
-vi.mock('@cloudflare/containers', () => ({
-  getContainer: vi.fn(() => stubMethods),
+vi.mock('./containers/demoContainerStub', () => ({
+  getDemoContainer: vi.fn(() => stubMethods),
 }));
 
 import app from './index';

@@ -1,32 +1,55 @@
-import {beforeEach,expect,it,vi} from 'vitest';
-const calls=vi.hoisted(()=>({state:{status:'stopped',lastChange:1},start:vi.fn(),stop:vi.fn()}));
-vi.mock('@cloudflare/containers',()=>({Container:class{
- envVars={};
- ctx={container:{get running(){return calls.state.status==='running'||calls.state.status==='healthy';}}};
- async getState(){return {...calls.state};}
- async start(){await calls.start();calls.state={status:'running',lastChange:2};}
- async stop(){await calls.stop();calls.state={status:'stopped',lastChange:3};}
-}}));
-import {DemoContainer} from './demoContainer';
-beforeEach(()=>{calls.state={status:'stopped',lastChange:1};calls.start.mockReset();calls.stop.mockReset();});
-const container=()=>new DemoContainer({} as never,{} as never);
-it('start/stop round trip and repeated desired states are idempotent',async()=>{
- const instance=container();expect(await instance.setRunning(true)).toMatchObject({changed:true,state:{status:'running'}});
- expect(await instance.setRunning(true)).toMatchObject({changed:false});expect(calls.start).toHaveBeenCalledTimes(1);
- expect(await instance.setRunning(false)).toMatchObject({changed:true,state:{status:'stopped'}});
- expect(await instance.setRunning(false)).toMatchObject({changed:false});expect(calls.stop).toHaveBeenCalledTimes(1);
+import { beforeEach, expect, it, vi } from 'vitest';
+
+// SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md 3章の2・3。
+vi.mock('cloudflare:workers', () => ({
+  DurableObject: class { ctx: unknown; env: unknown; constructor(ctx: unknown, env: unknown) { this.ctx = ctx; this.env = env; } },
+}));
+vi.mock('../utils/cfContainerOperationLog', () => ({ recordContainerOperation: async () => {} }));
+import { DemoContainer } from './demoContainer';
+import { createFakeCtx } from './demoContainerFakeCtx';
+
+let fake: ReturnType<typeof createFakeCtx>;
+let instance: DemoContainer;
+beforeEach(() => {
+  fake = createFakeCtx();
+  instance = new DemoContainer(fake.ctx as never, {} as never);
+  (instance as unknown as { sleep: () => Promise<void> }).sleep = async () => {};
 });
-it('shares the lock with management-page start/stop/restart and releases after failure',async()=>{
- let release!:()=>void;calls.start.mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve;}));
- const instance=container();const pending=instance.setRunning(true);
- await vi.waitFor(()=>expect(calls.start).toHaveBeenCalledOnce());
- await expect(instance.stop()).rejects.toThrow('別の操作');await expect(instance.restart()).rejects.toThrow('別の操作');await expect(instance.setRunning(false)).rejects.toThrow('別の操作');
- release();await pending;await instance.setRunning(false);
- calls.start.mockRejectedValueOnce(new Error('start failed'));await expect(instance.setRunning(true)).rejects.toThrow('start failed');await expect(instance.setRunning(true)).resolves.toMatchObject({changed:true});
+
+it('start/stop round trip and repeated desired states are idempotent', async () => {
+  expect(await instance.setRunning(true)).toMatchObject({ changed: true, state: { status: 'healthy' } });
+  expect(await instance.setRunning(true)).toMatchObject({ changed: false });
+  expect(fake.calls.start).toHaveLength(1);
+  expect(await instance.setRunning(false)).toMatchObject({ changed: true, state: { status: 'stopped' } });
+  expect(await instance.setRunning(false)).toMatchObject({ changed: false });
+  expect(fake.calls.signal).toHaveLength(1);
 });
-it('does not infer stopped from unknown state, and does not start while stopping',async()=>{
- const instance=container();calls.state={status:'unknown',lastChange:1};await expect(instance.setRunning(true)).rejects.toThrow('状態');
- calls.state={status:'stopping',lastChange:1};await expect(instance.setRunning(true)).rejects.toThrow('停止処理中');
- expect(await instance.setRunning(false)).toMatchObject({changed:false,state:{status:'stopping'}});
- await expect(instance.setRunning('yes' as never)).rejects.toThrow('不正');expect(calls.start).not.toHaveBeenCalled();
+
+it('shares the lock with management-page start/stop/restart and releases after failure', async () => {
+  let release!: () => void;
+  fake.state.pingFailures = 1;
+  (instance as unknown as { sleep: () => Promise<void> }).sleep = () => new Promise<void>((resolve) => { release = resolve; });
+  const pending = instance.setRunning(true);
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  await expect(instance.stop()).rejects.toThrow('別の操作');
+  await expect(instance.restart()).rejects.toThrow('別の操作');
+  await expect(instance.setRunning(false)).rejects.toThrow('別の操作');
+  (instance as unknown as { sleep: () => Promise<void> }).sleep = async () => {};
+  release();
+  await pending;
+  await instance.setRunning(false);
+  fake.state.crashOnStart = true;
+  await expect(instance.setRunning(true)).rejects.toThrow('止まりました');
+  fake.state.crashOnStart = false;
+  await expect(instance.setRunning(true)).resolves.toMatchObject({ changed: true });
+});
+
+it('does not start while stopping, and rejects a non-boolean', async () => {
+  await instance.setRunning(true);
+  fake.state.stopsOnSigterm = false;
+  await instance.stop();
+  await expect(instance.setRunning(true)).rejects.toThrow('停止処理中');
+  expect(await instance.setRunning(false)).toMatchObject({ changed: false, state: { status: 'stopping' } });
+  await expect(instance.setRunning('yes' as never)).rejects.toThrow('不正');
+  expect(fake.calls.start).toHaveLength(1);
 });

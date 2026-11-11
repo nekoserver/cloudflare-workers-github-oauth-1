@@ -458,6 +458,9 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)
 - demoコンテナのイメージをdigestで固定した経緯(Workers BuildsのDockerビルドが`runc ... mounting "proc" ... operation not permitted`で落ちる)と、コンテナを変えるときの手順(`image.lock.json`):
   [`NOTICE.cloudflare-workers-github-oauth-1.20261111.md`](NOTICE.cloudflare-workers-github-oauth-1.20261111.md)
+- demoコンテナを`@cloudflare/containers`(非推奨)からDurable Object Container API(`this.ctx.container`)へ移した経緯、旧クラスが裏でしていたこと(ポートの待ち・インターネット許可・アラームで起こし続けるループ)、停止の記録とスナップショットの制約:
+  [`SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md`](SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261111.md`](NOTICE.cloudflare-workers-github-oauth-1.20261111.md)の後半
 - Worker由来のTailscaleノード(`main-worker-muse`・`muse-monitor`)の所在と状態の保存先、ブラウザをノードにすると毎回ログインが要る理由、Museへの要望の2つの仕組み(`bridge_jobs`は手動・`MuseAgentJobs`は自動)と`failed`の理由:
   [`NOTICE.cloudflare-workers-github-oauth-1.20261110.md`](NOTICE.cloudflare-workers-github-oauth-1.20261110.md)
 - `/muse-status`のTailscale WASM経由の取得(`@tailscale/connect`の`fetch`の制約・ルートのCSP・`/health`の性質・このコンテナでの検証の注意・再ビルドの判断):
