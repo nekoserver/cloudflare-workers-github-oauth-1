@@ -147,6 +147,31 @@ describe('/muse-wasm-testの要望(Workerのジョブ台帳 MuseAgentJobs)', () 
     expect(list.querySelector('b, script')).toBeNull();
   });
 
+  it('「コンテナの版の一覧をMuseに渡す」は一覧の送信APIを呼び、受け付けたらトーストで追う', async () => {
+    const VERSIONS_URL = '/api/container-versions/send-to-muse';
+    const { deps, fetchJson } = setup({ api: async (url, init) => (isPost(init) && url === VERSIONS_URL ? { ok: true, jobId: 'j', messageId: 'container-versions-1', state: 'queued', count: 17 } : url === JOBS_URL ? { jobs: [] } : {}) });
+    await script.initMuseWasmTest(deps);
+    $('mwt-versions-send').click();
+    await flush(); await flush();
+    const post = fetchJson.mock.calls.find(([url, init]) => url === VERSIONS_URL && isPost(init));
+    expect(post).toBeTruthy();
+    expect($('mwt-submit-result').textContent).toContain('container-versions-1');
+    expect($('mwt-submit-result').textContent).toContain('17件');
+    expect($('mwt-submit-result').textContent).toContain('~/workspace/container-versions.md');
+    expect($('mwt-toast').hidden).toBe(false);
+    expect(($('mwt-versions-send') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('一覧が送れないときは理由を出す(記録が無い・上限を超える)', async () => {
+    const { deps } = setup({ api: async (url, init) => (isPost(init) ? { ok: false, error: 'no_data', detail: 'cf_container_package_release_status に記録がありません' } : url === JOBS_URL ? { jobs: [] } : {}) });
+    await script.initMuseWasmTest(deps);
+    $('mwt-versions-send').click();
+    await flush(); await flush();
+    expect($('mwt-submit-result').textContent).toContain('送れませんでした');
+    expect($('mwt-submit-result').textContent).toContain('記録がありません');
+    expect($('mwt-toast').hidden).toBe(true);
+  });
+
   it('処理中(queued・sending)がある間は5秒ごとに一覧を読み直し、片付いたら止める', async () => {
     let state = 'queued';
     const { deps, intervals, fetchJson } = setup({ api: async (_url, init) => (isPost(init) ? { ok: true, jobId: 'j', messageId: 'm', state: 'queued' } : { jobs: [{ jobId: 'j', createdAt: 'x', messages: [{ messageId: 'm', agent: 'user', prompt: 'p', state, reply: null }] }] }) });

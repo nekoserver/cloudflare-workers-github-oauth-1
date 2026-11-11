@@ -67,6 +67,7 @@ import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
 import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
+import { sendContainerVersionsToMuse } from './utils/containerVersionsForMuse';
 import { fetchBuildActivity, fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { buildBannerState } from './utils/cfContainerBanner';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
@@ -20538,6 +20539,16 @@ async function forwardMuseJobs(env: Bindings, owner: string, path: string, body?
   return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
 app.get('/api/tailscale-wasm/jobs', authMiddleware, cfDashboardAdminMiddleware, c => forwardMuseJobs(c.env, c.get('user').sub, ''));
+// 各コンテナの版の一覧(D1)を、Museへの要望として渡す。Museは muse-vm の ~/workspace/container-versions.md に保存して更新する。
+app.post('/api/container-versions/send-to-muse', authMiddleware, cfDashboardAdminMiddleware, async c => {
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return c.json({ error: 'cross_origin_forbidden' }, 403);
+  if (!c.env.DB) return c.json({ ok: false, error: 'db_not_configured', detail: 'D1(DB)が未設定です' }, 503);
+  const owner = c.get('user').sub;
+  const result = await sendContainerVersionsToMuse(c.env.DB, body => forwardMuseJobs(c.env, owner, '', body));
+  if (!result.ok) return c.json({ ok: false, error: result.errorCode, detail: result.detail }, result.errorCode === 'no_data' ? 404 : 413);
+  const data = await result.response.json().catch(() => ({ error: 'invalid_response' })) as Record<string, unknown>;
+  return c.json({ ...data, count: result.count }, result.response.status as 200);
+});
 app.get('/api/tailscale-wasm/jobs/changes', authMiddleware, cfDashboardAdminMiddleware, c => {
   const consumer = c.req.query('consumer');
   if (consumer !== 'codex' && consumer !== 'claude') return c.json({ error: 'invalid_consumer' }, 400);

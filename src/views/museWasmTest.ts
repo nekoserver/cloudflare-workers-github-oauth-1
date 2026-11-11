@@ -308,6 +308,26 @@ export const MUSE_WASM_TEST_SCRIPT = `
           setText('mwt-submit-result', '送れませんでした: ' + (error && error.message ? error.message : String(error)));
         }).then(function() { el('mwt-submit').disabled = false; });
       }
+      function sendVersions() {
+        var button = el('mwt-versions-send');
+        button.disabled = true;
+        setText('mwt-submit-result', 'コンテナの版の一覧を送信中…');
+        return deps.fetchJson('/api/container-versions/send-to-muse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        }).then(function(data) {
+          if (data && data.ok && typeof data.messageId === 'string') {
+            setText('mwt-submit-result', 'コンテナの版の一覧(' + (data.count || 0) + '件)を受け付けました: ' + data.messageId + '(Museが ~/workspace/container-versions.md に保存して更新します)');
+            startToast(data.messageId);
+            startJobPoll();
+            return loadJobs();
+          }
+          setText('mwt-submit-result', '送れませんでした: ' + ((data && (data.detail || data.error)) || '理由が返りませんでした'));
+        }).catch(function(error) {
+          setText('mwt-submit-result', '送れませんでした: ' + (error && error.message ? error.message : String(error)));
+        }).then(function() { button.disabled = false; });
+      }
       function monText(data) {
         if (data && typeof data.errorCode === 'string') {
           return { ok: false, text: 'エラー(' + data.errorCode + (data.upstreamStatus ? ', HTTP ' + data.upstreamStatus : '') + '): ' + (data.error || '理由が返りませんでした') };
@@ -350,6 +370,7 @@ export const MUSE_WASM_TEST_SCRIPT = `
       el('mwt-check-now').addEventListener('click', function() { checkAll(); });
       el('mwt-interval').addEventListener('change', applyInterval);
       el('mwt-submit').addEventListener('click', function() { submitJob(); });
+      el('mwt-versions-send').addEventListener('click', function() { sendVersions(); });
       el('mwt-jobs-toggle').addEventListener('click', function() { toggleList(); });
       el('mwt-toast-enabled').addEventListener('change', function() {
         toast.enabled = el('mwt-toast-enabled').checked;
@@ -443,7 +464,7 @@ export function getMuseWasmTestPage(): string {
       <h2>要望を渡す</h2>
       <p class="mwt-meta">要望はWorkerのジョブ台帳(MuseAgentJobs)に積まれ、WorkerのTailscale WASMノードがmuse-vmのMuseへ送ります。コンテナ上のエージェントは使いません。処理中は5秒ごとに一覧を読み直します。</p>
       <textarea id="mwt-request" aria-label="要望" maxlength="8000" placeholder="例: muse-monitorの状態を確認して"></textarea>
-      <p class="mwt-row"><button type="button" id="mwt-submit">送る</button>
+      <p class="mwt-row"><button type="button" id="mwt-submit">送る</button> <button type="button" id="mwt-versions-send">コンテナの版の一覧をMuseに渡す</button>
         <label><input type="checkbox" id="mwt-toast-enabled" checked> 結果をトースト表示</label></p>
       <p id="mwt-submit-result" class="mwt-meta" role="status"></p>
       <p class="mwt-row"><button type="button" id="mwt-jobs-toggle" aria-expanded="false" aria-controls="mwt-jobs-list">一覧を表示</button><span id="mwt-jobs-error" class="mwt-error"></span></p>
