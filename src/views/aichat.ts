@@ -8077,7 +8077,7 @@ ${AICHAT_PENDING_SCRIPT}
     // 画面間で表示が食い違わないよう、ここでも同じ固定色を優先する
     // (2026-10-08、サイドパネルと質問文パネルでclaudeの色が食い違う
     // 不具合の修正)。
-    var FIXED_MODEL_DOT_COLORS = { claude: '#f97316' };
+    var FIXED_MODEL_DOT_COLORS = { claude: '#f97316', muse: '#2563eb' };
     function getModelDotColor(modelId) {
       return FIXED_MODEL_DOT_COLORS[modelId] || (MODEL_COLORS && MODEL_COLORS[modelId]) || '';
     }
