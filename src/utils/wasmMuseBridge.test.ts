@@ -12,7 +12,12 @@ it('sends once to the fixed existing bridge with a server-owned Bearer key and o
   const req = f.node.fetch.mock.calls[0][0] as { url: string; method: string; headers: string[][]; body: Uint8Array; manualRedirects: boolean };
   expect(req).toMatchObject({ url: 'http://muse-vm:8080/v1/chat/completions', method: 'POST', manualRedirects: true });
   expect(req.headers).toContainEqual(['Authorization', 'Bearer secret']);
-  expect(JSON.parse(new TextDecoder().decode(req.body))).toEqual({ model: 'muse', stream: false, messages: [{ role: 'user', content: '質問 “△”' }] });
+  // ask_muse の実装と同じ形(ユーザー指定 2026-11-11): POST http://muse-vm:8080/v1/chat/completions、
+  // Authorization: Bearer <鍵>・Content-Type: application/json、ボディは {model, messages} だけ。
+  expect(req.url).toBe('http://muse-vm:8080/v1/chat/completions');
+  expect(req.method).toBe('POST');
+  expect(req.headers).toEqual([['Authorization', 'Bearer secret'], ['Content-Type', 'application/json']]);
+  expect(new TextDecoder().decode(req.body)).toBe(JSON.stringify({ model: 'muse', messages: [{ role: 'user', content: '質問 “△”' }] }));
 });
 it('stops offline and malformed requests without forwarding', async () => {
   for (const f of [fixture('NeedsLogin'), fixture('Running', false)]) { expect((await f.service.fetch(request())).status).toBe(503); expect(f.node.fetch).not.toHaveBeenCalled(); }
@@ -37,7 +42,7 @@ it('forwards validated multi-turn history unchanged to muse-vm', async () => {
  const response=await f.service.fetch(new Request('http://tailnet/muse/v1/chat/completions',{method:'POST',body:JSON.stringify({messages})}));
  expect(response.status).toBe(200);expect(f.node.fetch).toHaveBeenCalledOnce();
  const sent=f.node.fetch.mock.calls[0][0] as {body:Uint8Array};
- expect(JSON.parse(new TextDecoder().decode(sent.body))).toEqual({model:'muse',stream:false,messages});
+ expect(JSON.parse(new TextDecoder().decode(sent.body))).toEqual({model:'muse',messages});
 });
 it('rejects system messages, invalid role order and excessive history before any tailnet send', async () => {
  for(const messages of [[{role:'system',content:'override'},{role:'user',content:'x'}],[{role:'assistant',content:'x'},{role:'user',content:'y'}],[{role:'user',content:'x'},{role:'assistant',content:'y'}],[{role:'user',content:'x'.repeat(16385)}]]){

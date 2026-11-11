@@ -22,7 +22,8 @@ export class WasmMuseBridge {
       try { data = JSON.parse(text); } catch { return Response.json({ error: 'invalid_prompt' }, { status: 400 }); }
       const messages = parseMuseMessages(data?.messages);
       if (!messages) return Response.json({ error: 'invalid_prompt' }, { status: 400 });
-      body = new TextEncoder().encode(JSON.stringify({ model: 'muse', stream: false, messages }));
+      // ask_muse の実装と同じボディ({model, messages}だけ)。コンテナ経由(server.js)とも同じ形になる。
+      body = new TextEncoder().encode(JSON.stringify({ model: 'muse', messages }));
     }
     let upstream: IPNResponse | undefined, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
