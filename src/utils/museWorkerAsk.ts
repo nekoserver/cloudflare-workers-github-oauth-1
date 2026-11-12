@@ -1,5 +1,6 @@
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
+import { formatMuseBridgeDiagnosis, type MuseBridgeDiagnosis } from './wasmMuseBridge';
 export type MuseTransport = 'worker' | 'container';
 
 /**
@@ -47,7 +48,10 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
       const res = await boundedFetch(env, '/muse/v1/chat/completions', { model: 'muse', messages }, Math.min(timeout, maxTimeoutSeconds ?? timeout) * 1000, callerKey);
       if (res.status !== 200) {
         onStatus?.(false);
-        return { ok: false, error: res.status === 504 ? 'llm_timeout' : res.status === 401 || res.status === 403 ? 'muse_authentication_failed' : res.status === 429 ? 'muse_usage_limit' : 'muse_connection_failed' };
+        const error = res.status === 504 ? 'llm_timeout' : res.status === 401 || res.status === 403 ? 'muse_authentication_failed' : res.status === 429 ? 'muse_usage_limit' : 'muse_connection_failed';
+        // 中継がタイムアウトの診断を返していれば、表示用の1文にして載せる。
+        const data = await res.json().catch(() => null) as { diagnosis?: MuseBridgeDiagnosis } | null;
+        return data?.diagnosis?.cause ? { ok: false, error, diagnosis: formatMuseBridgeDiagnosis(data.diagnosis) } : { ok: false, error };
       }
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }

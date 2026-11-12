@@ -34,7 +34,8 @@ export type MuseDirectError =
   | 'llm_timeout';
 
 // bridgeCommandはmuse-vmのapi-bridgeが推論せずに実行したコマンド名。応答のbridge_commandから読む。
-export type MuseDirectResult = { ok: true; reply: string; llmModel: string; bridgeCommand?: string } | { ok: false; error: MuseDirectError };
+// diagnosis: 失敗したとき、どの段階で止まったか(表示用の1文。Worker内WASMの中継が返す)。
+export type MuseDirectResult = { ok: true; reply: string; llmModel: string; bridgeCommand?: string } | { ok: false; error: MuseDirectError; diagnosis?: string };
 
 export type MuseContainer = { getState(): Promise<ContainerStateLike>; fetch(request: Request): Promise<Response> };
 
