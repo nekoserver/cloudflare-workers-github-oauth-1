@@ -5,6 +5,7 @@ import type { IPN } from '@ai-ecoverse/wasm-tailscale';
 import type { Bindings } from '../types';
 import { WasmTailnetService } from '../utils/wasmTailnetService';
 import { WasmMuseBridge } from '../utils/wasmMuseBridge';
+import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
 
 let ready: Promise<void> | undefined;
@@ -57,13 +58,12 @@ export class TailscaleWasm extends DurableObject<Bindings> {
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();
-    const status = () => { const raw = this.node.status(); return raw instanceof Error ? '' : JSON.parse(raw).state; };
     const key = this.env.TAILSCALE_WASM_AUTHKEY || this.env.TAILSCALE_AUTHKEY;
-    const deadline = Date.now() + 6000;
-    while (status() !== 'Running' && !this.autoLoginDisabled && key && Date.now() < deadline) {
-      if (status() === 'NeedsLogin' && !this.loginRequested) { this.loginRequested = true; this.node.login(key); }
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+    await waitForMuseNode({
+      snapshot: () => readMuseNodeSnapshot(this.node.status()),
+      canLogin: !this.autoLoginDisabled && !!key,
+      login: () => { if (!this.loginRequested && key) { this.loginRequested = true; this.node.login(key); } },
+    });
     return this.bridge.fetch(request);
   }
   async alarm() { await this.jobs.processOne(); }

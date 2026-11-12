@@ -2,7 +2,8 @@ import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkT
 import { isContainerRunning, type ContainerStateLike } from './cfContainerStatus';
 
 /**
- * `/askmuse prompt="..."` の実処理。Workerはtailnetに参加できないため、
+ * コンテナ経由でmuse-vmへ送る部品(直送ではない。直送は museWorkerAsk.ts の Worker内WASM)。
+ * AIチャットで⚙の旧コンテナ直通を選んだときと、tree-view の Museタブ(通信経路「コンテナ」)が使う。Workerはtailnetに参加できないため、
  * 本体デモコンテナ(tailnetのノード)のserver.jsを1段だけ挟んでmuse-vmへ届ける。
  * rust-worker-sqlx-d1・tunnels.rb・LLM workerは通らない。
  *

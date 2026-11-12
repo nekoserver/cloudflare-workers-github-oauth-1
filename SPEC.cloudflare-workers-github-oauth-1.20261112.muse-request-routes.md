@@ -1,26 +1,32 @@
 # SPEC: Muse への送り方のまとめ(経路・ヘッダ・鍵・ジョブ登録、2026-11-12)
 
-## 1. AIチャットの接頭語なしの Muse は常に直送
+## 1. AIチャットの Muse の直送は、コンテナを通さない(2026-11-12 訂正)
 
-**対象**: `/api/aichat` の接頭語なしの Muse の送信、`/api/aichat/muse-health`、`src/views/aichatMuseHealth.ts` の ⚙、`src/utils/museDirectAsk.ts` の `museDirectDep` — AIチャットからの Muse 送信は、接頭語を付けない限り、常に本体のコンテナから muse-vm へ直接送る。経路の選択は無くす。
+**対象**: `/api/aichat` の接頭語なしの Muse と `/askmuse`、`/api/aichat/muse-health`、`src/views/aichatMuseHealth.ts` の ⚙、`src/durable/tailscaleWasm.ts` — 「直送」は本体 Worker 内の Tailscale WASM(`main-worker-muse`)から muse-vm へ送る経路だけを指す。コンテナを通るものは直送と呼ばない。
 
 ### 背景
 
-- これまでは Cookie の設定で Worker 内の Tailscale WASM(`main-worker-muse` ノード)を既定にしていた。デプロイのたびにこのノードが再起動し、最初の送信で6秒以内に tailnet へつながらないと「Museへの接続を確認できません」になった(2026-11-12、Muse は動いていた)。
-- ユーザー指定(2026-11-12): 「AIチャットからのMuse送信は(接頭語をつけない限り)常に直送」。
+- [#2572](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2572)(`b47f384`・`11b3c043`)は、ユーザー指定「AIチャットからのMuse送信は(接頭語をつけない限り)常に直送」を「本体のコンテナから muse-vm へ直接送る」と読み違え、接頭語なしの Muse を demo コンテナ(`server.js` → `tailscale nc`)に固定した。
+- その結果、本体 Worker から demo コンテナへの `container.fetch` が戻らず、AIチャットに「❌ Muse がタイムアウトしました(300秒以内に応答がありませんでした)」が出た(2026-11-12)。muse-vm と鍵は正常(同じ鍵で muse-vm・コンテナの `server.js` のどちらに送っても 10〜44 秒で 200)。
+- ユーザー指定(2026-11-12): 「直送はコンテナを経由しないという意味で直送」。直送以外は、AIチャットから直接コンテナの tunnels.rb を通る(`/neko askgk muse_prompt=`)か、`/muse-wasm-test` を通るか。
+- 正しい形は `SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md` の 2026-11-08 の図。既定は Worker → `TAILSCALE_WASM` → muse-vm、点線の「旧コンテナ直通」は保存済みの設定で選んだときだけ。
 
 ### 修正内容
 
 | ファイル | 変更 |
 |---|---|
-| `src/index.ts` | `/api/aichat` の接頭語なしの Muse と `/api/aichat/muse-health` は、Cookie を読まずに常に直送(`X-Muse-Transport: container`)。ジョブ受付が Cookie に経路を書き込む処理も外した |
-| `src/utils/museWorkerAsk.ts` | `resolveMuseTransport` を削除。`checkMuseWorkerHealth`・`museWorkerDep` は `/tailscale-wasm` ページ(Worker内WASMを明示的に試す機能)だけが使う |
-| `src/views/aichatMuseHealth.ts` | ⚙ の「接続方式」の選択欄を削除。保存する設定は有効/無効と間隔だけ(古い Cookie の `transport` は読まない) |
-| `src/utils/museDirectAsk.ts` | 直送でも、送った結果で `X-Muse-Tailscale`(画面の接続表示)を決める。muse-vm まで届かなかった失敗(`container_not_running`・`muse_connection_failed`・`llm_timeout`)は `unavailable`、届いた上での失敗(認証・利用上限・実行)は `connected` |
+| `src/index.ts` | #2572 の経路の固定を戻した。接頭語なしの Muse と `/askmuse` は ⚙ の設定(Cookie `aichat_muse_signal` の `transport`)に従い、既定は直送(`X-Muse-Transport: worker`)。旧コンテナ直通は `transport: 'container'` を選んだときだけ。失敗しても互いの代替・tunnels への切り替えはしない |
+| `src/utils/museWorkerAsk.ts` | `resolveMuseTransport` を戻した(既定 `worker`) |
+| `src/views/aichatMuseHealth.ts` | ⚙ の「接続方式」の選択欄を戻した(既定は直送) |
+| `src/utils/museNodeReady.ts`(新規)・`src/durable/tailscaleWasm.ts` | `/muse/*` を送る前に、WASM ノードが `Running` になり、かつ netmap に muse-vm がオンラインで載るまで最大 20 秒待つ。以前は 6 秒・`Running` だけで打ち切り、デプロイ直後の最初の送信が「Museへの接続を確認できません」になっていた |
+| `src/utils/museDirectAsk.ts` | コメントだけ: この部品はコンテナ経由で、直送ではないと書いた。関数や定数の名前(`askMuseDirect`・`museDirectDep`・`MUSE_DIRECT_PATH`)は、経路の名前が決まるまで変えない(7章) |
+
+旧コンテナ直通(本体 Worker → demo コンテナの `server.js` → muse-vm)は直送ではない。⚙ で明示的に選んだときだけの互換経路。経路の名前は7章(候補・未確定)。
 
 ### 注意事項
 
-- 直送は本体の demo コンテナが起動していることが前提。止まっていれば送らずに「停止中」を返す(自動で起動しない・ほかの経路へ切り替えない)。
+- 直送は `main-worker-muse` が tailnet につながっていることが前提。つながらなければ「Museへの接続を確認できません」を返し、コンテナや tunnels へは切り替えない。
+- 本番での直送の実送信は、デプロイ後に `/aichat` で確かめる。
 
 ## 2. Muse への6系統
 
@@ -28,7 +34,7 @@
 
 | 経路キー | 入口 | 経路 | ワーカーで完結 / コンテナ必須 | muse-vm 側で受ける鍵 | ジョブの積み上げ |
 |---|---|---|---|---|---|
-| `aichat-direct` | 本体 AIチャット、接頭語なし(`/askmuse prompt="…"` も同じ経路) | 本体 Worker → demo コンテナ(`server.js`)→ `tailscale nc` → muse-vm | **コンテナ必須**(本体 demo コンテナ) | 本体の `MUSE_API_KEY` | 特化していない |
+| `aichat-direct` | 本体 AIチャット、接頭語なし(`/askmuse prompt="…"` も同じ経路) | 本体 Worker → `TailscaleWasm`(`main-worker-muse`)→ muse-vm(⚙ で旧コンテナ直通を選んだときだけ demo コンテナの `server.js` → `tailscale nc` → muse-vm) | **ワーカーで完結**(旧コンテナ直通を選んだときはコンテナ必須) | 本体の `MUSE_API_KEY` | 特化していない |
 | `treeview-muse-tab` | dynamicneko tree-view の AI タブの「Museタブ」(直送専用) | dynamicneko → 本体 `/api/tree-view/muse-chat-external`(ヘッダ付与)→ demo コンテナ → muse-vm | **コンテナ必須**(本体 demo コンテナ。tree-view で通信経路に「ワーカー」を選ぶと本体の Worker 内 WASM を通り、**ワーカーで完結**) | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) | 特化していないが可能 |
 | `treeview-worker-tab` | dynamicneko tree-view の AI タブの「ワーカータブ」 | dynamicneko → 本体ワーカーを経由(会話ストリーム) | 未確認 | 本体の `MUSE_API_KEY`(未確認) | 特化していないが可能 |
 | `muse-wasm-jobs` | 本体 `/muse-wasm-test` ページ | 本体 → `TailscaleWasm` の `MuseAgentJobs`(4章)→ WASM(`main-worker-muse`)→ muse-vm | **ワーカーで完結** | 本体の `MUSE_API_KEY` | 特化している |
@@ -79,7 +85,7 @@ muse-vm へ届く要求(どの経路でも同じ):
 
 | 画面の表示(`errorCode`) | 意味 | 見るところ |
 |---|---|---|
-| Museへの接続を確認できません(`muse_connection_failed`) | muse-vm まで届かなかった | 直通: demo コンテナと `tailscale status`。WASM: `/tailscale-wasm` の状態 |
+| Museへの接続を確認できません(`muse_connection_failed`) | muse-vm まで届かなかった | 直送(既定): `/tailscale-wasm` の状態(`main-worker-muse` と muse-vm の在席)。旧コンテナ直通を選んでいるとき: demo コンテナと `tailscale status` |
 | 停止中(`container_not_running`) | 直通で demo コンテナが止まっている | `/cf-containers` |
 | 認証に失敗(`muse_authentication_failed`) | muse-vm に届いたが鍵が違う(401/403) | 送った側の `MUSE_API_KEY` と muse-vm の鍵 |
 | 利用上限(`muse_usage_limit`) | 429 | Muse 側 |
@@ -90,6 +96,55 @@ muse-vm へ届く要求(どの経路でも同じ):
 - 本番での直送の送信(この PR のデプロイ後に `/aichat` で確かめる)。
 - `treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の経路の細部と鍵(2章の「未確認」)。
 - muse-vm の api-bridge が、ヘッダを理由に要求を拒否していないこと(拒否されていればユーザー側で対応する、とのユーザー指定)。
+
+## 7. Muse への経路の一覧(コンテナの要否・鍵・名前の候補、2026-11-12)
+
+**対象**: Muse(`muse-vm:8080`)へ届くすべての経路と、lib を付けるコンテナ — 2章の6系統に、コンテナ起動後の確認送信を足した7系統。うち2つは中でさらに分かれるため、区別する名前は最大9つ。**名前は候補で、まだ決めていない**(muse-vm 側の鍵の名前と揃えてから決める。ユーザー指定 2026-11-12)。基本仕様としてユーザーが確認済み。工事中の部分がある。
+
+説明用のページ: https://claude.ai/artifact/87Nwq3mwBZKGqegxJSqZV6
+
+### 経路
+
+| # | 名前の候補(未確定) | 入口 | muse-vm までの道筋 | コンテナの起動 | muse-vm 側で受ける鍵 |
+|---|---|---|---|---|---|
+| 1 | `aichat-wasm-direct` | 本体 AIチャット、接頭語なし・`/askmuse` | 本体 Worker → TailscaleWasm(`main-worker-muse`)→ muse-vm(直送) | 不要 | 本体の `MUSE_API_KEY` |
+| 1' | `aichat-legacy-container` | 同上、⚙ で旧コンテナ直通を選んだとき | 本体 Worker → demo コンテナ `server.js` → `tailscale nc` → muse-vm | 必須(本体 demo コンテナ) | 本体の `MUSE_API_KEY` |
+| 2 | `treeview-musetab-container` | dynamicneko tree-view の Museタブ(通信経路: コンテナ) | dynamicneko → 本体 `/api/tree-view/muse-chat-external` → demo コンテナ → muse-vm | 必須(本体 demo コンテナ) | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) |
+| 2' | `treeview-musetab-wasm` | 同上(通信経路: ワーカー) | dynamicneko → 本体の中継 → TailscaleWasm → muse-vm | 不要 | dynamicneko の `MUSE_API_KEY` |
+| 3 | `treeview-workertab-stream` | dynamicneko tree-view のワーカータブ | dynamicneko → 本体ワーカー経由の会話ストリーム(`/lib/conversation-embed.html`・`/lib/api/chat/*`)(細部は未確認) | 必須(会話ストリームを出すコンテナ、mygw) | 未確認 |
+| 4 | `wasmtest-jobqueue` | 本体 `/muse-wasm-test` | 本体 → TailscaleWasm の MuseAgentJobs(キュー)→ WASM → muse-vm | 不要 | 本体の `MUSE_API_KEY` |
+| 5 | `aichat-askmgs-gadget` | 本体 AIチャット `/askmgs prompt="…"` | 本体 → TailscaleWasm → `cf-demo-container:8766` → Gadgets | 必須(行き先の `cf-demo-container`、本体 demo コンテナ) | `MUSE_GADGET_SDK_TOKEN`(中継への署名は `ORIGIN_HMAC_SECRET`) |
+| 6 | `aichat-askgk-tunnels` | 本体 AIチャット `/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 `/tunnel-signer` → tunnels.rb → lib の worker → muse-vm | 必須(lib を付けたコンテナ。種類は問わない) | lib の worker の `MUSE_API_KEY` |
+| 7 | `libhost-askgk-selfcheck` | コンテナ起動後の確認送信「今日は何日？」(手で実行) | `askgk_request.rb` → `tunnels.claude.rb`(CGI を直接実行)→ lib の worker → `tailscale nc` → muse-vm(Worker・Apache・HMAC を通らない) | 必須(lib を付けたコンテナ。種類は問わない。そこで手で実行) | lib の worker の `MUSE_API_KEY` |
+
+- 直送は、コンテナを通さない 1 だけを指す(ユーザー指定 2026-11-12)。直送以外で AIチャットから Muse へ送るのは、tunnels.rb を通る 6 と、`/muse-wasm-test` を通る 4。
+- 「必須」の経路は、そのコンテナが止まっていると送れない。どの経路も、止まっているコンテナを自動で起動したり、ほかの経路へ切り替えたりはしない。「不要」の経路(1・2'・4)は、Worker 内の `main-worker-muse` が tailnet につながっていれば送れる。
+- 7 の手順は `lib/SETTINGS.claude-host.20261102.md:109`(`ruby claude/test/manual/askgk_request.rb claude/api/tunnels.claude.rb 'muse_prompt="今日は何日？"'`)。起動時に自動で送るスクリプトは無い。
+- 名前の形の案は「入口-道筋-行き先」。`direct`・`worker`・`container` を単独では使わない(ほかの経路と取り違えやすい)。
+
+### lib を付けるコンテナと CLI
+
+tunnels.rb と LLM worker は lib 上にあり、特定のコンテナには縛られない。基本的にコンテナであれば何にでも付けられる(起動したコンテナの /home に clone し、ドキュメントルートにマウントする)。付けた先に Claude CLI・Codex CLI が入っているかで、同じ lib でも使えるエンジンが変わる。Muse は CLI を使わず HTTP で送るだけなので、CLI の有無に関係なく届く。
+
+| コンテナ | lib を付けるか | Claude CLI | Codex CLI | 出典 |
+|---|---|---|---|---|
+| 本体 demo | 付けられる | あり(2.1.322) | あり(0.167.1) | `containers/demo/Dockerfile` |
+| redmine | 付けられる | あり(2.1.309) | あり(0.164.0) | `containers/demo/Dockerfile.redmine` |
+| musevm(カーネルのビルド環境) | 付けられる | なし | あり(0.166.0) | `musevm/Dockerfile` |
+| musevm-kernel | 付けられる | なし | なし | `musevm-kernel/Dockerfile` |
+| cfc-standalone | 付けられる | あり(2.1.303) | あり(0.163.0) | `nekoserver/cfc-standalone` の `Dockerfile` |
+| dynamicneko(sandbox-terminal) | 付けられる | なし | あり(0.166.0)。ほかに本体コンテナへ SSH でつないで本体の codex を呼ぶ `codex-main` がある | `nekoserver/dynamicneko` の `containers/sandbox-terminal/Dockerfile` |
+
+- cfc-standalone は、Workers Routes でコンテナ用のドメインをまとめるために作ったコンテナ。ルートが増えるにつれて本来の目的から離れたところに手間がかかるようになり、今は放置気味(2026-11-12 時点)。
+- dynamicneko は、Dynamic Worker のテスト用に用意したもの。ベースは React 19 + Hono で、スタイルシートや UI のサンプルをなるべく多く集め、すぐ使えるようにしてある。tree-view もここから使う(2・2'・3 の入口)。
+- 版はイメージの定義から読んだ。動いているコンテナで確かめたのは、2026-11-12 に lib が付いていた1台だけ(claude 2.1.322・codex 0.167.1、本体 demo の定義と一致)。
+- Codex は入っていても、ログインが無いと `codex_authentication_failed` になる。
+
+### 決める必要があること
+
+- muse-vm 側で、どの名前の鍵を経路ごとに割り当てるか(今は本体と dynamicneko がどちらも `MUSE_API_KEY`)。
+- 1' と 2' に別の名前を付けるか。
+- 決めた名前を、本体のヘッダ・変数・SPEC にそのまま使うか。
 
 ## 関連コミット
 

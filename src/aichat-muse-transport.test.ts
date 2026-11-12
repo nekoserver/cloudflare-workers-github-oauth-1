@@ -18,33 +18,45 @@ async function request(body?: Record<string, unknown>, cookie = '', namespace: u
   return app.request(body ? '/api/aichat' : '/api/aichat/muse-health', { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Cookie: cookie }, ...(body ? { body: JSON.stringify(body) } : {}) }, { JWT_SECRET: 'transport-test', DB, DEMO_CONTAINER: {}, TAILSCALE_WASM: namespace, MUSE_API_KEY: 'test-key', RUST_WORKER: rust });
 }
 const message = { model: 'muse', message: '通常の質問 “△”', source: 'textbox' };
-// AIチャットからのMuse送信は(接頭語を付けない限り)常に直送(ユーザー指定 2026-11-12)。古いCookieにworkerがあっても直送。
-const workerCookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'worker', enabled: true, intervalSeconds: 600 }));
-it.each([['no cookie', ''], ['old worker cookie', workerCookie]])('prefixless Muse always goes direct (%s), exactly once, never through the Worker', async (_label, cookie) => {
-  const response = await request(message, cookie);
-  expect(await response.json()).toMatchObject({ usedModel: 'muse', response: expect.stringContaining('container answer') });
-  expect(response.headers.get('X-Muse-Transport')).toBe('container');
-  expect(response.headers.get('X-Muse-Tailscale')).toBe('connected');
-  const sent = container.fetch.mock.calls.map(([r]) => r as Request).filter(r => new URL(r.url).pathname === '/muse/v1/chat/completions');
-  expect(sent).toHaveLength(1);
-  expect(sent[0].headers.get('Authorization')).toBe('Bearer test-key');
-  expect(sent[0].headers.get('Content-Type')).toBe('application/json');
-  expect(await sent[0].text()).toBe(JSON.stringify({ model: 'muse', messages: [{ role: 'user', content: message.message }] }));
-  expect(worker.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
-});
-it('health always checks the direct route, even with an old worker cookie', async () => {
-  container.fetch.mockImplementation(async (r: Request) => new URL(r.url).pathname.includes('peers') ? Response.json({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }) : Response.json({ status: 'ok' }));
-  expect(await (await request(undefined, workerCookie)).json()).toMatchObject({ healthy: true, transport: 'container' });
-  expect(worker.fetch).not.toHaveBeenCalled();
-});
-it('direct send failure reports unavailable in X-Muse-Tailscale even after a connected preflight, and never falls back', async () => {
-  container.fetch.mockImplementation(async (r: Request) => new URL(r.url).pathname.includes('peers') ? Response.json({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }) : Response.json({ error: 'muse_connection_failed' }, { status: 502 }));
+it('defaults prefixless Muse to Worker, preserving prompt and sending exactly once without touching the container', async () => {
   const response = await request(message);
-  expect((await response.json() as { response: string }).response).toContain('❌');
-  expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
-  expect(worker.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
+  expect(await response.json()).toMatchObject({ usedModel: 'muse', response: expect.stringContaining('worker answer') });
+  expect(response.headers.get('X-Muse-Transport')).toBe('worker');
+  expect(response.headers.get('X-Muse-Tailscale')).toBe('connected');
+  expect(worker.fetch).toHaveBeenCalledOnce();
+  expect(await worker.fetch.mock.calls[0][0].json()).toMatchObject({ messages: [{ role: 'user', content: message.message }] });
+  expect(container.getState).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
 });
-it('explicit /askmuse also goes direct', async () => {
-  expect((await (await request({ ...message, message: '/askmuse prompt="explicit"' }, workerCookie)).json() as { response: string }).response).toContain('container answer');
+it('uses saved legacy choice for both health and submission', async () => {
+  const cookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'container', enabled: true, intervalSeconds: 600 }));
+  expect((await (await request(message, cookie)).json() as { response: string }).response).toContain('container answer');
+  await request(undefined, cookie);
+  expect(worker.fetch).not.toHaveBeenCalled(); expect(container.fetch).toHaveBeenCalled();
+});
+it('Worker health uses the same route without inference or container startup', async () => {
+  expect(await (await request()).json()).toMatchObject({ healthy: true, transport: 'worker' });
+  expect(new URL(worker.fetch.mock.calls[0][0].url).pathname).toBe('/muse/health');
+  expect(container.getState).not.toHaveBeenCalled();
+});
+it('does not fall back when Worker is missing or fails', async () => {
+  expect((await (await request(message, '', undefined)).json() as { response: string }).response).toContain('worker answer');
+  worker.fetch.mockResolvedValue(Response.json({ error: 'tailscale_not_connected' }, { status: 503 }));
+  const result = await (await request(message)).json() as { response: string };
+  expect(result.response).toContain('❌');
+  expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
+  worker.fetch.mockClear();
+  expect((await (await request(message, '', null)).json() as { response: string }).response).toContain('❌');
+  expect(worker.fetch).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled();
+});
+// 直送=コンテナを通さない(ユーザー指定 2026-11-12)。/askmuse も⚙の設定に従い、既定は直送。
+it('explicit /askmuse goes direct (Worker) by default, never through the container', async () => {
+  const response = await request({ ...message, message: '/askmuse prompt="explicit"' });
+  expect((await response.json() as { response: string }).response).toContain('worker answer');
+  expect(worker.fetch).toHaveBeenCalledOnce();
+  expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
+});
+it('explicit /askmuse uses the container only when the legacy route is chosen in settings', async () => {
+  const cookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'container' }));
+  expect((await (await request({ ...message, message: '/askmuse prompt="explicit"' }, cookie)).json() as { response: string }).response).toContain('container answer');
   expect(worker.fetch).not.toHaveBeenCalled();
 });
