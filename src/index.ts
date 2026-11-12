@@ -7261,6 +7261,17 @@ app.post('/api/aichat/jobs', aichatAuthMiddleware, async (c) => {
   try { JSON.parse(body); } catch { return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400); }
   return enqueueAichatJob(c.env, user.sub, c.req.raw, '/api/aichat', body);
 });
+// 送信中のジョブを止める(ユーザー指定 2026-11-12。Museの返事が来ないとき、毎回5分待たされないようにする)。送信者だけが止められる。
+app.post('/api/aichat/jobs/:jobId/cancel', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return jsonUtf8({ error: 'cross_origin_forbidden' }, 403);
+  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const jobId = c.req.param('jobId') ?? '';
+  if (!AICHAT_JOB_ID_RE.test(jobId)) return jsonUtf8({ error: 'not_found' }, 404);
+  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const res = await stub.fetch('https://aichat-job/cancel?' + new URLSearchParams({ owner: user.sub }).toString(), { method: 'POST' });
+  return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+});
 app.get('/api/aichat/jobs/:jobId', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
