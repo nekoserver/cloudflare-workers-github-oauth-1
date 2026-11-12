@@ -37,6 +37,7 @@
 
 - 接頭語付きの AI 投稿(`/askmuse`・`/askmgs`・`/neko askgk muse_prompt=` などの Muse と、`codex_prompt=`・`claude_prompt=` などそれ以外のモデル)は、主に外部アプリからの用途を想定している(ユーザー指定 2026-11-12)。画面から人が送る通常の投稿は接頭語なし(`aichat-direct`)。
 - 「ワーカーで完結」の経路は、本体の demo コンテナが止まっていても送れる(Worker 内の Tailscale WASM ノード `main-worker-muse` が tailnet につながっていればよい)。「コンテナ必須」の経路は、そのコンテナが止まっていれば送れない(自動で起動しない・ほかの経路へ切り替えない)。
+- `treeview-muse-tab` の送信チェック(2026-11-12): tree-view で Museタブを開いたとき・Museを選んだ状態で ⬜ でウィンドウで開くたびに、ボディ `{"action":"connect"}`(ヘッダは送信と同じ)を本体の中継へ送る。中継は推論を走らせず、muse-vm の `/health` だけを見て `{healthy, transport, keySource}` を返す(停止中のコンテナは起動しない)。tree-view はチェックの間だけ3本縦棒を動かし、結果の文字は出さない。
 - 経路キーは、この表で区別するための名前。要求のヘッダや記録にはまだ付けていない。
 - lib の `ask_muse`(`claude/ops/llm_worker_claude.py`)は、tailnet 上の機械から `tailscale nc` で muse-vm へ送る、本体の外の経路(lib の `MUSE_API_KEY`)。
 - 送り方(`Authorization: Bearer <鍵>`・`Content-Type: application/json`・`{model, messages}`)を確かめたのは `aichat-direct`・`treeview-muse-tab`・`muse-wasm-jobs`(と tree-view の `X-Muse-Transport: worker`)。`treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の muse-vm 側の形は確かめていない。

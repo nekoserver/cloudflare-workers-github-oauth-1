@@ -117,3 +117,40 @@ it('dynamicneko format: a malformed Authorization is rejected before any send (n
 it('old format (no Authorization) keeps using the main MUSE_API_KEY and says so',async()=>{
  const r=await request();expect(r.status).toBe(200);expect(await r.json()).toMatchObject({keySource:'main'});
 });
+
+// tree-view の送信チェック(ユーザー指定 2026-11-12): Museタブを開いたとき・ウィンドウで開くたびに送る。
+// 推論は走らせず、muse-vm の /health だけを見る。鍵は送信と同じ(dynamicneko の鍵があればそれ)。
+async function connectRequest(options:{transport?:string;env?:Record<string,unknown>;authorization?:string}={}){
+ const body=JSON.stringify({action:'connect'});
+ const signed=await signWorkerRequest(secret,'dynamicneko','POST',path,body);
+ const headers:Record<string,string>={...signed,'Content-Type':'application/json',Authorization:options.authorization??'Bearer dynamicneko-key','X-Aichat-User-Token':'header-user-token',...(options.transport?{'X-Muse-Transport':options.transport}:{})};
+ return createTreeViewMuseChatRoutes(deps).request('https://internal'+path,{method:'POST',body,headers},{DYNAMICNEKO_WORKER_HMAC_SECRET:secret,MUSE_API_KEY:'private-key',...options.env} as never);
+}
+it('connect check (container): healthy when tailnet shows muse-vm and /muse/health is ok, without inference', async()=>{
+ stub.fetch.mockImplementation(async(r:Request)=>new URL(r.url).pathname.endsWith('/debug/tailscale-peers')
+  ? Response.json({backendState:'Running',peers:[{hostName:'muse-vm',online:true}]})
+  : Response.json({status:'ok'}));
+ const r=await connectRequest();
+ expect(r.status).toBe(200);expect(await r.json()).toEqual({healthy:true,transport:'container',keySource:'dynamicneko'});
+ const sent=stub.fetch.mock.calls.map(([x])=>x as Request);
+ expect(sent.map(x=>new URL(x.url).pathname)).toEqual(['/debug/tailscale-peers','/muse/health']);
+ expect(sent[1].headers.get('Authorization')).toBe('Bearer dynamicneko-key');
+});
+it('connect check (container): unhealthy when the container is stopped, never starting it', async()=>{
+ stub.getState.mockResolvedValue({status:'stopped'});
+ const r=await connectRequest();
+ expect(r.status).toBe(200);expect(await r.json()).toMatchObject({healthy:false,transport:'container'});
+ expect(stub.fetch).not.toHaveBeenCalled();
+});
+it('connect check (worker): checks /muse/health through the WASM bridge with the dynamicneko key', async()=>{
+ const wasm={fetch:vi.fn(async(r:Request)=>{expect(new URL(r.url).pathname).toBe('/muse/health');expect(r.headers.get('Authorization')).toBe('Bearer dynamicneko-key');return Response.json({status:'ok'});})};
+ const ns={idFromName:()=> 'muse-id',get:()=>wasm};
+ const r=await connectRequest({transport:'worker',env:{TAILSCALE_WASM:ns}});
+ expect(await r.json()).toEqual({healthy:true,transport:'worker',keySource:'dynamicneko'});
+ expect(wasm.fetch).toHaveBeenCalledOnce();expect(deps.getContainer).not.toHaveBeenCalled();
+});
+it('connect check still requires the worker signature and the owner', async()=>{
+ deps.authenticate.mockResolvedValueOnce({ok:true,login:'other'});
+ expect((await connectRequest()).status).toBe(403);
+ expect(deps.getContainer).not.toHaveBeenCalled();
+});
