@@ -12,9 +12,9 @@ async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 
   } finally { clearTimeout(timer); }
 }
 /** /tailscale-wasm ページ(Worker内WASMを明示的に試す機能)の死活確認。AIチャットの送信には使わない(常に直送)。 */
-export async function checkMuseWorkerHealth(env: Env): Promise<boolean> {
+export async function checkMuseWorkerHealth(env: Env, callerKey?: string): Promise<boolean> {
   if (!env.MUSE_API_KEY) return false;
-  try { const res = await boundedFetch(env, '/muse/health'); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
+  try { const res = await boundedFetch(env, '/muse/health', undefined, 8000, callerKey); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
   catch { return false; }
 }
 /** callerKeyを渡すと、Tailscale WASMの中継はその鍵をmuse-vmへ渡す(dynamicnekoのMUSE_API_KEY)。無ければ中継が持つ本体の鍵。 */

@@ -1,9 +1,9 @@
-import {askMuseWorkerMessages} from '../utils/museWorkerAsk';
+import {askMuseWorkerMessages, checkMuseWorkerHealth} from '../utils/museWorkerAsk';
 import {Hono} from 'hono';
 import type {Bindings} from '../types';
 import {verifyTreeViewWorkerRequest} from './treeViewT3Power';
-import {parseCompletion, MUSE_DIRECT_PATH, type MuseContainer} from '../utils/museDirectAsk';
-import {requireMuseTailscale} from '../utils/museTailscalePreflight';
+import {parseCompletion, checkMuseHealth, MUSE_DIRECT_PATH, type MuseContainer} from '../utils/museDirectAsk';
+import {requireMuseTailscale, checkMuseTailscale} from '../utils/museTailscalePreflight';
 
 import {parseMuseMessages} from '../utils/museMessages';
 export {parseMuseMessages} from '../utils/museMessages';
@@ -17,7 +17,7 @@ export function createTreeViewMuseChatRoutes(deps:Dependencies){
   c.header('Cache-Control','no-store');
   const raw=await c.req.text();
   if(raw.length>100000||!await verifyTreeViewWorkerRequest(c.req.raw,raw,c.env.DYNAMICNEKO_WORKER_HMAC_SECRET))return c.json({error:'Unauthorized'},401);
-  let body:{userToken?:unknown;messages?:unknown;transport?:unknown}|null;
+  let body:{userToken?:unknown;messages?:unknown;transport?:unknown;action?:unknown}|null;
   try{body=JSON.parse(raw);}catch{return c.json({error:'invalid_request'},400);}
   if(!body)return c.json({error:'invalid_request'},400);
   // dynamicnekoはask_museと同じ形で送る: Authorization: Bearer <dynamicnekoのMUSE_API_KEY>、
@@ -38,6 +38,16 @@ export function createTreeViewMuseChatRoutes(deps:Dependencies){
   const auth=await deps.authenticate(c.env,userToken);
   if(!auth.ok)return c.json({error:auth.error},auth.status as 401|403|500|503);
   if(auth.login.toLowerCase()!=='nekoserver')return c.json({error:'Forbidden'},403);
+  // 送信チェック(tree-viewのMuseタブを開いたとき・ウィンドウで開くたび)。推論は走らせず、muse-vmの/healthだけを見る。
+  // 停止中のコンテナは起動しない。鍵は送信と同じ(受け取った鍵があればそれ)。
+  if(body.action!==undefined){
+   if(body.action!=='connect')return c.json({error:'invalid_action'},400);
+   if(transport!==undefined && transport!=='worker' && transport!=='container')return c.json({error:'invalid_transport'},400);
+   if(transport==='worker')return c.json({healthy:await checkMuseWorkerHealth({...c.env,MUSE_API_KEY:apiKey},callerKey),transport:'worker',keySource});
+   const container=await deps.getContainer(c.env).catch(()=>null);
+   const connected=await checkMuseTailscale(async()=>container);
+   return c.json({healthy:connected&&container?await checkMuseHealth(container,apiKey):false,transport:'container',keySource});
+  }
   const messages=parseMuseMessages(body.messages);
   if(!messages)return c.json({error:'会話は40件・UTF-8で16KiB以内にしてください'},400);
   if(transport!==undefined && transport!=='worker' && transport!=='container')return c.json({error:'invalid_transport'},400);
