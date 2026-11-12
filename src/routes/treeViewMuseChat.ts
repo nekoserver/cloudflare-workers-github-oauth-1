@@ -1,4 +1,4 @@
-import {askMuseWorkerMessages, checkMuseWorkerHealth} from '../utils/museWorkerAsk';
+import {checkMuseWorkerHealth, sendMuseViaWorker} from '../utils/museWorkerAsk';
 import {Hono} from 'hono';
 import type {Bindings} from '../types';
 import {verifyTreeViewWorkerRequest} from './treeViewT3Power';
@@ -52,7 +52,7 @@ export function createTreeViewMuseChatRoutes(deps:Dependencies){
   if(!messages)return c.json({error:'会話は40件・UTF-8で16KiB以内にしてください'},400);
   if(transport!==undefined && transport!=='worker' && transport!=='container')return c.json({error:'invalid_transport'},400);
   if(transport==='worker'){
-   const result=await askMuseWorkerMessages({...c.env,MUSE_API_KEY:apiKey},messages,undefined,90,callerKey);
+   const result=await sendMuseViaWorker(c.env,messages,{routeId:'treeview-musetab-wasm',apiKey});
    if(!result.ok)return c.json({error:result.error,transport:'worker',keySource},result.error==='muse_usage_limit'?429:503);
    return c.json({reply:result.reply,model:result.llmModel,transport:'worker',keySource});
   }

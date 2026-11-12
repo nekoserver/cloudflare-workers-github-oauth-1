@@ -62,7 +62,20 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
  }
-/** 直送(Worker内WASM → muse-vm)。AIチャットの接頭語なしのMuse・/askmuse(⚙の既定)と /tailscale-wasm の bridge-chat が使う。 */
+/** Worker内WASMで muse-vm へ送る経路のID(SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md 7章の名前の候補)。 */
+export type MuseWorkerRouteId = 'aichat-direct' | 'treeview-musetab-wasm';
+/** 待ち時間の上限。動いている tree-view の Museタブと同じ90秒にそろえる(2026-11-12)。 */
+export const MUSE_WORKER_MAX_TIMEOUT_SECONDS = 90;
+/**
+ * Worker内WASMの直送の共通の送り方。tree-view の Museタブで応答が返る送り方を、AIチャットにも使う(違うのは経路IDだけ。ユーザー指定 2026-11-12)。
+ * 鍵は毎回 Authorization で中継へ明示する(中継が起動時に読んだ鍵に任せない)。失敗したら経路IDを Worker のログに出す(鍵は出さない)。
+ */
+export async function sendMuseViaWorker(env: Env, messages: {role: 'user' | 'assistant'; content: string}[], options: { routeId: MuseWorkerRouteId; apiKey?: string; onStatus?: (healthy: boolean) => void }): Promise<MuseDirectResult> {
+  const result = await askMuseWorkerMessages({ ...env, MUSE_API_KEY: options.apiKey }, messages, options.onStatus, MUSE_WORKER_MAX_TIMEOUT_SECONDS, options.apiKey);
+  if (!result.ok) console.log('[muse-worker] ' + JSON.stringify({ routeId: options.routeId, error: result.error, ...(result.diagnosis ? { diagnosis: result.diagnosis } : {}) }));
+  return result;
+}
+/** 直送(Worker内WASM → muse-vm)。AIチャットの接頭語なしのMuse・/askmuse(⚙の既定)と /tailscale-wasm の bridge-chat が使う。送り方は tree-view の Museタブと同じ。 */
 export function museWorkerDep(env: Env, onStatus?: (healthy: boolean) => void) {
-  return (prompt: string): Promise<MuseDirectResult> => askMuseWorkerMessages(env, [{ role: 'user', content: prompt }], onStatus);
+  return (prompt: string): Promise<MuseDirectResult> => sendMuseViaWorker(env, [{ role: 'user', content: prompt }], { routeId: 'aichat-direct', apiKey: env.MUSE_API_KEY, onStatus });
 }
