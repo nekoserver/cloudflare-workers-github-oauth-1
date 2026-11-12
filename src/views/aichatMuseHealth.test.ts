@@ -196,23 +196,23 @@ describe('シグナル送信の設定の読み取り', () => {
   const cookie = (value: unknown) => 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify(value));
 
   it('未設定なら、有効で600秒', () => {
-    expect(script.readMuseSignalSettings('')).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings('')).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600, tunnelsFallback: false });
   });
 
   // 故障想定: 他のCookieの後ろにあると読めず、OFFにしても次の読み込みでONへ戻る。
   it('他のCookieの後ろにあっても読める', () => {
-    expect(script.readMuseSignalSettings('a=1; ' + cookie({ enabled: false, intervalSeconds: 900 }) + '; b=2')).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(script.readMuseSignalSettings('a=1; ' + cookie({ enabled: false, intervalSeconds: 900 }) + '; b=2')).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 900, tunnelsFallback: false });
   });
 
   it.each([
     ['壊れたJSON', 'aichat_muse_signal=%7Bbroken'],
     ['値が不正な形', cookie('x')],
   ])('%sなら既定値を使う', (_name, text) => {
-    expect(script.readMuseSignalSettings(text)).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings(text)).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600, tunnelsFallback: false });
   });
 
   it.each([[59], [86401], [60.5], ['600'], [null]])('間隔が%sなら既定の600秒を使い、ON/OFFは保つ', (intervalSeconds) => {
-    expect(script.readMuseSignalSettings(cookie({ enabled: false, intervalSeconds }))).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings(cookie({ enabled: false, intervalSeconds }))).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 600, tunnelsFallback: false });
   });
 });
 
@@ -238,10 +238,12 @@ describe('シグナル送信のモーダル', () => {
   });
 
   // 2026-11-07 ユーザー指定: Muse選択の接頭語なし投稿は常に直接muse-vmへ送るので、tunnelsへの切り替えの設定は出さない。
-  it('Tailscale未接続時にtunnelsを使う設定は表示しない', () => {
+  // ユーザー指定(2026-11-12): tunnels.rb をフォールバック経路として使うかをチェックボックスで選ぶ。既定は使わない。
+  it('tunnels.rb のフォールバックは既定で使わない(チェックボックスは外れている)', () => {
     const view = open();
-    expect(view.overlay.querySelector('[data-muse-tunnels-fallback]')).toBeNull();
-    expect(view.overlay.textContent).not.toContain('tunnels');
+    const box = view.overlay.querySelector<HTMLInputElement>('[data-muse-tunnels-fallback]');
+    expect(box).not.toBeNull();
+    expect(box!.checked).toBe(false);
   });
 
   it('間隔の入力はチェックボックスに連動する', () => {
@@ -261,7 +263,7 @@ describe('シグナル送信のモーダル', () => {
     interval.value = '900';
     checkbox.click();
     button('保存').click();
-    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900, tunnelsFallback: false });
     expect(document.querySelector('[data-overlay]')).toBeNull();
   });
 
@@ -280,7 +282,7 @@ describe('シグナル送信のモーダル', () => {
     interval.value = '1';
     checkbox.click();
     button('保存').click();
-    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900, tunnelsFallback: false });
   });
 
   it('デフォルトに戻すと設定を消して閉じる', () => {
@@ -362,9 +364,10 @@ describe('/aichatページへの組み込み', () => {
     const withGear = rows.filter((row) => row.querySelector('.model-dot-dropdown-tune-btn'));
     expect(withGear.map((row) => row.textContent)).toEqual(['muse⚙']);
     expect(withGear[0].lastElementChild!.classList.contains('model-dot-dropdown-tune-btn')).toBe(true);
+    const before = (bindings.modelSelect as unknown as HTMLSelectElement).value;
     (withGear[0].lastElementChild as HTMLElement).click();
     expect(openMuseSignalSettings).toHaveBeenCalledTimes(1);
     expect(bindings.closeModelDotDropdown).toHaveBeenCalledTimes(1);
-    expect((bindings.modelSelect as unknown as HTMLSelectElement).value).not.toBe('muse');
+    expect((bindings.modelSelect as unknown as HTMLSelectElement).value).toBe(before);
   });
 });

@@ -1563,16 +1563,15 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');
   });
 
-  it('llama-3.3-70b-instruct-fp8-fast がデフォルト選択状態になる', () => {
+  // 初期の言語モデルは Muse(ユーザー指定 2026-11-12)。AI_CHAT_MODEL が llama でも選択肢には残り、選択はされない。
+  it('AI_CHAT_MODEL が llama でも、デフォルト選択は muse になる', () => {
     const userWithLlama = {
       username: 'testuser',
       aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     };
     const html = getAiChatPage(userWithLlama);
-    const idx = html.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
-    expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx - 30, idx + 60);
-    expect(snippet).toContain('selected');
+    expect(html).toContain('value="muse" selected');
+    expect(html).not.toContain('value="@cf/meta/llama-3.3-70b-instruct-fp8-fast" selected');
   });
 
   it('index.ts の /aichat GET fallbackModel が llama-3.3-70b-instruct-fp8-fast', () => {

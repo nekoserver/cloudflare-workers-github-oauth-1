@@ -3,7 +3,7 @@ import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
 import { TailscalePageTools } from './utils/tailscalePageTools';
 import { getWorkerConversationStreamPage } from './views/workerConversationStream';
-import { resolveMuseTransport, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
+import { resolveMuseTransport, resolveMuseTunnelsFallback, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
 import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
@@ -556,7 +556,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretMusePrompt, interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretMusePrompt, interpretMuseTunnelsFallback, interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { extractTableSchemasFromSql, evaluateTable, JUDGMENT_LABELS as QUERY_PATTERN_JUDGMENT_LABELS, type TableSchema as QueryPatternTableSchema } from './utils/queryPatternAnalysis';
@@ -7342,10 +7342,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
+  // ⚙で有効にしたときだけ、直送に失敗したらtunnels.rbへ送る(既定は使わない。ユーザー指定 2026-11-12)。
+  const museTunnelsFallback = resolveMuseTunnelsFallback(c.req.header('Cookie') || '');
   const interpretInput: typeof interpretAichatSlashCommand = selectedMuseInput
     ? async (prompt, _now, deps) => museConnectionError
-      ? { handled: true, response: '❌ Muse投稿を停止しました: ' + museConnectionError }
-      : interpretMusePrompt(prompt, deps)
+      ? museTunnelsFallback
+        ? interpretMuseTunnelsFallback(prompt, deps, museConnectionError)
+        : { handled: true, response: '❌ Muse投稿を停止しました: ' + museConnectionError }
+      : interpretMusePrompt(prompt, deps, 'Muse', { tunnelsFallback: museTunnelsFallback })
     : interpretAichatSlashCommand;
   const slashCommand = await interpretInput(message, new Date(), {
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
