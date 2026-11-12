@@ -1,5 +1,18 @@
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
+export type MuseTransport = 'worker' | 'container';
+
+/**
+ * AIチャットの接頭語なしのMuseの経路。送信・死活確認・ジョブ受付で同じ設定(⚙、Cookie aichat_muse_signal)を読む。
+ * 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は設定で明示的に選んだとき(transport:'container')だけ。
+ * 失敗しても互いの代替にしない(SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md の図、2026-11-08)。
+ */
+export function resolveMuseTransport(cookie: string): MuseTransport {
+  const part = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('aichat_muse_signal='));
+  if (!part) return 'worker';
+  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'container' ? 'container' : 'worker'; }
+  catch { return 'worker'; }
+}
 type Env = { TAILSCALE_WASM?: DurableObjectNamespace; MUSE_API_KEY?: string; DB?: D1Database };
 async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 8000, apiKey?: string): Promise<Response> {
   if (!env.TAILSCALE_WASM) return Response.json({ error: 'tailscale_wasm_not_configured' }, { status: 503 });
@@ -11,7 +24,7 @@ async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 
     ]);
   } finally { clearTimeout(timer); }
 }
-/** /tailscale-wasm ページ(Worker内WASMを明示的に試す機能)の死活確認。AIチャットの送信には使わない(常に直送)。 */
+/** 直送(Worker内WASM → muse-vm)の死活確認。AIチャットの枠色・tree-view・/tailscale-wasm が使う。 */
 export async function checkMuseWorkerHealth(env: Env, callerKey?: string): Promise<boolean> {
   if (!env.MUSE_API_KEY) return false;
   try { const res = await boundedFetch(env, '/muse/health', undefined, 8000, callerKey); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
@@ -32,7 +45,7 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
  }
-/** /tailscale-wasm ページの bridge-chat 用(Worker内WASMを明示的に試す)。AIチャットの送信には使わない(常に直送)。 */
+/** 直送(Worker内WASM → muse-vm)。AIチャットの接頭語なしのMuse・/askmuse(⚙の既定)と /tailscale-wasm の bridge-chat が使う。 */
 export function museWorkerDep(env: Env, onStatus?: (healthy: boolean) => void) {
   return (prompt: string): Promise<MuseDirectResult> => askMuseWorkerMessages(env, [{ role: 'user', content: prompt }], onStatus);
 }

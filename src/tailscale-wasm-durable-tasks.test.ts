@@ -25,14 +25,13 @@ it.each([
   expect(JSON.parse(start.request.body)).toEqual(payload);
   expect(start.request.headers.authorization).toMatch(/^Bearer /);
 });
-// AIチャットからのMuse送信は常に直送なので、経路をCookieで上書きする必要は無い(ユーザー指定 2026-11-12)。
-it('keeps an explicit legacy Muse fallback as its own job without rewriting cookies', async () => {
+it('keeps an explicit legacy Muse fallback as its own job and overrides only the transport cookie', async () => {
   const response = await submit({ action: 'legacy-chat', payload: { model: 'muse', message: 'explicit old-route request' } });
   expect(response.status).toBe(202);
   const start = JSON.parse(String((taskStub.fetch.mock.calls[0][1] as RequestInit).body)) as { request: { url: string; body: string; headers: Record<string, string> } };
   expect(new URL(start.request.url).pathname).toBe('/api/aichat');
   expect(JSON.parse(start.request.body)).toMatchObject({ model: 'muse', message: 'explicit old-route request', source: 'textbox', stream: false });
-  expect(start.request.headers.cookie).toBe('aichat_muse_signal=%7B%22transport%22%3A%22worker%22%7D');
+  expect(decodeURIComponent(start.request.headers.cookie)).toContain('"transport":"container"');
   expect((await submit({ action: 'legacy-chat', payload: { model: 'codex', message: 'wrong model' } })).status).toBe(400);
   expect((await submit({ action: 'legacy-chat', payload: { model: 'muse', message: '/askmuse prompt="do not route this"' } })).status).toBe(400);
 });

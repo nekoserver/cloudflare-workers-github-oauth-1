@@ -193,7 +193,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko askgk <質問文> / /neko askgk claude_prompt="<質問文>" / /neko askgk muse_prompt="<質問文>" | rust-worker-sqlx-d1の/tunnel-signer経由でtunnelsへ質問を送り、回答文(reply)を表示します。claude_prompt="..."形式はClaudeの回答として保存し、✂️/📔・スレッドへの追加質問に対応します。接頭語ごとそのまま先方へ送られます(先方がこの接頭語で質問種別を判定するため)。/neko askgk settings は「設定状況」へ、/neko askgk tunnels-list は「cf tunnels list」へ変換されて送られます。/neko askgk sysstats・/neko askgk routines は変換せずそのまま送られ、先方のBotが内部的に解釈します |',
     '| /help /usage /status /ping /models | 言語モデルがMuseのとき、本体コンテナを経由してmuse-vmで直接実行します。推論は走らず、結果はD1に記録しません |',
     '| /askmgs prompt="<質問文>" | 独立したGadgets用ページと共通のAPIへ送り、専用会話で応答を取得します |',
-    '| /askmuse prompt="<質問文>" | 本体コンテナを経由してtailnet上のMuseへ直接問い合わせ、Museの回答として保存します。tunnelsを通りません。本体コンテナの起動中だけ使えます |',
+    '| /askmuse prompt="<質問文>" | tailnet上のMuseへ直送で問い合わせ(本体Worker内のTailscale、コンテナ不要)、Museの回答として保存します。tunnelsを通りません。⚙で旧コンテナ直通を選んでいるときは本体コンテナを経由し、その起動中だけ使えます |',
     '| /neko askgk (引数なし) / /neko askgk help | tunnel-signerファイルに渡すヘルプコマンド。どちらもエイリアス変換せず(引数なしは空文字のまま、helpは"help"のまま)tunnel-signer経由で送り、利用可能なコマンド一覧を表示します |',
     '| /neko secureminelog | "secureminelog"という文字列をエイリアス変換せずそのままtunnel-signer経由で送り、結果を表示します |',
     '| /neko ruby <ファイル名.rb> | mention-editorで保存したRubyコードをブラウザのRuby/WASMで実行します |',
@@ -1024,7 +1024,7 @@ export type AichatSlashCommandDeps = {
   /** `/neko askgk <質問文>` 用。rust-worker-sqlx-d1の/tunnel-signer経由でtunnels.rbへ質問を送り、
    * reply本文と(tunnels.rbが応答に含めた場合のみ)llm_model/llm_effortを返す */
   askTunnelSigner?: (message: string) => Promise<{ reply: string; llmModel?: string; llmEffort?: string }>;
-  /** `/askmuse prompt="..."` 用。本体コンテナを経由してtailnet上のmuse-vmへ直接問い合わせる。 */
+  /** `/askmuse prompt="..."` と接頭語なしのMuse用。既定は直送(Worker内WASM → muse-vm)、⚙で旧コンテナ直通を選んだときは本体コンテナ経由。 */
   askMuseDirect?: (prompt: string) => Promise<MuseDirectResult>;
   askMuseGadget?: (prompt: string) => Promise<{ ok: boolean; reply?: string; error?: string; partial?: boolean }>;
   /** `/neko ruby <ファイル名>` 用。mention-editorに保存された本文をユーザー単位で取得する */

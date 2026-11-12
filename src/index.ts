@@ -3,6 +3,7 @@ import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
 import { TailscalePageTools } from './utils/tailscalePageTools';
 import { getWorkerConversationStreamPage } from './views/workerConversationStream';
+import { resolveMuseTransport, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
 import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
 import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
@@ -482,7 +483,6 @@ import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
-import { museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
@@ -7030,8 +7030,9 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 /** /aichatの入力窓の枠色に使うMuseの死活確認（認証が必要）。停止中のコンテナは起動しない。 */
 app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  // AIチャットからのMuse送信は(接頭語を付けない限り)常に直送(ユーザー指定 2026-11-12)。死活確認も同じ経路。
-  const transport = 'container';
+  // 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は⚙で選んだときだけ。停止中のコンテナは起動しない。
+  const transport = resolveMuseTransport(c.req.header('Cookie') || '');
+  if (transport === 'worker') return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport });
   const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
   const connected = await checkMuseTailscale(async () => stub);
   return c.json({ healthy: connected && stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false, transport });
@@ -7224,12 +7225,23 @@ const AICHAT_JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 /** /api/aichat へ渡すときに引き継ぐヘッダー。認証(Cookie・APIキー)と本文の形式だけ。 */
 const AICHAT_JOB_FORWARD_HEADERS = ['cookie', 'authorization', 'content-type', 'user-agent', 'accept-language'];
 /** 生成系フォームの共通Durable Object受付。内部APIの宛先は呼び出し側が固定値で指定する。 */
-async function enqueueAichatJob(env: Bindings, owner: string, request: Request, endpoint: '/api/aichat' | '/api/tailscale-wasm/bridge-chat' | '/api/tailscale-wasm/agent-ask', body: string): Promise<Response> {
+async function enqueueAichatJob(env: Bindings, owner: string, request: Request, endpoint: '/api/aichat' | '/api/tailscale-wasm/bridge-chat' | '/api/tailscale-wasm/agent-ask', body: string, museTransport?: 'worker' | 'container'): Promise<Response> {
   if (!env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   for (const name of AICHAT_JOB_FORWARD_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers[name] = value;
+  }
+  if (museTransport) {
+    const cookies = (headers.cookie || '').split(';').map(value => value.trim()).filter(Boolean);
+    const index = cookies.findIndex(value => value.startsWith('aichat_muse_signal='));
+    let settings: Record<string, unknown> = {};
+    if (index >= 0) {
+      try { settings = JSON.parse(decodeURIComponent(cookies[index].slice('aichat_muse_signal='.length))) || {}; } catch { settings = {}; }
+      cookies.splice(index, 1);
+    }
+    cookies.push('aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ ...settings, transport: museTransport })));
+    headers.cookie = cookies.join('; ');
   }
   const jobId = crypto.randomUUID();
   const stub = env.AICHAT_JOB.get(env.AICHAT_JOB.idFromName(jobId));
@@ -7285,10 +7297,12 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   // (AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」: 2つの経路を互いの代替にしない)。
   const selectedModelInput = !!message && !/^\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(message);
   const selectedMuseInput = body.model === 'muse' && selectedModelInput;
-  // AIチャットからのMuse送信は(接頭語を付けない限り)常に直送(ユーザー指定 2026-11-12)。古いCookieの経路の選択は読まない。
-  if (selectedMuseInput) c.header('X-Muse-Transport', 'container');
+  // 既定は直送(Worker内WASM → muse-vm、コンテナを通さない)。旧コンテナ直通は⚙で明示的に選んだときだけ。
+  // /askmuse も同じ設定に従う。失敗しても互いの代替・tunnelsへの切り替えはしない(SPEC aichat-muse 2026-11-08 の図)。
+  const museTransport = resolveMuseTransport(c.req.header('Cookie') || '');
+  if (selectedMuseInput) c.header('X-Muse-Transport', museTransport);
   let museConnectionError: string | undefined;
-  if (selectedMuseInput) {
+  if (selectedMuseInput && museTransport === 'container') {
     try {
       await requireMuseTailscale(() => getDemoContainerStub(c.env), 4_000,
         healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'));
@@ -7607,7 +7621,9 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
     askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
-    askMuseDirect: museDirectDep(c.env, getDemoContainerStub, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
+    askMuseDirect: museTransport === 'worker'
+      ? museWorkerDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'))
+      : museDirectDep(c.env, getDemoContainerStub, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
     askMuseGadget: async (prompt) => {
       if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return { ok: false, error: '管理者権限が必要です' };
       const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.sub + ':' + (body.threadId || 'default')));
@@ -20574,7 +20590,7 @@ app.post('/api/tailscale-wasm/:action', authMiddleware, cfDashboardAdminMiddlewa
     if (data.action === 'legacy-chat') {
       const payload = data.payload as { model?: unknown; message?: unknown };
       if (payload.model !== 'muse' || typeof payload.message !== 'string' || !payload.message.trim() || new TextEncoder().encode(payload.message).length > 16384 || /^\s*\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(payload.message)) return c.json({ error: 'invalid_legacy_muse_request' }, 400);
-      return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, '/api/aichat', JSON.stringify({ ...payload, source: 'textbox', stream: false }));
+      return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, '/api/aichat', JSON.stringify({ ...payload, source: 'textbox', stream: false }), 'container');
     }
     const endpoint = data.action === 'bridge-chat' ? '/api/tailscale-wasm/bridge-chat' : '/api/tailscale-wasm/agent-ask';
     return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, endpoint, JSON.stringify(data.payload));
