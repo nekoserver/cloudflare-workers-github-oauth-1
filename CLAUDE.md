@@ -461,6 +461,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
 - demoコンテナを`@cloudflare/containers`(非推奨)からDurable Object Container API(`this.ctx.container`)へ移した経緯、旧クラスが裏でしていたこと(ポートの待ち・インターネット許可・アラームで起こし続けるループ)、停止の記録とスナップショットの制約:
   [`SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md`](SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md)
   [`NOTICE.cloudflare-workers-github-oauth-1.20261111.md`](NOTICE.cloudflare-workers-github-oauth-1.20261111.md)の後半
+- Worker内WASM(`main-worker-muse`)のMuseで、推論に1分以上かかると返事が届かない(送信の無いDERP中継を約1分で閉じる)・`/health`で通り道を保つ対処・Durable Objectで待っても直らない理由・本番ログ(Workers Observability)の調べ方:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261112.md`](NOTICE.cloudflare-workers-github-oauth-1.20261112.md)
 - Worker由来のTailscaleノード(`main-worker-muse`・`muse-monitor`)の所在と状態の保存先、ブラウザをノードにすると毎回ログインが要る理由、Museへの要望の2つの仕組み(`bridge_jobs`は手動・`MuseAgentJobs`は自動)と`failed`の理由:
   [`NOTICE.cloudflare-workers-github-oauth-1.20261110.md`](NOTICE.cloudflare-workers-github-oauth-1.20261110.md)
 - `/muse-status`のTailscale WASM経由の取得(`@tailscale/connect`の`fetch`の制約・ルートのCSP・`/health`の性質・このコンテナでの検証の注意・再ビルドの判断):
