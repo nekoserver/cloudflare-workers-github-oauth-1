@@ -9,7 +9,10 @@ export class WasmMuseBridge {
     const health = path === '/muse/health' && request.method === 'GET';
     const chat = path === '/muse/v1/chat/completions' && request.method === 'POST';
     if (!health && !chat) return new Response('Not found', { status: 404 });
-    if (!this.apiKey) return Response.json({ error: 'muse_not_authenticated' }, { status: 503 });
+    // 呼び出し元(本体の中継)がdynamicnekoの鍵を渡したときは、それをそのままmuse-vmへ渡す。無ければこの中継の鍵。
+    const callerKey = /^Bearer (\S+)$/.exec(request.headers.get('Authorization') ?? '')?.[1];
+    const apiKey = callerKey ?? this.apiKey;
+    if (!apiKey) return Response.json({ error: 'muse_not_authenticated' }, { status: 503 });
     const raw = this.node.status();
     if (raw instanceof Error) return Response.json({ error: 'tailscale_not_connected' }, { status: 503 });
     const state = JSON.parse(raw);
@@ -28,7 +31,7 @@ export class WasmMuseBridge {
     let upstream: IPNResponse | undefined, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const run = async () => {
-      upstream = await this.node.fetch({ url: 'http://muse-vm:8080' + (health ? '/health' : '/v1/chat/completions'), method: health ? 'GET' : 'POST', manualRedirects: true, headers: [['Authorization', 'Bearer ' + this.apiKey], ['Content-Type', 'application/json']], ...(body ? { body } : {}) });
+      upstream = await this.node.fetch({ url: 'http://muse-vm:8080' + (health ? '/health' : '/v1/chat/completions'), method: health ? 'GET' : 'POST', manualRedirects: true, headers: [['Authorization', 'Bearer ' + apiKey], ['Content-Type', 'application/json']], ...(body ? { body } : {}) });
       if (expired) { upstream.cancel(); throw new Error('expired'); }
       const chunks: Uint8Array[] = []; let size = 0;
       for (;;) {
