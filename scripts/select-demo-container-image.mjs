@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-// Workers Builds のビルドコマンド(デプロイの前に1回動く)。demo コンテナのイメージを作るかどうかを決め、wrangler.toml の image を書き換える(ユーザー指定 2026-11-13)。
+// Workers Builds の本番のデプロイコマンド。demo コンテナのイメージを作るかどうかを決め、wrangler.toml の image を書き換えてから、
+// npx wrangler deploy --containers-rollout=gradual を実行する(ユーザー指定 2026-11-13)。
 // - イメージを作るのは containers/demo の中身が変わったときだけ。Worker だけ・ドキュメントだけの変更では作らない。
 // - 中身のハッシュを付けたタグ(ctx-<12桁>)のイメージがレジストリにあれば、それを使う。無いときだけ作って push する。
 // - 作れなかったら、最後に動いたイメージ(containers/demo/image.lock.json)で出し、Worker のデプロイは止めない。
-// 使い方: node scripts/select-demo-container-image.mjs [--dry-run]
+// 使い方: node scripts/select-demo-container-image.mjs [--dry-run] [--no-deploy]
+//   --dry-run   判定だけ表示し、何も変えない
+//   --no-deploy 書き換えまでで止め、wrangler deploy を実行しない
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -11,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 
 const DIR = 'containers/demo';
 const REPO = 'cloudflare-workers-github-oauth-1-democontainer';
+/** 以前の Workers Builds のデプロイコマンド(npx wrangler deploy --containers-rollout=gradual)と同じ引数。 */
+export const DEPLOY_ARGS = ['--containers-rollout=gradual'];
 
 /** イメージの中身を決めるファイル(git で管理しているもの。テスト・文書・記録の image.lock.json は除く)。 */
 export function contextFiles() {
@@ -67,6 +72,9 @@ function main() {
   if (dryRun) { console.log(`[container-image] dry-run: image = "${use}"`); return; }
   writeFileSync('wrangler.toml', rewriteWranglerImage(readFileSync('wrangler.toml', 'utf8'), use));
   console.log(`[container-image] wrangler.toml の image = "${use}"`);
+  if (process.argv.includes('--no-deploy')) return;
+  // デプロイの失敗は隠さない(終了コードをそのまま返す)。
+  execFileSync('npx', ['wrangler', 'deploy', ...DEPLOY_ARGS], { stdio: 'inherit' });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

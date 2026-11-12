@@ -61,10 +61,11 @@
 
 ### ビルドが要るときだけ作る(2026-11-13、ユーザー指摘)
 
-**対象**: Workers Builds の本番トリガーのビルドコマンド、`scripts/select-demo-container-image.mjs` — `image` を Dockerfile のパスにしただけでは、Worker だけ・ドキュメントだけの変更でも毎回イメージを作り直してしまう(ルール44・47の「要否の判断」に反する)。
+**対象**: Workers Builds の本番トリガーのデプロイコマンド、`scripts/select-demo-container-image.mjs` — `image` を Dockerfile のパスにしただけでは、Worker だけ・ドキュメントだけの変更でも毎回イメージを作り直してしまう(ルール44・47の「要否の判断」に反する)。
 
-- ビルドコマンド `node scripts/select-demo-container-image.mjs` が、デプロイの前に `containers/demo` の中身のハッシュ(テスト・`*.md`・`image.lock.json` を除く)を計算する。
+- デプロイコマンド `node scripts/select-demo-container-image.mjs`(利用者がダッシュボードで設定、2026-11-13)が、 `containers/demo` の中身のハッシュ(テスト・`*.md`・`image.lock.json` を除く)を計算する。
 - そのハッシュを付けたタグ `cloudflare-workers-github-oauth-1-democontainer:ctx-<12桁>` がレジストリにあれば作らず、`wrangler.toml` の `image` をそのタグに書き換える。無いときだけ `wrangler containers build -p` で作って push し、同じく書き換える。
 - 作れなかったら、`image.lock.json` の最後に動いたイメージで出し、Worker のデプロイは止めない(ログに `[container-image] 作れなかった` と出る)。
 - リポジトリの `wrangler.toml` は `image = "./containers/demo/Dockerfile"` のまま。書き換えはビルド環境の中だけで起きる。
 - Dockerfile の `ARG INSTALL_*` の既定値は `image_vars` と同じなので、`wrangler containers build`(ビルド引数を渡せない)でも同じイメージになる。
+- スクリプトは書き換えのあと、以前のデプロイコマンドと同じ `npx wrangler deploy --containers-rollout=gradual` を実行する。デプロイの失敗は隠さず、終了コードをそのまま返す。

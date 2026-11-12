@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contextFiles, contextSha256, imageTag, decide, rewriteWranglerImage } from '../scripts/select-demo-container-image.mjs';
+import { contextFiles, contextSha256, imageTag, decide, rewriteWranglerImage, DEPLOY_ARGS } from '../scripts/select-demo-container-image.mjs';
 
 // 対象: Workers Builds のビルドコマンドで、demo コンテナのイメージを作るかどうかを決める(ユーザー指定 2026-11-13)。
 // 方針: イメージを作るのは containers/demo の中身が変わったときだけ。Worker だけ・ドキュメントだけの変更では作らない。
@@ -36,5 +36,9 @@ describe('demo コンテナのイメージを作るかどうか', () => {
 
   it('書き換える行が無ければ失敗する(黙って Dockerfile からのビルドにしない)', () => {
     expect(() => rewriteWranglerImage('[[containers]]\nimage = "other"\n', 'r')).toThrow();
+  });
+
+  it('デプロイコマンドとして使うので、最後に以前と同じ引数で wrangler deploy を実行する', () => {
+    expect(DEPLOY_ARGS).toEqual(['--containers-rollout=gradual']);
   });
 });
