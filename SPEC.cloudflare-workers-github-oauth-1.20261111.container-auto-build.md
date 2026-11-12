@@ -58,3 +58,13 @@
 - 代わりの作り方(2026-11-13、ユーザー指定): Workers Builds の本番のデプロイ(`npx wrangler deploy --containers-rollout=gradual`、設定済み)で、Dockerfile からイメージを作る。`wrangler.toml` の `image` を `./containers/demo/Dockerfile` に戻し、ビルド引数は `image_vars` で渡す。`containers/demo/image.lock.json` は、最後に動いたイメージ(戻す先)の記録として残す。11-11 の `runc` の `/proc` の失敗が今も起きるかは、この変更のビルドで確かめる。落ちたら、`image.lock.json` の digest を `image` に書いて戻す。
 - パッケージ(git・Apache)の作り方は未決。パッケージ(git・Apache)は、CLAUDE.md のコンテナビルドのルール8のとおり、十分な CPU のある Ubuntu 26.04 x86_64 で `scripts/build-demo-packages-ubuntu26.sh` を実行し、`scripts/demo-packages-apply.mjs` で反映する。イメージの作り直しと `image.lock.json` の更新は、Docker を使える環境が要る(Workers Builds では Docker が使えない。NOTICE.cloudflare-workers-github-oauth-1.20261111.md)。
 - エージェントのサンドボックス(2026-11-13 時点、Ubuntu 26.04 x86_64・1 CPU・メモリ 4GB・空きディスク 2.3GB・Docker なし)は、どちらにも向かない。
+
+### ビルドが要るときだけ作る(2026-11-13、ユーザー指摘)
+
+**対象**: Workers Builds の本番トリガーのビルドコマンド、`scripts/select-demo-container-image.mjs` — `image` を Dockerfile のパスにしただけでは、Worker だけ・ドキュメントだけの変更でも毎回イメージを作り直してしまう(ルール44・47の「要否の判断」に反する)。
+
+- ビルドコマンド `node scripts/select-demo-container-image.mjs` が、デプロイの前に `containers/demo` の中身のハッシュ(テスト・`*.md`・`image.lock.json` を除く)を計算する。
+- そのハッシュを付けたタグ `cloudflare-workers-github-oauth-1-democontainer:ctx-<12桁>` がレジストリにあれば作らず、`wrangler.toml` の `image` をそのタグに書き換える。無いときだけ `wrangler containers build -p` で作って push し、同じく書き換える。
+- 作れなかったら、`image.lock.json` の最後に動いたイメージで出し、Worker のデプロイは止めない(ログに `[container-image] 作れなかった` と出る)。
+- リポジトリの `wrangler.toml` は `image = "./containers/demo/Dockerfile"` のまま。書き換えはビルド環境の中だけで起きる。
+- Dockerfile の `ARG INSTALL_*` の既定値は `image_vars` と同じなので、`wrangler containers build`(ビルド引数を渡せない)でも同じイメージになる。
