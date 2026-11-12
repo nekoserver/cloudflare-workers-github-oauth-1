@@ -87,4 +87,4 @@ muse-vm へ届く要求(どの経路でも同じ):
 
 ## 関連コミット
 
-(コミット後に追記)
+- [`b47f384`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b47f384) 接頭語なしの Muse を直通(コンテナ経由)を既定にし、直通の接続表示を送った結果で決める
