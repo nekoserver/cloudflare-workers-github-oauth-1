@@ -70,7 +70,8 @@ export function getAiChatPage(user: {
     ? models
     : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
   const modelOptionsHtml = modelList
-    .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
+    // 初期の言語モデルは Muse(ユーザー指定 2026-11-12)。AI_CHAT_MODEL は Slack 応答と共通の設定なので変えない。
+    .map(m => `<option value="${escapeHtml(m.value)}"${m.value === MUSE_ASKGK_MODEL.value ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
   const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]).merged);
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';

@@ -1358,14 +1358,34 @@ async function interpretAskMuseCommand(message: string, deps: AichatSlashCommand
   return interpretMusePrompt(prompt, deps, '/askmuse');
 }
 
+/** muse-vmまで届かなかった失敗。届いた可能性がある失敗(タイムアウト・認証・利用上限・実行)はtunnels.rbへ送らない(推論の二重実行を避ける)。 */
+const MUSE_UNREACHED_ERRORS: ReadonlySet<MuseDirectError> = new Set<MuseDirectError>(['muse_connection_failed', 'container_not_running', 'tailscale_wasm_not_configured']);
+
+/**
+ * 直送に失敗したとき、⚙で有効にしていればtunnels.rb(/neko askgk muse_prompt=)へ1回だけ送る(既定は使わない。ユーザー指定 2026-11-12)。
+ * reasonは直送が失敗した理由(表示用)。
+ */
+export async function interpretMuseTunnelsFallback(prompt: string, deps: Pick<AichatSlashCommandDeps, 'askTunnelSigner'>, reason: string): Promise<AichatSlashCommandResult> {
+  if (!deps.askTunnelSigner) return { handled: true, response: `❌ Muse への直送に失敗し(${reason})、tunnels.rb も利用できません(rust-worker-sqlx-d1連携未設定)` };
+  const outcome = await raceWithTimeout(deps.askTunnelSigner('muse_prompt="' + prompt + '"'), ASKGK_TIMEOUT_MS);
+  if (outcome.status === 'timeout') return { handled: true, response: `❌ Muse への直送に失敗し(${reason})、tunnels.rb 経由もタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒)` };
+  if (outcome.status === 'error') return { handled: true, response: `❌ Muse への直送に失敗し(${reason})、tunnels.rb 経由もエラーになりました: ${outcome.message}` };
+  const reply = appendAskgkLlmInfoLine(outcome.value.reply.trim(), 'muse', outcome.value.llmModel);
+  return { handled: true, response: reply + `\n\n(直送に失敗したため(${reason})、tunnels.rb 経由で送りました)`, saveAsAiResponse: true, museAskgk: true };
+}
+
 /** Muse選択の通常入力はコマンドへ変換せず本文のまま実行する。 */
-export async function interpretMusePrompt(prompt: string, deps: AichatSlashCommandDeps, label = 'Muse'): Promise<AichatSlashCommandResult> {
+export async function interpretMusePrompt(prompt: string, deps: AichatSlashCommandDeps, label = 'Muse', options: { tunnelsFallback?: boolean } = {}): Promise<AichatSlashCommandResult> {
   if (!deps.askMuseDirect) return { handled: true, response: `❌ ${label} は現在利用できません(DEMO_CONTAINER未設定)` };
   const startedAt = Date.now();
   const outcome = await raceWithTimeout(deps.askMuseDirect(resolveMuseCommand(prompt)), ASKGK_TIMEOUT_MS);
   if (outcome.status === 'timeout') return { handled: true, response: `❌ ${label} がタイムアウトしました(${ASKGK_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
   if (outcome.status === 'error') return { handled: true, response: `❌ ${label} でエラーが発生しました: ${outcome.message}` };
-  if (!outcome.value.ok) return { handled: true, response: `❌ ${label} でエラーが発生しました: ${ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error}` };
+  if (!outcome.value.ok) {
+    const reason = ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error;
+    if (options.tunnelsFallback && MUSE_UNREACHED_ERRORS.has(outcome.value.error)) return interpretMuseTunnelsFallback(prompt, deps, reason);
+    return { handled: true, response: `❌ ${label} でエラーが発生しました: ${reason}` };
+  }
   // muse-vmが推論せずに実行したコマンドの結果は、Codex・Claudeの制御入力と同じくAI回答履歴に残さない。
   if (outcome.value.bridgeCommand) {
     const roundTrip = outcome.value.bridgeCommand === '/ping' ? `\n往復: ${Date.now() - startedAt} ms（本体Worker → muse-vm）` : '';

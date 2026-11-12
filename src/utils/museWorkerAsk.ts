@@ -13,6 +13,13 @@ export function resolveMuseTransport(cookie: string): MuseTransport {
   try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'container' ? 'container' : 'worker'; }
   catch { return 'worker'; }
 }
+/** 直送に失敗したら tunnels.rb をフォールバック経路として使うか。既定は使わない(明示的に true のときだけ。ユーザー指定 2026-11-12)。 */
+export function resolveMuseTunnelsFallback(cookie: string): boolean {
+  const part = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('aichat_muse_signal='));
+  if (!part) return false;
+  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.tunnelsFallback === true; }
+  catch { return false; }
+}
 type Env = { TAILSCALE_WASM?: DurableObjectNamespace; MUSE_API_KEY?: string; DB?: D1Database };
 async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 8000, apiKey?: string): Promise<Response> {
   if (!env.TAILSCALE_WASM) return Response.json({ error: 'tailscale_wasm_not_configured' }, { status: 503 });

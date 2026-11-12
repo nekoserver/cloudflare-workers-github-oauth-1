@@ -73,9 +73,11 @@ describe('aichat.ts モデル名表示', () => {
     expect(html).toContain('var lastModel = modelSelect.value');
   });
 
-  it('model select に初期モデルが selected 属性付きで存在する', () => {
+  // 初期選択は Muse(ユーザー指定 2026-11-12)。設定モデルは選択肢に残る。
+  it('model select に設定モデルが選択肢として存在し、初期選択は muse', () => {
     const html = buildPage(FULL_MODEL);
-    expect(html).toContain(`value="${FULL_MODEL}" selected`);
+    expect(html).toContain(`value="${FULL_MODEL}"`);
+    expect(html).toContain('value="muse" selected');
   });
 
   it('初期モデルのラベルが select option に含まれる', () => {

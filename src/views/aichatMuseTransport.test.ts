@@ -21,6 +21,6 @@ it('checkboxes always select exactly one route; save persists legacy selection a
   worker.click(); expect(worker.checked).toBe(true);
   container.click(); expect(container.checked).toBe(true); expect(worker.checked).toBe(false);
   [...document.querySelectorAll('button')].find(b => b.textContent === '保存')!.click();
-  expect(save).toHaveBeenCalledWith({ enabled: true, intervalSeconds: 600, transport: 'container' });
+  expect(save).toHaveBeenCalledWith({ enabled: true, intervalSeconds: 600, transport: 'container', tunnelsFallback: false });
   open('container'); expect(document.querySelector<HTMLInputElement>('[data-muse-transport="container"]')!.checked).toBe(true);
 });

@@ -62,6 +62,7 @@ Museへの経路は2つあり、同じ`muse-vm`へ届くが、明確に別の経
 | キーの場所 | LLM workerの環境の`MUSE_API_KEY` | Workerのsecret`MUSE_API_KEY` |
 
 - **互いの代替として扱わない。** 片方が失敗しても、もう片方へ切り替えない。
+  - 例外(ユーザー指定 2026-11-12): スイッチで Muse を選んだ接頭語なしの投稿だけ、Museの ⚙ の「Museへ直送できないとき、tunnels.rb をフォールバック経路として使う」(既定 OFF)を有効にしたときに限り、直送が muse-vm に届かなかった失敗(`muse_connection_failed`・`container_not_running`・`tailscale_wasm_not_configured`)で tunnels.rb(`muse_prompt=`)へ1回送る。届いた可能性がある失敗(タイムアウト・認証・利用上限)では送らない。接頭語付き(`/askmuse`・`/neko askgk`)には適用しない。
 - **修正と確認は経路ごとに行う。** 片方で動いたことを、もう片方が動く根拠にしない。
 
 2026-11-06に`src/views/aichat.ts`と`src/index.ts`で、スイッチの値を変えるのは人の操作だけであること、`/neko`と`/askmuse`で始まるメッセージは選択中のモデルで変換しないことを確かめた。

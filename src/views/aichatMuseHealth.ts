@@ -26,6 +26,8 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       var settings = (value && typeof value === 'object') ? value : {};
       return {
         transport: settings.transport === 'container' ? 'container' : 'worker',
+        // 直送に失敗したら tunnels.rb をフォールバック経路として使う。既定は使わない(ユーザー指定 2026-11-12)。
+        tunnelsFallback: settings.tunnelsFallback === true,
         enabled: settings.enabled !== false,
         intervalSeconds: isValidMuseSignalSeconds(settings.intervalSeconds) ? settings.intervalSeconds : AICHAT_MUSE_SIGNAL_DEFAULT_SECONDS
       };
@@ -198,6 +200,15 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       routeNote.style.cssText = 'font-size:12px;';
       routeField.appendChild(routeNote);
       box.appendChild(routeField);
+      var fallbackLabel = document.createElement('label');
+      fallbackLabel.style.cssText = 'display:block;margin:8px 0;font-size:13px;';
+      var fallbackInput = document.createElement('input');
+      fallbackInput.type = 'checkbox';
+      fallbackInput.setAttribute('data-muse-tunnels-fallback', '');
+      fallbackInput.checked = current.tunnelsFallback === true;
+      fallbackLabel.appendChild(fallbackInput);
+      fallbackLabel.appendChild(document.createTextNode('Museへ直送できないとき、tunnels.rb をフォールバック経路として使う'));
+      box.appendChild(fallbackLabel);
       enabledInput.addEventListener('change', function() {
         intervalInput.disabled = !enabledInput.checked;
         intervalError.textContent = '';
@@ -227,7 +238,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
           // OFFのときは入力が無効で直せないので、元の間隔を残す。
           seconds = current.intervalSeconds;
         }
-        options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds, transport: selectedTransport });
+        options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds, transport: selectedTransport, tunnelsFallback: fallbackInput.checked });
         close();
       });
       btnRow.appendChild(resetBtn);
