@@ -7,21 +7,26 @@ import { WasmTailnetService } from '../utils/wasmTailnetService';
 import { WasmMuseBridge, type MuseKeyStat } from '../utils/wasmMuseBridge';
 import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
+import { createGoLifecycle } from '../utils/goLifecycle';
 
-let ready: Promise<void> | undefined;
-function startGo(): Promise<void> {
-  return ready ??= (async () => {
-    const go = new Go();
-    const instance = new WebAssembly.Instance(wasm, go.importObject);
-    let failure: unknown;
-    void go.run(instance).catch(error => { failure = error; });
+// Go が終了したら(2026-11-12 19:29:33 UTC に exit code 1 で終了した)、次の要求で起動し直す。ノードの状態は SQLite に残るので、ログインし直しは要らない。
+const goRuntime = createGoLifecycle(() => {
+  const go = new Go();
+  const instance = new WebAssembly.Instance(wasm, go.importObject);
+  (globalThis as { newIPN?: unknown }).newIPN = undefined;
+  const exited = go.run(instance);
+  const ready = (async () => {
+    let failure = false;
+    exited.catch(() => { failure = true; });
     for (let i = 0; i < 500 && typeof globalThis.newIPN !== 'function'; i++) {
       if (failure) throw new Error('Tailscale WASM startup failed');
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     if (typeof globalThis.newIPN !== 'function') throw new Error('Tailscale WASM startup timed out');
   })();
-}
+  return { ready, exited };
+});
+function startGo(): Promise<void> { return goRuntime.start(); }
 /** One server-owned node, credentials in private DO SQLite, never in browser storage. */
 export class TailscaleWasm extends DurableObject<Bindings> {
   private service!: WasmTailnetService;
@@ -43,6 +48,11 @@ export class TailscaleWasm extends DurableObject<Bindings> {
     });
   }
   private ensureNode(): Promise<void> {
+    if (goRuntime.exited && this.nodeReady) {
+      console.log('[tailscale-wasm] ' + JSON.stringify({ event: 'go_exited_restart' }));
+      this.nodeReady = undefined;
+      this.loginRequested = false;
+    }
     return this.nodeReady ??= (async () => {
       const ctx = this.ctx, env = this.env;
       await startGo();
@@ -62,7 +72,7 @@ export class TailscaleWasm extends DurableObject<Bindings> {
         list() { return [...ctx.storage.sql.exec<MuseKeyStat>('SELECT fingerprint, replied, unanswered FROM muse_key_results ORDER BY replied DESC LIMIT 10')].map(r => ({ fingerprint: r.fingerprint, replied: r.replied, unanswered: r.unanswered })); },
       });
       node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
-    })();
+    })().catch(error => { this.nodeReady = undefined; throw error; });
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();
