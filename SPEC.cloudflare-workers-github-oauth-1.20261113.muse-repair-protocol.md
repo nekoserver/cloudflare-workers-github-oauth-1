@@ -16,8 +16,8 @@
 | 項目 | 決まり |
 |---|---|
 | 経路 | 本体の非同期ジョブ(`TAILSCALE_WASM` の Durable Object `muse` の `/agent-jobs`)。HTTP の待ち時間に縛られず、失敗は記録に残る |
-| 持ち主・送り手 | `X-Muse-Owner: nekoserver`、本文の `agent: "claude"`(Codex なら `"codex"`) |
-| 鍵 | Durable Object が持つ本体の `MUSE_API_KEY`。Muse は鍵が既知かどうかだけを見て、鍵と経路を結び付けていない(ユーザー確認 2026-11-13)ので、この使い方でよい |
+| 経路の判定 | この依頼は「本体 Worker → Tailscale WASM(Durable Object `muse`)→ muse-vm」の直送を通る。muse-vm 側では、届いた鍵(Durable Object が持つ本体の `MUSE_API_KEY`)で経路を見分ける。送信者(Claude Code か Codex か)は判定に使わない(8章) |
+| API の必須項目 | `X-Muse-Owner: nekoserver`。本文の `agent` は `/agent-jobs` の記録用で、Muse の判断には使わない |
 | Claude Code の入口 | 本体の `/api/tailscale-wasm/jobs` は管理者のログインが要る。Claude Code は、`TailscaleWasm`(`script_name = "cloudflare-workers-github-oauth-1"`)を束ねた使い捨ての Worker を配備して `/agent-jobs` を呼び、終わったら消す。配備と削除は `CF_CONTAINER_API_TOKEN` で行う |
 | 識別子 | `requestId` は `<用件>-<UNIX秒>`(例: `bridge-041-1794509569`)。同じ依頼を送り直すときは同じ値を使う(重複は受け付けられない) |
 
@@ -25,7 +25,7 @@
 
 次の順で書く。事実は確かめられるもの(PR・コミット・ファイルのパス)だけを書き、推測を事実として書かない。
 
-1. 1行目: 何の依頼か(例: 「muse-vm-hacks の api-bridge 更新の反映依頼です(利用者 nekoserver の了承済み)」)。
+1. 1行目: 何の依頼か(例: 「muse-vm-hacks の api-bridge 更新の反映依頼です」)。送り手の名乗りは書かない(8章)。
 2. 変更: PR の URL とコミット、版。
 3. お願い: 番号付きの手順。再起動を伴うときは「返信を書いたあとで再起動する」と書く(先に再起動すると、返信を運ぶ api-bridge が止まる)。
 4. 返信に書くこと: 確かめたい項目だけ(入った版、再起動したか、など)。
@@ -56,3 +56,11 @@
 
 - 依頼: muse-api-bridge 0.4.1 の反映(muse-vm-hacks PR #1、885a661d。呼び出し側が切断したらジョブを取り下げて `JOB_LOCK` を放す)。`requestId` は `bridge-041-1794509569`、18:52 UTC に送信。
 - 結果: (返信を受け取り、`/nix/packages` で版を確かめてから書く)
+
+## 8. 送信者は扱わず、経路の判定だけにする(2026-11-13 の変更)
+
+**対象**: 2章「経路の判定」と3章の1行目 — 依頼の送り手を区別するのをやめ、どの経路で届いたかだけを見る。
+
+- 変更: 送り手(`agent: "claude"` / `"codex"`、本文の「Claude Code からの依頼」という名乗り)を判断材料から外した。依頼は経路(届いた鍵)で見分ける。
+- 理由(ユーザー指定 2026-11-13): コンテナ側からの送信者は今は Claude か Codex にしかならず、区別しても得るものがない。Muse 側で照合しているのは鍵が既知かどうか(知らない送信者かどうか)で、それが経路の判定になる。
+- 全体の見直し: 経路の名前と muse-vm 側の鍵の名前は、まだ決まっていない([SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md](SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md) の7章)。決まったら、2章の経路をその名前で書き直す。
