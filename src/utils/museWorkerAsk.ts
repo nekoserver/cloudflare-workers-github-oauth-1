@@ -1,6 +1,14 @@
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
-import { formatMuseBridgeDiagnosis, type MuseBridgeDiagnosis } from './wasmMuseBridge';
+import { formatMuseBridgeDiagnosis, type MuseBridgeDiagnosis, type MuseKeyStat } from './wasmMuseBridge';
+/** 送った鍵の指紋と、鍵ごとの返事の記録を1文にする。返事をもらえている鍵と指紋が違えば、送った鍵は Muse に特定されていない。 */
+export function formatMuseKeyReport(fingerprint?: string, keys?: MuseKeyStat[]): string {
+  if (!fingerprint) return '';
+  const mine = keys?.find(k => k.fingerprint === fingerprint);
+  const others = (keys ?? []).filter(k => k.fingerprint !== fingerprint && k.replied > 0);
+  return `送った鍵 ${fingerprint}: 返事 ${mine?.replied ?? 0}回・返事なし ${mine?.unanswered ?? 0}回`
+    + (others.length ? ` / 返事をもらえている鍵 ${others.map(k => `${k.fingerprint}: ${k.replied}回`).join('、')}` : ' / 返事をもらえた鍵はまだ無い');
+}
 import { MUSE_NODE_READY_MS } from './museNodeReady';
 export type MuseTransport = 'worker' | 'container';
 
@@ -28,7 +36,7 @@ async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 
   const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      env.TAILSCALE_WASM.get(env.TAILSCALE_WASM.idFromName('muse')).fetch(new Request('http://tailnet' + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: controller.signal })),
+      env.TAILSCALE_WASM.get(env.TAILSCALE_WASM.idFromName('muse')).fetch(new Request('http://tailnet' + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'X-Muse-Bridge-Timeout-Ms': String(Math.max(1000, timeoutMs - 3000)), ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: controller.signal })),
       new Promise<Response>(resolve => { timer = setTimeout(() => { controller.abort(); resolve(Response.json({ error: 'llm_timeout' }, { status: 504 })); }, timeoutMs); }),
     ]);
   } finally { clearTimeout(timer); }
@@ -56,8 +64,9 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
         onStatus?.(false);
         const error = res.status === 504 ? 'llm_timeout' : res.status === 401 || res.status === 403 ? 'muse_authentication_failed' : res.status === 429 ? 'muse_usage_limit' : 'muse_connection_failed';
         // 中継がタイムアウトの診断を返していれば、表示用の1文にして載せる。
-        const data = await res.json().catch(() => null) as { diagnosis?: MuseBridgeDiagnosis } | null;
-        return data?.diagnosis?.cause ? { ok: false, error, diagnosis: formatMuseBridgeDiagnosis(data.diagnosis) } : { ok: false, error };
+        const data = await res.json().catch(() => null) as { diagnosis?: MuseBridgeDiagnosis; keyFingerprint?: string; keys?: MuseKeyStat[] } | null;
+        const lines = [data?.diagnosis?.cause ? formatMuseBridgeDiagnosis(data.diagnosis) : '', formatMuseKeyReport(data?.keyFingerprint, data?.keys)].filter(Boolean);
+        return lines.length ? { ok: false, error, diagnosis: lines.join('\n') } : { ok: false, error };
       }
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
