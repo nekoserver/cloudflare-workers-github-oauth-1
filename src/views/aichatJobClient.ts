@@ -51,6 +51,28 @@ export const AICHAT_JOB_CLIENT_SCRIPT = `
       });
     }
 
+    /** 送信したジョブを止める(ユーザー指定 2026-11-12)。止まったかどうかは、続けている pollAichatJob が failed で受け取る。 */
+    function cancelAichatJob(deps, jobId) {
+      return deps.fetch('/api/aichat/jobs/' + encodeURIComponent(jobId) + '/cancel', { method: 'POST', credentials: 'same-origin' })
+        .then(function(res) { if (res.body && res.body.cancel) res.body.cancel(); }, function() {});
+    }
+    /** 「考え中」の吹き出しにキャンセルボタンを置く。押すのは1回だけ有効。 */
+    function addAichatCancelButton(deps, bubble, jobId) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'aichat-job-cancel-btn';
+      button.textContent = 'キャンセル';
+      button.style.cssText = 'margin-left:8px;padding:2px 10px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:inherit;cursor:pointer;font-size:12px;';
+      button.addEventListener('click', function() {
+        if (button.disabled) return;
+        button.disabled = true;
+        button.textContent = 'キャンセル中…';
+        cancelAichatJob(deps, jobId);
+      });
+      bubble.appendChild(button);
+      return button;
+    }
+
     /** 途中経過を続きの位置から取り、onDeltaへ渡す。完了したら/api/aichatと同じ形の結果を返し、記録を消す。 */
     function pollAichatJob(deps, jobId, onDelta) {
       var offset = 0;
