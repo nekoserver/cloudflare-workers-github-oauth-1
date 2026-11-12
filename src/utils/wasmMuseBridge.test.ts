@@ -49,3 +49,40 @@ it('rejects system messages, invalid role order and excessive history before any
   const f=fixture();expect((await f.service.fetch(new Request('http://tailnet/muse/v1/chat/completions',{method:'POST',body:JSON.stringify({messages})}))).status).toBe(400);expect(f.node.fetch).not.toHaveBeenCalled();
  }
 });
+
+// 推論を待つ間の接続維持(2026-11-12): WASM のノードは送信の無い DERP 接続を約1分で閉じる(magicsock: closing
+// connection to derp-N (idle))。推論に1分以上かかると muse-vm の返事の通り道が閉じられ、300秒のタイムアウトになった。
+// 待っている間、muse-vm へ短い /health を定期的に送り、接続を使用中に保つ。推論の要求は送り直さない。
+it('keeps the tailnet path busy with periodic /health while a long chat is pending, and stops afterwards', async () => {
+  vi.useFakeTimers();
+  try {
+    let finish!: () => void;
+    const calls: string[] = [];
+    const node = {
+      status: () => JSON.stringify({ state: 'Running', peers: [{ name: 'muse-vm', online: true }] }),
+      fetch: vi.fn(async (r: { url: string }) => {
+        calls.push(r.url);
+        if (r.url.endsWith('/health')) return { status: 200, cancel: vi.fn(), read: vi.fn().mockResolvedValueOnce(new TextEncoder().encode('{"status":"ok"}')).mockResolvedValue(null) };
+        await new Promise<void>(resolve => { finish = resolve; });
+        let done = false;
+        return { status: 200, cancel: vi.fn(), read: async () => { if (done) return null; done = true; return new TextEncoder().encode('{"model":"muse","choices":[{"message":{"content":"ok"}}]}'); } };
+      }),
+    };
+    const service = new WasmMuseBridge(node as never, 'secret', 300_000, 20_000);
+    const pending = service.fetch(request());
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(calls.filter(u => u.endsWith('/v1/chat/completions'))).toHaveLength(1);
+    expect(calls.filter(u => u === 'http://muse-vm:8080/health')).toHaveLength(3);
+    finish();
+    const response = await pending;
+    expect(response.status).toBe(200);
+    const after = calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls.length).toBe(after);
+  } finally { vi.useRealTimers(); }
+});
+it('health checks themselves do not start keep-alive requests', async () => {
+  const f = fixture();
+  await f.service.fetch(new Request('http://node/muse/health'));
+  expect(f.node.fetch).toHaveBeenCalledOnce();
+});
