@@ -1,5 +1,6 @@
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
+import { MUSE_NODE_READY_MS } from './museNodeReady';
 export type MuseTransport = 'worker' | 'container';
 
 /**
@@ -32,9 +33,14 @@ async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 
   } finally { clearTimeout(timer); }
 }
 /** 直送(Worker内WASM → muse-vm)の死活確認。AIチャットの枠色・tree-view・/tailscale-wasm が使う。 */
+/**
+ * 死活確認の待ち時間。ノードは起動し直した直後、tailnetにつながるまで MUSE_NODE_READY_MS まで待つので、それより長くする
+ * (以前は8秒で、起動直後は Muse が動いていても必ず失敗し、ページ読み込み時のトーストが出ていた。2026-11-12)。
+ */
+export const MUSE_WORKER_HEALTH_TIMEOUT_MS = MUSE_NODE_READY_MS + 8_000;
 export async function checkMuseWorkerHealth(env: Env, callerKey?: string): Promise<boolean> {
   if (!env.MUSE_API_KEY) return false;
-  try { const res = await boundedFetch(env, '/muse/health', undefined, 8000, callerKey); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
+  try { const res = await boundedFetch(env, '/muse/health', undefined, MUSE_WORKER_HEALTH_TIMEOUT_MS, callerKey); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
   catch { return false; }
 }
 /** callerKeyを渡すと、Tailscale WASMの中継はその鍵をmuse-vmへ渡す(dynamicnekoのMUSE_API_KEY)。無ければ中継が持つ本体の鍵。 */
