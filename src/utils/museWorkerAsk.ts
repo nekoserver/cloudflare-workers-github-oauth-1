@@ -59,7 +59,8 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
     if (messages.reduce((size, message) => size + new TextEncoder().encode(message.content).length, 0) > 16384) return { ok: false, error: 'prompt_too_large' };
     try {
       const timeout = env.DB ? (await readAskgkTimeoutSetting(env.DB)).timeoutSeconds : DEFAULT_ASKGK_TIMEOUT_SECONDS;
-      const res = await boundedFetch(env, '/muse/v1/chat/completions', { model: 'muse', messages }, Math.min(timeout, maxTimeoutSeconds ?? timeout) * 1000, callerKey);
+      // 上限を渡された直送(sendMuseViaWorker)は、askgk の保存値(最大300秒)で縮めない。muse-vm の api-bridge が答えを待つ600秒に合わせる(2026-11-13)。
+      const res = await boundedFetch(env, '/muse/v1/chat/completions', { model: 'muse', messages }, (maxTimeoutSeconds ?? timeout) * 1000, callerKey);
       if (res.status !== 200) {
         onStatus?.(false);
         const error = res.status === 504 ? 'llm_timeout' : res.status === 401 || res.status === 403 ? 'muse_authentication_failed' : res.status === 429 ? 'muse_usage_limit' : 'muse_connection_failed';
@@ -73,8 +74,13 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
  }
 /** Worker内WASMで muse-vm へ送る経路のID(SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md 7章の名前の候補)。 */
 export type MuseWorkerRouteId = 'aichat-direct' | 'treeview-musetab-wasm';
-/** 待ち時間の上限。動いている tree-view の Museタブと同じ90秒にそろえる(2026-11-12)。 */
-export const MUSE_WORKER_MAX_TIMEOUT_SECONDS = 90;
+/**
+ * 待ち時間の上限。AIチャット(aichat-direct)と tree-view の Museタブで同じ値にする(2026-11-12)。
+ * muse-vm の api-bridge は、鍵が通るとジョブを置いて Muse の答えを最大600秒(BRIDGE_TIMEOUT)待ち、ジョブは1件ずつ処理する。
+ * 90秒で打ち切ると、Muse が答えを書く前にこちらが諦め、api-bridge は残りの時間ロックを握ったまま後続を詰まらせる。
+ * なので api-bridge と同じ600秒にする(2026-11-13。Muse 側で aichat-direct の要求が届き送信者も照合できていたが、答えに時間がかかっていた)。
+ */
+export const MUSE_WORKER_MAX_TIMEOUT_SECONDS = 600;
 /**
  * Worker内WASMの直送の共通の送り方。tree-view の Museタブで応答が返る送り方を、AIチャットにも使う(違うのは経路IDだけ。ユーザー指定 2026-11-12)。
  * 鍵は毎回 Authorization で中継へ明示する(中継が起動時に読んだ鍵に任せない)。失敗したら経路IDを Worker のログに出す(鍵は出さない)。

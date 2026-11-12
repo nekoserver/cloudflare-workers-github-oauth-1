@@ -149,3 +149,18 @@ tunnels.rb と LLM worker は lib 上にあり、特定のコンテナには縛�
 ## 関連コミット
 
 - [`b47f384`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b47f384) 接頭語なしの Muse を直通(コンテナ経由)を既定にし、直通の接続表示を送った結果で決める
+
+## 直送(Worker内WASM)の待ち時間(2026-11-13)
+
+**対象**: `aichat-direct` と `treeview-musetab-wasm`(`sendMuseViaWorker`)が muse-vm の答えを待つ時間 — muse-vm の api-bridge の動きに合わせる。
+
+| 項目 | 値 | 理由 |
+|---|---|---|
+| 本体の上限(`MUSE_WORKER_MAX_TIMEOUT_SECONDS`) | 600秒(以前は90秒) | api-bridge(`muse-vm-hacks/files/api-bridge/server.py`)は、鍵が通るとジョブを `~/bridge/inbox/` に置き、Muse の答えを最大600秒(`BRIDGE_TIMEOUT`)待つ。90秒で打ち切ると答えを受け取れない |
+| askgk の保存値(最大300秒) | 直送には使わない | askgk 用の値で、直送の上限を縮めない |
+| 中継(`WasmMuseBridge`)の上限 | 600秒(以前は290秒)。呼び出し側は3秒短くして送る | 外側より先に、中継が診断付きで答える |
+| AIチャットのジョブ | alarm の中で動き、上限は15分 | 600秒待っても収まる |
+
+- api-bridge は鍵が違えばすぐ 401 を返す。401 でなく無応答なら鍵は通っている(2026-11-13 に `server.py` で確認)。
+- api-bridge はジョブを1件ずつ処理する(`JOB_LOCK`)。こちらが先に諦めても、api-bridge は最大600秒ロックを握ったまま待ち、後続の要求を詰まらせる。上限を api-bridge と同じにするのは、このためでもある。
+- 変更のきっかけ: 2026-11-13、Muse 側で aichat-direct の要求が届き送信者も照合できていたが、答えに時間がかかり、90秒・290秒では受け取れなかった(ユーザー確認)。
