@@ -142,12 +142,11 @@ binding = "AI"
 # ようにしているが、起動したまま放置しないよう運用で注意する。
 [[containers]]
 class_name = "DemoContainer"
-# ビルド済みのイメージをdigestで固定する(ユーザー指定、2026-11-11。dynamicnekoと同じ方式)。
-# Workers BuildsのDockerビルドが「runc ... mounting "proc" ... operation not permitted」で落ち続けたため、
-# デプロイのたびにイメージを作らない。containers/demo/ を変えたら、Dockerのある環境でイメージを作り直し、
-# containers/demo/image.lock.json とこの行を更新する(src/cf-containers-image-lock.test.ts が漏れを検出する)。
-# 作ったときのビルド引数(以前の image_vars)は image.lock.json の buildArgs に記録している。
-image = "registry.cloudflare.com/4eb48547c6f6a8194e6c3eb5e700463f/cloudflare-workers-github-oauth-1-democontainer@sha256:c945ea026afa3e0c1d3446535fa019c96ef50ba21e25a17d75aabdaa162dee83"
+# Workers Builds の本番のデプロイ(npx wrangler deploy)で、Dockerfile からイメージを作る(ユーザー指定、2026-11-13。GitHub Actions は使わない)。
+# 2026-11-11〜13 はビルド済みのイメージをdigestで固定していた(Workers Builds の Docker ビルドが runc の /proc で落ちたため)。
+# 最後に動いたイメージは containers/demo/image.lock.json に記録してあり、ビルドが落ちたときはそのdigestをここに書けば戻せる。
+image = "./containers/demo/Dockerfile"
+image_vars = { INSTALL_DOCKER = "false", INSTALL_VITEST = "true", INSTALL_TYPESCRIPT = "true", INSTALL_WRANGLER = "true" }
 max_instances = 1
 # standard-1(1/2 vCPU・4GiBメモリ・8GBディスク)。既定のlite(1/16 vCPU・
 # 256MiB)ではtmux上でCLIを動かすには心細いため、実用と節約のバランスを

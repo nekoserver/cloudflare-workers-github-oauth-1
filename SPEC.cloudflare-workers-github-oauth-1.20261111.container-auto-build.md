@@ -48,3 +48,13 @@
 
 - GitHub Actions 上での実際のビルド・送信・PR の作成(シークレットの設定後に手動で1回実行して確かめる)。
 - `ubuntu:26.04` のコンテナでのパッケージのビルド。
+
+## GitHub Actions を使わない(2026-11-13、ユーザー指定)
+
+**対象**: `.github/workflows/demo-packages.yml`・`.github/workflows/container-image.yml` — パッケージとイメージの作り直しに GitHub Actions を使うのをやめる。
+
+- 2つのワークフローは GitHub 上で無効にした(`gh workflow disable`、2026-11-13)。ファイルは残すが、実行しない。
+- 背景: 2026-11-12 は、手動起動も含めて Actions の実行がすべて `startup_failure` で、一度も動かなかった(リポジトリの Actions 設定は有効。原因はアカウント側と見られるが、未確認)。
+- 代わりの作り方(2026-11-13、ユーザー指定): Workers Builds の本番のデプロイ(`npx wrangler deploy --containers-rollout=gradual`、設定済み)で、Dockerfile からイメージを作る。`wrangler.toml` の `image` を `./containers/demo/Dockerfile` に戻し、ビルド引数は `image_vars` で渡す。`containers/demo/image.lock.json` は、最後に動いたイメージ(戻す先)の記録として残す。11-11 の `runc` の `/proc` の失敗が今も起きるかは、この変更のビルドで確かめる。落ちたら、`image.lock.json` の digest を `image` に書いて戻す。
+- パッケージ(git・Apache)の作り方は未決。パッケージ(git・Apache)は、CLAUDE.md のコンテナビルドのルール8のとおり、十分な CPU のある Ubuntu 26.04 x86_64 で `scripts/build-demo-packages-ubuntu26.sh` を実行し、`scripts/demo-packages-apply.mjs` で反映する。イメージの作り直しと `image.lock.json` の更新は、Docker を使える環境が要る(Workers Builds では Docker が使えない。NOTICE.cloudflare-workers-github-oauth-1.20261111.md)。
+- エージェントのサンドボックス(2026-11-13 時点、Ubuntu 26.04 x86_64・1 CPU・メモリ 4GB・空きディスク 2.3GB・Docker なし)は、どちらにも向かない。
