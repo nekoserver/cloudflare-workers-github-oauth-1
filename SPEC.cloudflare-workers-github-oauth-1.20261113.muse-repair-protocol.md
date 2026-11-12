@@ -36,6 +36,7 @@
 
 **対象**: 各経路の通信を確かめるために送る「今日は何日？」— どの経路の点検かを、Muse 側で区別できるようにする(ユーザー指定 2026-11-13)。
 
+- **必須**(ユーザー指定 2026-11-13): 点検の質問には必ず `[点検 <経路キー> <UNIX秒>]` を付ける。付いていない「今日は何日？」は点検として扱わない。経路キーがあれば、その経路だけを Muse 側で遮断したいときにも使える。
 - 形: `今日は何日？ [点検 <経路キー> <UNIX秒>]`(例: `今日は何日？ [点検 aichat-direct 1794510543]`)。
 - 経路キーは [経路の SPEC](SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md) の2章の表のキーを使う(`aichat-direct`・`treeview-muse-tab`・`treeview-worker-tab`・`muse-wasm-jobs`・`aichat-askmgs-wasm`・`aichat-tunnels`)。lib の確認送信(7章の7)は `libhost-askgk-selfcheck`。経路の名前が決まったら、それに合わせる。
 - 旧コンテナ直通など、同じキーで道筋が2つある経路は、キーのあとに道筋を書く(例: `aichat-direct/container`)。
