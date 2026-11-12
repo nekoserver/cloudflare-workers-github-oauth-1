@@ -1384,7 +1384,8 @@ export async function interpretMusePrompt(prompt: string, deps: AichatSlashComma
   if (!outcome.value.ok) {
     const reason = ASKMUSE_ERROR_MESSAGES[outcome.value.error] ?? outcome.value.error;
     if (options.tunnelsFallback && MUSE_UNREACHED_ERRORS.has(outcome.value.error)) return interpretMuseTunnelsFallback(prompt, deps, reason);
-    return { handled: true, response: `❌ ${label} でエラーが発生しました: ${reason}` };
+    // どの段階で止まったか(Worker内WASMの中継の診断)があれば添える。
+    return { handled: true, response: `❌ ${label} でエラーが発生しました: ${reason}` + (outcome.value.diagnosis ? `\n診断: ${outcome.value.diagnosis}` : '') };
   }
   // muse-vmが推論せずに実行したコマンドの結果は、Codex・Claudeの制御入力と同じくAI回答履歴に残さない。
   if (outcome.value.bridgeCommand) {
