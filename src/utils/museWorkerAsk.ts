@@ -2,12 +2,15 @@ import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkT
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
 export type MuseTransport = 'worker' | 'container';
 
-/** Same browser preference for API, health checks and queued requests; missing/old settings use Worker. */
+/**
+ * Same browser preference for API, health checks and queued requests. 既定は直接(本体のコンテナからmuse-vmへ。
+ * ユーザー指定 2026-11-12)。Worker内WASMは明示的に選んだとき(transport:'worker')だけ。
+ */
 export function resolveMuseTransport(cookie: string): MuseTransport {
   const part = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('aichat_muse_signal='));
-  if (!part) return 'worker';
-  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'container' ? 'container' : 'worker'; }
-  catch { return 'worker'; }
+  if (!part) return 'container';
+  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'worker' ? 'worker' : 'container'; }
+  catch { return 'container'; }
 }
 type Env = { TAILSCALE_WASM?: DurableObjectNamespace; MUSE_API_KEY?: string; DB?: D1Database };
 async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 8000, apiKey?: string): Promise<Response> {

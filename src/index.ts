@@ -7620,7 +7620,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
     askMuseDirect: selectedMuseInput && museTransport === 'worker'
       ? museWorkerDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'))
-      : museDirectDep(c.env, getDemoContainerStub),
+      : museDirectDep(c.env, getDemoContainerStub, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
     askMuseGadget: async (prompt) => {
       if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return { ok: false, error: '管理者権限が必要です' };
       const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.sub + ':' + (body.threadId || 'default')));

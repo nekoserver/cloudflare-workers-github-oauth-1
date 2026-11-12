@@ -25,7 +25,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
     function normalizeMuseSignalSettings(value) {
       var settings = (value && typeof value === 'object') ? value : {};
       return {
-        transport: settings.transport === 'container' ? 'container' : 'worker',
+        transport: settings.transport === 'worker' ? 'worker' : 'container',
         enabled: settings.enabled !== false,
         intervalSeconds: isValidMuseSignalSeconds(settings.intervalSeconds) ? settings.intervalSeconds : AICHAT_MUSE_SIGNAL_DEFAULT_SECONDS
       };
@@ -176,8 +176,8 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       routeTitle.textContent = 'Muse + Tailscale の接続方式';
       routeField.appendChild(routeTitle);
       var routeInputs = {};
-      var selectedTransport = current.transport === 'container' ? 'container' : 'worker';
-      [['worker', 'Worker内WASM（デフォルト）'], ['container', '旧コンテナ直通']].forEach(function(entry) {
+      var selectedTransport = current.transport === 'worker' ? 'worker' : 'container';
+      [['container', 'コンテナから直接（デフォルト）'], ['worker', 'Worker内WASM']].forEach(function(entry) {
         var label = document.createElement('label');
         label.style.cssText = 'display:block;margin:8px 0;';
         var input = document.createElement('input');
