@@ -3,7 +3,7 @@ ARG TAILSCALE_VERSION=1.104.5
 ARG GH_VERSION=2.103.3
 ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
-ARG GIT_VERSION=2.56.0
+ARG GIT_VERSION=2.56.1
 ARG OPENSSH_VERSION=10.6p2
 ARG APACHE_VERSION=2.4.70
 
@@ -121,7 +121,7 @@ RUN echo "${JJ_SHA256}  /tmp/jj.tar.gz" | sha256sum -c - \
 # 手順と元のソースはpackages/README.md。イメージのビルドではコンパイルも取得もしない。
 # 実行時の共有ライブラリとperlは上のapt-getで入れている。
 ARG GIT_VERSION
-ARG GIT_PACKAGE_SHA256=28ac5557705ad3e374b5d63b4f90eed6ecd5814e1e9d7b86807eae598aeae4ab
+ARG GIT_PACKAGE_SHA256=6eae894fe567a1f78f9db26bd310e78f357e32e88f54e408eee278088a7fda94
 COPY packages/git-${GIT_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/git.tar.xz
 RUN echo "${GIT_PACKAGE_SHA256}  /tmp/git.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/git.tar.xz -C / \

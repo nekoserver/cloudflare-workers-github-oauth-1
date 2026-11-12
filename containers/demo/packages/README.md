@@ -14,20 +14,22 @@ before extraction. It does not download jj or compile Rust. Keep this file and
 SHA256SUMS when cleaning temporary downloads; they are reusable build inputs.
 Run `sha256sum -c SHA256SUMS` in this directory before manual reuse.
 
-## git 2.56.0
+## git 2.56.1
 
-`git-2.56.0-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+`git-2.56.1-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
 release. It unpacks to `/usr/local` and replaces the APT `git` package in the
 image, so the Dockerfile neither downloads nor compiles git.
 
-`git-2.56.0.tar.xz` is the unmodified source it was built from.
+`git-2.56.1.tar.xz` is the unmodified source it was built from.
 
-- Source: https://www.kernel.org/pub/software/scm/git/git-2.56.0.tar.xz
-- Source SHA256: `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3`
-- Checked: 2026-11-06 against kernel.org `sha256sums.asc`, fetched over HTTPS.
+- Source: https://www.kernel.org/pub/software/scm/git/git-2.56.1.tar.xz
+- Source SHA256: `f0b0bf89264b9bd2e1c640363e7529643989da76281600473c50745cd34a607f`
+- Checked: 2026-11-13 against kernel.org `sha256sums.asc`, fetched over HTTPS.
   The PGP signature on that file was not verified.
-- Built: 2026-11-06 on Ubuntu 26.04 x86_64 with Rust 1.93.1 enabled, which is
-  the upstream default since Git 2.55.
+- Built: 2026-11-13 in an Ubuntu 26.04.1 x86_64 chroot (ubuntu-base-26.04.1, SHA256
+  `a496a960472ce474a59590b8987d3a1135d3cbef1991f3b1abe8cacfea8bf85a`) with Rust
+  enabled (`git --version --build-options` shows `rust: enabled`), the upstream
+  default since Git 2.55.
 
 Rebuild on Ubuntu 26.04 from the unpacked source:
 
