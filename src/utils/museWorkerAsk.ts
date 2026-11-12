@@ -1,14 +1,5 @@
 import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
 import { parseCompletion, type MuseDirectResult } from './museDirectAsk';
-export type MuseTransport = 'worker' | 'container';
-
-/** Same browser preference for API, health checks and queued requests; missing/old settings use Worker. */
-export function resolveMuseTransport(cookie: string): MuseTransport {
-  const part = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('aichat_muse_signal='));
-  if (!part) return 'worker';
-  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'container' ? 'container' : 'worker'; }
-  catch { return 'worker'; }
-}
 type Env = { TAILSCALE_WASM?: DurableObjectNamespace; MUSE_API_KEY?: string; DB?: D1Database };
 async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 8000, apiKey?: string): Promise<Response> {
   if (!env.TAILSCALE_WASM) return Response.json({ error: 'tailscale_wasm_not_configured' }, { status: 503 });
@@ -20,6 +11,7 @@ async function boundedFetch(env: Env, path: string, body?: unknown, timeoutMs = 
     ]);
   } finally { clearTimeout(timer); }
 }
+/** /tailscale-wasm ページ(Worker内WASMを明示的に試す機能)の死活確認。AIチャットの送信には使わない(常に直送)。 */
 export async function checkMuseWorkerHealth(env: Env): Promise<boolean> {
   if (!env.MUSE_API_KEY) return false;
   try { const res = await boundedFetch(env, '/muse/health'); return res.status === 200 && (await res.json() as { status?: string })?.status === 'ok'; }
@@ -40,6 +32,7 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
  }
+/** /tailscale-wasm ページの bridge-chat 用(Worker内WASMを明示的に試す)。AIチャットの送信には使わない(常に直送)。 */
 export function museWorkerDep(env: Env, onStatus?: (healthy: boolean) => void) {
   return (prompt: string): Promise<MuseDirectResult> => askMuseWorkerMessages(env, [{ role: 'user', content: prompt }], onStatus);
 }

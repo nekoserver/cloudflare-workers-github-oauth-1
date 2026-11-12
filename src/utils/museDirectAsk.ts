@@ -133,13 +133,20 @@ export async function checkMuseHealth(container: MuseContainer, apiKey: string |
 
 type MuseDirectEnv = { DEMO_CONTAINER?: unknown; MUSE_API_KEY?: string; DB?: D1Database };
 
-/** チャットの依存を組み立てる。待ち時間は/neko askgkと同じ保存値を使う。 */
-export function museDirectDep<E extends MuseDirectEnv>(env: E, getContainer: (env: E) => Promise<MuseContainer | null>) {
+/** muse-vmまで届かなかった失敗。認証・利用上限・実行の失敗は届いた上での失敗なので含めない。 */
+const UNREACHED: ReadonlySet<MuseDirectError> = new Set<MuseDirectError>(['container_not_running', 'muse_connection_failed', 'llm_timeout', 'tailscale_wasm_not_configured']);
+
+/**
+ * チャットの依存を組み立てる。待ち時間は/neko askgkと同じ保存値を使う。
+ * onStatusは送った結果で接続状態を知らせる(画面のX-Muse-Tailscale。Worker内WASMの経路と同じ扱い)。
+ */
+export function museDirectDep<E extends MuseDirectEnv>(env: E, getContainer: (env: E) => Promise<MuseContainer | null>, onStatus?: (healthy: boolean) => void) {
   if (!env.DEMO_CONTAINER) return undefined;
   return async (prompt: string): Promise<MuseDirectResult> => {
     const container = await getContainer(env);
-    if (!container) return { ok: false, error: 'container_not_running' };
     const timeoutSeconds = env.DB ? (await readAskgkTimeoutSetting(env.DB)).timeoutSeconds : DEFAULT_ASKGK_TIMEOUT_SECONDS;
-    return askMuseDirect(container, env.MUSE_API_KEY, prompt, timeoutSeconds);
+    const result: MuseDirectResult = container ? await askMuseDirect(container, env.MUSE_API_KEY, prompt, timeoutSeconds) : { ok: false, error: 'container_not_running' };
+    onStatus?.(result.ok || !UNREACHED.has(result.error));
+    return result;
   };
 }

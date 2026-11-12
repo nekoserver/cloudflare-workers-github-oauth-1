@@ -25,7 +25,6 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
     function normalizeMuseSignalSettings(value) {
       var settings = (value && typeof value === 'object') ? value : {};
       return {
-        transport: settings.transport === 'container' ? 'container' : 'worker',
         enabled: settings.enabled !== false,
         intervalSeconds: isValidMuseSignalSeconds(settings.intervalSeconds) ? settings.intervalSeconds : AICHAT_MUSE_SIGNAL_DEFAULT_SECONDS
       };
@@ -171,33 +170,6 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       intervalError.style.cssText = 'color:#dc2626;font-size:11px;margin-top:4px;';
       intervalField.appendChild(intervalError);
       box.appendChild(intervalField);
-      var routeField = document.createElement('fieldset');
-      var routeTitle = document.createElement('legend');
-      routeTitle.textContent = 'Muse + Tailscale の接続方式';
-      routeField.appendChild(routeTitle);
-      var routeInputs = {};
-      var selectedTransport = current.transport === 'container' ? 'container' : 'worker';
-      [['worker', 'Worker内WASM（デフォルト）'], ['container', '旧コンテナ直通']].forEach(function(entry) {
-        var label = document.createElement('label');
-        label.style.cssText = 'display:block;margin:8px 0;';
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.setAttribute('data-muse-transport', entry[0]);
-        input.checked = selectedTransport === entry[0];
-        routeInputs[entry[0]] = input;
-        input.addEventListener('change', function() {
-          selectedTransport = entry[0];
-          Object.keys(routeInputs).forEach(function(key) { routeInputs[key].checked = key === selectedTransport; });
-        });
-        label.appendChild(input);
-        label.appendChild(document.createTextNode(entry[1]));
-        routeField.appendChild(label);
-      });
-      var routeNote = document.createElement('p');
-      routeNote.textContent = '接頭語なしでMuseへ送る場合に適用します。接続できない場合は送信を停止します。';
-      routeNote.style.cssText = 'font-size:12px;';
-      routeField.appendChild(routeNote);
-      box.appendChild(routeField);
       enabledInput.addEventListener('change', function() {
         intervalInput.disabled = !enabledInput.checked;
         intervalError.textContent = '';
@@ -227,7 +199,7 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
           // OFFのときは入力が無効で直せないので、元の間隔を残す。
           seconds = current.intervalSeconds;
         }
-        options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds, transport: selectedTransport });
+        options.saveSettings({ enabled: enabledInput.checked, intervalSeconds: seconds });
         close();
       });
       btnRow.appendChild(resetBtn);

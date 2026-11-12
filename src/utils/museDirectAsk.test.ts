@@ -19,7 +19,9 @@ describe('askMuseDirect', () => {
     expect(new URL(request.url).pathname).toBe(MUSE_DIRECT_PATH);
     expect(request.method).toBe('POST');
     expect(request.headers.get('Authorization')).toBe('Bearer key-1');
-    expect(await request.json()).toEqual({ model: 'muse', messages: [{ role: 'user', content: '今日は何日？' }] });
+    // ask_muse と同じ形: Authorization: Bearer・Content-Type: application/json・ボディは {model, messages} だけ
+    expect(request.headers.get('Content-Type')).toBe('application/json');
+    expect(await request.text()).toBe(JSON.stringify({ model: 'muse', messages: [{ role: 'user', content: '今日は何日？' }] }));
   });
 
   // 故障想定: stub.fetchは停止中のコンテナを起動する。問い合わせだけで課金を始めない。
@@ -87,6 +89,28 @@ describe('museDirectDep', () => {
     const started = Date.now();
     expect(await dep('質問')).toEqual({ ok: false, error: 'llm_timeout' });
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  // 画面の接続表示(X-Muse-Tailscale)は、送る前の確認ではなく送った結果で決める。Worker内WASMの経路と同じ。
+  it('送った結果で接続状態を知らせる(成功はconnected、つながらなければunavailable)', async () => {
+    const env = { DEMO_CONTAINER: {} as never, MUSE_API_KEY: 'key' };
+    const ok = vi.fn();
+    await museDirectDep(env, async () => container(new Response(completion('回答'))), ok)!('質問');
+    expect(ok).toHaveBeenCalledExactlyOnceWith(true);
+    for (const [stub, label] of [[container(new Response('{}', { status: 502 })), '502'], [container(new Response('x'), 'stopped'), 'stopped'], [null, 'none']] as const) {
+      const status = vi.fn();
+      await museDirectDep(env, async () => stub, status)!('質問');
+      expect(status, label).toHaveBeenCalledExactlyOnceWith(false);
+    }
+  });
+
+  it('つながった上での失敗(認証・利用上限)は、接続の失敗として知らせない', async () => {
+    const env = { DEMO_CONTAINER: {} as never, MUSE_API_KEY: 'key' };
+    for (const code of [401, 429]) {
+      const status = vi.fn();
+      await museDirectDep(env, async () => container(new Response('{}', { status: code })), status)!('質問');
+      expect(status).toHaveBeenCalledExactlyOnceWith(true);
+    }
   });
 });
 

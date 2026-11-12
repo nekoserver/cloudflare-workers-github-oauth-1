@@ -196,23 +196,23 @@ describe('シグナル送信の設定の読み取り', () => {
   const cookie = (value: unknown) => 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify(value));
 
   it('未設定なら、有効で600秒', () => {
-    expect(script.readMuseSignalSettings('')).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings('')).toEqual({ enabled: true, intervalSeconds: 600 });
   });
 
   // 故障想定: 他のCookieの後ろにあると読めず、OFFにしても次の読み込みでONへ戻る。
   it('他のCookieの後ろにあっても読める', () => {
-    expect(script.readMuseSignalSettings('a=1; ' + cookie({ enabled: false, intervalSeconds: 900 }) + '; b=2')).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(script.readMuseSignalSettings('a=1; ' + cookie({ enabled: false, intervalSeconds: 900 }) + '; b=2')).toEqual({ enabled: false, intervalSeconds: 900 });
   });
 
   it.each([
     ['壊れたJSON', 'aichat_muse_signal=%7Bbroken'],
     ['値が不正な形', cookie('x')],
   ])('%sなら既定値を使う', (_name, text) => {
-    expect(script.readMuseSignalSettings(text)).toEqual({ transport: 'worker', enabled: true, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings(text)).toEqual({ enabled: true, intervalSeconds: 600 });
   });
 
   it.each([[59], [86401], [60.5], ['600'], [null]])('間隔が%sなら既定の600秒を使い、ON/OFFは保つ', (intervalSeconds) => {
-    expect(script.readMuseSignalSettings(cookie({ enabled: false, intervalSeconds }))).toEqual({ transport: 'worker', enabled: false, intervalSeconds: 600 });
+    expect(script.readMuseSignalSettings(cookie({ enabled: false, intervalSeconds }))).toEqual({ enabled: false, intervalSeconds: 600 });
   });
 });
 
@@ -261,7 +261,7 @@ describe('シグナル送信のモーダル', () => {
     interval.value = '900';
     checkbox.click();
     button('保存').click();
-    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(save).toHaveBeenCalledWith({ enabled: false, intervalSeconds: 900 });
     expect(document.querySelector('[data-overlay]')).toBeNull();
   });
 
@@ -280,7 +280,7 @@ describe('シグナル送信のモーダル', () => {
     interval.value = '1';
     checkbox.click();
     button('保存').click();
-    expect(save).toHaveBeenCalledWith({ transport: 'worker', enabled: false, intervalSeconds: 900 });
+    expect(save).toHaveBeenCalledWith({ enabled: false, intervalSeconds: 900 });
   });
 
   it('デフォルトに戻すと設定を消して閉じる', () => {
