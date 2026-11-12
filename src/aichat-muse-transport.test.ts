@@ -18,10 +18,10 @@ async function request(body?: Record<string, unknown>, cookie = '', namespace: u
   return app.request(body ? '/api/aichat' : '/api/aichat/muse-health', { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Cookie: cookie }, ...(body ? { body: JSON.stringify(body) } : {}) }, { JWT_SECRET: 'transport-test', DB, DEMO_CONTAINER: {}, TAILSCALE_WASM: namespace, MUSE_API_KEY: 'test-key', RUST_WORKER: rust });
 }
 const message = { model: 'muse', message: '通常の質問 “△”', source: 'textbox' };
-// 接頭語なしの Muse は直通(本体のコンテナから muse-vm へ)が既定(ユーザー指定 2026-11-12)。Worker内WASMは明示的に選んだときだけ。
+// AIチャットからのMuse送信は(接頭語を付けない限り)常に直送(ユーザー指定 2026-11-12)。古いCookieにworkerがあっても直送。
 const workerCookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'worker', enabled: true, intervalSeconds: 600 }));
-it('defaults prefixless Muse to direct (container), preserving prompt and sending exactly once without touching the Worker', async () => {
-  const response = await request(message);
+it.each([['no cookie', ''], ['old worker cookie', workerCookie]])('prefixless Muse always goes direct (%s), exactly once, never through the Worker', async (_label, cookie) => {
+  const response = await request(message, cookie);
   expect(await response.json()).toMatchObject({ usedModel: 'muse', response: expect.stringContaining('container answer') });
   expect(response.headers.get('X-Muse-Transport')).toBe('container');
   expect(response.headers.get('X-Muse-Tailscale')).toBe('connected');
@@ -32,33 +32,19 @@ it('defaults prefixless Muse to direct (container), preserving prompt and sendin
   expect(await sent[0].text()).toBe(JSON.stringify({ model: 'muse', messages: [{ role: 'user', content: message.message }] }));
   expect(worker.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
 });
-it('direct send failure reports unavailable in X-Muse-Tailscale even after a connected preflight', async () => {
+it('health always checks the direct route, even with an old worker cookie', async () => {
+  container.fetch.mockImplementation(async (r: Request) => new URL(r.url).pathname.includes('peers') ? Response.json({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }) : Response.json({ status: 'ok' }));
+  expect(await (await request(undefined, workerCookie)).json()).toMatchObject({ healthy: true, transport: 'container' });
+  expect(worker.fetch).not.toHaveBeenCalled();
+});
+it('direct send failure reports unavailable in X-Muse-Tailscale even after a connected preflight, and never falls back', async () => {
   container.fetch.mockImplementation(async (r: Request) => new URL(r.url).pathname.includes('peers') ? Response.json({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }) : Response.json({ error: 'muse_connection_failed' }, { status: 502 }));
   const response = await request(message);
   expect((await response.json() as { response: string }).response).toContain('❌');
   expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
   expect(worker.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
 });
-it('uses the saved Worker choice for both health and submission', async () => {
-  expect((await (await request(message, workerCookie)).json() as { response: string }).response).toContain('worker answer');
-  await request(undefined, workerCookie);
-  expect(container.fetch).not.toHaveBeenCalled(); expect(worker.fetch).toHaveBeenCalled();
-});
-it('Worker health uses the same route without inference or container startup', async () => {
-  expect(await (await request(undefined, workerCookie)).json()).toMatchObject({ healthy: true, transport: 'worker' });
-  expect(new URL(worker.fetch.mock.calls[0][0].url).pathname).toBe('/muse/health');
-  expect(container.getState).not.toHaveBeenCalled();
-});
-it('does not fall back when Worker is selected and missing or failing', async () => {
-  worker.fetch.mockResolvedValue(Response.json({ error: 'tailscale_not_connected' }, { status: 503 }));
-  const result = await (await request(message, workerCookie)).json() as { response: string };
-  expect(result.response).toContain('❌');
-  expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
-  worker.fetch.mockClear();
-  expect((await (await request(message, workerCookie, null)).json() as { response: string }).response).toContain('❌');
-  expect(worker.fetch).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled();
-});
-it('explicit /askmuse keeps its legacy route even when Worker is selected', async () => {
+it('explicit /askmuse also goes direct', async () => {
   expect((await (await request({ ...message, message: '/askmuse prompt="explicit"' }, workerCookie)).json() as { response: string }).response).toContain('container answer');
   expect(worker.fetch).not.toHaveBeenCalled();
 });

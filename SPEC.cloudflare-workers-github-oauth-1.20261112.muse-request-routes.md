@@ -1,41 +1,43 @@
 # SPEC: Muse への送り方のまとめ(経路・ヘッダ・鍵・ジョブ登録、2026-11-12)
 
-## 1. 既定の経路を直通にする
+## 1. AIチャットの接頭語なしの Muse は常に直送
 
-**対象**: `/api/aichat` の接頭語なしの Muse の送信、`/api/aichat/muse-health`、`src/utils/museWorkerAsk.ts` の `resolveMuseTransport`、`src/views/aichatMuseHealth.ts` の ⚙(接続方式)、`src/utils/museDirectAsk.ts` の `museDirectDep` — 接頭語を付けない Muse の送信は、本体のコンテナから muse-vm へ直接送るのを既定にする。
+**対象**: `/api/aichat` の接頭語なしの Muse の送信、`/api/aichat/muse-health`、`src/views/aichatMuseHealth.ts` の ⚙、`src/utils/museDirectAsk.ts` の `museDirectDep` — AIチャットからの Muse 送信は、接頭語を付けない限り、常に本体のコンテナから muse-vm へ直接送る。経路の選択は無くす。
 
 ### 背景
 
-- これまでの既定は Worker 内の Tailscale WASM(`main-worker-muse` ノード)だった。デプロイのたびにこのノードが再起動し、最初の送信で6秒以内に tailnet へつながらないと「Museへの接続を確認できません」になった(2026-11-12、Muse は動いていた)。
-- ユーザー指定(2026-11-12): 「接頭語に何も指定しない Muse リクエストは直通。これは既定路線」。
+- これまでは Cookie の設定で Worker 内の Tailscale WASM(`main-worker-muse` ノード)を既定にしていた。デプロイのたびにこのノードが再起動し、最初の送信で6秒以内に tailnet へつながらないと「Museへの接続を確認できません」になった(2026-11-12、Muse は動いていた)。
+- ユーザー指定(2026-11-12): 「AIチャットからのMuse送信は(接頭語をつけない限り)常に直送」。
 
 ### 修正内容
 
 | ファイル | 変更 |
 |---|---|
-| `src/utils/museWorkerAsk.ts` | `resolveMuseTransport`: Cookie が無い・壊れている・`transport` が無いときは `container`(直通)。`transport: 'worker'` のときだけ Worker 内 WASM |
-| `src/views/aichatMuseHealth.ts` | ブラウザ側の既定も `container`。⚙ の表示を「コンテナから直接（デフォルト）」「Worker内WASM」にした |
-| `src/utils/museDirectAsk.ts`・`src/index.ts` | 直通でも、送った結果で `X-Muse-Tailscale`(画面の接続表示)を決める。muse-vm まで届かなかった失敗(`container_not_running`・`muse_connection_failed`・`llm_timeout`)は `unavailable`、届いた上での失敗(認証・利用上限・実行)は `connected` |
+| `src/index.ts` | `/api/aichat` の接頭語なしの Muse と `/api/aichat/muse-health` は、Cookie を読まずに常に直送(`X-Muse-Transport: container`)。ジョブ受付が Cookie に経路を書き込む処理も外した |
+| `src/utils/museWorkerAsk.ts` | `resolveMuseTransport` を削除。`checkMuseWorkerHealth`・`museWorkerDep` は `/tailscale-wasm` ページ(Worker内WASMを明示的に試す機能)だけが使う |
+| `src/views/aichatMuseHealth.ts` | ⚙ の「接続方式」の選択欄を削除。保存する設定は有効/無効と間隔だけ(古い Cookie の `transport` は読まない) |
+| `src/utils/museDirectAsk.ts` | 直送でも、送った結果で `X-Muse-Tailscale`(画面の接続表示)を決める。muse-vm まで届かなかった失敗(`container_not_running`・`muse_connection_failed`・`llm_timeout`)は `unavailable`、届いた上での失敗(認証・利用上限・実行)は `connected` |
 
 ### 注意事項
 
-- ⚙ を一度でも保存した利用者の Cookie には、当時の既定の `transport: 'worker'` が入っている。その場合は ⚙ で「コンテナから直接」を選び直して保存する(Cookie の値は利用者が選んだものとして尊重し、書き換えない)。
-- 直通は本体の demo コンテナが起動していることが前提。止まっていれば送らずに「停止中」を返す(自動で起動しない・Worker 内 WASM へ切り替えない)。
+- 直送は本体の demo コンテナが起動していることが前提。止まっていれば送らずに「停止中」を返す(自動で起動しない・ほかの経路へ切り替えない)。
 
-## 2. 経路の一覧
+## 2. Muse への6系統
 
-**対象**: Muse(muse-vm の api-bridge、`http://muse-vm:8080/v1/chat/completions`)へ届くすべての経路。
+**対象**: Muse(muse-vm の api-bridge、`http://muse-vm:8080/v1/chat/completions`)へ届くすべての経路 — 経路キーで1つずつ区別する(ユーザー指定 2026-11-12)。
 
-| 入口 | 経路 | muse-vm へ渡す鍵 |
-|---|---|---|
-| `/aichat` 接頭語なし(既定) | 本体 Worker → demo コンテナ(`server.js`)→ `tailscale nc` → muse-vm | 本体の `MUSE_API_KEY` |
-| `/aichat` 接頭語なし(⚙ で Worker内WASM を選んだとき) | 本体 Worker → `TailscaleWasm` Durable Object(`main-worker-muse`)→ muse-vm | 本体の `MUSE_API_KEY` |
-| `/askmuse prompt="…"` | 直通(上の1行目と同じ) | 本体の `MUSE_API_KEY` |
-| dynamicneko tree-view の Muse チャット | dynamicneko → 本体 `/api/tree-view/muse-chat-external` → 直通(既定)または WASM(`X-Muse-Transport: worker`) | dynamicneko の `MUSE_API_KEY`(本体は受け取った鍵をそのまま渡す) |
-| ジョブ(4章) | 本体 → `TailscaleWasm` の `MuseAgentJobs` → WASM → muse-vm | 本体の `MUSE_API_KEY` |
-| lib の `ask_muse`(`claude/ops/llm_worker_claude.py`) | tailnet 上の機械から `tailscale nc` → muse-vm | lib の `MUSE_API_KEY` |
+| 経路キー | 入口 | 経路 | muse-vm 側で受ける鍵 | ジョブの積み上げ |
+|---|---|---|---|---|
+| `aichat-direct` | 本体 AIチャット、接頭語なし(`/askmuse prompt="…"` も同じ経路) | 本体 Worker → demo コンテナ(`server.js`)→ `tailscale nc` → muse-vm | 本体の `MUSE_API_KEY` | 特化していない |
+| `treeview-muse-tab` | dynamicneko tree-view の AI タブの「Museタブ」(直送専用) | dynamicneko → 本体 `/api/tree-view/muse-chat-external`(ヘッダ付与)→ demo コンテナ → muse-vm | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) | 特化していないが可能 |
+| `treeview-worker-tab` | dynamicneko tree-view の AI タブの「ワーカータブ」 | dynamicneko → 本体ワーカーを経由(会話ストリーム) | 本体の `MUSE_API_KEY`(未確認) | 特化していないが可能 |
+| `muse-wasm-jobs` | 本体 `/muse-wasm-test` ページ | 本体 → `TailscaleWasm` の `MuseAgentJobs`(4章)→ WASM(`main-worker-muse`)→ muse-vm | 本体の `MUSE_API_KEY` | 特化している |
+| `aichat-askmgs-wasm` | 本体 AIチャット、接頭語 `/askmgs prompt="…"` | 本体 → `/api/tailscale-wasm/chat` → `TailscaleWasm`(WASM)→ Gadgets | `MUSE_GADGET_SDK_TOKEN` | 特化していない |
+| `aichat-tunnels` | 本体 AIチャット、`/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 の `/tunnel-signer` → tunnels.rb(コンテナ)→ Muse | tunnels.rb 側の設定(本体は扱わない) | 特化していない |
 
-ジョブは常に Worker 内 WASM を通る(直通の既定は適用されない)。
+- 経路キーは、この表で区別するための名前。要求のヘッダや記録にはまだ付けていない。
+- lib の `ask_muse`(`claude/ops/llm_worker_claude.py`)は、tailnet 上の機械から `tailscale nc` で muse-vm へ送る、本体の外の経路(lib の `MUSE_API_KEY`)。
+- 送り方(`Authorization: Bearer <鍵>`・`Content-Type: application/json`・`{model, messages}`)を確かめたのは `aichat-direct`・`treeview-muse-tab`・`muse-wasm-jobs`(と tree-view の `X-Muse-Transport: worker`)。`treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の muse-vm 側の形は確かめていない。
 
 ## 3. 各区間のヘッダとボディ
 
@@ -82,7 +84,8 @@ muse-vm へ届く要求(どの経路でも同じ):
 
 ## 6. 確かめていないこと
 
-- 本番での直通の送信(この PR のデプロイ後に `/aichat` で確かめる)。
+- 本番での直送の送信(この PR のデプロイ後に `/aichat` で確かめる)。
+- `treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の経路の細部と鍵(2章の「未確認」)。
 - muse-vm の api-bridge が、ヘッダを理由に要求を拒否していないこと(拒否されていればユーザー側で対応する、とのユーザー指定)。
 
 ## 関連コミット
