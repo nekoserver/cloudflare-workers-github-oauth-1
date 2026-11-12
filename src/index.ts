@@ -7031,7 +7031,8 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   // 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は⚙で選んだときだけ。停止中のコンテナは起動しない。
-  const transport = resolveMuseTransport(c.req.header('Cookie') || '');
+  // AIチャットの Muse はいつも直送(⚙・Cookie の旧コンテナ直通の設定は使わない。ユーザー指定 2026-11-13)。
+  const transport = 'worker' as const;
   if (transport === 'worker') return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport });
   const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
   const connected = await checkMuseTailscale(async () => stub);
@@ -7310,7 +7311,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const selectedMuseInput = body.model === 'muse' && selectedModelInput;
   // 既定は直送(Worker内WASM → muse-vm、コンテナを通さない)。旧コンテナ直通は⚙で明示的に選んだときだけ。
   // /askmuse も同じ設定に従う。失敗しても互いの代替・tunnelsへの切り替えはしない(SPEC aichat-muse 2026-11-08 の図)。
-  const museTransport = resolveMuseTransport(c.req.header('Cookie') || '');
+  // いつも直送(tree-view の Museタブと同じ sendMuseViaWorker)。⚙・Cookie に残った旧コンテナ直通の設定では切り替えない(ユーザー指定 2026-11-13)。
+  const museTransport = 'worker' as 'worker' | 'container';
   if (selectedMuseInput) c.header('X-Muse-Transport', museTransport);
   let museConnectionError: string | undefined;
   if (selectedMuseInput && museTransport === 'container') {
