@@ -1,16 +1,16 @@
 # 固定する版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
-ARG TAILSCALE_VERSION=1.104.5
-ARG GH_VERSION=2.103.3
+ARG TAILSCALE_VERSION=1.104.7
+ARG GH_VERSION=2.104.0
 ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
 ARG GIT_VERSION=2.56.1
 ARG OPENSSH_VERSION=10.6p2
-ARG APACHE_VERSION=2.4.70
+ARG APACHE_VERSION=2.4.71
 
 # Official precompiled Tailscale package; no Go source build.
 FROM ubuntu:26.04 AS tailscale-binaries
 ARG TAILSCALE_VERSION
-ARG TAILSCALE_SHA256=720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7
+ARG TAILSCALE_SHA256=e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/tailscale.tgz \
         "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz" \
@@ -61,12 +61,12 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 ARG NPM_VERSION=12.2.0
-ARG CODEX_VERSION=0.167.1
+ARG CODEX_VERSION=0.167.2
 ARG T3_VERSION=0.1.9
-ARG CLAUDE_VERSION=2.1.322
+ARG CLAUDE_VERSION=2.1.323
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
-ARG CLOUDFLARED_VERSION=2026.10.7
+ARG CLOUDFLARED_VERSION=2026.11.0
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
@@ -100,7 +100,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-websock
 # ghとjjは公式のコンパイル済みバイナリを使う。jjは退避パッケージから再利用。
 # sha256はghの公式チェックサム、jjのGitHub release asset digestと照合して固定。
 ARG GH_VERSION
-ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+ARG GH_SHA256=98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.tar.gz \
         "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
     && echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c - \
@@ -152,7 +152,7 @@ RUN echo "${OPENSSH_PACKAGE_SHA256}  /tmp/openssh.tar.xz" | sha256sum -c - \
 # aptのapache2は残す(/etc/apache2の設定、a2enmod・apache2ctl・envvars、実行時の共有ライブラリのため)。
 # 置き換えるのは/usr/sbin/apache2と/usr/lib/apache2/modules/*.soだけで、apt upgradeで戻らないようholdする。
 ARG APACHE_VERSION
-ARG APACHE_PACKAGE_SHA256=41ca9694e095a1318f67b3a7784c0163ec2d338e14d984ac51c040df1a3ab706
+ARG APACHE_PACKAGE_SHA256=283889d304af26686efd56a2642b329af09883d7a23800a19840171bb9f7d621
 COPY packages/apache-${APACHE_VERSION}-linux-x64-ubuntu26.04.tar.xz /tmp/apache.tar.xz
 RUN set -eu; \
     echo "${APACHE_PACKAGE_SHA256}  /tmp/apache.tar.xz" | sha256sum -c -; \
@@ -168,7 +168,7 @@ RUN set -eu; \
 # aptのopenssh-serverはビルド時にホスト鍵を作る。秘密鍵をイメージに残さない(entrypoint.shが起動時に用意する)。
 COPY sshd-hardening.conf /etc/ssh/sshd_config.d/10-hardening.conf
 RUN rm -f /etc/ssh/ssh_host_*
-ARG CLOUDFLARED_SHA256=70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393
+ARG CLOUDFLARED_SHA256=5305dbaf62984e92e7daa29cdd6a35a4797edc23385d4c5b8422ff97eb96a19b
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
     && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
@@ -222,7 +222,7 @@ RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-ARG CLAUDE_NATIVE_SHA256=bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478
+ARG CLAUDE_NATIVE_SHA256=604d29a6869409106b6a1110bdadcc8b72e8654a5a865d23258f938a696e348e
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \
