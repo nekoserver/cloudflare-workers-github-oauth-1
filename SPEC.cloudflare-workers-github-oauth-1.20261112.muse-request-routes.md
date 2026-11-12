@@ -26,16 +26,17 @@
 
 **対象**: Muse(muse-vm の api-bridge、`http://muse-vm:8080/v1/chat/completions`)へ届くすべての経路 — 経路キーで1つずつ区別する(ユーザー指定 2026-11-12)。
 
-| 経路キー | 入口 | 経路 | muse-vm 側で受ける鍵 | ジョブの積み上げ |
-|---|---|---|---|---|
-| `aichat-direct` | 本体 AIチャット、接頭語なし(`/askmuse prompt="…"` も同じ経路) | 本体 Worker → demo コンテナ(`server.js`)→ `tailscale nc` → muse-vm | 本体の `MUSE_API_KEY` | 特化していない |
-| `treeview-muse-tab` | dynamicneko tree-view の AI タブの「Museタブ」(直送専用) | dynamicneko → 本体 `/api/tree-view/muse-chat-external`(ヘッダ付与)→ demo コンテナ → muse-vm | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) | 特化していないが可能 |
-| `treeview-worker-tab` | dynamicneko tree-view の AI タブの「ワーカータブ」 | dynamicneko → 本体ワーカーを経由(会話ストリーム) | 本体の `MUSE_API_KEY`(未確認) | 特化していないが可能 |
-| `muse-wasm-jobs` | 本体 `/muse-wasm-test` ページ | 本体 → `TailscaleWasm` の `MuseAgentJobs`(4章)→ WASM(`main-worker-muse`)→ muse-vm | 本体の `MUSE_API_KEY` | 特化している |
-| `aichat-askmgs-wasm` | 本体 AIチャット、接頭語 `/askmgs prompt="…"` | 本体 → `/api/tailscale-wasm/chat` → `TailscaleWasm`(WASM)→ Gadgets | `MUSE_GADGET_SDK_TOKEN` | 特化していない |
-| `aichat-tunnels` | 本体 AIチャット、`/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 の `/tunnel-signer` → tunnels.rb(コンテナ)→ Muse | tunnels.rb 側の設定(本体は扱わない) | 特化していない |
+| 経路キー | 入口 | 経路 | ワーカーで完結 / コンテナ必須 | muse-vm 側で受ける鍵 | ジョブの積み上げ |
+|---|---|---|---|---|---|
+| `aichat-direct` | 本体 AIチャット、接頭語なし(`/askmuse prompt="…"` も同じ経路) | 本体 Worker → demo コンテナ(`server.js`)→ `tailscale nc` → muse-vm | **コンテナ必須**(本体 demo コンテナ) | 本体の `MUSE_API_KEY` | 特化していない |
+| `treeview-muse-tab` | dynamicneko tree-view の AI タブの「Museタブ」(直送専用) | dynamicneko → 本体 `/api/tree-view/muse-chat-external`(ヘッダ付与)→ demo コンテナ → muse-vm | **コンテナ必須**(本体 demo コンテナ。tree-view で通信経路に「ワーカー」を選ぶと本体の Worker 内 WASM を通り、**ワーカーで完結**) | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) | 特化していないが可能 |
+| `treeview-worker-tab` | dynamicneko tree-view の AI タブの「ワーカータブ」 | dynamicneko → 本体ワーカーを経由(会話ストリーム) | 未確認 | 本体の `MUSE_API_KEY`(未確認) | 特化していないが可能 |
+| `muse-wasm-jobs` | 本体 `/muse-wasm-test` ページ | 本体 → `TailscaleWasm` の `MuseAgentJobs`(4章)→ WASM(`main-worker-muse`)→ muse-vm | **ワーカーで完結** | 本体の `MUSE_API_KEY` | 特化している |
+| `aichat-askmgs-wasm` | 本体 AIチャット、接頭語 `/askmgs prompt="…"` | 本体 → `/api/tailscale-wasm/chat` → `TailscaleWasm`(WASM)→ `MUSE_GADGET_RELAY_URL`(`http://cf-demo-container:8766`)→ Gadgets | **コンテナ必須**(WASM を通るが、行き先の `cf-demo-container` は本体 demo コンテナ) | `MUSE_GADGET_SDK_TOKEN`(中継への署名は `ORIGIN_HMAC_SECRET`) | 特化していない |
+| `aichat-tunnels` | 本体 AIチャット、`/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 の `/tunnel-signer` → tunnels.rb(コンテナ)→ Muse | **コンテナ必須**(tunnels.rb のコンテナ。本体 demo コンテナかどうかは未確認) | tunnels.rb 側の設定(本体は扱わない) | 特化していない |
 
 - 接頭語付きの AI 投稿(`/askmuse`・`/askmgs`・`/neko askgk muse_prompt=` などの Muse と、`codex_prompt=`・`claude_prompt=` などそれ以外のモデル)は、主に外部アプリからの用途を想定している(ユーザー指定 2026-11-12)。画面から人が送る通常の投稿は接頭語なし(`aichat-direct`)。
+- 「ワーカーで完結」の経路は、本体の demo コンテナが止まっていても送れる(Worker 内の Tailscale WASM ノード `main-worker-muse` が tailnet につながっていればよい)。「コンテナ必須」の経路は、そのコンテナが止まっていれば送れない(自動で起動しない・ほかの経路へ切り替えない)。
 - 経路キーは、この表で区別するための名前。要求のヘッダや記録にはまだ付けていない。
 - lib の `ask_muse`(`claude/ops/llm_worker_claude.py`)は、tailnet 上の機械から `tailscale nc` で muse-vm へ送る、本体の外の経路(lib の `MUSE_API_KEY`)。
 - 送り方(`Authorization: Bearer <鍵>`・`Content-Type: application/json`・`{model, messages}`)を確かめたのは `aichat-direct`・`treeview-muse-tab`・`muse-wasm-jobs`(と tree-view の `X-Muse-Transport: worker`)。`treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の muse-vm 側の形は確かめていない。
