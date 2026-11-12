@@ -48,6 +48,23 @@
 - lib の `ask_muse`(`claude/ops/llm_worker_claude.py`)は、tailnet 上の機械から `tailscale nc` で muse-vm へ送る、本体の外の経路(lib の `MUSE_API_KEY`)。
 - 送り方(`Authorization: Bearer <鍵>`・`Content-Type: application/json`・`{model, messages}`)を確かめたのは `aichat-direct`・`treeview-muse-tab`・`muse-wasm-jobs`(と tree-view の `X-Muse-Transport: worker`)。`treeview-worker-tab`・`aichat-askmgs-wasm`・`aichat-tunnels` の muse-vm 側の形は確かめていない。
 
+### 2.1 通信の確認状況(2026-11-13)
+
+**対象**: 上の表の6系統 — 本番で実際に Muse の答えが返ったかどうか。
+
+| 経路キー | 状況 | 確かめたこと |
+|---|---|---|
+| `aichat-direct`(直送、Worker 内 WASM) | **とりあえず解決** | 19:09 UTC に直送で「今日は何日？」を送り、Muse が答えた(利用者が Muse の通知で確認)。推論を通らない `/usage` は約2秒で 200。待ち時間は api-bridge と同じ600秒にした(PR #2587)。鍵は df0100…(指紋 8c740698) |
+| `aichat-direct`(⚙ の旧コンテナ直通、demo コンテナ経由) | **とりあえず解決** | 19:04 UTC に同じ鍵・同じ本文で送り、58秒で HTTP 200「2026年11月13日です。」 |
+| `treeview-muse-tab` | 未確認(利用者によると動いている) | 本体からは送っていない |
+| `treeview-worker-tab` | 未確認 | — |
+| `muse-wasm-jobs` | 未確認 | 11-11 19:43 UTC までは答えが返っていた。11-12 の3件は600秒の 504(Muse が断っていた・ロック待ちの影響を切り分けていない) |
+| `aichat-askmgs-wasm` | 未確認 | — |
+| `aichat-tunnels` | 未確認 | — |
+
+- 直送で答えが返らなかった原因は、鍵でも POST の本文でもなかった。api-bridge は鍵が違えば即 401 を返す。`/usage` は直送でも返る。残った原因は2つ。(1) Muse が送信者の分かった質問を断っていた(利用者が Muse に伝えて解消)。(2) こちらが先に切ったジョブで、api-bridge が最大600秒ロックを握り、後続が詰まっていた(api-bridge 0.4.1 で解消予定。muse-vm-hacks PR #1、muse-vm には未反映)。
+- Muse の答えには1〜3分かかる。コンテナ経由で58秒、直送で約2分だった。
+
 ## 3. 各区間のヘッダとボディ
 
 **対象**: muse-vm へ届く要求の形 — すべての経路で ask_muse と同じ形にそろえる。
