@@ -41,8 +41,9 @@ export class WasmMuseBridge {
    * keepAliveMs: 推論を待つ間、muse-vm へ短い /health を送る間隔。WASM のノードは送信の無い DERP 接続を約1分で閉じ
    * (magicsock: closing connection to derp-N (idle))、推論に1分以上かかると返事の通り道が無くなる(2026-11-12)。
    */
-  // timeoutMs: 外側(AIチャットの300秒)より短くし、先に中継が診断付きで答える。
-  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 290_000, private keepAliveMs = 20_000, private keyLog?: MuseKeyLog) {}
+  // timeoutMs: muse-vm の api-bridge の待ち時間(600秒)に合わせる。呼び出し側は X-Muse-Bridge-Timeout-Ms で3秒短くして送るので、
+  // 外側(MUSE_WORKER_MAX_TIMEOUT_SECONDS)より先に中継が診断付きで答える(2026-11-13、以前は290秒)。
+  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 600_000, private keepAliveMs = 20_000, private keyLog?: MuseKeyLog) {}
 
   async fetch(request: Request): Promise<Response> {
     const chat = new URL(request.url).pathname === '/muse/v1/chat/completions' && request.method === 'POST';
