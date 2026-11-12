@@ -3,7 +3,20 @@ import type { IPN, IPNResponse } from '@ai-ecoverse/wasm-tailscale';
 
 /** Private DO endpoint: no caller-selected destination, credentials or redirects. */
 export class WasmMuseBridge {
-  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 300_000) {}
+  /**
+   * keepAliveMs: 推論を待つ間、muse-vm へ短い /health を送る間隔。WASM のノードは送信の無い DERP 接続を約1分で閉じ
+   * (magicsock: closing connection to derp-N (idle))、推論に1分以上かかると返事の通り道が無くなる(2026-11-12)。
+   */
+  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 300_000, private keepAliveMs = 20_000) {}
+
+  /** 推論の要求は送り直さず、接続を使用中に保つためだけの /health。結果は使わない。 */
+  private keepAlive(apiKey: string): ReturnType<typeof setInterval> {
+    return setInterval(() => {
+      this.node.fetch({ url: 'http://muse-vm:8080/health', method: 'GET', manualRedirects: true, headers: [['Authorization', 'Bearer ' + apiKey]] })
+        .then(res => res.cancel())
+        .catch(() => {});
+    }, this.keepAliveMs);
+  }
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     const health = path === '/muse/health' && request.method === 'GET';
@@ -30,6 +43,7 @@ export class WasmMuseBridge {
     }
     let upstream: IPNResponse | undefined, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const keepAlive = chat ? this.keepAlive(apiKey) : undefined;
     const run = async () => {
       upstream = await this.node.fetch({ url: 'http://muse-vm:8080' + (health ? '/health' : '/v1/chat/completions'), method: health ? 'GET' : 'POST', manualRedirects: true, headers: [['Authorization', 'Bearer ' + apiKey], ['Content-Type', 'application/json']], ...(body ? { body } : {}) });
       if (expired) { upstream.cancel(); throw new Error('expired'); }
@@ -48,6 +62,6 @@ export class WasmMuseBridge {
     };
     try { return await Promise.race([run(), new Promise<Response>(resolve => { timer = setTimeout(() => { expired = true; upstream?.cancel(); resolve(Response.json({ error: 'llm_timeout' }, { status: 504 })); }, health ? Math.min(8000, this.timeoutMs) : this.timeoutMs); })]); }
     catch { upstream?.cancel(); return Response.json({ error: 'muse_connection_failed' }, { status: 502 }); }
-    finally { clearTimeout(timer); }
+    finally { clearTimeout(timer); clearInterval(keepAlive); }
   }
 }
