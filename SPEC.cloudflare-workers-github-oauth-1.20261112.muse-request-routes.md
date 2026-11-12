@@ -65,6 +65,21 @@
 - 直送で答えが返らなかった原因は、鍵でも POST の本文でもなかった。api-bridge は鍵が違えば即 401 を返す。`/usage` は直送でも返る。残った原因は2つ。(1) Muse が送信者の分かった質問を断っていた(利用者が Muse に伝えて解消)。(2) こちらが先に切ったジョブで、api-bridge が最大600秒ロックを握り、後続が詰まっていた(api-bridge 0.4.1 で解消予定。muse-vm-hacks PR #1、muse-vm には未反映)。
 - Muse の答えには1〜3分かかる。コンテナ経由で58秒、直送で約2分だった。
 
+### 2.2 直送を通すために共通化・追加した処理(2026-11-11〜13)
+
+**対象**: `src/utils/museWorkerAsk.ts`・`src/utils/wasmMuseBridge.ts`・`src/durable/tailscaleWasm.ts`・`src/utils/museNodeReady.ts`・`src/utils/museMessages.ts` — 直送の2経路(`aichat-direct`・`treeview-musetab-wasm`)が同じ部品を通るようにした内容。
+
+| 内容 | 関数・定数 | コミット |
+|---|---|---|
+| AIチャットの直送を、tree-view の Museタブ(ワーカー)と同じ関数で送る。違うのは経路IDだけ。鍵は毎回 `Authorization` で中継へ明示する | `sendMuseViaWorker`(`museWorkerDep` は `routeId: 'aichat-direct'` で呼ぶ)、`MuseWorkerRouteId` | [`dbc15f38`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/dbc15f38) |
+| 送るボディを ask_muse・コンテナ経由と同じ `{model, messages}` にそろえた(`stream` を送らない) | `WasmMuseBridge.fetch` | [`2c847b01`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2c847b01) |
+| 会話の検査を共通化(40件・16KiB まで) | `parseMuseMessages` | [`2eda6474`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2eda6474) |
+| 送る前に、WASM ノードが `Running` で muse-vm がオンラインに見えるまで最大20秒待つ。死活確認も同じ待ちを使う | `waitForMuseNode`・`readMuseNodeSnapshot`・`MUSE_NODE_READY_MS`・`MUSE_WORKER_HEALTH_TIMEOUT_MS` | [`1540de6d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1540de6d)・[`919e1c4e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/919e1c4e) |
+| 推論を待つ間 `/health` を送り、返事の通り道を保つ(keepAlive) | `WasmMuseBridge.keepAlive` | [`6ff02ea8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6ff02ea8) |
+| タイムアウトしたとき、どこで止まったか(応答ヘッダなし・本文の途中・経路の喪失)を診断して返す | `MuseBridgeDiagnosis`・`formatMuseBridgeDiagnosis` | [`f05bcb9c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f05bcb9c) |
+| 送った鍵の指紋(sha256 の先頭8桁)ごとに返事の有無を記録し、エラー文に出す。鍵の妥当性を本番で確かめられる | `museKeyFingerprint`・`MuseKeyLog`・`formatMuseKeyReport`(Durable Object の `muse_key_results`) | [`8419ec9a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8419ec9a) |
+| 待ち時間を api-bridge と同じ600秒にし、2経路で共通にする。askgk の保存値で縮めない | `MUSE_WORKER_MAX_TIMEOUT_SECONDS`・`WasmMuseBridge` の既定 | [`fee856be`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/fee856be) |
+
 ## 3. 各区間のヘッダとボディ
 
 **対象**: muse-vm へ届く要求の形 — すべての経路で ask_muse と同じ形にそろえる。
