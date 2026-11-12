@@ -64,3 +64,11 @@
 - 変更: 送り手(`agent: "claude"` / `"codex"`、本文の「Claude Code からの依頼」という名乗り)を判断材料から外した。依頼は経路(届いた鍵)で見分ける。
 - 理由(ユーザー指定 2026-11-13): コンテナ側からの送信者は今は Claude か Codex にしかならず、区別しても得るものがない。Muse 側で照合しているのは鍵が既知かどうか(知らない送信者かどうか)で、それが経路の判定になる。
 - 全体の見直し: 経路の名前と muse-vm 側の鍵の名前は、まだ決まっていない([SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md](SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md) の7章)。決まったら、2章の経路をその名前で書き直す。
+
+### 8.1 未決: ワーカー経由でコンテナを通る経路の判定と矛盾
+
+**対象**: 本体 Worker → demo コンテナ(`server.js` の中継)→ muse-vm と届く要求(AIチャットの旧コンテナ直通、tree-view の Museタブの `container`)— 鍵だけで経路を判定するときに起きうる食い違い。
+
+- コンテナの中継は鍵を持たず、呼び出し側の `Authorization` をそのまま muse-vm へ渡す(`containers/demo/server.js` の `MUSE_PROXY_PATH`)。このため、直送と同じ鍵が、コンテナのノード(cf-demo-container)から届くことがある。
+- この経路では、鍵から経路を判定するしかない。一方で、muse-vm から見える送り元のノード(直送なら `main-worker-muse`、コンテナ経由なら cf-demo-container)は、鍵が示す経路と食い違いうる。その食い違いを、矛盾として評価する必要が出るかもしれない(ユーザー指摘 2026-11-13)。
+- 今は決めない。コンテナ側の鍵を用意するとき(ユーザーによると、これから)に、「鍵が示す経路」と「送り元のノード」が食い違ったときの扱い(受ける・断る・記録だけ)を決め、この節に書く。
