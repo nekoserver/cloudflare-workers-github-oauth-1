@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # コンテナを起動し直したあとに1回実行する(ユーザー指定 2026-11-13)。
-# このリポジトリのフック(日本語ガード・自分で確認しろ)を、ユーザー設定 ~/.claude/settings.json に入れる。
+# このリポジトリのフック(日本語ガード・自分で確認しろ)と、アンケートを出さない設定を、ユーザー設定 ~/.claude/settings.json に入れる。
 # リポジトリの .claude/settings.json は、このリポジトリの中で Claude Code を起動したときしか読まれないため、
 # どこで起動しても効くようにユーザー設定にも入れる。何度実行しても同じ結果になる(既存の設定は残す)。
 # 使い方: bash cloudflare-workers-github-oauth-1/scripts/install-claude-user-hooks.sh
@@ -28,6 +28,8 @@ for (const [event, commands] of Object.entries(ours)) {
     .filter(group => group.hooks.length);
   settings.hooks[event] = [...kept, { hooks: commands.map(command => ({ type: 'command', command })) }];
 }
+// アンケート(フィードバックの調査)を出さない(ユーザー指定 2026-11-13)
+settings.env = { ...(settings.env || {}), CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: '1' };
 fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
 console.log('Claude Code のフックを入れました: ' + SETTINGS);
 NODE
