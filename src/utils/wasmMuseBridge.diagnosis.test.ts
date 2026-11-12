@@ -92,7 +92,7 @@ describe('診断をチャットのエラー文まで届ける', () => {
   });
   it('Muse のエラー文に診断が出る', async () => {
     vi.useRealTimers();
-    const r = await interpretMusePrompt('q', { askMuseDirect: vi.fn().mockResolvedValue({ ok: false, error: 'llm_timeout', diagnosis: 'muse-vm が返事を始めなかった' }) });
+    const r = await interpretMusePrompt('q', { askMuseDirect: vi.fn().mockResolvedValue({ ok: false, error: 'llm_timeout', diagnosis: 'muse-vm が返事を始めなかった' }) } as never);
     expect(r.handled && r.response).toContain('muse-vm が返事を始めなかった');
   });
   it('診断の文は原因ごとに違う', () => {

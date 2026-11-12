@@ -25,6 +25,9 @@ export interface AichatJobStorage {
   setAlarm(time: number): Promise<void>;
 }
 
+/** キャンセルしたジョブの error。 */
+export const AICHAT_JOB_CANCELED = 'キャンセルしました';
+
 export type AichatJobStatus = 'pending' | 'running' | 'done' | 'failed';
 interface AichatJobMeta { owner: string; status: AichatJobStatus; createdAt: number; finishedAt?: number; expiresAt?: number }
 interface AichatJobRequest { url: string; headers: Record<string, string>; body: string }
@@ -48,6 +51,7 @@ export class AichatJobRunner {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname === '/start') return this.start(request);
+    if (request.method === 'POST' && url.pathname === '/cancel') return this.cancel(url.searchParams.get('owner') ?? '');
     if (request.method === 'GET' && url.pathname === '/status') {
       return this.status(url.searchParams.get('owner') ?? '', Math.max(0, Number(url.searchParams.get('offset')) || 0));
     }
@@ -65,6 +69,22 @@ export class AichatJobRunner {
     await this.storage.put('meta', meta);
     await this.storage.setAlarm(this.now());
     return json({ status: 'pending' }, 202);
+  }
+
+  /** 実行中のalarmへ、キャンセルされたことを知らせる(同じDurable Objectのインスタンスの中だけで有効)。 */
+  private cancelWaiter: (() => void) | undefined;
+
+  /**
+   * 送信者だけが止められる。待っている途中でもすぐ「キャンセルしました」で終える(ユーザー指定 2026-11-12。
+   * Museの返事が来ないとき、毎回5分待たされないようにする)。送った要求そのものは取り消せない場合がある。
+   */
+  private async cancel(owner: string): Promise<Response> {
+    const meta = await this.storage.get<AichatJobMeta>('meta');
+    if (!meta || !owner || meta.owner !== owner) return json({ error: 'not_found' }, 404);
+    if (meta.status !== 'pending' && meta.status !== 'running') return json({ error: 'already_finished', status: meta.status }, 409);
+    await this.finish(meta, { error: AICHAT_JOB_CANCELED });
+    this.cancelWaiter?.();
+    return json({ status: 'failed', error: AICHAT_JOB_CANCELED });
   }
 
   private async status(owner: string, offset: number): Promise<Response> {
@@ -99,8 +119,12 @@ export class AichatJobRunner {
     await this.storage.put('meta', { ...meta, status: 'running' });
     const saved = await this.storage.get<AichatJobRequest>('request');
     if (!saved) return this.finish(meta, { error: 'request_missing' });
+    // キャンセルされたら、返事を待たずにここで終える(結果はcancelが書き込み済み)。
+    const canceled = new Promise<'canceled'>(resolve => { this.cancelWaiter = () => resolve('canceled'); });
     try {
-      const response = await this.dispatch(new Request(saved.url, { method: 'POST', headers: saved.headers, body: saved.body }));
+      const raced = await Promise.race([this.dispatch(new Request(saved.url, { method: 'POST', headers: saved.headers, body: saved.body })), canceled]);
+      if (raced === 'canceled' || await this.isCanceled()) return;
+      const response = raced;
       const headers: Record<string, string> = {};
       for (const [name, key] of Object.entries(RESULT_HEADERS)) {
         const value = response.headers.get(name);
@@ -117,8 +141,16 @@ export class AichatJobRunner {
       // ステータスに関わらず結果として残す。{error}の表示は今までどおりブラウザが行う。
       return this.finish(meta, { result: { ...result, ...headers } });
     } catch (error) {
+      if (await this.isCanceled()) return;
       return this.finish(meta, { error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      this.cancelWaiter = undefined;
     }
+  }
+
+  /** キャンセル済みなら、後から来た結果で上書きしない。 */
+  private async isCanceled(): Promise<boolean> {
+    return (await this.storage.get<string>('error')) === AICHAT_JOB_CANCELED;
   }
 
   /** /api/aichat のSSE(start・delta・done・error)を読み、途中の文章を保存しながら最終結果を組み立てる。 */
@@ -162,6 +194,7 @@ export class AichatJobRunner {
   }
 
   private async finish(meta: AichatJobMeta, outcome: { result: Record<string, unknown> } | { error: string }): Promise<void> {
+    if (await this.isCanceled()) return;
     const finishedAt = this.now();
     if ('result' in outcome) await this.storage.put('result', outcome.result);
     else await this.storage.put('error', outcome.error);

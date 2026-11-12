@@ -8453,8 +8453,10 @@ ${AICHAT_JOB_CLIENT_SCRIPT}
       sleep: function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
     };
     /** 送信をジョブとして登録し、途中経過を受け取りながら/api/aichatと同じ形の結果を返す(ユーザー指定、2026-11-07)。 */
-    function runAichatJob(payload, question, onDelta) {
+    function runAichatJob(payload, question, onDelta, thinking) {
       return startAichatJob(aichatJobDeps, payload, { question: question, model: payload.model }).then(function(jobId) {
+        // 返事を待つ間、「考え中」にキャンセルボタンを置く(ユーザー指定 2026-11-12)。
+        if (thinking) addAichatCancelButton(aichatJobDeps, thinking, jobId);
         return pollAichatJob(aichatJobDeps, jobId, onDelta);
       });
     }
@@ -8463,6 +8465,7 @@ ${AICHAT_JOB_CLIENT_SCRIPT}
       readPendingAichatJobs(aichatJobDeps).forEach(function(job) {
         appendBubble(job.question, 'user');
         var thinking = appendBubble('考え中...(前回の送信の続き)', 'thinking');
+        addAichatCancelButton(aichatJobDeps, thinking, job.jobId);
         beginAichatPending(chatInput, thinking, getModelDotColor(job.model));
         var streamState = { text: '', bubble: null };
         var assistantBubbleEl = null;
@@ -8577,7 +8580,7 @@ ${AICHAT_JOB_CLIENT_SCRIPT}
       var streamState = { text: '', bubble: null };
       runAichatJob(payload, currentMsg, function(delta, streamMeta) {
         assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
-      })
+      }, thinking)
         .then(function(data) {
           var museConnection = data.museTailscale || null;
           if (museConnection || museSubmission) museHealthWatch.finishSubmission(museConnection === 'connected');
