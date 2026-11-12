@@ -25,7 +25,8 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
     function normalizeMuseSignalSettings(value) {
       var settings = (value && typeof value === 'object') ? value : {};
       return {
-        transport: settings.transport === 'container' ? 'container' : 'worker',
+        // 接続方式は直送だけ(旧コンテナ直通は廃止。2026-11-12)。
+        transport: 'worker',
         // 直送に失敗したら tunnels.rb をフォールバック経路として使う。既定は使わない(ユーザー指定 2026-11-12)。
         tunnelsFallback: settings.tunnelsFallback === true,
         enabled: settings.enabled !== false,
@@ -173,33 +174,8 @@ export const AICHAT_MUSE_HEALTH_SCRIPT = `
       intervalError.style.cssText = 'color:#dc2626;font-size:11px;margin-top:4px;';
       intervalField.appendChild(intervalError);
       box.appendChild(intervalField);
-      var routeField = document.createElement('fieldset');
-      var routeTitle = document.createElement('legend');
-      routeTitle.textContent = 'Muse + Tailscale の接続方式';
-      routeField.appendChild(routeTitle);
-      var routeInputs = {};
-      var selectedTransport = current.transport === 'container' ? 'container' : 'worker';
-      [['worker', 'Worker内WASM（デフォルト）'], ['container', '旧コンテナ直通']].forEach(function(entry) {
-        var label = document.createElement('label');
-        label.style.cssText = 'display:block;margin:8px 0;';
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.setAttribute('data-muse-transport', entry[0]);
-        input.checked = selectedTransport === entry[0];
-        routeInputs[entry[0]] = input;
-        input.addEventListener('change', function() {
-          selectedTransport = entry[0];
-          Object.keys(routeInputs).forEach(function(key) { routeInputs[key].checked = key === selectedTransport; });
-        });
-        label.appendChild(input);
-        label.appendChild(document.createTextNode(entry[1]));
-        routeField.appendChild(label);
-      });
-      var routeNote = document.createElement('p');
-      routeNote.textContent = '接頭語なしでMuseへ送る場合に適用します。接続できない場合は送信を停止します。';
-      routeNote.style.cssText = 'font-size:12px;';
-      routeField.appendChild(routeNote);
-      box.appendChild(routeField);
+      // 接続方式は直送(Worker内WASM)だけ。旧コンテナ直通の選択は廃止した(2026-11-12)。
+      var selectedTransport = 'worker';
       var fallbackLabel = document.createElement('label');
       fallbackLabel.style.cssText = 'display:block;margin:8px 0;font-size:13px;';
       var fallbackInput = document.createElement('input');

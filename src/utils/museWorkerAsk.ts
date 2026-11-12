@@ -5,15 +5,12 @@ import { MUSE_NODE_READY_MS } from './museNodeReady';
 export type MuseTransport = 'worker' | 'container';
 
 /**
- * AIチャットの接頭語なしのMuseの経路。送信・死活確認・ジョブ受付で同じ設定(⚙、Cookie aichat_muse_signal)を読む。
- * 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は設定で明示的に選んだとき(transport:'container')だけ。
- * 失敗しても互いの代替にしない(SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md の図、2026-11-08)。
+ * AIチャットの接頭語なしのMuse・/askmuse・死活確認の経路。常に直送(Worker内WASM、コンテナを通さない)。
+ * ⚙の旧コンテナ直通の選択は廃止した。保存済みのCookieに transport:'container' が残っていても直送にする
+ * (ユーザー指定 2026-11-12「接頭語をつけない限り常に直送」。旧コンテナ直通ではmuse-vmの送信者判定が外れ、回答しないモードになった)。
  */
-export function resolveMuseTransport(cookie: string): MuseTransport {
-  const part = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('aichat_muse_signal='));
-  if (!part) return 'worker';
-  try { return JSON.parse(decodeURIComponent(part.slice('aichat_muse_signal='.length)))?.transport === 'container' ? 'container' : 'worker'; }
-  catch { return 'worker'; }
+export function resolveMuseTransport(_cookie: string): MuseTransport {
+  return 'worker';
 }
 /** 直送に失敗したら tunnels.rb をフォールバック経路として使うか。既定は使わない(明示的に true のときだけ。ユーザー指定 2026-11-12)。 */
 export function resolveMuseTunnelsFallback(cookie: string): boolean {
@@ -62,6 +59,10 @@ export async function askMuseWorkerMessages(env: Env, messages: {role: 'user' | 
       const result = parseCompletion(await res.text()); onStatus?.(result.ok); return result;
     } catch { onStatus?.(false); return { ok: false, error: 'muse_connection_failed' }; }
  }
+/** 鍵の先頭4文字(照合用)。4文字以下の鍵は伏せる。 */
+export function museKeyPrefix(key?: string): string {
+  return key && key.length > 4 ? key.slice(0, 4) : '';
+}
 /** Worker内WASMで muse-vm へ送る経路のID(SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md 7章の名前の候補)。 */
 export type MuseWorkerRouteId = 'aichat-direct' | 'treeview-musetab-wasm';
 /** 待ち時間の上限。動いている tree-view の Museタブと同じ90秒にそろえる(2026-11-12)。 */
@@ -72,7 +73,8 @@ export const MUSE_WORKER_MAX_TIMEOUT_SECONDS = 90;
  */
 export async function sendMuseViaWorker(env: Env, messages: {role: 'user' | 'assistant'; content: string}[], options: { routeId: MuseWorkerRouteId; apiKey?: string; onStatus?: (healthy: boolean) => void }): Promise<MuseDirectResult> {
   const result = await askMuseWorkerMessages({ ...env, MUSE_API_KEY: options.apiKey }, messages, options.onStatus, MUSE_WORKER_MAX_TIMEOUT_SECONDS, options.apiKey);
-  if (!result.ok) console.log('[muse-worker] ' + JSON.stringify({ routeId: options.routeId, error: result.error, ...(result.diagnosis ? { diagnosis: result.diagnosis } : {}) }));
+  // 送った鍵が muse-vm の鍵と同じかを照らし合わせられるよう、先頭4文字と長さだけを毎回出す(ユーザー指定 2026-11-12。全体は出さない)。
+  console.log('[muse-worker] ' + JSON.stringify({ routeId: options.routeId, keyPrefix: museKeyPrefix(options.apiKey), keyLength: options.apiKey?.length ?? 0, ok: result.ok, ...(result.ok ? {} : { error: result.error }), ...(!result.ok && result.diagnosis ? { diagnosis: result.diagnosis } : {}) }));
   return result;
 }
 /** 直送(Worker内WASM → muse-vm)。AIチャットの接頭語なしのMuse・/askmuse(⚙の既定)と /tailscale-wasm の bridge-chat が使う。送り方は tree-view の Museタブと同じ。 */

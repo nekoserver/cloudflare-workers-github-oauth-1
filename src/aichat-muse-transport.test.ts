@@ -27,11 +27,14 @@ it('defaults prefixless Muse to Worker, preserving prompt and sending exactly on
   expect(await worker.fetch.mock.calls[0][0].json()).toMatchObject({ messages: [{ role: 'user', content: message.message }] });
   expect(container.getState).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
 });
-it('uses saved legacy choice for both health and submission', async () => {
+// 旧コンテナ直通の選択は廃止(2026-11-12)。保存済みのCookieが残っていても、送信と死活確認は直送で、コンテナに触れない。
+it('ignores a saved legacy container choice for both health and submission', async () => {
   const cookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'container', enabled: true, intervalSeconds: 600 }));
-  expect((await (await request(message, cookie)).json() as { response: string }).response).toContain('container answer');
-  await request(undefined, cookie);
-  expect(worker.fetch).not.toHaveBeenCalled(); expect(container.fetch).toHaveBeenCalled();
+  const response = await request(message, cookie);
+  expect((await response.json() as { response: string }).response).toContain('worker answer');
+  expect(response.headers.get('X-Muse-Transport')).toBe('worker');
+  expect(await (await request(undefined, cookie)).json()).toMatchObject({ healthy: true, transport: 'worker' });
+  expect(container.getState).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled();
 });
 it('Worker health uses the same route without inference or container startup', async () => {
   expect(await (await request()).json()).toMatchObject({ healthy: true, transport: 'worker' });
@@ -55,8 +58,8 @@ it('explicit /askmuse goes direct (Worker) by default, never through the contain
   expect(worker.fetch).toHaveBeenCalledOnce();
   expect(container.fetch).not.toHaveBeenCalled(); expect(rust.fetch).not.toHaveBeenCalled();
 });
-it('explicit /askmuse uses the container only when the legacy route is chosen in settings', async () => {
+it('explicit /askmuse goes direct even with a saved legacy container choice', async () => {
   const cookie = 'aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ transport: 'container' }));
-  expect((await (await request({ ...message, message: '/askmuse prompt="explicit"' }, cookie)).json() as { response: string }).response).toContain('container answer');
-  expect(worker.fetch).not.toHaveBeenCalled();
+  expect((await (await request({ ...message, message: '/askmuse prompt="explicit"' }, cookie)).json() as { response: string }).response).toContain('worker answer');
+  expect(container.fetch).not.toHaveBeenCalled();
 });
