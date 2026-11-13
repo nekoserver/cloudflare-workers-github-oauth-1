@@ -92,7 +92,8 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   node --version >/dev/null
   gh --version
   ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
-  node --check /usr/local/bin/cf
+  node --check /usr/local/bin/cf-api
+  cf --version
   node --check /app/server.js
   for c in netstat top whois dig ping; do command -v $c >/dev/null || { echo "NG: $c が入っていない"; exit 1; }; done
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }

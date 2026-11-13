@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --no-warnings
-// Cloudflare APIの簡易CLI(旧Railway VMの/usr/local/bin/cf相当)。
+// Cloudflare APIの簡易CLI(旧Railway VMの/usr/local/bin/cf相当)。公式の Cloudflare CLI(cf)と名前がぶつかるので cf-api として置く。
 // 認証: CF_CONTAINER_API_TOKEN(API Token)、アカウント: CLOUDFLARE_ACCOUNT_ID。
 // どちらも/cf-containersの起動時にenvVarsで渡され、entrypoint.shが
 // SSHログインシェルからも読めるよう/etc/profile.d/cf-env.shに書き出す。
@@ -9,10 +9,10 @@ const API = 'https://api.cloudflare.com/client/v4';
 
 function usage() {
   console.log(`使い方:
-  cf tunnels list [--json]     Cloudflare Tunnel一覧(name/status/connections/id)
-  cf tunnels get <name|id>     指定トンネルの詳細(JSON)
-  cf workers list [--json]     Worker一覧(name/modified_on)
-  cf api <GET path>            任意のGET(例: cf api /accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel)`);
+  cf-api tunnels list [--json]     Cloudflare Tunnel一覧(name/status/connections/id)
+  cf-api tunnels get <name|id>     指定トンネルの詳細(JSON)
+  cf-api workers list [--json]     Worker一覧(name/modified_on)
+  cf-api api <GET path>            任意のGET(例: cf api /accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel)`);
 }
 
 async function call(path) {

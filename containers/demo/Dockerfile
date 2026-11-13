@@ -67,6 +67,8 @@ ARG CLAUDE_VERSION=2.1.323
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.11.0
+# 公式の Cloudflare CLI(npm の cf。bin は cf と cloudflare)。node ^26.12 を要する。
+ARG CF_CLI_VERSION=1.0.0-beta.31
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
@@ -201,6 +203,11 @@ RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 1000
 RUN npm install -g t3@${T3_VERSION} \
     && t3 --version \
     && npm cache clean --force
+# 公式の Cloudflare CLI。依存の miniflare(workerd)が大きいので専用の RUN にし、キャッシュは同じ RUN で消す。
+RUN npm install -g cf@${CF_CLI_VERSION} \
+    && ln -sf /opt/node22/bin/cf /usr/local/bin/cf \
+    && cf --version \
+    && npm cache clean --force
 # Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
 ARG INSTALL_VITEST=true
 RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
@@ -292,11 +299,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
-COPY cf /usr/local/bin/cf
+COPY cf-api /usr/local/bin/cf-api
 COPY apache-demo.conf /etc/apache2/sites-available/000-demo.conf
 COPY apache-lib.conf /etc/apache2/sites-available/010-lib.conf
 COPY cloudflared-ingress.yml.template /etc/cloudflared/ingress.yml.template
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf-api \
     && a2enmod ssl proxy proxy_http proxy_wstunnel rewrite cgid include remoteip \
     && a2dissite 000-default \
     && a2ensite 000-demo 010-lib \
