@@ -10,6 +10,18 @@
 
 ## 経路
 
+### Muse関連Tailscaleノードの配置と運用形態
+
+名前が似ているノードでも、起動元・状態保存先・ライフサイクルは別々。**3ノードともコンテナではない**が、`muse-status-browser`だけはWorkerでもなく、利用者のブラウザ内で動くWASMノードである。
+
+| Tailscale上のノード名 | 起動・運用形態 | 状態の保存先と寿命 | 認証・起動条件 | 主な用途・コンテナとの関係 |
+|---|---|---|---|---|
+| `muse-status-browser`（`muse-statusbrowser`と呼ばれるノード） | `/muse-status`を開いた利用者のブラウザで公式`@tailscale/connect` WASMを起動。ブラウザ端末としてtailnetへ参加する。**コンテナでもWorkerでもない** | Tailscaleノードの秘密状態はブラウザストレージへ保存しない。ページのセッション内だけで扱うため、再度ログインが必要。tailnet側の端末がエフェメラルか、ログインごとに古い端末がどう整理されるかは未確認 | 利用者自身がブラウザからTailscaleへログイン。`authKey`はWASMへ渡さない | コンテナ停止時の`muse-vm`検出と`/health`到達性確認だけに使う。Nix一覧や認証付きMuse APIには使わない。ページはコンテナを起動しない |
+| `muse-monitor` | `nekoserver/muse-monitor`のCloudflare WorkerがDurable Object `MonitorGateway`を実行する。**Worker運用**であり、コンテナではない | `MonitorGateway`のDOストレージ(`ts-state`) | `TS_AUTHKEY`、なければ`TS_API_KEY`（muse-monitor #7以降）。Worker/DOの要求に応じてノードを起動 | muse-monitor独立サービスの監視・中継用ノード。本体Workerの`TailscaleWasm`とは別サービス、別DO、別状態 |
+| `main-worker-muse` | 本体WorkerのDurable Object `TailscaleWasm`（`src/durable/tailscaleWasm.ts`、binding `TAILSCALE_WASM`）のWASM。名前`muse`のDOインスタンス1つ。**Worker運用**であり、コンテナではない | 同じDOのSQLite(`tailnet_state`)。`ephemeral: false`で、DOの休止・再起動後も同じTailscaleノードとして復帰する。ノード状態自体に期限はなく、Tailscale鍵の期限は管理画面側の設定に従う（既定180日） | `TAILSCALE_WASM_AUTHKEY`、未設定時は`TAILSCALE_AUTHKEY`。初回の対象要求時に`ensureNode()`で起動し、Museへ送る直前に必要な場合だけ自動ログイン | 本体AIチャットのMuse直送、`MuseAgentJobs`、Worker内監視など。通常のWorker経路ではdemoコンテナを起動せず利用する。コンテナ経由を明示選択した経路とは別 |
+
+`muse-status-browser`は利用者端末、`muse-monitor`は独立Worker、`main-worker-muse`は本体Worker内のDurable Objectである。Tailscale管理画面で端末のログイン主体・オンライン状態を確認する場合も、この配置表を使い、名前だけから同一プロセスや同一保存領域と判断しない。ブラウザ端末の実際のephemeral設定は引き続き未確認。
+
 Workerはtailnetに参加できないので、`/askmuse`と同じく本体デモコンテナを経由する。
 
 ```
