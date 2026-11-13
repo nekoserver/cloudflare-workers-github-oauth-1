@@ -27,6 +27,7 @@ def restore(home):
             raise ValueError('Existing hook configuration is invalid')
         template = json.loads((BUNDLE / 'hooks.json').read_text())
         script = shlex.quote(str(BUNDLE / 'japanese.py'))
+        pr_state_script = shlex.quote(str(BUNDLE / 'pr-state.py'))
         command = '/usr/bin/python3 ' + script
         merged = copy.deepcopy(data)
         merged.setdefault('description', template['description'])
@@ -48,6 +49,7 @@ def restore(home):
             for group in additions:
                 for handler in group['hooks']:
                     handler['command'] = handler['command'].replace('__HARNESS_SCRIPT__', script)
+                    handler['command'] = handler['command'].replace('__PR_STATE_SCRIPT__', pr_state_script)
             hooks[event] = kept + additions
         output = (json.dumps(merged, ensure_ascii=False, indent=2) + '\n').encode()
         if previous == output:

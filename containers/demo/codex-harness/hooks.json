@@ -1,6 +1,7 @@
 {
   "description": "Codexの応答を日本語にするハーネス設定",
   "hooks": {
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "/usr/bin/python3 __PR_STATE_SCRIPT__", "timeout": 20, "statusMessage": "既存PRの状態を確認"}]}],
     "SessionStart": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答の指示を復元"}]}],
     "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答の指示を復元"}]}],
     "Stop": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答を確認"}]}]

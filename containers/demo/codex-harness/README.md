@@ -1,12 +1,14 @@
 # Codexの日本語応答ハーネス
 
-`hooks.json`がリポジトリで管理する定義、`japanese.py`がCodexイベントを処理する実体、`restore.py`が既存設定を保持して復元する入口。
+`hooks.json`がリポジトリで管理する定義、`japanese.py`と`pr-state.py`がCodexイベントを処理する実体、`restore.py`が既存設定を保持して復元する入口。
+
+`PreToolUse`のBash hookは`gh pr create`の直前に同じブランチの既存PRを全状態で照会する。マージ済み・クローズ済みなら作成を止め、最新のデフォルトブランチから新しいブランチを作って未反映差分を移し、新しい番号で作成するよう案内する。既存PRがオープン中の場合も重複作成を止める。GitHub照会に失敗した場合も、状態未確認のまま作成しない。
 
 - SessionStart / UserPromptSubmit: すべて日本語で応答する指示をCodexのadditionalContextへ渡す。
 - Stop: Codexのlast_assistant_messageから英語中心の応答を検出し、JSONのblock/reasonで日本語への書き直しを促す。コード・URLは判定から除外し、既にStopで継続したターンは再度止めない。これは言語判定の補助であり、すべての混在文を完全判定するものではない。
 - 他のhook、config.toml、認証、権限、hookの信頼データは変更しない。壊れた既存JSONは上書きせず失敗する。置換前は非公開バックアップを保存し、原子的に0600で更新する。同じ定義の再適用では重複させない。
 
-Dockerfileはこのディレクトリを `/usr/local/share/codex-harness/` へCOPYし、entrypointが毎回 `python3 /usr/local/share/codex-harness/restore.py` を実行する。配置先は明示CODEX_HOMEがあればそのディレクトリ、なければ起動ユーザーの `~/.codex/hooks.json`（root起動では/root/.codex）。codex-web等の別ユーザーへ自動で広げない。
+Dockerfileはこのディレクトリを `/usr/local/share/codex-harness/` へCOPYし、entrypointが毎回 `python3 /usr/local/share/codex-harness/restore.py` を実行する。したがって定義・スクリプトはイメージに永続化され、コンテナ起動ごとに既存設定を保持しながらhookを復元する。配置先は明示CODEX_HOMEがあればそのディレクトリ、なければ起動ユーザーの `~/.codex/hooks.json`（root起動では/root/.codex）。codex-web等の別ユーザーへ自動で広げない。
 
 現コンテナにも同じファイルと復元呼び出しを配置した。実コンテナ再起動・イメージ再ビルドは行っていないため、再作成後の実機確認は未実施。イメージに含めるには許可された環境で今後ビルドが必要。今回の復元検査は隔離CODEX_HOMEで2回行った。
 
