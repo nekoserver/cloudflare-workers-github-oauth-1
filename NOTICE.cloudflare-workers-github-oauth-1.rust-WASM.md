@@ -198,3 +198,7 @@ Cannot find module './factor_bg.js' imported from .../public/wasm/factor_bg.wasm
 
 - [`wasm/README.md`](wasm/README.md) — WASMモジュールのビルド手順、サーバー側での再利用方法
 - 関連PR: #1353(陸地タップ判定、WASM本題とは無関係だが同期間の作業)、#1354(CSP修正)、#1355(`/neko 256`)、#1356(`/wasm-modules`)、#1357(`/file-deps`)
+
+## 2026-11-13補足: リリース版とスキーマ版の区別
+
+wasm-bindgenのcrate/CLIのリリース版番号だけでは互換性は断定できない。0.2.129のwasm-bindgen-sharedはSCHEMA_VERSION="0.2.128"を使い、CLI 0.2.128でも実生成・workerdの/pingが成功した。一方MSBのschema 0.2.128とCLI 0.2.127は実際にエラーになる。版をそろえる運用を基本にしつつ、例外は上流定数と実処理で確認する。根拠: https://github.com/wasm-bindgen/wasm-bindgen/blob/0.2.129/crates/shared/src/lib.rs 。今回のRust 1.100検証結果はREPORT.cloudflare-workers-github-oauth-1.RUST-1.100.20261113.md。

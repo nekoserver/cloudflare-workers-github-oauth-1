@@ -787,6 +787,9 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; gap: 14px;
     }
     .history-modal .chat-bubble { max-width: 88%; font-size: 11px; line-height: 1.5; }
+    .history-modal.fullscreen .chat-bubble {
+      width: 100%; max-width: 100%; box-sizing: border-box;
+    }
     .history-modal .preview-area table { font-size: 10px; }
     .history-modal .search-hist-btn { font-size: 9px; }
     .history-modal .chat-bubble.user {

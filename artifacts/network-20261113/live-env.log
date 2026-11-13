@@ -1,0 +1,3 @@
+chat_websocket: live HMAC matches current ENV; management/Muse tokens absent
+chat_http_stream: live HMAC matches current ENV; management/Muse tokens absent
+private LLM settings: root-only 0600

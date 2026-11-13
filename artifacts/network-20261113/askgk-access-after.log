@@ -1,0 +1,28 @@
+test_other_lib_paths_stay_private (__main__.AskgkAccessTest.test_other_lib_paths_stay_private) ... ok
+test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) ... 
+  test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels') ... FAIL
+  test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels.rb') ... FAIL
+test_unsigned_and_invalid_signature_denied (__main__.AskgkAccessTest.test_unsigned_and_invalid_signature_denied) ... ok
+
+======================================================================
+FAIL: test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_askgk_access_test.py", line 18, in test_signed_worker_api_reaches_cgi
+    status,body=self.request(path);self.assertEqual(status,200);self.assertIn('uptime',json.loads(body))
+                                                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'uptime' not found in {'command': 'railway_uptime', 'uptime_seconds': 1490, 'booted_at': '2026-11-13T03:45:56Z', 'checked_at': '2026-11-13T04:10:47Z', 'source': '/proc/uptime', 'billing_time': False, 'reply': 'Railway VMのOS稼働時間: 0日0時間24分（課金対象時間ではありません）'}
+
+======================================================================
+FAIL: test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels.rb')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_askgk_access_test.py", line 18, in test_signed_worker_api_reaches_cgi
+    status,body=self.request(path);self.assertEqual(status,200);self.assertIn('uptime',json.loads(body))
+                                                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'uptime' not found in {'command': 'railway_uptime', 'uptime_seconds': 1490, 'booted_at': '2026-11-13T03:45:56Z', 'checked_at': '2026-11-13T04:10:47Z', 'source': '/proc/uptime', 'billing_time': False, 'reply': 'Railway VMのOS稼働時間: 0日0時間24分（課金対象時間ではありません）'}
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.082s
+
+FAILED (failures=2)

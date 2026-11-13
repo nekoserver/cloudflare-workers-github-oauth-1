@@ -1,0 +1,17 @@
+   Compiling ls-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/ls-wasm)
+    Finished `test` profile [unoptimized] target(s) in 0.48s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/ls-wasm/ebfdde51cee36103/out/ls_wasm-ebfdde51cee36103)
+
+running 9 tests
+test tests::show_all指定でドット始まりの名前も含まれる ... ok
+test tests::ディレクトリはd始まりのパーミッション表記になる ... ok
+test tests::ドット始まりの名前はshow_all未指定なら除外される ... ok
+test tests::フィールド数が不正な行はエラーになる ... ok
+test tests::短形式は名前のみを名前順に1行ずつ返す ... ok
+test tests::種別が不正な行はエラーになる ... ok
+test tests::空行だけの入力は空文字列を返す ... ok
+test tests::長形式のサイズ列はエントリ内最大桁数で右揃えされる ... ok
+test tests::長形式はパーミッション風表記_サイズ_更新日_名前を含む ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

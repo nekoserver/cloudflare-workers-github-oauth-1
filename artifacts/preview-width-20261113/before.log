@@ -1,0 +1,18 @@
+{"viewport": 1440, "before": {"modal": 720, "body": 63, "available": 682, "overflow": false}, "fullscreen": {"modal": 1440, "body": 63, "available": 1404, "overflow": false}, "restored": {"modal": 720, "body": 63, "available": 682, "overflow": false}, "errors": []}
+Traceback (most recent call last):
+  File "/root/cloudflare-workers-github-oauth-1/artifacts/preview-width-20261113/check.py", line 31, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/root/cloudflare-workers-github-oauth-1/artifacts/preview-width-20261113/check.py", line 26, in main
+    assert abs(full['body']-full['available'])<1,'fullscreen body does not use available width'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: fullscreen body does not use available width

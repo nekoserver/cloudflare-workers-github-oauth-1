@@ -1,0 +1,91 @@
+...E/usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+EE.....tunnel_list_incomplete: active tunnel missing from listing
+.....
+======================================================================
+ERROR: test_ruby_and_child_cgi_ssi (network_runtime_test.RuntimeTest.test_ruby_and_child_cgi_ssi) (path='/lib/ruby_-v.shtml')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 33, in test_ruby_and_child_cgi_ssi
+    with self.subTest(path=path), self.request(path) as res:
+                                  ~~~~~~~~~~~~^^^^^^
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 22, in request
+    return urllib.request.urlopen(req,context=ssl._create_unverified_context(),timeout=15)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 493, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.14/urllib/request.py", line 602, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.14/urllib/request.py", line 531, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 611, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 403: Forbidden
+
+======================================================================
+ERROR: test_ruby_and_child_cgi_ssi (network_runtime_test.RuntimeTest.test_ruby_and_child_cgi_ssi) (path='/lib/api/tunnels.shtml')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 33, in test_ruby_and_child_cgi_ssi
+    with self.subTest(path=path), self.request(path) as res:
+                                  ~~~~~~~~~~~~^^^^^^
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 22, in request
+    return urllib.request.urlopen(req,context=ssl._create_unverified_context(),timeout=15)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 493, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.14/urllib/request.py", line 602, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.14/urllib/request.py", line 531, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 611, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 403: Forbidden
+
+======================================================================
+ERROR: test_ssi_expands (network_runtime_test.RuntimeTest.test_ssi_expands)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 25, in test_ssi_expands
+    with self.request('/lib/date.shtml') as res:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/root/cf-container/ops/test/network_runtime_test.py", line 22, in request
+    return urllib.request.urlopen(req,context=ssl._create_unverified_context(),timeout=15)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 493, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.14/urllib/request.py", line 602, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.14/urllib/request.py", line 531, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 611, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 403: Forbidden
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.399s
+
+FAILED (errors=3)
+Tunnel cache updated: 0 tunnels
+Tunnel cache updated: 0 tunnels

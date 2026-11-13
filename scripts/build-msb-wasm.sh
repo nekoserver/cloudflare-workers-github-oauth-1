@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 crate_dir="$repo_root/wasm/msb-wasm"
 out_dir="$repo_root/public/wasm"
-bindgen_version="0.2.127"
+bindgen_version="0.2.128"
 
 if ! rustup target list --installed | grep -qx 'wasm32-unknown-unknown'; then
   echo 'error: wasm32-unknown-unknown is not installed (run: rustup target add wasm32-unknown-unknown)' >&2

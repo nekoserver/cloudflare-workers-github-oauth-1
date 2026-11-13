@@ -19,7 +19,7 @@ command -v wasm-bindgen >/dev/null || {
   exit 1
 }
 
-cargo test --manifest-path "$CRATE/Cargo.toml"
-cargo build --release --target wasm32-unknown-unknown --manifest-path "$CRATE/Cargo.toml"
+cargo test --locked --manifest-path "$CRATE/Cargo.toml"
+cargo build --release --locked --target wasm32-unknown-unknown --manifest-path "$CRATE/Cargo.toml"
 wasm-bindgen --target web --out-dir "$ROOT/public/wasm" --out-name sqlx \
   "$CRATE/target/wasm32-unknown-unknown/release/sqlx_wasm.wasm"

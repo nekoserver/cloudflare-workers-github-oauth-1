@@ -1,0 +1,4 @@
+PASS public unsigned POST rejected with HTTP403
+PASS public signed POST HTTP200 with real uptime
+{"engine": "codex", "http": 200, "ask_status": "done", "ask_error": null, "exact_reply": true}
+{"engine": "muse", "http": 200, "ask_status": "done", "ask_error": null, "exact_reply": true}

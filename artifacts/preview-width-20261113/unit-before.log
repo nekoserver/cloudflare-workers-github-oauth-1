@@ -1,0 +1,17 @@
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/aichat-history-modal-frame-toggle.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/aichat-history-modal-frame-toggle.test.ts [ src/aichat-history-modal-frame-toggle.test.ts ]
+Error: ELOOP: too many symbolic links encountered, mkdir '/root/cloudflare-workers-github-oauth-1/node_modules/.vitest-cache'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  04:24:04
+   Duration  389ms (worker 100%)
+

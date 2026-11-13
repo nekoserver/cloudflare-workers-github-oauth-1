@@ -23,6 +23,14 @@ describe('詳細プレビューモーダル: フレーム表示切り替え', ()
     expect(clickHandler).toContain("isFrameless ? '🔲' : '⬜︎'");
   });
 
+  it('全画面では短い本文も内容領域いっぱいに広げる', () => {
+    const rule = html.match(/\.history-modal\.fullscreen \.chat-bubble\s*\{([^}]+)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/(?:^|;)\s*width:\s*100%/);
+    expect(rule![1]).toMatch(/max-width:\s*100%/);
+    expect(rule![1]).toMatch(/box-sizing:\s*border-box/);
+  });
+
   it('タッチ操作はフレーム表示を変更しない', () => {
     expect(html).not.toContain('historyPinchStartDistance');
     expect(html).not.toContain('historyPinchGestureActive');

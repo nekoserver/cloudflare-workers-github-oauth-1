@@ -1,0 +1,39 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded bumpalo v3.20.3
+  Downloaded proc-macro2 v1.0.107
+  Downloaded rustversion v1.0.23
+  Downloaded cfg-if v1.0.4
+  Downloaded unicode-ident v1.0.24
+  Downloaded once_cell v1.21.4
+  Downloaded wasm-bindgen-macro-support v0.2.127
+  Downloaded wasm-bindgen v0.2.127
+  Downloaded wasm-bindgen-macro v0.2.127
+  Downloaded wasm-bindgen-shared v0.2.127
+  Downloaded quote v1.0.47
+  Downloaded syn v2.0.119
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling wasm-bindgen-shared v0.2.127
+   Compiling rustversion v1.0.23
+   Compiling syn v2.0.119
+   Compiling bumpalo v3.20.3
+   Compiling wasm-bindgen v0.2.127
+   Compiling cfg-if v1.0.4
+   Compiling once_cell v1.21.4
+   Compiling wasm-bindgen-macro-support v0.2.127
+   Compiling wasm-bindgen-macro v0.2.127
+   Compiling dig-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/dig-wasm)
+    Finished `test` profile [unoptimized] target(s) in 26.61s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/dig-wasm/9e458f6a2407e87d/out/dig_wasm-9e458f6a2407e87d)
+
+running 5 tests
+test tests::build_query_encodes_name_and_type ... ok
+test tests::ipv4_format ... ok
+test tests::ipv6_format_compresses_zero_run ... ok
+test tests::parse_minimal_a_response ... ok
+test tests::qtype_unknown_is_error ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

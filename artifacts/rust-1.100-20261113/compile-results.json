@@ -1,0 +1,142 @@
+[
+  {
+    "crate": "dig-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 26.63,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "dig-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 25.89,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "factor-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 0.2,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "factor-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 0.8,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "gh-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 21.28,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "gh-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 28.03,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "jev-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 32.47,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "jev-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 33.79,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "ls-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 0.5,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "ls-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 1.42,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "msb-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 0.51,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "msb-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 1.58,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "sha256-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 4.21,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "sha256-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 5.7,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "sqlx-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 123.2,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "sqlx-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 178.29,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "tree-wasm",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 0.7,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "tree-wasm",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 1.98,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "rust-worker-sqlx-d1",
+    "kind": "test",
+    "exit": 0,
+    "seconds": 207.93,
+    "lock_unchanged": true
+  },
+  {
+    "crate": "rust-worker-sqlx-d1",
+    "kind": "wasm-release",
+    "exit": 0,
+    "seconds": 396.57,
+    "lock_unchanged": true
+  }
+]

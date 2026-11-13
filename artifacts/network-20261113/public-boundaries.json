@@ -1,0 +1,42 @@
+[
+  {
+    "host": "mygw.nekomaneki.work",
+    "path": "/lib/date.shtml",
+    "status": 403
+  },
+  {
+    "host": "mygw.nekomaneki.work",
+    "path": "/lib/api/tunnels.rb",
+    "status": 403
+  },
+  {
+    "host": "r8.nekomaneki.work",
+    "path": "/lib/date.shtml",
+    "status": 403
+  },
+  {
+    "host": "r8.nekomaneki.work",
+    "path": "/lib/api/tunnels.rb",
+    "status": 403
+  },
+  {
+    "host": "stream.test.cfc.nekomaneki.work",
+    "path": "/lib/date.shtml",
+    "status": 530
+  },
+  {
+    "host": "stream.test.cfc.nekomaneki.work",
+    "path": "/lib/api/tunnels.rb",
+    "status": 530
+  },
+  {
+    "host": "r9.nekomaneki.work",
+    "path": "/lib/date.shtml",
+    "error": "TimeoutError"
+  },
+  {
+    "host": "r9.nekomaneki.work",
+    "path": "/lib/api/tunnels.rb",
+    "status": 502
+  }
+]

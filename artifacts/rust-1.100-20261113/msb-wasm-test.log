@@ -1,0 +1,14 @@
+   Compiling msb-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/msb-wasm)
+    Finished `test` profile [unoptimized] target(s) in 0.49s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/msb-wasm/3989e40702d8a71e/out/msb_wasm-3989e40702d8a71e)
+
+running 6 tests
+test tests::クエリでコマンド名と説明の両方を絞り込む ... ok
+test tests::コマンド単位のヘルプはサブコマンドをまとめて返す ... ok
+test tests::ツリーはスペース区切りのサブコマンドを入れ子にする ... ok
+test tests::ツリーもクエリで絞り込める ... ok
+test tests::全件のヘルプ一覧を返す ... ok
+test tests::存在しないコマンドはエラーになる ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
