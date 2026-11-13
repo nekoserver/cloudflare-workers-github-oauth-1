@@ -288,6 +288,8 @@ export function getConversationStreamPanel(config: ConversationStreamRoutes | nu
       var url = new URL(embedUrls[host], location.href);
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());
+      // 経路ID(秘密ではない): lib側のApacheが、どの呼出し元が埋め込んだかをログで見分ける。鍵は付けない。
+      if (host !== 'worker') url.searchParams.set('via', 'aichat-panel');
       frame.src = url.href;
     }
     buttons.forEach(function (button) {
