@@ -33,6 +33,10 @@ NOTIFY_TARGET = "worker"
 # 本体nekorootはmygwを維持。CFC用Tunnel・Secretとは分離する。
 # src/utils/containerEndpoints.tsと同じ接続先を使用する。
 NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
+# 起動オプション(ユーザー指定、2026-11-13): "1" のときだけ、demoコンテナの起動時の lib の復元
+# (nekoserver/lib の restore-claude-host.sh)が、libを管理者専用のまま、経路ID(via)のある要求に
+# チャットの経路を通す。"0" では lib は一律に管理者専用。変えたらコンテナの再起動で反映される。
+LIB_ROUTE_ACCESS_CONTROL = "1"
 # askgkは独立側のCodex認証復旧まで、本体コンテナ(mygw)へ一時的に送る。
 # 経路一覧はsrc/data/askgk-routes.json。ASKGK_ROUTESのJSON設定で上書きできる。
 ASKGK_ROUTE_ID = "main"

@@ -15,7 +15,8 @@ describe('conversation stream upstream health', () => {
     vi.stubGlobal('fetch', probe);
     expect(await conversationStreamHealthy()).toEqual(['mygw']);
     expect(probe).toHaveBeenCalledTimes(1);
-    expect(probe).toHaveBeenCalledWith(CONTAINER_ENDPOINTS.conversation, expect.objectContaining({
+    // 経路ID via=health を付ける。lib側は起動オプションが有効なとき、経路IDのある要求だけを通す(nekoserver/lib#147)。
+    expect(probe).toHaveBeenCalledWith(CONTAINER_ENDPOINTS.conversation + '?via=health', expect.objectContaining({
       method: 'GET', redirect: 'manual', signal: expect.any(AbortSignal),
       headers: expect.objectContaining({ Accept: 'text/html' }),
     }));
@@ -45,7 +46,7 @@ describe('conversation stream upstream health', () => {
       autoPriority: ['b', 'a'], routes: [{ id: 'a', origin: 'https://a.example' }, { id: 'b', origin: 'https://b.example' }],
     });
     expect(await conversationStreamHealthy(routes)).toEqual(['b']);
-    expect(probe.mock.calls.map(call => call[0])).toEqual(['https://b.example/lib/conversation-embed.html', 'https://a.example/lib/conversation-embed.html']);
+    expect(probe.mock.calls.map(call => call[0])).toEqual(['https://b.example/lib/conversation-embed.html?via=health', 'https://a.example/lib/conversation-embed.html?via=health']);
   });
   it('logs connection failures for each trusted host', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));

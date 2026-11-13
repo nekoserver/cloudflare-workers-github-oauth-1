@@ -43,7 +43,7 @@
 | Worker `rust-worker-sqlx-d1` | Secretあり | `src/tunnelsigner.rs` |
 | Worker `cfc-standalone` | Secretあり | `src/worker.ts`、`server.js`、`origin-hmac.mjs`、`src/routing.mjs` |
 | Worker `cf-auth` | `REDMINE_HMAC_SECRET`のみ | `ORIGIN_HMAC_SECRET`はない。同じ値かは未確認 |
-| コンテナ `cloudflare-workers-github-oauth-1-democontainer` | **Workerから渡されない** | 手入力で`/etc/lib-hmac.env`に入れている |
+| コンテナ `cloudflare-workers-github-oauth-1-democontainer` | **Workerから`envVars`で渡す**（2026-11-13、利用者の承認。段階3の1だけ） | 起動時の lib の復元（`/root/lib/claude/ops/restore-claude-host.sh`、`entrypoint.sh`から呼ぶ）が環境変数で読む。`ALLOWED_SECRET_NAMES`には入れず、更新は`wrangler secret put`だけ。古いイメージでは手入力の`/etc/lib-hmac.env` |
 | コンテナ `redmine-redminecontainer` | Workerから渡される | `worker/index.ts:79-80`、`scripts/lib-services.py:25-27` |
 | コンテナ `cfc-standalone-standalonecontainer` | 利用あり。渡し方は未確認 | `server.js`、`origin-hmac.mjs` |
 | リポジトリ `lib` | 検証側 | `api/hmac_auth.rb`、`ops/chat_websocket.py`、`claude/ops/` |
@@ -86,7 +86,7 @@ Cloudflareのコンテナはすでに10個あり、今後も増える。手順�
 |---|---|---|---|
 | `CF_CONTAINER_API_TOKEN` | あり(`demoContainer.ts:43`) | 届いている | `cf-env.sh`、`/etc/lib-tunnels.env` |
 | `GH_TOKEN` | あり(`demoContainer.ts:46`) | **空で届いた**。Worker側の`CONTAINER_GH_TOKEN`が未設定か空と見られる | `cf-env.sh`(値があるときだけ)、`~/.config/gh/hosts.yml` |
-| `ORIGIN_HMAC_SECRET` | **なし**。`envVars`にも`ALLOWED_SECRET_NAMES`にもない | 手入力で渡している | `/etc/lib-hmac.env` |
+| `ORIGIN_HMAC_SECRET` | `envVars`で渡す（2026-11-13）。`ALLOWED_SECRET_NAMES`にはない | 起動時の lib の復元が環境変数で読む | 環境変数（古いイメージは`/etc/lib-hmac.env`） |
 
 ## 現状の問題
 

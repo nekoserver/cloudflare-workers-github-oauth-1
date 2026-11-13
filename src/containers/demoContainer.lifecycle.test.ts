@@ -14,7 +14,7 @@ import { createFakeCtx } from './demoContainerFakeCtx';
 const ENV = {
   NEKOROOT_HOSTNAME: 'h', NEKOROOT_TUNNEL_TOKEN: 't', TAILSCALE_AUTHKEY: 'ts', TAILSCALE_LOGIN_SERVER: 'ls',
   SSH_HOST_ED25519_KEY_B64: 'k', SSH_AUTHORIZED_KEYS: 'a', CF_CONTAINER_API_TOKEN: 'cf', CLOUDFLARE_ACCOUNT_ID: 'acc',
-  CONTAINER_GH_TOKEN: 'gh', DB: {},
+  CONTAINER_GH_TOKEN: 'gh', ORIGIN_HMAC_SECRET: 'hmac', MUSE_API_KEY: 'muse', LIB_ROUTE_ACCESS_CONTROL: '1', DB: {},
 };
 
 function setup(opts: { running?: boolean; ready?: boolean } = {}) {
@@ -28,13 +28,14 @@ const flush = async (calls: { waitUntil: Promise<unknown>[] }) => { await Promis
 beforeEach(() => { record.mockClear(); });
 
 describe('起動', () => {
-  it('今と同じ10個の環境変数とインターネット接続で起動し、ポートの準備完了を待つ', async () => {
+  it('12個の環境変数(libの復元用の3つを含む)とインターネット接続で起動し、ポートの準備完了を待つ', async () => {
     const { instance, calls, state } = setup();
     state.pingFailures = 2;
     await instance.start();
     expect(calls.start).toEqual([{ enableInternet: true, env: {
       NEKOROOT_HOSTNAME: 'h', NEKOROOT_TUNNEL_TOKEN: 't', TAILSCALE_AUTHKEY: 'ts', TAILSCALE_LOGIN_SERVER: 'ls',
       SSH_HOST_ED25519_KEY_B64: 'k', SSH_AUTHORIZED_KEYS: 'a', CF_CONTAINER_API_TOKEN: 'cf', CLOUDFLARE_ACCOUNT_ID: 'acc', GH_TOKEN: 'gh',
+      ORIGIN_HMAC_SECRET: 'hmac', MUSE_API_KEY: 'muse', LIB_ROUTE_ACCESS_CONTROL: '1',
     } }]);
     expect(calls.fetch).toEqual([`${CONTAINER_PORT} http://ping`]);
     expect((await instance.getState()).status).toBe('healthy');
@@ -45,7 +46,7 @@ describe('起動', () => {
     const instance = new DemoContainer(fake.ctx as never, { DB: {} } as never);
     (instance as unknown as { sleep: () => Promise<void> }).sleep = async () => {};
     await instance.start();
-    expect(Object.values(fake.calls.start[0].env ?? {})).toEqual(Array(9).fill(''));
+    expect(Object.values(fake.calls.start[0].env ?? {})).toEqual(Array(12).fill(''));
   });
 
   it('起動後に無活動タイムアウト(6時間)と、それより短い間隔のアラームを設定する', async () => {
