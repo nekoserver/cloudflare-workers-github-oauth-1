@@ -29,5 +29,5 @@ it('never contacts sleeping candidates, including r9, even when the selected hos
   const secret = 'stream-no-wake-test';
   const token = await createJWT({ sub: 'testuser' }, secret, 60);
   await app.request('/api/aichat/conversation-stream/health', { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET: secret });
-  expect(probe.mock.calls.map(call => call[0])).toEqual(['https://mygw.nekomaneki.work/lib/conversation-embed.html']);
+  expect(probe.mock.calls.map(call => call[0])).toEqual(['https://mygw.nekomaneki.work/lib/conversation-embed.html?via=health']);
 });

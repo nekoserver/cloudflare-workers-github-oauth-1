@@ -13,6 +13,11 @@ export type Bindings = {
   REDMINE_HMAC_TARGETS?: string;
   /** Shared origin HMAC; legacy Redmine-specific binding remains a fallback. */
   ORIGIN_HMAC_SECRET?: string;
+  /**
+   * 起動オプション(wrangler.toml の [vars])。"1" のときだけ、demoコンテナの起動時の lib の復元が、
+   * libを管理者専用のまま経路情報(via)をもとにしたアクセス制御を行う(ユーザー指定、2026-11-13)。
+   */
+  LIB_ROUTE_ACCESS_CONTROL?: string;
   HMAC_SECRET?: string;
   REDMINE_HMAC_SECRET?: string;
   JWT_SECRET: string;
