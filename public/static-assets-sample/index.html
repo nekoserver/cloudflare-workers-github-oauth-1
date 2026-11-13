@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>静的アセットのサンプル</title>
+<link rel="stylesheet" href="/static-assets-sample/style.css">
+<script src="/static-assets-sample/app.js" defer></script>
+</head>
+<body>
+<header class="bar"><span class="title">Workers Static Assets のサンプル</span></header>
+<main class="page">
+  <p class="lead">このページの HTML・CSS・JS は <code>public/static-assets-sample/</code> に置いたファイルです。パスに一致するファイルがあるので、Worker のコードは動かずにエッジから直接返ります。</p>
+
+  <section class="card">
+    <h2>1. このページ自身(静的アセット)</h2>
+    <p>読み込んだ各ファイルの応答ヘッダーを表示します。<code>X-Static-Asset-Sample</code> は <code>public/_headers</code> で付けたものです。</p>
+    <table class="tbl" id="asset-table">
+      <thead><tr><th>ファイル</th><th>状態</th><th>Content-Type</th><th>X-Static-Asset-Sample</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>2. 一致するファイルが無いパス(Worker が答える)</h2>
+    <p><code>/api/static-assets-sample</code> には対応するファイルが無いので、Worker のコードが JSON を返します。</p>
+    <button type="button" class="btn" id="call-worker">Worker を呼ぶ</button>
+    <pre class="out" id="worker-out">(まだ呼んでいません)</pre>
+  </section>
+
+  <section class="card">
+    <h2>設定(wrangler.toml)</h2>
+    <pre class="out">assets = { directory = "./public" }</pre>
+    <p>静的アセットへのリクエストは Worker の実行回数に数えられません。<code>run_worker_first</code> を付けると、アセットより先に Worker を動かせます(認証が必要なページなど)。</p>
+  </section>
+</main>
+</body>
+</html>

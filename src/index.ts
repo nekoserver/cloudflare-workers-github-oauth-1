@@ -13681,6 +13681,15 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 // 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
 // computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
 // (単発登録ではnullのまま=フィールド自体を含めない)。
+/**
+ * Workers Static Assets のサンプル(public/static-assets-sample/)から呼ぶ API。
+ * public/ に一致するファイルが無いパスは Worker のコードに渡ることを見せるだけで、認証も保存もしない。
+ */
+app.get('/api/static-assets-sample', (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ served_by: 'worker', path: new URL(c.req.url).pathname, time: new Date().toISOString() });
+});
+
 app.get('/api/countdown/next', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
