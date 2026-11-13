@@ -1,3 +1,4 @@
+import {createTreeViewConversationStreamRoutes} from './routes/treeViewConversationStream';
 import { createTreeViewMuseChatRoutes } from './routes/treeViewMuseChat';
 import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
@@ -6004,7 +6005,7 @@ app.use('/*', async (c, next) => {
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Frame-Options', c.req.path.startsWith('/api/tree-view/conversation-stream-external/') && c.res.ok ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -17286,6 +17287,16 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
   return !!expected && auth === expected;
 }
+
+app.route('/', createTreeViewConversationStreamRoutes({
+  getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
 
 // The tree-view Muse target uses the existing container's fixed tailnet bridge.
 app.route('/', createTreeViewMuseChatRoutes({
