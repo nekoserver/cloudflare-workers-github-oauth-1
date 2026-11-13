@@ -28,7 +28,7 @@
 - 直送は `main-worker-muse` が tailnet につながっていることが前提。つながらなければ「Museへの接続を確認できません」を返し、コンテナや tunnels へは切り替えない。
 - 本番での直送の実送信は、デプロイ後に `/aichat` で確かめる。
 
-## 2. Muse への6系統
+## 2. Muse への7系統（/tailscale-wasm ページを追加、2026-11-13）
 
 **対象**: Muse(muse-vm の api-bridge、`http://muse-vm:8080/v1/chat/completions`)へ届くすべての経路 — 経路キーで1つずつ区別する(ユーザー指定 2026-11-12)。
 
@@ -40,6 +40,7 @@
 | `muse-wasm-jobs` | 本体 `/muse-wasm-test` ページ | 本体 → `TailscaleWasm` の `MuseAgentJobs`(4章)→ WASM(`main-worker-muse`)→ muse-vm | **ワーカーで完結** | 本体の `MUSE_API_KEY` | 特化している |
 | `aichat-askmgs-wasm` | 本体 AIチャット、接頭語 `/askmgs prompt="…"` | 本体 → `/api/tailscale-wasm/chat` → `TailscaleWasm`(WASM)→ `MUSE_GADGET_RELAY_URL`(`http://cf-demo-container:8766`)→ Gadgets | **コンテナ必須**(WASM を通るが、行き先の `cf-demo-container` は本体 demo コンテナ) | `MUSE_GADGET_SDK_TOKEN`(中継への署名は `ORIGIN_HMAC_SECRET`) | 特化していない |
 | `aichat-tunnels` | 本体 AIチャット、`/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 の `/tunnel-signer` → tunnels.rb(コンテナ)→ Muse | **コンテナ必須**(tunnels.rb のコンテナ。本体 demo コンテナかどうかは未確認) | tunnels.rb 側の設定(本体は扱わない) | 特化していない |
+| `tailscale-wasm-page`（説明用） | 本体 `/tailscale-wasm` の「Worker → Muse」 | ページ → `POST /api/tailscale-wasm/tasks`（`action: bridge-chat`）→ 永続ジョブ → `/api/tailscale-wasm/bridge-chat` → `museWorkerDep` → TailscaleWasm(`main-worker-muse`) → muse-vm | **ワーカーで完結** | 本体の `MUSE_API_KEY` | 画面を閉じても永続ジョブを照会して回答を取得。MuseAgentJobsとは別 |
 
 - 接頭語付きの AI 投稿(`/askmuse`・`/askmgs`・`/neko askgk muse_prompt=` などの Muse と、`codex_prompt=`・`claude_prompt=` などそれ以外のモデル)は、主に外部アプリからの用途を想定している(ユーザー指定 2026-11-12)。画面から人が送る通常の投稿は接頭語なし(`aichat-direct`)。
 - 「ワーカーで完結」の経路は、本体の demo コンテナが止まっていても送れる(Worker 内の Tailscale WASM ノード `main-worker-muse` が tailnet につながっていればよい)。「コンテナ必須」の経路は、そのコンテナが止まっていれば送れない(自動で起動しない・ほかの経路へ切り替えない)。
@@ -99,7 +100,7 @@ muse-vm へ届く要求(どの経路でも同じ):
 
 ## 7. Muse への経路の一覧(コンテナの要否・鍵・名前の候補、2026-11-12)
 
-**対象**: Muse(`muse-vm:8080`)へ届くすべての経路と、lib を付けるコンテナ — 2章の6系統に、コンテナ起動後の確認送信を足した7系統。うち2つは中でさらに分かれるため、区別する名前は最大9つ。**名前は候補で、まだ決めていない**(muse-vm 側の鍵の名前と揃えてから決める。ユーザー指定 2026-11-12)。基本仕様としてユーザーが確認済み。工事中の部分がある。
+**対象**: Muse(`muse-vm:8080`)へ届くすべての経路と、lib を付けるコンテナ — 2章の7系統に、コンテナ起動後の確認送信を足した8系統。旧コンテナ経路を分けて記載した候補名は最大11個。**名前は候補で、まだ決めていない**(muse-vm 側の鍵の名前と揃えてから決める。ユーザー指定 2026-11-12)。基本仕様としてユーザーが確認済み。工事中の部分がある。
 
 説明用のページ: https://claude.ai/artifact/87Nwq3mwBZKGqegxJSqZV6
 
@@ -116,9 +117,11 @@ muse-vm へ届く要求(どの経路でも同じ):
 | 5 | `aichat-askmgs-gadget` | 本体 AIチャット `/askmgs prompt="…"` | 本体 → TailscaleWasm → `cf-demo-container:8766` → Gadgets | 必須(行き先の `cf-demo-container`、本体 demo コンテナ) | `MUSE_GADGET_SDK_TOKEN`(中継への署名は `ORIGIN_HMAC_SECRET`) |
 | 6 | `aichat-askgk-tunnels` | 本体 AIチャット `/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 `/tunnel-signer` → tunnels.rb → lib の worker → muse-vm | 必須(lib を付けたコンテナ。種類は問わない) | lib の worker の `MUSE_API_KEY` |
 | 7 | `libhost-askgk-selfcheck` | コンテナ起動後の確認送信「今日は何日？」(手で実行) | `askgk_request.rb` → `tunnels.claude.rb`(CGI を直接実行)→ lib の worker → `tailscale nc` → muse-vm(Worker・Apache・HMAC を通らない) | 必須(lib を付けたコンテナ。種類は問わない。そこで手で実行) | lib の worker の `MUSE_API_KEY` |
+| 8 | `tailscalepage-wasm-muse` | 本体 `/tailscale-wasm` の「Worker → Muse」 | ページ → `/api/tailscale-wasm/tasks` → 永続ジョブ → `/api/tailscale-wasm/bridge-chat` → `museWorkerDep` → TailscaleWasm → muse-vm | 不要 | 本体の `MUSE_API_KEY` |
+| 8' | `tailscalepage-legacy-container` | 同ページの旧コンテナ経路（明示操作・確認あり） | `/api/tailscale-wasm/tasks`（`action: legacy-chat`）→ 永続ジョブ → `/api/aichat`（Muse、`container`指定）→ demo コンテナ → muse-vm | 必須（本体 demo コンテナ） | 本体の `MUSE_API_KEY` |
 
-- 直送は、コンテナを通さない 1 だけを指す(ユーザー指定 2026-11-12)。直送以外で AIチャットから Muse へ送るのは、tunnels.rb を通る 6 と、`/muse-wasm-test` を通る 4。
-- 「必須」の経路は、そのコンテナが止まっていると送れない。どの経路も、止まっているコンテナを自動で起動したり、ほかの経路へ切り替えたりはしない。「不要」の経路(1・2'・4)は、Worker 内の `main-worker-muse` が tailnet につながっていれば送れる。
+- 直送はコンテナを通さない経路を指す。1 と同じ Worker 内 WASM の送り方を 2'・8 も利用する。直送以外で AIチャットから Muse へ送るのは、tunnels.rb を通る 6 と、`/muse-wasm-test` を通る 4。
+- 「必須」の経路は、そのコンテナが止まっていると送れない。どの経路も、止まっているコンテナを自動で起動したり、ほかの経路へ切り替えたりはしない。「不要」の経路(1・2'・4・8)は、Worker 内の `main-worker-muse` が tailnet につながっていれば送れる。
 - 7 の手順は `lib/SETTINGS.claude-host.20261102.md:109`(`ruby claude/test/manual/askgk_request.rb claude/api/tunnels.claude.rb 'muse_prompt="今日は何日？"'`)。起動時に自動で送るスクリプトは無い。
 - 名前の形の案は「入口-道筋-行き先」。`direct`・`worker`・`container` を単独では使わない(ほかの経路と取り違えやすい)。
 
@@ -164,3 +167,69 @@ tunnels.rb と LLM worker は lib 上にあり、特定のコンテナには縛�
 - api-bridge は鍵が違えばすぐ 401 を返す。401 でなく無応答なら鍵は通っている(2026-11-13 に `server.py` で確認)。
 - api-bridge はジョブを1件ずつ処理する(`JOB_LOCK`)。こちらが先に諦めても、api-bridge は最大600秒ロックを握ったまま待ち、後続の要求を詰まらせる。上限を api-bridge と同じにするのは、このためでもある。
 - 変更のきっかけ: 2026-11-13、Muse 側で aichat-direct の要求が届き送信者も照合できていたが、答えに時間がかかり、90秒・290秒では受け取れなかった(ユーザー確認)。
+
+## /tailscale-wasm ページを加えた根拠（2026-11-13）
+
+- `src/views/tailscaleWasm.ts` の通常送信フォームは `submitDurableTask('bridge-chat', {prompt}, …)` を呼ぶ。`POST /api/tailscale-wasm/tasks` はジョブを登録し、回答はジョブ照会で受け取る。登録成功だけをMuseの回答成功と扱わない。
+- `src/index.ts` の `bridge-chat` は `museWorkerDep(c.env)(data.prompt)` を呼び、`src/utils/museWorkerAsk.ts` の `sendMuseViaWorker` から Worker 内 WASM へ送る。管理者認証と同一origin確認が必要。本体demoコンテナは不要で、自動で別経路へ切り替えない。
+- `tailscale-wasm-page`・`tailscalepage-wasm-muse` は一覧で入口を区別するための説明用・候補名。実装の `museWorkerDep` は現時点で `routeId: 'aichat-direct'` を使う。新しいヘッダ・鍵・経路IDを実装したという意味ではない。
+- 同ページのジョブ登録パネル（`/api/tailscale-wasm/jobs`）は4のMuseAgentJobsを利用する。同じページに入口があっても、通常フォームの永続ジョブとは別。
+- `/api/tailscale-wasm/chat` は `/askmgs` と同じGadgets側の経路であり、通常フォームの `bridge-chat` と混同しない。旧コンテナ送信ボタンは明示操作と確認が必要で、直送失敗時の自動フォールバックではない。
+- この追記は現コードの参照による経路整理。今回 `/tailscale-wasm` から新たな実推論送信・デプロイは行っていない。
+
+## tree-view のMuseウィンドウ内「ワーカー」の403（2026-11-13）
+
+### 実際の入口と原因
+
+`https://dynamicneko.nekoflare.workers.dev/tree-view` のAIチャットでMuseを選び、⬜︎でウィンドウを開いてから「ワーカー」へ切り替える操作でも、同じ `TreeViewConversationStream` のiframeを使用する。修正前は台帳の既定mygwの公開 `/lib/conversation-embed.html` を直接表示したが、管理者限定のApacheが公開 `/lib` を403にしていた。公開403・内部8445の200を実測した。内部配信・投稿の成功だけを、tree-viewの成功と扱わない。
+
+この「ワーカー」はlibの固定会話の観測・投稿画面であり、「Muse」タブの `/api/tree-view/muse-chat-external` とは別。ウィンドウのタイトルがMuseでも、それだけでMuse直送やMuseのAPIキーを使うことにはならない。今回の中継はMUSE_API_KEYをブラウザや公開配信へ渡さない。
+
+### 修正後の会話ストリーム経路
+
+```
+AIチャット → Muse → ⬜︎ → ワーカー
+  → 同一origin /lib/conversation-embed.html
+  → dynamicnekoの所有者セッション確認・限定した/lib中継
+  → MAIN_WORKER /api/tree-view/conversation-stream-external/lib/*
+      CF-Worker+HMAC署名 + 短寿命ユーザートークン + 管理者本人確認
+  → 起動中demoコンテナのserver.js
+  → 内部Apache 127.0.0.1:8445 → lib / observer
+```
+
+既定mygwを本体demoコンテナへ対応させる。その他の台帳接続先は既存の公開URLを使う。公開Apacheの/lib拒否は維持し、停止中コンテナは起動しない。HTML・限定したJS/CSS・ticket付き資産・chat APIだけ中継し、任意のホストやファイルへのプロキシにはしない。
+
+### 見落としを防ぐ点
+
+- `HTTP200`やiframeのsrcだけでは表示成功ではない。CSP、X-Frame-Options、相対importするJS/CSS、会話本文まで確認する。成功したlib応答のnonce付きCSPを維持し、X-Frame-OptionsはSAMEORIGINにする。
+- 実libの試験で `chat/vendor/markdown-it.mjs` の許可漏れも発見した。ticket付き資産からの相対importも許可表とテストの対象にする。
+- PWA用ログインには通常ログインとは別のパス制限がある。限定した会話パスをPWAでも通し、ops等の非公開パスは拒否し続ける。
+- 接続前のHEAD確認ではログインページへのredirectを成功扱いにしない。失敗・時間切れは理由と再試行を表示する。閲覧再試行で推論入力は送らない。
+- SSE等は本文を読み切らず中継し、WebSocketの101は作り直さない。ログイン用Cookie・中継の資格情報を無条件に全区間へ転送しない。
+
+### 確認と反映
+
+本体の関連テスト41件、ブラウザ11件に加え、指定されたMuseウィンドウ操作と失敗時の再試行2件、PWA所有者認証・非公開パス拒否・型チェックに成功。実libと両中継実装を通すChrome試験でHMACログイン・JS/CSS・SSE・現在会話articleを確認した。ローカルのセッション保存先と本人照会はfixtureであり、本番の利用者ログイン・WebSocket 101の終端確認とは区別する。
+
+Workerだけの反映にWranglerの `deploy --containers-rollout none --keep-vars` を使用した。インストール済みCLIのhelpと実装でコンテナのビルド・更新を省略することを確認した後、本体→dynamicnekoの順に反映した。Dockerビルド・コンテナ再作成なし。
+
+- 本体Worker: `fe1c9bd8-908e-4e86-a175-bc326789a6e0`
+- dynamicneko（PWA補正後）: `7ee55793-dc75-41d4-a719-9c6fa4f3425a`
+
+公開側では未ログインのdynamicneko埋め込みがログインへ302、未署名の本体中継が401、mygwの公開/libが403を確認。配信されたフロントエンドJSのSHA256が修正ビルドと一致することも確認した。利用者のログイン済みブラウザでの最終表示は再読み込み後の確認が残る。詳細の経緯は `NOTICE.cloudflare-workers-github-oauth-1.20261113.tree-view-worker-stream.md`。
+
+### 再発時の切り分けと画面の更新（2026-11-13 追記）
+
+| 症状・確認結果 | 判断と確認先 |
+|---|---|
+| ワーカータブ内にApacheの `Forbidden / You don't have permission to access this resource.` | iframeが公開mygwの `/lib` を直接見ていないか確認する。今回の構成では公開側の403は意図したアクセス制限であり、解除する対象ではない |
+| 通常ログインでは表示できるがPWAでは403 | dynamicnekoのPWA専用パス制限と、失効・ログアウト済みセッションの照合を確認する。所有者認証を省略せず、限定した会話パスだけ許可する |
+| 接続前のHEADがログインへ302 | 認証切れの可能性がある。redirect先のHTTP200を中継成功と扱わない |
+| HTMLは200だが会話が出ない | CSP・X-Frame-Options、ticket付きJS/CSSとvendor依存の取得、観測セッション、SSE/WSの実イベントを順に確認する |
+| Workerを反映したのに古い公開mygwへ接続する | 既に開いている親画面が旧JavaScriptを実行している可能性がある。iframeだけでなくtree-view全体を再読み込みし、Museウィンドウを開き直す。配信JSと最終ビルドのSHA256も照合する |
+
+利用者へ案内する更新手順は、tree-view全体の再読み込み → AIチャット → Muse → ⬜︎ → ワーカー。ウィンドウ移動・タブ切替では同じiframeを維持する実装なので、既存iframeだけの再読み込みでは親画面の接続先ロジックは更新されない。
+
+未ログイン埋め込みの302、未署名中継の401、公開mygw/libの403、配信JSのハッシュ一致は、それぞれ認証境界と配信版の確認である。利用者のログイン済み画面で会話が描画された証拠とは分けて記録する。テストの投稿受付、同一会話キューへの登録、モデルの実受信、回答、ブラウザ描画も別々の到達点として確認する。
+
+本体コンテナのlibに対する公開拒否・署名付きAPI例外・内部SSI・観測/投稿認証・Worker中継・ソケット権限の現状は、[libアクセス制御SPEC](SPEC.cloudflare-workers-github-oauth-1.20261113.lib-access-control.md)に分けて記録した。

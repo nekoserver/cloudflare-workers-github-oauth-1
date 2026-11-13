@@ -1,0 +1,8 @@
+{
+  "description": "Codexの応答を日本語にするハーネス設定",
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答の指示を復元"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答の指示を復元"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "/usr/bin/python3 __HARNESS_SCRIPT__", "timeout": 5, "statusMessage": "日本語応答を確認"}]}]
+  }
+}

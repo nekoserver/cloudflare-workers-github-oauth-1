@@ -61,7 +61,7 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 ARG NPM_VERSION=12.2.0
-ARG CODEX_VERSION=0.167.2
+ARG CODEX_VERSION=0.169.0
 ARG T3_VERSION=0.1.9
 ARG CLAUDE_VERSION=2.1.323
 ARG VITEST_VERSION=5.0.5
@@ -195,7 +195,7 @@ RUN npm cache clean --force \
     && /opt/node22/bin/npm cache clean --force
 RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
     && npm install -g @openai/codex@${CODEX_VERSION} \
-    && codex --version \
+    && codex --version | grep -Fx "codex-cli ${CODEX_VERSION}" \
     && npm cache clean --force
 # T3 Code。npmのパッケージは起動用の小さなプログラムで、初回の実行時にGitHub Releasesから本体(約122MB)を
 # ~/.t3/runtime へ取り込む。起動のたびにダウンロードしないよう、ビルド時に t3 --version を実行して
@@ -206,7 +206,8 @@ RUN npm install -g t3@${T3_VERSION} \
 # 公式の Cloudflare CLI。依存の miniflare(workerd)が大きいので専用の RUN にし、キャッシュは同じ RUN で消す。
 RUN npm install -g cf@${CF_CLI_VERSION} \
     && ln -sf /opt/node22/bin/cf /usr/local/bin/cf \
-    && cf --version \
+    && ln -sf /opt/node22/bin/cloudflare /usr/local/bin/cloudflare \
+    && cf --version | grep -Fx "${CF_CLI_VERSION}" \
     && npm cache clean --force
 # Global CLI for container/SSH use; project-local Vitest remains lockfile-managed.
 ARG INSTALL_VITEST=true
@@ -295,6 +296,7 @@ COPY firewall-stats.py firewall-log.py ./
 COPY container_setup.py /usr/local/libexec/container_setup.py
 # SSI setup is self-contained and can be reused by other container images.
 RUN python3 /usr/local/libexec/container_setup.py
+COPY codex-harness/ /usr/local/share/codex-harness/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/

@@ -372,5 +372,10 @@ else
   log "lib: no /root/lib/claude/ops/restore-claude-host.sh, lib services not restored"
 fi
 
+# Restore the versioned Codex Japanese hooks at boot; preserve other hooks and trust.
+if ! /usr/bin/python3 /usr/local/share/codex-harness/restore.py; then
+  log "WARN: Codex Japanese hook restore failed; existing settings retained"
+fi
+
 log "exec: $*"
 exec "$@"

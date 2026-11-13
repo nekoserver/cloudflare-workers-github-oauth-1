@@ -352,3 +352,25 @@ Workerブリッジの単一入力制限を入口と共通の履歴検証に修�
 AIチャット詳細プレビューの⬜︎でモーダルだけが広がり、短い本文の吹き出しが内容幅のまま残る問題を修正。全画面モーダル内のchat-bubbleへwidth/max-width 100%とborder-boxを指定し、本文領域の横幅いっぱいに広げる。通常表示のサイズは維持。
 
 実際に生成したページをローカルChromeで開き、詳細プレビュー表示→⬜︎→🔲を操作。修正前は1440px画面で本文63pxのまま、修正後は本文領域1404pxまで拡張。390px画面でも354pxまで拡張し、横スクロールなし、通常表示への復帰を確認。APIはfixtureを使用し、本番の認証済み画面操作ではない。関連8テストと生成inline script4本のnode --check成功。根拠はartifacts/preview-width-20261113/。既存node_modulesの自己参照symlinkを避け、既存グローバルVitest 5.0.5を一時設定で使用（lockfile既定4系での実行ではない）。Workerデプロイ・Dockerビルド・git pushなし。
+
+## 2026-11-13: tree-view ワーカータブの会話中継（後続でWorkerのみ反映）
+
+公開mygwの `/lib/conversation-embed.html` が403、内部8445が200であることを確認。dynamicnekoの既定mygw埋め込みを所有者認証付きの同一origin中継へ変更し、本体 `/api/tree-view/conversation-stream-external/lib/*` にWorker署名・本人確認・パス制限付きの受信ルートを追加した。公開Apacheの拒否は維持する。
+
+ローカル実libと両中継実装を通すChrome試験で認証・依存資産・SSE・現在会話表示に成功。セッション保存先とユーザー照会はfixtureで、本番のログイン・service binding・WebSocket 101は未検証。push・デプロイ・コンテナビルドなし。本体Worker→dynamicnekoの順に反映して本番画面を確認する必要がある。経緯はdynamicnekoの `NOTICE.20261113.tree-view-worker-stream.md`。
+
+Muse経路の既存SPECに `/tailscale-wasm` ページを追加した。これは経路整理の文書更新であり、新しい経路IDの実装・推論送信・本番反映ではない。
+
+### 同日17:52 UTCの後続反映
+
+Wranglerのhelpと実装でコンテナ変更を省略する `--containers-rollout none` を確認し、`--keep-vars` と併用して本体→dynamicnekoを反映した。本体 `fe1c9bd8-908e-4e86-a175-bc326789a6e0`、dynamicneko `7ee55793-dc75-41d4-a719-9c6fa4f3425a`。Dockerビルド・コンテナ更新なし。指定されたMuseウィンドウ内のワーカー切替テスト、PWA限定パス補正、公開の認証境界とフロントエンドJSハッシュ一致を確認済み。本番の利用者ログインによる終端表示・WebSocket 101は未確認。上記の「未デプロイ」は初回ローカル検証時点の履歴。
+
+## 2026-11-13: Codexの日本語応答hookと起動時復元
+
+リポジトリの `containers/demo/codex-harness/` に定義・実体・復元スクリプトを保存し、DockerfileのCOPYとentrypointの毎回復元を追加した。現コンテナの同ディレクトリ、/root/.codex/hooks.json、起動entrypointにも適用。6テスト、既存設定保持・冪等性・壊れた設定の保護、隔離した起動ブロックの2回復元、shell構文、Codex strict-configの検証成功。
+
+hookの利用者信頼確認は変更していない。現在会話での自動発火、実再起動、イメージ再作成後の復元は未確認。Dockerビルド・Workerデプロイ・Git pushは今回のhook復元では行わない。rootの明示CODEX_HOMEまたは~/.codexが対象で、codex-webへは自動適用しない。手順と制約は `containers/demo/codex-harness/README.md`。
+
+## 2026-11-13: 本体DockerfileのCodex/Cloudflare CLI
+
+Codexの固定版をnpm latestで確認した0.169.0へ更新。公式cfのlatestは既存と同じ1.0.0-beta.31なので維持し、cloudflare別名のSSH用リンクとCodex/cfの導入版照合を追加した。隔離prefixでCodexの版・app-server・hooks機能を確認し、CLI関連12テスト成功。現コンテナのグローバルCLI・本番イメージは更新していない。再ビルドと再起動が必要で、この環境では実施しない。詳細は `REPORT.cloudflare-workers-github-oauth-1.CODEX-CF-CLI.20261113.md`。
