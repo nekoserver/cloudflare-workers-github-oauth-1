@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rust 1.100 · never型をWASMで試す</title>
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+<main>
+<header><p class="eyebrow">RUST 1.100 / WEBASSEMBLY</p><h1>値を返さない型、<span>!</span></h1>
+<p class="lead">never型には値がありません。「失敗が存在しない」と「ここから戻らない」を、ブラウザ上の本物のWASMで試します。</p>
+<p id="status" role="status">WASMを読み込んでいます…</p></header>
+<section class="input"><label for="value">符号なし32ビット整数</label><div class="controls"><input id="value" type="number" min="0" max="4294967295" step="1" value="42"><button id="run" disabled>WASMを実行</button></div><p id="validation" role="alert"></p><p>例: 42 → 通常終了 ／ 43 → ③だけtrap ／ 4294967295 → 32ビットすべて1</p></section>
+<div class="cards">
+<section><p class="number">01 / ERROR IS IMPOSSIBLE</p><h2>失敗しないResult</h2><pre><code>fn population(n: u32) -&gt; Result&lt;u32, !&gt;</code></pre><p>1のビット数を数えます。Err側の型が <code>!</code> なので、エラー値を作れません。</p><output id="total">—</output></section>
+<section><p class="number">02 / SAME TYPE</p><h2>Infallibleと同じ型</h2><pre><code>let r: Result&lt;u32, Infallible&gt;
+    = population(n);</code></pre><p>Rust 1.100ではInfallibleは <code>!</code> の別名。この代入をコンパイルしたWASMで、①と同じ計算を実行します。</p><output id="alias">—</output></section>
+<section><p class="number">03 / NO RETURN</p><h2>戻らない分岐</h2><pre><code>if n.is_multiple_of(2) {
+    n / 2
+} else {
+    stop() // -&gt; !
+}</code></pre><p>偶数なら半分の値。奇数ならWASMのunreachable命令でtrapします。JSが例外を受け止めるので、入力を変えて再実行できます。</p><output id="trap">—</output></section>
+</div>
+<footer><p><code>!</code> と <code>()</code> は別の型です。<code>()</code> は「値が1つ」、<code>!</code> は「値が0個」。never型が必ずtrapするわけではなく、このサンプルが終了方法としてtrapを選んでいます。</p><p><a href="./source.rs">Rustソースを見る</a> · <a href="https://blog.rust-lang.org/2026/11/12/Rust-1.100.0/">Rust 1.100公式リリース</a></p><p>HTML・CSS・JS・WASMは静的アセット。計算はブラウザ内で完結し、入力値をサーバーへ送信しません。</p></footer>
+</main>
+</body>
+</html>
