@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rust 1.100 · Allocator APIをWASMで試す</title>
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body><main>
+<header><p class="eyebrow">RUST 1.100 / WEBASSEMBLY</p><h1>メモリの置き場所を<br>型で選ぶ</h1><p class="lead">Rust 1.100で安定したAllocator APIを使い、<code>Vec</code>と<code>Box</code>の確保先をコードで指定します。</p><p id="status" role="status">WASMを読み込んでいます…</p></header>
+<section class="play"><label for="count">要素数 <span>0〜4096</span></label><div class="controls"><input id="count" type="number" min="0" max="4096" step="1" value="12"><button id="run" disabled>メモリを確保して計算</button></div><p id="error" role="alert"></p><div class="result"><span>WASMのチェックサム</span><output id="checksum">—</output></div><div class="result"><span>確保した要素数</span><output id="length">—</output></div><div class="blocks" id="blocks" aria-label="要素数の表示"></div></section>
+<section class="code"><p class="eyebrow">EXPLICIT ALLOCATOR</p><h2>確保先を明示する</h2><pre><code>let mut values = Vec::new_in(Global);
+values.push(value);
+let boxed = Box::new_in(values, Global);</code></pre><p><code>Vec::new_in</code>と<code>Box::new_in</code>へ<code>Global</code>を渡しています。WASMモジュールの中で確保し、使い終わった値はスコープを抜けると解放します。</p><p class="note">ここではカスタムヒープを実装せず、Rustの標準Global allocatorを明示します。allocator自体はWASMのJavaScript境界を越えません。</p><a href="./source.rs">Rustソースを見る</a></section>
+<footer>このページは静的アセットです。計算はブラウザ内のWASMで行い、入力値をサーバーへ送信しません。<br><a href="https://blog.rust-lang.org/2026/11/12/Rust-1.100.0/">Rust 1.100公式リリースノート</a></footer>
+</main></body></html>
