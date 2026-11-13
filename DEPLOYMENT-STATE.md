@@ -337,3 +337,18 @@ Workerブリッジの単一入力制限を入口と共通の履歴検証に修�
 ## 2026-11-09 後続: UIを公開反映（コンテナ更新なし）
 
 本体Worker ca303d16-b1e6-4276-91d8-13f50ec41390、dynamicneko 7fd593e7-53d5-4606-b6f0-7b029e58661cをcontainers-rollout none/keep-varsで公開。公開JSはローカル本番ビルドとSHA256一致し、パネル⬜︎、chat固有キーボード撤去、共通リサイズ処理を含む。tailscale-wasmのthemeも配備済み。現libにはqueue件数配信/更新表示とトークンURL露出防止を配置し、observer/HTTP streamを再起動。公開conversation entry HTTP200で、チケット遷移にトークンフラグメントがないことを確認。iPhone実機PWAとログイン済み本番UI操作、Muse実推論は未確認。Git pushなし。詳細は[UI PUBLISH REPORT](REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md)とdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md、lib/REPORT.lib.20261109.pwa-session-url.md。
+
+
+## 2026-11-13: 現コンテナのネットワーク配置・実検証
+
+現ENV優先でSSI/CGI、observer/LLM/WS・HTTP配信を配置。現在会話のread API照合、全4配信方式の実受信、Codex/Claude/Museの引用符付きprompt実回答を確認。内部ApacheのHost継承不備を回帰テスト後に修正。実Chromeの内部パネル投稿は同一会話queueへ1件受付、assistant応答は未確認。外部/libの管理者限定拒否を維持。Tunnel一覧権限不足、stream530/r9障害、Nemotron未対応、本体認証画面からの終端未検証が残る。entrypoint/cronの復帰経路を配置、再作成後は未検証。Chrome更新候補1件をREPORTに記載、更新未実施。最終ファイアウォールを再採取。Worker/イメージ未更新。詳細は [REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261113.md)。
+
+2026-11-13後続: パネル投稿を同一会話で実受信しSTREAM_POST_OK_20261113を返答。一致する待機queue0件とobserverのuser投稿を確認。利用者ブラウザでのassistant描画は未確認。詳細はNETWORK.20261113 REPORTの後続ターン節。
+
+2026-11-13後続修正: /neko askgkが利用する公開/lib/api/tunnelsまで一括拒否される403を修正。完全一致APIだけHMAC認証CGIへ接続し、他/libは拒否を維持。実公開URLで本体同形式のPOST登録・照会からCodex/Muse実回答成功、回帰18件成功。本体service binding/ログイン済みUI経由の再確認は未実施。Worker/イメージ更新なし。詳細はNETWORK.20261113 REPORT末尾。
+
+## 2026-11-13: 詳細プレビュー全画面時の本文幅（本番未反映）
+
+AIチャット詳細プレビューの⬜︎でモーダルだけが広がり、短い本文の吹き出しが内容幅のまま残る問題を修正。全画面モーダル内のchat-bubbleへwidth/max-width 100%とborder-boxを指定し、本文領域の横幅いっぱいに広げる。通常表示のサイズは維持。
+
+実際に生成したページをローカルChromeで開き、詳細プレビュー表示→⬜︎→🔲を操作。修正前は1440px画面で本文63pxのまま、修正後は本文領域1404pxまで拡張。390px画面でも354pxまで拡張し、横スクロールなし、通常表示への復帰を確認。APIはfixtureを使用し、本番の認証済み画面操作ではない。関連8テストと生成inline script4本のnode --check成功。根拠はartifacts/preview-width-20261113/。既存node_modulesの自己参照symlinkを避け、既存グローバルVitest 5.0.5を一時設定で使用（lockfile既定4系での実行ではない）。Workerデプロイ・Dockerビルド・git pushなし。

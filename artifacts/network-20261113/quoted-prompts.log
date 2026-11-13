@@ -1,0 +1,5 @@
+{"claude_auth_exit": 0}
+{"engine": "codex", "http": 200, "ask_status": "done", "error": "no_api_token", "exact_reply": true}
+{"engine": "claude", "http": 200, "ask_status": "done", "error": "no_api_token", "exact_reply": true}
+{"engine": "muse", "http": 200, "ask_status": "done", "error": "no_api_token", "exact_reply": true}
+{"engine": "nemotron", "http": 200, "ask_status": "failed", "error": "unsupported_engine", "exact_reply": false}

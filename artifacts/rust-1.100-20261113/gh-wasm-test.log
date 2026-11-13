@@ -1,0 +1,38 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded itoa v1.0.18
+  Downloaded serde_derive v1.0.229
+  Downloaded serde v1.0.229
+  Downloaded serde_core v1.0.229
+  Downloaded zmij v1.0.23
+  Downloaded memchr v2.8.3
+  Downloaded serde_json v1.0.151
+  Downloaded syn v3.0.4
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling syn v3.0.4
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+   Compiling serde_derive v1.0.229
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling gh-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/gh-wasm)
+    Finished `test` profile [unoptimized] target(s) in 21.20s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/gh-wasm/031f998e5ac90b36/out/gh_wasm-031f998e5ac90b36)
+
+running 12 tests
+test tests::draft_openの件数を見出しに表示する ... ok
+test tests::github_apiデータをmarkdownへ整形する ... ok
+test tests::mergeable_stateからコンフリクト列を判定する ... ok
+test tests::owner_repoを検証して正規化する ... ok
+test tests::owner_repo形式が不正なら弾く ... ok
+test tests::pr0件は該当メッセージを返す ... ok
+test tests::pr一覧をmarkdownテーブルへ整形する_作成者マスクあり ... ok
+test tests::pr一覧をmarkdownテーブルへ整形する_作成者マスクなし ... ok
+test tests::pr番号が6桁を超える場合はそのまま桁数を保つ ... ok
+test tests::userが欠損している場合は不明として扱う_マスクなし ... ok
+test tests::不正なjsonはエラーを返す ... ok
+test tests::必須フィールド欠損は明示的なエラーになる ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

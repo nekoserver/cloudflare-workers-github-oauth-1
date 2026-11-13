@@ -1,0 +1,8 @@
+test_other_lib_paths_stay_private (__main__.AskgkAccessTest.test_other_lib_paths_stay_private) ... ok
+test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) ... ok
+test_unsigned_and_invalid_signature_denied (__main__.AskgkAccessTest.test_unsigned_and_invalid_signature_denied) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.036s
+
+OK

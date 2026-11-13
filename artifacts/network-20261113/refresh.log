@@ -1,0 +1,1 @@
+tunnel_api_not_authorized: active tunnel missing from listing; API rejected access to active tunnel; check credential source and resource scope

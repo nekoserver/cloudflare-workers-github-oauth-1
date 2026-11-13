@@ -1,0 +1,6 @@
+API HTTP=200, auth=error, tunnels=0, error=no_api_token
+PASS unsigned model request rejected
+PASS sse: signed real conversation event
+PASS ndjson: signed real conversation event
+PASS jsonseq: signed real conversation event
+PASS websocket: challenge authentication and real conversation event

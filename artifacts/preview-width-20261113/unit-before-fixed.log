@@ -1,0 +1,27 @@
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/aichat-history-modal-frame-toggle.test.ts (5 tests | 1 failed) 68ms
+   ❯ 詳細プレビューモーダル: フレーム表示切り替え (5)
+     × 全画面では短い本文も内容領域いっぱいに広げる 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/aichat-history-modal-frame-toggle.test.ts > 詳細プレビューモーダル: フレーム表示切り替え > 全画面では短い本文も内容領域いっぱいに広げる
+AssertionError: expected null not to be null
+ ❯ src/aichat-history-modal-frame-toggle.test.ts:28:22
+     26|   it('全画面では短い本文も内容領域いっぱいに広げる', () => {
+     27|     const rule = html.match(/\.history-modal\.fullscreen \.chat-bubble…
+     28|     expect(rule).not.toBeNull();
+       |                      ^
+     29|     expect(rule![1]).toMatch(/(?:^|;)\s*width:\s*100%/);
+     30|     expect(rule![1]).toMatch(/max-width:\s*100%/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  04:24:22
+   Duration  1.49s (transform 77%, import 17%, tests 6%)
+

@@ -1,0 +1,11 @@
+{
+  "collected_at_utc": "2026-11-13T04:12:28.821316+00:00",
+  "mode": "counters-only",
+  "nft_exit_code": 0,
+  "sha256": {
+    "firewall.log": "188202480ce6910afb5be21022f21885e488f786cb6ec177917c9b8377e32321",
+    "firewall-collector.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "nftables.log": "746a07a50600623e4da572f98f201c77919a434a472ba427078dd5bcc867200c",
+    "nft-ruleset.txt": "61452ff440e1ef684b4b59d5f849804621506567152bfc5125ad89fcb870f3c4"
+  }
+}

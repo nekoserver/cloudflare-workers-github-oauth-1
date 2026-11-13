@@ -1,0 +1,66 @@
+[
+  {
+    "name": "dig",
+    "bytes": 55686,
+    "sha256": "9c4422464546fc2710ea767972f24259df30f0d8a03b7b26416f84278b5b2ea6",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.4 wasm-bindgen 0.2.127"
+    ]
+  },
+  {
+    "name": "factor",
+    "bytes": 21248,
+    "sha256": "c835bd99cd8e2a30a55b24959967e7d90eeb3503b956a8340e87783934007c17",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.4 wasm-bindgen 0.2.127"
+    ]
+  },
+  {
+    "name": "gh",
+    "bytes": 79179,
+    "sha256": "064fd23cdff6eb3fe993bf6a227fea14e7c06841060f9eda4855b6bb0c453ac3",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.5 wasm-bindgen 0.2.127"
+    ]
+  },
+  {
+    "name": "jev",
+    "bytes": 108613,
+    "sha256": "a6c77e0752a68de9d3cc13bea076a664f372873b3be873edf2e9959ca91f41a5",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.5 wasm-bindgen 0.2.128"
+    ]
+  },
+  {
+    "name": "ls",
+    "bytes": 35040,
+    "sha256": "38776c39b5228d313e1b1a69ba683bae939627db2622d3c5a4c685ccdefa444f",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.5 wasm-bindgen 0.2.127"
+    ]
+  },
+  {
+    "name": "msb",
+    "bytes": 62596,
+    "sha256": "5547a4b1693e4e3da41d4dba5e5e88e4848c846c8ba5044733b2b1fe19c88aa7",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.5 wasm-bindgen 0.2.128"
+    ]
+  },
+  {
+    "name": "sha256",
+    "bytes": 25600,
+    "sha256": "547793e7bcbd1a9ff5c7fe11260f02b48a15701899e5f4e16d229e99ee32ccb1",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.4 wasm-bindgen 0.2.127"
+    ]
+  },
+  {
+    "name": "sqlx",
+    "bytes": 180739,
+    "sha256": "6d1211da67df7927860c33732957530129bc6a884362e0d3ba20c882b4469bea",
+    "producers": [
+      "  language  Rust  processed-by  rustc 1.94.1 (e408947bf 2026-03-25) walrus 0.26.5 wasm-bindgen 0.2.127"
+    ]
+  }
+]

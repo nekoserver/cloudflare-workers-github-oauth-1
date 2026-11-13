@@ -1,0 +1,9 @@
+test_private_paths_denied (test.RuntimeTest.test_private_paths_denied) ... ok
+test_private_sockets (test.RuntimeTest.test_private_sockets) ... ok
+test_ruby_and_child_cgi_ssi (test.RuntimeTest.test_ruby_and_child_cgi_ssi) ... ok
+test_ssi_expands (test.RuntimeTest.test_ssi_expands) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.363s
+
+OK

@@ -1,0 +1,82 @@
+✔ tree: bindgen CLI matches the locked WASM schema (60.590622ms)
+✖ tree: tests and rebuilds preserve the dependency lock (5.442226ms)
+✖ msb: bindgen CLI matches the locked WASM schema (0.636455ms)
+✔ msb: tests and rebuilds preserve the dependency lock (0.19319ms)
+✔ sqlx: bindgen CLI matches the locked WASM schema (4.010428ms)
+✖ sqlx: tests and rebuilds preserve the dependency lock (0.254923ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 3
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 576.699727
+
+✖ failing tests:
+
+test at scripts/wasm-build-contract.test.mjs:12:3
+✖ tree: tests and rebuilds preserve the dependency lock (5.442226ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /--locked\b/. Input:
+  
+  'cargo test --manifest-path "$crate_dir/Cargo.toml"'
+  
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/wasm-build-contract.test.mjs:14:14)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'cargo test --manifest-path "$crate_dir/Cargo.toml"',
+    expected: /--locked\b/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at scripts/wasm-build-contract.test.mjs:7:3
+✖ msb: bindgen CLI matches the locked WASM schema (0.636455ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '0.2.127'
+  - '0.2.128'
+           ^
+  
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/wasm-build-contract.test.mjs:10:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '0.2.127',
+    expected: '0.2.128',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/wasm-build-contract.test.mjs:12:3
+✖ sqlx: tests and rebuilds preserve the dependency lock (0.254923ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /--locked\b/. Input:
+  
+  'cargo test --manifest-path "$CRATE/Cargo.toml"'
+  
+      at TestContext.<anonymous> (file:///root/cloudflare-workers-github-oauth-1/scripts/wasm-build-contract.test.mjs:14:14)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'cargo test --manifest-path "$CRATE/Cargo.toml"',
+    expected: /--locked\b/,
+    operator: 'match',
+    diff: 'simple'
+  }
