@@ -295,6 +295,32 @@ describe('日次統計グラフ: リクエスト元別円グラフ', () => {
     expect(colorsLine).not.toContain("dynamicneko: '#f59e0b'");
   });
 
+  it('muse-wasm-test経由のリクエスト総数(museWasmTestTotal)を、独自の色と件数付きでリクエスト元別に出す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 21000);
+    const sectionIdx = fn.indexOf('SOURCE_COLORS');
+    expect(sectionIdx).toBeGreaterThan(-1);
+    const section = fn.slice(sectionIdx, sectionIdx + 6000);
+    expect(section).toContain('d.museWasmTestTotal');
+    expect(section).toContain("museWasmTest: 'muse-wasm-test'");
+    const colorsLine = section.slice(0, 200);
+    expect(colorsLine).toMatch(/museWasmTest: '#[0-9a-f]{6}'/);
+    for (const used of ['#611f69', '#0ea5e9', '#f59e0b', '#10b981']) expect(colorsLine).not.toContain(`museWasmTest: '${used}'`);
+    // 取得できなかったとき(null)は0件と区別して表示する
+    expect(section).toContain('取得できません');
+  });
+
+  it('daily-stats APIはINQUIRY_DBのmuse-wasm-test経由の件数をmuseWasmTestTotalとして返す', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf8');
+    const start = src.indexOf("app.get('/api/aichat/daily-stats'");
+    expect(start).toBeGreaterThan(-1);
+    const handler = src.slice(start, src.indexOf('app.get(', start + 10));
+    expect(handler).toContain('countMuseWasmTestRequests(c.env.INQUIRY_DB, user.sub, month)');
+    expect(handler).toContain('museWasmTestTotal');
+  });
+
   it('リクエスト元別 というラベルが左パネルに出力される', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
@@ -452,7 +478,7 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 18000);
+    const fn = html.slice(idx, idx + 20000);
     expect(fn).toContain('grid-template-columns');
   });
 });

@@ -535,7 +535,7 @@ import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInte
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
 import { SLACK_AI_MODEL, type AiUsage } from './utils/slackAiReply';
-import { buildAichatSourceTotals } from './utils/aichatSourceStats';
+import { buildAichatSourceTotals, countMuseWasmTestRequests } from './utils/aichatSourceStats';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -9644,6 +9644,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
+  // muse-wasm-test経由の要望は ai_chat_shares に保存されないため、INQUIRY_DB の bridge_jobs から数える(取得できなければ null)。
+  const museWasmTestTotalPromise = countMuseWasmTestRequests(c.env.INQUIRY_DB, user.sub, month);
   const [kwRows, qRows, apiModelRows, sourceRows, newKeywordRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
@@ -9712,7 +9714,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     models: qMap[date] ?? {},
   }));
 
-  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals });
+  const museWasmTestTotal = await museWasmTestTotalPromise;
+  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals, museWasmTestTotal });
 });
 
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
