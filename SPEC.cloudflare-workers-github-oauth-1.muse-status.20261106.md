@@ -22,6 +22,12 @@
 
 `muse-status-browser`は利用者端末、`muse-monitor`は独立Worker、`main-worker-muse`は本体Worker内のDurable Objectである。Tailscale管理画面で端末のログイン主体・オンライン状態を確認する場合も、この配置表を使い、名前だけから同一プロセスや同一保存領域と判断しない。ブラウザ端末の実際のephemeral設定は引き続き未確認。
 
+#### 本体Workerの`/muse-wasm-test`ページ
+
+`/muse-wasm-test`は本体Workerが配信する管理者向けページで、コンテナではない。ページ自身が別のTailscaleノードになるのではなく、ジョブを本体Workerの`TailscaleWasm` Durable Objectにある`MuseAgentJobs`へ登録し、同じ`main-worker-muse`からmuse-vmへ届ける。したがって、ページの運用形態はWorker、実際にtailnetへ参加するノードの運用形態もWorkerである。demoコンテナを必要とせず、自動でコンテナ経路へ切り替えない。
+
+このページの`MuseAgentJobs`は、別機構のD1 `bridge_jobs`（本体コンテナ上のエージェントが手動で処理）とは異なる。経路・失敗時の扱いは[依頼キューSPEC](SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md)と[Muse要求経路SPEC](SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md)を参照。
+
 Workerはtailnetに参加できないので、`/askmuse`と同じく本体デモコンテナを経由する。
 
 ```
