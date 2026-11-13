@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rust 1.100 新API · WASM Playground</title><link rel="stylesheet" href="./style.css"><script type="module" src="./app.js"></script></head>
+<body><main><header><p class="eyebrow">RUST 1.100 / NEW STABLE APIS</p><h1>標準APIの新しい道具を<br>WASMで試す</h1><p class="lead">Rust 1.100で安定したAPIを、入力を変えながら実行します。すべての処理はブラウザ内のWASMで動きます。</p><p id="status" role="status">WASMを読み込んでいます…</p></header>
+<section class="controls"><label for="seed">開始値</label><input id="seed" type="number" min="0" max="4294967295" value="7"><label for="length">要素数</label><input id="length" type="number" min="0" max="64" value="5"><button id="run" disabled>APIを実行</button></section>
+<div class="grid">
+<section><p class="tag">VEC::FROM_FN</p><h2>インデックスからVecを作る</h2><pre><code>Vec::from_fn(length, |i| seed + i)</code></pre><p>生成したVecを、同じ値を持つ借用Cowスライスと比較します。Rust 1.100で追加されたPartialEq実装を通ります。</p><output id="vec-result">—</output></section>
+<section><p class="tag">BOOL::TOGGLE</p><h2>値を直接切り替える</h2><pre><code>enabled.toggle();</code></pre><p>開始値からトグルを10回行った結果。回数を変えて偶数・奇数回の違いを確認できます。</p><label for="toggles">トグル回数</label><input id="toggles" type="number" min="0" max="100" value="3"><output id="bool-result">—</output></section>
+<section><p class="tag">STR::TRIM_PREFIX / SUFFIX</p><h2>前後の決まった文字を削る</h2><pre><code>text.trim_prefix("rust:")
+    .trim_suffix(":wasm")</code></pre><p>固定文字列から接頭辞と接尾辞を取り除いた残りのバイト数を計算します。</p><output id="trim-result">—</output></section>
+<section><p class="tag">MEM::DROP_GUARD</p><h2>スコープ終了時の処理</h2><pre><code>let guard = DropGuard::new(value,
+    |owned| outcome = owned);
+DropGuard::dismiss(guard);</code></pre><p>通常終了ではクロージャが値を受け取り、dismissではクロージャを実行せず値を返します。</p><div class="row"><button id="drop">スコープ終了</button><button id="dismiss">dismiss</button></div><output id="guard-result">—</output></section>
+<section><p class="tag">MEM::CONJURE_ZST</p><h2>ゼロサイズ型を作る</h2><pre><code>unsafe { conjure_zst::&lt;Marker&gt;() }</code></pre><p>不変条件のない空のMarker型だけを作ります。サイズは0バイト。値を作れない型や安全条件を持つ型には使えません。</p><button id="conjure">Markerを作成</button><output id="zst-result">—</output></section>
+</div><footer><a href="./source.rs">Rustソースを見る</a> · <a href="https://blog.rust-lang.org/2026/11/12/Rust-1.100.0/">Rust 1.100公式リリースノート</a><p>HTML・CSS・JS・WASMは静的配信。入力値はサーバーへ送信しません。</p></footer></main></body></html>
