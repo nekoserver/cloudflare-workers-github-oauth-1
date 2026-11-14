@@ -374,3 +374,11 @@ hookの利用者信頼確認は変更していない。現在会話での自動�
 ## 2026-11-13: 本体DockerfileのCodex/Cloudflare CLI
 
 Codexの固定版をnpm latestで確認した0.169.0へ更新。公式cfのlatestは既存と同じ1.0.0-beta.31なので維持し、cloudflare別名のSSH用リンクとCodex/cfの導入版照合を追加した。隔離prefixでCodexの版・app-server・hooks機能を確認し、CLI関連12テスト成功。現コンテナのグローバルCLI・本番イメージは更新していない。再ビルドと再起動が必要で、この環境では実施しない。詳細は `REPORT.cloudflare-workers-github-oauth-1.CODEX-CF-CLI.20261113.md`。
+
+## 2026-11-14: ネットワーク復元とMuseタブのコンテナ依存除去（Worker未反映）
+
+現コンテナへENV優先のSSI/CGI・ソケット・observer・配信を配置。Codex/Museトンネル実回答、実Chromeパネル投稿の現在会話queue1件を確認。トンネル一覧は権限不足、Claude未認証、Nemotron未対応で全体degraded。
+
+本番配備コードのtree-view既定containerとコンテナ用事前検査、health外側20秒/内側28秒、投稿外側310秒/内側600秒を確認。両WorkerのMuseタブをWorker直通だけに修正し、コンテナ指定拒否と旧Cookie無効化を実装。本体63件、dynamicneko7件、実Chrome、両中継→実workerd WASM→Museのhealthと/ping成功（コンテナ参照0、投稿1、本人認証fixture）。Workerは未反映。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK-MUSE.20261114.md)。
+
+2026-11-14後続: STREAM_POST_OK_20261114を含むパネル試験投稿を同一会話で実受信し識別子を返答。モデルへの入力到達を確認。ブラウザでの返答描画は未確認。両Workerの公開は承認待ちのまま。

@@ -7,8 +7,12 @@ export type MuseNodeSnapshot = { state: string; museOnline: boolean };
 export function readMuseNodeSnapshot(raw: string | Error): MuseNodeSnapshot {
   if (raw instanceof Error) return { state: '', museOnline: false };
   try {
-    const data = JSON.parse(raw) as { state?: string; peers?: { name?: string; dnsName?: string; online?: boolean }[] };
-    return { state: data.state ?? '', museOnline: !!data.peers?.some(p => (p.name || p.dnsName || '').split('.')[0] === 'muse-vm' && p.online === true) };
+    const data = JSON.parse(raw) as { state?: unknown; peers?: unknown } | null;
+    const peers = Array.isArray(data?.peers) ? data.peers : [];
+    return {
+      state: typeof data?.state === 'string' ? data.state : '',
+      museOnline: peers.some(p => p && p.online === true && [p.name, p.dnsName].some(name => typeof name === 'string' && name.split('.')[0].toLowerCase() === 'muse-vm')),
+    };
   } catch { return { state: '', museOnline: false }; }
 }
 

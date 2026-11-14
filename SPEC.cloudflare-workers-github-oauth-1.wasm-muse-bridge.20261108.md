@@ -91,3 +91,9 @@ T3の一回限りログインURL生成は`src/utils/t3PairingHandoff.ts`の`requ
 実際の入力窓に相当する`POST /api/aichat/jobs`から本体Workerの経路を通すlive検査は完了しなかった。Job自体はdoneになったが`museTailscale=unavailable`で、固有回答マーカーも確認できていない。別検査のDO→WASM→Muse実POST成功を入力窓の成功として扱わない。統合失敗の記録は`artifacts/wasm-tailscale-20261108/aichat-live-e2e-result.jsonl`、独立したDO成功の記録は`artifacts/wasm-tailscale-20261108/worker-do-live.jsonl`。
 
 本番反映にはWorkerの公開操作が必要で、未実施。Cloudflare productionでは`TAILSCALE_WASM` binding/migrationをまだ追加していない。既存コンテナのイメージ更新は不要で、Container rolloutを抑止するdry-runは成功している。Docker build・Git pushも行っていない。
+
+## 2026-11-14: tree-viewのMuseタブはWorker直通のみ
+
+Museタブの送信と接続検査ではDEMO_CONTAINERを参照しない。dynamicnekoの旧container Cookieを採用せず、両中継APIのcontainer指定を400で拒否し、省略時もworkerに固定する。UIの経路選択を除去する。本体のAIチャットで明示選択する旧コンテナ経路と、tunnelsのmuse_promptは別仕様のまま。
+
+接続確認の上限は本体32秒・dynamicneko40秒、投稿は本体600秒・dynamicneko610秒。送信とhealthで呼出元の同じ鍵を明示し、未接続と上流の認証/実行失敗を混同しない。テストと実測の範囲、本番未反映の状態はNETWORK-MUSE.20261114 REPORTに記録する。

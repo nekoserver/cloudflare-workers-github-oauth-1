@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
 
+// 接頭語なしのMuse・/askmuse は常に直送(Worker内WASM)。stub は TAILSCALE_WASM の中継として受ける(2026-11-12 旧コンテナ直通を廃止)。
 const stub = vi.hoisted(() => ({ getState: vi.fn(), fetch: vi.fn() }));
-vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => stub }));
+const container = vi.hoisted(() => ({ getState: vi.fn(), fetch: vi.fn() }));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => container }));
+const TAILSCALE_WASM = { idFromName: () => 'muse', get: () => ({ fetch: (request: Request) => stub.fetch(request) }) };
 
 describe('POST /api/aichat の /askmuse', () => {
   const JWT_SECRET = 'askmuse-test-secret';
@@ -31,7 +34,7 @@ describe('POST /api/aichat の /askmuse', () => {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Cookie: cookie || 'aichat_muse_signal=%7B%22transport%22%3A%22container%22%7D' },
       body: JSON.stringify(body),
-    }, { JWT_SECRET, DB, RUST_WORKER, DEMO_CONTAINER: {}, ...env });
+    }, { JWT_SECRET, DB, RUST_WORKER, DEMO_CONTAINER: {}, TAILSCALE_WASM, ...env });
   }
 
   beforeEach(() => {
@@ -44,9 +47,7 @@ describe('POST /api/aichat の /askmuse', () => {
   describe('言語モデルがMuseのときのスラッシュコマンド', () => {
     // 契約: muse-vmのapi-bridge(server.py)は/で始まる入力を推論せずに実行し、応答へbridge_commandを付ける。
     const usage = JSON.stringify({ model: 'muse', bridge_command: '/usage', choices: [{ message: { content: 'Usage: 1% of free weekly limit.' } }] });
-    const connected = (url: string) => url.endsWith('/debug/tailscale-peers')
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response(usage);
+    const connected = (_url: string) => new Response(usage);
     const sentPrompts = () => stub.fetch.mock.calls.map(([request]) => request as Request).filter((request) => request.url.endsWith('/muse/v1/chat/completions'));
 
     it.each(['/usage', '  /usage  '])('%j はmuse-vmへ直接送り、結果を返すが通常のAI回答として保存しない', async (message) => {
@@ -68,7 +69,7 @@ describe('POST /api/aichat の /askmuse', () => {
     });
 
     const commandReply = (command: string, content: string) => JSON.stringify({ model: 'muse', bridge_command: command, choices: [{ message: { content } }] });
-    const answering = (body: string, status = 200) => async (request: Request) => request.url.endsWith('/debug/tailscale-peers') ? connected(request.url) : new Response(body, { status });
+    const answering = (body: string, status = 200) => async () => new Response(body, { status });
 
     it.each(['/help', '/usage', '/status', '/ping', '/models', '/nope'])('%s はmuse-vmへ送り、D1へ記録しない', async (command) => {
       stub.fetch.mockImplementation(answering(commandReply(command, '実行結果')));
@@ -107,40 +108,25 @@ describe('POST /api/aichat の /askmuse', () => {
     });
 
     // 故障想定: コマンドの失敗を推論の失敗と取り違え、保存または別経路への再送をする。
-    it('コマンド実行の失敗(503)は内容を伝え、保存せず別の経路へも送らない', async () => {
+    it('コマンド実行の失敗(503)は失敗として伝え、保存せず別の経路へも送らない', async () => {
       stub.fetch.mockImplementation(answering(JSON.stringify({ error: { type: 'usage_unavailable' } }), 503));
       const response = await post({ message: '/usage', model: 'muse', source: 'textbox' });
-      expect((await response.json() as { response: string }).response).toContain('muse-vmでコマンドを実行できませんでした');
+      expect((await response.json() as { response: string }).response).toContain('❌');
       expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
       expect(inserts).toEqual([]);
     });
 
     // 故障想定: 文頭が/でも、ブリッジがコマンドとして実行していなければ回答として保存する。
     it('bridge_commandの無い応答は通常の回答として保存する', async () => {
-      stub.fetch.mockImplementation(async (request: Request) => request.url.endsWith('/debug/tailscale-peers') ? connected(request.url) : new Response(reply));
+      stub.fetch.mockImplementation(async () => new Response(reply));
       const response = await post({ message: '/usage', model: 'muse', source: 'textbox' });
       expect(await response.json()).toMatchObject({ usedModel: 'muse', response: '回答本文\n\nEngine: Muse / Model: muse' });
       expect(inserts).toHaveLength(1);
     });
 
-    // 故障想定: Tailscaleが切れているときに、tunnels経由へ切り替えて届けてしまう。
-    it.each([
-      ['Tailscaleが停止中', { backendState: 'Stopped', peers: [{ hostName: 'muse-vm', online: true }] }, 'Tailscaleが停止中'],
-      ['muse-vmがオフライン', { backendState: 'Running', peers: [{ hostName: 'muse-vm', online: false }] }, 'muse-vm'],
-    ])('%sなら送らず、別の経路へも切り替えない', async (_name, peers, text) => {
-      stub.fetch.mockImplementation(async () => new Response(JSON.stringify(peers)));
-      const response = await post({ message: '/usage', model: 'muse', source: 'textbox' });
-      const body = await response.json() as { response: string };
-      expect(body.response).toContain(text);
-      expect(body.response).toContain('送信していません');
-      expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
-      expect(sentPrompts()).toHaveLength(0);
-      expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
-      expect(inserts).toEqual([]);
-    });
   });
 
-  it('tunnelsを通らずコンテナへ送り、Museの回答として質問本文で保存する', async () => {
+  it('tunnelsもコンテナも通らず直送し、Museの回答として質問本文で保存する', async () => {
     const response = await post({ message: '/askmuse prompt="質問本文"', source: 'textbox' });
     expect(await response.json()).toMatchObject({ response: '回答本文\n\nEngine: Muse / Model: muse', usedModel: 'muse' });
     expect(stub.fetch).toHaveBeenCalledTimes(1);
@@ -159,33 +145,20 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(sent.messages[0].content).toBe('質問本文');
   });
 
-  it('コンテナの停止中は起動せず、Museの回答として保存しない', async () => {
-    stub.getState.mockResolvedValue({ status: 'stopped' });
-    const response = await post({ message: '/askmuse prompt="質問本文"' });
-    const body = await response.json() as { response: string; usedModel: string };
-    expect(body.response).toContain('本体コンテナが停止しています');
-    expect(body.usedModel).not.toBe('muse');
-    expect(stub.fetch).not.toHaveBeenCalled();
-    expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
-  });
-
-  it.each(['質問本文', '引用 "そのまま"\n次の行 “△”'])('Muse選択の通常入力はTailscale直接経路を先に選ぶ: %s', async (message) => {
-    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response(reply));
+  it.each(['質問本文', '引用 "そのまま"\n次の行 “△”'])('Muse選択の通常入力は直送(Worker内WASM)で送る: %s', async (message) => {
+    stub.fetch.mockImplementation(async () => new Response(reply));
     const response = await post({ message, model: 'muse', source: 'textbox' });
     expect(await response.json()).toMatchObject({ usedModel: 'muse', response: '回答本文\n\nEngine: Muse / Model: muse' });
     expect(response.headers.get('X-Muse-Tailscale')).toBe('connected');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
-    expect(stub.fetch.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual(['/debug/tailscale-peers', '/muse/v1/chat/completions']);
-    expect(await (stub.fetch.mock.calls[1][0] as Request).json()).toMatchObject({ messages: [{ role: 'user', content: message }] });
+    expect(stub.fetch.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual(['/muse/v1/chat/completions']);
+    expect(container.fetch).not.toHaveBeenCalled();
+    expect(await (stub.fetch.mock.calls[0][0] as Request).json()).toMatchObject({ messages: [{ role: 'user', content: message }] });
     expect(inserts[0][3]).toBe(message);
   });
 
   it('通常Museの直接接続が失敗してもtunnelsへフォールバックしない', async () => {
-    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response('{}', { status: 502 }));
+    stub.fetch.mockImplementation(async () => new Response('{}', { status: 502 }));
     const response = await post({ message: '質問本文', model: 'muse' });
     const data = await response.json() as { response: string };
     expect(data.response).toContain('Museへの接続を確認できません');
@@ -195,12 +168,14 @@ describe('POST /api/aichat の /askmuse', () => {
   });
 
   it.each(['muse', 'codex', 'claude'])('明示muse_promptの経路は選択中の%sに影響されない', async (model) => {
-    stub.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] })));
+    // 明示の muse_prompt= は tunnels.rb の経路(コンテナのTailscaleを確かめてから送る)。直送の変更とは別。
+    container.getState.mockResolvedValue({ status: 'healthy' });
+    container.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] })));
     RUST_WORKER.fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: '明示経路の回答' }) })));
     const response = await post({ message: '/neko askgk muse_prompt="明示質問"', model });
     expect(await response.json()).toMatchObject({ usedModel: 'muse', response: '明示経路の回答' });
     expect(RUST_WORKER.fetch).toHaveBeenCalledTimes(1);
-    expect(stub.fetch.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual(['/debug/tailscale-peers']);
+    expect(stub.fetch).not.toHaveBeenCalled();
   });
 
   it.each(['codex', 'claude'])('%s選択の通常入力は既存askgkへ送る', async (model) => {
@@ -211,28 +186,17 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(stub.fetch).not.toHaveBeenCalled();
   });
 
-  it('通常のMuse投稿でTailscale未接続なら中継へ一切送らない', async () => {
-    stub.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'NeedsLogin', peers: [] })));
-    const response = await post({ message: '質問本文', model: 'muse' });
-    const data = await response.json() as { response: string };
-    expect(data.response).toContain('Tailscaleが停止中または未接続');
-    expect(data.response).not.toContain('unsupported_engine');
-    expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
-    expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
-    expect(inserts).toHaveLength(0);
-  });
-
   // 2026-11-07 ユーザー指定: スイッチがMuseのときの接頭語なし投稿は、tunnels方向ではなく直接muse-vmへ送る。
   // AGENTS.md「互いの代替として扱わない」に合わせ、Tailscaleを確かめられなくてもtunnelsへは切り替えない。
   it.each([
     [undefined, ''], [false, ''], [true, ''], ['true', ''],
     [undefined, 'other=1; aichat_muse_tunnels=on'], [true, 'aichat_muse_tunnels=on'],
-  ])('Tailscale未接続ならtunnelsの指定(%s)やCookie(%s)に関係なく止め、tunnelsへ送らない', async (museTunnelsFallback, cookie) => {
-    stub.fetch.mockResolvedValue(new Response(JSON.stringify({ backendState: 'NeedsLogin', peers: [] })));
+  ])('直送が届かなければtunnelsの指定(%s)やCookie(%s)に関係なく止め、tunnelsへ送らない', async (museTunnelsFallback, cookie) => {
+    stub.fetch.mockResolvedValue(Response.json({ error: 'tailscale_not_connected' }, { status: 503 }));
     RUST_WORKER.fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'tunnelsの回答' }) })));
     const response = await post({ message: '質問 "そのまま"', model: 'muse', museTunnelsFallback }, { MUSE_API_KEY: 'key' }, cookie);
     const data = await response.json() as { response: string; fallbackUsed?: boolean };
-    expect(data.response).toContain('Tailscale');
+    expect(data.response).toContain('Museへの接続を確認できません');
     expect(data.response).not.toContain('tunnelsの回答');
     expect(data.fallbackUsed).toBeUndefined();
     expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
@@ -240,20 +204,16 @@ describe('POST /api/aichat の /askmuse', () => {
     expect(inserts).toHaveLength(0);
   });
 
-  it('tunnelsがONでもTailscale接続中は本文を直接Museへ送る', async () => {
-    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response(reply));
+  it('tunnelsがONでも本文を直送でMuseへ送る', async () => {
+    stub.fetch.mockImplementation(async () => new Response(reply));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
     expect(await response.json()).toMatchObject({ usedModel: 'muse', response: '回答本文\n\nEngine: Muse / Model: muse' });
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
-    expect(stub.fetch).toHaveBeenCalledTimes(2);
+    expect(stub.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('tunnelsがONでもTailscale接続中なら直接送り、Muse実行失敗で再送しない', async () => {
-    stub.fetch.mockImplementation(async (request: Request) => new URL(request.url).pathname === '/debug/tailscale-peers'
-      ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
-      : new Response('{}', { status: 502 }));
+  it('tunnelsがONでも直送し、Muse実行失敗で再送しない', async () => {
+    stub.fetch.mockImplementation(async () => new Response('{}', { status: 502 }));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
     expect((await response.json() as { response: string }).response).toContain('Museへの接続を確認できません');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
@@ -292,36 +252,32 @@ describe('GET /api/aichat/muse-health', () => {
     },
   };
 
-  async function get(env: Record<string, unknown> = { MUSE_API_KEY: 'key', DEMO_CONTAINER: {} }, authorized = true) {
+  // 保存済みの旧コンテナ直通の選択(Cookie)が残っていても、死活確認は直送で行い、コンテナに触れない。
+  async function get(env: Record<string, unknown> = { MUSE_API_KEY: 'key', DEMO_CONTAINER: {}, TAILSCALE_WASM }, authorized = true) {
     const token = await createJWT({ sub: 'test-user', name: 'Test' }, JWT_SECRET);
     return app.request('/api/aichat/muse-health', { headers: authorized ? { Authorization: `Bearer ${token}`, Cookie: 'aichat_muse_signal=%7B%22transport%22%3A%22container%22%7D' } : {} }, { JWT_SECRET, DB, ...env });
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
-    stub.getState.mockResolvedValue({ status: 'healthy' });
-    stub.fetch.mockImplementation(async (req: Request) => new Response(JSON.stringify(new URL(req.url).pathname === '/debug/tailscale-peers' ? { backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] } : { status: 'ok' })));
+    stub.fetch.mockImplementation(async () => Response.json({ status: 'ok' }));
   });
 
-  it('稼働中ならhealthy: trueを返し、応答を保存させない', async () => {
+  it('muse-vmの/healthが応えればhealthy: trueを返し、応答を保存させない', async () => {
     const response = await get();
-    expect(await response.json()).toEqual({ healthy: true, transport: 'container' });
+    expect(await response.json()).toEqual({ healthy: true, transport: 'worker' });
     expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(new URL((stub.fetch.mock.calls[0][0] as Request).url).pathname).toBe('/muse/health');
+    expect(container.getState).not.toHaveBeenCalled(); expect(container.fetch).not.toHaveBeenCalled();
   });
 
-  it('コンテナの停止中は起動せず、healthy: falseを返す', async () => {
-    stub.getState.mockResolvedValue({ status: 'stopped' });
-    expect(await (await get()).json()).toEqual({ healthy: false, transport: 'container' });
-    expect(stub.fetch).not.toHaveBeenCalled();
-  });
-
-  it('DEMO_CONTAINERが無ければhealthy: falseを返す', async () => {
-    expect(await (await get({ MUSE_API_KEY: 'key' })).json()).toEqual({ healthy: false, transport: 'container' });
+  it('Worker内WASMが無ければhealthy: falseを返す', async () => {
+    expect(await (await get({ MUSE_API_KEY: 'key', DEMO_CONTAINER: {} })).json()).toEqual({ healthy: false, transport: 'worker' });
   });
 
   it('未認証では確認しない', async () => {
     const response = await get(undefined, false);
     expect(response.status).toBeGreaterThanOrEqual(300);
-    expect(stub.getState).not.toHaveBeenCalled();
+    expect(stub.fetch).not.toHaveBeenCalled();
   });
 });

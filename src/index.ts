@@ -17298,9 +17298,8 @@ app.route('/', createTreeViewConversationStreamRoutes({
   },
 }));
 
-// The tree-view Muse target uses the existing container's fixed tailnet bridge.
+// tree-viewのMuseタブはWorker内WASMから直通し、本体コンテナに依存しない。
 app.route('/', createTreeViewMuseChatRoutes({
-  getContainer: getDemoContainerStub,
   authenticate: async (env, token) => {
     if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
     const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);

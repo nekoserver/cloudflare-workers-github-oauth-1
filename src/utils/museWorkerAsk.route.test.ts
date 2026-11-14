@@ -29,7 +29,7 @@ async function sendFromTreeView(key: string, messages: { role: 'user' | 'assista
   const path = '/api/tree-view/muse-chat-external';
   const body = JSON.stringify({ model: 'muse', messages });
   const signed = await signWorkerRequest('secret', 'dynamicneko', 'POST', path, body);
-  const app = createTreeViewMuseChatRoutes({ getContainer: async () => null as never, authenticate: async () => ({ ok: true as const, login: 'nekoserver' }) });
+  const app = createTreeViewMuseChatRoutes({ authenticate: async () => ({ ok: true as const, login: 'nekoserver' }) });
   return app.request('https://internal' + path, {
     method: 'POST', body,
     headers: { ...signed, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Aichat-User-Token': 'user-token', 'X-Muse-Transport': 'worker' },
@@ -73,8 +73,15 @@ describe('AIチャットの直送は tree-view の Museタブと同じ送り方'
     expect(result).toMatchObject({ ok: false, error: 'llm_timeout' });
     const line = log.mock.calls.map(c => String(c[0])).find(x => x.startsWith('[muse-worker]'));
     expect(line).toBeDefined();
-    expect(JSON.parse(line!.slice('[muse-worker] '.length))).toMatchObject({ routeId: 'aichat-direct', error: 'llm_timeout' });
-    expect(line).not.toContain('"k"');
+    expect(JSON.parse(line!.slice('[muse-worker] '.length))).toMatchObject({ routeId: 'aichat-direct', error: 'llm_timeout', keyPrefix: '', keyLength: 1 });
+  });
+
+  it('送った鍵の先頭4文字と長さを毎回ログに出す(全体は出さない)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await sendMuseViaWorker({ TAILSCALE_WASM: recordingNamespace([]) as never }, [{ role: 'user', content: 'q' }], { routeId: 'treeview-musetab-wasm', apiKey: 'abcd-secret-rest' });
+    const line = log.mock.calls.map(c => String(c[0])).find(x => x.startsWith('[muse-worker]'))!;
+    expect(JSON.parse(line.slice('[muse-worker] '.length))).toEqual({ routeId: 'treeview-musetab-wasm', keyPrefix: 'abcd', keyLength: 16, ok: true });
+    expect(line).not.toContain('secret-rest');
   });
 
   it('鍵が無ければ送らない(中継の起動時の鍵に黙って切り替えない)', async () => {

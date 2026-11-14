@@ -1335,6 +1335,9 @@ const ASKMUSE_USAGE = '使い方: /askmuse prompt="<質問文>"';
 
 const ASKMUSE_ERROR_MESSAGES: Partial<Record<MuseDirectError, string>> = {
   tailscale_wasm_not_configured: 'Worker内Tailscaleの接続経路が未設定です',
+  tailscale_not_connected: 'Worker内Tailscaleが未接続、またはmuse-vmの在席を確認できません（Museへは未送信）',
+  tailscale_wasm_unavailable: 'Worker内Tailscaleの起動・状態取得に失敗しました。本体コンテナの状態とは独立した経路です',
+  muse_delivery_unknown: 'WorkerからのMuse投稿結果を確認できません。届いた可能性があるため自動再送はしません',
   muse_connection_failed: 'Museへの接続を確認できません。Tailscaleの接続状況を確認してください（自動再送はしません）',
   container_not_running: '本体コンテナが停止しています。/cf-containersから起動してください',
   muse_not_authenticated: 'WorkerのsecretにMUSE_API_KEYが設定されていません',
@@ -1359,7 +1362,7 @@ async function interpretAskMuseCommand(message: string, deps: AichatSlashCommand
 }
 
 /** muse-vmまで届かなかった失敗。届いた可能性がある失敗(タイムアウト・認証・利用上限・実行)はtunnels.rbへ送らない(推論の二重実行を避ける)。 */
-const MUSE_UNREACHED_ERRORS: ReadonlySet<MuseDirectError> = new Set<MuseDirectError>(['muse_connection_failed', 'container_not_running', 'tailscale_wasm_not_configured']);
+const MUSE_UNREACHED_ERRORS: ReadonlySet<MuseDirectError> = new Set<MuseDirectError>(['muse_connection_failed', 'container_not_running', 'tailscale_wasm_not_configured', 'tailscale_not_connected']);
 
 /**
  * 直送に失敗したとき、⚙で有効にしていればtunnels.rb(/neko askgk muse_prompt=)へ1回だけ送る(既定は使わない。ユーザー指定 2026-11-12)。

@@ -35,3 +35,10 @@ it('Museが ok を返さなければ失敗にする', async () => {
   await vi.advanceTimersByTimeAsync(100);
   await expect(pending).resolves.toBe(false);
 });
+
+// ノード準備20秒とhealth通信8秒に、DO起動・応答の余裕も必要。
+it('ノード準備とhealth通信の合計28秒で外側が先に打ち切らない', async () => {
+ const pending=checkMuseWorkerHealth({TAILSCALE_WASM:slowNode(MUSE_NODE_READY_MS+8500) as never,MUSE_API_KEY:'k'});
+ await vi.advanceTimersByTimeAsync(MUSE_NODE_READY_MS+8500);
+ await expect(pending).resolves.toBe(true);
+});

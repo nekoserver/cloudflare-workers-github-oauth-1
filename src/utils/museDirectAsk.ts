@@ -23,6 +23,9 @@ const MODEL_NAME = /^[a-zA-Z0-9_.:/-]{1,128}$/;
 
 export type MuseDirectError =
   | 'tailscale_wasm_not_configured'
+  | 'tailscale_not_connected'
+  | 'tailscale_wasm_unavailable'
+  | 'muse_delivery_unknown'
   | 'container_not_running'
   | 'muse_not_authenticated'
   | 'prompt_too_large'
