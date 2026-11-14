@@ -53,7 +53,7 @@ describe('直送に失敗したときの tunnels.rb フォールバック', () =
     expect(askTunnelSigner).not.toHaveBeenCalled();
     expect(r.handled && r.response).toContain('❌');
   });
-  it.each(['muse_connection_failed', 'container_not_running', 'tailscale_wasm_not_configured'])('ON で %s なら tunnels.rb へ muse_prompt で1回送る', async (error) => {
+  it.each(['muse_connection_failed', 'container_not_running', 'tailscale_wasm_not_configured', 'tailscale_not_connected'])('ON で %s なら tunnels.rb へ muse_prompt で1回送る', async (error) => {
     const askTunnelSigner = tunnels();
     const r = await interpretMusePrompt('質問', { askMuseDirect: vi.fn().mockResolvedValue({ ok: false, error }), askTunnelSigner }, 'Muse', { tunnelsFallback: true });
     expect(askTunnelSigner).toHaveBeenCalledExactlyOnceWith('muse_prompt="質問"');

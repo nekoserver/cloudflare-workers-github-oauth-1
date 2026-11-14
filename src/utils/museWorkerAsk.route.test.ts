@@ -29,7 +29,7 @@ async function sendFromTreeView(key: string, messages: { role: 'user' | 'assista
   const path = '/api/tree-view/muse-chat-external';
   const body = JSON.stringify({ model: 'muse', messages });
   const signed = await signWorkerRequest('secret', 'dynamicneko', 'POST', path, body);
-  const app = createTreeViewMuseChatRoutes({ getContainer: async () => null as never, authenticate: async () => ({ ok: true as const, login: 'nekoserver' }) });
+  const app = createTreeViewMuseChatRoutes({ authenticate: async () => ({ ok: true as const, login: 'nekoserver' }) });
   return app.request('https://internal' + path, {
     method: 'POST', body,
     headers: { ...signed, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Aichat-User-Token': 'user-token', 'X-Muse-Transport': 'worker' },

@@ -2,13 +2,10 @@ import {checkMuseWorkerHealth, sendMuseViaWorker} from '../utils/museWorkerAsk';
 import {Hono} from 'hono';
 import type {Bindings} from '../types';
 import {verifyTreeViewWorkerRequest} from './treeViewT3Power';
-import {parseCompletion, checkMuseHealth, MUSE_DIRECT_PATH, type MuseContainer} from '../utils/museDirectAsk';
-import {requireMuseTailscale, checkMuseTailscale} from '../utils/museTailscalePreflight';
 
 import {parseMuseMessages} from '../utils/museMessages';
 export {parseMuseMessages} from '../utils/museMessages';
 type Dependencies={
- getContainer(env:Bindings):Promise<MuseContainer|null>;
  authenticate(env:Bindings,token:string):Promise<{ok:true;login:string}|{ok:false;error:string;status:number}>;
 };
 export function createTreeViewMuseChatRoutes(deps:Dependencies){
@@ -38,39 +35,17 @@ export function createTreeViewMuseChatRoutes(deps:Dependencies){
   const auth=await deps.authenticate(c.env,userToken);
   if(!auth.ok)return c.json({error:auth.error},auth.status as 401|403|500|503);
   if(auth.login.toLowerCase()!=='nekoserver')return c.json({error:'Forbidden'},403);
-  // 送信チェック(tree-viewのMuseタブを開いたとき・ウィンドウで開くたび)。推論は走らせず、muse-vmの/healthだけを見る。
-  // 停止中のコンテナは起動しない。鍵は送信と同じ(受け取った鍵があればそれ)。
+  // MuseタブはWorker内WASMの直通だけ。旧コンテナ指定は拒否し、停止中の本体コンテナも参照しない。
+  if(transport!==undefined && transport!=='worker')return c.json({error:'invalid_transport'},400);
   if(body.action!==undefined){
    if(body.action!=='connect')return c.json({error:'invalid_action'},400);
-   if(transport!==undefined && transport!=='worker' && transport!=='container')return c.json({error:'invalid_transport'},400);
-   if(transport==='worker')return c.json({healthy:await checkMuseWorkerHealth({...c.env,MUSE_API_KEY:apiKey},callerKey),transport:'worker',keySource});
-   const container=await deps.getContainer(c.env).catch(()=>null);
-   const connected=await checkMuseTailscale(async()=>container);
-   return c.json({healthy:connected&&container?await checkMuseHealth(container,apiKey):false,transport:'container',keySource});
+   return c.json({healthy:await checkMuseWorkerHealth({TAILSCALE_WASM:c.env.TAILSCALE_WASM,MUSE_API_KEY:apiKey},apiKey),transport:'worker',keySource});
   }
   const messages=parseMuseMessages(body.messages);
   if(!messages)return c.json({error:'会話は40件・UTF-8で16KiB以内にしてください'},400);
-  if(transport!==undefined && transport!=='worker' && transport!=='container')return c.json({error:'invalid_transport'},400);
-  if(transport==='worker'){
-   const result=await sendMuseViaWorker(c.env,messages,{routeId:'treeview-musetab-wasm',apiKey});
-   if(!result.ok)return c.json({error:result.error,transport:'worker',keySource},result.error==='muse_usage_limit'?429:503);
-   return c.json({reply:result.reply,model:result.llmModel,transport:'worker',keySource});
-  }
-  if(!apiKey)return c.json({error:'muse_not_authenticated'},503);
-  try{
-   const container=await deps.getContainer(c.env);
-   if(!container)return c.json({error:'container_not_running'},503);
-   try{await requireMuseTailscale(async()=>container);}catch{return c.json({error:'Tailscaleのmuse-vmへの接続を確認してください'},503);}
-   // No automatic start, fallback or resubmission. Fixed tailnet destination in server.js.
-   const response=await container.fetch(new Request('http://container'+MUSE_DIRECT_PATH,{
-    method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
-    body:JSON.stringify({model:'muse',messages}),signal:AbortSignal.timeout(90000),
-   }));
-   if(!response.ok)return c.json({error:'muse_request_failed',upstreamStatus:response.status},response.status===429?429:502);
-   const result=parseCompletion(await response.text());
-   if(!result.ok)return c.json({error:result.error},502);
-   return c.json({reply:result.reply,model:result.llmModel,keySource});
-  }catch{return c.json({error:'muse_connection_failed'},502);}
+  const result=await sendMuseViaWorker(c.env,messages,{routeId:'treeview-musetab-wasm',apiKey});
+  if(!result.ok)return c.json({error:result.error,...(result.diagnosis?{diagnosis:result.diagnosis}:{}),transport:'worker',keySource},result.error==='muse_usage_limit'?429:503);
+  return c.json({reply:result.reply,model:result.llmModel,transport:'worker',keySource});
  });
  return app;
 }

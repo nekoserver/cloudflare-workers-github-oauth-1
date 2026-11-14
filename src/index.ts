@@ -17273,9 +17273,26 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   return !!expected && auth === expected;
 }
 
-// The tree-view Muse target uses the existing container's fixed tailnet bridge.
-app.route('/', createTreeViewMuseChatRoutes({
+app.route('/', createTreeViewConversationStreamRoutes({
   getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
+
+// tree-viewのMuseタブはWorker内WASMから直通し、本体コンテナに依存しない。
+app.route('/', createTreeViewMuseChatRoutes({
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
+app.route('/', createTreeViewMuseChatRoutes({
   authenticate: async (env, token) => {
     if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
     const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);

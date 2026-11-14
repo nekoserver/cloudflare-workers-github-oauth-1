@@ -337,3 +337,48 @@ Workerブリッジの単一入力制限を入口と共通の履歴検証に修�
 ## 2026-11-09 後続: UIを公開反映（コンテナ更新なし）
 
 本体Worker ca303d16-b1e6-4276-91d8-13f50ec41390、dynamicneko 7fd593e7-53d5-4606-b6f0-7b029e58661cをcontainers-rollout none/keep-varsで公開。公開JSはローカル本番ビルドとSHA256一致し、パネル⬜︎、chat固有キーボード撤去、共通リサイズ処理を含む。tailscale-wasmのthemeも配備済み。現libにはqueue件数配信/更新表示とトークンURL露出防止を配置し、observer/HTTP streamを再起動。公開conversation entry HTTP200で、チケット遷移にトークンフラグメントがないことを確認。iPhone実機PWAとログイン済み本番UI操作、Muse実推論は未確認。Git pushなし。詳細は[UI PUBLISH REPORT](REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md)とdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md、lib/REPORT.lib.20261109.pwa-session-url.md。
+
+
+## 2026-11-13: 現コンテナのネットワーク配置・実検証
+
+現ENV優先でSSI/CGI、observer/LLM/WS・HTTP配信を配置。現在会話のread API照合、全4配信方式の実受信、Codex/Claude/Museの引用符付きprompt実回答を確認。内部ApacheのHost継承不備を回帰テスト後に修正。実Chromeの内部パネル投稿は同一会話queueへ1件受付、assistant応答は未確認。外部/libの管理者限定拒否を維持。Tunnel一覧権限不足、stream530/r9障害、Nemotron未対応、本体認証画面からの終端未検証が残る。entrypoint/cronの復帰経路を配置、再作成後は未検証。Chrome更新候補1件をREPORTに記載、更新未実施。最終ファイアウォールを再採取。Worker/イメージ未更新。詳細は [REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261113.md)。
+
+2026-11-13後続: パネル投稿を同一会話で実受信しSTREAM_POST_OK_20261113を返答。一致する待機queue0件とobserverのuser投稿を確認。利用者ブラウザでのassistant描画は未確認。詳細はNETWORK.20261113 REPORTの後続ターン節。
+
+2026-11-13後続修正: /neko askgkが利用する公開/lib/api/tunnelsまで一括拒否される403を修正。完全一致APIだけHMAC認証CGIへ接続し、他/libは拒否を維持。実公開URLで本体同形式のPOST登録・照会からCodex/Muse実回答成功、回帰18件成功。本体service binding/ログイン済みUI経由の再確認は未実施。Worker/イメージ更新なし。詳細はNETWORK.20261113 REPORT末尾。
+
+## 2026-11-13: 詳細プレビュー全画面時の本文幅（本番未反映）
+
+AIチャット詳細プレビューの⬜︎でモーダルだけが広がり、短い本文の吹き出しが内容幅のまま残る問題を修正。全画面モーダル内のchat-bubbleへwidth/max-width 100%とborder-boxを指定し、本文領域の横幅いっぱいに広げる。通常表示のサイズは維持。
+
+実際に生成したページをローカルChromeで開き、詳細プレビュー表示→⬜︎→🔲を操作。修正前は1440px画面で本文63pxのまま、修正後は本文領域1404pxまで拡張。390px画面でも354pxまで拡張し、横スクロールなし、通常表示への復帰を確認。APIはfixtureを使用し、本番の認証済み画面操作ではない。関連8テストと生成inline script4本のnode --check成功。根拠はartifacts/preview-width-20261113/。既存node_modulesの自己参照symlinkを避け、既存グローバルVitest 5.0.5を一時設定で使用（lockfile既定4系での実行ではない）。Workerデプロイ・Dockerビルド・git pushなし。
+
+## 2026-11-13: tree-view ワーカータブの会話中継（後続でWorkerのみ反映）
+
+公開mygwの `/lib/conversation-embed.html` が403、内部8445が200であることを確認。dynamicnekoの既定mygw埋め込みを所有者認証付きの同一origin中継へ変更し、本体 `/api/tree-view/conversation-stream-external/lib/*` にWorker署名・本人確認・パス制限付きの受信ルートを追加した。公開Apacheの拒否は維持する。
+
+ローカル実libと両中継実装を通すChrome試験で認証・依存資産・SSE・現在会話表示に成功。セッション保存先とユーザー照会はfixtureで、本番のログイン・service binding・WebSocket 101は未検証。push・デプロイ・コンテナビルドなし。本体Worker→dynamicnekoの順に反映して本番画面を確認する必要がある。経緯はdynamicnekoの `NOTICE.20261113.tree-view-worker-stream.md`。
+
+Muse経路の既存SPECに `/tailscale-wasm` ページを追加した。これは経路整理の文書更新であり、新しい経路IDの実装・推論送信・本番反映ではない。
+
+### 同日17:52 UTCの後続反映
+
+Wranglerのhelpと実装でコンテナ変更を省略する `--containers-rollout none` を確認し、`--keep-vars` と併用して本体→dynamicnekoを反映した。本体 `fe1c9bd8-908e-4e86-a175-bc326789a6e0`、dynamicneko `7ee55793-dc75-41d4-a719-9c6fa4f3425a`。Dockerビルド・コンテナ更新なし。指定されたMuseウィンドウ内のワーカー切替テスト、PWA限定パス補正、公開の認証境界とフロントエンドJSハッシュ一致を確認済み。本番の利用者ログインによる終端表示・WebSocket 101は未確認。上記の「未デプロイ」は初回ローカル検証時点の履歴。
+
+## 2026-11-13: Codexの日本語応答hookと起動時復元
+
+リポジトリの `containers/demo/codex-harness/` に定義・実体・復元スクリプトを保存し、DockerfileのCOPYとentrypointの毎回復元を追加した。現コンテナの同ディレクトリ、/root/.codex/hooks.json、起動entrypointにも適用。6テスト、既存設定保持・冪等性・壊れた設定の保護、隔離した起動ブロックの2回復元、shell構文、Codex strict-configの検証成功。
+
+hookの利用者信頼確認は変更していない。現在会話での自動発火、実再起動、イメージ再作成後の復元は未確認。Dockerビルド・Workerデプロイ・Git pushは今回のhook復元では行わない。rootの明示CODEX_HOMEまたは~/.codexが対象で、codex-webへは自動適用しない。手順と制約は `containers/demo/codex-harness/README.md`。
+
+## 2026-11-13: 本体DockerfileのCodex/Cloudflare CLI
+
+Codexの固定版をnpm latestで確認した0.169.0へ更新。公式cfのlatestは既存と同じ1.0.0-beta.31なので維持し、cloudflare別名のSSH用リンクとCodex/cfの導入版照合を追加した。隔離prefixでCodexの版・app-server・hooks機能を確認し、CLI関連12テスト成功。現コンテナのグローバルCLI・本番イメージは更新していない。再ビルドと再起動が必要で、この環境では実施しない。詳細は `REPORT.cloudflare-workers-github-oauth-1.CODEX-CF-CLI.20261113.md`。
+
+## 2026-11-14: ネットワーク復元とMuseタブのコンテナ依存除去（Worker未反映）
+
+現コンテナへENV優先のSSI/CGI・ソケット・observer・配信を配置。Codex/Museトンネル実回答、実Chromeパネル投稿の現在会話queue1件を確認。トンネル一覧は権限不足、Claude未認証、Nemotron未対応で全体degraded。
+
+本番配備コードのtree-view既定containerとコンテナ用事前検査、health外側20秒/内側28秒、投稿外側310秒/内側600秒を確認。両WorkerのMuseタブをWorker直通だけに修正し、コンテナ指定拒否と旧Cookie無効化を実装。本体63件、dynamicneko7件、実Chrome、両中継→実workerd WASM→Museのhealthと/ping成功（コンテナ参照0、投稿1、本人認証fixture）。Workerは未反映。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK-MUSE.20261114.md)。
+
+2026-11-14後続: STREAM_POST_OK_20261114を含むパネル試験投稿を同一会話で実受信し識別子を返答。モデルへの入力到達を確認。ブラウザでの返答描画は未確認。両Workerの公開は承認待ちのまま。
