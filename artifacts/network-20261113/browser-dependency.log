@@ -1,0 +1,11 @@
+Collecting playwright
+  Downloading playwright-1.65.1-py3-none-manylinux1_x86_64.whl.metadata (3.3 kB)
+Collecting greenlet<4.0.0,>=3.1.1 (from playwright)
+  Downloading greenlet-3.5.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+Downloading playwright-1.65.1-py3-none-manylinux1_x86_64.whl (53.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 53.5/53.5 MB 38.8 MB/s eta 0:00:00
+Downloading greenlet-3.5.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (670 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 670.8/670.8 kB 121.9 MB/s eta 0:00:00
+Installing collected packages: greenlet, playwright
+
+Successfully installed greenlet-3.5.6 playwright-1.65.1

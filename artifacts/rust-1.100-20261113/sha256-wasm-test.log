@@ -1,0 +1,26 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded block-buffer v0.10.4
+  Downloaded cpufeatures v0.2.17
+  Downloaded digest v0.10.7
+  Downloaded generic-array v0.14.7
+  Downloaded crypto-common v0.1.7
+  Downloaded sha2 v0.10.9
+  Downloaded version_check v0.9.5
+  Downloaded typenum v1.20.1
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling cpufeatures v0.2.17
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling sha256-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/sha256-wasm)
+    Finished `test` profile [unoptimized] target(s) in 4.19s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/sha256-wasm/af1c7df283b209b0/out/sha256_wasm-af1c7df283b209b0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

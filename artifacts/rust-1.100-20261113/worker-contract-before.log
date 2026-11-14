@@ -1,0 +1,30 @@
+test_bindgen_schema_matches_lock (__main__.BuildContractTest.test_bindgen_schema_matches_lock) ... FAIL
+test_deploy_compiler_is_explicit (__main__.BuildContractTest.test_deploy_compiler_is_explicit) ... FAIL
+
+======================================================================
+FAIL: test_bindgen_schema_matches_lock (__main__.BuildContractTest.test_bindgen_schema_matches_lock)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/rust-worker-sqlx-d1/tests/build_contract_test.py", line 11, in test_bindgen_schema_matches_lock
+    self.assertIsNotNone(cli);self.assertEqual(cli[1],locked)
+                              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: '0.2.128' != '0.2.129'
+- 0.2.128
+?       ^
++ 0.2.129
+?       ^
+
+
+======================================================================
+FAIL: test_deploy_compiler_is_explicit (__main__.BuildContractTest.test_deploy_compiler_is_explicit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/rust-worker-sqlx-d1/tests/build_contract_test.py", line 14, in test_deploy_compiler_is_explicit
+    self.assertIn('--default-toolchain 1.100.0',command)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '--default-toolchain 1.100.0' not found in 'curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable && . "$HOME/.cargo/env" && rustup target add wasm32-unknown-unknown && cargo install -q worker-build --version "^0.1" && cargo install -q wasm-bindgen-cli --version "0.2.128" && WASM_BINDGEN_BIN=$(which wasm-bindgen) worker-build --release'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.023s
+
+FAILED (failures=2)

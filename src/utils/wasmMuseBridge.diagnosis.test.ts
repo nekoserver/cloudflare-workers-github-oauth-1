@@ -72,11 +72,13 @@ describe('タイムアウトしたとき、どの段階で止まったかを返�
     expect(line).toBeDefined();
     expect(line).toContain('no_response_headers');
   });
-  it('中継の既定の待ち時間は、外側の300秒より短い(先に中継が診断付きで答える)', async () => {
+  it('中継の既定の待ち時間は、muse-vm の api-bridge と同じ600秒(それより前に諦めない。2026-11-13)', async () => {
     const { node } = fakeNode({ health: 'ok', chat: 'no-headers' });
     const pending = new WasmMuseBridge(node as never, 'key').fetch(chat());
     let settled = false; void pending.then(() => { settled = true; });
-    await vi.advanceTimersByTimeAsync(295_000);
+    await vi.advanceTimersByTimeAsync(599_000);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(settled).toBe(true);
   });
 });

@@ -1,0 +1,41 @@
+ Downloading crates ...
+  Downloaded cfg-if v1.0.5
+  Downloaded wasm-bindgen-macro v0.2.128
+  Downloaded unicode-ident v1.0.26
+  Downloaded wasm-bindgen v0.2.128
+  Downloaded wasm-bindgen-shared v0.2.128
+  Downloaded wasm-bindgen-macro-support v0.2.128
+  Downloaded syn v3.0.6
+   Compiling unicode-ident v1.0.26
+   Compiling wasm-bindgen-shared v0.2.128
+   Compiling proc-macro2 v1.0.107
+   Compiling wasm-bindgen v0.2.128
+   Compiling quote v1.0.47
+   Compiling syn v3.0.6
+   Compiling cfg-if v1.0.5
+   Compiling wasm-bindgen-macro-support v0.2.128
+   Compiling serde_derive v1.0.229
+   Compiling serde v1.0.229
+   Compiling wasm-bindgen-macro v0.2.128
+   Compiling jev-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/jev-wasm)
+    Finished `test` profile [unoptimized] target(s) in 32.40s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/jev-wasm/699ca81bcbb347eb/out/jev_wasm-699ca81bcbb347eb)
+
+running 14 tests
+test tests::evaluation_plan_all_pending_when_none_evaluated ... ok
+test tests::evaluation_plan_empty_labels_is_always_empty ... ok
+test tests::evaluation_plan_splits_pending_and_cached ... ok
+test tests::parse_label_criteria_invalid_json_is_none ... ok
+test tests::parse_label_criteria_none_and_empty_are_none ... ok
+test tests::parse_label_criteria_valid_two_element_array ... ok
+test tests::parse_label_criteria_wrong_shape_is_none ... ok
+test tests::parse_response_answers_not_object_is_unexpected_shape ... ok
+test tests::parse_response_empty_labels_is_always_ok_empty ... ok
+test tests::parse_response_extracts_numeric_scores ... ok
+test tests::parse_response_missing_answers_is_unexpected_shape ... ok
+test tests::parse_response_missing_label_key_is_unexpected_shape ... ok
+test tests::parse_response_non_numeric_score_is_unexpected_shape ... ok
+test tests::request_body_builds_dict_keyed_by_label_id_with_criteria ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

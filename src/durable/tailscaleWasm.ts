@@ -4,24 +4,29 @@ import wasm from '@ai-ecoverse/wasm-tailscale/main.wasm';
 import type { IPN } from '@ai-ecoverse/wasm-tailscale';
 import type { Bindings } from '../types';
 import { WasmTailnetService } from '../utils/wasmTailnetService';
-import { WasmMuseBridge } from '../utils/wasmMuseBridge';
+import { WasmMuseBridge, type MuseKeyStat } from '../utils/wasmMuseBridge';
 import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
+import { createGoLifecycle } from '../utils/goLifecycle';
 
-let ready: Promise<void> | undefined;
-function startGo(): Promise<void> {
-  return ready ??= (async () => {
-    const go = new Go();
-    const instance = new WebAssembly.Instance(wasm, go.importObject);
-    let failure: unknown;
-    void go.run(instance).catch(error => { failure = error; });
+// Go が終了したら(2026-11-12 19:29:33 UTC に exit code 1 で終了した)、次の要求で起動し直す。ノードの状態は SQLite に残るので、ログインし直しは要らない。
+const goRuntime = createGoLifecycle(() => {
+  const go = new Go();
+  const instance = new WebAssembly.Instance(wasm, go.importObject);
+  (globalThis as { newIPN?: unknown }).newIPN = undefined;
+  const exited = go.run(instance);
+  const ready = (async () => {
+    let failure = false;
+    exited.catch(() => { failure = true; });
     for (let i = 0; i < 500 && typeof globalThis.newIPN !== 'function'; i++) {
       if (failure) throw new Error('Tailscale WASM startup failed');
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     if (typeof globalThis.newIPN !== 'function') throw new Error('Tailscale WASM startup timed out');
   })();
-}
+  return { ready, exited };
+});
+function startGo(): Promise<void> { return goRuntime.start(); }
 /** One server-owned node, credentials in private DO SQLite, never in browser storage. */
 export class TailscaleWasm extends DurableObject<Bindings> {
   private service!: WasmTailnetService;
@@ -36,12 +41,18 @@ export class TailscaleWasm extends DurableObject<Bindings> {
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS tailnet_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
       ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS worker_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+      ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS muse_key_results (fingerprint TEXT PRIMARY KEY, replied INTEGER NOT NULL DEFAULT 0, unanswered INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)');
       this.autoLoginDisabled = [...ctx.storage.sql.exec<{ value: string }>("SELECT value FROM worker_settings WHERE key='auto_login_disabled'")][0]?.value === '1';
       this.jobs = new MuseAgentJobs(ctx.storage, prompt => this.deliver(new Request('http://tailnet/muse/v1/chat/completions', { method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }) })));
       if ([...ctx.storage.sql.exec("SELECT id FROM muse_agent_messages WHERE state='queued' LIMIT 1")].length && await ctx.storage.getAlarm() === null) await ctx.storage.setAlarm(Date.now() + 1000);
     });
   }
   private ensureNode(): Promise<void> {
+    if (goRuntime.exited && this.nodeReady) {
+      console.log('[tailscale-wasm] ' + JSON.stringify({ event: 'go_exited_restart' }));
+      this.nodeReady = undefined;
+      this.loginRequested = false;
+    }
     return this.nodeReady ??= (async () => {
       const ctx = this.ctx, env = this.env;
       await startGo();
@@ -52,9 +63,16 @@ export class TailscaleWasm extends DurableObject<Bindings> {
       if (node instanceof Error) throw new Error('Tailscale node initialization failed');
       this.service = new WasmTailnetService(node as IPN, env);
       this.node = node as IPN;
-      this.bridge = new WasmMuseBridge(this.node, env.MUSE_API_KEY);
+      this.bridge = new WasmMuseBridge(this.node, env.MUSE_API_KEY, undefined, undefined, {
+        record(fingerprint, replied) {
+          ctx.storage.sql.exec(replied
+            ? 'INSERT INTO muse_key_results(fingerprint,replied,updated_at) VALUES(?,1,?) ON CONFLICT(fingerprint) DO UPDATE SET replied=replied+1, updated_at=excluded.updated_at'
+            : 'INSERT INTO muse_key_results(fingerprint,unanswered,updated_at) VALUES(?,1,?) ON CONFLICT(fingerprint) DO UPDATE SET unanswered=unanswered+1, updated_at=excluded.updated_at', fingerprint, new Date().toISOString());
+        },
+        list() { return [...ctx.storage.sql.exec<MuseKeyStat>('SELECT fingerprint, replied, unanswered FROM muse_key_results ORDER BY replied DESC LIMIT 10')].map(r => ({ fingerprint: r.fingerprint, replied: r.replied, unanswered: r.unanswered })); },
+      });
       node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
-    })();
+    })().catch(error => { this.nodeReady = undefined; throw error; });
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();

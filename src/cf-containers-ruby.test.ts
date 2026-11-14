@@ -35,7 +35,7 @@ describe('demoコンテナ: Rubyをソースからビルドする', () => {
 
 describe('demoコンテナ: Codex・Claude CLIの版', () => {
   it('最新版に上げる', () => {
-    expect(dockerfile).toMatch(/^ARG CODEX_VERSION=0\.167\.1$/m);
-    expect(dockerfile).toMatch(/^ARG CLAUDE_VERSION=2\.1\.322$/m);
+    expect(dockerfile).toMatch(/^ARG CODEX_VERSION=0\.169\.0$/m);
+    expect(dockerfile).toMatch(/^ARG CLAUDE_VERSION=2\.1\.323$/m);
   });
 });

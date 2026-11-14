@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAichatSourceTotals, AICHAT_SOURCE_LABELS } from './aichatSourceStats';
+import { buildAichatSourceTotals, AICHAT_SOURCE_LABELS, countMuseWasmTestRequests } from './aichatSourceStats';
 
 describe('buildAichatSourceTotals', () => {
   it('slack/textbox/api/dynamicnekoそれぞれの件数を集計する', () => {
@@ -52,5 +52,42 @@ describe('buildAichatSourceTotals', () => {
     expect(AICHAT_SOURCE_LABELS.textbox).toBe('AIチャット入力窓');
     expect(AICHAT_SOURCE_LABELS.api).toBe('回答伝播ページ');
     expect(AICHAT_SOURCE_LABELS.dynamicneko).toBe('ダイナミックワーカー');
+  });
+});
+
+describe('countMuseWasmTestRequests', () => {
+  function fakeDb(result: { n: number } | null | Error) {
+    const calls: { sql: string; binds: unknown[] }[] = [];
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind(...binds: unknown[]) {
+            calls.push({ sql, binds });
+            return { first: async () => { if (result instanceof Error) throw result; return result; } };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    return { db, calls };
+  }
+
+  it('INQUIRY_DBのbridge_jobsから、同じユーザー・UTCの同じ月のmuse-wasm-test経由の件数を数える', async () => {
+    const { db, calls } = fakeDb({ n: 6 });
+    expect(await countMuseWasmTestRequests(db, 'user-1', '2026-11')).toBe(6);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].sql).toContain('FROM bridge_jobs');
+    expect(calls[0].binds).toEqual(['user-1', 'muse-wasm-test', Date.UTC(2026, 10, 1) / 1000, Date.UTC(2026, 11, 1) / 1000]);
+  });
+
+  it('12月は翌年1月1日の手前までを数える', async () => {
+    const { db, calls } = fakeDb({ n: 0 });
+    expect(await countMuseWasmTestRequests(db, 'user-1', '2026-12')).toBe(0);
+    expect(calls[0].binds.slice(2)).toEqual([Date.UTC(2026, 11, 1) / 1000, Date.UTC(2027, 0, 1) / 1000]);
+  });
+
+  it('INQUIRY_DBが無い・問い合わせに失敗した・月の形が違うときは0ではなくnullを返す(取得できないことを件数0と区別する)', async () => {
+    expect(await countMuseWasmTestRequests(undefined, 'user-1', '2026-11')).toBeNull();
+    expect(await countMuseWasmTestRequests(fakeDb(new Error('D1_ERROR')).db, 'user-1', '2026-11')).toBeNull();
+    expect(await countMuseWasmTestRequests(fakeDb({ n: 1 }).db, 'user-1', 'bad')).toBeNull();
   });
 });

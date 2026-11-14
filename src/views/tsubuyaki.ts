@@ -9,7 +9,9 @@ function buildTemplateSnippet(templateId: typeof SLACK_POST_TEMPLATES[number]['i
   if (templateId === 'plain') {
     return JSON.stringify({ text: buildFreeTextSlackMessage(PREVIEW_DISPLAY_NAME, PREVIEW_TEXT) }, null, 2);
   }
-  const blocks = buildFreeTextSlackBlocks(PREVIEW_DISPLAY_NAME, PREVIEW_TEXT, templateId);
+  const template = SLACK_POST_TEMPLATES.find((item) => item.id === templateId)!;
+  const text = 'sampleText' in template ? template.sampleText : PREVIEW_TEXT;
+  const blocks = buildFreeTextSlackBlocks(PREVIEW_DISPLAY_NAME, text, templateId);
   return JSON.stringify(blocks, null, 2);
 }
 
@@ -26,6 +28,7 @@ export function getTsubuyakiPage(username: string): string {
     emoji: template.emoji,
     title: template.title,
     description: template.description,
+    sampleText: 'sampleText' in template ? template.sampleText : undefined,
     snippet: buildTemplateSnippet(template.id),
   }));
   const templatesJson = JSON.stringify(templatesPayload).replace(/<\/script/gi, '<\\/script');
@@ -292,6 +295,9 @@ ${sidebarIcons}
       selectedTemplate = previewTemplate.id;
       if (selectedTemplate === 'interactive_sample') {
         freeTextEl.value = '更新時間: ' + new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false }) + '（日本時間）';
+        freeTextEl.dispatchEvent(new Event('input'));
+      } else if (typeof previewTemplate.sampleText === 'string') {
+        freeTextEl.value = previewTemplate.sampleText;
         freeTextEl.dispatchEvent(new Event('input'));
       }
       renderAppliedLabel();

@@ -14,20 +14,22 @@ before extraction. It does not download jj or compile Rust. Keep this file and
 SHA256SUMS when cleaning temporary downloads; they are reusable build inputs.
 Run `sha256sum -c SHA256SUMS` in this directory before manual reuse.
 
-## git 2.56.0
+## git 2.56.1
 
-`git-2.56.0-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+`git-2.56.1-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
 release. It unpacks to `/usr/local` and replaces the APT `git` package in the
 image, so the Dockerfile neither downloads nor compiles git.
 
-`git-2.56.0.tar.xz` is the unmodified source it was built from.
+`git-2.56.1.tar.xz` is the unmodified source it was built from.
 
-- Source: https://www.kernel.org/pub/software/scm/git/git-2.56.0.tar.xz
-- Source SHA256: `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3`
-- Checked: 2026-11-06 against kernel.org `sha256sums.asc`, fetched over HTTPS.
+- Source: https://www.kernel.org/pub/software/scm/git/git-2.56.1.tar.xz
+- Source SHA256: `f0b0bf89264b9bd2e1c640363e7529643989da76281600473c50745cd34a607f`
+- Checked: 2026-11-13 against kernel.org `sha256sums.asc`, fetched over HTTPS.
   The PGP signature on that file was not verified.
-- Built: 2026-11-06 on Ubuntu 26.04 x86_64 with Rust 1.93.1 enabled, which is
-  the upstream default since Git 2.55.
+- Built: 2026-11-13 in an Ubuntu 26.04.1 x86_64 chroot (ubuntu-base-26.04.1, SHA256
+  `a496a960472ce474a59590b8987d3a1135d3cbef1991f3b1abe8cacfea8bf85a`) with Rust
+  enabled (`git --version --build-options` shows `rust: enabled`), the upstream
+  default since Git 2.55.
 
 Rebuild on Ubuntu 26.04 from the unpacked source:
 
@@ -77,22 +79,22 @@ tar --owner=0 --group=0 --numeric-owner -cJf openssh-VERSION-linux-x64-ubuntu26.
 After a rebuild, update `OPENSSH_VERSION` and `OPENSSH_PACKAGE_SHA256` in the
 Dockerfile and `SHA256SUMS` here. The package targets Ubuntu 26.04 x86_64 only.
 
-## Apache httpd 2.4.70
+## Apache httpd 2.4.71
 
-`apache-2.4.70-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
+`apache-2.4.71-linux-x64-ubuntu26.04.tar.xz` is a local build, not an upstream
 release. It holds only `/usr/sbin/apache2` and `/usr/lib/apache2/modules/*.so`
 and unpacks over the APT `apache2` packages, which stay for `/etc/apache2`,
 `a2enmod`, `apache2ctl`, `envvars` and the runtime libraries. The Dockerfile
 holds those APT packages so an upgrade cannot put the old binary back.
 
-`httpd-2.4.70.tar.gz` and `.asc` are the unmodified source and its signature.
+`httpd-2.4.71.tar.gz` and `.asc` are the unmodified source and its signature.
 
-- Source: https://downloads.apache.org/httpd/httpd-2.4.70.tar.gz
-  (permanent copy: https://archive.apache.org/dist/httpd/httpd-2.4.70.tar.gz)
-- Source SHA512: `5998908195bd99e719714befbcf328b98012625c5848e8ca34509e15ad5faff61a4c7575cccc43dae3c79f6a66bb89b7ed67d730e65ca9dabf5f6b8c33fbcf09`
-- Checked: 2026-11-07 against the `.sha512` files on both hosts and the PGP
+- Source: https://downloads.apache.org/httpd/httpd-2.4.71.tar.gz
+  (permanent copy: https://archive.apache.org/dist/httpd/httpd-2.4.71.tar.gz)
+- Source SHA512: `3dbd1b5f9fda192ae9399612c62ccfc90d329f35b6fda5b6d482f4c28b598b50e479738f8cf64c9b7febcff564811de43f2d84b3a2e24d41c29abdf77a50ef92`
+- Checked: 2026-11-13 against the `.sha512` files on both hosts and the PGP
   signature by `65B2D44FE74BD5E3DE3AC3F082781DE46D5954FA` (Eric Covener, httpd `KEYS`).
-- Built: 2026-11-07 on Ubuntu 26.04 x86_64 against the APT APR 1.7.6,
+- Built: 2026-11-13 in an Ubuntu 26.04.1 x86_64 chroot (ubuntu-base-26.04.1) against the APT APR 1.7.6,
   APR-util 1.6.3 and PCRE2. No Ubuntu patches, no suexec, no mod_systemd.
 
 Rebuild on Ubuntu 26.04 from the unpacked source. Do not do this inside the
@@ -120,7 +122,7 @@ mkdir -p pkg/usr/sbin pkg/usr/lib/apache2/modules
 install -m 755 -s dest/usr/sbin/apache2 pkg/usr/sbin/apache2
 install -m 644 dest/usr/lib/apache2/modules/*.so pkg/usr/lib/apache2/modules/
 strip --strip-unneeded pkg/usr/lib/apache2/modules/*.so
-tar --sort=name --mtime=2026-11-07T00:00:00Z --owner=0 --group=0 --numeric-owner \
+tar --sort=name --mtime=2026-11-13T00:00:00Z --owner=0 --group=0 --numeric-owner \
   -cJf apache-VERSION-linux-x64-ubuntu26.04.tar.xz -C pkg usr
 ```
 

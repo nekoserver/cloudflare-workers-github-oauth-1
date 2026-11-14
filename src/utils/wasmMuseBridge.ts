@@ -27,15 +27,44 @@ export function formatMuseBridgeDiagnosis(d: MuseBridgeDiagnosis): string {
   return `muse-vm が返事を始めなかった(待機中の /health は${d.keepAliveOk}回成功・${d.keepAliveFailed}回失敗。推論が終わっていない可能性、${seconds}秒)`;
 }
 
+/** 鍵ごとの muse-vm の返事の記録(指紋だけ。鍵そのものは持たない)。Muse は送信者を特定できない鍵には答えないので、本番で鍵の正当性を確かめる(2026-11-13)。 */
+export type MuseKeyStat = { fingerprint: string; replied: number; unanswered: number };
+export type MuseKeyLog = { record(fingerprint: string, replied: boolean): void; list(): MuseKeyStat[] };
+/** sha256 の先頭8桁(lib の receiver.py と同じ)。 */
+export async function museKeyFingerprint(key: string): Promise<string> {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
+  return Array.from(hash.slice(0, 4), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Private DO endpoint: no caller-selected destination, credentials or redirects. */
 export class WasmMuseBridge {
   /**
    * keepAliveMs: 推論を待つ間、muse-vm へ短い /health を送る間隔。WASM のノードは送信の無い DERP 接続を約1分で閉じ
    * (magicsock: closing connection to derp-N (idle))、推論に1分以上かかると返事の通り道が無くなる(2026-11-12)。
    */
-  // timeoutMs: 外側(AIチャットの300秒)より短くし、先に中継が診断付きで答える。
-  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 290_000, private keepAliveMs = 20_000) {}
+  // timeoutMs: muse-vm の api-bridge の待ち時間(600秒)に合わせる。呼び出し側は X-Muse-Bridge-Timeout-Ms で3秒短くして送るので、
+  // 外側(MUSE_WORKER_MAX_TIMEOUT_SECONDS)より先に中継が診断付きで答える(2026-11-13、以前は290秒)。
+  constructor(private node: IPN, private apiKey?: string, private timeoutMs = 600_000, private keepAliveMs = 20_000, private keyLog?: MuseKeyLog) {}
 
+  async fetch(request: Request): Promise<Response> {
+    const chat = new URL(request.url).pathname === '/muse/v1/chat/completions' && request.method === 'POST';
+    const key = /^Bearer (\S+)$/.exec(request.headers.get('Authorization') ?? '')?.[1] ?? this.apiKey;
+    // 呼び出し元の打ち切りより先に答え、鍵の記録をエラー文まで届ける
+    const callerTimeout = Number(request.headers.get('X-Muse-Bridge-Timeout-Ms'));
+    const saved = this.timeoutMs;
+    if (chat && Number.isFinite(callerTimeout) && callerTimeout > 0) this.timeoutMs = Math.min(saved, callerTimeout);
+    let response: Response;
+    try { response = await this.send(request); } finally { this.timeoutMs = saved; }
+    if (!chat || !key || !this.keyLog) return response;
+    const fingerprint = await museKeyFingerprint(key);
+    const replied = response.status === 200;
+    try { this.keyLog.record(fingerprint, replied); } catch { /* 記録の失敗で応答は変えない */ }
+    if (replied) return response;
+    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+    let keys: MuseKeyStat[] = []; try { keys = this.keyLog.list(); } catch { /* 読めなければ空 */ }
+    console.log('[muse-key] ' + JSON.stringify({ keyFingerprint: fingerprint, status: response.status, keys }));
+    return Response.json({ ...data, keyFingerprint: fingerprint, keys }, { status: response.status, headers: { 'Cache-Control': 'no-store' } });
+  }
   /** 推論の要求は送り直さず、接続を使用中に保つためだけの /health。成否は診断に数える。 */
   private keepAlive(apiKey: string, counts: { ok: number; failed: number }): ReturnType<typeof setInterval> {
     return setInterval(() => {
@@ -44,7 +73,7 @@ export class WasmMuseBridge {
         .catch(() => { counts.failed++; });
     }, this.keepAliveMs);
   }
-  async fetch(request: Request): Promise<Response> {
+  private async send(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     const health = path === '/muse/health' && request.method === 'GET';
     const chat = path === '/muse/v1/chat/completions' && request.method === 'POST';

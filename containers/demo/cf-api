@@ -1,0 +1,77 @@
+#!/usr/bin/env -S node --no-warnings
+// Cloudflare APIの簡易CLI(旧Railway VMの/usr/local/bin/cf相当)。公式の Cloudflare CLI(cf)と名前がぶつかるので cf-api として置く。
+// 認証: CF_CONTAINER_API_TOKEN(API Token)、アカウント: CLOUDFLARE_ACCOUNT_ID。
+// どちらも/cf-containersの起動時にenvVarsで渡され、entrypoint.shが
+// SSHログインシェルからも読めるよう/etc/profile.d/cf-env.shに書き出す。
+'use strict';
+
+const API = 'https://api.cloudflare.com/client/v4';
+
+function usage() {
+  console.log(`使い方:
+  cf-api tunnels list [--json]     Cloudflare Tunnel一覧(name/status/connections/id)
+  cf-api tunnels get <name|id>     指定トンネルの詳細(JSON)
+  cf-api workers list [--json]     Worker一覧(name/modified_on)
+  cf-api api <GET path>            任意のGET(例: cf api /accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel)`);
+}
+
+async function call(path) {
+  const token = process.env.CF_CONTAINER_API_TOKEN;
+  if (!token) throw new Error('CF_CONTAINER_API_TOKENが未設定です(/cf-containersのトークン設定から設定してください)');
+  const res = await fetch(API + path, { headers: { Authorization: `Bearer ${token}` } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.success === false) {
+    const msg = (body.errors || []).map((e) => e.message).join(', ') || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return body.result;
+}
+
+function account() {
+  const id = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!id) throw new Error('CLOUDFLARE_ACCOUNT_IDが未設定です');
+  return encodeURIComponent(id);
+}
+
+function table(rows, cols) {
+  const widths = cols.map((c) => Math.max(c.length, ...rows.map((r) => String(r[c] ?? '').length)));
+  const line = (vals) => vals.map((v, i) => String(v ?? '').padEnd(widths[i])).join('  ');
+  console.log(line(cols));
+  rows.forEach((r) => console.log(line(cols.map((c) => r[c]))));
+}
+
+async function main(argv) {
+  const [group, cmd, arg] = argv;
+  const json = argv.includes('--json');
+  if (group === 'tunnels' && cmd === 'list') {
+    const result = await call(`/accounts/${account()}/cfd_tunnel?is_deleted=false`);
+    const rows = result.map((t) => ({
+      name: t.name,
+      status: (t.connections || []).length ? 'healthy' : 'down',
+      connections: (t.connections || []).length,
+      id: t.id,
+    }));
+    return json ? console.log(JSON.stringify(rows, null, 2)) : table(rows, ['name', 'status', 'connections', 'id']);
+  }
+  if (group === 'tunnels' && cmd === 'get' && arg) {
+    const list = await call(`/accounts/${account()}/cfd_tunnel?is_deleted=false`);
+    const t = list.find((x) => x.id === arg || x.name === arg);
+    if (!t) throw new Error(`トンネルが見つかりません: ${arg}`);
+    return console.log(JSON.stringify(t, null, 2));
+  }
+  if (group === 'workers' && cmd === 'list') {
+    const result = await call(`/accounts/${account()}/workers/scripts`);
+    const rows = result.map((w) => ({ name: w.id, modified_on: w.modified_on }));
+    return json ? console.log(JSON.stringify(rows, null, 2)) : table(rows, ['name', 'modified_on']);
+  }
+  if (group === 'api' && cmd) {
+    return console.log(JSON.stringify(await call(cmd), null, 2));
+  }
+  usage();
+  process.exitCode = group ? 1 : 0;
+}
+
+main(process.argv.slice(2)).catch((err) => {
+  console.error('cf: ' + err.message);
+  process.exitCode = 1;
+});

@@ -67,6 +67,12 @@ export class DemoContainer extends DurableObject<Bindings> {
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID ?? '',
       // コンテナ内のgh用(ghはGH_TOKENを自動で読む)。Worker本体のGITHUB_TOKENは流用しない。
       GH_TOKEN: env.CONTAINER_GH_TOKEN ?? '',
+      // 起動時の lib の復元(/root/lib/claude/ops/restore-claude-host.sh、entrypoint.sh)用。
+      // Workerの既存のシークレットを同じ名前で渡す(ユーザー承認、2026-11-13)。
+      ORIGIN_HMAC_SECRET: env.ORIGIN_HMAC_SECRET ?? '',
+      MUSE_API_KEY: env.MUSE_API_KEY ?? '',
+      // 起動オプション: "1" のときだけ、libを管理者専用のまま経路情報(via)によるアクセス制御を行う。
+      LIB_ROUTE_ACCESS_CONTROL: env.LIB_ROUTE_ACCESS_CONTROL ?? '',
     };
     // デプロイなどで再起動したDurable Objectはタイムアウトを持たない(公式)。
     // コンテナが動いていれば張り直し、終了の監視も再開する。

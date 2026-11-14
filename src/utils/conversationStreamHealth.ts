@@ -8,7 +8,10 @@ export async function conversationStreamHealthy(config: ConversationStreamRoutes
   const embeds = new Map(config.routes.map(route => [route.id, route.endpoints.embed]));
   const results = await Promise.all(config.autoPriority.map(async host => {
     try {
-      const response = await fetch(embeds.get(host)!, {
+      // 経路ID via=health。lib側は起動オプションが有効なとき、経路IDのある要求だけを通す。
+      const url = new URL(embeds.get(host)!);
+      url.searchParams.set('via', 'health');
+      const response = await fetch(url.href, {
         method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000),
         headers: { 'Cache-Control': 'no-cache', Accept: 'text/html' },
       });

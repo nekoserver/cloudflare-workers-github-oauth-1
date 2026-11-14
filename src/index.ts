@@ -1,3 +1,4 @@
+import {createTreeViewConversationStreamRoutes} from './routes/treeViewConversationStream';
 import { createTreeViewMuseChatRoutes } from './routes/treeViewMuseChat';
 import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
@@ -535,7 +536,7 @@ import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInte
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
 import { SLACK_AI_MODEL, type AiUsage } from './utils/slackAiReply';
-import { buildAichatSourceTotals } from './utils/aichatSourceStats';
+import { buildAichatSourceTotals, countMuseWasmTestRequests } from './utils/aichatSourceStats';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -6004,7 +6005,7 @@ app.use('/*', async (c, next) => {
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Frame-Options', c.req.path.startsWith('/api/tree-view/conversation-stream-external/') && c.res.ok ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -7031,7 +7032,8 @@ app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
 app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   // 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は⚙で選んだときだけ。停止中のコンテナは起動しない。
-  const transport = resolveMuseTransport(c.req.header('Cookie') || '');
+  // AIチャットの Muse はいつも直送(⚙・Cookie の旧コンテナ直通の設定は使わない。ユーザー指定 2026-11-13)。
+  const transport = 'worker' as const;
   if (transport === 'worker') return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport });
   const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
   const connected = await checkMuseTailscale(async () => stub);
@@ -7310,7 +7312,8 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const selectedMuseInput = body.model === 'muse' && selectedModelInput;
   // 既定は直送(Worker内WASM → muse-vm、コンテナを通さない)。旧コンテナ直通は⚙で明示的に選んだときだけ。
   // /askmuse も同じ設定に従う。失敗しても互いの代替・tunnelsへの切り替えはしない(SPEC aichat-muse 2026-11-08 の図)。
-  const museTransport = resolveMuseTransport(c.req.header('Cookie') || '');
+  // いつも直送(tree-view の Museタブと同じ sendMuseViaWorker)。⚙・Cookie に残った旧コンテナ直通の設定では切り替えない(ユーザー指定 2026-11-13)。
+  const museTransport = 'worker' as 'worker' | 'container';
   if (selectedMuseInput) c.header('X-Muse-Transport', museTransport);
   let museConnectionError: string | undefined;
   if (selectedMuseInput && museTransport === 'container') {
@@ -9642,6 +9645,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
+  // muse-wasm-test経由の要望は ai_chat_shares に保存されないため、INQUIRY_DB の bridge_jobs から数える(取得できなければ null)。
+  const museWasmTestTotalPromise = countMuseWasmTestRequests(c.env.INQUIRY_DB, user.sub, month);
   const [kwRows, qRows, apiModelRows, sourceRows, newKeywordRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
@@ -9710,7 +9715,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     models: qMap[date] ?? {},
   }));
 
-  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals });
+  const museWasmTestTotal = await museWasmTestTotalPromise;
+  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals, museWasmTestTotal });
 });
 
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
@@ -13676,6 +13682,15 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 // 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
 // computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
 // (単発登録ではnullのまま=フィールド自体を含めない)。
+/**
+ * Workers Static Assets のサンプル(public/static-assets-sample/)から呼ぶ API。
+ * public/ に一致するファイルが無いパスは Worker のコードに渡ることを見せるだけで、認証も保存もしない。
+ */
+app.get('/api/static-assets-sample', (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ served_by: 'worker', path: new URL(c.req.url).pathname, time: new Date().toISOString() });
+});
+
 app.get('/api/countdown/next', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
@@ -17284,14 +17299,6 @@ app.route('/', createTreeViewConversationStreamRoutes({
 }));
 
 // tree-viewのMuseタブはWorker内WASMから直通し、本体コンテナに依存しない。
-app.route('/', createTreeViewMuseChatRoutes({
-  authenticate: async (env, token) => {
-    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
-    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
-    if (!result.ok) return result;
-    return { ok: true, login: result.login ?? '' };
-  },
-}));
 app.route('/', createTreeViewMuseChatRoutes({
   authenticate: async (env, token) => {
     if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };

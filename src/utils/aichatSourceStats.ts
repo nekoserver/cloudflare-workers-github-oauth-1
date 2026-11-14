@@ -31,3 +31,32 @@ export function buildAichatSourceTotals(
   }
   return totals;
 }
+
+/**
+ * /muse-wasm-test から積まれた要望(INQUIRY_DB の bridge_jobs、origin='muse-wasm-test')の件数を、
+ * 日ごとキーワード数・質問数モーダルのリクエスト元別に出すために数える。ai_chat_shares には保存されないため、
+ * buildAichatSourceTotals とは別に数える。月は ai_chat_shares の集計と同じく UTC の暦月(created_at はUNIX秒)。
+ * INQUIRY_DB が無い・問い合わせに失敗した・月の形が違うときは null を返し、件数0と区別する。
+ */
+export async function countMuseWasmTestRequests(
+  db: D1Database | undefined,
+  userSub: string,
+  month: string
+): Promise<number | null> {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!db || !m) return null;
+  const year = Number(m[1]);
+  const monthIndex = Number(m[2]) - 1;
+  if (monthIndex < 0 || monthIndex > 11) return null;
+  const start = Date.UTC(year, monthIndex, 1) / 1000;
+  const end = Date.UTC(year, monthIndex + 1, 1) / 1000;
+  try {
+    const row = await db
+      .prepare('SELECT COUNT(*) AS n FROM bridge_jobs WHERE created_by = ? AND origin = ? AND created_at >= ? AND created_at < ?')
+      .bind(userSub, 'muse-wasm-test', start, end)
+      .first<{ n: number }>();
+    return row ? Number(row.n) : 0;
+  } catch {
+    return null;
+  }
+}

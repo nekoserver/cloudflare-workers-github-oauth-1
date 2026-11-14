@@ -193,6 +193,8 @@ describe('本体チャットに埋め込む閲覧専用ストリーム', () => {
     toggle.click();
     await vi.waitFor(() => expect(new URL(frame.src).origin).toBe('https://stream.test.cfc.nekomaneki.work'));
     expect(new URL(frame.src).searchParams.get('protocol')).toBe('websocket');
+    // 経路ID(秘密ではない)。lib側のApacheが呼出し元をログで見分ける(nekoserver/lib#147)。
+    expect(new URL(frame.src).searchParams.get('via')).toBe('aichat-panel');
     for (const protocol of ['sse', 'websocket', 'ndjson', 'jsonseq']) {
       (doc.querySelector('[data-conversation-protocol="' + protocol + '"]') as unknown as HTMLButtonElement).click();
       await vi.waitFor(() => expect(new URL(frame.src).searchParams.get('protocol')).toBe(protocol));

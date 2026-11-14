@@ -1,0 +1,2 @@
+PASS read-only current thread and request match
+{"observer": "configured", "start-lib-chat-streams": "ready", "start-lib-llm-worker": "ready", "state": "degraded", "tunnels": "refresh_failed"}

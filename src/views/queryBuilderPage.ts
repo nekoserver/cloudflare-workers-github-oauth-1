@@ -79,6 +79,8 @@ select.wide, input.wide { flex: 1; min-width: 160px; }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .hint { color: var(--text-muted); font-size: 11px; }
 .table-hint { margin-top: 6px; }
+.table-search { flex: 1 1 220px; min-width: 180px; }
+.table-count { min-width: 90px; text-align: right; }
 .columns-grid { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .columns-grid label { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text); font-family: ui-monospace, Menlo, Consolas, monospace; }
 .pk-badge { font-size: 10px; background: var(--danger-bg); color: var(--danger); border-radius: 4px; padding: 0 4px; }
@@ -117,6 +119,11 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
 
 <div class="panel">
   <h2>1. テーブル</h2>
+  <div class="row">
+    <label for="tableSearch">テーブル検索</label>
+    <input id="tableSearch" class="table-search" type="search" autocomplete="off" placeholder="名前・説明で検索" aria-controls="tableSelect">
+    <span id="tableCount" class="hint table-count" role="status" aria-live="polite"></span>
+  </div>
   <div class="row">
     <label for="tableSelect">対象テーブル</label>
     <select id="tableSelect" class="wide"><option value="">選択してください</option></select>
@@ -205,6 +212,8 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
 
   var $ = function(id) { return document.getElementById(id); };
   var tableSelect = $('tableSelect');
+  var tableSearch = $('tableSearch');
+  var tableCount = $('tableCount');
   var tableDescription = $('tableDescription');
   var modePanel = $('modePanel');
   var modeRows = $('modeRows');
@@ -249,12 +258,30 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   }
 
   function populateTableSelect() {
+    var selected = tableSelect.value;
+    var query = tableSearch.value.trim().toLocaleLowerCase();
+    var matches = [];
     for (var i = 0; i < TABLES.length; i++) {
+      var searchable = (TABLES[i].name + ' ' + TABLES[i].description).toLocaleLowerCase();
+      if (!query || searchable.indexOf(query) !== -1) matches.push(TABLES[i]);
+    }
+    var selectedMatches = false;
+    for (var j = 0; j < matches.length; j++) if (matches[j].name === selected) selectedMatches = true;
+    while (tableSelect.options.length > 1) tableSelect.remove(1);
+    tableCount.textContent = query ? matches.length + ' / ' + TABLES.length + '件' : TABLES.length + '件';
+    if (selected && !selectedMatches) {
+      var selectedOpt = document.createElement('option');
+      selectedOpt.value = selected;
+      selectedOpt.textContent = selected + ' (選択中)';
+      tableSelect.appendChild(selectedOpt);
+    }
+    for (var k = 0; k < matches.length; k++) {
       var opt = document.createElement('option');
-      opt.value = TABLES[i].name;
-      opt.textContent = TABLES[i].name;
+      opt.value = matches[k].name;
+      opt.textContent = matches[k].name;
       tableSelect.appendChild(opt);
     }
+    tableSelect.value = selected;
   }
 
   function findTableDescription(name) {
@@ -590,6 +617,7 @@ table.result-table th { background: var(--hover); position: sticky; top: 0; }
   });
 
   populateTableSelect();
+  tableSearch.addEventListener('input', populateTableSelect);
 })();
 </script>
 </body>

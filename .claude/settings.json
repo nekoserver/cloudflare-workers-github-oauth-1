@@ -33,6 +33,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/scripts/claude-japanese-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/scripts/claude-self-check-guard.js\""
           }
         ]
       }
@@ -43,6 +47,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/scripts/claude-japanese-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/scripts/claude-self-check-guard.js\""
           }
         ]
       }

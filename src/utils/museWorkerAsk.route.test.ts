@@ -3,7 +3,7 @@
  *
  * 仮説: 2つの経路で違うのは経路IDだけのはず(ユーザー指定)。そうなら、同じ鍵・同じ会話を渡したとき、
  *   1. Worker 内 WASM の中継(TAILSCALE_WASM)へ届く要求は、パス・ヘッダ(Authorization を含む)・本文がまったく同じでないとおかしい。
- *   2. 待ち時間の上限も同じ(90秒)でないとおかしい。AIチャットだけ300秒待つと、tree-view では起きない待ち方になる。
+ *   2. 待ち時間の上限も同じでないとおかしい。上限は muse-vm の api-bridge の待ち時間と同じ600秒(2026-11-13、以前は90秒)。
  * 修正前は、AIチャットは Authorization を付けず中継の起動時の鍵に任せ、待ち時間はAIチャットの設定(300秒)だった。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -53,7 +53,7 @@ describe('AIチャットの直送は tree-view の Museタブと同じ送り方'
     expect(fromAichat[0].authorization).toBe('Bearer same-key');
   });
 
-  it('AIチャットも90秒で打ち切る(300秒待たない)', async () => {
+  it('直送は api-bridge と同じ600秒まで待つ(askgk の保存値で縮めない)', async () => {
     vi.useFakeTimers();
     const ns = recordingNamespace([], () => new Promise<Response>(() => {}));
     const pending = museWorkerDep({ TAILSCALE_WASM: ns as never, MUSE_API_KEY: 'k' })('q');
@@ -63,7 +63,7 @@ describe('AIチャットの直送は tree-view の Museタブと同じ送り方'
     expect(settled).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
     expect(settled).toMatchObject({ ok: false, error: 'llm_timeout' });
-    expect(MUSE_WORKER_MAX_TIMEOUT_SECONDS).toBe(90);
+    expect(MUSE_WORKER_MAX_TIMEOUT_SECONDS).toBe(600);
   });
 
   it('失敗したときは経路IDを Worker のログに出す(どの経路の失敗か見分ける)', async () => {

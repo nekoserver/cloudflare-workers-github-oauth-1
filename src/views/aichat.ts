@@ -787,6 +787,9 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; gap: 14px;
     }
     .history-modal .chat-bubble { max-width: 88%; font-size: 11px; line-height: 1.5; }
+    .history-modal.fullscreen .chat-bubble {
+      width: 100%; max-width: 100%; box-sizing: border-box;
+    }
     .history-modal .preview-area table { font-size: 10px; }
     .history-modal .search-hist-btn { font-size: 9px; }
     .history-modal .chat-bubble.user {
@@ -6983,14 +6986,17 @@ ${AICHAT_PENDING_CSS}
             leftHtml += apiPieSvg + apiRatioHtml + '</div>';
           }
 
-          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー) =====
-          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ', dynamicneko: 'ダイナミックワーカー' };
-          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b', dynamicneko: '#10b981' };
-          var sourceTotals = d.sourceTotals || {};
-          var sourceKeys = ['slack', 'textbox', 'api', 'dynamicneko'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
+          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー/muse-wasm-test) =====
+          // muse-wasm-testはai_chat_sharesではなくINQUIRY_DBのbridge_jobsの件数(museWasmTestTotal)。nullは取得できなかったこと。
+          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b', dynamicneko: '#10b981', museWasmTest: '#e11d48' };
+          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ', dynamicneko: 'ダイナミックワーカー', museWasmTest: 'muse-wasm-test' };
+          var sourceTotals = Object.assign({}, d.sourceTotals || {});
+          var museWasmTestUnavailable = d.museWasmTestTotal === null;
+          sourceTotals.museWasmTest = Number(d.museWasmTestTotal) || 0;
+          var sourceKeys = ['slack', 'textbox', 'api', 'dynamicneko', 'museWasmTest'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
           var sourceTotal = sourceKeys.reduce(function(s, k) { return s + (sourceTotals[k] || 0); }, 0);
 
-          if (sourceTotal > 0) {
+          if (sourceTotal > 0 || museWasmTestUnavailable) {
             leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">リクエスト元別</div>';
 
             var SPR = 46, SPCX = 50, SPCY = 50, SPSZ = 100;
@@ -7022,6 +7028,13 @@ ${AICHAT_PENDING_CSS}
               sourceRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">' + cnt + '件 ' + ratio.toFixed(1) + '%' + '</span>';
               sourceRatioHtml += '</div>';
             });
+            if (museWasmTestUnavailable) {
+              sourceRatioHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+              sourceRatioHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + SOURCE_COLORS.museWasmTest + ';flex-shrink:0;"></span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-primary);flex:1;">' + escHtml(SOURCE_LABELS.museWasmTest) + '</span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">取得できません</span>';
+              sourceRatioHtml += '</div>';
+            }
             sourceRatioHtml += '</div>';
 
             leftHtml += '<div>' + sourcePieSvg + sourceRatioHtml + '</div>';
