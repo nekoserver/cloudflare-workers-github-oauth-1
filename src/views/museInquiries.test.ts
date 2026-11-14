@@ -624,6 +624,33 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     expect(postJson).toHaveBeenCalledWith('/api/muse-inquiries/proposals/p1/decision', { decision: 'rejected', note: '' });
   });
 
+  // ユーザー指定(2026-11-14): 採否の判断材料(利点・副作用・破壊的変更・元に戻せるか)をテンプレートとして見られるようにする。
+  it('提案のモーダルに「採否の判断材料」を出し、利点・副作用・破壊的変更・元に戻せるかを色付きで、未記入は「未記入」と出す', async () => {
+    const withAssessment = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'proposed' ? { ...p, panels: [{ ...p.panels[0], benefits: '採決の手間が減る', sideEffects: '表が1つ増える', breakingChange: 'yes', reversible: null }] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => withAssessment), postJson: vi.fn() });
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    const box = modal().querySelector('[data-field="assessment"]') as HTMLElement;
+    expect(box.textContent).toContain('採否の判断材料');
+    expect(box.querySelector('[data-assessment="benefits"]')!.textContent).toContain('採決の手間が減る');
+    expect(box.querySelector('[data-assessment="side-effects"]')!.textContent).toContain('表が1つ増える');
+    const breaking = box.querySelector('[data-assessment="breaking-change"]') as HTMLElement;
+    expect(breaking.textContent).toContain('あり');
+    expect(breaking.getAttribute('data-level')).toBe('danger');
+    const reversible = box.querySelector('[data-assessment="reversible"]') as HTMLElement;
+    expect(reversible.textContent).toContain('未記入');
+    expect(reversible.getAttribute('data-level')).toBe('unset');
+  });
+  it('破壊的変更が「あり」「ありうる」の提案はカードに印を付け、「なし」や未記入には付けない', async () => {
+    const mk = (id: string, breakingChange: string | null) => ({ ...BOARD.phases[2].panels[0], id, breakingChange });
+    const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'proposed' ? { ...p, panels: [mk('b-yes', 'yes'), mk('b-possible', 'possible'), mk('b-none', 'none'), mk('b-unset', null)] } : p) };
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board), postJson: vi.fn() });
+    const mark = (id: string) => document.querySelector(`#inq-board [data-card-key="proposal:${CASE_ID}:${id}"] [data-breaking-mark]`);
+    expect(mark('b-yes')!.textContent).toContain('破壊的変更');
+    expect(mark('b-possible')!.textContent).toContain('破壊的変更');
+    expect(mark('b-none')).toBeNull();
+    expect(mark('b-unset')).toBeNull();
+  });
   it('採否待ちでない提案にはボタンを出さない', async () => {
     const board = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'adopted' ? { ...p, panels: [{ ...BOARD.phases[2].panels[0], id: 'p9', status: 'adopted' }] } : p) };
     await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => board), postJson: vi.fn() });
