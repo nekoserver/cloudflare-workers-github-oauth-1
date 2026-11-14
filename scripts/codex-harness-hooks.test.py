@@ -19,6 +19,16 @@ class CodexHooksTest(unittest.TestCase):
  def test_japanese_and_stop_loop_are_allowed(self):
   self.assertEqual(self.invoke({'hook_event_name':'Stop','last_assistant_message':'設定を確認して復旧しました。'}),{})
   self.assertEqual(self.invoke({'hook_event_name':'Stop','stop_hook_active':True,'last_assistant_message':'English response that should not cause an infinite continuation loop.'}),{})
+ def test_html_and_visualize_are_exempt(self):
+  for message in (
+   'visualize{"path":"/root/artifacts/muse-d1-tree.html"}',
+   '<div><div>Conversation tree with question and response identifiers</div><p>Completed database migration</p></div>',
+   '<!doctype html><html><head><title>Conversation tree</title></head><body>Database conversation history</body></html>',
+  ):
+   self.assertEqual(self.invoke({'hook_event_name':'Stop','last_assistant_message':message}),{})
+ def test_english_outside_html_is_still_checked(self):
+  message='<div>Conversation tree</div> This is an entirely English final explanation that needs rewriting.'
+  self.assertEqual(self.invoke({'hook_event_name':'Stop','last_assistant_message':message})['decision'],'block')
  def test_install_preserves_unrelated_and_is_idempotent(self):
   with tempfile.TemporaryDirectory() as directory:
    home=Path(directory);config=home/'hooks.json';other={'type':'command','command':'printf unrelated'}
