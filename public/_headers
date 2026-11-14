@@ -7,3 +7,10 @@
 
 /static-assets-sample/*
   X-Static-Asset-Sample: served-from-assets
+
+# Apacheのモジュールのドキュメント(scripts/build-apache-docs.mjs)。/cf-containersのモーダルから同じオリジンのiframeでだけ読む。
+/apache-docs/*
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=86400

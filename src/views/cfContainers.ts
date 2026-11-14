@@ -4,6 +4,15 @@
  */
 import { CONFIGURED_INSTANCE_TYPE, CONFIGURED_INSTANCE_SPEC, computeHourlyRate } from '../utils/cfContainerCost';
 import { APACHE_MODULE_INFO, APACHE_DEBIAN_DEFAULT_ENABLED } from '../utils/apacheModuleInfo';
+import { APACHE_DOCS_PAGES, apacheDocPageFor } from '../utils/apacheDocsIndex';
+
+/** モジュール名(ssl・mpm_eventなど)から、同梱したドキュメントのページへのパス。ページ側のscriptへ埋め込む。 */
+const APACHE_DOC_BY_MODULE: Record<string, string> = Object.fromEntries(
+  Object.keys(APACHE_DOCS_PAGES)
+    .map((page) => (page.startsWith('mod_') ? page.slice(4) : ['event', 'prefork', 'worker'].includes(page) ? 'mpm_' + page : ''))
+    .filter(Boolean)
+    .map((name) => [name, apacheDocPageFor(name) as string]),
+);
 
 export function getCfContainersPage(): string {
   const instancePrices = [
@@ -125,6 +134,9 @@ button.module-name { border: 0; background: none; padding: 0; margin: 0; font: i
 .module-modal dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
 .module-modal dt { color: var(--muted); }
 .module-modal dd { margin: 0; overflow-wrap: anywhere; }
+.module-doc-box { width: min(980px, 100%); height: calc(100vh - 32px); max-height: none; display: flex; flex-direction: column; padding: 8px 10px; }
+.module-doc-box iframe { flex: 1; width: 100%; border: 1px solid var(--border); border-radius: 4px; margin-top: 8px; background: #fff; /* Apacheのマニュアルは明るい配色で作られているため白を敷く */ }
+.module-doc-btn { margin-right: 0; padding: 4px 10px; font-size: 12px; }
 .module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
 .module-check { margin: 0 6px 0 0; vertical-align: middle; }
 .apache-main-row td { font-weight: 600; }
@@ -522,6 +534,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var LABEL = { closed: 'モジュール一覧を開く', open: '🔐の行だけにする', locked: 'モジュール一覧を閉じる' };
   var INFO = ${JSON.stringify(APACHE_MODULE_INFO)};
   var DEBIAN_DEFAULT = ${JSON.stringify(APACHE_DEBIAN_DEFAULT_ENABLED)};
+  var DOCS = ${JSON.stringify(APACHE_DOC_BY_MODULE)};
   var state = 'closed';
   var locks = {};
   var unlocks = {};
@@ -662,7 +675,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     modal.appendChild(box);
     modal.setAttribute('aria-labelledby', title.id);
     modal.addEventListener('click', function (event) { if (event.target === modal) modal.hidden = true; });
-    document.addEventListener('keydown', function (event) { if (event.key === 'Escape') modal.hidden = true; });
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      var docModal = document.getElementById('apache-doc-modal');
+      if (docModal && !docModal.hidden) { closeDoc(); return; }
+      modal.hidden = true;
+    });
     document.body.appendChild(modal);
     return modal;
   }
@@ -681,6 +699,64 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     return dd;
   }
 
+  // 同梱したApacheのドキュメントを、さらに上のモーダルのiframeで開く(ユーザー指定、2026-11-14)
+  function docModalEl() {
+    var modal = document.getElementById('apache-doc-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'apache-doc-modal';
+    modal.className = 'module-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.hidden = true;
+    var box = document.createElement('div');
+    box.className = 'module-modal-box module-doc-box';
+    var headEl = document.createElement('div');
+    headEl.className = 'module-modal-head';
+    var title = document.createElement('h3');
+    title.id = 'apache-doc-modal-title';
+    var tab = document.createElement('a');
+    tab.id = 'apache-doc-modal-tab';
+    tab.target = '_blank';
+    tab.rel = 'noopener';
+    tab.textContent = '新しいタブで開く';
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', '閉じる');
+    close.setAttribute('data-action', 'close-doc-modal');
+    close.addEventListener('click', closeDoc);
+    headEl.appendChild(title);
+    headEl.appendChild(tab);
+    headEl.appendChild(close);
+    var frame = document.createElement('iframe');
+    frame.setAttribute('src', 'about:blank');
+    frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    box.appendChild(headEl);
+    box.appendChild(frame);
+    modal.appendChild(box);
+    modal.setAttribute('aria-labelledby', title.id);
+    modal.addEventListener('click', function (event) { if (event.target === modal) closeDoc(); });
+    document.body.appendChild(modal);
+    return modal;
+  }
+  function closeDoc() {
+    var modal = document.getElementById('apache-doc-modal');
+    if (!modal) return;
+    modal.hidden = true;
+    modal.querySelector('iframe').setAttribute('src', 'about:blank');
+  }
+  function openDoc(base, path) {
+    var modal = docModalEl();
+    document.getElementById('apache-doc-modal-title').textContent = base + '_module の公式ドキュメント';
+    document.getElementById('apache-doc-modal-tab').href = path;
+    modal.querySelector('iframe').setAttribute('title', base + '_module の公式ドキュメント');
+    modal.querySelector('iframe').setAttribute('src', path);
+    modal.style.zIndex = String(nextZ());
+    modal.hidden = false;
+  }
+
   function openInfo(module, apacheVersion) {
     var modal = modalEl();
     var base = baseName(module.name);
@@ -695,6 +771,20 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     var stateClass = !module.installed ? 'module-inactive' : module.enabled === true ? 'module-active' : module.enabled === false ? 'module-off' : 'diff-up';
     row(dl, '今の状態', stateText, stateClass, 'module-state');
     row(dl, '導入', module.installed ? '導入済み(/usr/lib/apache2/modules/mod_' + base + '.so)' : '未導入', module.installed ? 'module-active' : 'module-inactive');
+    var docPath = DOCS[base];
+    if (docPath) {
+      var docDd = row(dl, '公式ドキュメント', docPath.slice(-8) === '.ja.html' ? '日本語版あり' : '英語版のみ', 'module-active');
+      var docBtn = document.createElement('button');
+      docBtn.type = 'button';
+      docBtn.className = 'module-doc-btn';
+      docBtn.textContent = '公式ドキュメントを見る';
+      docBtn.setAttribute('data-action', 'open-module-doc');
+      docBtn.addEventListener('click', function () { openDoc(base, docPath); });
+      docDd.appendChild(document.createTextNode(' '));
+      docDd.appendChild(docBtn);
+    } else {
+      row(dl, '公式ドキュメント', '公式ドキュメントは同梱していません(Apache ' + (apacheVersion || '') + 'のソースに無いモジュール)', 'module-inactive');
+    }
     row(dl, 'ロック', isLocked(module.name) ? '🔐 ロック中' + (isActive(module) && !locks[module.name] ? '(有効なため標準でロック)' : '') : 'ロックなし', isLocked(module.name) ? 'module-active' : 'module-inactive');
     modal.style.zIndex = String(nextZ());
     modal.hidden = false;

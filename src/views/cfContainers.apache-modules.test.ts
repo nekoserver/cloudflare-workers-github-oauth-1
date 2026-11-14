@@ -183,6 +183,37 @@ describe('Apacheモジュール一覧の開閉とロック', () => {
     expect(modal.querySelector('[data-field="module-state"]')!.textContent).toBe('未導入');
   });
 
+  // ユーザー指定(2026-11-14): Apacheのソースのドキュメントを静的アセットに置き、モーダルからiframeで表示する。
+  it('ドキュメントのあるモジュールは「公式ドキュメントを見る」でさらに上のiframeのモーダルを開き、日本語版があれば日本語版を出す', () => {
+    const { dom, doc } = setup();
+    (dom.window as any).cfcApacheModules.render({ apacheVersion: '2.4.71', items: [{ name: 'ssl', installed: true, enabled: true }, { name: 'headers', installed: true, enabled: true }, { name: 'mpm_event', installed: true, enabled: true }] });
+    (doc.querySelector('tr[data-module="ssl"] .module-name') as HTMLButtonElement).click();
+    const info = doc.getElementById('apache-module-modal') as HTMLElement;
+    (info.querySelector('[data-action="open-module-doc"]') as HTMLButtonElement).click();
+    const docModal = doc.getElementById('apache-doc-modal') as HTMLElement;
+    expect(docModal.hidden).toBe(false);
+    expect(Number(docModal.style.zIndex)).toBeGreaterThan(Number(info.style.zIndex));
+    expect(docModal.querySelector('iframe')!.getAttribute('src')).toBe('/apache-docs/2.4.71/mod/mod_ssl.en.html');
+    (docModal.querySelector('[data-action="close-doc-modal"]') as HTMLButtonElement).click();
+    expect(docModal.hidden).toBe(true);
+    expect(docModal.querySelector('iframe')!.getAttribute('src')).toBe('about:blank');
+    (doc.querySelector('tr[data-module="headers"] .module-name') as HTMLButtonElement).click();
+    (info.querySelector('[data-action="open-module-doc"]') as HTMLButtonElement).click();
+    expect(docModal.querySelector('iframe')!.getAttribute('src')).toBe('/apache-docs/2.4.71/mod/mod_headers.ja.html');
+    (doc.querySelector('tr[data-module="mpm_event"] .module-name') as HTMLButtonElement).click();
+    (info.querySelector('[data-action="open-module-doc"]') as HTMLButtonElement).click();
+    expect(docModal.querySelector('iframe')!.getAttribute('src')).toBe('/apache-docs/2.4.71/mod/event.en.html');
+  });
+
+  it('ドキュメントの無いモジュールはボタンを出さず、無いことを書く', () => {
+    const { dom, doc } = setup();
+    (dom.window as any).cfcApacheModules.render({ apacheVersion: '2.4.71', items: [{ name: 'made_up_module', installed: false, enabled: false }] });
+    (doc.querySelector('tr[data-module="made_up_module"] .module-name') as HTMLButtonElement).click();
+    const info = doc.getElementById('apache-module-modal') as HTMLElement;
+    expect(info.querySelector('[data-action="open-module-doc"]')).toBeNull();
+    expect(info.textContent).toContain('公式ドキュメントは同梱していません');
+  });
+
   it('一覧が取れないときは表を隠し、理由を表示する', () => {
     const { dom, doc } = setup();
     (dom.window as any).cfcApacheModules.render({ error: 'apache2ctl failed' });
