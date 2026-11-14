@@ -3,6 +3,7 @@
  * HTML。コンテナの状態参照・起動/停止/再起動・プロキシへの導線を持つ。
  */
 import { CONFIGURED_INSTANCE_TYPE, CONFIGURED_INSTANCE_SPEC, computeHourlyRate } from '../utils/cfContainerCost';
+import { APACHE_MODULE_INFO, APACHE_DEBIAN_DEFAULT_ENABLED } from '../utils/apacheModuleInfo';
 
 export function getCfContainersPage(): string {
   const instancePrices = [
@@ -112,7 +113,18 @@ details.card[open] > summary { margin-bottom: 6px; }
 .diff-ok { color: var(--ok); font-weight: 600; }
 .module-active { color: var(--ok); font-weight: 600; }
 .module-inactive { color: var(--muted); }
-.module-unlocked { opacity: 0.45; }
+.module-unlocked td:not(:first-child) { opacity: 0.45; }
+.module-unlocked .module-name { color: var(--text); font-weight: 600; }
+.module-off { color: var(--err); font-weight: 600; }
+button.module-name { border: 0; background: none; padding: 0; margin: 0; font: inherit; cursor: pointer; text-align: left; text-decoration: underline dotted; }
+.module-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
+.module-modal[hidden] { display: none; }
+.module-modal-box { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 12px 16px; }
+.module-modal-head { display: flex; align-items: center; gap: 8px; }
+.module-modal-head h3 { flex: 1; margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.module-modal dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
+.module-modal dt { color: var(--muted); }
+.module-modal dd { margin: 0; overflow-wrap: anywhere; }
 .module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
 .module-check { margin: 0 6px 0 0; vertical-align: middle; }
 .apache-main-row td { font-weight: 600; }
@@ -498,20 +510,36 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 </script>
 <script id="apache-modules-panel">
 // Apacheモジュール一覧(ユーザー指定 2026-11-14)。Apache(本体)行の行頭のトグルで
-// ▶(全部閉じる)→▼(全部開く。🔐でない行はグレーアウト)→▲(🔐の行だけ)→▶ と巡る。
-// 各モジュール名の先頭のチェックボックスをONにすると🔐ボタンに替わりロックされ、🔐を押すと解除する。
-// ロックはCookie cfc_apache_module_locks に7日間保存する。壊れた値や一覧に無い名前はロック無しとして扱う。
+// ▶(全部閉じる)→▼(全部開く。🔐でない無効な行はグレーアウト)→▲(🔐の行だけ)→▶ と巡る。
+// 有効なモジュールは標準でロック(🔐)し、グレーアウトしない。チェックボックスをONにするとロック、🔐を押すと解除する。
+// ロックはCookie cfc_apache_module_locks に7日間保存する。値はロックした名前、または標準のロックを外した「-名前」の並び。
+// 壊れた値や一覧に無い名前は無視する。モジュール名を押すと、最上位のモーダルに役割・初期設定・今の状態を出す。
 (function () {
   var COOKIE = 'cfc_apache_module_locks';
   var MAX_AGE = 7 * 24 * 60 * 60;
   var NEXT = { closed: 'open', open: 'locked', locked: 'closed' };
   var MARK = { closed: '▶', open: '▼', locked: '▲' };
   var LABEL = { closed: 'モジュール一覧を開く', open: '🔐の行だけにする', locked: 'モジュール一覧を閉じる' };
+  var INFO = ${JSON.stringify(APACHE_MODULE_INFO)};
+  var DEBIAN_DEFAULT = ${JSON.stringify(APACHE_DEBIAN_DEFAULT_ENABLED)};
   var state = 'closed';
   var locks = {};
+  var unlocks = {};
+  var modules = {};
 
-  function readLocks() {
-    var found = {};
+  function baseName(name) {
+    var n = String(name || '');
+    return n.slice(-7) === '_module' ? n.slice(0, -7) : n;
+  }
+  function isActive(module) { return !!(module && module.installed && module.enabled === true); }
+  function isLocked(name) {
+    if (unlocks[name]) return false;
+    return !!locks[name] || isActive(modules[name]);
+  }
+
+  function readCookie() {
+    locks = {};
+    unlocks = {};
     document.cookie.split(';').forEach(function (part) {
       var kv = part.trim();
       var eq = kv.indexOf('=');
@@ -519,15 +547,25 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       kv.slice(eq + 1).split(',').forEach(function (raw) {
         var name;
         try { name = decodeURIComponent(raw); } catch (e) { return; }
-        if (name) found[name] = true;
+        if (!name) return;
+        if (name.charAt(0) === '-') { if (name.length > 1) unlocks[name.slice(1)] = true; } else { locks[name] = true; }
       });
     });
-    return found;
   }
 
-  function writeLocks() {
-    var value = Object.keys(locks).map(encodeURIComponent).join(',');
+  function writeCookie() {
+    var parts = Object.keys(locks).map(encodeURIComponent).concat(Object.keys(unlocks).map(function (n) { return encodeURIComponent('-' + n); }));
+    var value = parts.join(',');
     document.cookie = COOKIE + '=' + value + '; Path=/cf-containers; Secure; SameSite=Lax; Max-Age=' + (value ? MAX_AGE : 0);
+  }
+
+  function setLocked(name, on) {
+    var byDefault = isActive(modules[name]);
+    delete locks[name];
+    delete unlocks[name];
+    if (on && !byDefault) locks[name] = true;
+    if (!on && byDefault) unlocks[name] = true;
+    writeCookie();
   }
 
   function apply() {
@@ -539,15 +577,16 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       toggle.setAttribute('aria-expanded', state === 'closed' ? 'false' : 'true');
     }
     document.querySelectorAll('#apache-modules-tbody tr[data-module]').forEach(function (tr) {
-      var locked = !!locks[tr.getAttribute('data-module')];
-      tr.classList.toggle('module-unlocked', !locked);
+      var name = tr.getAttribute('data-module');
+      var locked = isLocked(name);
+      tr.classList.toggle('module-unlocked', !locked && !isActive(modules[name]));
       tr.hidden = state === 'closed' || (state === 'locked' && !locked);
     });
   }
 
-  function fillLock(cell, name) {
-    cell.innerHTML = '';
-    if (locks[name]) {
+  function fillLock(cellEl, name) {
+    cellEl.innerHTML = '';
+    if (isLocked(name)) {
       var lock = document.createElement('button');
       lock.type = 'button';
       lock.className = 'module-lock';
@@ -555,12 +594,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       lock.title = name + ' のロックを解除';
       lock.setAttribute('aria-label', lock.title);
       lock.addEventListener('click', function () {
-        delete locks[name];
-        writeLocks();
-        fillLock(cell, name);
+        setLocked(name, false);
+        fillLock(cellEl, name);
         apply();
       });
-      cell.appendChild(lock);
+      cellEl.appendChild(lock);
       return;
     }
     var box = document.createElement('input');
@@ -569,12 +607,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     box.setAttribute('aria-label', name + ' をロック');
     box.addEventListener('change', function () {
       if (!box.checked) return;
-      locks[name] = true;
-      writeLocks();
-      fillLock(cell, name);
+      setLocked(name, true);
+      fillLock(cellEl, name);
       apply();
     });
-    cell.appendChild(box);
+    cellEl.appendChild(box);
   }
 
   function cell(tr, text, className) {
@@ -585,6 +622,84 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     return td;
   }
 
+  // 開いているfixed要素の最大のz-index + 100(CLAUDE.md ルール26)
+  function nextZ() {
+    var max = 1000;
+    document.querySelectorAll('*').forEach(function (el) {
+      var z = parseInt(getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    });
+    return max + 100;
+  }
+
+  function modalEl() {
+    var modal = document.getElementById('apache-module-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'apache-module-modal';
+    modal.className = 'module-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.hidden = true;
+    var box = document.createElement('div');
+    box.className = 'module-modal-box';
+    var headEl = document.createElement('div');
+    headEl.className = 'module-modal-head';
+    var title = document.createElement('h3');
+    title.id = 'apache-module-modal-title';
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', '閉じる');
+    close.setAttribute('data-action', 'close-module-modal');
+    close.addEventListener('click', function () { modal.hidden = true; });
+    headEl.appendChild(title);
+    headEl.appendChild(close);
+    var body = document.createElement('dl');
+    body.id = 'apache-module-modal-body';
+    box.appendChild(headEl);
+    box.appendChild(body);
+    modal.appendChild(box);
+    modal.setAttribute('aria-labelledby', title.id);
+    modal.addEventListener('click', function (event) { if (event.target === modal) modal.hidden = true; });
+    document.addEventListener('keydown', function (event) { if (event.key === 'Escape') modal.hidden = true; });
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function row(dl, label, text, className, field) {
+    var dt = document.createElement('dt');
+    dt.textContent = label;
+    var dd = document.createElement('dd');
+    var span = document.createElement('span');
+    span.textContent = text;
+    if (className) span.className = className;
+    if (field) span.setAttribute('data-field', field);
+    dd.appendChild(span);
+    dl.appendChild(dt);
+    dl.appendChild(dd);
+    return dd;
+  }
+
+  function openInfo(module, apacheVersion) {
+    var modal = modalEl();
+    var base = baseName(module.name);
+    var info = INFO[base];
+    document.getElementById('apache-module-modal-title').textContent = base + '_module' + (apacheVersion ? '(Apache ' + apacheVersion + ')' : '');
+    var dl = document.getElementById('apache-module-modal-body');
+    dl.innerHTML = '';
+    row(dl, '役割', info || '役割の説明は未登録です。', info ? '' : 'module-inactive');
+    var byDefault = DEBIAN_DEFAULT.indexOf(base) !== -1;
+    row(dl, '初期設定', byDefault ? 'Debianの既定で有効(無効にするには a2dismod ' + base + ')' : 'Debianの既定では無効(有効にするには a2enmod ' + base + ')', byDefault ? 'module-active' : 'module-inactive');
+    var stateText = !module.installed ? '未導入' : module.enabled === true ? '有効' : module.enabled === false ? '無効' : '不明';
+    var stateClass = !module.installed ? 'module-inactive' : module.enabled === true ? 'module-active' : module.enabled === false ? 'module-off' : 'diff-up';
+    row(dl, '今の状態', stateText, stateClass, 'module-state');
+    row(dl, '導入', module.installed ? '導入済み(/usr/lib/apache2/modules/mod_' + base + '.so)' : '未導入', module.installed ? 'module-active' : 'module-inactive');
+    row(dl, 'ロック', isLocked(module.name) ? '🔐 ロック中' + (isActive(module) && !locks[module.name] ? '(有効なため標準でロック)' : '') : 'ロックなし', isLocked(module.name) ? 'module-active' : 'module-inactive');
+    modal.style.zIndex = String(nextZ());
+    modal.hidden = false;
+  }
+
   function render(data) {
     var table = document.getElementById('apache-modules-table');
     var tbody = document.getElementById('apache-modules-tbody');
@@ -592,12 +707,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     tbody.innerHTML = '';
     error.textContent = data && data.error ? '状態取得の補足: ' + data.error : '';
     if (!data || !Array.isArray(data.items)) { table.hidden = true; return; }
-    locks = readLocks();
+    readCookie();
+    modules = {};
     var installed = 0;
     var enabled = 0;
     data.items.forEach(function (m) {
+      modules[m.name] = m;
       if (m.installed) installed++;
-      if (m.installed && m.enabled === true) enabled++;
+      if (isActive(m)) enabled++;
     });
 
     var main = document.createElement('tr');
@@ -617,15 +734,18 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     tbody.appendChild(main);
 
     data.items.forEach(function (module) {
-      var active = module.installed && module.enabled === true;
+      var active = isActive(module);
       var tr = document.createElement('tr');
       tr.setAttribute('data-module', module.name);
       var first = document.createElement('td');
       var lockCell = document.createElement('span');
       lockCell.className = 'module-lock-cell';
-      var name = document.createElement('span');
+      var name = document.createElement('button');
+      name.type = 'button';
       name.className = 'module-name ' + (active ? 'module-active' : 'module-inactive');
       name.textContent = module.name;
+      name.title = module.name + ' の役割と状態を見る';
+      name.addEventListener('click', function () { openInfo(module, data.apacheVersion); });
       first.appendChild(lockCell);
       first.appendChild(name);
       tr.appendChild(first);
