@@ -283,8 +283,8 @@ ARG RUBY_VERSION
 ARG GIT_VERSION
 ARG OPENSSH_VERSION
 ARG APACHE_VERSION
-RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s","git":"%s","openssh":"%s","apache":"%s"}\n' \
-        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" "$GIT_VERSION" "$OPENSSH_VERSION" "$APACHE_VERSION" \
+RUN printf '{"node":"%s","codex":"%s","claude":"%s","cloudflared":"%s","tailscale":"%s","gh":"%s","jj":"%s","ruby":"%s","preprint":"%s","t3":"%s","git":"%s","openssh":"%s","apache":"%s","cf":"%s"}\n' \
+        "$NODE_VERSION" "$CODEX_VERSION" "$CLAUDE_VERSION" "$CLOUDFLARED_VERSION" "$TAILSCALE_VERSION" "$GH_VERSION" "$JJ_VERSION" "$RUBY_VERSION" "$PREPRINT_VERSION" "$T3_VERSION" "$GIT_VERSION" "$OPENSSH_VERSION" "$APACHE_VERSION" "$CF_CLI_VERSION" \
         > /etc/image-versions.json \
     && cat /etc/image-versions.json
 
