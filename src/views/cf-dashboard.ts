@@ -91,7 +91,7 @@ h1 { font-size: 20px; margin-bottom: 4px; }
 </head>
 <body>
 <h1>Cloudflare D1 ダッシュボード</h1>
-<p class="subtitle">D1バインディング（Cloudflare API設定時はアカウント全体）からデータベースとテーブルを取得します</p>
+<p class="subtitle">D1バインディング（Cloudflare API設定時はアカウント全体）からデータベースとテーブルを取得します</p><p class="subtitle"><a href="/worker-static-assets">Worker Static Assetsの配備状況を見る</a></p>
 
 <div id="main">
   <p class="loading">読み込み中…</p>

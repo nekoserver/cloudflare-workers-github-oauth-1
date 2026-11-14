@@ -55,6 +55,8 @@ import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, 
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { getWorkerStaticAssetsPage } from './views/workerStaticAssets';
+import { collectWorkerStaticAssets } from './utils/workerStaticAssets';
 import { getCfContainersPage } from './views/cfContainers';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
@@ -20404,6 +20406,26 @@ app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMid
   } catch (err) {
     return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
+});
+
+app.get('/api/worker-static-assets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.CLOUDFLARE_ACCOUNT_ID || !c.env.CF_CONTAINER_API_TOKEN) {
+    return jsonUtf8({ error: 'CLOUDFLARE_ACCOUNT_IDまたはCF_CONTAINER_API_TOKENが未設定です' }, 503);
+  }
+  try {
+    return jsonUtf8(await collectWorkerStaticAssets(c.env));
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Cloudflare APIからWorker一覧を取得できませんでした' }, 502);
+  }
+});
+
+app.get('/worker-static-assets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) return c.html(getSessionExpiredPage(c.req.path), 403);
+  c.header('Cache-Control', 'no-store');
+  return c.html(getWorkerStaticAssetsPage());
 });
 
 /**
