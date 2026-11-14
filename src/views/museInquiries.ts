@@ -217,6 +217,11 @@ export const MUSE_INQUIRIES_SCRIPT = `
               row.remove();
               note.remove();
               result.textContent = (item[0] === 'adopted' ? '採用' : '不採用') + 'として記録しました';
+              // 採決したらウィンドウを閉じ、結果をその場で列に反映する(ユーザー指定、2026-11-14)。
+              rememberDecision(panel.id, item[0]);
+              modal.hidden = true;
+              pendingBoard = null;
+              if (board) applyBoard(board);
               caseCache = {};
               return load();
             }, function(error) {
@@ -660,8 +665,67 @@ export const MUSE_INQUIRIES_SCRIPT = `
       if (autoRefresh) {
         doc.addEventListener('visibilitychange', function() { if (doc.visibilityState === 'visible') load(); });
       }
+      // 直近に採決した提案(10分以内)を覚え、読み直しや再読み込みで古い「採否待ち」が返っても元の列に戻さない
+      // (ユーザー指定、2026-11-14)。サーバーが採否を返すようになったら覚えた分を消す。
+      var DECISIONS_KEY = 'inq_recent_decisions';
+      var DECISION_TTL_MS = 10 * 60 * 1000;
+      function decisionStore() {
+        try { return doc.defaultView && doc.defaultView.sessionStorage ? doc.defaultView.sessionStorage : null; } catch (e) { return null; }
+      }
+      function readDecisions() {
+        var store = decisionStore();
+        if (!store) return {};
+        try {
+          var parsed = JSON.parse(store.getItem(DECISIONS_KEY) || '{}');
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (e) { return {}; }
+      }
+      function writeDecisions(map) {
+        var store = decisionStore();
+        if (!store) return;
+        try { store.setItem(DECISIONS_KEY, JSON.stringify(map)); } catch (e) { /* 保存できなければ画面の上だけで反映する */ }
+      }
+      function rememberDecision(id, status) {
+        var map = readDecisions();
+        map[id] = { status: status, at: Date.now() };
+        writeDecisions(map);
+      }
+      function applyDecisions(data) {
+        var map = readDecisions();
+        var now = Date.now();
+        var changed = false;
+        Object.keys(map).forEach(function(id) {
+          if (!map[id] || now - Number(map[id].at || 0) > DECISION_TTL_MS) { delete map[id]; changed = true; }
+        });
+        if (!data || !Array.isArray(data.phases) || !Object.keys(map).length) { if (changed) writeDecisions(map); return data; }
+        var moved = [];
+        var copyOf = function(obj) { var out = {}; Object.keys(obj).forEach(function(k) { out[k] = obj[k]; }); return out; };
+        data = copyOf(data);
+        data.cases = (data.cases || []).map(copyOf);
+        data.phases = data.phases.map(function(phase) {
+          var next = copyOf(phase);
+          next.panels = phase.panels.filter(function(p) {
+            var decided = p.type === 'proposal' ? map[p.id] : null;
+            if (!decided) return true;
+            if (p.status !== 'proposed') { delete map[p.id]; changed = true; return true; }
+            var copy = copyOf(p);
+            copy.status = decided.status;
+            moved.push(copy);
+            return false;
+          });
+          return next;
+        });
+        moved.forEach(function(p) {
+          var target = data.phases.filter(function(phase) { return phase.key === p.status; })[0];
+          if (target) target.panels = [p].concat(target.panels);
+          data.cases.forEach(function(c) { if (c.id === p.caseId && c.proposed > 0) c.proposed -= 1; });
+        });
+        if (changed) writeDecisions(map);
+        return data;
+      }
       function applyBoard(data) {
         pendingBoard = null;
+        data = applyDecisions(data);
         board = data;
         setNotice('');
         var selected = filter.value;

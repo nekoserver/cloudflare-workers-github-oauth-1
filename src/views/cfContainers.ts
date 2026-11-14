@@ -112,6 +112,10 @@ details.card[open] > summary { margin-bottom: 6px; }
 .diff-ok { color: var(--ok); font-weight: 600; }
 .module-active { color: var(--ok); font-weight: 600; }
 .module-inactive { color: var(--muted); }
+.module-unlocked { opacity: 0.45; }
+.module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
+.module-check { margin: 0 6px 0 0; vertical-align: middle; }
+.apache-main-row td { font-weight: 600; }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 13px; }
 .menu-toggle { padding: 0 8px; font-size: 12px; }
 .menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
@@ -492,6 +496,152 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   reveal(window.location.hash);
 })();
 </script>
+<script id="apache-modules-panel">
+// Apacheモジュール一覧(ユーザー指定 2026-11-14)。Apache(本体)行の行頭のトグルで
+// ▶(全部閉じる)→▼(全部開く。🔐でない行はグレーアウト)→▲(🔐の行だけ)→▶ と巡る。
+// 各モジュール名の先頭のチェックボックスをONにすると🔐ボタンに替わりロックされ、🔐を押すと解除する。
+// ロックはCookie cfc_apache_module_locks に7日間保存する。壊れた値や一覧に無い名前はロック無しとして扱う。
+(function () {
+  var COOKIE = 'cfc_apache_module_locks';
+  var MAX_AGE = 7 * 24 * 60 * 60;
+  var NEXT = { closed: 'open', open: 'locked', locked: 'closed' };
+  var MARK = { closed: '▶', open: '▼', locked: '▲' };
+  var LABEL = { closed: 'モジュール一覧を開く', open: '🔐の行だけにする', locked: 'モジュール一覧を閉じる' };
+  var state = 'closed';
+  var locks = {};
+
+  function readLocks() {
+    var found = {};
+    document.cookie.split(';').forEach(function (part) {
+      var kv = part.trim();
+      var eq = kv.indexOf('=');
+      if (eq < 0 || kv.slice(0, eq) !== COOKIE) return;
+      kv.slice(eq + 1).split(',').forEach(function (raw) {
+        var name;
+        try { name = decodeURIComponent(raw); } catch (e) { return; }
+        if (name) found[name] = true;
+      });
+    });
+    return found;
+  }
+
+  function writeLocks() {
+    var value = Object.keys(locks).map(encodeURIComponent).join(',');
+    document.cookie = COOKIE + '=' + value + '; Path=/cf-containers; Secure; SameSite=Lax; Max-Age=' + (value ? MAX_AGE : 0);
+  }
+
+  function apply() {
+    var toggle = document.getElementById('apache-modules-toggle');
+    if (toggle) {
+      toggle.textContent = MARK[state];
+      toggle.setAttribute('data-state', state);
+      toggle.setAttribute('aria-label', LABEL[state]);
+      toggle.setAttribute('aria-expanded', state === 'closed' ? 'false' : 'true');
+    }
+    document.querySelectorAll('#apache-modules-tbody tr[data-module]').forEach(function (tr) {
+      var locked = !!locks[tr.getAttribute('data-module')];
+      tr.classList.toggle('module-unlocked', !locked);
+      tr.hidden = state === 'closed' || (state === 'locked' && !locked);
+    });
+  }
+
+  function fillLock(cell, name) {
+    cell.innerHTML = '';
+    if (locks[name]) {
+      var lock = document.createElement('button');
+      lock.type = 'button';
+      lock.className = 'module-lock';
+      lock.textContent = '🔐';
+      lock.title = name + ' のロックを解除';
+      lock.setAttribute('aria-label', lock.title);
+      lock.addEventListener('click', function () {
+        delete locks[name];
+        writeLocks();
+        fillLock(cell, name);
+        apply();
+      });
+      cell.appendChild(lock);
+      return;
+    }
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'module-check';
+    box.setAttribute('aria-label', name + ' をロック');
+    box.addEventListener('change', function () {
+      if (!box.checked) return;
+      locks[name] = true;
+      writeLocks();
+      fillLock(cell, name);
+      apply();
+    });
+    cell.appendChild(box);
+  }
+
+  function cell(tr, text, className) {
+    var td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    tr.appendChild(td);
+    return td;
+  }
+
+  function render(data) {
+    var table = document.getElementById('apache-modules-table');
+    var tbody = document.getElementById('apache-modules-tbody');
+    var error = document.getElementById('apache-modules-error');
+    tbody.innerHTML = '';
+    error.textContent = data && data.error ? '状態取得の補足: ' + data.error : '';
+    if (!data || !Array.isArray(data.items)) { table.hidden = true; return; }
+    locks = readLocks();
+    var installed = 0;
+    var enabled = 0;
+    data.items.forEach(function (m) {
+      if (m.installed) installed++;
+      if (m.installed && m.enabled === true) enabled++;
+    });
+
+    var main = document.createElement('tr');
+    main.className = 'apache-main-row';
+    var head = document.createElement('td');
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'apache-modules-toggle';
+    toggle.className = 'module-toggle';
+    toggle.addEventListener('click', function () { state = NEXT[state]; apply(); });
+    head.appendChild(toggle);
+    head.appendChild(document.createTextNode('Apache(本体)'));
+    main.appendChild(head);
+    cell(main, data.apacheVersion || '取得できず', data.apacheVersion ? 'module-active' : 'module-inactive');
+    cell(main, installed + '/' + data.items.length + ' 導入済み');
+    cell(main, '有効 ' + enabled + '件');
+    tbody.appendChild(main);
+
+    data.items.forEach(function (module) {
+      var active = module.installed && module.enabled === true;
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-module', module.name);
+      var first = document.createElement('td');
+      var lockCell = document.createElement('span');
+      lockCell.className = 'module-lock-cell';
+      var name = document.createElement('span');
+      name.className = 'module-name ' + (active ? 'module-active' : 'module-inactive');
+      name.textContent = module.name;
+      first.appendChild(lockCell);
+      first.appendChild(name);
+      tr.appendChild(first);
+      fillLock(lockCell, module.name);
+      cell(tr, data.apacheVersion || '取得できず', active && data.apacheVersion ? 'module-active' : 'module-inactive');
+      cell(tr, module.installed ? '導入済み' : '未導入', module.installed ? 'module-active' : 'module-inactive');
+      cell(tr, module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明'), active ? 'module-active' : 'module-inactive');
+      tbody.appendChild(tr);
+    });
+    apply();
+    table.hidden = false;
+  }
+
+  window.cfcApacheModules = { render: render };
+})();
+</script>
 <script>
 (function () {
   var chip = document.getElementById('status-chip');
@@ -792,26 +942,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     saveSnapshot({ versions: snap });
   }
 
+  // 描画・開閉・ロックは <script id="apache-modules-panel"> が受け持つ。
   function renderApacheModules(data) {
-    var table = document.getElementById('apache-modules-table');
-    var tbody = document.getElementById('apache-modules-tbody');
-    var error = document.getElementById('apache-modules-error');
-    tbody.innerHTML = '';
-    error.textContent = data && data.error ? '状態取得の補足: ' + data.error : '';
-    if (!data || !Array.isArray(data.items)) { table.hidden = true; return; }
-    data.items.forEach(function (module) {
-      var tr = document.createElement('tr');
-      [module.name, data.apacheVersion || '取得できず', module.installed ? '導入済み' : '未導入', module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明')].forEach(function (value, index) {
-        var td = document.createElement('td');
-        td.textContent = value;
-        if (index === 1) td.className = module.installed && module.enabled === true && data.apacheVersion ? 'module-active' : 'module-inactive';
-        if (index === 2) td.className = module.installed ? 'module-active' : 'module-inactive';
-        if (index === 3) td.className = module.installed && module.enabled === true ? 'module-active' : 'module-inactive';
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    table.hidden = false;
+    window.cfcApacheModules.render(data);
   }
 
   // 単価表: 既定は適用中のプランだけ。切り替えで全プランを表示する(適用中は緑のまま)
