@@ -48,7 +48,7 @@ const api = () => vi.fn(async (url: string) => (url === '/api/muse-inquiries/boa
 const modal = () => document.getElementById('inq-modal')!;
 
 describe('Museとの協議のカンバン', () => {
-  beforeEach(loadBody);
+  beforeEach(() => { sessionStorage.clear(); loadBody(); });
 
   it('フェーズごとの列に件数とパネルを並べる。文字列はHTMLとして解釈しない', async () => {
     const fetchJson = api();
@@ -460,7 +460,7 @@ describe('Museとの協議のカンバン', () => {
 // ユーザー指定(2026-11-08): カンバンの変更が即座に反映されない。Codexの案(bar-p1、board-auto-refresh-20261108)で周期取得にする。
 // 取得が終わってから次を予約し、古い応答で上書きせず、裏のタブでは止め、詳細を開いている間は描き直さず「更新あり」を出し、失敗したら間隔を延ばす。
 describe('Museとの協議のカンバン: 自動の読み直し', () => {
-  beforeEach(() => { loadBody(); Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
+  beforeEach(() => { sessionStorage.clear(); loadBody(); Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
   function timers() {
     const queue: Array<{ fn: () => void; ms: number }> = [];
     return { queue, setTimeout: (fn: () => void, ms: number) => { queue.push({ fn, ms }); return queue.length; }, clearTimeout: () => {} };
@@ -535,7 +535,7 @@ describe('Museとの協議のカンバン: 自動の読み直し', () => {
 });
 
 describe('Museとの協議のカンバン: ページとルート', () => {
-  beforeEach(loadBody);
+  beforeEach(() => { sessionStorage.clear(); loadBody(); });
   it('生成HTMLの全scriptがnode --checkに通り、上部の帯は高さ44pxで固定', () => {
     const html = getMuseInquiriesPage();
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
@@ -576,6 +576,42 @@ describe('Museとの協議のカンバン: ページとルート', () => {
     expect(postJson).toHaveBeenCalledWith('/api/muse-inquiries/proposals/p1/decision', { decision: 'adopted', note: 'これで進める' });
     expect(fetchJson.mock.calls.filter((c) => c[0] === '/api/muse-inquiries/board').length).toBe(2);
     expect(modal().querySelector('[data-action="decide-adopted"]')).toBeNull();
+  });
+  // ユーザー指定(2026-11-14): 採決したらウィンドウを閉じる。採決して消えたパネルが、再読み込みで採否待ちに戻らないようにする。
+  it('採決に成功したらモーダルを閉じ、読み直しが古い採否待ちを返しても採用の列に置く', async () => {
+    sessionStorage.clear();
+    const fetchJson = api();
+    const postJson = vi.fn(async () => ({ ok: true, status: 'adopted' }));
+    await script.initMuseInquiriesPage({ document, fetchJson, postJson });
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    (modal().querySelector('[data-action="decide-adopted"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(true));
+    await vi.waitFor(() => expect(fetchJson.mock.calls.filter((c) => c[0] === '/api/muse-inquiries/board').length).toBe(2));
+    const card = () => document.querySelector('#inq-board [data-card-key="proposal:' + CASE_ID + ':p1"]') as HTMLElement;
+    await vi.waitFor(() => expect(card().closest('[data-phase]')!.getAttribute('data-phase')).toBe('adopted'));
+    expect(document.querySelector('#inq-board [data-phase="proposed"] [data-card-key="proposal:' + CASE_ID + ':p1"]')).toBeNull();
+  });
+  it('再読み込みしても、直近に採決した提案を古い採否待ちに戻さない。サーバーが採否を返したら覚えた分を消す', async () => {
+    sessionStorage.clear();
+    const postJson = vi.fn(async () => ({ ok: true, status: 'rejected' }));
+    await script.initMuseInquiriesPage({ document, fetchJson: api(), postJson });
+    (document.querySelector('#inq-board [data-panel="proposal"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(false));
+    (modal().querySelector('[data-action="decide-rejected"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(modal().hidden).toBe(true));
+    // 再読み込み: ページを作り直し、サーバーはまだ古い採否待ちを返す
+    loadBody();
+    await script.initMuseInquiriesPage({ document, fetchJson: api(), postJson: vi.fn() });
+    const phaseOf = () => document.querySelector('#inq-board [data-card-key="proposal:' + CASE_ID + ':p1"]')!.closest('[data-phase]')!.getAttribute('data-phase');
+    expect(phaseOf()).toBe('rejected');
+    expect(document.querySelector('#inq-board [data-card-key="proposal:' + CASE_ID + ':p1"] [data-pending-mark]')).toBeNull();
+    // サーバーが不採用を返すようになったら、覚えた分は消える
+    const settled = { ...BOARD, phases: BOARD.phases.map((p) => p.key === 'proposed' ? { ...p, panels: [] } : p.key === 'rejected' ? { ...p, panels: [{ ...BOARD.phases[2].panels[0], status: 'rejected' }] } : p) };
+    loadBody();
+    await script.initMuseInquiriesPage({ document, fetchJson: vi.fn(async () => settled), postJson: vi.fn() });
+    expect(phaseOf()).toBe('rejected');
+    expect(sessionStorage.getItem('inq_recent_decisions') || '{}').toBe('{}');
   });
   it('記録に失敗したら理由を出し、ボタンを押せる状態に戻す', async () => {
     const postJson = vi.fn(async () => { throw new Error('この提案はもう採否待ちではありません'); });
