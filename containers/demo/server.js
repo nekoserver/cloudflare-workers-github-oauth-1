@@ -82,8 +82,11 @@ async function probeDockerRunning() {
 }
 
 // 各コマンドの出力から版(例: 26.12.1、10.2p1)を取り出す。取れなければnull。
-function extractVersion(text) {
-  const m = String(text || '').match(/(\d+\.\d+(?:\.\d+)?(?:p\d+)?)/);
+function extractVersion(text, includePrerelease = false) {
+  const pattern = includePrerelease
+    ? /(\d+\.\d+(?:\.\d+)?(?:p\d+)?(?:-[0-9A-Za-z.-]+)?)/
+    : /(\d+\.\d+(?:\.\d+)?(?:p\d+)?)/;
+  const m = String(text || '').match(pattern);
   return m ? m[1] : null;
 }
 
@@ -112,6 +115,7 @@ function judgeVersion(actual, expected, minimum) {
 const VERSION_SOURCES = [
   { name: 'node', cmd: process.execPath, args: ['--version'], key: 'node', minimum: '26.12.1' },
   { name: 'apache', cmd: 'apache2ctl', args: ['-v'], key: 'apache' },
+  { name: 'cf', cmd: 'cf', args: ['--version'], key: 'cf' },
   { name: 'openssh', cmd: 'ssh', args: ['-V'], key: 'openssh' },
   { name: 'openssl', cmd: 'openssl', args: ['version'] },
   { name: 'cloudflared', cmd: 'cloudflared', args: ['--version'], key: 'cloudflared' },
@@ -184,10 +188,10 @@ async function refreshAptTools() {
       return { name: t.name, pkg: t.pkg, actual: installed, latest, level: judgeAptVersion(installed, latest) };
     })
   );
-  // cfは自作(リポジトリ同梱)なので配布元の最新は無い。イメージのコミットで版の代わりにする。
+  // cf-apiは自作(リポジトリ同梱)なので配布元の最新は無い。イメージのコミットで版の代わりにする。
   const build = readBuildInfo();
   const commit = build && build.commit && build.commit !== 'unknown' ? String(build.commit).slice(0, 7) : null;
-  items.push({ name: 'cf', pkg: null, actual: commit, latest: null, level: commit ? 'ok' : 'warn', note: '自作(リポジトリ同梱・イメージのコミット)' });
+  items.push({ name: 'cf-api', pkg: null, actual: commit, latest: null, level: commit ? 'ok' : 'warn', status: commit ? '同梱' : '確認できず', note: '自作(リポジトリ同梱・イメージのコミット)' });
   aptToolsCache = { items, checkedAt: new Date().toISOString() };
   return aptToolsCache;
 }
@@ -223,13 +227,47 @@ async function collectVersions() {
   const items = await Promise.all(
     VERSION_SOURCES.filter(s => !(s.name === 'docker' && readContainerFeatures()?.docker === false)).map(async (s) => {
       const raw = await runVersionCmd(s.cmd, s.args);
-      const actual = extractVersion(raw.split('\n')[0]);
+      const actual = extractVersion(raw.split('\n')[0], s.name === 'cf');
       const exp = s.key ? expected[s.key] || null : null;
       return { name: s.name, actual, expected: exp, minimum: s.minimum || null, level: s.optional && !actual ? 'none' : judgeVersion(actual, exp, s.minimum), raw: raw.split('\n')[0].slice(0, 120) };
     })
   );
   versionsCache = { items, expectedError, checkedAt: new Date().toISOString() };
   return versionsCache;
+}
+
+async function collectApacheModules() {
+  const apacheVersionRaw = await runVersionCmd('apache2ctl', ['-v']);
+  const apacheVersion = extractVersion(apacheVersionRaw.split('\n')[0]);
+  let installed = [];
+  let installedError = null;
+  try {
+    installed = require('node:fs').readdirSync('/usr/lib/apache2/modules')
+      .filter((file) => /^mod_.+\.so$/.test(file))
+      .map((file) => file.slice(4, -3))
+      .sort();
+  } catch (err) {
+    installedError = err instanceof Error ? err.message : String(err);
+  }
+  const required = ['ssl', 'proxy', 'proxy_http', 'proxy_wstunnel', 'rewrite', 'cgid', 'include', 'remoteip', 'mpm_event'];
+  const installedSet = new Set(installed);
+  const moduleNames = [...new Set([...required, ...installed])].sort();
+  const loadedResult = await new Promise((resolve) => {
+    execFile('apache2ctl', ['-M'], { timeout: 8000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({ ok: !err, output: `${stdout || ''}\n${stderr || ''}` });
+    });
+  });
+  const loaded = new Set(
+    [...loadedResult.output.matchAll(/^\s*([A-Za-z0-9_]+)_module\s+\((?:shared|static)\)/gm)]
+      .map((match) => match[1]),
+  );
+  const items = moduleNames.map((name) => ({ name, installed: installedSet.has(name), enabled: loadedResult.ok ? loaded.has(name) : null }));
+  return {
+    apacheVersion: apacheVersion || null,
+    items,
+    error: installedError || (!loadedResult.ok ? 'apache2ctl -Mを実行できませんでした' : null),
+    checkedAt: new Date().toISOString(),
+  };
 }
 
 function readContainerFeatures() {
@@ -255,6 +293,7 @@ async function buildHealth() {
     features: readContainerFeatures(),
     // 版の取得は時間がかかるため、起動時と10分ごとに取ったものを返す(初回は取得を待つ)
     versions: versionsCache || (await collectVersions()),
+    apacheModules: await collectApacheModules(),
     build: readBuildInfo(),
     aptTools: aptToolsCache,
     checkedAt: new Date().toISOString(),

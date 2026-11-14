@@ -110,6 +110,8 @@ details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
 .diff-up { color: var(--warn); font-weight: 600; }
 .diff-ok { color: var(--ok); font-weight: 600; }
+.module-active { color: var(--ok); font-weight: 600; }
+.module-inactive { color: var(--muted); }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 13px; }
 .menu-toggle { padding: 0 8px; font-size: 12px; }
 .menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
@@ -244,6 +246,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     </tr></tbody>
   </table>
   </div>
+  <div class="pricing-scroll">
+  <p class="subtitle" style="margin:6px 0 4px;">Apacheモジュール（導入済みファイルとapache2ctl -Mのロード状態。版はApache本体の版）</p>
+  <table class="health-table" id="apache-modules-table" hidden>
+    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th>有効状態</th></tr></thead>
+    <tbody id="apache-modules-tbody"></tbody>
+  </table>
+  <div id="apache-modules-error" class="module-inactive" style="font-size:12px;margin-top:4px;"></div>
+  </div>
   <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
   <div class="pricing-scroll">
   <table class="health-table" id="version-table" hidden>
@@ -252,7 +262,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   </div>
   <div class="pricing-scroll">
-  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール(apt。最新はコンテナ内のapt-cacheの候補版、6時間ごとに更新)</p>
+  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール（apt導入状況。最新版はコンテナ内のapt-cache候補版、6時間ごとに更新）</p>
   <table class="health-table" id="apt-table" hidden>
     <thead><tr><th>コマンド</th><th>パッケージ</th><th>実際の版</th><th>最新(apt候補)</th><th>判定</th></tr></thead>
     <tbody id="apt-tbody"></tbody>
@@ -711,7 +721,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var span = document.createElement('span');
       span.className = 'badge';
       span.setAttribute('data-level', t.level);
-      span.textContent = { ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level;
+      span.textContent = t.status || ({ ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level);
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
       tbody.appendChild(tr);
@@ -780,6 +790,28 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     var snap = {};
     versions.items.forEach(function (v) { snap[v.name] = v.actual; });
     saveSnapshot({ versions: snap });
+  }
+
+  function renderApacheModules(data) {
+    var table = document.getElementById('apache-modules-table');
+    var tbody = document.getElementById('apache-modules-tbody');
+    var error = document.getElementById('apache-modules-error');
+    tbody.innerHTML = '';
+    error.textContent = data && data.error ? '状態取得の補足: ' + data.error : '';
+    if (!data || !Array.isArray(data.items)) { table.hidden = true; return; }
+    data.items.forEach(function (module) {
+      var tr = document.createElement('tr');
+      [module.name, data.apacheVersion || '取得できず', module.installed ? '導入済み' : '未導入', module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明')].forEach(function (value, index) {
+        var td = document.createElement('td');
+        td.textContent = value;
+        if (index === 1) td.className = module.installed && module.enabled === true && data.apacheVersion ? 'module-active' : 'module-inactive';
+        if (index === 2) td.className = module.installed ? 'module-active' : 'module-inactive';
+        if (index === 3) td.className = module.installed && module.enabled === true ? 'module-active' : 'module-inactive';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.hidden = false;
   }
 
   // 単価表: 既定は適用中のプランだけ。切り替えで全プランを表示する(適用中は緑のまま)
@@ -951,6 +983,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         healthTable.hidden = false;
         latestVersions = null;
         renderVersions(data.versions);
+        renderApacheModules(data.apacheModules);
         renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
