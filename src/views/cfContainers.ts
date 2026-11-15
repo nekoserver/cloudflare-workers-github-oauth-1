@@ -3,6 +3,7 @@
  * HTML。コンテナの状態参照・起動/停止/再起動・プロキシへの導線を持つ。
  */
 import { CONFIGURED_INSTANCE_TYPE, CONFIGURED_INSTANCE_SPEC, computeHourlyRate } from '../utils/cfContainerCost';
+import { APACHE_MANUAL_BASE } from '../data/apacheManual';
 
 export function getCfContainersPage(): string {
   const instancePrices = [
@@ -112,7 +113,21 @@ details.card[open] > summary { margin-bottom: 6px; }
 .diff-ok { color: var(--ok); font-weight: 600; }
 .module-active { color: var(--ok); font-weight: 600; }
 .module-inactive { color: var(--muted); }
-.module-unlocked { opacity: 0.45; }
+.module-unlocked td:not(.module-active):not(.module-first) { opacity: 0.45; }
+/* グレーアウト中も緑の表記は薄くせず、モジュール名は通常の文字色(ダークテーマでは白)にする。ユーザー指定 2026-11-15 */
+.module-unlocked .module-lock-cell { opacity: 0.45; }
+.module-unlocked .module-name.module-inactive { color: var(--text); }
+button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.apache-module-panel { width: min(640px, 100%); max-height: calc(100dvh - 80px); overflow-y: auto; }
+.apache-module-panel h4 { font-size: 13px; margin: 10px 0 4px; }
+.apache-module-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; font-size: 12px; }
+.apache-module-panel dt { color: var(--muted); }
+.apache-directives { width: 100%; border-collapse: collapse; font-size: 12px; }
+.apache-directives th, .apache-directives td { border-top: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.apache-directives code { font-size: 11px; }
+.apache-help-link { display: inline-block; margin: 8px 0 2px; color: var(--link); }
+.apache-help-panel { width: min(960px, 100%); height: calc(100dvh - 80px); display: flex; flex-direction: column; gap: 6px; }
+.apache-help-panel iframe { flex: 1; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
 .module-check { margin: 0 6px 0 0; vertical-align: middle; }
 .apache-main-row td { font-weight: 600; }
@@ -257,6 +272,19 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <tbody id="apache-modules-tbody"></tbody>
   </table>
   <div id="apache-modules-error" class="module-inactive" style="font-size:12px;margin-top:4px;"></div>
+  <div id="apache-module-modal" class="menu-modal" hidden>
+    <div class="menu-panel apache-module-panel" role="dialog" aria-modal="true" aria-labelledby="apache-module-title">
+      <div class="status-row"><strong id="apache-module-title"></strong><button type="button" id="apache-module-close">閉じる</button></div>
+      <div id="apache-module-body" style="font-size:13px;margin-top:6px;"></div>
+    </div>
+  </div>
+  <div id="apache-help-modal" class="menu-modal" hidden>
+    <div class="menu-panel apache-help-panel" role="dialog" aria-modal="true" aria-labelledby="apache-help-title">
+      <div class="status-row"><strong id="apache-help-title"></strong><button type="button" id="apache-help-close">閉じる</button></div>
+      <iframe id="apache-help-frame" src="about:blank" title="Apacheモジュールのヘルプ" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+    </div>
+  </div>
+  <!-- /apache-module-modals -->
   </div>
   <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
   <div class="pricing-scroll">
@@ -501,7 +529,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 // ▶(全部閉じる)→▼(全部開く。🔐でない行はグレーアウト)→▲(🔐の行だけ)→▶ と巡る。
 // 各モジュール名の先頭のチェックボックスをONにすると🔐ボタンに替わりロックされ、🔐を押すと解除する。
 // ロックはCookie cfc_apache_module_locks に7日間保存する。壊れた値や一覧に無い名前はロック無しとして扱う。
+// モジュール名を押すと、最上位のモーダルに状態・説明・設定項目(ディレクティブ)を出す(ユーザー指定 2026-11-15)。
+// 説明は静的アセット(Apacheのソースから展開したマニュアル)のmodules.jsonから読み、ヘルプは分離したiframeで最上位に出す。
 (function () {
+  var MANUAL_BASE = '${APACHE_MANUAL_BASE}';
+  var manualPromise = null;
+  var currentModule = null;
+  var moduleModal = document.getElementById('apache-module-modal');
+  var helpModal = document.getElementById('apache-help-modal');
+  var helpFrame = document.getElementById('apache-help-frame');
   var COOKIE = 'cfc_apache_module_locks';
   var MAX_AGE = 7 * 24 * 60 * 60;
   var NEXT = { closed: 'open', open: 'locked', locked: 'closed' };
@@ -577,6 +613,152 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     cell.appendChild(box);
   }
 
+  // 開く直前に、画面のすべての要素のz-indexの最大値+100を取る(CLAUDE.md ルール26)
+  function nextZ() {
+    var max = 1000;
+    document.querySelectorAll('*').forEach(function (el) {
+      var z = parseInt(getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    });
+    return max + 100;
+  }
+
+  function loadManual() {
+    if (!manualPromise) {
+      manualPromise = fetch(MANUAL_BASE + '/modules.json', { credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+      // 失敗は次に開いたときに読み直す
+      manualPromise.catch(function () { manualPromise = null; });
+    }
+    return manualPromise;
+  }
+
+  function el(tag, text, className) {
+    var node = document.createElement(tag);
+    if (text != null) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+
+  function addPair(dl, label, value) {
+    if (!value) return;
+    dl.appendChild(el('dt', label));
+    dl.appendChild(el('dd', value));
+  }
+
+  function openHelp(url, title) {
+    document.getElementById('apache-help-title').textContent = title;
+    helpFrame.setAttribute('src', url);
+    helpModal.style.zIndex = String(nextZ());
+    helpModal.hidden = false;
+  }
+
+  function closeHelp() {
+    helpModal.hidden = true;
+    helpFrame.setAttribute('src', 'about:blank');
+  }
+
+  function closeModule() {
+    closeHelp();
+    moduleModal.hidden = true;
+    currentModule = null;
+  }
+
+  function helpLink(href, text, className, title) {
+    var a = el('a', text, className);
+    a.href = href;
+    a.setAttribute('href', href);
+    a.addEventListener('click', function (e) { e.preventDefault(); openHelp(href, title); });
+    return a;
+  }
+
+  function fillManual(body, note, index, module, apacheVersion) {
+    var entry = index && index.modules ? index.modules[module.name] : null;
+    if (!entry) {
+      note.textContent = '静的アセットにこのモジュールの説明がありません(Apache ' + (index && index.apacheVersion || '?') + ' のマニュアルに無いモジュールです)。';
+      return;
+    }
+    note.textContent = entry.description;
+    var dl = el('dl');
+    addPair(dl, '区分', entry.status);
+    addPair(dl, '識別子', entry.identifier);
+    addPair(dl, 'ソース', entry.sourceFile);
+    addPair(dl, '互換性', entry.compatibility);
+    body.appendChild(dl);
+    if (apacheVersion && index.apacheVersion !== apacheVersion) {
+      body.appendChild(el('p', '説明はApache ' + index.apacheVersion + ' のマニュアルです(コンテナは ' + apacheVersion + ')。', 'module-inactive'));
+    }
+    var href = MANUAL_BASE + '/' + entry.file;
+    body.appendChild(helpLink(href, '📖 ' + entry.title + ' のヘルプを開く', 'apache-help-link', entry.title));
+    body.appendChild(el('h4', '設定項目(ディレクティブ)'));
+    if (!entry.directives || !entry.directives.length) {
+      body.appendChild(el('p', 'このモジュールのページで定義されたディレクティブはありません。', 'module-inactive'));
+      return;
+    }
+    var table = el('table', null, 'apache-directives');
+    var head = el('tr');
+    ['名前', '構文', '既定値', '使える場所'].forEach(function (h) { head.appendChild(el('th', h)); });
+    table.appendChild(head);
+    entry.directives.forEach(function (d) {
+      var tr = el('tr');
+      var nameCell = el('td');
+      nameCell.appendChild(helpLink(href + (d.anchor ? '#' + d.anchor : ''), d.name, 'apache-directive-link', entry.title + ' - ' + d.name));
+      if (d.description) { nameCell.appendChild(el('br')); nameCell.appendChild(el('span', d.description, 'module-inactive')); }
+      tr.appendChild(nameCell);
+      var syntax = el('td');
+      syntax.appendChild(el('code', d.syntax || ''));
+      tr.appendChild(syntax);
+      tr.appendChild(el('td', d['default'] || ''));
+      tr.appendChild(el('td', d.context || ''));
+      table.appendChild(tr);
+    });
+    body.appendChild(table);
+  }
+
+  function openModule(module, apacheVersion) {
+    currentModule = module.name;
+    var active = module.installed && module.enabled === true;
+    document.getElementById('apache-module-title').textContent = 'mod_' + module.name;
+    var body = document.getElementById('apache-module-body');
+    body.innerHTML = '';
+    var dl = el('dl');
+    dl.appendChild(el('dt', '有効状態'));
+    var stateCell = el('dd');
+    stateCell.appendChild(el('span', module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明'), active ? 'module-active' : 'module-inactive'));
+    stateCell.firstChild.id = 'apache-module-state';
+    dl.appendChild(stateCell);
+    addPair(dl, '導入', module.installed ? '導入済み' : '未導入');
+    addPair(dl, 'Apache版', apacheVersion || '取得できず');
+    body.appendChild(dl);
+    var note = el('p', '説明を読み込んでいます…');
+    note.style.margin = '8px 0 4px';
+    body.appendChild(note);
+    moduleModal.style.zIndex = String(nextZ());
+    moduleModal.hidden = false;
+    var name = module.name;
+    loadManual().then(function (index) {
+      if (currentModule !== name) return;
+      fillManual(body, note, index, module, apacheVersion);
+    }).catch(function (err) {
+      if (currentModule !== name) return;
+      note.textContent = '説明を読み込めませんでした(' + (err && err.message ? err.message : String(err)) + ')。';
+    });
+  }
+
+  if (moduleModal && helpModal && helpFrame) {
+    document.getElementById('apache-module-close').addEventListener('click', closeModule);
+    document.getElementById('apache-help-close').addEventListener('click', closeHelp);
+    moduleModal.addEventListener('click', function (e) { if (e.target === moduleModal) closeModule(); });
+    helpModal.addEventListener('click', function (e) { if (e.target === helpModal) closeHelp(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!helpModal.hidden) closeHelp();
+      else if (!moduleModal.hidden) closeModule();
+    });
+  }
+
   function cell(tr, text, className) {
     var td = document.createElement('td');
     td.textContent = text;
@@ -621,11 +803,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var tr = document.createElement('tr');
       tr.setAttribute('data-module', module.name);
       var first = document.createElement('td');
+      first.className = 'module-first';
       var lockCell = document.createElement('span');
       lockCell.className = 'module-lock-cell';
-      var name = document.createElement('span');
+      var name = document.createElement('button');
+      name.type = 'button';
       name.className = 'module-name ' + (active ? 'module-active' : 'module-inactive');
       name.textContent = module.name;
+      name.setAttribute('aria-label', module.name + ' の説明を開く');
+      name.addEventListener('click', function () { openModule(module, data.apacheVersion); });
       first.appendChild(lockCell);
       first.appendChild(name);
       tr.appendChild(first);
