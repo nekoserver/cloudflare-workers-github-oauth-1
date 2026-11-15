@@ -50,7 +50,7 @@
 | 画面の設定(全体) | `user_theme`、`user_timezone`、`user_session_duration`、`aichat_*`、`er_*`、`user_status_*`など | 多くは`Secure; SameSite=Lax; Path=/` | 表示の好み |
 | 画面の設定(ページ限定) | `cfc_apache_module_locks`・`cfc_apache_help_size`(`Path=/cf-containers`)、`inq_board_layout`(`Path=/muse-inquiries`)、`/cron-status`の設定 | `Secure; SameSite=Lax`、ページのパスに限定 | そのページだけの状態 |
 
-- 画面の設定の一部(`heritage_journey_*`、`keyword_*`、`kw_panel_*`、`kp_hide_zero_hits`、`commit_history_merge_filter`、`history_incr_search`、`cg_group_off_clears_badges`)には`Secure`が無い。中身は表示の好みだけで、サイトはHTTPSでしか配信しないため、実害は小さい。ただし統一されていない(未決事項)。
+- 画面の設定の一部(10種類。一覧は8.3節)には`Secure`が無い。中身は表示の好みだけで、サイトはHTTPSでしか配信しないため、実害は小さい。ただし統一されていない(未決事項)。
 
 ### 3.3 ログインの属性を緩めない
 
@@ -148,14 +148,69 @@
 | `Domain`を付けない(ホスト限定) | **違反ではない。推奨どおり** | RFC 6265では`Domain`なしのCookieは発行したホストだけに送られる。OWASPはセッションCookieに`Domain`を付けないことを勧める。`__Host-`の名前の付け方も`Domain`なしを条件にしている |
 | ワーカーのドメインと独自ドメインでログインが分かれる | **安全な設計の結果。インシデントではない** | ログインを共有する要件があれば「要件の漏れ」だが、セキュリティポリシーの違反ではない |
 | ログインのCookie(`auth_token`)に`__Host-`が無い | **推奨の未達(強化の余地)** | 公開サフィックス一覧は`workers.dev`を区切りとして登録しており(2026-11-15に確認)、同じアカウントの別Worker(`cf-auth.nekoflare.workers.dev`など)は本体ワーカーと同じサイトになる。独自ドメイン側でも`mygw`・`r9`・Redmineは同じサイト。同じサイトのホストは`Domain`付きで同名のCookieを送り込める。読むことも、署名鍵なしで正しいログインを偽造することもできないが、偽のCookieでログインを壊すことはできる。`__Host-`にすれば、ブラウザがこの送り込みを拒否する |
-| 画面の設定のCookieの一部(約9種類)に`Secure`が無い | **基準との不一致。実害は小さい** | OWASPはHTTPSのサイトのすべてのCookieに`Secure`を勧める。ルール25は「付いている`Secure`を外さない」なので、もともと付いていないものは文言上の違反ではないが、趣旨とは合わない。中身は表示の好みだけで、本体ワーカーは`Strict-Transport-Security`(`includeSubDomains; preload`)を返す |
+| 画面の設定のCookieの一部(10種類、8.3節)に`Secure`が無い | **基準との不一致。実害は小さい** | OWASPはHTTPSのサイトのすべてのCookieに`Secure`を勧める。ルール25は「付いている`Secure`を外さない」なので、もともと付いていないものは文言上の違反ではないが、趣旨とは合わない。中身は表示の好みだけで、本体ワーカーは`Strict-Transport-Security`(`includeSubDomains; preload`)を返す |
 
 ### 強める場合の変更(未実施)
 
 - `auth_token`を`__Host-auth_token`にする。属性の条件(`Secure`・`Path=/`・`Domain`なし)は満たしている。切り替えると全員が1回ログアウトする。読み取り側(`src/middleware/auth.ts`の`getToken`)とログアウトの削除も同時に変える。
-- 約9種類の画面の設定のCookieに`Secure`を付ける。
+- 8.3節の10種類の画面の設定のCookieに`Secure`を付ける。
 
 どちらもルール25に沿った「強める」変更である。
+
+## 8.2 用語
+
+**対象**: このSPECで使うCookieとブラウザの用語。
+
+| 用語 | 意味 |
+|---|---|
+| ホスト限定のCookie | `Domain`を付けずに発行したCookie。発行したホスト(例: `1.wr1.nekomaneki.work`)にだけ送られ、サブドメインや親ドメインには送られない(RFC 6265) |
+| `Domain`付きのCookie | `Domain=nekomaneki.work`のように付けたCookie。そのドメインと、その下のすべてのサブドメインに送られる |
+| 公開サフィックス | `com`・`co.jp`・`workers.dev`のように、その下を別々の持ち主が使う区切り。ブラウザは公開サフィックス一覧(publicsuffix.org)で判断し、公開サフィックスそのものには`Domain`付きのCookieを発行させない |
+| サイト | 公開サフィックスとその1つ下までの組(例: `nekomaneki.work`、`nekoflare.workers.dev`)。`SameSite`や`Partitioned`は、この単位で「同じか」を判断する |
+| `__Host-`の名前 | 名前が`__Host-`で始まるCookie。ブラウザは`Secure`・`Path=/`・`Domain`なしのときだけ受け付ける。同じサイトの別のホストから`Domain`付きで同名のCookieを送り込まれることを防げる |
+| Cookieの送り込み | 同じサイトの別のホストが、`Domain`付きのCookieを発行して、本来のホストに届かせること。本来のホストのCookieを読むことはできないが、同名のCookieを先に読ませて動きを狂わせることはできる |
+| `Partitioned` | 埋め込まれたページのCookieを、埋め込んでいる親ページのサイトごとに分けて保存させる属性(6章) |
+| `Strict-Transport-Security` | ブラウザに、以後そのホストへはHTTPSでしか接続しないよう覚えさせる応答ヘッダー。本体ワーカーは`max-age=63072000; includeSubDomains; preload`を返す(`src/index.ts`) |
+
+## 8.3 `Secure`が無いCookieの一覧
+
+**対象**: 本番のコードで`Secure`を付けずに発行しているCookie(2026-11-15に`src/`を洗い出した。テスト用のファイルは除く)。
+
+| Cookie | 発行する場所 | 中身 |
+|---|---|---|
+| `commit_history_merge_filter` | `src/views/settings.ts` | コミット履歴の絞り込み |
+| `history_incr_search` | `src/views/settings.ts` | 履歴のインクリメンタル検索のON/OFF |
+| `kp_hide_zero_hits` | `src/views/settings.ts` | 0件の項目を隠すかのON/OFF |
+| `keyword_badge_count` | `src/views/settings.ts` | キーワードのバッジ表示のON/OFF |
+| `cg_group_off_clears_badges` | `src/views/settings.ts` | グループのOFFでバッジを消すかのON/OFF |
+| `kw_panel_tap_close` | `src/views/settings.ts` | キーワードパネルをタップで閉じるかのON/OFF |
+| `kw_panel_no_all_focus` | `src/views/settings.ts` | キーワードパネルの全体フォーカスのON/OFF |
+| `keyword_classify_debug` | `src/views/settings.ts` | キーワード分類のデバッグ表示のON/OFF |
+| `user_status_chart_sort_order` | `src/views/status.ts` | グラフの並び順。2か所で発行しており、片方だけ`Secure`が無い |
+| `apis_desc_panel_gi` | `src/views/apis.ts` | APIページの説明パネルの状態 |
+
+- どれも表示の好みだけで、ログインや個人の情報は入っていない。
+- `heritage_journey_start_city`・`heritage_journey_end_city`は、本番のコード(`src/views/heritageJourney.ts`)では`Secure`付きで発行している。`Secure`が無いのはテスト用のファイルだけである。
+
+## 8.4 インシデントに当たるかの判断
+
+**対象**: 3章・8.1節で見つかった点が、インシデント(対応が要る事故)に当たるか。
+
+インシデントとして扱うのは、次のどれかが起きた、または起きうる状態が実際に開いていた場合とする。
+
+1. ログインの証明(`auth_token`など)や個人の情報が、意図しない相手に送られた・読まれた
+2. 他人としてログインできた、または権限の無い操作ができた
+3. 利用者がログインできない・操作できない状態が続いた
+
+2026-11-15の時点では、どれにも当たらない。
+
+| 見つかった点 | 1 | 2 | 3 | 判断 |
+|---|---|---|---|---|
+| `Domain`が無く、ホストごとにログインが分かれる | なし(むしろ送り先を狭めている) | なし | 設計どおりの動き | インシデントではない |
+| `auth_token`に`__Host-`が無い | なし(送り込まれても読めない) | なし(署名鍵なしでは偽造できない) | 送り込まれればログインを壊されうる。起きた記録は無い | インシデントではない。強化の余地 |
+| 画面の設定の10種類に`Secure`が無い | 表示の好みだけで、ログインや個人の情報は無い | なし | なし | インシデントではない。基準との不一致 |
+
+開発の途中で属性がそろっていないことはよくあるが、このリポジトリでは、見つけた時点でこのSPECに記録し、直すかどうかを未決事項として残す。
 
 ---
 
