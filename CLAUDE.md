@@ -452,6 +452,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - /cf-containers(Cloudflare Containers)・Workers Builds(PRビルドはイメージをビルドしない・イメージ失敗でもWorkerだけ出る・結果表示の上書き・Builds APIの権限・トークンの使い分け・サンドボックスでのフルビルド):
   [`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md)
+- `node_modules`が自分自身を指すシンボリックリンクとして登録されていた事故(`.gitignore`の末尾スラッシュ)、push前のガードが止まったときの見分け方、`/root`で起動するとhookが効かないこと、Chromiumの要否、「いちいち質問しない」のhook:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261115.md`](NOTICE.cloudflare-workers-github-oauth-1.20261115.md)
 - `/muse-status`のNix一覧、Museとの問い合わせの進め方、本番反映の承認、D1`agent-inquiries`:
   [`NOTICE.cloudflare-workers-github-oauth-1.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.20261107.md)
   [`NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md)
