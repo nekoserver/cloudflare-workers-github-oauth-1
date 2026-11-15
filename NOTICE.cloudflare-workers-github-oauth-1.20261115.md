@@ -50,6 +50,9 @@
 
 ### 起動のたびに設定を自動で作る方法は採らない(2026-11-15の判断)
 
+詳しい説明は [`REPORT.cloudflare-workers-github-oauth-1.HOOKS-STARTUP.20261115.md`](REPORT.cloudflare-workers-github-oauth-1.HOOKS-STARTUP.20261115.md)。
+
+
 - `/root/.claude/` は起動のたびに新しく作られる(2026-11-15 は Claude Code の起動時の00:26に作成)。`settings.local.json` を手で書いても、次の起動で消える。
 - この環境の起動時の設定作業(`/root/boot.log`)は、起動スクリプトではなく、ユーザーが Codex に入力したプロンプトで行われている。リポジトリの取得も見えない仕組みで行われ、起動のたびに確実に動く、手を入れられる場所が無い。
 - 自動生成の仕組みを足すと壊れる場所が増えるだけなので作らない。**リポジトリのディレクトリで起動する**(`cd /root/cloudflare-workers-github-oauth-1 && claude`。ほかのリポジトリも触るなら `--add-dir /root/lib` を足す)のを最善とする。
