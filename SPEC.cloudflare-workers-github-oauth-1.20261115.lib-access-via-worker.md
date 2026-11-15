@@ -74,6 +74,8 @@
 
 **対象**: 本体ワーカーの独自ドメイン`https://1.wr1.nekomaneki.work/`(2026-11-15に200を確認) — `workers.dev`と同じ入口を独自ドメインで使うときに、別物になる点。
 
+ワーカーのドメインと独自ドメインのCookie・アクセス制御の違いの全体は、[`SPEC.cloudflare-workers-github-oauth-1.20261115.domain-cookies-access-control.md`](SPEC.cloudflare-workers-github-oauth-1.20261115.domain-cookies-access-control.md)(ドメインごとのCookieの割り当て状態とアクセス制御)にまとめた。ここでは`/lib`に関わる点だけを書く。
+
 `/cf-containers/proxy/lib/...`はパスで決まる経路なので、ホストに関係なく同じように動く(例: `https://1.wr1.nekomaneki.work/cf-containers/proxy/lib/date.shtml`)。確認の内容(ログイン → 管理者 → コンテナ)も同じである。ただし、次の3点は`workers.dev`と別物になる。
 
 | # | 別物になること | 理由 | 確認 |
