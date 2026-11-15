@@ -2,6 +2,9 @@ import {createTreeViewConversationStreamRoutes} from './routes/treeViewConversat
 import { createTreeViewMuseChatRoutes } from './routes/treeViewMuseChat';
 import { renderTailscaleWasmPage } from './views/tailscaleWasm';
 import { fetchWorkerMuseCost } from './utils/workerMuseCost';
+import { extractKeywordsWithFallback, type KeywordExtractionOutcome } from './utils/embeddingKeywordExtraction';
+import { EMBEDDING_PLAIN_COSINE_SCORE_METHOD } from './utils/answerKeywordExtractionStore';
+import { saveAnswerKeywordExtraction } from './utils/answerKeywordExtractionStore';
 import { TailscalePageTools } from './utils/tailscalePageTools';
 import { getWorkerConversationStreamPage } from './views/workerConversationStream';
 import { resolveMuseTransport, resolveMuseTunnelsFallback, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
@@ -694,6 +697,10 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_image_records', migration: '0185', description: 'イメージ・稼働分析・ビルド実測のJSON原本', syncPolicy: 'auto' },
   { name: 'cf_container_build_measurements', migration: '0184', description: 'Dockerビルドログの実測観測記録。再取得・並行収集でも過去観測を保持', syncPolicy: 'auto' },
   { name: 'cf_container_build_steps', migration: '0184', description: 'ビルド観測ごとのBuildKitステップ所要秒・キャッシュ・成否', syncPolicy: 'auto' },
+  { name: 'aichat_model_names', migration: '0192', description: 'AIモデル名の正規化表(1モデル1行)。✂️のキーワード切り出し結果・スコアがモデルIDで参照する', syncPolicy: 'auto' },
+  { name: 'aichat_answer_keyword_extractions', migration: '0192', description: 'AIチャットの✂️の切り出し記録(回答ID・切り出しモデルIDを外部キーに、本文ベクトル・候補数・フォールバックの理由を持つ)', syncPolicy: 'auto' },
+  { name: 'aichat_answer_extracted_keywords', migration: '0192', description: '✂️で切り出したキーワード群(切り出しIDを外部キーに、順位・切り出しモデルでの本文との類似度・出現回数・ベクトル)', syncPolicy: 'auto' },
+  { name: 'aichat_answer_keyword_scores', migration: '0192', description: '✂️のキーワードを切り出しモデル以外(PlaMoなど)で測った本文との類似度。(切り出しID, 順位)とモデルIDを外部キーに持つ', syncPolicy: 'auto' },
   { name: 'cf_container_build_cache_effects', migration: '0191', description: 'ソースビルドしたパッケージの、コンパイル秒とキャッシュからのインストール秒、ソースアーカイブとパッケージのバイト数(ビルドごと)', syncPolicy: 'auto' },
   { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
@@ -3210,6 +3217,48 @@ CREATE TABLE IF NOT EXISTS securemine_login_history (
 );
 CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
   ON cf_container_firewall_snapshots(collected_at);`,
+  '0192': `CREATE TABLE IF NOT EXISTS aichat_model_names (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TABLE IF NOT EXISTS aichat_answer_keyword_extractions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL REFERENCES ai_chat_shares(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  model_id INTEGER NOT NULL REFERENCES aichat_model_names(id),
+  dim INTEGER CHECK(dim IS NULL OR dim > 0),
+  document_vector BLOB,
+  candidate_count INTEGER CHECK(candidate_count IS NULL OR candidate_count >= 0),
+  score_method TEXT NOT NULL,
+  fallback_error_code TEXT,
+  fallback_detail TEXT,
+  extracted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE(user_id, share_id, model_id)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_extractions_share ON aichat_answer_keyword_extractions(share_id);
+CREATE TABLE IF NOT EXISTS aichat_answer_extracted_keywords (
+  extraction_id INTEGER NOT NULL REFERENCES aichat_answer_keyword_extractions(id) ON DELETE CASCADE,
+  rank INTEGER NOT NULL CHECK(rank >= 1),
+  keyword TEXT NOT NULL,
+  score REAL,
+  occurrence_count INTEGER NOT NULL DEFAULT 0 CHECK(occurrence_count >= 0),
+  vector BLOB,
+  PRIMARY KEY(extraction_id, rank),
+  UNIQUE(extraction_id, keyword)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_extracted_keywords_keyword ON aichat_answer_extracted_keywords(keyword);
+CREATE TABLE IF NOT EXISTS aichat_answer_keyword_scores (
+  extraction_id INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  model_id INTEGER NOT NULL REFERENCES aichat_model_names(id),
+  similarity REAL NOT NULL,
+  score_method TEXT NOT NULL,
+  PRIMARY KEY(extraction_id, rank, model_id),
+  FOREIGN KEY(extraction_id, rank) REFERENCES aichat_answer_extracted_keywords(extraction_id, rank) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_scores_model ON aichat_answer_keyword_scores(model_id, similarity);
+`,
   '0191': `CREATE TABLE IF NOT EXISTS cf_container_build_cache_effects (
   snapshot_key TEXT NOT NULL REFERENCES cf_container_build_measurements(snapshot_key),
   build_uuid TEXT NOT NULL,
@@ -3604,6 +3653,10 @@ export interface ColumnKeyInfo {
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   // 2026-11-06 全体テストで見つかった登録漏れ(migrations 0167〜0191)。列の種別はmigrationsのPRIMARY KEY・REFERENCES・UNIQUE・INDEXに合わせる。
   aichat_keyword_registry: { user_id: 'pk+fk', keyword: 'pk', first_share_id: 'fk', first_source: 'idx', first_added_at: 'idx' },
+  aichat_model_names: { id: 'pk', name: 'uk' },
+  aichat_answer_keyword_extractions: { id: 'pk', share_id: 'uk+fk', user_id: 'uk', model_id: 'uk+fk' },
+  aichat_answer_extracted_keywords: { extraction_id: 'pk+fk', rank: 'pk', keyword: 'uk' },
+  aichat_answer_keyword_scores: { extraction_id: 'pk+fk', rank: 'pk+fk', model_id: 'pk+fk' },
   securemine_sessions: { token_hash: 'pk', user_id: 'fk', expires_at: 'idx' },
   securemine_login_history: { id: 'pk', user_id: 'fk' },
   cf_container_firewall_snapshots: { id: 'pk', container_name: 'uk', hour_utc: 'uk', collected_at: 'idx' },
@@ -3841,6 +3894,10 @@ export function getFilterableColumns(tableName: string): string[] {
 export const TABLE_GROUP_MAP: Record<string, string> = {
   // 2026-11-06 全体テストで見つかった登録漏れ
   aichat_keyword_registry: 'ai',
+  aichat_model_names: 'ai',
+  aichat_answer_keyword_extractions: 'ai',
+  aichat_answer_extracted_keywords: 'ai',
+  aichat_answer_keyword_scores: 'ai',
   securemine_sessions: 'auth',
   securemine_login_history: 'auth',
   askgk_timeout_settings: 'config',
@@ -4069,6 +4126,9 @@ export interface GroupErData {
 export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // 2026-11-06 全体テストで見つかった登録漏れ(migrationsのREFERENCESに合わせる)
   aichat_keyword_registry: { user_id: 'user_sessions', first_share_id: 'ai_chat_shares' },
+  aichat_answer_keyword_extractions: { share_id: 'ai_chat_shares', model_id: 'aichat_model_names' },
+  aichat_answer_extracted_keywords: { extraction_id: 'aichat_answer_keyword_extractions' },
+  aichat_answer_keyword_scores: { extraction_id: 'aichat_answer_extracted_keywords', rank: 'aichat_answer_extracted_keywords', model_id: 'aichat_model_names' },
   securemine_sessions: { user_id: 'user_sessions' },
   securemine_login_history: { user_id: 'user_sessions' },
   cf_container_build_steps: { snapshot_key: 'cf_container_build_measurements' },
@@ -4277,6 +4337,12 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   't3_pwa_handoff_events.handoff_id': 'id',
   't3_pwa_handoff_events.session_id': 'id',
   'aichat_keyword_registry.first_share_id': 'id',
+  'aichat_answer_keyword_extractions.share_id': 'id',
+  'aichat_answer_keyword_extractions.model_id': 'id',
+  'aichat_answer_extracted_keywords.extraction_id': 'id',
+  'aichat_answer_keyword_scores.extraction_id': 'extraction_id',
+  'aichat_answer_keyword_scores.rank': 'rank',
+  'aichat_answer_keyword_scores.model_id': 'id',
   'cf_container_session_notes.start_operation_id': 'id',
   'cf_container_resources.parent_container_id': 'container_id',
   'cf_container_runtime_sessions.image_record_hash': 'record_hash',
@@ -12492,10 +12558,16 @@ app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
 /**
  * answer-graphの回答モーダル「この回答文をベクタ化する」ボタン用API。
  * 回答文を埋め込みモデル(既定plamo-embedding-1b、bodyのmodelで選択可能)で
- * ベクタ化してaichat_answer_vectorsに保存し、さらにgemma-4-26b-a4b-itに
- * 「この文章を理解するのに必要な予備知識」を単語単位で抽出させて返す。
+ * ベクタ化してaichat_answer_vectorsに保存し、さらに予備知識キーワードを切り出して返す。
+ * 切り出しはEmbeddingGemma 2(KEYWORD_EXTRACTION_EMBEDDING_MODEL)で行い、失敗したときだけ
+ * gemma-4-26b-a4b-it(extractPrerequisiteTerms)へフォールバックする(2026-11-15、
+ * src/utils/embeddingKeywordExtraction.ts)。使ったモデルはkeywordsModel、フォールバックの
+ * 理由は_keywordsFallbackで返す。
  * 予備知識抽出の失敗はベクタ化そのものの失敗とは独立して扱い、
  * _keywordsWarningに理由を入れて返す(ベクタ化自体は成功のまま)。
+ * 切り出し結果・ベクトル分析・各キーワードのスコア(切り出しモデルの類似度・出現回数・
+ * 埋め込みモデルの類似度)はD1(migrations/0192)へ保存する。保存の失敗も✂️全体は
+ * 失敗させず、_extractionSaveWarningに理由を入れて返す。
  */
 app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -12547,15 +12619,27 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
 
   let keywords: string[] = [];
   let keywordsWarning: string | null = null;
+  let extraction: KeywordExtractionOutcome | null = null;
   try {
-    keywords = await withTimeout(
-      extractPrerequisiteTerms(c.env.AI, share.answer),
+    const ai = c.env.AI;
+    extraction = await withTimeout(
+      extractKeywordsWithFallback(
+        ai as unknown as Parameters<typeof extractKeywordsWithFallback>[0],
+        share.answer,
+        (text) => extractPrerequisiteTerms(ai, text),
+        ANSWER_PREREQUISITE_TERMS_MODEL,
+      ),
       PREREQUISITE_TERMS_TIMEOUT_MS,
       `予備知識キーワードの抽出が${PREREQUISITE_TERMS_TIMEOUT_MS / 1000}秒以内に完了しませんでした(タイムアウト)`
     );
+    if (extraction.fallback) {
+      logger.warn('vectorize-answer: embeddinggemma-2 keyword extraction failed, fell back to gemma-4', {
+        shareId, errorCode: extraction.fallback.errorCode, error: extraction.fallback.detail,
+      });
+    }
     // 英数字だけの語・ひらがなカタカナ1文字だけの語は、ベクタ化・登録処理
     // (AI呼び出し・D1書き込み)を行う前にここで弾く
-    keywords = filterMeaningfulPrerequisiteTerms(keywords);
+    keywords = filterMeaningfulPrerequisiteTerms(extraction.terms);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn('vectorize-answer: prerequisite term extraction failed', { shareId, error: message });
@@ -12566,13 +12650,41 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
     ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords, embeddingModel, vector)
     : [];
 
+  let extractionSaveWarning: string | null = null;
+  if (extraction) {
+    const embeddingScores: Record<string, number> = {};
+    for (const r of keywordVectorization) {
+      if (typeof r.similarityScore === 'number') embeddingScores[r.keyword] = r.similarityScore;
+    }
+    try {
+      await saveAnswerKeywordExtraction(c.env.DB, {
+        userId: user.sub,
+        shareId,
+        model: extraction.usedModel,
+        scoreMethod: extraction.scoreMethod,
+        terms: keywords,
+        analysis: extraction.analysis,
+        fallback: extraction.fallback,
+        answerText: share.answer,
+        extraScores: [{ model: embeddingModel, scoreMethod: EMBEDDING_PLAIN_COSINE_SCORE_METHOD, scores: embeddingScores }],
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('vectorize-answer: saving keyword extraction failed', { shareId, error: message });
+      extractionSaveWarning = 'キーワード切り出し結果の保存に失敗しました: ' + message;
+    }
+  }
+
   return jsonUtf8({
     vectorized: true,
     model: embeddingModel,
     dim: vector.length,
     keywords,
+    keywordsModel: extraction ? extraction.usedModel : null,
     keywordVectorization,
     _keywordsWarning: keywordsWarning,
+    _keywordsFallback: extraction ? extraction.fallback : null,
+    _extractionSaveWarning: extractionSaveWarning,
   });
 });
 
