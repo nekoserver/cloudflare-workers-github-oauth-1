@@ -53,7 +53,9 @@ body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans
 .section-sidebar summary { cursor: pointer; font-weight: 600; padding: 8px 12px; }
 .section-sidebar details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .section-sidebar a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; color: var(--link); text-decoration: none; }
-.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); text-decoration: underline; }
+.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); }
+/* リンクには下線を付けない(マウスを乗せたときも)。ユーザー指定 2026-11-15 */
+a, a:hover, a:focus-visible { text-decoration: none; }
 main { min-width: 0; }
 main details[data-section] { scroll-margin-top: 12px; }
 main details[data-section]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -117,7 +119,8 @@ details.card[open] > summary { margin-bottom: 6px; }
 /* グレーアウト中も緑の表記は薄くせず、モジュール名は通常の文字色(ダークテーマでは白)にする。ユーザー指定 2026-11-15 */
 .module-unlocked .module-lock-cell { opacity: 0.45; }
 .module-unlocked .module-name.module-inactive { color: var(--text); }
-button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+button.module-filter-toggle { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: none; }
 .apache-module-panel { width: min(640px, 100%); max-height: calc(100dvh - 80px); overflow-y: auto; }
 .apache-module-panel h4 { font-size: 13px; margin: 10px 0 4px; }
 .apache-module-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; font-size: 12px; }
@@ -285,7 +288,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <div class="pricing-scroll">
   <p class="subtitle" style="margin:6px 0 4px;">Apacheモジュール（導入済みファイルとapache2ctl -Mのロード状態。版はApache本体の版）</p>
   <table class="health-table" id="apache-modules-table" hidden>
-    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th>有効状態</th></tr></thead>
+    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th><button type="button" id="apache-modules-filter" class="module-filter-toggle" data-filter="all" aria-label="有効状態で絞り込む(すべて)">有効状態</button></th></tr></thead>
     <tbody id="apache-modules-tbody"></tbody>
   </table>
   <div id="apache-modules-error" class="module-inactive" style="font-size:12px;margin-top:4px;"></div>
@@ -575,6 +578,17 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var LABEL = { closed: 'モジュール一覧を開く', open: '🔐の行だけにする', locked: 'モジュール一覧を閉じる' };
   var state = 'closed';
   var locks = {};
+  // 見出し「有効状態」で切り替える絞り込み(ユーザー指定 2026-11-15)。
+  // all: 有効◯件(すべて) / enabled: 有効のみ(🔐の無い無効な行を消す) / locked: 鍵のみ(🔐の行だけ)
+  var filter = 'all';
+  var enabledCount = 0;
+  var NEXT_FILTER = { all: 'enabled', enabled: 'locked', locked: 'all' };
+  var FILTER_ARIA = { all: 'すべて', enabled: '有効のみ', locked: '鍵のみ' };
+  function filterLabel() {
+    if (filter === 'enabled') return '有効のみ';
+    if (filter === 'locked') return '鍵のみ';
+    return '有効 ' + enabledCount + '件(すべて)';
+  }
 
   function readLocks() {
     var found = {};
@@ -597,6 +611,13 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   }
 
   function apply() {
+    var filterButton = document.getElementById('apache-modules-filter');
+    if (filterButton) {
+      filterButton.setAttribute('data-filter', filter);
+      filterButton.setAttribute('aria-label', '有効状態で絞り込む(' + FILTER_ARIA[filter] + ')');
+    }
+    var filterCell = document.getElementById('apache-modules-filter-cell');
+    if (filterCell) filterCell.textContent = filterLabel();
     var toggle = document.getElementById('apache-modules-toggle');
     if (toggle) {
       toggle.textContent = MARK[state];
@@ -607,7 +628,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     document.querySelectorAll('#apache-modules-tbody tr[data-module]').forEach(function (tr) {
       var locked = !!locks[tr.getAttribute('data-module')];
       tr.classList.toggle('module-unlocked', !locked);
-      tr.hidden = state === 'closed' || (state === 'locked' && !locked);
+      var enabled = tr.getAttribute('data-enabled') === 'true';
+      var passes = filter === 'all' || (filter === 'enabled' && (enabled || locked)) || (filter === 'locked' && locked);
+      tr.hidden = state === 'closed' || (state === 'locked' && !locked) || !passes;
     });
   }
 
@@ -888,6 +911,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     });
   }
 
+  var filterButtonInit = document.getElementById('apache-modules-filter');
+  if (filterButtonInit) {
+    filterButtonInit.addEventListener('click', function () { filter = NEXT_FILTER[filter]; apply(); });
+  }
+
   if (moduleModal && helpModal && helpFrame) {
     document.getElementById('apache-module-close').addEventListener('click', closeModule);
     document.getElementById('apache-help-close').addEventListener('click', closeHelp);
@@ -954,13 +982,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     main.appendChild(head);
     cell(main, data.apacheVersion || '取得できず', data.apacheVersion ? 'module-active' : 'module-inactive');
     cell(main, installed + '/' + data.items.length + ' 導入済み');
-    cell(main, '有効 ' + enabled + '件');
+    enabledCount = enabled;
+    cell(main, filterLabel()).id = 'apache-modules-filter-cell';
     tbody.appendChild(main);
 
     data.items.forEach(function (module) {
       var active = module.installed && module.enabled === true;
       var tr = document.createElement('tr');
       tr.setAttribute('data-module', module.name);
+      tr.setAttribute('data-enabled', active ? 'true' : 'false');
       var first = document.createElement('td');
       first.className = 'module-first';
       var lockCell = document.createElement('span');

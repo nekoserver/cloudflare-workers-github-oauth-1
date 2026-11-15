@@ -53,13 +53,14 @@ function markupOf(html: string) {
   return html.match(/<table class="health-table" id="apache-modules-table"[\s\S]*?<!-- \/apache-module-modals -->/)?.[0];
 }
 
-async function setup(fetchImpl?: (url: string) => Promise<unknown>) {
+async function setup(fetchImpl?: (url: string) => Promise<unknown>, cookie?: string) {
   const html = getCfContainersPage();
   const markup = markupOf(html);
   const script = html.match(/<script id="apache-modules-panel">([\s\S]*?)<\/script>/)?.[1];
   expect(markup).toBeTruthy();
   expect(script).toBeTruthy();
   const dom = new JSDOM('<!doctype html><body><div id="other" style="position:fixed;z-index:5000"></div>' + markup + '</body>', { url: 'https://example.test/cf-containers', runScripts: 'outside-only' });
+  if (cookie) dom.window.document.cookie = cookie;
   const requested: string[] = [];
   (dom.window as any).fetch = async (url: string) => {
     requested.push(url);
@@ -91,6 +92,79 @@ describe('グレーアウト中の表示', () => {
   it('モジュール名の列は薄くしない(.module-firstを付ける)', async () => {
     const { row } = await setup();
     expect(row('headers').cells[0].classList.contains('module-first')).toBe(true);
+  });
+});
+
+describe('リンクの下線(ユーザー指定 2026-11-15)', () => {
+  it('ページ内のリンクとモジュール名に下線を付けない(マウスを乗せたときも)', () => {
+    const html = getCfContainersPage();
+    const css = html.match(/<style>([\s\S]*?)<\/style>/)![1];
+    expect(css).not.toMatch(/text-decoration:\s*underline/);
+    expect(css).toMatch(/(^|\n)a, a:hover, a:focus-visible \{ text-decoration: none; \}/);
+    expect(css).toMatch(/button\.module-name \{[^}]*text-decoration: none/);
+  });
+});
+
+describe('「有効状態」のタップで切り替える絞り込み(ユーザー指定 2026-11-15)', () => {
+  // 見出しの「有効状態」をタップするたびに、Apache(本体)行の有効状態のセルが
+  // 「有効◯件(すべて)」→「有効のみ」(🔐の無い無効な行=グレーの行を消す)→「鍵のみ」(🔐の行だけ)→ と巡り、
+  // モジュール行を絞り込む。▶▼▲の開閉の結果に、さらにこの絞り込みをかける。
+  async function opened(cookie?: string) {
+    const ctx = await setup(undefined, cookie);
+    (ctx.doc.getElementById('apache-modules-toggle') as HTMLButtonElement).click();
+    return ctx;
+  }
+  const visible = (doc: Document) => [...doc.querySelectorAll<HTMLTableRowElement>('tr[data-module]')].filter((r) => !r.hidden).map((r) => r.getAttribute('data-module'));
+  const filterButton = (doc: Document) => doc.getElementById('apache-modules-filter') as HTMLButtonElement;
+  const filterCell = (doc: Document) => doc.getElementById('apache-modules-filter-cell')!;
+
+  it('見出しは「有効状態」のままで、押せるボタンになっている', async () => {
+    const { doc, html } = await opened();
+    expect(html).not.toContain('ロード状態</th>');
+    expect(filterButton(doc).tagName).toBe('BUTTON');
+    expect(filterButton(doc).textContent).toBe('有効状態');
+    expect(doc.querySelector('#apache-modules-table thead')!.contains(filterButton(doc))).toBe(true);
+  });
+
+  it('初期状態は「有効◯件(すべて)」で、全行を出す', async () => {
+    const { doc } = await opened();
+    expect(filterCell(doc).textContent).toBe('有効 3件(すべて)');
+    expect(visible(doc)).toEqual(['ssl', 'headers', 'mpm_event', 'custom_thing']);
+  });
+
+  it('1回押すと「有効のみ」になり、🔐の無い無効な行を消す(🔐の行は無効でも残す)', async () => {
+    const { doc } = await opened('cfc_apache_module_locks=custom_thing');
+    filterButton(doc).click();
+    expect(filterCell(doc).textContent).toBe('有効のみ');
+    expect(visible(doc)).toEqual(['ssl', 'mpm_event', 'custom_thing']);
+    const locked = await opened('cfc_apache_module_locks=headers');
+    filterButton(locked.doc).click();
+    expect(visible(locked.doc)).toEqual(['ssl', 'headers', 'mpm_event', 'custom_thing']);
+  });
+
+  it('2回押すと「鍵のみ」になり🔐の行だけを出し、3回目で「すべて」に戻る', async () => {
+    const { doc } = await opened('cfc_apache_module_locks=headers');
+    filterButton(doc).click();
+    filterButton(doc).click();
+    expect(filterCell(doc).textContent).toBe('鍵のみ');
+    expect(visible(doc)).toEqual(['headers']);
+    filterButton(doc).click();
+    expect(filterCell(doc).textContent).toBe('有効 3件(すべて)');
+    expect(visible(doc)).toEqual(['ssl', 'headers', 'mpm_event', 'custom_thing']);
+  });
+
+  it('▶で閉じているときは、絞り込みを変えても行を出さない', async () => {
+    const { doc } = await setup(undefined, 'cfc_apache_module_locks=headers');
+    filterButton(doc).click();
+    expect(visible(doc)).toEqual([]);
+  });
+
+  it('一覧を描き直しても(ヘルスチェックの更新)、絞り込みの状態を保つ', async () => {
+    const { doc, dom } = await opened('cfc_apache_module_locks=headers');
+    filterButton(doc).click();
+    filterButton(doc).click();
+    (dom.window as any).cfcApacheModules.render(DATA);
+    expect(filterCell(doc).textContent).toBe('鍵のみ');
   });
 });
 
