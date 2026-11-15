@@ -125,3 +125,32 @@
 
 - 再ビルド: 不要(`src/views/`・`src/data/`・`public/`・`scripts/`の変更で、`containers/**`・`src/containers/**`・`wrangler.toml`の`[[containers]]`に触れていない)
 - 再起動: 不要(Worker側だけの変更)
+
+---
+
+## 8. ヘルプのウィンドウの操作(2026-11-15 追加)
+
+**対象**: `#apache-help-modal`(iframeでマニュアルを出すウィンドウ)、`src/views/cfContainers.ts`のヘルプのウィンドウの処理 — 最大化・四隅でのサイズ変更・大きさの保存・タイトルバーだけの表示を足す。
+
+| 操作 | 動き | 保存 |
+|---|---|---|
+| 「閉じる」の右の「⬜︎」 | 最大化と元の大きさ・位置を切り替える(`aria-pressed`) | しない |
+| 2つのボタンの位置 | `#apache-help-actions`にまとめ`margin-left: auto`で常に右端。タイトルは`text-overflow: ellipsis`で省略し、折り返さない | — |
+| 四隅のドラッグ | 反対の隅を固定して大きさを変える。最小は幅280・高さ160、最大は画面の大きさ | 離したときに幅x高さをCookie`cfc_apache_help_size`(1年、`Path=/cf-containers`)へ |
+| 開いたとき | 保存した大きさ(無い・壊れているときは幅`min(960, 画面幅-32)`・高さ`画面高-80`)を画面に収まるよう縮め、中央に置く | 位置は保存しない |
+| タイトルバーのダブルクリック(タッチでは350ミリ秒以内の2回のタップ) | タイトルバーだけにする/元に戻す。ボタンの上では反応しない | しない(開き直すと解除) |
+
+- ドラッグ中はiframeがポインタを奪わないよう`pointer-events: none`にする。
+- ドラッグをウィンドウの外で離したときに起きる背景のクリック(500ミリ秒以内の1回)では閉じない。
+- テスト: `src/views/cfContainers.apache-help-window.test.ts`(14件)。
+
+## 9. 日本語のヘルプを優先する(2026-11-15 追加)
+
+**対象**: `scripts/extract-apache-manual.py`、`public/apache-manual/2.4.71/mod/*.ja.html`、`modules.json`、モジュールのモーダル — 日本語版のマニュアルがあるモジュールでは、説明もヘルプも日本語を出す。
+
+- Apache 2.4.71のソース(sha512は配布元・`modules.json`の記録と一致を再確認)にある`docs/manual/mod/*.html.ja.utf8`(57ページ)を、`mod/<名前>.ja.html`として英語版と同じ`mod/`に置く(CSS・画像への相対リンクをそのまま使うため)。
+- 日本語版の中のモジュールどうしのリンクは、日本語版があれば日本語版を指すよう張り替える。英語版の言語切替の「ja」も手元の日本語版を指す。
+- 古い日本語訳には2.4に無いモジュール(例: `mod_authz_default`)へのリンクがある。展開した`mod/`に無いページへのリンクは、リンクを外して文字だけ残す。
+- `modules.json`に、日本語版があるモジュールだけ`fileJa`・`titleJa`・`descriptionJa`と、ディレクティブごとの`descriptionJa`を足した。
+- モーダルは、日本語版があれば日本語の説明(英語の原文も淡色で添える)と「📖 …のヘルプ(日本語)を開く」を出し、ディレクティブ名のリンクも日本語版の節を開く。英語版へのリンクも残し、「日本語訳は英語版より古い場合があります」と添える。日本語版が無ければ、従来どおり英語を出す。
+- 日本語版がある主なモジュール: `proxy`・`proxy_balancer`・`proxy_connect`・`proxy_ajp`・`cgid`・`cgi`・`include`・`headers`・`deflate`・`mime`・`dir`・`alias`など。`ssl`・`rewrite`・`remoteip`・`proxy_http`・`proxy_wstunnel`は英語版だけ。

@@ -19,7 +19,8 @@
      "description": "Controls which hosts can access an area of the server",
      "syntax": "Allow from all|host|env=[!]env-variable [host|env=[!]env-variable] ...",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "サーバのある領域にアクセスできるホストを制御する"
     },
     {
      "name": "Deny",
@@ -27,7 +28,8 @@
      "description": "Controls which hosts are denied access to the server",
      "syntax": "Deny from all|host|env=[!]env-variable [host|env=[!]env-variable] ...",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "サーバがアクセスを拒否するホストを制御する"
     },
     {
      "name": "Order",
@@ -35,7 +37,8 @@
      "description": "Controls the default access state and the order in which Allow and Deny are evaluated.",
      "syntax": "Order ordering",
      "default": "Order Deny,Allow",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "デフォルトのアクセス可能な状態と、Allow と Deny が評価される順番を制御する"
     },
     {
      "name": "Satisfy",
@@ -43,9 +46,13 @@
      "description": "Interaction between host-level access control and user authentication",
      "syntax": "Satisfy Any|All",
      "default": "Satisfy All",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "ホストレベルのアクセス制御とユーザ認証との相互作用を指定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_access_compat.ja.html",
+   "titleJa": "Apache モジュール mod_access_compat",
+   "descriptionJa": "ホスト (名前もしくは IP アドレス) に基づいたグループ承認"
   },
   "actions": {
    "title": "Apache Module mod_actions",
@@ -62,7 +69,8 @@
      "description": "Activates a CGI script for a particular handler or content-type",
      "syntax": "Action action-type cgi-script [virtual]",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "特定のハンドラやコンテントタイプに対して CGI を実行するように 設定"
     },
     {
      "name": "Script",
@@ -70,9 +78,13 @@
      "description": "Activates a CGI script for a particular request method.",
      "syntax": "Script method cgi-script",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "特定のリクエストメソッドに対して CGI スクリプトを 実行するように設定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_actions.ja.html",
+   "titleJa": "Apache モジュール mod_actions",
+   "descriptionJa": "メディアタイプやリクエストメソッドに応じて CGI スクリプトを実行する機能を提供"
   },
   "alias": {
    "title": "Apache Module mod_alias",
@@ -89,7 +101,8 @@
      "description": "Maps URLs to filesystem locations",
      "syntax": "Alias [URL-path] file-path|directory-path",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "URL をファイルシステムの位置にマップする"
     },
     {
      "name": "AliasMatch",
@@ -97,7 +110,8 @@
      "description": "Maps URLs to filesystem locations using regular expressions",
      "syntax": "AliasMatch regex file-path|directory-path",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "正規表現を使って URL をファイルシステムの位置にマップする"
     },
     {
      "name": "AliasPreservePath",
@@ -105,7 +119,8 @@
      "description": "Map the full path after the alias in a location.",
      "syntax": "AliasPreservePath OFF|ON",
      "default": "AliasPreservePath OFF",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Map the full path after the alias in a location."
     },
     {
      "name": "Redirect",
@@ -113,7 +128,8 @@
      "description": "Sends an external redirect asking the client to fetch a different URL",
      "syntax": "Redirect [status] [URL-path] URL",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "クライアントが違う URL を取得するように外部へのリダイレクトを 送る"
     },
     {
      "name": "RedirectMatch",
@@ -121,7 +137,8 @@
      "description": "Sends an external redirect based on a regular expression match of the current URL",
      "syntax": "RedirectMatch [status] regex URL",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "現在の URL への正規表現のマッチにより 外部へのリダイレクトを送る"
     },
     {
      "name": "RedirectPermanent",
@@ -129,7 +146,8 @@
      "description": "Sends an external permanent redirect asking the client to fetch a different URL",
      "syntax": "RedirectPermanent URL-path URL",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "クライアントが違う URL を取得するように外部への永久的な リダイレクトを送る"
     },
     {
      "name": "RedirectRelative",
@@ -137,7 +155,8 @@
      "description": "Allows relative redirect targets.",
      "syntax": "RedirectRelative On|Off",
      "default": "RedirectRelative Off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Allows relative redirect targets."
     },
     {
      "name": "RedirectTemp",
@@ -145,7 +164,8 @@
      "description": "Sends an external temporary redirect asking the client to fetch a different URL",
      "syntax": "RedirectTemp URL-path URL",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "クライアントが違う URL を取得するように外部への一時的な リダイレクトを送る"
     },
     {
      "name": "ScriptAlias",
@@ -153,7 +173,8 @@
      "description": "Maps a URL to a filesystem location and designates the target as a CGI script",
      "syntax": "ScriptAlias [URL-path] file-path|directory-path",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "URL をファイルシステムの位置へマップし、マップ先を CGI スクリプトに指定"
     },
     {
      "name": "ScriptAliasMatch",
@@ -161,9 +182,13 @@
      "description": "Maps a URL to a filesystem location using a regular expression and designates the target as a CGI script",
      "syntax": "ScriptAliasMatch regex file-path|directory-path",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "URL を正規表現を使ってファイルシステムの位置へマップし、マップ先を CGI スクリプトに指定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_alias.ja.html",
+   "titleJa": "Apache モジュール mod_alias",
+   "descriptionJa": "ホストファイルシステム上のいろいろな違う場所を ドキュメントツリーにマップする機能と、 URL のリダイレクトを行なう機能を提供する"
   },
   "allowmethods": {
    "title": "Apache Module mod_allowmethods",
@@ -192,7 +217,10 @@
    "identifier": "asis_module",
    "sourceFile": "mod_asis.c",
    "compatibility": "",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_asis.ja.html",
+   "titleJa": "Apache モジュール mod_asis",
+   "descriptionJa": "自分用の HTTP ヘッダの書かれているファイルを送信する"
   },
   "auth_basic": {
    "title": "Apache Module mod_auth_basic",
@@ -209,7 +237,8 @@
      "description": "Sets whether authorization and authentication are passed to lower level modules",
      "syntax": "AuthBasicAuthoritative On|Off",
      "default": "AuthBasicAuthoritative On",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "認証と承認を、より低いレベルのモジュールに移行させるかを 設定します。"
     },
     {
      "name": "AuthBasicFake",
@@ -217,7 +246,8 @@
      "description": "Fake basic authentication using the given expressions for username and password",
      "syntax": "AuthBasicFake off|username [password]",
      "default": "none",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "Fake basic authentication using the given expressions for username and password"
     },
     {
      "name": "AuthBasicProvider",
@@ -225,7 +255,8 @@
      "description": "Sets the authentication provider(s) for this location",
      "syntax": "AuthBasicProvider provider-name [provider-name] ...",
      "default": "AuthBasicProvider file",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "この位置に対する認証プロバイダを設定します。"
     },
     {
      "name": "AuthBasicUseDigestAlgorithm",
@@ -233,9 +264,13 @@
      "description": "Check passwords against the authentication providers as if Digest Authentication was in force instead of Basic Authentication.",
      "syntax": "AuthBasicUseDigestAlgorithm MD5|Off",
      "default": "AuthBasicUseDigestAlgorithm Off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "Check passwords against the authentication providers as if Digest Authentication was in force instead of Basic Authentication."
     }
-   ]
+   ],
+   "fileJa": "mod/mod_auth_basic.ja.html",
+   "titleJa": "Apache モジュール mod_auth_basic",
+   "descriptionJa": "基本認証"
   },
   "auth_digest": {
    "title": "Apache Module mod_auth_digest",
@@ -442,7 +477,8 @@
      "description": "Specifies userIDs that are allowed access without password verification",
      "syntax": "Anonymous user [user] ...",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "パスワードの検査無しでアクセスを許可する userID を指定する"
     },
     {
      "name": "Anonymous_LogEmail",
@@ -450,7 +486,8 @@
      "description": "Sets whether the password entered will be logged in the error log",
      "syntax": "Anonymous_LogEmail On|Off",
      "default": "Anonymous_LogEmail On",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "入力されたパスワードがエラーログにロギングされるかどうかを 設定する"
     },
     {
      "name": "Anonymous_MustGiveEmail",
@@ -458,7 +495,8 @@
      "description": "Specifies whether blank passwords are allowed",
      "syntax": "Anonymous_MustGiveEmail On|Off",
      "default": "Anonymous_MustGiveEmail On",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "空パスワードを許可するかどうかを指定する"
     },
     {
      "name": "Anonymous_NoUserID",
@@ -466,7 +504,8 @@
      "description": "Sets whether the userID field may be empty",
      "syntax": "Anonymous_NoUserID On|Off",
      "default": "Anonymous_NoUserID Off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "空 userID を許可するかを指定する"
     },
     {
      "name": "Anonymous_VerifyEmail",
@@ -474,9 +513,13 @@
      "description": "Sets whether to check the password field for a correctly formatted email address",
      "syntax": "Anonymous_VerifyEmail On|Off",
      "default": "Anonymous_VerifyEmail Off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "パスワード欄が正しい形式の電子メールアドレスであることを 調べるかどうかを設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_authn_anon.ja.html",
+   "titleJa": "Apache モジュール mod_authn_anon",
+   "descriptionJa": "認証が必要な領域への \"anonymous\" ユーザのアクセスを許可する"
   },
   "authn_core": {
    "title": "Apache Module mod_authn_core",
@@ -555,7 +598,8 @@
      "description": "Sets the type of database file that is used to store passwords",
      "syntax": "AuthDBMType default|SDBM|GDBM|NDBM|DB",
      "default": "AuthDBMType default",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "パスワードを保存するために必要なデータベースファイルの種類を 設定する"
     },
     {
      "name": "AuthDBMUserFile",
@@ -563,9 +607,13 @@
      "description": "Sets the name of a database file containing the list of users and passwords for authentication",
      "syntax": "AuthDBMUserFile file-path",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "認証用のユーザとパスワードのリストを保持している データベースファイル名を設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_authn_dbm.ja.html",
+   "titleJa": "Apache モジュール mod_authn_dbm",
+   "descriptionJa": "DBM ファイルを用いたユーザ認証"
   },
   "authn_file": {
    "title": "Apache Module mod_authn_file",
@@ -582,9 +630,13 @@
      "description": "Sets the name of a text file containing the list of users and passwords for authentication",
      "syntax": "AuthUserFile file-path",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "認証に使用するユーザとパスワードの一覧が格納されている、 テキストファイルの名前を設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_authn_file.ja.html",
+   "titleJa": "Apache モジュール mod_authn_file",
+   "descriptionJa": "テキストファイルを用いたユーザ認証"
   },
   "authn_socache": {
    "title": "Apache Module mod_authn_socache",
@@ -971,9 +1023,13 @@
      "description": "Sets the name of a text file containing the list of user groups for authorization",
      "syntax": "AuthGroupFile file-path",
      "default": "",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "証認に使用するユーザグループの一覧が格納されている、 テキストファイルの名前を設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_authz_groupfile.ja.html",
+   "titleJa": "Apache モジュール mod_authz_groupfile",
+   "descriptionJa": "プレーンテキストファイルを用いたグループ承認"
   },
   "authz_host": {
    "title": "Apache Module mod_authz_host",
@@ -993,7 +1049,10 @@
    "identifier": "authz_owner_module",
    "sourceFile": "mod_authz_owner.c",
    "compatibility": "Available in Apache 2.1 and later",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_authz_owner.ja.html",
+   "titleJa": "Apache モジュール mod_authz_owner",
+   "descriptionJa": "ファイルの所有者に基づいた承認"
   },
   "authz_user": {
    "title": "Apache Module mod_authz_user",
@@ -1003,7 +1062,10 @@
    "identifier": "authz_user_module",
    "sourceFile": "mod_authz_user.c",
    "compatibility": "Available in Apache 2.1 and later",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_authz_user.ja.html",
+   "titleJa": "Apache モジュール mod_authz_user",
+   "descriptionJa": "ユーザ承認"
   },
   "autoindex": {
    "title": "Apache Module mod_autoindex",
@@ -1020,7 +1082,8 @@
      "description": "Alternate text to display for a file, instead of an icon selected by filename",
      "syntax": "AddAlt string file [file] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "アイコンの代わりに 表示される、ファイル名で選択された代替テキスト"
     },
     {
      "name": "AddAltByEncoding",
@@ -1028,7 +1091,8 @@
      "description": "Alternate text to display for a file instead of an icon selected by MIME-encoding",
      "syntax": "AddAltByEncoding string MIME-encoding [MIME-encoding] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "アイコンの代わりに表示される、MIME 符号化方法で選択された 代替テキスト"
     },
     {
      "name": "AddAltByType",
@@ -1036,7 +1100,8 @@
      "description": "Alternate text to display for a file, instead of an icon selected by MIME content-type",
      "syntax": "AddAltByType string MIME-type [MIME-type] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "アイコンの代わりに 表示される、MIME タイプで選択された代替テキスト"
     },
     {
      "name": "AddDescription",
@@ -1044,7 +1109,8 @@
      "description": "Description to display for a file",
      "syntax": "AddDescription string file [file] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルに対して表示する説明"
     },
     {
      "name": "AddIcon",
@@ -1052,7 +1118,8 @@
      "description": "Icon to display for a file selected by name",
      "syntax": "AddIcon icon name [name] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルに表示するアイコンを名前で選択"
     },
     {
      "name": "AddIconByEncoding",
@@ -1060,7 +1127,8 @@
      "description": "Icon to display next to files selected by MIME content-encoding",
      "syntax": "AddIconByEncoding icon MIME-encoding [MIME-encoding] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルに表示するアイコンを MIME 符号化方法で選択"
     },
     {
      "name": "AddIconByType",
@@ -1068,7 +1136,8 @@
      "description": "Icon to display next to files selected by MIME content-type",
      "syntax": "AddIconByType icon MIME-type [MIME-type] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの隣に表示するアイコンを MIME タイプによって選択"
     },
     {
      "name": "DefaultIcon",
@@ -1076,7 +1145,8 @@
      "description": "Icon to display for files when no specific icon is configured",
      "syntax": "DefaultIcon url-path",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "特定のアイコンが何も設定されていない時に ファイルに表示するアイコン"
     },
     {
      "name": "HeaderName",
@@ -1084,7 +1154,8 @@
      "description": "Name of the file that will be inserted at the top of the index listing",
      "syntax": "HeaderName filename",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "インデックス一覧の先頭に挿入されるファイルの名前"
     },
     {
      "name": "IndexHeadInsert",
@@ -1092,7 +1163,8 @@
      "description": "Inserts text in the HEAD section of an index page.",
      "syntax": "IndexHeadInsert \"markup ...\"",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "インデックスページの HEAD セクションにテキストを挿入する"
     },
     {
      "name": "IndexIgnore",
@@ -1100,7 +1172,8 @@
      "description": "Adds to the list of files to hide when listing a directory",
      "syntax": "IndexIgnore file [file] ...",
      "default": "IndexIgnore \".\"",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ディレクトリ一覧を行なう際に無視すべき ファイルリストに追加"
     },
     {
      "name": "IndexIgnoreReset",
@@ -1108,7 +1181,8 @@
      "description": "Empties the list of files to hide when listing a directory",
      "syntax": "IndexIgnoreReset ON|OFF",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Empties the list of files to hide when listing a directory"
     },
     {
      "name": "IndexOptions",
@@ -1116,7 +1190,8 @@
      "description": "Various configuration settings for directory indexing",
      "syntax": "IndexOptions [+|-]option [[+|-]option] ...",
      "default": "By default, no options are enabled.",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ディレクトリインデックスの様々な設定項目"
     },
     {
      "name": "IndexOrderDefault",
@@ -1124,7 +1199,8 @@
      "description": "Sets the default ordering of the directory index",
      "syntax": "IndexOrderDefault Ascending|Descending Name|Date|Size|Description",
      "default": "IndexOrderDefault Ascending Name",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ディレクトリインデックスの標準の順番付けを設定"
     },
     {
      "name": "IndexStyleSheet",
@@ -1132,7 +1208,8 @@
      "description": "Adds a CSS stylesheet to the directory index",
      "syntax": "IndexStyleSheet url-path",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ディレクトリインデックスに CSS スタイルシートを追加する"
     },
     {
      "name": "ReadmeName",
@@ -1140,9 +1217,13 @@
      "description": "Name of the file that will be inserted at the end of the index listing",
      "syntax": "ReadmeName filename",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "インデックス一覧の最後に挿入されるファイルの名前"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_autoindex.ja.html",
+   "titleJa": "Apache モジュール mod_autoindex",
+   "descriptionJa": "Unix の ls コマンドや Win32 の dir シェルコマンドに似た ディレクトリインデックスを生成する"
   },
   "brotli": {
    "title": "Apache Module mod_brotli",
@@ -1229,7 +1310,8 @@
      "description": "The default duration to cache a document when no expiry date is specified.",
      "syntax": "CacheDefaultExpire seconds",
      "default": "CacheDefaultExpire 3600 (one hour)",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "期日が指定されていないときにドキュメントをキャッシュするデフォルトの期間"
     },
     {
      "name": "CacheDetailHeader",
@@ -1237,7 +1319,8 @@
      "description": "Add an X-Cache-Detail header to the response.",
      "syntax": "CacheDetailHeader on|off",
      "default": "CacheDetailHeader off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Add an X-Cache-Detail header to the response."
     },
     {
      "name": "CacheDisable",
@@ -1245,7 +1328,8 @@
      "description": "Disable caching of specified URLs",
      "syntax": "CacheDisable url-string | on",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "特定の URL をキャッシュしない"
     },
     {
      "name": "CacheEnable",
@@ -1253,7 +1337,8 @@
      "description": "Enable caching of specified URLs using a specified storage manager",
      "syntax": "CacheEnable cache_type [url-string]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "指定したストレージ管理方式を使ってのキャッシュを有効にする"
     },
     {
      "name": "CacheHeader",
@@ -1261,7 +1346,8 @@
      "description": "Add an X-Cache header to the response.",
      "syntax": "CacheHeader on|off",
      "default": "CacheHeader off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Add an X-Cache header to the response."
     },
     {
      "name": "CacheIgnoreCacheControl",
@@ -1269,7 +1355,8 @@
      "description": "Ignore request to not serve cached content to client",
      "syntax": "CacheIgnoreCacheControl On|Off",
      "default": "CacheIgnoreCacheControl Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "キャッシュされているコンテンツを返さないようにクライアントから リクエストされても無視する"
     },
     {
      "name": "CacheIgnoreHeaders",
@@ -1277,7 +1364,8 @@
      "description": "Do not store the given HTTP header(s) in the cache.",
      "syntax": "CacheIgnoreHeaders header-string [header-string] ...",
      "default": "CacheIgnoreHeaders None",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "指定された HTTP ヘッダをキャッシュに保存しない。"
     },
     {
      "name": "CacheIgnoreNoLastMod",
@@ -1285,7 +1373,8 @@
      "description": "Ignore the fact that a response has no Last Modified header.",
      "syntax": "CacheIgnoreNoLastMod On|Off",
      "default": "CacheIgnoreNoLastMod Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "応答に Last Modified が無くても気にしないようにする"
     },
     {
      "name": "CacheIgnoreQueryString",
@@ -1293,7 +1382,8 @@
      "description": "Ignore query string when caching",
      "syntax": "CacheIgnoreQueryString On|Off",
      "default": "CacheIgnoreQueryString Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "キャッシュ時にクエリーストリングを無視する"
     },
     {
      "name": "CacheIgnoreURLSessionIdentifiers",
@@ -1301,7 +1391,8 @@
      "description": "Ignore defined session identifiers encoded in the URL when caching",
      "syntax": "CacheIgnoreURLSessionIdentifiers identifier [identifier] ...",
      "default": "CacheIgnoreURLSessionIdentifiers None",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Ignore defined session identifiers encoded in the URL when caching"
     },
     {
      "name": "CacheKeyBaseURL",
@@ -1309,7 +1400,8 @@
      "description": "Override the base URL of reverse proxied cache keys.",
      "syntax": "CacheKeyBaseURL URL",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Override the base URL of reverse proxied cache keys."
     },
     {
      "name": "CacheLastModifiedFactor",
@@ -1317,7 +1409,8 @@
      "description": "The factor used to compute an expiry date based on the LastModified date.",
      "syntax": "CacheLastModifiedFactor float",
      "default": "CacheLastModifiedFactor 0.1",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "LastModified の日付に基づいて有効期限 (expiry) を計算するための重みを指定する"
     },
     {
      "name": "CacheLock",
@@ -1325,7 +1418,8 @@
      "description": "Enable the thundering herd lock.",
      "syntax": "CacheLock on|off",
      "default": "CacheLock off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Enable the thundering herd lock."
     },
     {
      "name": "CacheLockMaxAge",
@@ -1333,7 +1427,8 @@
      "description": "Set the maximum possible age of a cache lock.",
      "syntax": "CacheLockMaxAge integer",
      "default": "CacheLockMaxAge 5",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Set the maximum possible age of a cache lock."
     },
     {
      "name": "CacheLockPath",
@@ -1341,7 +1436,8 @@
      "description": "Set the lock path directory.",
      "syntax": "CacheLockPath directory",
      "default": "CacheLockPath /tmp/mod_cache-lock",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Set the lock path directory."
     },
     {
      "name": "CacheMaxExpire",
@@ -1349,7 +1445,8 @@
      "description": "The maximum time in seconds to cache a document",
      "syntax": "CacheMaxExpire seconds",
      "default": "CacheMaxExpire 86400 (one day)",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ドキュメントをキャッシュする最大時間を秒数で表したもの"
     },
     {
      "name": "CacheMinExpire",
@@ -1357,7 +1454,8 @@
      "description": "The minimum time in seconds to cache a document",
      "syntax": "CacheMinExpire seconds",
      "default": "CacheMinExpire 0",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ドキュメントをキャッシュする最小秒数"
     },
     {
      "name": "CacheQuickHandler",
@@ -1365,7 +1463,8 @@
      "description": "Run the cache from the quick handler.",
      "syntax": "CacheQuickHandler on|off",
      "default": "CacheQuickHandler on",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Run the cache from the quick handler."
     },
     {
      "name": "CacheStaleOnError",
@@ -1373,7 +1472,8 @@
      "description": "Serve stale content in place of 5xx responses.",
      "syntax": "CacheStaleOnError on|off",
      "default": "CacheStaleOnError on",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Serve stale content in place of 5xx responses."
     },
     {
      "name": "CacheStoreExpired",
@@ -1381,7 +1481,8 @@
      "description": "Attempt to cache responses that the server reports as expired",
      "syntax": "CacheStoreExpired On|Off",
      "default": "CacheStoreExpired Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Attempt to cache responses that the server reports as expired"
     },
     {
      "name": "CacheStoreNoStore",
@@ -1389,7 +1490,8 @@
      "description": "Attempt to cache requests or responses that have been marked as no-store.",
      "syntax": "CacheStoreNoStore On|Off",
      "default": "CacheStoreNoStore Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "no-store と指定されているレスポンスのキャッシュを試みる。"
     },
     {
      "name": "CacheStorePrivate",
@@ -1397,9 +1499,13 @@
      "description": "Attempt to cache responses that the server has marked as private",
      "syntax": "CacheStorePrivate On|Off",
      "default": "CacheStorePrivate Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "private と指定されているレスポンスのキャッシュを試みる。"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_cache.ja.html",
+   "titleJa": "Apache モジュール mod_cache",
+   "descriptionJa": "URI をキーにしたコンテンツのキャッシュ"
   },
   "cache_disk": {
    "title": "Apache Module mod_cache_disk",
@@ -1416,7 +1522,8 @@
      "description": "The number of characters in subdirectory names",
      "syntax": "CacheDirLength length",
      "default": "CacheDirLength 2",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "サブディレクトリ名の文字数"
     },
     {
      "name": "CacheDirLevels",
@@ -1424,7 +1531,8 @@
      "description": "The number of levels of subdirectories in the cache.",
      "syntax": "CacheDirLevels levels",
      "default": "CacheDirLevels 2",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "キャッシュのサブディレクトリの深さの数"
     },
     {
      "name": "CacheMaxFileSize",
@@ -1432,7 +1540,8 @@
      "description": "The maximum size (in bytes) of a document to be placed in the cache",
      "syntax": "CacheMaxFileSize bytes",
      "default": "CacheMaxFileSize 1000000",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "キャッシュに保管されるドキュメントの最大の (バイトでの) サイズ"
     },
     {
      "name": "CacheMinFileSize",
@@ -1440,7 +1549,8 @@
      "description": "The minimum size (in bytes) of a document to be placed in the cache",
      "syntax": "CacheMinFileSize bytes",
      "default": "CacheMinFileSize 1",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "キャッシュに保管されるドキュメントの最小限の (バイトでの) 大きさ"
     },
     {
      "name": "CacheReadSize",
@@ -1448,7 +1558,8 @@
      "description": "The minimum size (in bytes) of the document to read and be cached before sending the data downstream",
      "syntax": "CacheReadSize bytes",
      "default": "CacheReadSize 0",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "The minimum size (in bytes) of the document to read and be cached before sending the data downstream"
     },
     {
      "name": "CacheReadTime",
@@ -1456,7 +1567,8 @@
      "description": "The minimum time (in milliseconds) that should elapse while reading before data is sent downstream",
      "syntax": "CacheReadTime milliseconds",
      "default": "CacheReadTime 0",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "The minimum time (in milliseconds) that should elapse while reading before data is sent downstream"
     },
     {
      "name": "CacheRoot",
@@ -1464,9 +1576,13 @@
      "description": "The directory root under which cache files are stored",
      "syntax": "CacheRoot directory",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "キャッシュファイルが保管されるルートディレクトリ"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_cache_disk.ja.html",
+   "titleJa": "Apache モジュール mod_cache_disk",
+   "descriptionJa": "URI をキーにしたコンテンツキャッシュストレージ管理"
   },
   "cache_socache": {
    "title": "Apache Module mod_cache_socache",
@@ -1577,7 +1693,8 @@
      "description": "The length of time to wait for more output from the CGI program",
      "syntax": "CGIScriptTimeout time[s|ms]",
      "default": "value of Timeout directive when unset",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "The length of time to wait for more output from the CGI program"
     },
     {
      "name": "ScriptLog",
@@ -1585,7 +1702,8 @@
      "description": "Location of the CGI script error logfile",
      "syntax": "ScriptLog file-path",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "CGI スクリプトのエラーログファイルの場所"
     },
     {
      "name": "ScriptLogBuffer",
@@ -1593,7 +1711,8 @@
      "description": "Maximum amount of PUT or POST requests that will be recorded in the scriptlog",
      "syntax": "ScriptLogBuffer bytes",
      "default": "ScriptLogBuffer 1024",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "スクリプトログに記録される PUT や POST リクエストの内容の上限"
     },
     {
      "name": "ScriptLogLength",
@@ -1601,9 +1720,13 @@
      "description": "Size limit of the CGI script logfile",
      "syntax": "ScriptLogLength bytes",
      "default": "ScriptLogLength 10385760",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "CGI スクリプトのログファイルの大きさの上限"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_cgi.ja.html",
+   "titleJa": "Apache モジュール mod_cgi",
+   "descriptionJa": "CGI スクリプトの実行"
   },
   "cgid": {
    "title": "Apache Module mod_cgid",
@@ -1620,7 +1743,8 @@
      "description": "The length of time to wait for more output from the CGI program",
      "syntax": "CGIDScriptTimeout time[s|ms]",
      "default": "value of Timeout directive when unset or set to 0",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "The length of time to wait for more output from the CGI program"
     },
     {
      "name": "ScriptSock",
@@ -1628,9 +1752,13 @@
      "description": "The filename prefix of the socket to use for communication with the cgi daemon",
      "syntax": "ScriptSock file-path",
      "default": "ScriptSock cgisock",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "CGI デーモンとの通信に使われるソケットのファイル名の接頭辞"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_cgid.ja.html",
+   "titleJa": "Apache モジュール mod_cgid",
+   "descriptionJa": "外部 CGI デーモンを使った CGI スクリプトの実行"
   },
   "charset_lite": {
    "title": "Apache Module mod_charset_lite",
@@ -1692,7 +1820,8 @@
      "description": "Enable WebDAV HTTP methods",
      "syntax": "Dav On|Off|provider-name",
      "default": "Dav Off",
-     "context": "directory"
+     "context": "directory",
+     "descriptionJa": "WebDAV HTTP メソッドを有効にします"
     },
     {
      "name": "DavBasePath",
@@ -1700,7 +1829,8 @@
      "description": "Configure repository root path",
      "syntax": "DavBasePath root-path",
      "default": "None",
-     "context": "directory"
+     "context": "directory",
+     "descriptionJa": "Configure repository root path"
     },
     {
      "name": "DavDepthInfinity",
@@ -1708,7 +1838,8 @@
      "description": "Allow PROPFIND, Depth: Infinity requests",
      "syntax": "DavDepthInfinity on|off",
      "default": "DavDepthInfinity off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "PROPFIND, Depth: Infinity リクエストを許可します"
     },
     {
      "name": "DavMinTimeout",
@@ -1716,9 +1847,13 @@
      "description": "Minimum amount of time the server holds a lock on a DAV resource",
      "syntax": "DavMinTimeout seconds",
      "default": "DavMinTimeout 0",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "サーバが DAV リソースのロックを維持する最小時間です。"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_dav.ja.html",
+   "titleJa": "Apache モジュール mod_dav",
+   "descriptionJa": "分散オーサリングとバージョン管理 (WebDAV) 機能"
   },
   "dav_fs": {
    "title": "Apache Module mod_dav_fs",
@@ -1735,7 +1870,8 @@
      "description": "Location of the DAV lock database",
      "syntax": "DavLockDB file-path",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "DAV ロックデータベースの位置"
     },
     {
      "name": "DavLockDiscovery",
@@ -1743,9 +1879,13 @@
      "description": "Enable lock discovery",
      "syntax": "DavLockDiscovery on|off",
      "default": "DavLockDiscovery on",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Enable lock discovery"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_dav_fs.ja.html",
+   "titleJa": "Apache モジュール mod_dav_fs",
+   "descriptionJa": "mod_dav のためのファイルシステムプロバイダ"
   },
   "dav_lock": {
    "title": "Apache Module mod_dav_lock",
@@ -1762,9 +1902,13 @@
      "description": "Location of the DAV lock database",
      "syntax": "DavGenericLockDB file-path",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "DAV ロックデータベースの場所"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_dav_lock.ja.html",
+   "titleJa": "Apache モジュール mod_dav_lock",
+   "descriptionJa": "mod_dav 用の汎用ロックモジュール"
   },
   "dbd": {
    "title": "Apache Module mod_dbd",
@@ -1864,7 +2008,8 @@
      "description": "How the outgoing ETag header should be modified during compression",
      "syntax": "DeflateAlterETag AddSuffix|NoChange|Remove",
      "default": "DeflateAlterETag AddSuffix",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "How the outgoing ETag header should be modified during compression"
     },
     {
      "name": "DeflateBufferSize",
@@ -1872,7 +2017,8 @@
      "description": "Fragment size to be compressed at one time by zlib",
      "syntax": "DeflateBufferSize value",
      "default": "DeflateBufferSize 8096",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "zlib が一度に圧縮する塊の大きさ"
     },
     {
      "name": "DeflateCompressionLevel",
@@ -1880,7 +2026,8 @@
      "description": "How much compression do we apply to the output",
      "syntax": "DeflateCompressionLevel value",
      "default": "Zlib's default",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "出力に対して行なう圧縮の程度"
     },
     {
      "name": "DeflateFilterNote",
@@ -1888,7 +2035,8 @@
      "description": "Places the compression ratio in a note for logging",
      "syntax": "DeflateFilterNote [type] notename",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "ロギング用に圧縮比をメモに追加"
     },
     {
      "name": "DeflateInflateLimitRequestBody",
@@ -1896,7 +2044,8 @@
      "description": "Maximum size of inflated request bodies",
      "syntax": "DeflateInflateLimitRequestBody value",
      "default": "None, but LimitRequestBody applies after deflation",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Maximum size of inflated request bodies"
     },
     {
      "name": "DeflateInflateRatioBurst",
@@ -1904,7 +2053,8 @@
      "description": "Maximum number of times the inflation ratio for request bodies can be crossed",
      "syntax": "DeflateInflateRatioBurst value",
      "default": "DeflateInflateRatioBurst 3",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Maximum number of times the inflation ratio for request bodies can be crossed"
     },
     {
      "name": "DeflateInflateRatioLimit",
@@ -1912,7 +2062,8 @@
      "description": "Maximum inflation ratio for request bodies",
      "syntax": "DeflateInflateRatioLimit value",
      "default": "DeflateInflateRatioLimit 200",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Maximum inflation ratio for request bodies"
     },
     {
      "name": "DeflateMemLevel",
@@ -1920,7 +2071,8 @@
      "description": "How much memory should be used by zlib for compression",
      "syntax": "DeflateMemLevel value",
      "default": "DeflateMemLevel 9",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "zlib が圧縮に使うメモリのレベルを指定"
     },
     {
      "name": "DeflateWindowSize",
@@ -1928,9 +2080,13 @@
      "description": "Zlib compression window size",
      "syntax": "DeflateWindowSize value",
      "default": "DeflateWindowSize 15",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Zlib の圧縮用ウィンドウの大きさ"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_deflate.ja.html",
+   "titleJa": "Apache モジュール mod_deflate",
+   "descriptionJa": "クライアントへ送られる前にコンテンツを圧縮する"
   },
   "dialup": {
    "title": "Apache Module mod_dialup",
@@ -1966,7 +2122,8 @@
      "description": "Toggle how this module responds when another handler is configured",
      "syntax": "DirectoryCheckHandler On|Off",
      "default": "DirectoryCheckHandler Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Toggle how this module responds when another handler is configured"
     },
     {
      "name": "DirectoryIndex",
@@ -1974,7 +2131,8 @@
      "description": "List of resources to look for when the client requests a directory",
      "syntax": "DirectoryIndex disabled | local-url [local-url] ...",
      "default": "DirectoryIndex index.html",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "クライアントがディレクトリをリクエストしたときに調べる リソースのリスト"
     },
     {
      "name": "DirectoryIndexRedirect",
@@ -1982,7 +2140,8 @@
      "description": "Configures an external redirect for directory indexes.",
      "syntax": "DirectoryIndexRedirect on | off | permanent | temp | seeother | 3xx-code",
      "default": "DirectoryIndexRedirect off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Configures an external redirect for directory indexes."
     },
     {
      "name": "DirectorySlash",
@@ -1990,7 +2149,8 @@
      "description": "Toggle trailing slash redirects on or off",
      "syntax": "DirectorySlash On|Off",
      "default": "DirectorySlash On",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "パス末尾のスラッシュでリダイレクトするかどうかのオンオフをトグルさせる"
     },
     {
      "name": "FallbackResource",
@@ -1998,9 +2158,13 @@
      "description": "Define a default URL for requests that don't map to a file or handler",
      "syntax": "FallbackResource disabled | local-url",
      "default": "disabled - httpd will return 404 (Not Found)",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Define a default URL for requests that don't map to a file"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_dir.ja.html",
+   "titleJa": "Apache モジュール mod_dir",
+   "descriptionJa": "「最後のスラッシュ」のリダイレクトと、ディレクトリの インデックスファイルを扱う機能を提供する"
   },
   "dumpio": {
    "title": "Apache Module mod_dumpio",
@@ -2017,7 +2181,8 @@
      "description": "Dump all input data to the error log",
      "syntax": "DumpIOInput On|Off",
      "default": "DumpIOInput Off",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "エラーログにすべての入力データをダンプ"
     },
     {
      "name": "DumpIOOutput",
@@ -2025,9 +2190,13 @@
      "description": "Dump all output data to the error log",
      "syntax": "DumpIOOutput On|Off",
      "default": "DumpIOOutput Off",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "エラーログにすべての出力データをダンプ"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_dumpio.ja.html",
+   "titleJa": "Apache モジュール mod_dumpio",
+   "descriptionJa": "望むようにすべての I/O をエラーログにダンプする"
   },
   "echo": {
    "title": "Apache Module mod_echo",
@@ -2044,9 +2213,13 @@
      "description": "Turn the echo server on or off",
      "syntax": "ProtocolEcho On|Off",
      "default": "ProtocolEcho Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "エコーサーバの有効無効を設定します。"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_echo.ja.html",
+   "titleJa": "Apache モジュール mod_echo",
+   "descriptionJa": "プロトコルモジュールの概要を示すための単純なエコーサーバ"
   },
   "env": {
    "title": "Apache Module mod_env",
@@ -2063,7 +2236,8 @@
      "description": "Passes environment variables from the shell",
      "syntax": "PassEnv env-variable [env-variable] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "シェルからの環境変数を渡す"
     },
     {
      "name": "SetEnv",
@@ -2071,7 +2245,8 @@
      "description": "Sets environment variables",
      "syntax": "SetEnv env-variable [value]",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "環境変数を設定する"
     },
     {
      "name": "UnsetEnv",
@@ -2079,9 +2254,13 @@
      "description": "Removes variables from the environment",
      "syntax": "UnsetEnv env-variable [env-variable] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "環境から変数を取り除く"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_env.ja.html",
+   "titleJa": "Apache モジュール mod_env",
+   "descriptionJa": "CGI スクリプト及び SSI ページに渡される環境変数を変更する機能を提供する"
   },
   "example_hooks": {
    "title": "Apache Module mod_example_hooks",
@@ -2117,7 +2296,8 @@
      "description": "Enables generation of Expires headers",
      "syntax": "ExpiresActive On|Off",
      "default": "ExpiresActive Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Expires ヘッダの生成を有効にする"
     },
     {
      "name": "ExpiresByType",
@@ -2125,7 +2305,8 @@
      "description": "Value of the Expires header configured by MIME type",
      "syntax": "ExpiresByType MIME-type <code>seconds",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "MIME タイプによって設定される Expires ヘッダの値"
     },
     {
      "name": "ExpiresDefault",
@@ -2133,9 +2314,13 @@
      "description": "Default algorithm for calculating expiration time",
      "syntax": "ExpiresDefault <code>seconds",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "期限切れ期日を計算するデフォルトアルゴリズム"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_expires.ja.html",
+   "titleJa": "Apache モジュール mod_expires",
+   "descriptionJa": "ユーザの指定した基準に基づいた Expires と Cache-Control HTTP ヘッダの生成"
   },
   "ext_filter": {
    "title": "Apache Module mod_ext_filter",
@@ -2152,7 +2337,8 @@
      "description": "Define an external filter",
      "syntax": "ExtFilterDefine filtername parameters",
      "default": "",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "外部フィルタを定義"
     },
     {
      "name": "ExtFilterOptions",
@@ -2160,9 +2346,13 @@
      "description": "Configure mod_ext_filter options",
      "syntax": "ExtFilterOptions option [option] ...",
      "default": "ExtFilterOptions NoLogStderr",
-     "context": "directory"
+     "context": "directory",
+     "descriptionJa": "mod_ext_filter のオプションを設定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_ext_filter.ja.html",
+   "titleJa": "Apache モジュール mod_ext_filter",
+   "descriptionJa": "レスポンスのボディをクライアントに送る前に外部プログラムで処理する"
   },
   "file_cache": {
    "title": "Apache Module mod_file_cache",
@@ -2265,7 +2455,8 @@
      "description": "Configure HTTP response headers",
      "syntax": "Header [condition] add|append|echo|edit|edit*|merge|set|setifempty|unset|note header [[expr=]value [replacement] [early|env=[!]varname|expr=expression]]",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "HTTP 応答ヘッダの設定"
     },
     {
      "name": "RequestHeader",
@@ -2273,9 +2464,13 @@
      "description": "Configure HTTP request headers",
      "syntax": "RequestHeader add|append|edit|edit*|merge|set|setifempty|unset header [[expr=]value [replacement] [early|env=[!]varname|expr=expression]]",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "HTTP リクエストヘッダの設定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_headers.ja.html",
+   "titleJa": "Apache モジュール mod_headers",
+   "descriptionJa": "HTTP リクエストのヘッダと応答のヘッダのカスタマイズ"
   },
   "heartbeat": {
    "title": "Apache Module mod_heartbeat",
@@ -2573,7 +2768,8 @@
      "description": "Enables logging of the RFC 1413 identity of the remote user",
      "syntax": "IdentityCheck On|Off",
      "default": "IdentityCheck Off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "リモートユーザの RFC 1413 によるアイデンティティのロギングを 有効にする"
     },
     {
      "name": "IdentityCheckTimeout",
@@ -2581,9 +2777,13 @@
      "description": "Determines the timeout duration for ident requests",
      "syntax": "IdentityCheckTimeout seconds",
      "default": "IdentityCheckTimeout 30",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Ident リクエストがタイムアウトするまでの期間を決める"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_ident.ja.html",
+   "titleJa": "Apache モジュール mod_ident",
+   "descriptionJa": "RFC 1413 ident lookups"
   },
   "imagemap": {
    "title": "Apache Module mod_imagemap",
@@ -2635,7 +2835,8 @@
      "description": "String that ends an include element",
      "syntax": "SSIEndTag tag",
      "default": "SSIEndTag \"-->\"",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "include 要素を終了させる文字列"
     },
     {
      "name": "SSIErrorMsg",
@@ -2643,7 +2844,8 @@
      "description": "Error message displayed when there is an SSI error",
      "syntax": "SSIErrorMsg message",
      "default": "SSIErrorMsg \"[an error occurred while processing this directive]\"",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "SSI のエラーがあったときに表示されるエラーメッセージ"
     },
     {
      "name": "SSIETag",
@@ -2651,7 +2853,8 @@
      "description": "Controls whether ETags are generated by the server.",
      "syntax": "SSIETag on|off",
      "default": "SSIETag off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "Controls whether ETags are generated by the server."
     },
     {
      "name": "SSILastModified",
@@ -2659,7 +2862,8 @@
      "description": "Controls whether Last-Modified headers are generated by the server.",
      "syntax": "SSILastModified on|off",
      "default": "SSILastModified off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "Controls whether Last-Modified headers are generated by the server."
     },
     {
      "name": "SSILegacyExprParser",
@@ -2667,7 +2871,8 @@
      "description": "Enable compatibility mode for conditional expressions.",
      "syntax": "SSILegacyExprParser on|off",
      "default": "SSILegacyExprParser off",
-     "context": "directory, .htaccess"
+     "context": "directory, .htaccess",
+     "descriptionJa": "Enable compatibility mode for conditional expressions."
     },
     {
      "name": "SSIStartTag",
@@ -2675,7 +2880,8 @@
      "description": "String that starts an include element",
      "syntax": "SSIStartTag tag",
      "default": "SSIStartTag \"<!--#\"",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "include 要素を開始する文字列"
     },
     {
      "name": "SSITimeFormat",
@@ -2683,7 +2889,8 @@
      "description": "Configures the format in which date strings are displayed",
      "syntax": "SSITimeFormat formatstring",
      "default": "SSITimeFormat \"%A, %d-%b-%Y %H:%M:%S %Z\"",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "日付けを現す文字列の書式を設定する"
     },
     {
      "name": "SSIUndefinedEcho",
@@ -2691,7 +2898,8 @@
      "description": "String displayed when an unset variable is echoed",
      "syntax": "SSIUndefinedEcho string",
      "default": "SSIUndefinedEcho \"(none)\"",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "未定義の変数が echo されたときに表示される文字列"
     },
     {
      "name": "XBitHack",
@@ -2699,9 +2907,13 @@
      "description": "Parse SSI directives in files with the execute bit set",
      "syntax": "XBitHack on|off|full",
      "default": "XBitHack off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "実行ビットが設定されたファイルの SSI ディレクティブを 解析する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_include.ja.html",
+   "titleJa": "Apache モジュール mod_include",
+   "descriptionJa": "サーバがパースする html ドキュメント (Server Side Includes)"
   },
   "info": {
    "title": "Apache Module mod_info",
@@ -2718,9 +2930,13 @@
      "description": "Adds additional information to the module information displayed by the server-info handler",
      "syntax": "AddModuleInfo module-name string",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "server-info ハンドラにより表示されるモジュールの情報に 追加の情報を付け加える"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_info.ja.html",
+   "titleJa": "Apache モジュール mod_info",
+   "descriptionJa": "サーバの設定の包括的な概観を提供する"
   },
   "isapi": {
    "title": "Apache Module mod_isapi",
@@ -3000,7 +3216,8 @@
      "description": "Buffer log entries in memory before writing to disk",
      "syntax": "BufferedLogs On|Off",
      "default": "BufferedLogs Off",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "ディスクに書き出す前にメモリにログエントリをバッファする"
     },
     {
      "name": "CustomLog",
@@ -3008,7 +3225,8 @@
      "description": "Sets filename and format of log file",
      "syntax": "CustomLog file|pipe format|nickname [env=[!]environment-variable| expr=expression]",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "ログファイルの名前と書式を設定する"
     },
     {
      "name": "GlobalLog",
@@ -3016,7 +3234,8 @@
      "description": "Sets filename and format of log file",
      "syntax": "GlobalLog file|pipe format|nickname [env=[!]environment-variable| expr=expression]",
      "default": "",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "Sets filename and format of log file"
     },
     {
      "name": "LogFormat",
@@ -3024,7 +3243,8 @@
      "description": "Describes a format for use in a log file",
      "syntax": "LogFormat format|nickname [nickname]",
      "default": "LogFormat \"%h %l %u %t \\\"%r\\\" %>s %b\"",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "ログファイルで使用する書式を設定する"
     },
     {
      "name": "TransferLog",
@@ -3032,9 +3252,13 @@
      "description": "Specify location of a log file",
      "syntax": "TransferLog file|pipe",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "ログファイルの位置を指定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_log_config.ja.html",
+   "titleJa": "Apache モジュール mod_log_config",
+   "descriptionJa": "サーバへのリクエストのロギング"
   },
   "log_debug": {
    "title": "Apache Module mod_log_debug",
@@ -3070,9 +3294,13 @@
      "description": "Sets filename of the forensic log",
      "syntax": "ForensicLog filename|pipe",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Forensic ログのファイル名を設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_log_forensic.ja.html",
+   "titleJa": "Apache モジュール mod_log_forensic",
+   "descriptionJa": "サーバに送られたリクエストの forensic ロギング"
   },
   "logio": {
    "title": "Apache Module mod_logio",
@@ -3089,9 +3317,13 @@
      "description": "Enable tracking of time to first byte (TTFB)",
      "syntax": "LogIOTrackTTFB ON|OFF",
      "default": "LogIOTrackTTFB OFF",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Enable tracking of time to first byte (TTFB)"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_logio.ja.html",
+   "titleJa": "Apache モジュール mod_logio",
+   "descriptionJa": "リクエスト毎に入力バイト数と出力バイト数とをロギング"
   },
   "lua": {
    "title": "Apache Module mod_lua",
@@ -3709,7 +3941,8 @@
      "description": "Maps the given filename extensions to the specified content charset",
      "syntax": "AddCharset charset extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名の拡張子を指定された文字セットにマップする"
     },
     {
      "name": "AddEncoding",
@@ -3717,7 +3950,8 @@
      "description": "Maps the given filename extensions to the specified encoding type",
      "syntax": "AddEncoding encoding extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名の拡張子を指定されたエンコーディング にマップする"
     },
     {
      "name": "AddHandler",
@@ -3725,7 +3959,8 @@
      "description": "Maps the filename extensions to the specified handler",
      "syntax": "AddHandler handler-name extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名の拡張子を指定されたハンドラにマップする"
     },
     {
      "name": "AddInputFilter",
@@ -3733,7 +3968,8 @@
      "description": "Maps filename extensions to the filters that will process client requests",
      "syntax": "AddInputFilter filter[;filter...] extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの拡張子をクライアントのリクエストを処理する フィルタにマップする"
     },
     {
      "name": "AddLanguage",
@@ -3741,7 +3977,8 @@
      "description": "Maps the given filename extension to the specified content language",
      "syntax": "AddLanguage language-tag extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名を指定された言語にマップ"
     },
     {
      "name": "AddOutputFilter",
@@ -3749,7 +3986,8 @@
      "description": "Maps filename extensions to the filters that will process responses from the server",
      "syntax": "AddOutputFilter filter[;filter...] extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名の拡張子をサーバからの応答を処理するフィルタに マップする"
     },
     {
      "name": "AddType",
@@ -3757,7 +3995,8 @@
      "description": "Maps the given filename extensions onto the specified content type",
      "syntax": "AddType media-type extension [extension] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル名の拡張子を指定されたコンテントタイプにマップ"
     },
     {
      "name": "DefaultLanguage",
@@ -3765,7 +4004,8 @@
      "description": "Defines a default language-tag to be sent in the Content-Language header field for all resources in the current context that have not been assigned a language-tag by some other means.",
      "syntax": "DefaultLanguage language-tag",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "あるスコープのすべてのファイルを指定された言語に 設定する"
     },
     {
      "name": "ModMimeUsePathInfo",
@@ -3773,7 +4013,8 @@
      "description": "Tells mod_mime to treat path_info components as part of the filename",
      "syntax": "ModMimeUsePathInfo On|Off",
      "default": "ModMimeUsePathInfo Off",
-     "context": "directory"
+     "context": "directory",
+     "descriptionJa": "path_info コンポーネントをファイル名の一部として扱うように mod_mime に通知する"
     },
     {
      "name": "MultiviewsMatch",
@@ -3781,7 +4022,8 @@
      "description": "The types of files that will be included when searching for a matching file with MultiViews",
      "syntax": "MultiviewsMatch Any|NegotiatedOnly|Filters|Handlers [Handlers|Filters]",
      "default": "MultiviewsMatch NegotiatedOnly",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "MultiViews でのマッチングの検索に含ませる ファイルのタイプを指定する"
     },
     {
      "name": "RemoveCharset",
@@ -3789,7 +4031,8 @@
      "description": "Removes any character set associations for a set of file extensions",
      "syntax": "RemoveCharset extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの拡張子に関連付けられたすべての文字セット を解除する"
     },
     {
      "name": "RemoveEncoding",
@@ -3797,7 +4040,8 @@
      "description": "Removes any content encoding associations for a set of file extensions",
      "syntax": "RemoveEncoding extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの拡張子に関連付けられたすべてのコンテントエンコーディング を解除する"
     },
     {
      "name": "RemoveHandler",
@@ -3805,7 +4049,8 @@
      "description": "Removes any handler associations for a set of file extensions",
      "syntax": "RemoveHandler extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの拡張子に関連付けられたすべてのハンドラを 解除する"
     },
     {
      "name": "RemoveInputFilter",
@@ -3813,7 +4058,8 @@
      "description": "Removes any input filter associations for a set of file extensions",
      "syntax": "RemoveInputFilter extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル拡張子に関連付けられた入力フィルタを解除する"
     },
     {
      "name": "RemoveLanguage",
@@ -3821,7 +4067,8 @@
      "description": "Removes any language associations for a set of file extensions",
      "syntax": "RemoveLanguage extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル拡張子に関連付けられた言語を解除する"
     },
     {
      "name": "RemoveOutputFilter",
@@ -3829,7 +4076,8 @@
      "description": "Removes any output filter associations for a set of file extensions",
      "syntax": "RemoveOutputFilter extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイル拡張子に関連付けられた出力フィルタを解除する"
     },
     {
      "name": "RemoveType",
@@ -3837,7 +4085,8 @@
      "description": "Removes any content type associations for a set of file extensions",
      "syntax": "RemoveType extension [extension] ...",
      "default": "",
-     "context": "virtual host, directory, .htaccess"
+     "context": "virtual host, directory, .htaccess",
+     "descriptionJa": "ファイルの拡張子と関連付けられたコンテントタイプを 解除する"
     },
     {
      "name": "TypesConfig",
@@ -3845,9 +4094,13 @@
      "description": "The location of the mime.types file",
      "syntax": "TypesConfig file-path",
      "default": "TypesConfig conf/mime.types",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "mime.types ファイルの位置"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_mime.ja.html",
+   "titleJa": "Apache モジュール mod_mime",
+   "descriptionJa": "リクエストされたファイルの拡張子とファイルの振る舞い (ハンドラとフィルタ)、内容 (MIME タイプ、言語、文字セット、エンコーディング) とを関連付ける"
   },
   "mime_magic": {
    "title": "Apache Module mod_mime_magic",
@@ -3931,7 +4184,8 @@
      "description": "Maximum number of idle child server processes",
      "syntax": "MaxSpareServers number",
      "default": "MaxSpareServers 10",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "アイドルな子サーバプロセスの最大個数"
     },
     {
      "name": "MinSpareServers",
@@ -3939,9 +4193,13 @@
      "description": "Minimum number of idle child server processes",
      "syntax": "MinSpareServers number",
      "default": "MinSpareServers 5",
-     "context": "server config"
+     "context": "server config",
+     "descriptionJa": "アイドルな子サーバプロセスの最小個数"
     }
-   ]
+   ],
+   "fileJa": "mod/prefork.ja.html",
+   "titleJa": "Apache MPM prefork",
+   "descriptionJa": "スレッドを使わず、先行して fork を行なうウェブサーバを実装"
   },
   "mpm_winnt": {
    "title": "Apache MPM winnt",
@@ -3951,7 +4209,10 @@
    "identifier": "mpm_winnt_module",
    "sourceFile": "mpm_winnt.c",
    "compatibility": "",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mpm_winnt.ja.html",
+   "titleJa": "Apache MPM winnt",
+   "descriptionJa": "Windows NT 向けに最適化されたマルチプロセッシングモジュール"
   },
   "mpm_worker": {
    "title": "Apache MPM worker",
@@ -3961,7 +4222,10 @@
    "identifier": "mpm_worker_module",
    "sourceFile": "worker.c",
    "compatibility": "",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/worker.ja.html",
+   "titleJa": "Apache MPM worker",
+   "descriptionJa": "マルチスレッドとマルチプロセスのハイブリッド型 ウェブサーバを実装したマルチプロセッシングモジュール"
   },
   "negotiation": {
    "title": "Apache Module mod_negotiation",
@@ -3978,7 +4242,8 @@
      "description": "Allows content-negotiated documents to be cached by proxy servers",
      "syntax": "CacheNegotiatedDocs On|Off",
      "default": "CacheNegotiatedDocs Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "コンテントネゴシエーションされたドキュメントをプロキシサーバが キャッシュできるようにする"
     },
     {
      "name": "ForceLanguagePriority",
@@ -3986,7 +4251,8 @@
      "description": "Action to take if a single acceptable document is not found",
      "syntax": "ForceLanguagePriority None|Prefer|Fallback [Prefer|Fallback]",
      "default": "ForceLanguagePriority Prefer",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "要求に合う単独のドキュメントが見つからなかったときに行なうことを指定"
     },
     {
      "name": "LanguagePriority",
@@ -3994,9 +4260,13 @@
      "description": "The precedence of language variants for cases where the client does not express a preference",
      "syntax": "LanguagePriority MIME-lang [MIME-lang] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "クライアントが優先度を示さなかったときの言語の variant の優先度を 指定"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_negotiation.ja.html",
+   "titleJa": "Apache モジュール mod_negotiation",
+   "descriptionJa": "コンテントネゴシエーション 機能を提供する"
   },
   "nwssl": {
    "title": "Apache Module mod_nw_ssl",
@@ -4123,7 +4393,8 @@
      "description": "Number of additional Balancers that can be added Post-configuration",
      "syntax": "BalancerGrowth #",
      "default": "BalancerGrowth 5",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Number of additional Balancers that can be added Post-configuration"
     },
     {
      "name": "BalancerInherit",
@@ -4131,7 +4402,8 @@
      "description": "Inherit ProxyPassed Balancers/Workers from the main server",
      "syntax": "BalancerInherit On|Off",
      "default": "BalancerInherit On",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Inherit ProxyPassed Balancers/Workers from the main server"
     },
     {
      "name": "BalancerMember",
@@ -4139,7 +4411,8 @@
      "description": "Add a member to a load balancing group",
      "syntax": "BalancerMember [balancerurl] url [key=value [key=value ...]]",
      "default": "",
-     "context": "directory"
+     "context": "directory",
+     "descriptionJa": "Add a member to a load balancing group"
     },
     {
      "name": "BalancerPersist",
@@ -4147,7 +4420,8 @@
      "description": "Attempt to persist changes made by the Balancer Manager across restarts.",
      "syntax": "BalancerPersist On|Off",
      "default": "BalancerPersist Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Attempt to persist changes made by the Balancer Manager across restarts."
     },
     {
      "name": "NoProxy",
@@ -4155,7 +4429,8 @@
      "description": "Hosts, domains, or networks that will be connected to directly",
      "syntax": "NoProxy host [host] ...",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "直接接続する ホスト、ドメイン、ネットワーク"
     },
     {
      "name": "Proxy",
@@ -4163,7 +4438,8 @@
      "description": "Container for directives applied to proxied resources",
      "syntax": "<Proxy wildcard-url> ...</Proxy>",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシされるリソースに適用されるコンテナ"
     },
     {
      "name": "Proxy100Continue",
@@ -4171,7 +4447,8 @@
      "description": "Forward 100-continue expectation to the origin server",
      "syntax": "Proxy100Continue Off|On",
      "default": "Proxy100Continue On",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Forward 100-continue expectation to the origin server"
     },
     {
      "name": "ProxyAddHeaders",
@@ -4179,7 +4456,8 @@
      "description": "Add proxy information in X-Forwarded-* headers",
      "syntax": "ProxyAddHeaders Off|On",
      "default": "ProxyAddHeaders On",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Add proxy information in X-Forwarded-* headers"
     },
     {
      "name": "ProxyBadHeader",
@@ -4187,7 +4465,8 @@
      "description": "Determines how to handle bad header lines in a response",
      "syntax": "ProxyBadHeader IsError|Ignore|StartBody",
      "default": "ProxyBadHeader IsError",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "応答におかしなヘッダがある場合の扱い方を決める"
     },
     {
      "name": "ProxyBlock",
@@ -4195,7 +4474,8 @@
      "description": "Words, hosts, or domains that are banned from being proxied",
      "syntax": "ProxyBlock *|word|host|domain [word|host|domain] ...",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシ接続を禁止する語句、ホスト名、ドメインを指定する"
     },
     {
      "name": "ProxyDomain",
@@ -4203,7 +4483,8 @@
      "description": "Default domain name for proxied requests",
      "syntax": "ProxyDomain Domain",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシされたリクエストのデフォルトのドメイン名"
     },
     {
      "name": "ProxyErrorOverride",
@@ -4211,7 +4492,8 @@
      "description": "Override error pages for proxied content",
      "syntax": "ProxyErrorOverride Off|On [code ...]",
      "default": "ProxyErrorOverride Off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "プロキシされたコンテンツのエラーページを上書きする"
     },
     {
      "name": "ProxyIOBufferSize",
@@ -4219,7 +4501,8 @@
      "description": "Determine size of internal data throughput buffer",
      "syntax": "ProxyIOBufferSize bytes",
      "default": "ProxyIOBufferSize 8192",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "内部データスループットバッファのサイズを決定する"
     },
     {
      "name": "ProxyMatch",
@@ -4227,7 +4510,8 @@
      "description": "Container for directives applied to regular-expression-matched proxied resources",
      "syntax": "<ProxyMatch regex> ...</ProxyMatch>",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "正規表現でのマッチによるプロキシリソース用のディレクティブコンテナ"
     },
     {
      "name": "ProxyMaxForwards",
@@ -4235,7 +4519,8 @@
      "description": "Maximum number of proxies that a request can be forwarded through",
      "syntax": "ProxyMaxForwards number",
      "default": "ProxyMaxForwards -1",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "リクエストがフォワードされるプロキシの最大数"
     },
     {
      "name": "ProxyPass",
@@ -4243,7 +4528,8 @@
      "description": "Maps remote servers into the local server URL-space",
      "syntax": "ProxyPass [path] !|url [key=value [key=value ...]] [nocanon] [interpolate] [noquery]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "リモートサーバをローカルサーバの URL 空間にマップする"
     },
     {
      "name": "ProxyPassInherit",
@@ -4251,7 +4537,8 @@
      "description": "Inherit ProxyPass directives defined from the main server",
      "syntax": "ProxyPassInherit On|Off",
      "default": "ProxyPassInherit On",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Inherit ProxyPass directives defined from the main server"
     },
     {
      "name": "ProxyPassInterpolateEnv",
@@ -4259,7 +4546,8 @@
      "description": "Enable Environment Variable interpolation in Reverse Proxy configurations",
      "syntax": "ProxyPassInterpolateEnv On|Off",
      "default": "ProxyPassInterpolateEnv Off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Enable Environment Variable interpolation in Reverse Proxy configurations"
     },
     {
      "name": "ProxyPassMatch",
@@ -4267,7 +4555,8 @@
      "description": "Maps remote servers into the local server URL-space using regular expressions",
      "syntax": "ProxyPassMatch [regex] !|url [key=value [key=value ...]]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Maps remote servers into the local server URL-space using regular expressions"
     },
     {
      "name": "ProxyPassReverse",
@@ -4275,7 +4564,8 @@
      "description": "Adjusts the URL in HTTP response headers sent from a reverse proxied server",
      "syntax": "ProxyPassReverse [path] url [interpolate]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "リバースプロキシされたサーバから送られた HTTP 応答ヘッダの URL を調整する"
     },
     {
      "name": "ProxyPassReverseCookieDomain",
@@ -4283,7 +4573,8 @@
      "description": "Adjusts the Domain string in Set-Cookie headers from a reverse- proxied server",
      "syntax": "ProxyPassReverseCookieDomain internal-domain public-domain [interpolate]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "リバースプロキシサーバからの Set-Cookie ヘッダの Domain 文字列を 調整する"
     },
     {
      "name": "ProxyPassReverseCookiePath",
@@ -4291,7 +4582,8 @@
      "description": "Adjusts the Path string in Set-Cookie headers from a reverse- proxied server",
      "syntax": "ProxyPassReverseCookiePath internal-path public-path [interpolate]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Reverse プロキシサーバからの Set-Cookie ヘッダの Path 文字列を 調整する"
     },
     {
      "name": "ProxyPreserveHost",
@@ -4299,7 +4591,8 @@
      "description": "Use incoming Host HTTP request header for proxy request",
      "syntax": "ProxyPreserveHost On|Off",
      "default": "ProxyPreserveHost Off",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "プロキシリクエストに、受け付けた Host HTTP ヘッダを使う"
     },
     {
      "name": "ProxyReceiveBufferSize",
@@ -4307,7 +4600,8 @@
      "description": "Network buffer size for proxied HTTP and FTP connections",
      "syntax": "ProxyReceiveBufferSize bytes",
      "default": "ProxyReceiveBufferSize 0",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシされる HTTP と FTP 接続のためのネットワークバッファサイズ"
     },
     {
      "name": "ProxyRemote",
@@ -4315,7 +4609,8 @@
      "description": "Remote proxy used to handle certain requests",
      "syntax": "ProxyRemote match remote-server [username:password]",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "特定のリクエストを扱う時に使われるリモートプロキシを指定する"
     },
     {
      "name": "ProxyRemoteMatch",
@@ -4323,7 +4618,8 @@
      "description": "Remote proxy used to handle requests matched by regular expressions",
      "syntax": "ProxyRemoteMatch regex remote-server [username:password]",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "正規表現でのマッチによるリクエストを扱うリモートプロキシの指定"
     },
     {
      "name": "ProxyRequests",
@@ -4331,7 +4627,8 @@
      "description": "Enables forward (standard) proxy requests",
      "syntax": "ProxyRequests On|Off",
      "default": "ProxyRequests Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "フォワード (標準の) プロキシリクエストを有効にする"
     },
     {
      "name": "ProxySet",
@@ -4339,7 +4636,8 @@
      "description": "Set various Proxy balancer or member parameters",
      "syntax": "ProxySet url key=value [key=value ...]",
      "default": "",
-     "context": "server config, virtual host, directory"
+     "context": "server config, virtual host, directory",
+     "descriptionJa": "Set various Proxy balancer or member parameters"
     },
     {
      "name": "ProxySourceAddress",
@@ -4347,7 +4645,8 @@
      "description": "Set local IP address for outgoing proxy connections",
      "syntax": "ProxySourceAddress address",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Set local IP address for outgoing proxy connections"
     },
     {
      "name": "ProxyStatus",
@@ -4355,7 +4654,8 @@
      "description": "Show Proxy LoadBalancer status in mod_status",
      "syntax": "ProxyStatus Off|On|Full",
      "default": "ProxyStatus Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Show Proxy LoadBalancer status in mod_status"
     },
     {
      "name": "ProxyTimeout",
@@ -4363,7 +4663,8 @@
      "description": "Network timeout for proxied requests",
      "syntax": "ProxyTimeout seconds",
      "default": "Value of Timeout",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシされたリクエストのネットワークタイムアウト"
     },
     {
      "name": "ProxyVia",
@@ -4371,9 +4672,13 @@
      "description": "Information provided in the Via HTTP response header for proxied requests",
      "syntax": "ProxyVia On|Off|Full|Block",
      "default": "ProxyVia Off",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "プロキシされたリクエストの Via HTTP 応答ヘッダ により提供される情報"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_proxy.ja.html",
+   "titleJa": "Apache モジュール mod_proxy",
+   "descriptionJa": "HTTP/1.1 プロキシ/ゲートウェイサーバ"
   },
   "proxy_ajp": {
    "title": "Apache Module mod_proxy_ajp",
@@ -4383,7 +4688,10 @@
    "identifier": "proxy_ajp_module",
    "sourceFile": "mod_proxy_ajp.c",
    "compatibility": "Available in version 2.1 and later",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_proxy_ajp.ja.html",
+   "titleJa": "Apache モジュール mod_proxy_ajp",
+   "descriptionJa": "mod_proxy で AJP をサポートするためのモジュール"
   },
   "proxy_balancer": {
    "title": "Apache Module mod_proxy_balancer",
@@ -4393,7 +4701,10 @@
    "identifier": "proxy_balancer_module",
    "sourceFile": "mod_proxy_balancer.c",
    "compatibility": "Available in version 2.1 and later",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_proxy_balancer.ja.html",
+   "titleJa": "Apache モジュール mod_proxy_balancer",
+   "descriptionJa": "負荷分散のための mod_proxy 拡張"
   },
   "proxy_connect": {
    "title": "Apache Module mod_proxy_connect",
@@ -4410,9 +4721,13 @@
      "description": "Ports that are allowed to CONNECT through the proxy",
      "syntax": "AllowCONNECT port[-port] [port[-port]] ...",
      "default": "AllowCONNECT 443 563",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "Ports that are allowed to CONNECT through the proxy"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_proxy_connect.ja.html",
+   "titleJa": "Apache モジュール mod_proxy_connect",
+   "descriptionJa": "CONNECT リクエストを扱う mod_proxy 用の拡張"
   },
   "proxy_express": {
    "title": "Apache Module mod_proxy_express",
@@ -5202,7 +5517,8 @@
      "description": "Sets environment variables conditional on HTTP User-Agent",
      "syntax": "BrowserMatch regex [!]env-variable[=value] [[!]env-variable[=value]] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "HTTP User-Agent に基づいて環境変数を設定する"
     },
     {
      "name": "BrowserMatchNoCase",
@@ -5210,7 +5526,8 @@
      "description": "Sets environment variables conditional on User-Agent without respect to case",
      "syntax": "BrowserMatchNoCase regex [!]env-variable[=value] [[!]env-variable[=value]] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "HTTP User-Agent に基づいて大文字小文字を区別せずに 環境変数を設定する"
     },
     {
      "name": "SetEnvIf",
@@ -5218,7 +5535,8 @@
      "description": "Sets environment variables based on attributes of the request",
      "syntax": "SetEnvIf attribute regex [!]env-variable[=value] [[!]env-variable[=value]] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "リクエストの属性に基づいて環境変数を設定する"
     },
     {
      "name": "SetEnvIfExpr",
@@ -5226,7 +5544,8 @@
      "description": "Sets environment variables based on an ap_expr expression",
      "syntax": "SetEnvIfExpr expr [!]env-variable[=value] [[!]env-variable[=value]] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Sets environment variables based on an ap_expr expression"
     },
     {
      "name": "SetEnvIfNoCase",
@@ -5234,9 +5553,13 @@
      "description": "Sets environment variables based on attributes of the request without respect to case",
      "syntax": "SetEnvIfNoCase attribute regex [!]env-variable[=value] [[!]env-variable[=value]] ...",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "リクエストの属性に基づいて大文字小文字を区別せずに環境変数を設定する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_setenvif.ja.html",
+   "titleJa": "Apache モジュール mod_setenvif",
+   "descriptionJa": "リクエストの特徴に基づいた環境変数の設定を可能にする"
   },
   "slotmem_plain": {
    "title": "Apache Module mod_slotmem_plain",
@@ -5273,7 +5596,8 @@
      "description": "Link in the named object file or library",
      "syntax": "LoadFile filename [filename] ...",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "指定されたオブジェクトファイルやライブラリをリンクする"
     },
     {
      "name": "LoadModule",
@@ -5281,9 +5605,13 @@
      "description": "Links in the object file or library, and adds to the list of active modules",
      "syntax": "LoadModule module filename",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "オブジェクトファイルやライブラリをリンクし、使用モジュールの リストに追加する"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_so.ja.html",
+   "titleJa": "Apache モジュール mod_so",
+   "descriptionJa": "起動時や再起動時に実行コードとモジュールをサーバにロードする"
   },
   "socache_dbm": {
    "title": "Apache Module mod_socache_dbm",
@@ -5376,7 +5704,8 @@
      "description": "Also match files with differing file name extensions.",
      "syntax": "CheckBasenameMatch on|off",
      "default": "CheckBasenameMatch On",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "Also match files with differing file name extensions."
     },
     {
      "name": "CheckCaseOnly",
@@ -5384,7 +5713,8 @@
      "description": "Limits the action of the speling module to case corrections",
      "syntax": "CheckCaseOnly on|off",
      "default": "CheckCaseOnly Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "大文字小文字の修正だけ行うようにする"
     },
     {
      "name": "CheckSpelling",
@@ -5392,9 +5722,13 @@
      "description": "Enables the spelling module",
      "syntax": "CheckSpelling on|off",
      "default": "CheckSpelling Off",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "spelling モジュールを使用するようにする"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_speling.ja.html",
+   "titleJa": "Apache モジュール mod_speling",
+   "descriptionJa": "ユーザが入力したであろう間違った URL を、 大文字小文字の区別を無視することと一つ以下の綴り間違いを許容することで 修正を試みる"
   },
   "ssl": {
    "title": "Apache Module mod_ssl",
@@ -5991,7 +6325,10 @@
    "identifier": "status_module",
    "sourceFile": "mod_status.c",
    "compatibility": "",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_status.ja.html",
+   "titleJa": "Apache モジュール mod_status",
+   "descriptionJa": "サーバの活動状況と性能に関する情報を提供する"
   },
   "substitute": {
    "title": "Apache Module mod_substitute",
@@ -6043,9 +6380,13 @@
      "description": "User and group for CGI programs to run as",
      "syntax": "SuexecUserGroup User Group",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "CGI プログラムのユーザパーミッション、グループパーミッション"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_suexec.ja.html",
+   "titleJa": "Apache モジュール mod_suexec",
+   "descriptionJa": "指定されたユーザとグループで CGI スクリプトを実行する"
   },
   "systemd": {
    "title": "Apache Module mod_systemd",
@@ -6065,7 +6406,10 @@
    "identifier": "unique_id_module",
    "sourceFile": "mod_unique_id.c",
    "compatibility": "",
-   "directives": []
+   "directives": [],
+   "fileJa": "mod/mod_unique_id.ja.html",
+   "titleJa": "Apache モジュール mod_unique_id",
+   "descriptionJa": "それぞれのリクエストに対する一意な識別子の入った環境変数を 提供する"
   },
   "unixd": {
    "title": "Apache Module mod_unixd",
@@ -6125,9 +6469,13 @@
      "description": "Location of the user-specific directories",
      "syntax": "UserDir directory-filename [directory-filename] ...",
      "default": "",
-     "context": "server config, virtual host"
+     "context": "server config, virtual host",
+     "descriptionJa": "ユーザ専用ディレクトリの位置"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_userdir.ja.html",
+   "titleJa": "Apache モジュール mod_userdir",
+   "descriptionJa": "ユーザ専用のディレクトリを提供"
   },
   "usertrack": {
    "title": "Apache Module mod_usertrack",
@@ -6219,9 +6567,13 @@
      "description": "contains version dependent configuration",
      "syntax": "<IfVersion [[!]operator] version> ... </IfVersion>",
      "default": "",
-     "context": "server config, virtual host, directory, .htaccess"
+     "context": "server config, virtual host, directory, .htaccess",
+     "descriptionJa": "バージョン依存の設定を入れる"
     }
-   ]
+   ],
+   "fileJa": "mod/mod_version.ja.html",
+   "titleJa": "Apache モジュール mod_version",
+   "descriptionJa": "バージョン依存の設定"
   },
   "vhost_alias": {
    "title": "Apache Module mod_vhost_alias",
