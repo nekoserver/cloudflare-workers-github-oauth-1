@@ -92,6 +92,29 @@ describe('グレーアウト中の表示', () => {
   });
 });
 
+describe('リンクの下線(ユーザー指定 2026-11-15)', () => {
+  it('ページ内のリンクとモジュール名に下線を付けない(マウスを乗せたときも)', () => {
+    const html = getCfContainersPage();
+    const css = html.match(/<style>([\s\S]*?)<\/style>/)![1];
+    expect(css).not.toMatch(/text-decoration:\s*underline/);
+    expect(css).toMatch(/(^|\n)a, a:hover, a:focus-visible \{ text-decoration: none; \}/);
+    expect(css).toMatch(/button\.module-name \{[^}]*text-decoration: none/);
+  });
+});
+
+describe('「有効状態」の文言(ユーザー指定 2026-11-15)', () => {
+  it('表の見出しとモーダルの項目名を「ロード状態」にする(値の有効・無効はそのまま)', async () => {
+    const html = getCfContainersPage();
+    expect(html).not.toContain('有効状態');
+    expect(html).toContain('<th>ロード状態</th>');
+    const { open, doc } = await setup();
+    await open('ssl');
+    const labels = [...doc.querySelectorAll('#apache-module-body dt')].map((dt) => dt.textContent);
+    expect(labels).toContain('ロード状態');
+    expect(doc.getElementById('apache-module-state')!.textContent).toBe('有効');
+  });
+});
+
 describe('モジュール名のタップで開くモーダル', () => {
   it('モジュール名はボタンで、押すと既存の要素より上にモーダルを開き、説明と設定項目を出す', async () => {
     const { row, open, modal, doc, requested } = await setup();

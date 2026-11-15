@@ -53,7 +53,9 @@ body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans
 .section-sidebar summary { cursor: pointer; font-weight: 600; padding: 8px 12px; }
 .section-sidebar details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .section-sidebar a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; color: var(--link); text-decoration: none; }
-.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); text-decoration: underline; }
+.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); }
+/* リンクには下線を付けない(マウスを乗せたときも)。ユーザー指定 2026-11-15 */
+a, a:hover, a:focus-visible { text-decoration: none; }
 main { min-width: 0; }
 main details[data-section] { scroll-margin-top: 12px; }
 main details[data-section]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -117,7 +119,7 @@ details.card[open] > summary { margin-bottom: 6px; }
 /* グレーアウト中も緑の表記は薄くせず、モジュール名は通常の文字色(ダークテーマでは白)にする。ユーザー指定 2026-11-15 */
 .module-unlocked .module-lock-cell { opacity: 0.45; }
 .module-unlocked .module-name.module-inactive { color: var(--text); }
-button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: none; }
 .apache-module-panel { width: min(640px, 100%); max-height: calc(100dvh - 80px); overflow-y: auto; }
 .apache-module-panel h4 { font-size: 13px; margin: 10px 0 4px; }
 .apache-module-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; font-size: 12px; }
@@ -268,7 +270,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <div class="pricing-scroll">
   <p class="subtitle" style="margin:6px 0 4px;">Apacheモジュール（導入済みファイルとapache2ctl -Mのロード状態。版はApache本体の版）</p>
   <table class="health-table" id="apache-modules-table" hidden>
-    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th>有効状態</th></tr></thead>
+    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th>ロード状態</th></tr></thead>
     <tbody id="apache-modules-tbody"></tbody>
   </table>
   <div id="apache-modules-error" class="module-inactive" style="font-size:12px;margin-top:4px;"></div>
@@ -724,7 +726,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     var body = document.getElementById('apache-module-body');
     body.innerHTML = '';
     var dl = el('dl');
-    dl.appendChild(el('dt', '有効状態'));
+    dl.appendChild(el('dt', 'ロード状態'));
     var stateCell = el('dd');
     stateCell.appendChild(el('span', module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明'), active ? 'module-active' : 'module-inactive'));
     stateCell.firstChild.id = 'apache-module-state';
