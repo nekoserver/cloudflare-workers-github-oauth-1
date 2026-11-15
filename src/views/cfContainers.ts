@@ -126,7 +126,24 @@ button.module-name { background: none; border: 0; padding: 0; margin: 0; font: i
 .apache-directives th, .apache-directives td { border-top: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .apache-directives code { font-size: 11px; }
 .apache-help-link { display: inline-block; margin: 8px 0 2px; color: var(--link); }
-.apache-help-panel { width: min(960px, 100%); height: calc(100dvh - 80px); display: flex; flex-direction: column; gap: 6px; }
+.apache-help-panel { position: fixed; margin: 0; width: min(960px, 100%); height: calc(100dvh - 80px); display: flex; flex-direction: column; gap: 6px; }
+/* ヘルプのウィンドウ: 右端のボタン・最大化・四隅のつまみ・タイトルバーだけ(ユーザー指定 2026-11-15) */
+#apache-help-bar { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin-bottom: 0; user-select: none; touch-action: manipulation; }
+#apache-help-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#apache-help-actions { margin-left: auto; flex: 0 0 auto; display: flex; gap: 6px; }
+#apache-help-actions button { margin-right: 0; }
+.apache-help-panel.maximized { left: 0 !important; top: 0 !important; width: 100vw !important; height: 100dvh !important; border-radius: 0; }
+.apache-help-panel.collapsed { height: auto !important; }
+.apache-help-panel.collapsed iframe, .apache-help-panel.collapsed .help-resize { display: none; }
+.apache-help-panel.maximized .help-resize { display: none; }
+.apache-help-panel.resizing iframe { pointer-events: none; }
+.apache-help-panel.resizing { user-select: none; }
+.help-resize { position: absolute; width: 20px; height: 20px; touch-action: none; z-index: 1; }
+.help-resize[data-corner="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
+.help-resize[data-corner="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+.help-resize[data-corner="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.help-resize[data-corner="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.help-resize[data-corner="se"]::after { content: ''; position: absolute; right: 8px; bottom: 8px; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); }
 .apache-help-panel iframe { flex: 1; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
 .module-check { margin: 0 6px 0 0; vertical-align: middle; }
@@ -280,8 +297,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div id="apache-help-modal" class="menu-modal" hidden>
     <div class="menu-panel apache-help-panel" role="dialog" aria-modal="true" aria-labelledby="apache-help-title">
-      <div class="status-row"><strong id="apache-help-title"></strong><button type="button" id="apache-help-close">閉じる</button></div>
+      <div class="status-row" id="apache-help-bar" title="ダブルタップでタイトルバーだけにする/元に戻す"><strong id="apache-help-title"></strong><span id="apache-help-actions"><button type="button" id="apache-help-close">閉じる</button><button type="button" id="apache-help-maximize" aria-pressed="false" aria-label="最大化する" title="最大化する">⬜︎</button></span></div>
       <iframe id="apache-help-frame" src="about:blank" title="Apacheモジュールのヘルプ" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+      <span class="help-resize" data-corner="nw" aria-hidden="true"></span><span class="help-resize" data-corner="ne" aria-hidden="true"></span><span class="help-resize" data-corner="sw" aria-hidden="true"></span><span class="help-resize" data-corner="se" aria-hidden="true"></span>
     </div>
   </div>
   <!-- /apache-module-modals -->
@@ -538,6 +556,18 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var moduleModal = document.getElementById('apache-module-modal');
   var helpModal = document.getElementById('apache-help-modal');
   var helpFrame = document.getElementById('apache-help-frame');
+  // ヘルプのウィンドウの大きさ(幅x高さ)はCookieに1年保存する。位置は開くたびに中央。
+  // 最大化とタイトルバーだけの状態は一時的なもので、保存しない(ユーザー指定 2026-11-15)。
+  var HELP_COOKIE = 'cfc_apache_help_size';
+  var HELP_MAX_AGE = 365 * 24 * 60 * 60;
+  var HELP_MIN_W = 280;
+  var HELP_MIN_H = 160;
+  var helpPanel = helpModal ? helpModal.querySelector('.apache-help-panel') : null;
+  var helpMaxButton = document.getElementById('apache-help-maximize');
+  var helpBar = document.getElementById('apache-help-bar');
+  var helpBox = null;
+  var resizeEndedAt = 0;
+  var lastTouchUp = 0;
   var COOKIE = 'cfc_apache_module_locks';
   var MAX_AGE = 7 * 24 * 60 * 60;
   var NEXT = { closed: 'open', open: 'locked', locked: 'closed' };
@@ -648,8 +678,107 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     dl.appendChild(el('dd', value));
   }
 
+  function viewport() {
+    return { w: window.innerWidth || document.documentElement.clientWidth, h: window.innerHeight || document.documentElement.clientHeight };
+  }
+
+  function readHelpSize() {
+    var found = null;
+    document.cookie.split(';').forEach(function (part) {
+      var kv = part.trim();
+      var eq = kv.indexOf('=');
+      if (eq < 0 || kv.slice(0, eq) !== HELP_COOKIE) return;
+      var pair = kv.slice(eq + 1).split('x');
+      if (pair.length !== 2) return;
+      var w = parseInt(pair[0], 10);
+      var h = parseInt(pair[1], 10);
+      if (w > 0 && h > 0 && String(w) === pair[0] && String(h) === pair[1]) found = { width: w, height: h };
+    });
+    return found;
+  }
+
+  function writeHelpSize() {
+    document.cookie = HELP_COOKIE + '=' + helpBox.width + 'x' + helpBox.height + '; Path=/cf-containers; Secure; SameSite=Lax; Max-Age=' + HELP_MAX_AGE;
+  }
+
+  function clampSize(w, h) {
+    var v = viewport();
+    return { width: Math.max(HELP_MIN_W, Math.min(w, v.w - 16)), height: Math.max(HELP_MIN_H, Math.min(h, v.h - 16)) };
+  }
+
+  function applyHelpBox() {
+    helpPanel.style.left = helpBox.left + 'px';
+    helpPanel.style.top = helpBox.top + 'px';
+    helpPanel.style.width = helpBox.width + 'px';
+    helpPanel.style.height = helpBox.height + 'px';
+  }
+
+  function placeHelp() {
+    var v = viewport();
+    var saved = readHelpSize();
+    var size = saved ? clampSize(saved.width, saved.height) : clampSize(Math.min(960, v.w - 32), v.h - 80);
+    helpBox = { width: size.width, height: size.height, left: Math.round((v.w - size.width) / 2), top: Math.max(8, Math.min(40, v.h - size.height - 8)) };
+    applyHelpBox();
+  }
+
+  function setHelpMaximized(on) {
+    helpPanel.classList.toggle('maximized', on);
+    var label = on ? '元のサイズに戻す' : '最大化する';
+    helpMaxButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+    helpMaxButton.setAttribute('aria-label', label);
+    helpMaxButton.title = label;
+  }
+
+  // 四隅のつまみ: 反対の隅を固定したまま大きさを変え、離したときに大きさを保存する
+  function startResize(corner, e) {
+    if (helpPanel.classList.contains('maximized')) return;
+    e.preventDefault();
+    var start = { x: e.clientX, y: e.clientY, box: { left: helpBox.left, top: helpBox.top, width: helpBox.width, height: helpBox.height } };
+    helpPanel.classList.add('resizing');
+    function move(ev) {
+      var b = start.box;
+      var v = viewport();
+      var dx = ev.clientX - start.x;
+      var dy = ev.clientY - start.y;
+      var w = corner.indexOf('e') >= 0 ? b.width + dx : b.width - dx;
+      var h = corner.indexOf('s') >= 0 ? b.height + dy : b.height - dy;
+      w = Math.max(HELP_MIN_W, Math.min(w, v.w));
+      h = Math.max(HELP_MIN_H, Math.min(h, v.h));
+      helpBox = {
+        left: corner.indexOf('w') >= 0 ? b.left + b.width - w : b.left,
+        top: corner.indexOf('n') >= 0 ? b.top + b.height - h : b.top,
+        width: w,
+        height: h,
+      };
+      applyHelpBox();
+    }
+    function up(ev) {
+      move(ev);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      helpPanel.classList.remove('resizing');
+      resizeEndedAt = Date.now();
+      writeHelpSize();
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  }
+
+  function toggleHelpCollapsed() {
+    helpPanel.classList.toggle('collapsed');
+  }
+
+  function onBar(e) {
+    return !(e.target && e.target.closest && e.target.closest('button'));
+  }
+
   function openHelp(url, title) {
     document.getElementById('apache-help-title').textContent = title;
+    helpPanel.classList.remove('collapsed');
+    setHelpMaximized(false);
+    placeHelp();
     helpFrame.setAttribute('src', url);
     helpModal.style.zIndex = String(nextZ());
     helpModal.hidden = false;
@@ -680,7 +809,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       note.textContent = '静的アセットにこのモジュールの説明がありません(Apache ' + (index && index.apacheVersion || '?') + ' のマニュアルに無いモジュールです)。';
       return;
     }
-    note.textContent = entry.description;
+    // 日本語版があれば、説明もヘルプも日本語を出す(ユーザー指定 2026-11-15)。英語の原文と英語版へのリンクも残す
+    var ja = !!entry.fileJa;
+    note.textContent = (ja && entry.descriptionJa) || entry.description;
+    if (ja && entry.descriptionJa && entry.description) {
+      body.appendChild(el('p', entry.description, 'module-inactive'));
+    }
     var dl = el('dl');
     addPair(dl, '区分', entry.status);
     addPair(dl, '識別子', entry.identifier);
@@ -690,8 +824,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     if (apacheVersion && index.apacheVersion !== apacheVersion) {
       body.appendChild(el('p', '説明はApache ' + index.apacheVersion + ' のマニュアルです(コンテナは ' + apacheVersion + ')。', 'module-inactive'));
     }
-    var href = MANUAL_BASE + '/' + entry.file;
-    body.appendChild(helpLink(href, '📖 ' + entry.title + ' のヘルプを開く', 'apache-help-link', entry.title));
+    var href = MANUAL_BASE + '/' + (ja ? entry.fileJa : entry.file);
+    var helpTitle = (ja && entry.titleJa) || entry.title;
+    body.appendChild(helpLink(href, '📖 ' + helpTitle + (ja ? ' のヘルプ(日本語)を開く' : ' のヘルプを開く'), 'apache-help-link', helpTitle));
+    if (ja) {
+      body.appendChild(document.createTextNode(' '));
+      body.appendChild(helpLink(MANUAL_BASE + '/' + entry.file, '英語版', 'apache-help-link apache-help-link-en', entry.title));
+      body.appendChild(el('p', '日本語訳は英語版より古い場合があります(英語版が ' + index.apacheVersion + ' の最新です)。', 'module-inactive'));
+    }
     body.appendChild(el('h4', '設定項目(ディレクティブ)'));
     if (!entry.directives || !entry.directives.length) {
       body.appendChild(el('p', 'このモジュールのページで定義されたディレクティブはありません。', 'module-inactive'));
@@ -704,8 +844,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     entry.directives.forEach(function (d) {
       var tr = el('tr');
       var nameCell = el('td');
-      nameCell.appendChild(helpLink(href + (d.anchor ? '#' + d.anchor : ''), d.name, 'apache-directive-link', entry.title + ' - ' + d.name));
-      if (d.description) { nameCell.appendChild(el('br')); nameCell.appendChild(el('span', d.description, 'module-inactive')); }
+      nameCell.appendChild(helpLink(href + (d.anchor ? '#' + d.anchor : ''), d.name, 'apache-directive-link', helpTitle + ' - ' + d.name));
+      var directiveDescription = (ja && d.descriptionJa) || d.description;
+      if (directiveDescription) { nameCell.appendChild(el('br')); nameCell.appendChild(el('span', directiveDescription, 'module-inactive')); }
       tr.appendChild(nameCell);
       var syntax = el('td');
       syntax.appendChild(el('code', d.syntax || ''));
@@ -751,7 +892,25 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     document.getElementById('apache-module-close').addEventListener('click', closeModule);
     document.getElementById('apache-help-close').addEventListener('click', closeHelp);
     moduleModal.addEventListener('click', function (e) { if (e.target === moduleModal) closeModule(); });
-    helpModal.addEventListener('click', function (e) { if (e.target === helpModal) closeHelp(); });
+    helpModal.addEventListener('click', function (e) {
+      if (e.target !== helpModal) return;
+      // つまみのドラッグをウィンドウの外で離したときのクリックでは閉じない
+      if (resizeEndedAt && Date.now() - resizeEndedAt < 500) { resizeEndedAt = 0; return; }
+      closeHelp();
+    });
+    helpMaxButton.addEventListener('click', function () { setHelpMaximized(!helpPanel.classList.contains('maximized')); });
+    helpPanel.querySelectorAll('.help-resize').forEach(function (handle) {
+      handle.addEventListener('pointerdown', function (e) { startResize(handle.getAttribute('data-corner'), e); });
+    });
+    // タイトルバーのダブルクリック(タッチでは続けて2回のタップ)で、タイトルバーだけにする/元に戻す
+    helpBar.addEventListener('dblclick', function (e) { if (onBar(e)) toggleHelpCollapsed(); });
+    helpBar.addEventListener('pointerup', function (e) {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      if (!onBar(e)) return;
+      var now = Date.now();
+      if (lastTouchUp && now - lastTouchUp < 350) { lastTouchUp = 0; toggleHelpCollapsed(); }
+      else lastTouchUp = now;
+    });
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!helpModal.hidden) closeHelp();
@@ -825,7 +984,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     table.hidden = false;
   }
 
-  window.cfcApacheModules = { render: render };
+  window.cfcApacheModules = { render: render, openHelp: openHelp };
 })();
 </script>
 <script>

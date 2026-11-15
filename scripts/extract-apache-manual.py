@@ -9,11 +9,13 @@
 #   python3 -I scripts/extract-apache-manual.py <dir>/httpd-<版>.tar.bz2 <dir>/httpd-<版>.tar.bz2.sha512 public/apache-manual
 #
 # - アーカイブは配布元が公開する .sha512 と照合し、一致しなければ何も書かずに止める(CLAUDE.md コンテナビルドのルール2)。
-# - 展開するのは docs/manual/mod/*.html.en(拡張子 .html に改名)、表示に要る style/ と images/、LICENSE・NOTICE だけ。
+# - 展開するのは docs/manual/mod/*.html.en(拡張子 .html に改名)、日本語版の *.html.ja.utf8(.ja.html に改名して同じ mod/ に置く)、
+#   表示に要る style/ と images/、LICENSE・NOTICE だけ。日本語版どうしのリンクは、日本語版があれば日本語版を指すように張り替える。
 # - mod/ の外(用語集・howto など)へのリンクは公式のオンライン版(https://httpd.apache.org/docs/2.4/)に張り替え、
 #   外部リンクは新しいタブで開くようにする(iframe の中で外部サイトへ移動させない)。
 # - modules.json には、モジュール名(識別子から _module を除いたもの。apache2ctl -M の表記と同じ)ごとに、
 #   説明・状態・識別子・ソースファイル・互換性と、そのページで定義されたディレクティブ(構文・既定値・文脈)を入れる。
+#   日本語版があれば fileJa・titleJa・descriptionJa と、ディレクティブごとの descriptionJa も入れる。
 import hashlib
 import html
 import json
@@ -43,13 +45,17 @@ def rows_of(table_html):
     return rows
 
 
-def rewrite_links(page):
+def rewrite_links(page, ja_names=frozenset()):
     def fix(match):
         attr, url = match.group(1), match.group(2)
         if url.startswith(('../mod/', '../style/', '../images/')):
             return match.group(0)
         if url.startswith('../en/mod/'):
             return '%s="%s"' % (attr, url[len('../en/'):].replace('mod/', '', 1))
+        if url.startswith('../ja/mod/'):
+            name = url[len('../ja/mod/'):].split('#', 1)[0]
+            if name in ja_names:
+                return '%s="%s"' % (attr, url[len('../ja/mod/'):].replace('.html', '.ja.html', 1))
         if url.startswith('../'):
             return '%s="%s"' % (attr, ONLINE + url[3:])
         return match.group(0)
@@ -67,6 +73,37 @@ def rewrite_links(page):
         return tag[:-1] + ' target="_blank" rel="noopener noreferrer">'
 
     return re.sub(r'<a\b[^>]*\bhref="https?://[^"]*"[^>]*>', external, page)
+
+
+def link_japanese(page, ja_names):
+    # 日本語版の中のモジュールどうしのリンクを、日本語版があれば日本語版へ向ける
+    def fix(match):
+        prefix, name, anchor = match.group(1), match.group(2), match.group(3) or ''
+        if name + '.html' not in ja_names:
+            return match.group(0)
+        return 'href="%s%s.ja.html%s"' % (prefix, name, anchor)
+    return re.sub(r'href="((?:\.\./mod/)?)([\w-]+(?:\.[\w-]+)*?)\.html(#[^"]*)?"', fix, page)
+
+
+def unlink_missing(page, existing):
+    # 展開した mod/ に無いページへのリンク(古い日本語訳が指す、2.4には無いモジュールなど)は、リンクを外して文字だけ残す
+    def fix(match):
+        target = match.group(1) + '.html'
+        return match.group(0) if target in existing else match.group(2)
+    return re.sub(r'<a\b[^>]*\bhref="(?:\.\./mod/)?([\w-]+(?:\.[\w-]+)*?)\.html(?:#[^"]*)?"[^>]*>(.*?)</a>', fix, page, flags=re.S)
+
+
+def parse_japanese(page):
+    table = re.search(r'<table class="module">(.*?)</table>', page, re.S)
+    info = rows_of(table.group(1)) if table else {}
+    directives = {}
+    for section in re.findall(r'<div class="directive-section">(.*?)</table>', page, re.S):
+        name = re.search(r'<span id="([^"]+)">', section)
+        dtable = re.search(r'<table class="directive">(.*)', section, re.S)
+        if name and dtable:
+            directives[html.unescape(name.group(1))] = rows_of(dtable.group(1)).get('説明', '')
+    title = re.search(r'<h1>(.*?)</h1>', page, re.S)
+    return {'title': text_of(title.group(1)) if title else '', 'description': info.get('説明', ''), 'directives': directives}
 
 
 def parse_module(page, file_name):
@@ -124,7 +161,7 @@ def main():
 
     prefix = 'httpd-%s/' % version
     manual = prefix + 'docs/manual/'
-    pages, assets = {}, {}
+    pages, ja_pages, assets = {}, {}, {}
     with tarfile.open(archive, 'r:bz2') as tar:
         for member in tar.getmembers():
             if not member.isfile():
@@ -134,6 +171,9 @@ def main():
             if name.startswith(manual + 'mod/') and name.endswith('.html.en'):
                 data = tar.extractfile(member).read()
                 pages[os.path.basename(name)[:-len('.en')]] = data.decode('utf-8')
+            elif name.startswith(manual + 'mod/') and name.endswith('.html.ja.utf8'):
+                data = tar.extractfile(member).read()
+                ja_pages[os.path.basename(name)[:-len('.ja.utf8')]] = data.decode('utf-8')
             elif name.startswith((manual + 'style/css/', manual + 'style/scripts/', manual + 'images/')):
                 assets[name[len(manual):]] = tar.extractfile(member).read()
             elif name in (prefix + 'LICENSE', prefix + 'NOTICE'):
@@ -142,7 +182,7 @@ def main():
         fail('docs/manual/mod/*.html.en が見つかりません')
 
     used_images = set()
-    for page in pages.values():
+    for page in list(pages.values()) + list(ja_pages.values()):
         used_images.update(re.findall(r'src="\.\./(images/[^"]+)"', page))
         used_images.update(re.findall(r'href="\.\./(images/[^"]+)"', page))
 
@@ -151,14 +191,28 @@ def main():
         shutil.rmtree(out)
     os.makedirs(os.path.join(out, 'mod'))
 
+    ja_names = frozenset(ja_pages)
+    existing = frozenset(pages) | frozenset(name[:-len('.html')] + '.ja.html' for name in ja_pages)
     modules = {}
     for file_name, page in sorted(pages.items()):
         with open(os.path.join(out, 'mod', file_name), 'w', encoding='utf-8') as f:
-            f.write(rewrite_links(page))
+            f.write(unlink_missing(rewrite_links(page, ja_names), existing))
         parsed = parse_module(page, file_name)
         if parsed:
             key, entry = parsed
+            if file_name in ja_pages:
+                ja = parse_japanese(ja_pages[file_name])
+                entry['fileJa'] = 'mod/' + file_name[:-len('.html')] + '.ja.html'
+                entry['titleJa'] = ja['title']
+                entry['descriptionJa'] = ja['description']
+                for d in entry['directives']:
+                    if ja['directives'].get(d['name']):
+                        d['descriptionJa'] = ja['directives'][d['name']]
             modules[key] = entry
+    for file_name, page in sorted(ja_pages.items()):
+        ja_file = file_name[:-len('.html')] + '.ja.html'
+        with open(os.path.join(out, 'mod', ja_file), 'w', encoding='utf-8') as f:
+            f.write(unlink_missing(link_japanese(rewrite_links(page, ja_names), ja_names), existing))
 
     for rel, data in sorted(assets.items()):
         if rel.startswith('images/') and rel not in used_images:
@@ -178,7 +232,7 @@ def main():
     with open(os.path.join(out, 'modules.json'), 'w', encoding='utf-8') as f:
         json.dump(index, f, ensure_ascii=False, indent=1)
         f.write('\n')
-    print('%s: %d pages, %d modules -> %s' % (version, len(pages), len(modules), out))
+    print('%s: %d pages (+%d ja), %d modules -> %s' % (version, len(pages), len(ja_pages), len(modules), out))
 
 
 if __name__ == '__main__':

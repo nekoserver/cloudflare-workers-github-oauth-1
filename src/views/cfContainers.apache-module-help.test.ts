@@ -38,7 +38,9 @@ const INDEX = {
     },
     headers: {
       title: 'Apache Module mod_headers', file: 'mod/mod_headers.html', description: 'Customization of HTTP request and response headers', status: 'Extension',
-      identifier: 'headers_module', sourceFile: 'mod_headers.c', compatibility: '', directives: [],
+      identifier: 'headers_module', sourceFile: 'mod_headers.c', compatibility: '',
+      titleJa: 'Apache モジュール mod_headers', fileJa: 'mod/mod_headers.ja.html', descriptionJa: 'HTTP リクエストのヘッダと応答のヘッダのカスタマイズ',
+      directives: [{ name: 'Header', anchor: 'header', description: 'Configure HTTP response headers', descriptionJa: 'HTTP 応答ヘッダの設定', syntax: 'Header [condition] add|append|echo|edit|merge|set|unset header [value]', default: '', context: 'server config, virtual host, directory, .htaccess' }],
     },
     mpm_event: {
       title: 'Apache MPM event', file: 'mod/event.html', description: 'A variant of the worker MPM', status: 'MPM',
@@ -135,6 +137,33 @@ describe('モジュール名のタップで開くモーダル', () => {
     const frame = doc.getElementById('apache-help-frame') as HTMLIFrameElement;
     expect(frame.getAttribute('src')).toBe(APACHE_MANUAL_BASE + '/mod/event.html');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-popups allow-popups-to-escape-sandbox');
+  });
+
+  it('日本語のヘルプがあれば、説明もヘルプも日本語を出し、英語版へのリンクも残す', async () => {
+    const { open, doc, help } = await setup();
+    await open('headers');
+    const body = doc.getElementById('apache-module-body')!;
+    expect(body.textContent).toContain('HTTP リクエストのヘッダと応答のヘッダのカスタマイズ');
+    expect(body.textContent).toContain('日本語訳は英語版より古い場合があります');
+    const link = doc.querySelector('#apache-module-body a.apache-help-link') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(APACHE_MANUAL_BASE + '/mod/mod_headers.ja.html');
+    expect(link.textContent).toContain('日本語');
+    const english = doc.querySelector('#apache-module-body a.apache-help-link-en') as HTMLAnchorElement;
+    expect(english.getAttribute('href')).toBe(APACHE_MANUAL_BASE + '/mod/mod_headers.html');
+    const directive = doc.querySelector('#apache-module-body a.apache-directive-link') as HTMLAnchorElement;
+    expect(directive.getAttribute('href')).toBe(APACHE_MANUAL_BASE + '/mod/mod_headers.ja.html#header');
+    expect(body.textContent).toContain('HTTP 応答ヘッダの設定');
+    link.click();
+    expect((doc.getElementById('apache-help-frame') as HTMLIFrameElement).getAttribute('src')).toBe(APACHE_MANUAL_BASE + '/mod/mod_headers.ja.html');
+    expect(help().hidden).toBe(false);
+  });
+
+  it('日本語のヘルプが無ければ、英語の説明とヘルプを出し、英語版へのリンクは重ねて出さない', async () => {
+    const { open, doc } = await setup();
+    await open('ssl');
+    expect(doc.querySelector('#apache-module-body a.apache-help-link')!.getAttribute('href')).toBe(APACHE_MANUAL_BASE + '/mod/mod_ssl.html');
+    expect(doc.querySelector('#apache-module-body a.apache-help-link-en')).toBeNull();
+    expect(doc.getElementById('apache-module-body')!.textContent).not.toContain('日本語訳は');
   });
 
   it('説明が無いモジュールはリンクを出さず、無いことを書く', async () => {

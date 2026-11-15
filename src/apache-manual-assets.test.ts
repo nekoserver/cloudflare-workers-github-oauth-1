@@ -13,13 +13,14 @@ import { APACHE_MANUAL_VERSION, APACHE_MANUAL_BASE } from './data/apacheManual';
 //   (4) MPM(mpm_event)のようにファイル名とモジュール名が違うものを対応付けられない
 //   (5) マニュアルが外部のscriptを読む、または外部リンクがiframeの中で開いてしまう
 //   (6) iframeで表示できない(フレームの許可が無い)、またはライセンス表記が欠ける
+//   (7) 日本語版があるのに日本語のヘルプが出ない、または日本語版の中のリンクが英語版や存在しないファイルを指す
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, 'public', APACHE_MANUAL_BASE);
 const index = JSON.parse(fs.readFileSync(path.join(DIR, 'modules.json'), 'utf8')) as {
   apacheVersion: string;
   sha512: string;
-  modules: Record<string, { file: string; description: string; identifier: string; directives: { name: string; syntax: string }[] }>;
+  modules: Record<string, { file: string; fileJa?: string; titleJa?: string; description: string; descriptionJa?: string; identifier: string; directives: { name: string; syntax: string; descriptionJa?: string }[] }>;
 };
 const REQUIRED = ['ssl', 'proxy', 'proxy_http', 'proxy_wstunnel', 'rewrite', 'cgid', 'include', 'remoteip', 'mpm_event'];
 
@@ -75,6 +76,33 @@ describe('Apacheマニュアルの静的アセット', () => {
     }
     expect(fs.existsSync(path.join(DIR, 'LICENSE'))).toBe(true);
     expect(fs.existsSync(path.join(DIR, 'NOTICE'))).toBe(true);
+  });
+
+  it('日本語版があるモジュールは、日本語のファイル・タイトル・説明を持つ(無いものは持たない)', () => {
+    const proxy = index.modules.proxy;
+    expect(proxy.fileJa).toBe('mod/mod_proxy.ja.html');
+    expect(proxy.titleJa).toBe('Apache モジュール mod_proxy');
+    expect(proxy.descriptionJa).toBe('HTTP/1.1 プロキシ/ゲートウェイサーバ');
+    expect(index.modules.ssl.fileJa).toBeUndefined();
+    const withJa = Object.entries(index.modules).filter(([, e]) => e.fileJa);
+    expect(withJa.length).toBeGreaterThan(40);
+    for (const [name, entry] of withJa) {
+      expect(fs.existsSync(path.join(DIR, entry.fileJa!)), name).toBe(true);
+    }
+  });
+
+  it('日本語版のページは lang="ja" で、モジュールどうしのリンクは日本語版があれば日本語版を指し、すべて存在する', () => {
+    const page = fs.readFileSync(path.join(DIR, 'mod', 'mod_proxy.ja.html'), 'utf8');
+    expect(page).toContain('<html lang="ja"');
+    expect(page).toContain('href="../mod/mod_proxy_http.html"');
+    expect(page).toContain('href="../mod/mod_cache.ja.html"');
+    expect(page).toContain('href="../mod/mod_rewrite.html"');
+    for (const file of fs.readdirSync(path.join(DIR, 'mod')).filter((f) => f.endsWith('.ja.html'))) {
+      const body = fs.readFileSync(path.join(DIR, 'mod', file), 'utf8');
+      for (const m of body.matchAll(/href="(?:\.\.\/mod\/)?([\w.-]+\.html)(?:#[^"]*)?"/g)) {
+        expect(fs.existsSync(path.join(DIR, 'mod', m[1])), file + ' -> ' + m[1]).toBe(true);
+      }
+    }
   });
 
   it('_headersで同じオリジンのiframeだけに表示を許す', () => {
