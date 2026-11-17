@@ -66,10 +66,21 @@ export class TailscaleWasm extends DurableObject<Bindings> {
       }
     })().catch(error => { this.nodeReady = undefined; throw error; });
   }
+  private logBootEvent(event: 'boot_failed' | 'state_discarded', fingerprint: string | null, reason: string): void {
+    const db = this.env.DB;
+    if (!db) return;
+    // D1 への記録は要求の経路を止めない。失敗しても握り潰す(記録は DO 内の記録と併用する)。
+    this.ctx.waitUntil(
+      db.prepare('INSERT INTO tailscale_wasm_boot_log(event, fingerprint, reason) VALUES(?,?,?)')
+        .bind(event, fingerprint, reason.slice(0, 200)).run()
+        .then(() => undefined, () => undefined),
+    );
+  }
   private discardStateForRecovery(error: unknown): boolean {
     const sql = this.ctx.storage.sql;
     const rows = [...sql.exec<{ key: string; value: string }>('SELECT key, value FROM tailnet_state')];
     const stateFingerprint = rows.length ? fingerprintState(rows.map(r => [r.key, r.value] as const)) : null;
+    this.logBootEvent('boot_failed', stateFingerprint, String(error));
     let lastDiscardedFingerprint: string | null = null;
     const marker = [...sql.exec<{ value: string }>("SELECT value FROM worker_settings WHERE key='node_boot_recovery_discard'")][0]?.value;
     if (marker) {
@@ -84,6 +95,7 @@ export class TailscaleWasm extends DurableObject<Bindings> {
     sql.exec("INSERT INTO worker_settings(key,value) VALUES('node_boot_recovery_discard',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       JSON.stringify({ fingerprint: stateFingerprint, at: new Date().toISOString(), reason }));
     console.log('[tailscale-wasm] ' + JSON.stringify({ event: 'node_state_discarded', fingerprint: stateFingerprint, reason }));
+    this.logBootEvent('state_discarded', stateFingerprint, reason);
     this.loginRequested = false;
     return true;
   }
