@@ -62,6 +62,7 @@ import { getWorkerStaticAssetsPage } from './views/workerStaticAssets';
 import { collectWorkerStaticAssets } from './utils/workerStaticAssets';
 import { getCfContainersPage } from './views/cfContainers';
 import { summarizeTailnetHealth, type TailnetBootEvent } from './utils/tailscaleNodeHealth';
+import { buildProxyForwardRequest } from './utils/proxyIdentity';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
@@ -21475,14 +21476,17 @@ app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, as
           logger.error('[cf-containers-proxy] 診断結果のD1記録に失敗', { error: m })
         )
       : Promise.resolve(false);
+  // 身元の受け渡し(SPEC.cloudflare-workers-github-oauth-1.lib-proxy-identity REQ-LP-001):
+  // ブラウザ由来のX-Forwarded-Userを消し、認証済みセッションのログイン名を付け直して中継する。
+  const forwardRequest = buildProxyForwardRequest(c.req.raw, forwardUrl, user?.sub ?? null);
   try {
     // 応答が返らないまま待ち続けると原因が何も残らないため、診断系は30秒で打ち切って記録する
     const res = diagAction
       ? await Promise.race([
-          stub.fetch(new Request(forwardUrl, c.req.raw)),
+          stub.fetch(forwardRequest),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('コンテナが30秒以内に応答しませんでした(起動中・起動失敗・ポート未待ち受けの可能性)')), 30000)),
         ])
-      : await stub.fetch(new Request(forwardUrl, c.req.raw));
+      : await stub.fetch(forwardRequest);
     if (diagAction) {
       // 診断結果はD1にも残す(Claude CodeがMCP経由で読めるようにするため)
       const body = await res.clone().text();
