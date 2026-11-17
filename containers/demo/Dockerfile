@@ -60,15 +60,15 @@ FROM ubuntu:26.04
 # digest is pinned independently of the download, so corruption fails the build.
 ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
-ARG NPM_VERSION=12.2.0
+ARG NPM_VERSION=12.2.2
 ARG CODEX_VERSION=0.169.0
 ARG T3_VERSION=0.1.10
-ARG CLAUDE_VERSION=2.1.323
+ARG CLAUDE_VERSION=2.1.326
 ARG VITEST_VERSION=5.0.5
 ARG TYPESCRIPT_VERSION=7.0.2
-ARG CLOUDFLARED_VERSION=2026.11.0
+ARG CLOUDFLARED_VERSION=2026.11.1
 # 公式の Cloudflare CLI(npm の cf。bin は cf と cloudflare)。node ^26.12 を要する。
-ARG CF_CLI_VERSION=1.0.0-beta.31
+ARG CF_CLI_VERSION=1.0.0-rc.1
 # Retain the installation path used by existing runtime checks.
 ENV PATH="/opt/node22/bin:${PATH}"
 
@@ -170,7 +170,7 @@ RUN set -eu; \
 # aptのopenssh-serverはビルド時にホスト鍵を作る。秘密鍵をイメージに残さない(entrypoint.shが起動時に用意する)。
 COPY sshd-hardening.conf /etc/ssh/sshd_config.d/10-hardening.conf
 RUN rm -f /etc/ssh/ssh_host_*
-ARG CLOUDFLARED_SHA256=5305dbaf62984e92e7daa29cdd6a35a4797edc23385d4c5b8422ff97eb96a19b
+ARG CLOUDFLARED_SHA256=744ce90be92adb361103d51c85f78646314c47e4a68bbaadfe12ab5acc16c9b6
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --output /tmp/cloudflared.deb \
         "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb" \
     && echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared.deb" | sha256sum -c - \
