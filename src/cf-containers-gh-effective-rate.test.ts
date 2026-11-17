@@ -25,7 +25,7 @@ describe('demoコンテナのwranglerとcf', () => {
   // 自作の簡易スクリプトは名前がぶつかるので cf-api に移した。
   it('公式の Cloudflare CLI(cf)を版を固定して入れ、/usr/local/bin/cf に置く', () => {
     const df = readFileSync('containers/demo/Dockerfile', 'utf8');
-    expect(df).toMatch(/^ARG CF_CLI_VERSION=1\.0\.0-beta\.31$/m);
+    expect(df).toMatch(/^ARG CF_CLI_VERSION=1\.0\.0-rc\.1$/m);
     expect(df).toContain('npm install -g cf@${CF_CLI_VERSION}');
     expect(df).toContain('ln -sf /opt/node22/bin/cf /usr/local/bin/cf');
     expect(df).toContain('cf --version');
