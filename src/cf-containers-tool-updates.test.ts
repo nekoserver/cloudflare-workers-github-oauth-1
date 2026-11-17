@@ -7,11 +7,11 @@ const server=require('../containers/demo/server.js');
 const df=readFileSync('containers/demo/Dockerfile','utf8');
 const arg=(n:string)=>df.match(new RegExp('^ARG '+n+'=(\\S+)','m'))?.[1];
 // Official metadata and downloaded binaries checked 2026-11-05 (Claude 2026-11-11; cloudflared・Tailscale・Claude 2026-11-13); see REPORT.
-const VERIFIED={CLOUDFLARED_VERSION:'2026.11.0',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.323',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
+const VERIFIED={CLOUDFLARED_VERSION:'2026.11.1',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.323',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
 describe('container tools: verified precompiled releases',()=>{
  it('pins every requested tool to its verified release',()=>{for(const [n,v] of Object.entries(VERIFIED))expect(arg(n),n).toBe(v);});
  it('verifies downloaded archives and native Claude bytes',()=>{
-  expect(arg('CLOUDFLARED_SHA256')).toBe('5305dbaf62984e92e7daa29cdd6a35a4797edc23385d4c5b8422ff97eb96a19b');
+  expect(arg('CLOUDFLARED_SHA256')).toBe('744ce90be92adb361103d51c85f78646314c47e4a68bbaadfe12ab5acc16c9b6');
   expect(arg('TAILSCALE_SHA256')).toBe('e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c');
   expect(arg('PREPRINT_SHA256')).toBe('451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f');
   expect(arg('CHROME_SHA256')).toBe('a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d');
