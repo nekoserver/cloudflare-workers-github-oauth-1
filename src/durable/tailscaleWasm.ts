@@ -8,6 +8,7 @@ import { WasmMuseBridge, type MuseKeyStat } from '../utils/wasmMuseBridge';
 import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
 import { createGoLifecycle } from '../utils/goLifecycle';
+import { decideBootRecovery, fingerprintState } from '../utils/nodeBootRecovery';
 
 // Go が終了したら(2026-11-12 19:29:33 UTC に exit code 1 で終了した)、次の要求で起動し直す。ノードの状態は SQLite に残るので、ログインし直しは要らない。
 const goRuntime = createGoLifecycle(() => {
@@ -54,6 +55,51 @@ export class TailscaleWasm extends DurableObject<Bindings> {
       this.loginRequested = false;
     }
     return this.nodeReady ??= (async () => {
+      try {
+        await this.bootNode();
+      } catch (error) {
+        // 起動に失敗したとき、永続化したノード状態が壊れている可能性がある。その状態を
+        // 1回だけ破棄して初回参加をやり直す(SPEC.cloudflare-workers-github-oauth-1.tailscale-wasm.recovery)。
+        // 破棄済みの状態と同じものは二度と破棄しないので、破棄のループにはならない。
+        if (!this.discardStateForRecovery(error)) throw error;
+        await this.bootNode();
+      }
+    })().catch(error => { this.nodeReady = undefined; throw error; });
+  }
+  private logBootEvent(event: 'boot_failed' | 'state_discarded', fingerprint: string | null, reason: string): void {
+    const db = this.env.DB;
+    if (!db) return;
+    // D1 への記録は要求の経路を止めない。失敗しても握り潰す(記録は DO 内の記録と併用する)。
+    this.ctx.waitUntil(
+      db.prepare('INSERT INTO tailscale_wasm_boot_log(event, fingerprint, reason) VALUES(?,?,?)')
+        .bind(event, fingerprint, reason.slice(0, 200)).run()
+        .then(() => undefined, () => undefined),
+    );
+  }
+  private discardStateForRecovery(error: unknown): boolean {
+    const sql = this.ctx.storage.sql;
+    const rows = [...sql.exec<{ key: string; value: string }>('SELECT key, value FROM tailnet_state')];
+    const stateFingerprint = rows.length ? fingerprintState(rows.map(r => [r.key, r.value] as const)) : null;
+    this.logBootEvent('boot_failed', stateFingerprint, String(error));
+    let lastDiscardedFingerprint: string | null = null;
+    const marker = [...sql.exec<{ value: string }>("SELECT value FROM worker_settings WHERE key='node_boot_recovery_discard'")][0]?.value;
+    if (marker) {
+      try {
+        const parsed = JSON.parse(marker) as { fingerprint?: unknown };
+        lastDiscardedFingerprint = typeof parsed.fingerprint === 'string' ? parsed.fingerprint : null;
+      } catch { lastDiscardedFingerprint = null; }
+    }
+    if (decideBootRecovery({ stateFingerprint, lastDiscardedFingerprint }) !== 'discard-and-retry') return false;
+    const reason = String(error).slice(0, 200);
+    sql.exec('DELETE FROM tailnet_state');
+    sql.exec("INSERT INTO worker_settings(key,value) VALUES('node_boot_recovery_discard',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      JSON.stringify({ fingerprint: stateFingerprint, at: new Date().toISOString(), reason }));
+    console.log('[tailscale-wasm] ' + JSON.stringify({ event: 'node_state_discarded', fingerprint: stateFingerprint, reason }));
+    this.logBootEvent('state_discarded', stateFingerprint, reason);
+    this.loginRequested = false;
+    return true;
+  }
+  private async bootNode(): Promise<void> {
       const ctx = this.ctx, env = this.env;
       await startGo();
       const node = globalThis.newIPN({ hostname: 'main-worker-muse', ephemeral: false, logUpload: false, stateStorage: {
@@ -72,7 +118,6 @@ export class TailscaleWasm extends DurableObject<Bindings> {
         list() { return [...ctx.storage.sql.exec<MuseKeyStat>('SELECT fingerprint, replied, unanswered FROM muse_key_results ORDER BY replied DESC LIMIT 10')].map(r => ({ fingerprint: r.fingerprint, replied: r.replied, unanswered: r.unanswered })); },
       });
       node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
-    })().catch(error => { this.nodeReady = undefined; throw error; });
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();
