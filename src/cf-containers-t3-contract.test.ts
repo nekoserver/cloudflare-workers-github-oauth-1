@@ -6,10 +6,14 @@ import { readFileSync } from 'node:fs';
 // 0.1.9(タグ v0.1.9、24e77473)のソースで各項目の根拠の箇所を確かめ直した(2026-11-11)。getSessionState・selectRequestCredential・resolveSessionCookieName・
 // DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES・takePairingTokenFromUrl・waitForAuthenticatedSessionAfterBootstrap は 0.1.7 と同じ。pairingCredential は
 // access:write が要るのは同じで、任意の access(MCPクライアント向け)が足されただけ。公式リリース t3-0.1.9-linux-x64.tar.gz は SHA256SUMS にある。
+// 0.1.10(タグ v0.1.10、7d32075e)のソースで全9項目を確かめ直した(2026-11-18)。全項目とも 0.1.9 と同じ。置き場所の変化だけ:
+// resolveSessionCookieName は auth/utils.ts。takePairingTokenFromUrl の下に peekPairingTokenFromUrl が足され、take は peek+除去に再構成された。
+// 同名クッキーの先勝ちは T3 本体でなく effect 4.1.3(T3 の pnpm-lock で固定)の Cookies.parseHeader が決める: キーが無ければ代入する形で、
+// npm の tarball のソースで確かめた。公式リリース t3-0.1.10-linux-x64.tar.gz は SHA256SUMS にある(9bea9d36…)。
 // 画面以外は、別のポートと状態ディレクトリで起動した実物でも確かめた。0.1.7 で GET /api/auth/clients は無くなった(このリポジトリは使っていない)。
 // T3の版を上げるときは、テストを先に直す: 新しい版のソースで下の各項目を確かめ直し、CONTRACT_VERIFIED_VERSION を上げてから、
 // Dockerfile の T3_VERSION を上げる。確かめないまま版だけ上げると、このテストが失敗する。
-const CONTRACT_VERIFIED_VERSION = '0.1.9';
+const CONTRACT_VERIFIED_VERSION = '0.1.10';
 const CONTRACT = [
   { behavior: '/api/auth/session は、認証に失敗した要求に、401ではなく 200 の { authenticated: false } を返す', source: 'サーバー getSessionState の catchIf(isServerAuthCredentialError)' },
   { behavior: 'ほかの認証付きAPIは、認証に失敗すると 401 を返す', source: 'サーバー EnvironmentAuthenticatedAuth' },
