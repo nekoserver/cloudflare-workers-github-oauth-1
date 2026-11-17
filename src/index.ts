@@ -702,6 +702,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_answer_keyword_extractions', migration: '0192', description: 'AIチャットの✂️の切り出し記録(回答ID・切り出しモデルIDを外部キーに、本文ベクトル・候補数・フォールバックの理由を持つ)', syncPolicy: 'auto' },
   { name: 'aichat_answer_extracted_keywords', migration: '0192', description: '✂️で切り出したキーワード群(切り出しIDを外部キーに、順位・切り出しモデルでの本文との類似度・出現回数・ベクトル)', syncPolicy: 'auto' },
   { name: 'aichat_answer_keyword_scores', migration: '0192', description: '✂️のキーワードを切り出しモデル以外(PlaMoなど)で測った本文との類似度。(切り出しID, 順位)とモデルIDを外部キーに持つ', syncPolicy: 'auto' },
+  { name: 'tailscale_wasm_boot_log', migration: '0193', description: 'TailscaleWasm DO の起動失敗と永続状態の破棄の記録(REQ-TW-014)', syncPolicy: 'auto' },
+  { name: 'tailscale_node_health_checks', migration: '0194', description: '/cf-containers の tailscale ノード ヘルスチェック欄の確認記録(時刻・状態・ノードIP・muse-vm在席。REQ-TW-016)', syncPolicy: 'auto' },
   { name: 'cf_container_build_cache_effects', migration: '0191', description: 'ソースビルドしたパッケージの、コンパイル秒とキャッシュからのインストール秒、ソースアーカイブとパッケージのバイト数(ビルドごと)', syncPolicy: 'auto' },
   { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
@@ -20964,24 +20966,45 @@ app.get('/api/cf-containers/tailnet-health', authMiddleware, cfDashboardAdminMid
       logger.error('[cf-containers-tailnet-health] 起動記録の取得に失敗', { error: message });
     }
   }
+  let summary: ReturnType<typeof summarizeTailnetHealth>;
   if (!c.env.TAILSCALE_WASM) {
-    return jsonUtf8(summarizeTailnetHealth({ configured: false, doError: null, status: null, bootEvents, checkedAt }));
-  }
-  let doError: string | null = null;
-  let status: { state?: unknown; peers?: unknown; loginURL?: unknown } | null = null;
-  try {
-    const stub = c.env.TAILSCALE_WASM.get(c.env.TAILSCALE_WASM.idFromName('muse'));
-    const res = await stub.fetch(new Request('http://tailnet/status'));
-    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    if (res.ok && body) {
-      status = body;
-    } else {
-      doError = typeof body?.error === 'string' ? body.error : `http_${res.status}`;
+    summary = summarizeTailnetHealth({ configured: false, doError: null, status: null, bootEvents, checkedAt });
+  } else {
+    let doError: string | null = null;
+    let status: { state?: unknown; peers?: unknown; loginURL?: unknown; nodeIp?: unknown } | null = null;
+    try {
+      const stub = c.env.TAILSCALE_WASM.get(c.env.TAILSCALE_WASM.idFromName('muse'));
+      const res = await stub.fetch(new Request('http://tailnet/status'));
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (res.ok && body) {
+        status = body;
+      } else {
+        doError = typeof body?.error === 'string' ? body.error : `http_${res.status}`;
+      }
+    } catch (err) {
+      doError = err instanceof Error ? err.message : String(err);
     }
-  } catch (err) {
-    doError = err instanceof Error ? err.message : String(err);
+    summary = summarizeTailnetHealth({ configured: true, doError, status, bootEvents, checkedAt });
   }
-  return jsonUtf8(summarizeTailnetHealth({ configured: true, doError, status, bootEvents, checkedAt }));
+  // 確認のたびに D1 へ記録し、直近の履歴を返す(REQ-TW-016)。記録の失敗は
+  // 欄の表示を止めない。状態破棄で IP が変わったときは、この履歴に
+  // 旧 IP の停止と新 IP の正常が並ぶことで変化を確認できる。
+  let checks: unknown[] = [];
+  if (c.env.DB) {
+    try {
+      await c.env.DB.prepare(
+        'INSERT INTO tailscale_node_health_checks (checked_at, kind, node_state, node_ip, muse_online) VALUES (?, ?, ?, ?, ?)',
+      ).bind(summary.checkedAt, summary.kind, summary.nodeState, summary.nodeIp, summary.museOnline ? 1 : 0).run();
+      const rows = await c.env.DB.prepare(
+        'SELECT checked_at, kind, node_state, node_ip, muse_online FROM tailscale_node_health_checks ORDER BY id DESC LIMIT 20',
+      ).all();
+      checks = rows.results ?? [];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-tailnet-health] 確認記録の読み書きに失敗', { error: message });
+    }
+  }
+  return jsonUtf8({ ...summary, checks });
 });
 
 /**

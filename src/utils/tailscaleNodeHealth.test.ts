@@ -59,4 +59,16 @@ describe('summarizeTailnetHealth', () => {
     const s = summarizeTailnetHealth({ ...base, status: { state: 42 } });
     expect(s.kind).toBe('unknown');
   });
+
+  it('Running で IP があれば nodeIp を返し healthy は true', () => {
+    const s = summarizeTailnetHealth({ ...base, status: { state: 'Running', peers: [], nodeIp: '100.127.175.6' } });
+    expect(s.nodeIp).toBe('100.127.175.6');
+    expect(s.healthy).toBe(true);
+  });
+
+  it('Running 以外と到達不能は healthy が false', () => {
+    expect(summarizeTailnetHealth({ ...base, status: { state: 'NeedsLogin', peers: [] } }).healthy).toBe(false);
+    expect(summarizeTailnetHealth({ ...base, doError: 'tailscale_wasm_unavailable' }).healthy).toBe(false);
+    expect(summarizeTailnetHealth({ ...base, status: { state: 'Running', peers: [], nodeIp: 'not-an-ip' } }).nodeIp).toBeNull();
+  });
 });

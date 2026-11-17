@@ -26,6 +26,8 @@ export type TailnetHealthKind =
 export type TailnetHealthSummary = {
   kind: TailnetHealthKind;
   nodeState: string | null;
+  nodeIp: string | null;
+  healthy: boolean;
   museOnline: boolean;
   peerCount: number;
   loginPending: boolean;
@@ -39,7 +41,10 @@ type StatusLike = {
   state?: unknown;
   peers?: unknown;
   loginURL?: unknown;
+  nodeIp?: unknown;
 };
+
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 function peerName(peer: unknown): string | null {
   if (!peer || typeof peer !== 'object') return null;
@@ -63,6 +68,8 @@ export function summarizeTailnetHealth(input: {
   const base: TailnetHealthSummary = {
     kind: 'unknown',
     nodeState: null,
+    nodeIp: null,
+    healthy: false,
     museOnline: false,
     peerCount: 0,
     loginPending: false,
@@ -91,6 +98,8 @@ export function summarizeTailnetHealth(input: {
     ...base,
     kind,
     nodeState: status.state,
+    nodeIp: typeof status.nodeIp === 'string' && IPV4.test(status.nodeIp) ? status.nodeIp : null,
+    healthy: kind === 'running',
     museOnline,
     peerCount: peers.length,
     loginPending: typeof status.loginURL === 'string' && status.loginURL.length > 0,

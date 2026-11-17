@@ -8,6 +8,7 @@ import { WasmMuseBridge, type MuseKeyStat } from '../utils/wasmMuseBridge';
 import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
 import { createGoLifecycle } from '../utils/goLifecycle';
+import { parseSelfIp } from '../utils/tailnetSelfIp';
 import { decideBootRecovery, fingerprintState } from '../utils/nodeBootRecovery';
 
 // Go が終了したら(2026-11-12 19:29:33 UTC に exit code 1 で終了した)、次の要求で起動し直す。ノードの状態は SQLite に残るので、ログインし直しは要らない。
@@ -35,6 +36,7 @@ export class TailscaleWasm extends DurableObject<Bindings> {
   private node!: IPN;
   private loginRequested = false;
   private autoLoginDisabled = false;
+  private selfIp: string | null = null;
   private nodeReady?: Promise<void>;
   private jobs!: MuseAgentJobs;
   constructor(ctx: DurableObjectState, env: Bindings) {
@@ -117,7 +119,7 @@ export class TailscaleWasm extends DurableObject<Bindings> {
         },
         list() { return [...ctx.storage.sql.exec<MuseKeyStat>('SELECT fingerprint, replied, unanswered FROM muse_key_results ORDER BY replied DESC LIMIT 10')].map(r => ({ fingerprint: r.fingerprint, replied: r.replied, unanswered: r.unanswered })); },
       });
-      node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
+      node.run({ notifyState() {}, notifyNetMap: (netMap: string) => { this.selfIp = parseSelfIp(netMap, 'main-worker-muse'); }, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();
@@ -146,8 +148,13 @@ export class TailscaleWasm extends DurableObject<Bindings> {
       }
       if (url.pathname.startsWith('/muse/')) return await this.deliver(request);
       await this.ensureNode();
-      const response = await this.service.fetch(request);
-      const path = new URL(request.url).pathname;
+      const path = url.pathname;
+      let response = await this.service.fetch(request);
+      // /status には netmap から得た自ノードの IP を足す(REQ-TW-016)。
+      if (path === '/status' && response.ok) {
+        const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+        if (body) response = Response.json({ ...body, nodeIp: this.selfIp });
+      }
       if (response.ok && request.method === 'POST' && (path === '/logout' || path === '/login')) {
         this.autoLoginDisabled = path === '/logout';
         this.loginRequested = path === '/login';

@@ -101,6 +101,12 @@ h1 { font-size: 20px; margin-bottom: 4px; }
 }
 .chip[data-running="true"] { background: var(--ok-bg); color: var(--ok); }
 .chip[data-running="false"] { background: var(--border); color: var(--muted); }
+/* TailscaleノードのIPとヘルス状態(REQ-TW-016): 正常は緑、停止・到達不能は赤 */
+.tailnet-ip { font-weight: 700; font-size: 16px; }
+.tailnet-ip[data-healthy="true"] { color: var(--ok); }
+.tailnet-ip[data-healthy="false"] { color: var(--err); }
+.tailnet-check-state[data-healthy="true"] { color: var(--ok); font-weight: 600; }
+.tailnet-check-state[data-healthy="false"] { color: var(--err); font-weight: 600; }
 button {
   border: 1px solid var(--border); background: var(--surface); color: var(--text);
   border-radius: var(--radius); padding: 7px 14px; font-size: 13px; cursor: pointer; margin-right: 8px;
@@ -332,11 +338,18 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <span class="chip" id="tailnet-chip" data-running="false">確認中</span>
     <button id="btn-tailnet" type="button">再確認</button>
   </div>
+  <div style="font-size:13px;">ノードIP（main-worker-muse）: <span class="tailnet-ip" id="tailnet-ip" data-healthy="false">—</span></div>
   <div id="tailnet-detail" style="font-size:13px;"></div>
   <div class="pricing-scroll">
   <table class="health-table" id="tailnet-events" hidden>
     <thead><tr><th>起動記録（D1）</th><th>状態の指紋</th><th>理由</th><th>時刻</th></tr></thead>
     <tbody id="tailnet-events-tbody"></tbody>
+  </table>
+  </div>
+  <div class="pricing-scroll">
+  <table class="health-table" id="tailnet-checks" hidden>
+    <thead><tr><th>確認履歴</th><th>状態</th><th>ノードIP</th><th>muse-vm</th></tr></thead>
+    <tbody id="tailnet-checks-tbody"></tbody>
   </table>
   </div>
   <div id="tailnet-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
@@ -1163,6 +1176,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var tailnetLog = document.getElementById('tailnet-log');
   var tailnetEvents = document.getElementById('tailnet-events');
   var tailnetEventsBody = document.getElementById('tailnet-events-tbody');
+  var tailnetIp = document.getElementById('tailnet-ip');
+  var tailnetChecks = document.getElementById('tailnet-checks');
+  var tailnetChecksBody = document.getElementById('tailnet-checks-tbody');
   var tailnetLabels = {
     running: 'Running（稼働中）',
     needs_login: 'NeedsLogin（ログイン待ち）',
@@ -1196,6 +1212,27 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       tailnetEventsBody.appendChild(tr);
     });
     tailnetEvents.hidden = !(data.bootEvents && data.bootEvents.length);
+    // ノードIPと、そのIPのヘルス状態(色)。状態破棄で IP が変われば履歴にも残る
+    tailnetIp.textContent = data.nodeIp || '（未割当）';
+    tailnetIp.setAttribute('data-healthy', data.healthy ? 'true' : 'false');
+    tailnetChecksBody.textContent = '';
+    var checks = data.checks || [];
+    checks.forEach(function (row, i) {
+      var tr = document.createElement('tr');
+      var healthy = row.kind === 'running';
+      var older = checks[i + 1];
+      var ipChanged = older && (older.node_ip || '') !== (row.node_ip || '');
+      var cells = [row.checked_at, (tailnetLabels[row.kind] || row.kind) + (ipChanged ? '（IPが変わりました）' : ''), row.node_ip || '（未割当）', row.muse_online ? 'オンライン' : 'オフライン'];
+      cells.forEach(function (v, j) {
+        var td = document.createElement('td');
+        td.textContent = v;
+        if (j === 1) { td.className = 'tailnet-check-state'; td.setAttribute('data-healthy', healthy ? 'true' : 'false'); }
+        if (j === 2 && ipChanged) td.className = 'diff-up';
+        tr.appendChild(td);
+      });
+      tailnetChecksBody.appendChild(tr);
+    });
+    tailnetChecks.hidden = !checks.length;
   }
   function fetchTailnet() {
     return fetch('/api/cf-containers/tailnet-health', { cache: 'no-store' })
@@ -1217,6 +1254,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   var tailnetBtn = document.getElementById('btn-tailnet');
   if (tailnetBtn) tailnetBtn.addEventListener('click', fetchTailnet);
   fetchTailnet();
+  // 開いている間は15秒ごとに再確認し、再起動や IP の変化をその場で見られるようにする
+  setInterval(fetchTailnet, 15000);
 
   function fetchStatus() {
     return fetch('/api/cf-containers/status')
