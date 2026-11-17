@@ -37,6 +37,21 @@ export type TailnetHealthSummary = {
   checkedAt: string;
 };
 
+export type TailnetHealthCheck = {
+  kind: TailnetHealthKind;
+  nodeIp: string | null;
+  museOnline: boolean;
+};
+
+/**
+ * ヘルスチェックの受け入れ条件 (REQ-TW-017): ノードが Running で、ノード自身の
+ * IP が取得できていて、muse-vm が在席していること。この3点すべてを満たす場合
+ * にだけ true。判定は記録された確認の値から機械的に導く。
+ */
+export function checkAccepted(check: TailnetHealthCheck): boolean {
+  return check.kind === 'running' && check.nodeIp !== null && check.museOnline === true;
+}
+
 type StatusLike = {
   state?: unknown;
   peers?: unknown;

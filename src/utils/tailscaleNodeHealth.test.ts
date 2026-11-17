@@ -6,7 +6,7 @@
  * 表すこと。ログイン URL は要約に含めない(待ちの有無だけ)。
  */
 import { describe, expect, it } from 'vitest';
-import { summarizeTailnetHealth } from './tailscaleNodeHealth';
+import { checkAccepted, summarizeTailnetHealth } from './tailscaleNodeHealth';
 
 const base = { configured: true, doError: null, status: null, bootEvents: [], checkedAt: '2026-11-18T00:00:00.000Z' };
 
@@ -70,5 +70,24 @@ describe('summarizeTailnetHealth', () => {
     expect(summarizeTailnetHealth({ ...base, status: { state: 'NeedsLogin', peers: [] } }).healthy).toBe(false);
     expect(summarizeTailnetHealth({ ...base, doError: 'tailscale_wasm_unavailable' }).healthy).toBe(false);
     expect(summarizeTailnetHealth({ ...base, status: { state: 'Running', peers: [], nodeIp: 'not-an-ip' } }).nodeIp).toBeNull();
+  });
+});
+
+describe('checkAccepted (REQ-TW-017)', () => {
+  it('3点すべてを満たせば true', () => {
+    expect(checkAccepted({ kind: 'running', nodeIp: '100.127.175.6', museOnline: true })).toBe(true);
+  });
+
+  it('ノードが Running でなければ false', () => {
+    expect(checkAccepted({ kind: 'needs_login', nodeIp: '100.127.175.6', museOnline: true })).toBe(false);
+    expect(checkAccepted({ kind: 'unavailable', nodeIp: null, museOnline: false })).toBe(false);
+  });
+
+  it('IP が無ければ false', () => {
+    expect(checkAccepted({ kind: 'running', nodeIp: null, museOnline: true })).toBe(false);
+  });
+
+  it('muse-vm が不在なら false', () => {
+    expect(checkAccepted({ kind: 'running', nodeIp: '100.127.175.6', museOnline: false })).toBe(false);
   });
 });

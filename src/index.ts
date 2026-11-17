@@ -61,7 +61,7 @@ import { getCfDashboardPage } from './views/cf-dashboard';
 import { getWorkerStaticAssetsPage } from './views/workerStaticAssets';
 import { collectWorkerStaticAssets } from './utils/workerStaticAssets';
 import { getCfContainersPage } from './views/cfContainers';
-import { summarizeTailnetHealth, type TailnetBootEvent } from './utils/tailscaleNodeHealth';
+import { checkAccepted, summarizeTailnetHealth, type TailnetBootEvent } from './utils/tailscaleNodeHealth';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
@@ -20998,7 +20998,15 @@ app.get('/api/cf-containers/tailnet-health', authMiddleware, cfDashboardAdminMid
       const rows = await c.env.DB.prepare(
         'SELECT checked_at, kind, node_state, node_ip, muse_online FROM tailscale_node_health_checks ORDER BY id DESC LIMIT 20',
       ).all();
-      checks = rows.results ?? [];
+      checks = (rows.results ?? []).map((row: any) => ({
+        ...row,
+        // 受け入れ条件の判定 (REQ-TW-017): 記録された値から機械的に導く。
+        accepted: checkAccepted({
+          kind: row.kind,
+          nodeIp: typeof row.node_ip === 'string' ? row.node_ip : null,
+          museOnline: row.muse_online === 1 || row.muse_online === true,
+        }),
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error('[cf-containers-tailnet-health] 確認記録の読み書きに失敗', { error: message });

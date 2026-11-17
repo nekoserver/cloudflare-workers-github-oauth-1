@@ -348,7 +348,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div class="pricing-scroll">
   <table class="health-table" id="tailnet-checks" hidden>
-    <thead><tr><th>確認履歴</th><th>状態</th><th>ノードIP</th><th>muse-vm</th></tr></thead>
+    <thead><tr><th>確認履歴</th><th>状態</th><th>ノードIP</th><th>muse-vm</th><th>受け入れ条件</th></tr></thead>
     <tbody id="tailnet-checks-tbody"></tbody>
   </table>
   </div>
@@ -1222,12 +1222,14 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var healthy = row.kind === 'running';
       var older = checks[i + 1];
       var ipChanged = older && (older.node_ip || '') !== (row.node_ip || '');
-      var cells = [row.checked_at, (tailnetLabels[row.kind] || row.kind) + (ipChanged ? '（IPが変わりました）' : ''), row.node_ip || '（未割当）', row.muse_online ? 'オンライン' : 'オフライン'];
+      var cells = [row.checked_at, (tailnetLabels[row.kind] || row.kind) + (ipChanged ? '（IPが変わりました）' : ''), row.node_ip || '（未割当）', row.muse_online ? 'オンライン' : 'オフライン', row.accepted ? '満たす' : '満たさない'];
       cells.forEach(function (v, j) {
         var td = document.createElement('td');
         td.textContent = v;
         if (j === 1) { td.className = 'tailnet-check-state'; td.setAttribute('data-healthy', healthy ? 'true' : 'false'); }
         if (j === 2 && ipChanged) td.className = 'diff-up';
+        // 受け入れ条件のカラム (REQ-TW-017): 満たす=緑、満たさない=赤
+        if (j === 4) { td.className = 'tailnet-check-state'; td.setAttribute('data-healthy', row.accepted ? 'true' : 'false'); }
         tr.appendChild(td);
       });
       tailnetChecksBody.appendChild(tr);
