@@ -70,5 +70,5 @@ describe('container tools: verified precompiled releases',()=>{
 it('checks the actual T3 Code version without changing its verified install pin',()=>{
  expect(server.VERSION_SOURCES).toContainEqual({name:'t3',cmd:'t3',args:['--version'],key:'t3'});
  expect(df).toContain('"t3":"%s"');
- expect(arg('T3_VERSION')).toBe('0.1.9');
+ expect(arg('T3_VERSION')).toBe('0.1.10');
 });
