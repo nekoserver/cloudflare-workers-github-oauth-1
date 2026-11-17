@@ -7,7 +7,7 @@ const server=require('../containers/demo/server.js');
 const df=readFileSync('containers/demo/Dockerfile','utf8');
 const arg=(n:string)=>df.match(new RegExp('^ARG '+n+'=(\\S+)','m'))?.[1];
 // Official metadata and downloaded binaries checked 2026-11-05 (Claude 2026-11-11; cloudflared・Tailscale・Claude 2026-11-13); see REPORT.
-const VERIFIED={CLOUDFLARED_VERSION:'2026.11.1',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.326',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
+const VERIFIED={CLOUDFLARED_VERSION:'2026.11.1',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.327',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
 describe('container tools: verified precompiled releases',()=>{
  it('pins every requested tool to its verified release',()=>{for(const [n,v] of Object.entries(VERIFIED))expect(arg(n),n).toBe(v);});
  it('verifies downloaded archives and native Claude bytes',()=>{
