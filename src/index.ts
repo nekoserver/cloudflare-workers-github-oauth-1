@@ -61,6 +61,7 @@ import { getCfDashboardPage } from './views/cf-dashboard';
 import { getWorkerStaticAssetsPage } from './views/workerStaticAssets';
 import { collectWorkerStaticAssets } from './utils/workerStaticAssets';
 import { getCfContainersPage } from './views/cfContainers';
+import { summarizeTailnetHealth, type TailnetBootEvent } from './utils/tailscaleNodeHealth';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
@@ -20940,6 +20941,47 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
   // ここでは同じ値を文字列として明示している。値を変えたら両方更新すること。
   const sleepAfter = '5m';
   return jsonUtf8({ ...statusResponse, usage, instanceId, cost, sleepAfter });
+});
+
+/**
+ * /cf-containers の tailscale ノード ヘルスチェック欄のデータ
+ * (SPEC.cloudflare-workers-github-oauth-1.tailscale-wasm.recovery REQ-TW-015)。
+ * TailscaleWasm DO の /status と D1 の起動記録(tailscale_wasm_boot_log)を要約して
+ * 返す。DO への取得が失敗した場合は、その失敗自体を状態として返し、この API
+ * 自体は異常終了しない。ログイン URL は要約に含めない(待ちの有無だけ)。
+ */
+app.get('/api/cf-containers/tailnet-health', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const checkedAt = new Date().toISOString();
+  let bootEvents: TailnetBootEvent[] = [];
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare(
+        'SELECT event, fingerprint, reason, created_at FROM tailscale_wasm_boot_log ORDER BY id DESC LIMIT 10',
+      ).all<TailnetBootEvent>();
+      bootEvents = rows.results ?? [];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-tailnet-health] 起動記録の取得に失敗', { error: message });
+    }
+  }
+  if (!c.env.TAILSCALE_WASM) {
+    return jsonUtf8(summarizeTailnetHealth({ configured: false, doError: null, status: null, bootEvents, checkedAt }));
+  }
+  let doError: string | null = null;
+  let status: { state?: unknown; peers?: unknown; loginURL?: unknown } | null = null;
+  try {
+    const stub = c.env.TAILSCALE_WASM.get(c.env.TAILSCALE_WASM.idFromName('muse'));
+    const res = await stub.fetch(new Request('http://tailnet/status'));
+    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (res.ok && body) {
+      status = body;
+    } else {
+      doError = typeof body?.error === 'string' ? body.error : `http_${res.status}`;
+    }
+  } catch (err) {
+    doError = err instanceof Error ? err.message : String(err);
+  }
+  return jsonUtf8(summarizeTailnetHealth({ configured: true, doError, status, bootEvents, checkedAt }));
 });
 
 /**

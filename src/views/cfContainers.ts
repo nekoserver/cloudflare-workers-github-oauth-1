@@ -191,6 +191,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-tailnet">Tailscaleノード</a><button type="button" class="menu-toggle" data-section="tailnet" aria-expanded="false" aria-label="Tailscaleノード の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-t3">T3・Codex・Tailscale</a><button type="button" class="menu-toggle" data-section="t3" aria-expanded="false" aria-label="T3・Codex・Tailscale の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
@@ -324,6 +325,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
   <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時に最新版・導入状況をD1へ記録します。</div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<details class="card" id="section-tailnet" tabindex="-1" data-section="tailnet" open>
+  <summary>Tailscaleノード（本体ワーカーのWASMノード）</summary>
+  <div class="status-row">
+    <span class="chip" id="tailnet-chip" data-running="false">確認中</span>
+    <button id="btn-tailnet" type="button">再確認</button>
+  </div>
+  <div id="tailnet-detail" style="font-size:13px;"></div>
+  <div class="pricing-scroll">
+  <table class="health-table" id="tailnet-events" hidden>
+    <thead><tr><th>起動記録（D1）</th><th>状態の指紋</th><th>理由</th><th>時刻</th></tr></thead>
+    <tbody id="tailnet-events-tbody"></tbody>
+  </table>
+  </div>
+  <div id="tailnet-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-report" tabindex="-1" data-section="report">
   <summary>6時間レポート(Slack通知)</summary>
@@ -1139,6 +1155,68 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       liveClock.hidden = true;
     }
   }
+
+  // Tailscaleノードのヘルスチェック欄(REQ-TW-015)。取得失敗やDOの503は、
+  // ページの異常ではなく欄の状態として表示する。
+  var tailnetChip = document.getElementById('tailnet-chip');
+  var tailnetDetail = document.getElementById('tailnet-detail');
+  var tailnetLog = document.getElementById('tailnet-log');
+  var tailnetEvents = document.getElementById('tailnet-events');
+  var tailnetEventsBody = document.getElementById('tailnet-events-tbody');
+  var tailnetLabels = {
+    running: 'Running（稼働中）',
+    needs_login: 'NeedsLogin（ログイン待ち）',
+    not_started: '未起動',
+    unavailable: '到達不能（DOが応答しない）',
+    not_configured: '未設定（バインディングなし）',
+    unknown: '状態不明'
+  };
+  function renderTailnet(data) {
+    var label = tailnetLabels[data.kind] || data.kind;
+    tailnetChip.textContent = label;
+    tailnetChip.setAttribute('data-running', data.kind === 'running' ? 'true' : 'false');
+    var lines = [];
+    if (data.nodeState) lines.push('ノード状態: ' + data.nodeState);
+    if (data.kind === 'running' || data.kind === 'needs_login') {
+      lines.push('muse-vm: ' + (data.museOnline ? 'オンライン' : 'オフライン'));
+      lines.push('ピア数: ' + data.peerCount);
+    }
+    if (data.loginPending) lines.push('ログインURLが発行されています（この欄には表示しません）');
+    if (data.doError) lines.push('DOの応答: ' + data.doError);
+    tailnetDetail.textContent = lines.join(' ／ ');
+    tailnetLog.textContent = '確認時刻: ' + data.checkedAt;
+    tailnetEventsBody.textContent = '';
+    (data.bootEvents || []).forEach(function (ev) {
+      var tr = document.createElement('tr');
+      [ev.event, ev.fingerprint || '', ev.reason || '', ev.created_at].forEach(function (v) {
+        var td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      tailnetEventsBody.appendChild(tr);
+    });
+    tailnetEvents.hidden = !(data.bootEvents && data.bootEvents.length);
+  }
+  function fetchTailnet() {
+    return fetch('/api/cf-containers/tailnet-health', { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) {
+          tailnetChip.textContent = 'エラー: ' + data.error;
+          tailnetChip.setAttribute('data-running', 'false');
+          return;
+        }
+        renderTailnet(data);
+      })
+      .catch(function (err) {
+        tailnetChip.textContent = '取得に失敗しました';
+        tailnetChip.setAttribute('data-running', 'false');
+        tailnetLog.textContent = String(err);
+      });
+  }
+  var tailnetBtn = document.getElementById('btn-tailnet');
+  if (tailnetBtn) tailnetBtn.addEventListener('click', fetchTailnet);
+  fetchTailnet();
 
   function fetchStatus() {
     return fetch('/api/cf-containers/status')
