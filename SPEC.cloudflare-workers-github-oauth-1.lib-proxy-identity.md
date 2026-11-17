@@ -2,7 +2,7 @@
 id: SPEC.cloudflare-workers-github-oauth-1.lib-proxy-identity
 repo: nekoserver/cloudflare-workers-github-oauth-1
 target: lib dashboard proxy identity and recovery
-version: 5
+version: 6
 date: 2026-11-18
 ---
 
