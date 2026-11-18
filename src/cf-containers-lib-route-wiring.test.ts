@@ -61,6 +61,37 @@ describe('前提チェック: Dockerfile が lib の VirtualHost を配置し有
   });
 });
 
+describe('前提チェック: Dockerfile が各 VirtualHost の要るモジュールを有効化する', () => {
+  // a2enmod の並び(最終ステージ)を実物から取る。
+  const finalStage = dockerfile.slice(dockerfile.lastIndexOf('\nFROM '));
+  const enmod = finalStage.match(/a2enmod ([^\n\\]+)/);
+  const modules = enmod ? enmod[1].trim().split(/\s+/) : [];
+
+  it('a2enmod が最終ステージにあり、引数を列挙できる', () => {
+    expect(enmod, '最終ステージに a2enmod が無い').toBeTruthy();
+    expect(modules.length).toBeGreaterThan(0);
+  });
+
+  it('lib の VirtualHost が使う include(SSI) と cgid(CGI) が有効化される', () => {
+    // 根拠は conf 側の使用箇所: INCLUDES フィルタと cgi-script ハンドラ。
+    expect(libConf).toMatch(/AddOutputFilter INCLUDES/);
+    expect(libConf).toMatch(/AddHandler cgi-script/);
+    expect(modules).toContain('include');
+    expect(modules).toContain('cgid');
+  });
+
+  it('demo の VirtualHost(8443)が使う ssl / proxy 系 / rewrite / remoteip が有効化される', () => {
+    expect(demoConf).toMatch(/SSLEngine on/);
+    expect(demoConf).toMatch(/ProxyPass /);
+    expect(demoConf).toMatch(/ws:\/\/127\.0\.0\.1:8080/);
+    expect(demoConf).toMatch(/RewriteEngine On/);
+    expect(demoConf).toMatch(/RemoteIPHeader /);
+    for (const m of ['ssl', 'proxy', 'proxy_http', 'proxy_wstunnel', 'rewrite', 'remoteip']) {
+      expect(modules, `a2enmod に ${m} が無い`).toContain(m);
+    }
+  });
+});
+
 describe('前提チェック: トンネル側(8443)は lib を拒否したままである', () => {
   it('apache-demo.conf は /lib を含む LocationMatch で Require all denied を維持する', () => {
     const loc = demoConf.match(/<LocationMatch "[^"]*lib[^"]*">([\s\S]*?)<\/LocationMatch>/);
